@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -29,6 +30,29 @@ func executionWriter(t *testing.T, s *Store) *Store {
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
 	return NewExecution(s, lease)
+}
+
+// sessionExecution builds the Session execution operations on lease, as
+// cmd/server does.
+func sessionExecution(t *testing.T, lease *pgunit.Lease) *sessions.ExecutionOperations {
+	t.Helper()
+	operations, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return operations
+}
+
+// functionExecution builds the Session execution operations on the execution
+// lease of a pool of its own, so the test may close its Store's pool.
+func functionExecution(t *testing.T) *sessions.ExecutionOperations {
+	t.Helper()
+	other, _ := testStore(t)
+	return sessionExecution(t, executionWriter(t, other).lease)
+}
+
+func functionCallFixture(id string) sessions.FunctionCall {
+	return sessions.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}
 }
 
 // executionOwnerPID finds the backend holding this database's execution lease,
@@ -48,6 +72,7 @@ func executionOwnerPID(t *testing.T, pool *pgxpool.Pool) int32 {
 func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	s, pool := testStore(t)
 	writer := executionWriter(t, s)
+	functions := sessionExecution(t, writer.lease)
 	tenant, active := newTurnSession(t, s)
 	input := submitMessage(t, s, tenant, active.ID, "active")
 	transition(t, writer, tenant, active.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
@@ -70,10 +95,10 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	waitInput := submitMessage(t, s, tenant, waiting.ID, "waiting")
 	transition(t, writer, tenant, waiting.ID, waitInput.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	call := functionCallFixture("saved")
-	if err = writer.RecordFunctionCall(t.Context(), tenant, waiting.ID, waitInput.TurnID, call); err != nil {
+	if err = functions.RecordFunctionCall(t.Context(), tenant, waiting.ID, waitInput.TurnID, call); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.SubmitFunctionResult(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
+	if err = SubmitFixtureFunctionResult(t.Context(), s, tenant, waiting.ID, waitInput.TurnID, call.CallID, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
 		t.Fatal(err)
 	}
 	before, err := s.GetSession(t.Context(), tenant, active.ID)
@@ -100,8 +125,8 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	_, err = writer.TransitionTurn(t.Context(), tenant, queued.ID, pending.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	mustReject("claim", err)
 	mustReject("journal", writer.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"stale"}`)}}))
-	mustReject("callback", writer.RecordFunctionCall(t.Context(), tenant, active.ID, input.TurnID, functionCallFixture("late")))
-	mustReject("receipt", writer.ConfirmFunctionResult(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID))
+	mustReject("callback", functions.RecordFunctionCall(t.Context(), tenant, active.ID, input.TurnID, functionCallFixture("late")))
+	mustReject("receipt", functions.ConfirmFunctionResult(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID))
 	_, err = writer.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"content":"stale"}}`), "stale-native", input.Sequence)
 	mustReject("completion", err)
 	_, err = writer.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
@@ -121,7 +146,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if err != nil || len(events) != 0 {
 		t.Fatal("stale journal persisted", events, err)
 	}
-	saved, err := s.GetFunctionCall(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID)
+	saved, err := FixtureFunctionCall(t.Context(), s.pool, tenant, waiting.ID, waitInput.TurnID, call.CallID)
 	if err != nil || saved.Applied {
 		t.Fatal("stale receipt persisted", saved, err)
 	}

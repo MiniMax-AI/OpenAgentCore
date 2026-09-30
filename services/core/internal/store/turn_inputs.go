@@ -117,7 +117,7 @@ func validateInputs(inputs []sessions.Input) ([]sessions.Input, json.RawMessage,
 			return nil, nil, fmt.Errorf("%w: cancel payload must be empty", sessions.ErrInvalidInput)
 		}
 		if input.Kind == "tool_result" {
-			if _, err := functionInput(payload); err != nil {
+			if _, err := sessions.ParseFunctionResultInput(payload); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -129,7 +129,29 @@ func validateInputs(inputs []sessions.Input) ([]sessions.Input, json.RawMessage,
 
 func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session pgtype.UUID, key string, position int32, input sessions.Input) (sessions.InputReceipt, error) {
 	if input.Kind == "tool_result" {
-		return admitFunctionResult(ctx, q, tenantID, session, key, position, input)
+		result, err := sessions.ParseFunctionResultInput(input.Payload)
+		if err != nil {
+			return sessions.InputReceipt{}, err
+		}
+		tenant, err := parseID(tenantID)
+		if err != nil {
+			return sessions.InputReceipt{}, err
+		}
+		turn, err := sessions.AdmitFunctionResult(ctx, sessionpg.BindSession(q, tenant, session), result)
+		if err != nil {
+			return sessions.InputReceipt{}, err
+		}
+		id, err := parseID(turn.ID)
+		if err != nil {
+			return sessions.InputReceipt{}, err
+		}
+		sequence, err := q.CreateTurnInput(ctx, sqlc.CreateTurnInputParams{
+			SessionID: session, TurnID: id, IdempotencyKey: key, Kind: input.Kind, Payload: input.Payload, BatchPosition: position,
+		})
+		if err != nil {
+			return sessions.InputReceipt{}, err
+		}
+		return inputReceipt(sequence, id, false), nil
 	}
 	created := false
 	turn, err := q.GetActiveTurn(ctx, session)

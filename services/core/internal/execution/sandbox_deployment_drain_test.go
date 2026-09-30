@@ -72,7 +72,7 @@ func delayedReadWriter(t *testing.T, armed *atomic.Bool, reading chan struct{}, 
 		}
 	})
 	deployments, reader, operations := testDeployment(t, pool, nil, lease)
-	return Owner{Lease: lease, Store: store.NewExecution(store.New(pool), lease), Deployment: operations}, deployments, reader, pool
+	return Owner{Lease: lease, Store: store.NewExecution(store.New(pool), lease), Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader, pool
 }
 
 func TestSandboxDeploymentDrainPreservesLeaseInFlightRead(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -72,7 +73,7 @@ func TestNativeFunctionImagePublicExecution(t *testing.T) {
 		t.Fatal("invalid evidence", err)
 	}
 	for _, item := range proof.Calls {
-		call, err := h.s.GetFunctionCall(ctx, h.tenant, proof.Session, item.Turn, item.Call)
+		call, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, item.Turn, item.Call)
 		if err != nil || !call.Applied {
 			t.Fatal("function delivery acknowledgement missing", err)
 		}

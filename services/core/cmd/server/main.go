@@ -301,11 +301,16 @@ func run() error {
 		if err != nil {
 			return errors.Join(err, lease.Close(ctx))
 		}
+		sessionExecution, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+		if err != nil {
+			return errors.Join(err, lease.Close(ctx))
+		}
 		// From this call on the Worker closes the lease, even when it fails to start.
 		worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{
 			Lease:      lease,
 			Store:      store.NewExecution(executionStore, lease),
 			Deployment: deploymentExecution,
+			Sessions:   sessionExecution,
 		})
 		if err != nil {
 			return err

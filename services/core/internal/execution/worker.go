@@ -68,16 +68,15 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.SessionsReader == nil {
 		return nil, errors.New("execution worker requires the Session reader")
 	}
-	if owner.Store == nil {
-		return nil, errors.New("execution worker requires the execution Store")
+	owned, err := dispatcher.Bind(owner)
+	if err != nil {
+		return nil, err
 	}
 	if owner.Deployment == nil {
 		return nil, errors.New("execution worker requires the deployment execution operations")
 	}
-	owned := *dispatcher
-	owned.Store = owner.Store
 	owned.notifications = &executionNotifications{}
-	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: &owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
+	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
 	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		return nil, err

@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -73,7 +74,7 @@ func TestNativeMessageImagePublicExecution(t *testing.T) {
 	if err != nil || json.Unmarshal(raw, &proof) != nil {
 		t.Fatal("invalid evidence", err)
 	}
-	call, err := h.s.GetFunctionCall(ctx, h.tenant, proof.Session, proof.Turn, proof.Call)
+	call, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, proof.Turn, proof.Call)
 	if err != nil || !call.Applied {
 		t.Fatal("function application receipt missing", err)
 	}

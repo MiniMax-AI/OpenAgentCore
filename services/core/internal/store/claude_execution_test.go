@@ -123,14 +123,14 @@ func TestClaudeDispatcherRejectsUnsupportedConfigurationBeforeClaim(t *testing.T
 func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T) {
 	h := newDispatchHarness(t)
 	claudeSession(t, h, functionConfiguration, false)
-	worker := startWorker(t, t.Context(), h.db, h.d)
+	worker := startOwnedWorker(t, t.Context(), h.db, h.d, h.owner())
 	defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 	input := h.message("start", "Run")
 	if _, err := h.s.TransitionTurn(t.Context(), h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	call := sessions.FunctionCall{CallID: "public-call", ExecutorCallID: "native-call", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)}
-	if err := h.s.RecordFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call); err != nil {
+	if err := h.owner().Sessions.RecordFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call); err != nil {
 		t.Fatal(err)
 	}
 	result := func(raw string) sessions.Input {
@@ -144,7 +144,7 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal(err)
 	}
-	saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call.CallID)
+	saved, err := store.FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, call.CallID)
 	if err != nil || saved.Result != nil || saved.Applied {
 		t.Fatal(saved, err)
 	}

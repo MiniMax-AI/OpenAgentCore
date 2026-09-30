@@ -64,14 +64,15 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 	} {
 		t.Run(raw, func(t *testing.T) {
 			s, pool := testStore(t)
+			functions := functionExecution(t)
 			tenant, session := newTurnSession(t, s)
 			turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 			transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 			call := functionCallFixture(items.Identity(turn, "tool:call"))
-			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, call); err != nil {
+			if err := functions.RecordFunctionCall(t.Context(), tenant, session.ID, turn, call); err != nil {
 				t.Fatal(err)
 			}
-			if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, call.CallID, json.RawMessage(raw)); err != nil {
+			if err := SubmitFixtureFunctionResult(t.Context(), s, tenant, session.ID, turn, call.CallID, json.RawMessage(raw)); err != nil {
 				t.Fatal(err)
 			}
 			event := sessions.ExecutionEvent{Kind: "tool_call", Payload: json.RawMessage(`{"id":"call","stage":"after","observation":{"status":"completed","kind":"function","name":"lookup","arguments":{},"content":[{"type":"input_text","text":"normalized"}]}}`)}

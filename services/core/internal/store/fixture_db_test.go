@@ -12,6 +12,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -59,34 +61,50 @@ func startWorker(t testing.TB, ctx context.Context, db fixtureDB, dispatcher *ex
 
 // startWorkerErr is startWorker for tests that assert a startup failure.
 func startWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dispatcher) (*execution.Worker, error) {
-	_, credentials, err := fixtureVaults(db)
-	if err != nil {
-		return nil, err
-	}
-	sessionStore, sessionService, err := fixtureSessions(db)
-	if err != nil {
-		return nil, err
-	}
 	lease, err := pgunit.AcquireLease(ctx, db.pool)
 	if err != nil {
 		return nil, err
 	}
-	deployments, changes, err := fixtureDeploymentExecution(db, lease)
+	owner, err := fixtureOwner(db, dispatcher.Store, lease)
 	if err != nil {
 		return nil, errors.Join(err, lease.Close(ctx))
+	}
+	return startOwnedWorkerErr(ctx, db, dispatcher, owner)
+}
+
+// startOwnedWorker is startWorker on an Owner the test already holds, for tests
+// that also run execution operations on it. The Worker closes its lease when
+// Run exits.
+func startOwnedWorker(t testing.TB, ctx context.Context, db fixtureDB, dispatcher *execution.Dispatcher, owner execution.Owner) *execution.Worker {
+	t.Helper()
+	worker, err := startOwnedWorkerErr(ctx, db, dispatcher, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return worker
+}
+
+func startOwnedWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dispatcher, owner execution.Owner) (*execution.Worker, error) {
+	_, credentials, err := fixtureVaults(db)
+	if err != nil {
+		return nil, errors.Join(err, owner.Lease.Close(ctx))
+	}
+	sessionStore, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		return nil, errors.Join(err, owner.Lease.Close(ctx))
+	}
+	deployments, err := fixtureDeploymentService(db)
+	if err != nil {
+		return nil, errors.Join(err, owner.Lease.Close(ctx))
 	}
 	owned := *dispatcher
 	owned.Credentials = credentials
 	owned.Observer = modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher)
 	owned.Deployment = deployments
+	owned.DeploymentReader = deploymentpg.New(pgunit.NewPool(db.pool), db.cipher)
 	owned.Sessions = sessionService
 	owned.SessionsReader = sessionStore
-	owned.DeploymentReader = deploymentpg.New(pgunit.NewPool(db.pool), db.cipher)
-	return execution.StartWorker(ctx, &owned, execution.Owner{
-		Lease:      lease,
-		Store:      store.NewExecution(dispatcher.Store, lease),
-		Deployment: changes,
-	})
+	return execution.StartWorker(ctx, &owned, owner)
 }
 
 // executionOwner acquires the execution lease on db and builds s's execution
@@ -99,13 +117,28 @@ func executionOwner(t testing.TB, db fixtureDB, s *store.Store) execution.Owner 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	_, changes, err := fixtureDeploymentExecution(db, lease)
+	owner, err := fixtureOwner(db, s, lease)
 	if err != nil {
 		t.Fatal(err)
+	}
+	return owner
+}
+
+// fixtureOwner builds s's execution writer and the deployment and Session
+// execution operations on lease, as cmd/server does.
+func fixtureOwner(db fixtureDB, s *store.Store, lease *pgunit.Lease) (execution.Owner, error) {
+	_, changes, err := fixtureDeploymentExecution(db, lease)
+	if err != nil {
+		return execution.Owner{}, err
+	}
+	sessionExecution, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+	if err != nil {
+		return execution.Owner{}, err
 	}
 	return execution.Owner{
 		Lease:      lease,
 		Store:      store.NewExecution(s, lease),
 		Deployment: changes,
-	}
+		Sessions:   sessionExecution,
+	}, nil
 }

@@ -39,7 +39,7 @@ func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session s
 func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session sessions.Session) *dispatchHarness {
 	t.Helper()
 	// The Runtime shares the harness's Core, not its connection or write lock.
-	other := &dispatchHarness{t: h.t, s: h.s, db: h.db, lease: h.lease, d: h.d, tenant: h.tenant, session: session, registry: h.registry, url: h.url,
+	other := &dispatchHarness{t: h.t, s: h.s, db: h.db, lease: h.lease, owned: h.owned, d: h.d, tenant: h.tenant, session: session, registry: h.registry, url: h.url,
 		admissions: h.admissions, environments: h.environments}
 	other.device, other.credential = enrollFixtureSession(t, h.s, h.tenant, session)
 	u, err := url.Parse(h.url)

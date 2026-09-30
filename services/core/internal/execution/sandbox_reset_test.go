@@ -14,11 +14,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,7 +67,18 @@ func testOwner(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
 	deployments, reader, operations := testDeployment(t, pool, cipher, lease)
-	return Owner{Lease: lease, Store: store.NewExecution(s, lease), Deployment: operations}, deployments, reader
+	return Owner{Lease: lease, Store: store.NewExecution(s, lease), Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader
+}
+
+// sessionExecution builds the Session execution operations on lease, as
+// cmd/server does.
+func sessionExecution(t *testing.T, lease *pgunit.Lease) *sessions.ExecutionOperations {
+	t.Helper()
+	operations, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return operations
 }
 
 func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {

@@ -6,7 +6,11 @@
 // settles, measured Turn usage and the Session activity each change reports.
 // The Session writes that several operations share are procedures here, over
 // the transaction interfaces declared beside them: cancelling work, failing
-// and terminating an Environment, tracking input activity and the admission
-// gates. Service runs the pooled Session use cases, such as staging a Turn's
+// and terminating an Environment, tracking input activity, the admission
+// gates, admitting a function result and reading a Turn's required actions.
+// Service runs the pooled Session use cases, such as staging a Turn's
 // Artifacts, over Storage, and Reader declares the Session reads.
+// ExecutionOperations runs the Session writes only the execution owner makes,
+// such as recording function calls and their application receipts, over the
+// lease-bound ExecutionStorage.
 package sessions

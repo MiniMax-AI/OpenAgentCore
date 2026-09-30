@@ -20,7 +20,7 @@ func TestNoEnvironmentRejectsUnadvertisedDeviceBeforeClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := h.message("first", "Answer")
-	if _, err = h.d.Run(ctx, h.tenant, h.session.ID, input.TurnID); err == nil {
+	if _, err = h.bound().Run(ctx, h.tenant, h.session.ID, input.TurnID); err == nil {
 		t.Fatal("unsupported environment admitted")
 	}
 	turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)

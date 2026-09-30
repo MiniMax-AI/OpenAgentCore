@@ -81,7 +81,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 	}
 	for _, id := range []string{"a", "b"} {
 		public := items.Identity(input.TurnID, "tool:"+id)
-		if err := h.s.SubmitFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, public, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
+		if err := store.SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, public, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -89,7 +89,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		var reply proto.FunctionResultPayload
 		_ = h.read(proto.TypeFunctionResult).DecodePayload(&reply)
 		public := items.Identity(input.TurnID, "tool:"+reply.CallID)
-		saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, public)
+		saved, err := store.FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, public)
 		if err != nil || saved.Applied || reply.DeliveryID != "function:"+public || len(reply.Content) != 1 || *reply.Content[0].Text != "saved" {
 			t.Fatal(saved, reply, err)
 		}
@@ -127,7 +127,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "a", Name: "lookup_ticket", Arguments: json.RawMessage(`{}`)})
 			state := functionState(t, h, 1)
 			id := state.RequiredActions[0].CallID
-			if err := h.s.SubmitFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id, json.RawMessage(`{"success":false,"error":"tool failed"}`)); err != nil {
+			if err := store.SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, id, json.RawMessage(`{"success":false,"error":"tool failed"}`)); err != nil {
 				t.Fatal(err)
 			}
 			var reply proto.FunctionResultPayload
@@ -160,11 +160,11 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 					t.Fatal(bound, err)
 				}
 			}
-			saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, id)
+			saved, err := store.FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, id)
 			if err != nil || saved.Applied || len(saved.Result) == 0 {
 				t.Fatal(saved, err)
 			}
-			if err := h.s.ConfirmFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id); !errors.Is(err, sessions.ErrTurnConflict) {
+			if err := h.owner().Sessions.ConfirmFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
 			functionState(t, h, 0)

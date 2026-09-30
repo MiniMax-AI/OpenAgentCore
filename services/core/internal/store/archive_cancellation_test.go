@@ -104,7 +104,8 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h := &dispatchHarness{t: t, s: s, db: db, lease: leased.Lease, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Store: writer, Registry: registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}}
+			h := &dispatchHarness{t: t, s: s, db: db, lease: leased.Lease, owned: &leased, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Registry: registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}}
+			h.d = h.bound()
 			capabilities := workerEnvironmentCapabilities()
 			capabilities.FunctionTools = proto.CapabilitySupported
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
