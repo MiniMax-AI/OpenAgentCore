@@ -28,7 +28,7 @@ try {
     '/api-reference/core/sandbox-manager/retrieve-sandbox-deployment': 'Authorization',
     '/api-reference/machine/sandbox-node/enroll-a-sandbox-node': 'Authorization',
   }
-  for (const route of ['/', '/install', '/configure', '/console', '/execution-model', ...Object.keys(credentials), '/harness-onboarding']) {
+  for (const route of ['/', '/install', '/configure', '/console', '/architecture', ...Object.keys(credentials), '/harness-onboarding']) {
     const response = await page.goto(origin + route, { waitUntil: 'networkidle' })
     assert.equal(response.status(), 200, route)
     assert.ok(await page.locator('h1').count(), 'Missing page title: ' + route)
@@ -38,7 +38,7 @@ try {
       assert.equal(await page.locator('input, form, textarea').count(), 0, 'Reference exposes request controls: ' + route)
       assert.ok((await page.locator('body').innerText()).includes(credentials[route]), 'Missing credential documentation: ' + route)
     }
-    if (screenshots && ['/', '/console', '/execution-model', '/api-reference/core/sandbox-manager', '/harness-onboarding'].includes(route)) {
+    if (screenshots && ['/', '/console', '/architecture', '/api-reference/core/sandbox-manager', '/harness-onboarding'].includes(route)) {
       await page.screenshot({ path: path.join(screenshots, (route.replaceAll('/', '-') || 'home') + '.png'), fullPage: false })
     }
   }

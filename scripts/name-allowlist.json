@@ -765,9 +765,9 @@
     "reason": "Generated copy of docs/design-principles.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
-    "path": "apps/docs/content/docs/execution-model.mdx",
+    "path": "apps/docs/content/docs/architecture.mdx",
     "regex": "including Parsar",
-    "reason": "Generated copy of docs/web/architecture.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
+    "reason": "Generated copy of docs/architecture.md: These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
   },
   {
     "path": "apps/docs/content/docs/install.mdx",

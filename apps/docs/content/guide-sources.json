@@ -34,15 +34,15 @@
     "docs/runtime-bootstrap.md": "0d49aed73b298039e04453e6f465b0e925fb2227fa35d4206820bb3acbd8df39",
     "docs/runtime-protocol.md": "e8aa4cf862b5f63a4138cfeb25196a6bdb5c40a2e389e828b464585415dc6c45",
     "docs/sandbox-provider.md": "4d47b234a457f874f3ff7e61a7f5da6fc8b75b0c6df0ce0ce9ead1c07afdfb3e",
-    "apps/docs/scripts/guides.json": "05fa34e2bdddfabb2bb1c6f620323e672e9261e358d04784b8c8331f2c315d9f"
+    "apps/docs/scripts/guides.json": "d85716ba38429a9f469b1bc1e972f33ed836e277f17636415fbfbb7d8b8a6ce5"
   },
   "outputs": {
-    "content/docs/index.mdx": "ac36f1536e558acd741cdf4986519a5d6098088aa5bc07d3f8a0ccbef3799e75",
+    "content/docs/index.mdx": "5b31a67f14bd01c38321934e4d5ac941de190cb7a61c154feb218f3b0b201b1f",
     "content/docs/concepts.mdx": "88ba65e1ba902921d6cd5da2866620a6dbef52c041db991312a138884fb43a4e",
     "public/images/source/docs/assets/architecture-overview.png": "c6103e2a8730796a15d6c4ae7165f3b9e60dbd09075b459d34821a3ee0d2d49f",
     "public/images/source/docs/assets/architecture-api-surfaces.png": "37c0d0d4f42c37ec41f8d4931ef10f182287d94d0928da195bf8b9e377c942e5",
     "public/images/source/docs/assets/architecture-session-flow.png": "0f0a78c43d3dfd235f3994421708c65347863665278bd39e79d19b52e13fab7a",
-    "content/docs/execution-model.mdx": "2c06f4fce7bafdae0e0c2acbc587ab3ece38e473019cef6222f7168fe2429c30",
+    "content/docs/architecture.mdx": "2c06f4fce7bafdae0e0c2acbc587ab3ece38e473019cef6222f7168fe2429c30",
     "content/docs/install.mdx": "6c3ec01d1b80cbce35d58e3f141b0fa832d6294a2ecc07c3b286ecc56ba66919",
     "content/docs/install-options.mdx": "aaafc209293a905d5b433511149aa1f0cc422bd31d5bb5b6cd7eec0d532ab8eb",
     "content/docs/configure.mdx": "02d1eee789646fdf65ed2ec48b6fe954c81107d6ff5891536ec6ac2df0a8c4dc",

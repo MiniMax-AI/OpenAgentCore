@@ -12,7 +12,7 @@
     "description": "Projects, credentials and the boundary between applications, administration and execution."
   },
   {
-    "slug": "execution-model",
+    "slug": "architecture",
     "source": "docs/architecture.md",
     "title": "Architecture",
     "description": "Core, the Runtime daemon and the native harness: the three namespaces, replaceable parts and a Session end to end."
