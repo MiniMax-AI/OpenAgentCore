@@ -19,15 +19,13 @@ import zipapp
 
 RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
-ARTIFACTS = {
-    "images/runtime.tar.gz": "runtime.tar.gz",
-    "native/bin/oac-node": "sandbox-node",
-    "native/bin/oac-daemon": "daemon",
-    "native/bin/oac-microsandbox-provider": "microsandbox-provider",
-    "native/microsandbox/msb": "msb",
-    "native/microsandbox/libkrunfw.so.5.6.1": "libkrunfw.so.5.6.1",
-    "runtime/seccomp.json": "seccomp.json",
-}
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/install"))
+import provider_assets
+
+ARTIFACTS = {item["path"]: item["suffix"] for items in provider_assets.CATALOG.values() for item in items}
+# The standalone daemon is a distribution artifact, independent of node providers.
+ARTIFACTS["native/bin/oac-daemon"] = "daemon"
+
 
 
 # The docs a distribution carries, by repository path. Links between them stay
@@ -287,7 +285,7 @@ def bootstraps(bundle, epoch, revision):
     bundle = pathlib.Path(bundle)
     with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
         modules = (("node_install.py", "__main__.py"), ("distribution.py", "distribution.py"),
-                   *((name, name) for name in ("node_spec.py", "node_generations.py", "install_display.py", "node_output.py")))
+                   *((name, name) for name in ("node_spec.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py")))
         for original, packaged in modules:
             target = pathlib.Path(directory) / packaged
             shutil.copyfile(bundle / original, target)

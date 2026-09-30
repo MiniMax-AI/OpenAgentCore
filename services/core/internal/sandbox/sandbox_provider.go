@@ -107,3 +107,10 @@ type CheckpointProvider interface {
 	// ResumeCompute thaws only the same resident instance after an aborted pause.
 	ResumeCompute(context.Context, Reference, Compute) (ComputeState, error)
 }
+
+// ProcessPaths locates installed adapter helpers and their private state. The
+// launcher supplies roots from the distribution layout; adapters own subpaths.
+type ProcessPaths struct {
+	ArtifactRoot string
+	StateRoot    string
+}

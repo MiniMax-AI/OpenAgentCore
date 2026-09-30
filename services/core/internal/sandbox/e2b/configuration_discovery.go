@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (json.RawMessage, error) {
 	var connection struct {
 		APIURL string `json:"api_url"`
 		Domain string `json:"domain"`
@@ -24,9 +23,9 @@ func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input san
 	if sandbox.DecodeConfigurationObject(input.Configuration, &connection, "api_url", "domain") != nil || sandbox.DecodeConfigurationObject(input.Credential, &credential, "api_key") != nil || sandbox.DecodeConfigurationObject(input.Query, &query, "template") != nil {
 		return nil, sandbox.ErrInvalid
 	}
-	binary := os.Getenv("OAC_E2B_PROVIDER_BIN")
-	if binary == "" {
-		binary = "/opt/oac/e2b/oac-e2b-provider"
+	binary, _, err := InstalledPaths(paths)
+	if err != nil {
+		return nil, sandbox.ErrConfigurationUnconfirmed
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

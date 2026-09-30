@@ -2,6 +2,9 @@ package providers
 
 import (
 	"errors"
+	"fmt"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // Local paths belong to the node. Core owns reservation capacity, execution
@@ -12,7 +15,7 @@ func validateSpecification(c Config) error {
 		return err
 	}
 	if adapter.Mode != "nodes" {
-		return errors.New("nodes support Docker or microsandbox; E2B is managed by Core")
+		return fmt.Errorf("%w: selected provider does not support node hosting", sandbox.ErrInvalid)
 	}
 	if c.Generation == 0 {
 		return errors.New("node requires a deployment generation; obtain configuration from Core")

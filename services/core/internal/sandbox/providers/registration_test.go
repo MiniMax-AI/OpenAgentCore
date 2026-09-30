@@ -88,7 +88,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				{"decode", func() error { _, err := Decode(kind, sandbox.ConfigurationRecord{}); return err }},
 				{"equal", func() error { _, err := Equal(kind, nil, nil); return err }},
 				{"discovery", func() error {
-					_, err := DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{})
+					_, err := DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 					return err
 				}},
 				{"resolve change", func() error { _, err := ResolveChange(selection, selection); return err }},
@@ -141,7 +141,7 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	closeProvider()
 	// Direct providers may legitimately need no remote credential or extra
 	// selection state; registration must not require irrelevant callback stubs.
-	a.Mode, a.BuildLocal = "direct", nil
+	a.Mode, a.BuildLocal, a.NodeArtifacts = "direct", nil, nil
 	a.BuildDirect = func(DirectConfig) (sandbox.SandboxProvider, error) {
 		calls++
 		return &docker.Provider{}, nil

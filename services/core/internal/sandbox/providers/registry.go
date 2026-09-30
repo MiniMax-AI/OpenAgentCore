@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -18,6 +19,7 @@ import (
 // Adapter describes configuration and transport independently of compute operations.
 // Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
+	NodeArtifacts                 []providerassets.Artifact
 	Policy                        sandbox.DeploymentPolicy
 	Configuration                 sandbox.ConfigurationAdapter
 	BuildLocal                    func(Config, *Built) (func(), error)
@@ -31,11 +33,16 @@ type Adapter struct {
 
 var adapters = map[string]Adapter{
 	"docker": {
-		Policy: docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
+		NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
+		Policy:        docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
 		ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
 		Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
 	},
 	"microsandbox": {
+		NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy,
+			{Path: "native/bin/oac-microsandbox-provider", Suffix: "microsandbox-provider", Role: "runtime"},
+			{Path: "native/microsandbox/msb", Suffix: "msb", Role: "runtime"},
+			{Path: "native/microsandbox/libkrunfw.so.5.6.1", Suffix: "libkrunfw.so.5.6.1", Role: "runtime"}},
 		Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
 		IdleSeconds: 300, RetentionSeconds: 86400,
 		ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,

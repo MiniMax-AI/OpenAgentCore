@@ -33,8 +33,8 @@ func (s *routingSetupStore) GetSandboxAllocationSetup(_ context.Context, ref san
 	return value, nil
 }
 func TestE2BRouterKeepsOldSpecificationWithCommittedCredential(t *testing.T) {
-	state := t.TempDir()
-	if err := os.Chmod(state, 0700); err != nil {
+	state := filepath.Join(t.TempDir(), "e2b")
+	if err := os.MkdirAll(state, 0700); err != nil {
 		t.Fatal(err)
 	}
 	helper := filepath.Join(t.TempDir(), "helper")
@@ -49,8 +49,7 @@ print(json.dumps({'Version':1,'Info':info}))
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
-	t.Setenv("OAC_E2B_STATE_DIR", state)
+	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
 	old := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
 	current := old
@@ -59,7 +58,7 @@ print(json.dumps({'Version':1,'Info':info}))
 	current.Configuration = &e2b.DeploymentConfiguration{APIKey: "new-key", Template: "new:" + uuid.NewString()}
 	ref := sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
 	db := &routingSetupStore{setupStore: setupStore{value: current}, old: old, oldID: ref.AllocationID}
-	setup := &managedSetup{store: db, installationID: id}
+	setup := &managedSetup{processPaths: paths, store: db, installationID: id}
 	// A facade retained by a generation-one lifecycle still reads current credentials.
 	router := &generationRouter{setup: setup, store: db}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -122,8 +121,8 @@ func TestE2BReplacementRequiresCommittedOwnershipAnchor(t *testing.T) {
 		{name: "explicit same key", committedKey: "team-a", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			state := t.TempDir()
-			if err := os.Chmod(state, 0700); err != nil {
+			state := filepath.Join(t.TempDir(), "e2b")
+			if err := os.MkdirAll(state, 0700); err != nil {
 				t.Fatal(err)
 			}
 			helper := filepath.Join(t.TempDir(), "provider")
@@ -147,14 +146,13 @@ print(json.dumps(result))
 			if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("OAC_E2B_PROVIDER_BIN", helper)
-			t.Setenv("OAC_E2B_STATE_DIR", state)
+			paths := testProviderPaths(t, helper, state)
 			id, build := uuid.NewString(), ":"+uuid.NewString()
 			current := store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
 				Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
 				Configuration: &e2b.DeploymentConfiguration{APIKey: tc.committedKey, Template: tc.committedTemplate + build}}
 			db := &setupStore{value: current}
-			s := &managedSetup{installationID: id, store: db}
+			s := &managedSetup{processPaths: paths, installationID: id, store: db}
 			loaded, err := s.load(t.Context())
 			if err != nil {
 				t.Fatal(err)

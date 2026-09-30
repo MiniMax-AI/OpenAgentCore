@@ -73,7 +73,7 @@ func (a regionalCodec) Equal(x, y sandbox.Configuration) (bool, error) {
 	_, err = a.Encode(y)
 	return x == y, err
 }
-func (regionalCodec) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (regionalCodec) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "node_configuration_has_no_catalog"}
 }
 

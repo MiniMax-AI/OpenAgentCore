@@ -207,14 +207,13 @@ def core_environment(root, config, state):
         "OAC_CORE_KEY_DIGESTS_FILE": generated + "/core-key-digests.json",
         "OAC_INSTALLATION_ID": state["installation_id"],
         "OAC_SETTINGS_FILE": generated + "/settings.json",
-        "OAC_E2B_STATE_DIR": str(root / "state/e2b") if native else "/state/e2b",
+        "OAC_PROVIDER_ROOT": str(root / "native") if native else "/opt/oac",
+        "OAC_PROVIDER_STATE_ROOT": str(root / "state") if native else "/state",
         "OAC_DEFAULT_HARNESS": core["default_harness"],
         "OAC_HARNESSES": ",".join(core["harnesses"]),
         "OAC_EXECUTION_CONCURRENCY": str(core["execution_concurrency"]),
         "OAC_WRITE_AUDIT_RETENTION": core["write_audit_retention"],
     }
-    if native:
-        result["OAC_E2B_PROVIDER_BIN"] = str(root / "native/e2b/oac-e2b-provider")
     if (root / "native-installers/catalog.json").is_file():
         result["OAC_NATIVE_INSTALLER_DIR"] = str(root / "native-installers") if native else "/opt/oac/native-installers"
     if core["oauth_trusted_origins"]:

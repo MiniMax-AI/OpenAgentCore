@@ -28,7 +28,7 @@ func TestNodeConfigurationExplicitUnsupportedAndStrictEmptyInput(t *testing.T) {
 		if !ok {
 			t.Fatal("missing explicit discovery implementation")
 		}
-		if _, err := discover.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{}); !errors.Is(err, providercontract.ErrUnsupported) {
+		if _, err := discover.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{}); !errors.Is(err, providercontract.ErrUnsupported) {
 			t.Fatal("discovery did not reject", err)
 		}
 		if _, err := a.Configuration.WithCredential(nil, nil); !errors.Is(err, providercontract.ErrUnsupported) {

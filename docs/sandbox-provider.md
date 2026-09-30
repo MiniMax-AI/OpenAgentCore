@@ -136,6 +136,12 @@ Vendor deployment validation and SDK setup stay at the construction boundary, an
 
 The backend fingerprint identifies a native resource namespace, not capacity. Core keeps deployment generations so that owned allocations keep resolving to their original backend; never repoint retained allocations at a replacement backend.
 
+### Distribution artifacts and process paths
+
+Each node adapter's registration owns its typed `NodeArtifacts` declaration: logical distribution path, release filename suffix and installation role (`node`, `runtime`, `policy` or `image`). Registration rejects missing declarations, unsafe paths and unknown roles. `go run ./services/core/cmd/provider-artifacts -write` generates the shared Web catalog and Python projection. Run the command without `-write` to check freshness. Distribution packaging, Web availability and node installation read this projection; adding a provider's payload does not add a provider-name branch to those consumers.
+
+The launcher supplies `sandbox.ProcessPaths` from the [derived process environment](configuration.md). Core reads these paths once and passes them to direct construction and configuration discovery. They are fixed distribution properties, not deployment settings or user-selectable helper paths. Each adapter resolves its own relative helper and state locations; E2B uses `e2b/oac-e2b-provider` and `e2b/`. Missing or nonabsolute roots fail before helper execution. Provider construction and discovery never read process environment variables.
+
 ## Managed lifecycle
 
 This is what Core does around every provider. Adapters implement none of it, but they rely on it.

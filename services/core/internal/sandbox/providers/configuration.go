@@ -98,7 +98,7 @@ func WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, erro
 	owner.Configuration, e = a.Configuration.WithCredential(owner.Configuration, candidate.Configuration)
 	return owner, e
 }
-func DiscoverConfiguration(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func DiscoverConfiguration(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (json.RawMessage, error) {
 	a, err := Lookup(kind)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func DiscoverConfiguration(ctx context.Context, kind string, input sandbox.Confi
 	if !ok {
 		return nil, providercontract.ErrContract
 	}
-	return discovery.DiscoverConfiguration(ctx, input)
+	return discovery.DiscoverConfiguration(ctx, input, paths)
 }
 
 type nodeConfiguration struct{}
@@ -167,6 +167,6 @@ func (a nodeConfigurationAdapter) Equal(x, y sandbox.Configuration) (bool, error
 	}
 	return true, nil
 }
-func (nodeConfigurationAdapter) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (nodeConfigurationAdapter) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
 	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "node_configuration_has_no_catalog"}
 }

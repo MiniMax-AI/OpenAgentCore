@@ -33,6 +33,7 @@ from urllib.parse import urlencode, urlsplit
 import uuid
 
 import distribution
+import provider_assets
 import node_spec
 import node_generations
 import install_display
@@ -47,9 +48,7 @@ class RuntimeDownloadError(InstallError):
     """A fixed private helper exit category for transfer/provenance failures."""
 
 
-COMMON = ("native/bin/oac-node", "runtime/seccomp.json")
-MICRO = ("native/bin/oac-microsandbox-provider", "native/microsandbox/msb",
-         "native/microsandbox/libkrunfw.so.5.6.1")
+MICRO = provider_assets.artifacts("microsandbox", ("runtime",))
 DOCKER = ("docker", "--host", "unix:///var/run/docker.sock")
 DOCKER_SOCKET = Path("/var/run/docker.sock")
 KVM = Path("/dev/kvm")
@@ -211,7 +210,7 @@ def metadata(source, bundle=None, prefix=""):
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
         raise RuntimeDownloadError("Unsupported node distribution")
     distribution.image_identities(manifest, "runtime")
-    for name in (COMMON[0], "images/runtime.tar.gz") + MICRO:
+    for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items if item["role"] != "policy"):
         distribution.artifact(manifest, name)
     # Metadata stays on the console; artifact requests may redirect to its pinned release.
     manifest["artifact_base_url"] = source + "/node-install/releases/" + manifest["source_commit"] + "/artifacts" if source else ""
@@ -392,7 +391,7 @@ def register_node(root, args, token, helper_archive=None):
         manifest, sums = metadata(args.source_url, prefix="releases/" + selected["source_commit"] + "/")
     node_spec.verify_release(args.configuration, manifest)
     runtime_prefix = "releases/" + manifest["source_commit"] + "/"
-    names = COMMON + (MICRO if args.provider == "microsandbox" else ())
+    names = provider_assets.artifacts(args.provider, ("node", "runtime", "policy"))
     if "runtime/seccomp.json" not in sums:
         raise InstallError("The distribution is missing required node checksums")
     state = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url,
@@ -414,7 +413,7 @@ def register_node(root, args, token, helper_archive=None):
             target = root / name
             safe_directory(target.parent)
             existing_file(target)
-            distribution.obtain_artifact(program_manifest if name == COMMON[0] else manifest, name, target, getattr(args, "bundle", None))
+            distribution.obtain_artifact(program_manifest if name in provider_assets.artifacts(args.provider, ("node",)) else manifest, name, target, getattr(args, "bundle", None))
             os.chmod(target, 0o700)
     node_generations.install_helper(root, args, sys.modules[__name__], helper_archive)
     safe_directory(root / "state/node")
@@ -439,7 +438,7 @@ def register_node(root, args, token, helper_archive=None):
                 secret.write(token)
             install_display.step("Registering this node with Core")
             try:
-                checked([str(root / COMMON[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
+                checked([str(root / provider_assets.artifacts(args.provider, ("node",))[0]), "register", "--config", str(root / "provider.json"), "--state-dir", str(root / "state/node"),
                          "--core-url", args.core_url, "--name", socket.gethostname(),
                          "--enrollment-token-file", secret_path], REGISTRATION_UNCONFIRMED, explain=registration_failure)
             except AddressChanged:
@@ -948,7 +947,7 @@ def system_unit(root, provider):
     # service runs with the account's own primary group.
     return ("[Unit]\nDescription=OpenAgentCore sandbox node " + root.name + "\nWants=network-online.target\nAfter=" + after
             + "\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nUser=" + SERVICE_USER
-            + "\nExecStart=:" + quote(root / COMMON[0]) + " run --config " + quote(root / "provider.json")
+            + "\nExecStart=:" + quote(root / provider_assets.artifacts(provider, ("node",))[0]) + " run --config " + quote(root / "provider.json")
             + " --state-dir " + quote(root / "state/node") + "\nWorkingDirectory=" + str(root).replace("%", "%%")
             + "\nRestart=on-failure\nRestartSec=5s\nRestartPreventExitStatus=78\nKillMode=process\nUMask=0077"
             + "\n\n[Install]\nWantedBy=multi-user.target\n")

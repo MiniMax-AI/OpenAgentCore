@@ -20,7 +20,8 @@ import (
 // managedSetup publishes one immutable selection to execution, bootstrap and
 // observation. The database owns the selection; this cache is never a writer.
 type managedSetup struct {
-	store interface {
+	processPaths sandbox.ProcessPaths
+	store        interface {
 		GetSandboxSetup(context.Context) (store.SandboxSetup, error)
 		ResolveRuntimeGeneration(context.Context, sandbox.Reference) (string, uint64, error)
 	}
@@ -191,5 +192,5 @@ func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.SandboxProvid
 		}
 		return s.hub.GenerationProvider(setup.Provider, s.store.ResolveRuntimeGeneration), nil
 	}
-	return providers.BuildDirect(providers.DirectConfig{InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls})
+	return providers.BuildDirect(providers.DirectConfig{ProcessPaths: s.processPaths, InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls})
 }

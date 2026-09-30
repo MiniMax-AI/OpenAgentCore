@@ -19,6 +19,17 @@ def schemas(node):
 
 
 class ConfigModelTests(unittest.TestCase):
+    def test_provider_roots_follow_the_installed_layout(self):
+        root = Path("/installation")
+        for native, artifacts, state in ((False, "/opt/oac", "/state"),
+                                          (True, "/installation/native", "/installation/state")):
+            with self.subTest(native=native):
+                config = config_model.initial("all", native, **({"ports.database": 15432} if native else {}))
+                environment = configuration.core_environment(root, config, {"installation_id": "fixture"})
+                self.assertEqual(environment["OAC_PROVIDER_ROOT"], artifacts)
+                self.assertEqual(environment["OAC_PROVIDER_STATE_ROOT"], state)
+
+
     def test_schema_uses_only_the_supported_keyword_subset(self):
         for node in schemas(config_model.SCHEMA):
             self.assertLessEqual(set(node), config_model.KEYWORDS)

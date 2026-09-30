@@ -149,8 +149,8 @@ Core reads only its environment. The installer renders `generated/core.env` from
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching `core.*` settings |
 | `OAC_HISTORY_SETTINGS_FILE` | `generated/runtime-history.json`: the [`core.runtime_history`](#settings) object, when it is set |
 | `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | `log.*`; Web reads the same three |
-| `OAC_E2B_STATE_DIR` | `state/e2b/`: an absolute directory owned by Core's user, with no group or other access. Back it up with the database and `credential.key`; don't mount it into Web or a Runtime |
-| `OAC_E2B_PROVIDER_BIN` | The E2B helper: `/opt/oac/e2b/oac-e2b-provider` in the Core image, `native/e2b/oac-e2b-provider` for native Core. The E2B key and template live in the database |
+| `OAC_PROVIDER_ROOT` | Absolute adapter artifact root: `native/` for native Core, `/opt/oac` in the Core image. Each adapter owns its helper paths beneath this root |
+| `OAC_PROVIDER_STATE_ROOT` | Absolute private state root: `state/` for native Core, `/state` in the Core image. Each adapter owns its subdirectory; E2B uses `e2b/`, owned by Core's user with no group or other access. Back it up with the database and `credential.key`; don't mount it into Web or a Runtime |
 | `OAC_NATIVE_INSTALLER_DIR` | `native-installers/`, served to self-hosted machines; the Core image has a copy at `/opt/oac/native-installers`, used when this is unset. Core checks the catalog against its own release before serving it |
 
 Core logs the file paths it loads, never environment values or file contents.

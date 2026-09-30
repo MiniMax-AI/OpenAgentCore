@@ -83,9 +83,7 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 
 func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	id := uuid.NewString()
-	t.Setenv("OAC_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
-	t.Setenv("OAC_E2B_STATE_DIR", t.TempDir())
-	s := &managedSetup{installationID: id, store: &setupStore{value: store.SandboxSetup{
+	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, installationID: id, store: &setupStore{value: store.SandboxSetup{
 		InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1,
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()},
 	}}}
@@ -121,9 +119,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 
 func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	id := uuid.NewString()
-	t.Setenv("OAC_E2B_PROVIDER_BIN", filepath.Join(t.TempDir(), "missing-helper"))
-	t.Setenv("OAC_E2B_STATE_DIR", t.TempDir())
-	s := &managedSetup{installationID: id}
+	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, installationID: id}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
 	_, err := s.prepare(t.Context(), store.SandboxSetup{InstallationID: id, Provider: "e2b", Mode: "direct",
@@ -202,4 +198,24 @@ func (s *setupStore) SandboxCredentialAllocationPage(context.Context, string) ([
 
 func (s *setupStore) ResolveRuntimeGeneration(context.Context, sandbox.Reference) (string, uint64, error) {
 	return "", 0, errors.New("unexpected node generation lookup")
+}
+
+func testProviderPaths(t *testing.T, helper, state string) sandbox.ProcessPaths {
+	t.Helper()
+	paths := sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: filepath.Dir(state)}
+	binary, resolvedState, err := e2b.InstalledPaths(paths)
+	if err != nil || resolvedState != state {
+		t.Fatalf("provider layout: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(binary), 0700); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(helper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binary, raw, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return paths
 }
