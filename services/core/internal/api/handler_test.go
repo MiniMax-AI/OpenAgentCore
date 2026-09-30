@@ -12,6 +12,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -154,7 +155,14 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			unavailable := 0
-			h, s, _ := testHandler(t, func(_ *Dependencies, f *testFakes) { f.metrics.recordUnavailable = func() { unavailable++ } })
+			h, s, _ := testHandler(t, func(_ *Dependencies, f *testFakes) {
+				f.metrics.recordUnavailable = func() { unavailable++ }
+				if test.name == "unknown saved agent" {
+					f.agentsReader.getAgentWithModelProvider = func(context.Context, string, string) (agents.Agent, *v1.ModelProviderInput, error) {
+						return agents.Agent{}, nil, agents.ErrNotFound
+					}
+				}
+			})
 			r := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 			r.Header.Set("Authorization", test.auth)
 			r.Header.Set("OpenAI-Beta", test.beta)

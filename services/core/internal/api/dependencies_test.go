@@ -22,6 +22,7 @@ type testFakes struct {
 	skills                 *fakeSkills
 	environmentTemplates   *fakeEnvironmentTemplates
 	agents                 *fakeAgents
+	agentsReader           *fakeAgentsReader
 	sessions               *fakeSessions
 	sessionEvents          *fakeSessionEvents
 	sessionHistory         *fakeSessionHistory
@@ -55,7 +56,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	f := &testFakes{
 		projects: &fakeProjects{t: t}, vaults: &fakeVaults{t: t}, modelProviders: &fakeModelProviders{t: t},
 		files: &fakeFiles{t: t}, skills: &fakeSkills{t: t}, environmentTemplates: &fakeEnvironmentTemplates{t: t},
-		agents: &fakeAgents{t: t}, sessions: &fakeSessions{t: t}, sessionEvents: &fakeSessionEvents{t: t},
+		agents: &fakeAgents{t: t}, agentsReader: &fakeAgentsReader{t: t}, sessions: &fakeSessions{t: t}, sessionEvents: &fakeSessionEvents{t: t},
 		sessionHistory: &fakeSessionHistory{t: t}, subagents: &fakeSubagents{t: t}, artifacts: &fakeArtifacts{t: t},
 		sessionAdmin: &fakeSessionAdmin{t: t}, environments: &fakeEnvironments{t: t}, executorConnections: &fakeExecutorConnections{t: t},
 		admin: &fakeAdmin{t: t}, adminAudit: &fakeAdminAudit{t: t}, writeAudit: &fakeWriteAudit{t: t}, metrics: &fakeMetrics{t: t},
@@ -66,7 +67,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	return Dependencies{
 		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
 		Projects: f.projects, Vaults: f.vaults, ModelProviders: f.modelProviders, Files: f.files, Skills: f.skills,
-		EnvironmentTemplates: f.environmentTemplates, Agents: f.agents, Sessions: f.sessions, SessionEvents: f.sessionEvents,
+		EnvironmentTemplates: f.environmentTemplates, Agents: f.agents, AgentsReader: f.agentsReader, Sessions: f.sessions, SessionEvents: f.sessionEvents,
 		SessionHistory: f.sessionHistory, Subagents: f.subagents, Artifacts: f.artifacts, SessionAdmin: f.sessionAdmin,
 		Environments: f.environments, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
 		Metrics: f.metrics, RuntimeObservations: f.runtimeObservations, RuntimeHistory: f.runtimeHistory,

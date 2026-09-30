@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -58,23 +59,23 @@ type adminReadFixture struct {
 	administrative, impersonated bool
 }
 
-func (s *adminReadFixture) ListAgents(ctx context.Context, tenant, after string, limit int, ascending bool) (store.AgentPage, error) {
-	s.seenTenant = tenant
+func (s *adminReadFixture) ListAgents(ctx context.Context, query agents.ListQuery) (agents.Page, error) {
+	s.seenTenant = query.TenantID
 	_, s.administrative = adminaudit.FromContext(ctx)
 	s.impersonated = ctx.Value(principalContextKey{}) != nil
-	return store.AgentPage{Agents: []store.SavedAgent{}}, nil
+	return agents.Page{Agents: []agents.Agent{}}, nil
 }
-func (s *adminReadFixture) DeleteAgent(ctx context.Context, tenant, id string) (string, error) {
-	s.seenTenant = tenant
+func (s *adminReadFixture) DeleteAgent(ctx context.Context, command agents.DeleteCommand) (string, error) {
+	s.seenTenant = command.TenantID
 	_, s.administrative = adminaudit.FromContext(ctx)
 	s.impersonated = ctx.Value(principalContextKey{}) != nil
-	return id, nil
+	return command.AgentID, nil
 }
 func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T) {
 	key := callerBinding()
 	deps, fakes := managementFakes(t, key)
 	resources := &adminReadFixture{}
-	fakes.agents.listAgents, fakes.agents.deleteAgent = resources.ListAgents, resources.DeleteAgent
+	fakes.agentsReader.listAgents, fakes.agents.delete = resources.ListAgents, resources.DeleteAgent
 	h := newTestHandler(t, deps)
 	base := "/core/v1/projects/" + managementProjectID
 	for _, test := range []struct {

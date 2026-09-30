@@ -3,8 +3,6 @@ package store
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -48,7 +46,7 @@ func TestWriteAuditStandaloneResourceTransactions(t *testing.T) {
 	}
 	archive := skillArchive(t, "audit-private-archive")
 	for _, name := range []string{
-		"agent_create", "agent_update", "agent_delete", "template_create", "template_update", "template_delete",
+		"template_create", "template_update", "template_delete",
 		"skill_create", "skill_upload_version", "skill_update_default", "skill_delete", "version_delete", "version_delete_last",
 		"file_create", "file_delete", "vault_create", "vault_delete", "credential_create", "credential_update", "credential_delete",
 		"oauth_create", "oauth_update", "oauth_delete",
@@ -119,21 +117,6 @@ func prepareResourceAuditMutation(t *testing.T, s *Store, tenant, name string, a
 		if err != nil {
 			t.Fatal(err)
 		}
-	}
-	if strings.HasPrefix(name, "agent_") {
-		input := CreateAgentInput{Configuration: json.RawMessage(`{"model":"fixture"}`)}
-		if name == "agent_create" {
-			return resourceAuditMutation{action: "create", kind: "agent", owners: 1, run: func(ctx context.Context) (string, error) { v, e := s.CreateAgent(ctx, tenant, input); return v.ID, e }}
-		}
-		a, err := s.CreateAgent(ctx, tenant, input)
-		must(err)
-		if name == "agent_update" {
-			return resourceAuditMutation{action: "update", kind: "agent", run: func(ctx context.Context) (string, error) {
-				v, e := s.UpdateAgent(ctx, tenant, a.ID, UpdateAgentInput{Configuration: json.RawMessage(`{"model":"replacement"}`)})
-				return v.ID, e
-			}}
-		}
-		return resourceAuditMutation{action: "delete", kind: "agent", run: func(ctx context.Context) (string, error) { return s.DeleteAgent(ctx, tenant, a.ID) }}
 	}
 	if strings.HasPrefix(name, "template_") {
 		if name == "template_create" {
@@ -244,42 +227,6 @@ func prepareResourceAuditMutation(t *testing.T, s *Store, tenant, name string, a
 		}}
 	}
 	return resourceAuditMutation{action: "delete", kind: "credential", parent: vault.ID, run: func(ctx context.Context) (string, error) { return s.DeleteCredential(ctx, tenant, vault.ID, v.ID) }}
-}
-
-func TestWriteAuditResourceReadsFailuresAndStableOwnership(t *testing.T) {
-	s, pool := testStore(t)
-	tenant := uuid.NewString()
-	first, err := s.CreateAgent(resourceAuditContext(t.Context(), tenant, uuid.NewString()), tenant, CreateAgentInput{Configuration: json.RawMessage(`{"model":"fixture"}`)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var before string
-	if err := pool.QueryRow(t.Context(), `SELECT to_jsonb(o)::text FROM write_audit_owners o WHERE tenant_id=$1 AND resource_id=$2`, tenant, first.ID).Scan(&before); err != nil {
-		t.Fatal(err)
-	}
-	readCtx := resourceAuditContext(t.Context(), tenant, uuid.NewString())
-	if _, err := s.GetAgent(readCtx, tenant, first.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.UpdateAgent(readCtx, tenant, uuid.NewString(), UpdateAgentInput{}); !errors.Is(err, ErrNotFound) {
-		t.Fatal(err)
-	}
-	other, _ := writeaudit.FromContext(resourceAuditContext(t.Context(), tenant, uuid.NewString()))
-	other.KeyID, other.Prefix = "static:"+strings.Repeat("b", 64), "bbbbbbbb"
-	if _, err := s.UpdateAgent(writeaudit.WithSource(t.Context(), other), tenant, first.ID, UpdateAgentInput{}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.DeleteAgent(resourceAuditContext(t.Context(), tenant, uuid.NewString()), tenant, first.ID); err != nil {
-		t.Fatal(err)
-	}
-	var after string
-	var count int
-	if err := pool.QueryRow(t.Context(), `SELECT to_jsonb(o)::text FROM write_audit_owners o WHERE tenant_id=$1 AND resource_id=$2`, tenant, first.ID).Scan(&after); err != nil || after != before {
-		t.Fatal("creator changed or disappeared", err)
-	}
-	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM write_audit_operations WHERE tenant_id=$1`, tenant).Scan(&count); err != nil || count != 3 {
-		t.Fatal("read or failure audit", count, err)
-	}
 }
 
 // A public mutation owns its transaction, so inject database failures through

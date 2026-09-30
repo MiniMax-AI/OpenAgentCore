@@ -89,7 +89,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		Engine: "codex", CoreKeys: admin, InstallationBindings: struct{ api.InstallationBindings }{},
 		Projects: trapProjects{keys: keys}, Vaults: struct{ api.Vaults }{}, ModelProviders: struct{ api.ModelProviders }{},
 		Files: struct{ api.Files }{}, Skills: struct{ api.Skills }{}, EnvironmentTemplates: struct{ api.EnvironmentTemplates }{},
-		Agents: struct{ api.Agents }{}, Sessions: struct{ api.Sessions }{}, SessionEvents: struct{ api.SessionEvents }{},
+		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{}, Sessions: struct{ api.Sessions }{}, SessionEvents: struct{ api.SessionEvents }{},
 		SessionHistory: struct{ api.SessionHistory }{}, Subagents: struct{ api.Subagents }{}, Artifacts: struct{ api.Artifacts }{},
 		SessionAdmin: struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},

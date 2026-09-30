@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,49 +27,51 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	input, err := resolveAgentUpdate(raw)
+	command, err := resolveAgentUpdate(raw)
 	if err != nil {
 		if !writeFieldError(w, err) {
 			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
 		}
 		return
 	}
-	updated, err := h.Agents.UpdateAgent(r.Context(), tenantID(r), chi.URLParam(r, "agent_id"), input)
+	command.TenantID, command.AgentID = tenantID(r), chi.URLParam(r, "agent_id")
+	updated, err := h.Agents.Update(r.Context(), command)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeAgentsError(w, r, err)
 		return
 	}
 	h.respondAgent(w, r, updated)
 }
 
-func resolveAgentUpdate(raw []byte) (store.UpdateAgentInput, error) {
+// resolveAgentUpdate returns the command without its tenant and Agent.
+func resolveAgentUpdate(raw []byte) (agents.UpdateCommand, error) {
 	if err := metadataTypeError(raw); err != nil {
-		return store.UpdateAgentInput{}, err
+		return agents.UpdateCommand{}, err
 	}
 	if err := validateSavedAgentBody(raw, savedAgentUpdate); err != nil {
-		return store.UpdateAgentInput{}, err
+		return agents.UpdateCommand{}, err
 	}
 	if err := validateSavedCoreInput(raw); err != nil {
-		return store.UpdateAgentInput{}, err
+		return agents.UpdateCommand{}, err
 	}
 	var request v1.UpdateAgentRequest
 	if decodeInputObject(raw, &request, "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
-		return store.UpdateAgentInput{}, errors.New("Request must be a JSON object containing supported fields.")
+		return agents.UpdateCommand{}, errors.New("Request must be a JSON object containing supported fields.")
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
-		return store.UpdateAgentInput{}, err
+		return agents.UpdateCommand{}, err
 	}
 	if _, supplied := fields["model"]; supplied && request.Model == nil {
-		return store.UpdateAgentInput{}, errors.New("model must be a string when supplied.")
+		return agents.UpdateCommand{}, errors.New("model must be a string when supplied.")
 	}
 	normalized, err := resolveSavedFields(v1.CreateAgentRequest(request))
 	if err != nil {
-		return store.UpdateAgentInput{}, err
+		return agents.UpdateCommand{}, err
 	}
 	var patch map[string]json.RawMessage
 	if err := json.Unmarshal(normalized.Configuration, &patch); err != nil {
-		return store.UpdateAgentInput{}, err
+		return agents.UpdateCommand{}, err
 	}
 	if _, supplied := fields["x_agents_core"]; supplied && request.XAgentsCore == nil {
 		patch["x_agents_core"] = json.RawMessage(`null`)
@@ -79,19 +81,21 @@ func resolveAgentUpdate(raw []byte) (store.UpdateAgentInput, error) {
 			delete(patch, field)
 		}
 	}
-	result := store.UpdateAgentInput{ModelProvider: normalized.ModelProvider}
+	var result agents.UpdateCommand
 	if extension, supplied := fields["x_agents_core"]; supplied {
-		if request.XAgentsCore == nil {
-			result.ModelProviderSet = true
-		} else {
-			_, coreFields := orderedMembers(extension)
-			_, result.ModelProviderSet = coreFields["model_provider"]
-			if result.ModelProviderSet && request.XAgentsCore.ModelProvider == nil {
+		_, coreFields := orderedMembers(extension)
+		_, providerSupplied := coreFields["model_provider"]
+		switch {
+		case request.XAgentsCore == nil:
+			result.ModelProvider = &agents.ModelProviderChange{}
+		case providerSupplied:
+			result.ModelProvider = &agents.ModelProviderChange{Provider: normalized.ModelProvider}
+			if request.XAgentsCore.ModelProvider == nil {
 				_, corePatch := orderedMembers(patch["x_agents_core"])
 				corePatch["model_provider"] = json.RawMessage(`null`)
 				patch["x_agents_core"], err = json.Marshal(corePatch)
 				if err != nil {
-					return store.UpdateAgentInput{}, err
+					return agents.UpdateCommand{}, err
 				}
 			}
 		}

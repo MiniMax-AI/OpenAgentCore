@@ -31,11 +31,13 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
@@ -109,6 +111,11 @@ func run() error {
 	executionStore.SetPublicURL(public)
 	units := pgunit.NewPool(pool)
 	auditStore := auditpg.New(units)
+	agentStore := agentpg.New(units, credentialKey)
+	agentService, err := agents.NewService(agentStore)
+	if err != nil {
+		return err
+	}
 	installation, err := installationFacts(public)
 	if err != nil {
 		return err
@@ -296,7 +303,7 @@ func run() error {
 		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
 		Installation: installation, InstallationBindings: executionStore,
 		Projects: executionStore, Vaults: executionStore, ModelProviders: executionStore, Files: executionStore,
-		Skills: executionStore, EnvironmentTemplates: executionStore, Agents: executionStore,
+		Skills: executionStore, EnvironmentTemplates: executionStore, Agents: agentService, AgentsReader: agentStore,
 		Sessions: executionStore, SessionEvents: executionStore, SessionHistory: executionStore,
 		Subagents: executionStore, Artifacts: executionStore, SessionAdmin: executionStore,
 		Environments: executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},

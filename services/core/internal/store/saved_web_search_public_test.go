@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -75,7 +75,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	live := `{"type":"web_search","mode":"live",` + defaults
 
 	// W1: Agent create with every pinned mode (official create 201).
-	agents := map[string]string{}
+	agentIDs := map[string]string{}
 	for _, tc := range []struct{ name, tool, official string }{
 		{"type-only", `{"type":"web_search"}`, live},
 		{"mode-null", `{"type":"web_search","mode":null}`, live},
@@ -96,7 +96,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		var created struct{ ID string }
 		_ = json.Unmarshal([]byte(body), &created)
 		readBack(tc.name, created.ID, body)
-		agents[tc.name] = created.ID
+		agentIDs[tc.name] = created.ID
 	}
 
 	// W2: update replaces tools with each observed form (official update 200).
@@ -115,7 +115,8 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 
 	// A disabled record saved before this batch reads unchanged and is admitted with
 	// the same frozen Session tool (W7).
-	legacy, err := s.CreateAgent(t.Context(), ownerTenant, store.CreateAgentInput{Metadata: map[string]string{}, Configuration: json.RawMessage(
+	_, agentService := fixtureAgents(t, db)
+	legacy, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(
 		`{"model":"search-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":[{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}]}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +147,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	// A same-key retry of a Session that recorded its creation request recovers it
 	// after the Agent enables search.
 	retry := func(key string) (int, string) {
-		request, err := http.NewRequest(http.MethodPost, server.URL+"/v1/agents/sessions", strings.NewReader(`{"agent_id":"`+agents["mode-disabled"]+`","environment":{"type":"none"},"input":"hi"}`))
+		request, err := http.NewRequest(http.MethodPost, server.URL+"/v1/agents/sessions", strings.NewReader(`{"agent_id":"`+agentIDs["mode-disabled"]+`","environment":{"type":"none"},"input":"hi"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,8 +168,8 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	if status != http.StatusCreated || original == "" {
 		t.Fatalf("retry fixture: %d", status)
 	}
-	client.created(owner, "/v1/agents/"+agents["mode-disabled"], `{"tools":[{"type":"web_search","mode":"live"}]}`)
-	enabledTools := map[string]string{"mode-live": agents["mode-live"], "mode-cached": agents["mode-cached"], "type-only": agents["type-only"], "updated-to-live": agents["mode-disabled"]}
+	client.created(owner, "/v1/agents/"+agentIDs["mode-disabled"], `{"tools":[{"type":"web_search","mode":"live"}]}`)
+	enabledTools := map[string]string{"mode-live": agentIDs["mode-live"], "mode-cached": agentIDs["mode-cached"], "type-only": agentIDs["type-only"], "updated-to-live": agentIDs["mode-disabled"]}
 
 	// W4: every creation mode rejects enabled saved search without writes.
 	before := databaseDigest(t, db.pool)
@@ -214,7 +215,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		send := func(token, id string) (int, string) {
 			return client.do(token, request.method, strings.ReplaceAll(request.path, "%s", id), "application/json", []byte(strings.ReplaceAll(request.body, "%s", id)))
 		}
-		foreignStatus, foreignBody := send(foreign, agents["mode-live"])
+		foreignStatus, foreignBody := send(foreign, agentIDs["mode-live"])
 		missingStatus, missingBody := send(owner, missing)
 		if foreignStatus != http.StatusNotFound || foreignStatus != missingStatus || foreignBody != missingBody {
 			t.Errorf("%s %s: foreign %d %s, missing %d %s", request.method, request.path, foreignStatus, foreignBody, missingStatus, missingBody)
@@ -241,7 +242,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 
 	// W5: a per-Session tools replacement admits the saved Agent without its search.
 	for _, replacement := range []string{`[]`, `[{"type":"web_search","mode":"disabled"}]`} {
-		session := client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+agents["mode-live"]+`","agent":{"tools":`+replacement+`},"environment":{"type":"none"},"input":"hi"}`)
+		session := client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+agentIDs["mode-live"]+`","agent":{"tools":`+replacement+`},"environment":{"type":"none"},"input":"hi"}`)
 		if got := sessionTool("replacement", session); got != "" && got != disabled {
 			t.Fatalf("replacement %s: Session tool %s", replacement, got)
 		}

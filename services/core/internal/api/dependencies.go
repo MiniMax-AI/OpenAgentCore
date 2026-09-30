@@ -36,6 +36,7 @@ type Dependencies struct {
 	Skills               Skills
 	EnvironmentTemplates EnvironmentTemplates
 	Agents               Agents
+	AgentsReader         AgentsReader
 	Sessions             Sessions
 	SessionEvents        SessionEvents
 	SessionHistory       SessionHistory
@@ -111,7 +112,8 @@ func (d Dependencies) validate() error {
 	if err := required(
 		field{"InstallationBindings", d.InstallationBindings}, field{"Projects", d.Projects}, field{"Vaults", d.Vaults},
 		field{"ModelProviders", d.ModelProviders}, field{"Files", d.Files}, field{"Skills", d.Skills},
-		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"Agents", d.Agents}, field{"Sessions", d.Sessions},
+		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
+		field{"Sessions", d.Sessions},
 		field{"SessionEvents", d.SessionEvents}, field{"SessionHistory", d.SessionHistory}, field{"Subagents", d.Subagents},
 		field{"Artifacts", d.Artifacts}, field{"SessionAdmin", d.SessionAdmin}, field{"Environments", d.Environments},
 		field{"ExecutorConnections", d.ExecutorConnections}, field{"Admin", d.Admin}, field{"AdminAudit", d.AdminAudit}, field{"WriteAudit", d.WriteAudit},

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -43,7 +44,8 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 	saved := func(tools string) string {
 		return `{"model":"config-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":` + tools + `}`
 	}
-	legacy, err := s.CreateAgent(t.Context(), ownerTenant, store.CreateAgentInput{Metadata: map[string]string{}, Configuration: json.RawMessage(saved(`[{"type":"function","name":"lookup","description":"","parameters":{"type":"string"},"defer_loading":false}]`))})
+	_, agentService := fixtureAgents(t, db)
+	legacy, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(saved(`[{"type":"function","name":"lookup","description":"","parameters":{"type":"string"},"defer_loading":false}]`))})
 	if err != nil {
 		t.Fatal(err)
 	}

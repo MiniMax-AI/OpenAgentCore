@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/google/uuid"
 )
@@ -34,7 +35,7 @@ func createTestProject(t *testing.T, s *Store) Project {
 	return p
 }
 func TestProjectKeysShareIdentityAndArchiveRetainsAssets(t *testing.T) {
-	s, _ := testStore(t)
+	s, pool := testStore(t)
 	p := createTestProject(t, s)
 	other := createTestProject(t, s)
 	first, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "first")
@@ -53,14 +54,15 @@ func TestProjectKeysShareIdentityAndArchiveRetainsAssets(t *testing.T) {
 	if err != nil || a.Principal != b.Principal || a.Principal.SubjectID != "project:"+p.ID || a.Principal.ProjectID != "proj_"+p.ID {
 		t.Fatal("Project keys do not share the stable Project principal", err)
 	}
-	asset, err := s.CreateAgent(t.Context(), a.Principal.TenantID, CreateAgentInput{Configuration: []byte(`{"model":"test"}`)})
+	agentStore, agentService := testAgents(t, pool, nil)
+	asset, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: a.Principal.TenantID, Configuration: []byte(`{"model":"test"}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetAgent(t.Context(), b.Principal.TenantID, asset.ID); err != nil {
+	if _, err := agentStore.GetAgent(t.Context(), b.Principal.TenantID, asset.ID); err != nil {
 		t.Fatal("peer key cannot read shared asset", err)
 	}
-	if _, err := s.GetAgent(t.Context(), other.TenantID, asset.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := agentStore.GetAgent(t.Context(), other.TenantID, asset.ID); !errors.Is(err, agents.ErrNotFound) {
 		t.Fatal("foreign Project read asset", err)
 	}
 	renamed, err := s.RenameProject(keyAdminContext(t.Context(), p.ID), p.ID, "renamed")
@@ -101,7 +103,7 @@ func TestProjectKeysShareIdentityAndArchiveRetainsAssets(t *testing.T) {
 	if _, err := s.CreateProjectAPIKey(keyAdminContext(t.Context(), p.ID), p.ID, uuid.NewString(), "late"); !errors.Is(err, ErrProjectArchived) {
 		t.Fatal("archived Project admitted new key", err)
 	}
-	if _, err := s.GetAgent(t.Context(), p.TenantID, asset.ID); err != nil {
+	if _, err := agentStore.GetAgent(t.Context(), p.TenantID, asset.ID); err != nil {
 		t.Fatal("archive removed assets", err)
 	}
 	if err := s.ValidateProjectKeySeparation(t.Context(), []string{projectKeyDigest(second.Key)}); err == nil {

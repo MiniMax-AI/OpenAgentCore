@@ -9,6 +9,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
@@ -92,55 +93,59 @@ func (f *fakeAdmission) SubmitInputs(a0 context.Context, a1 string, a2 string, a
 }
 
 type fakeAgents struct {
-	t                  testing.TB
-	deleteAgent        func(context.Context, string, string) (string, error)
-	updateAgent        func(context.Context, string, string, store.UpdateAgentInput) (store.SavedAgent, error)
-	listAgents         func(context.Context, string, string, int, bool) (store.AgentPage, error)
-	createAgent        func(context.Context, string, store.CreateAgentInput) (store.SavedAgent, error)
-	getAgent           func(context.Context, string, string) (store.SavedAgent, error)
-	getAgentForSession func(context.Context, string, string, bool) (store.SavedAgent, *v1.ModelProviderInput, error)
+	t      testing.TB
+	create func(context.Context, agents.CreateCommand) (agents.Agent, error)
+	update func(context.Context, agents.UpdateCommand) (agents.Agent, error)
+	delete func(context.Context, agents.DeleteCommand) (string, error)
 }
 
-func (f *fakeAgents) DeleteAgent(a0 context.Context, a1 string, a2 string) (string, error) {
-	if f.deleteAgent == nil {
-		unexpectedCall(f.t, "DeleteAgent")
+func (f *fakeAgents) Create(a0 context.Context, a1 agents.CreateCommand) (agents.Agent, error) {
+	if f.create == nil {
+		unexpectedCall(f.t, "Create")
 	}
-	return f.deleteAgent(a0, a1, a2)
+	return f.create(a0, a1)
 }
 
-func (f *fakeAgents) UpdateAgent(a0 context.Context, a1 string, a2 string, a3 store.UpdateAgentInput) (store.SavedAgent, error) {
-	if f.updateAgent == nil {
-		unexpectedCall(f.t, "UpdateAgent")
+func (f *fakeAgents) Update(a0 context.Context, a1 agents.UpdateCommand) (agents.Agent, error) {
+	if f.update == nil {
+		unexpectedCall(f.t, "Update")
 	}
-	return f.updateAgent(a0, a1, a2, a3)
+	return f.update(a0, a1)
 }
 
-func (f *fakeAgents) ListAgents(a0 context.Context, a1 string, a2 string, a3 int, a4 bool) (store.AgentPage, error) {
-	if f.listAgents == nil {
-		unexpectedCall(f.t, "ListAgents")
+func (f *fakeAgents) Delete(a0 context.Context, a1 agents.DeleteCommand) (string, error) {
+	if f.delete == nil {
+		unexpectedCall(f.t, "Delete")
 	}
-	return f.listAgents(a0, a1, a2, a3, a4)
+	return f.delete(a0, a1)
 }
 
-func (f *fakeAgents) CreateAgent(a0 context.Context, a1 string, a2 store.CreateAgentInput) (store.SavedAgent, error) {
-	if f.createAgent == nil {
-		unexpectedCall(f.t, "CreateAgent")
-	}
-	return f.createAgent(a0, a1, a2)
+type fakeAgentsReader struct {
+	t                         testing.TB
+	getAgent                  func(context.Context, string, string) (agents.Agent, error)
+	listAgents                func(context.Context, agents.ListQuery) (agents.Page, error)
+	getAgentWithModelProvider func(context.Context, string, string) (agents.Agent, *v1.ModelProviderInput, error)
 }
 
-func (f *fakeAgents) GetAgent(a0 context.Context, a1 string, a2 string) (store.SavedAgent, error) {
+func (f *fakeAgentsReader) GetAgent(a0 context.Context, a1 string, a2 string) (agents.Agent, error) {
 	if f.getAgent == nil {
 		unexpectedCall(f.t, "GetAgent")
 	}
 	return f.getAgent(a0, a1, a2)
 }
 
-func (f *fakeAgents) GetAgentForSession(a0 context.Context, a1 string, a2 string, a3 bool) (store.SavedAgent, *v1.ModelProviderInput, error) {
-	if f.getAgentForSession == nil {
-		unexpectedCall(f.t, "GetAgentForSession")
+func (f *fakeAgentsReader) ListAgents(a0 context.Context, a1 agents.ListQuery) (agents.Page, error) {
+	if f.listAgents == nil {
+		unexpectedCall(f.t, "ListAgents")
 	}
-	return f.getAgentForSession(a0, a1, a2, a3)
+	return f.listAgents(a0, a1)
+}
+
+func (f *fakeAgentsReader) GetAgentWithModelProvider(a0 context.Context, a1 string, a2 string) (agents.Agent, *v1.ModelProviderInput, error) {
+	if f.getAgentWithModelProvider == nil {
+		unexpectedCall(f.t, "GetAgentWithModelProvider")
+	}
+	return f.getAgentWithModelProvider(a0, a1, a2)
 }
 
 type fakeArtifacts struct {

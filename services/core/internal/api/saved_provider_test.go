@@ -8,40 +8,43 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/google/uuid"
 )
 
 const savedProviderFixture = `{"protocol":"responses","base_url":"https://example.test/v1","api_key":"saved-provider-secret","context_window":100000,"max_output_tokens":8000}`
 
 type savedProviderStore struct {
-	saved    store.SavedAgent
+	saved    agents.Agent
 	provider *v1.ModelProviderInput
 }
 
-func (s *savedProviderStore) CreateAgent(_ context.Context, tenant string, input store.CreateAgentInput) (store.SavedAgent, error) {
-	s.provider = input.ModelProvider
-	s.saved = store.SavedAgent{ID: uuid.NewString(), TenantID: tenant, Configuration: input.Configuration, Metadata: input.Metadata}
+func (s *savedProviderStore) CreateAgent(_ context.Context, command agents.CreateCommand) (agents.Agent, error) {
+	s.provider = command.ModelProvider
+	s.saved = agents.Agent{ID: uuid.NewString(), TenantID: command.TenantID, Configuration: command.Configuration, Metadata: command.Metadata}
 	return s.saved, nil
 }
 
-func (s *savedProviderStore) UpdateAgent(_ context.Context, _, _ string, input store.UpdateAgentInput) (store.SavedAgent, error) {
-	s.provider = input.ModelProvider
-	s.saved.Configuration = input.Configuration
+func (s *savedProviderStore) UpdateAgent(_ context.Context, command agents.UpdateCommand) (agents.Agent, error) {
+	s.provider = nil
+	if command.ModelProvider != nil {
+		s.provider = command.ModelProvider.Provider
+	}
+	s.saved.Configuration = command.Configuration
 	return s.saved, nil
 }
 
-func (s *savedProviderStore) GetAgent(context.Context, string, string) (store.SavedAgent, error) {
+func (s *savedProviderStore) GetAgent(context.Context, string, string) (agents.Agent, error) {
 	return s.saved, nil
 }
 
-func (s *savedProviderStore) ListAgents(context.Context, string, string, int, bool) (store.AgentPage, error) {
-	return store.AgentPage{Agents: []store.SavedAgent{s.saved}}, nil
+func (s *savedProviderStore) ListAgents(context.Context, agents.ListQuery) (agents.Page, error) {
+	return agents.Page{Agents: []agents.Agent{s.saved}}, nil
 }
 
 // serve answers the saved Agent operations from s.
 func (s *savedProviderStore) serve(_ *Dependencies, f *testFakes) {
-	f.agents.createAgent, f.agents.updateAgent, f.agents.getAgent, f.agents.listAgents = s.CreateAgent, s.UpdateAgent, s.GetAgent, s.ListAgents
+	f.agents.create, f.agents.update, f.agentsReader.getAgent, f.agentsReader.listAgents = s.CreateAgent, s.UpdateAgent, s.GetAgent, s.ListAgents
 }
 
 func TestSavedProviderReadRedaction(t *testing.T) {
@@ -104,8 +107,10 @@ func TestSavedProviderUpdatePresence(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			input, err := resolveAgentUpdate([]byte(tc.body))
-			if err != nil || input.ModelProviderSet != tc.set || (input.ModelProvider != nil) != tc.provider {
-				t.Fatalf("set=%v provider=%v err=%v", input.ModelProviderSet, input.ModelProvider != nil, err)
+			set := input.ModelProvider != nil
+			provider := set && input.ModelProvider.Provider != nil
+			if err != nil || set != tc.set || provider != tc.provider {
+				t.Fatalf("set=%v provider=%v err=%v", set, provider, err)
 			}
 			if tc.patch != "" && string(input.Configuration) != tc.patch {
 				t.Fatalf("patch=%s", input.Configuration)

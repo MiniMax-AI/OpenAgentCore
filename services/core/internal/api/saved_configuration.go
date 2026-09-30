@@ -9,33 +9,34 @@ import (
 	"unicode/utf8"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func resolveSavedAgent(input v1.CreateAgentRequest) (store.CreateAgentInput, error) {
+// resolveSavedAgent returns the command without its tenant.
+func resolveSavedAgent(input v1.CreateAgentRequest) (agents.CreateCommand, error) {
 	if input.Model == nil {
-		return store.CreateAgentInput{}, errors.New("model is required and must be a string.")
+		return agents.CreateCommand{}, errors.New("model is required and must be a string.")
 	}
 	return resolveSavedFields(input)
 }
 
 // Update requests reuse field validation without requiring an omitted model.
-func resolveSavedFields(input v1.CreateAgentRequest) (store.CreateAgentInput, error) {
+func resolveSavedFields(input v1.CreateAgentRequest) (agents.CreateCommand, error) {
 	if input.Name != nil {
 		if length := utf8.RuneCountInString(*input.Name); length > 128 {
-			return store.CreateAgentInput{}, &fieldError{param: "name", message: fmt.Sprintf("Invalid 'name': string too long. Expected a string with maximum length 128, but got a string with length %d instead.", length)}
+			return agents.CreateCommand{}, &fieldError{param: "name", message: fmt.Sprintf("Invalid 'name': string too long. Expected a string with maximum length 128, but got a string with length %d instead.", length)}
 		}
 	}
 	values, err := stringMetadata(input.Metadata)
 	if err != nil {
-		return store.CreateAgentInput{}, err
+		return agents.CreateCommand{}, err
 	}
 	if err := metadataFieldError(metadata.Validate(values)); err != nil {
-		return store.CreateAgentInput{}, err
+		return agents.CreateCommand{}, err
 	}
 	if err := input.XAgentsCore.Validate(); err != nil {
-		return store.CreateAgentInput{}, err
+		return agents.CreateCommand{}, err
 	}
 	cfg := v1.SavedAgentConfiguration{XAgentsCore: input.XAgentsCore.SafeView(), Name: input.Name, Instructions: input.Instructions, ServiceTier: "auto"}
 	if input.Model != nil {
@@ -43,35 +44,35 @@ func resolveSavedFields(input v1.CreateAgentRequest) (store.CreateAgentInput, er
 	}
 	cfg.MultiAgent, err = resolveSavedMultiAgent(input.MultiAgent)
 	if err != nil {
-		return store.CreateAgentInput{}, err
+		return agents.CreateCommand{}, err
 	}
 	if input.ServiceTier != nil {
 		if !slices.Contains([]string{"auto", "default", "flex", "priority", "fast"}, *input.ServiceTier) {
-			return store.CreateAgentInput{}, errors.New("service_tier must be auto, default, flex, priority or fast.")
+			return agents.CreateCommand{}, errors.New("service_tier must be auto, default, flex, priority or fast.")
 		}
 		cfg.ServiceTier = *input.ServiceTier
 	}
 	if input.Reasoning != nil {
 		cfg.Reasoning = *input.Reasoning
 		if cfg.Reasoning.Effort != nil && !slices.Contains([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, *cfg.Reasoning.Effort) {
-			return store.CreateAgentInput{}, errors.New("reasoning.effort is not a supported protocol value.")
+			return agents.CreateCommand{}, errors.New("reasoning.effort is not a supported protocol value.")
 		}
 		if cfg.Reasoning.Summary != nil && !slices.Contains([]string{"concise", "detailed", "auto"}, *cfg.Reasoning.Summary) {
-			return store.CreateAgentInput{}, errors.New("reasoning.summary must be concise, detailed or auto.")
+			return agents.CreateCommand{}, errors.New("reasoning.summary must be concise, detailed or auto.")
 		}
 	}
 	// Model-derived effort resolution is a recorded gap. Do not manufacture a
 	// default from the operator's execution engine or another model's catalog.
 	cfg.Text, err = resolveSavedText(input.Text)
 	if err != nil {
-		return store.CreateAgentInput{}, err
+		return agents.CreateCommand{}, err
 	}
 	cfg.Tools, err = resolveSavedTools(input.Tools)
 	if err != nil {
-		return store.CreateAgentInput{}, err
+		return agents.CreateCommand{}, err
 	}
 	configuration, err := json.Marshal(cfg)
-	result := store.CreateAgentInput{Metadata: values, Configuration: configuration}
+	result := agents.CreateCommand{Metadata: values, Configuration: configuration}
 	if input.XAgentsCore != nil {
 		result.ModelProvider = input.XAgentsCore.ModelProvider
 	}

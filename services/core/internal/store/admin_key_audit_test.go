@@ -7,18 +7,20 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/google/uuid"
 )
 
 func TestAdminProjectAndKeyDatabaseAuditTransactions(t *testing.T) {
-	s, _ := newManagedTestStore(t)
+	s, pool := newManagedTestStore(t)
 	rejectAdminAuditInsert(t, s)
+	agentStore, agentService := testAgents(t, pool, fixtureCipher)
 	for _, action := range []string{"project_create", "rename", "archive", "key_create", "revoke"} {
 		t.Run(action, func(t *testing.T) {
 			projectID, keyID := uuid.NewString(), uuid.NewString()
 			var p Project
 			var issued IssuedProjectAPIKey
-			var asset SavedAgent
+			var asset agents.Agent
 			ctxFor := func(request string) context.Context {
 				return adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "87654321", ActorLabel: "administrator fixture", ProjectID: projectID, RequestID: request, TraceID: "admin-mutation-trace"})
 			}
@@ -28,7 +30,7 @@ func TestAdminProjectAndKeyDatabaseAuditTransactions(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				asset, err = s.CreateAgent(t.Context(), p.TenantID, CreateAgentInput{Configuration: []byte(`{"model":"fixture"}`)})
+				asset, err = agentService.Create(t.Context(), agents.CreateCommand{TenantID: p.TenantID, Configuration: []byte(`{"model":"fixture"}`)})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -112,7 +114,7 @@ func TestAdminProjectAndKeyDatabaseAuditTransactions(t *testing.T) {
 				}
 			}
 			if action != "project_create" {
-				if _, err := s.GetAgent(t.Context(), p.TenantID, asset.ID); err != nil {
+				if _, err := agentStore.GetAgent(t.Context(), p.TenantID, asset.ID); err != nil {
 					t.Fatal("management mutation removed assets", err)
 				}
 			}
