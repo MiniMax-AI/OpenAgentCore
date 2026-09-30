@@ -34,10 +34,7 @@ func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, store.E
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.WorkspaceReadPreparation
 	})
-	w, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := startWorker(t, t.Context(), h.db, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()

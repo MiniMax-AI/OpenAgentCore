@@ -22,11 +22,11 @@ import (
 const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // publicHandler serves s through api.NewHandler. s backs every area the Store
-// implements, keys authenticate as Project keys and "admin" as the Core key.
-// Metrics, Runtime observation and history, and executor connections are
-// strict stand-ins. Execution and Sandboxes stay disabled unless configure
-// sets them.
-func publicHandler(t testing.TB, s *store.Store, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
+// implements, and db is the database and credential key that built s. keys
+// authenticate as Project keys and "admin" as the Core key. Metrics, Runtime
+// observation and history, and executor connections are strict stand-ins.
+// Execution and Sandboxes stay disabled unless configure sets them.
+func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
 	t.Helper()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	if err != nil {

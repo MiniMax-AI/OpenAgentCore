@@ -32,7 +32,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	providerConfig := func(setup store.SandboxSetup) *execution.RuntimeProvider {
@@ -47,10 +47,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: providerConfig(setup)}, nil
 	})
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {
@@ -94,7 +91,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, nil, "codex", storeKeys(s), workerExecution(worker), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), workerExecution(worker), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}

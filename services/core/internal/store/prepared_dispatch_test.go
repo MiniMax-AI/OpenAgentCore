@@ -22,12 +22,8 @@ func preparedDispatchHarness(t *testing.T) (*dispatchHarness, store.EnvironmentI
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	assertNoRuntimeAllocation(t, h)
-	writer, err := store.NewExecution(t.Context(), h.s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
-	h.d.Store = writer
+	owner := executionOwner(t, h.db, h.s)
+	h.d.Store, h.lease = owner.Store, owner.Lease
 	enableWorkerEnvironment(t, h)
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 	if err != nil {
@@ -39,7 +35,7 @@ func preparedDispatchHarness(t *testing.T) (*dispatchHarness, store.EnvironmentI
 func runPreparedDispatch(h *dispatchHarness, ctx context.Context, pending store.EnvironmentInputReservation) <-chan preparedDispatchResult {
 	out := make(chan preparedDispatchResult, 1)
 	go func() {
-		result, err := h.d.RunEnvironmentInput(ctx, h.tenant, h.session.ID, pending.ID)
+		result, err := h.d.RunEnvironmentInput(ctx, h.lease, h.tenant, h.session.ID, pending.ID)
 		out <- preparedDispatchResult{result, err}
 	}()
 	return out
@@ -114,7 +110,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	if err != nil || bound.NativeSessionID != "retained-prepared-native" {
 		t.Fatal("native identity was not committed", bound, err)
 	}
-	retry, err := h.d.RunEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID)
+	retry, err := h.d.RunEnvironmentInput(t.Context(), h.lease, h.tenant, h.session.ID, pending.ID)
 	if err != nil || len(retry.Reservation.Receipts) != 2 || !retry.Reservation.Receipts[0].Replayed || retry.Reservation.Receipts[0].TurnID != start.RunID || retry.Turn.ID != "" {
 		t.Fatal("replay executed again", retry, err)
 	}

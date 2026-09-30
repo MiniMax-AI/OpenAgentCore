@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -19,13 +20,14 @@ import (
 )
 
 // The execution lease is database-scoped, so these manager tests own a database.
-// They receive the pooled Store and the execution writer built on it.
-func resetManagerStore(t *testing.T) (*store.Store, *store.Store) {
+// They receive the pooled Store and the Owner of its execution lease, which the
+// test closes when it ends.
+func resetManagerStore(t *testing.T) (*store.Store, Owner) {
 	t.Helper()
 	return resetManagerStoreConfig(t, nil)
 }
 
-func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, *store.Store) {
+func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner) {
 	t.Helper()
 	pool := pgtest.OpenIsolated(t, configure)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
@@ -33,16 +35,24 @@ func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*st
 		t.Fatal(err)
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
-	writer, err := store.NewExecution(t.Context(), s)
+	return s, testOwner(t, pool, s)
+}
+
+// testOwner acquires the execution lease on pool and builds s's execution
+// writer on it, as cmd/server does. The lease closes when the test ends.
+func testOwner(t *testing.T, pool *pgxpool.Pool, s *store.Store) Owner {
+	t.Helper()
+	lease, err := pgunit.AcquireLease(t.Context(), pool)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
-	return s, writer
+	t.Cleanup(func() { _ = lease.Close(context.Background()) })
+	return Owner{Lease: lease, Store: store.NewExecution(s, lease)}
 }
 
 func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
-	s, w := resetManagerStore(t)
+	s, owner := resetManagerStore(t)
+	w := owner.Store
 	id := uuid.NewString()
 	if err := w.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -67,7 +77,7 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", 1)}, nil
 	})
-	m, err := newRuntimeManager(w, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, runtimegateway.NewRegistry(), config)
 	if err != nil {
 		t.Fatal(err)
 	}

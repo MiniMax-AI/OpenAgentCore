@@ -19,6 +19,7 @@ import (
 type finishObservationFixture struct {
 	s          *store.Store
 	writer     *store.Store
+	lease      Ownership
 	pool       *pgxpool.Pool
 	tenant     string
 	session    store.Session
@@ -28,7 +29,7 @@ type finishObservationFixture struct {
 func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObservationFixture {
 	t.Helper()
 	var cfg *pgxpool.Config
-	s, writer := resetManagerStoreConfig(t, func(c *pgxpool.Config) {
+	s, owner := resetManagerStoreConfig(t, func(c *pgxpool.Config) {
 		if maxConnections > 0 {
 			c.MaxConns = maxConnections
 		}
@@ -56,7 +57,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	if err != nil {
 		t.Fatal(err)
 	}
-	return finishObservationFixture{s, writer, pool, tenant, session, Dispatcher{Store: writer}}
+	return finishObservationFixture{s, owner.Store, owner.Lease, pool, tenant, session, Dispatcher{Store: owner.Store}}
 }
 func (f finishObservationFixture) start(t *testing.T) store.InputReceipt {
 	t.Helper()
@@ -183,7 +184,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				if elapsed := time.Since(started); elapsed < 900*time.Millisecond || elapsed > 2*time.Second {
 					t.Fatal("pool timeout exceeded observation budget", elapsed)
 				}
-				if err = f.writer.CheckExecutionOwnership(t.Context()); err != nil {
+				if err = f.lease.CheckOwnership(t.Context()); err != nil {
 					t.Fatal("observation cancelled lease", err)
 				}
 				return
@@ -211,7 +212,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 			if used != nil || code != nil {
 				t.Fatal("failed observation wrote")
 			}
-			if err = f.writer.CheckExecutionOwnership(t.Context()); err != nil {
+			if err = f.lease.CheckOwnership(t.Context()); err != nil {
 				t.Fatal("observation cancelled execution lease", err)
 			}
 		})

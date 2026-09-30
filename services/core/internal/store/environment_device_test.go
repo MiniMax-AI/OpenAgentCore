@@ -25,7 +25,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			awaitFixtureCapabilities(t, originalRuntime, caps)
 			generalFrames := workerFrames(t, h)
 			boundFrames := workerFrames(t, originalRuntime)
-			_, stop := startEnvironmentExpiryWorker(t, h.d)
+			_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 			select {
 			case frame := <-generalFrames:
 				t.Fatal("general device received self-hosted work", frame.Type)

@@ -69,24 +69,20 @@ func subagentFixture(kind string, value any) store.ExecutionEvent {
 // routes with the Session's Agent ID, Subagent lists use the common envelope and
 // child Item lists clamp their limit. Tenant B sees none of it.
 func TestSubagentVisibilityPublic(t *testing.T) {
-	s, _ := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = writer.CloseExecution(t.Context()) }()
+	writer := executionOwner(t, db, s).Store
 	ctx := t.Context()
 
 	created := openStream(t, server, token, http.MethodPost, "/v1/agents/sessions",

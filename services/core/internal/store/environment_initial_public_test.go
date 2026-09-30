@@ -21,7 +21,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
@@ -36,18 +36,16 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	owner := executionOwner(t, db, s)
+	writer := owner.Store
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := writer.CloseExecution(ctx); err != nil {
+		if err := owner.Lease.Close(ctx); err != nil {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +90,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 		}
 	}
 	var reservation string
-	if err := pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial RETURNING id", session.ID).Scan(&reservation); err != nil {
+	if err := db.pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial RETURNING id", session.ID).Scan(&reservation); err != nil {
 		t.Fatal(err)
 	}
 	if result, err := writer.ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation); err != nil || result.State != store.EnvironmentInputExpired {

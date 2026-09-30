@@ -94,7 +94,7 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner store.Runti
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
 		return r.cleanupCompute(ctx, p, owner, state)
 	}
-	if err := r.store.CheckExecutionOwnership(ctx); err != nil {
+	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
 	switch owner.ComputePhase {

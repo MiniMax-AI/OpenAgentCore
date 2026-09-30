@@ -62,7 +62,8 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 	}{{"Kill_no_delivery", false, false}, {"KillCompute_no_delivery", true, false}, {"Kill_live_delivery", false, true}, {"KillCompute_live_delivery", true, true}} {
 		t.Run(scenario.name, func(t *testing.T) {
 			checkpoint := scenario.checkpoint
-			s, writer := resetManagerStore(t)
+			s, leased := resetManagerStore(t)
+			writer := leased.Store
 			installation := uuid.NewString()
 			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 				t.Fatal(err)
@@ -167,7 +168,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal("Kill bypassed durable cleanup ownership", allocation, err)
 				}
 			}}
-			lifecycle := &runtimeLifecycle{store: writer, registry: registry, config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
+			lifecycle := &runtimeLifecycle{store: writer, lease: leased.Lease, registry: registry, config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
 			if checkpoint {
 				lifecycle.config.Provider = waitingCleanupCheckpoint{beforeKill: provider.beforeKill}
 			}

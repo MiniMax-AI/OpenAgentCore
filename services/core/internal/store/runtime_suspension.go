@@ -99,7 +99,7 @@ func (s *Store) RuntimeActivity(ctx context.Context, owner RuntimeAllocation) (R
 	if err != nil {
 		return RuntimeActivity{}, err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return RuntimeActivity{}, err
 	}
 	row, err := s.queries.GetRuntimeActivity(ctx, id)
@@ -143,7 +143,7 @@ func (s *Store) ClearRuntimeWake(ctx context.Context, owner RuntimeAllocation, o
 	if err != nil {
 		return err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return err
 	}
 	return s.queries.ClearRuntimeWake(ctx, sqlc.ClearRuntimeWakeParams{ID: id, ComputeActivityAt: pgtype.Timestamptz{Time: observedActivity, Valid: true}})
@@ -154,7 +154,7 @@ func (s *Store) CountRuntimeComputeReservations(ctx context.Context, provider st
 	if err != nil {
 		return 0, err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return 0, err
 	}
 	return s.queries.CountRuntimeComputeReservations(ctx, id)
@@ -165,7 +165,7 @@ func (s *Store) CountRuntimeRetainedAllocations(ctx context.Context, provider st
 	if err != nil {
 		return 0, err
 	}
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return 0, err
 	}
 	return s.queries.CountRuntimeRetainedAllocations(ctx, id)

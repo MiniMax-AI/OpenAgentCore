@@ -1,7 +1,6 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -27,12 +26,7 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
 				t.Fatal(err)
 			}
-			writer, err := store.NewExecution(ctx, h.s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
-			h.d.Store = writer
+			h.d.Store = executionOwner(t, h.db, h.s).Store
 			input := h.message("first", "root message")
 			running := h.run(ctx, input.TurnID)
 			var request proto.PromptRequestPayload

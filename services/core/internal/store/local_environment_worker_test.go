@@ -41,10 +41,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.LocalEnvironment
 	})
-	w, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := startWorker(t, t.Context(), h.db, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()

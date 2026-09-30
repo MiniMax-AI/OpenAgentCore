@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -20,10 +19,10 @@ import (
 // still reject with today's fields and write nothing.
 func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +72,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	}
 
 	// W4: unchanged rejection without writes.
-	before := databaseDigest(t, pool)
+	before := databaseDigest(t, db.pool)
 	const rejection = `{"error":{"message":"Invalid resource identifier or request limits.","type":"invalid_request_error","code":"invalid_request","param":null}}` + "\n"
 	for _, input := range []string{`""`, `[]`, `[{"role":"user","content":[]}]`, `[{"role":"user","content":[{"type":"input_text","text":""}]}]`} {
 		if status, body := client.do(token, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(`{"agent":{"model":"whitespace-model"},"environment":{"type":"none"},"input":`+input+`}`)); status != http.StatusBadRequest || body != rejection {
@@ -85,7 +84,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 			t.Errorf("events %s: %d %s", input, status, body)
 		}
 	}
-	if after := databaseDigest(t, pool); !mapsEqual(before, after) {
+	if after := databaseDigest(t, db.pool); !mapsEqual(before, after) {
 		t.Error("rejected empty input changed persisted state")
 	}
 }
@@ -94,14 +93,11 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 // admits it; Claude SDK and MiniMax Code reject it at Session creation and
 // events.create, before any write, reservation or promotion.
 func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-harness", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
 	// Real Worker admission with dispatch paused keeps admitted Turns queued.
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
 	t.Cleanup(func() {
 		stopped, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -110,7 +106,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 		}
 	})
 	serve := func(engine string) pathIDClient {
-		handler, err := publicHandler(t, s, auth, engine, workerExecution(worker), executorURL("https://offline-executor.example"))
+		handler, err := publicHandler(t, s, db, auth, engine, workerExecution(worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,7 +139,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 		if status, body := events(client, session, cancel); status != http.StatusAccepted {
 			t.Fatalf("%s cancel: %d %s", engine, status, body)
 		}
-		before := databaseDigest(t, pool)
+		before := databaseDigest(t, db.pool)
 		for _, body := range []string{
 			`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`,
 			`{"agent":{"model":"m"},"environment":{"type":"none"},"input":[{"role":"user","content":[{"type":"input_text","text":"\n\t"}]}]}`,
@@ -161,7 +157,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 				t.Errorf("%s events %s: %d %s", engine, body, status, response)
 			}
 		}
-		if after := databaseDigest(t, pool); !mapsEqual(before, after) {
+		if after := databaseDigest(t, db.pool); !mapsEqual(before, after) {
 			t.Errorf("%s: rejected whitespace-only text changed persisted state", engine)
 		}
 		// Whitespace beside non-whitespace text in one message remains admitted verbatim.

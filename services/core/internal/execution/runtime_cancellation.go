@@ -14,12 +14,7 @@ func (m *runtimeManager) cancelLifecycles(nodes []*runtimeNode) error {
 			n.lifecycle.cancelOperations()
 		}
 	}
-	// Managers in pure lifecycle tests have no Store or execution connection.
-	if m.store == nil {
-		cancel()
-		return nil
-	}
-	err := m.store.CancelExecutionOperations(m.ctx, cancel)
+	err := m.lease.CancelOperations(m.ctx, cancel)
 	if err != nil {
 		// A manual reconcile may have no running coordinator to consume failed.
 		// Close admission synchronously; Worker shutdown still owns cancellation.

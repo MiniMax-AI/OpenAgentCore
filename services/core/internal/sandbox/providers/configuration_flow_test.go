@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -85,11 +86,12 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	adapter.Configuration = regionalCodec{}
 	providers.RegisterFixture(t, kind, adapter)
 	s := store.New(pool)
-	w, err := store.NewExecution(t.Context(), s)
+	lease, err := pgunit.AcquireLease(t.Context(), pool)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer w.CloseExecution(context.Background())
+	defer lease.Close(context.Background())
+	w := store.NewExecution(s, lease)
 	installation := uuid.NewString()
 	if err = w.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 		t.Fatal(err)

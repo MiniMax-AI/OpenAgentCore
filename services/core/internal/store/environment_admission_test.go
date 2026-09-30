@@ -23,22 +23,20 @@ func newEnvironmentAdmission(t *testing.T) (*dispatchHarness, *execution.Worker)
 	t.Helper()
 	h := newDispatchHarness(t)
 	enableWorkerEnvironment(t, h)
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), h.db, h.d)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		_ = worker.Run(ctx)
 	})
-	h.session, err = worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{
+	session, err := worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.session = session
 	h = connectFixtureRuntime(t, h, h.session)
 	return h, worker
 }

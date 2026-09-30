@@ -27,7 +27,9 @@ type dispatchHarness struct {
 	admissions   map[string]fixtureAdmission
 	t            *testing.T
 	s            *store.Store
+	db           fixtureDB
 	d            *execution.Dispatcher
+	lease        execution.Ownership // held by tests that run execution operations without a Worker
 	tenant       string
 	session      store.Session
 	device       store.ExecutionDevice
@@ -45,8 +47,8 @@ func newDispatchHarness(t *testing.T) *dispatchHarness {
 
 func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool) *dispatchHarness {
 	t.Helper()
-	s, _ := store.NewModelTestStore(t)
-	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
+	s, db := newModelTestStoreDB(t)
+	h := &dispatchHarness{t: t, s: s, db: db, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error
 	h.session, err = s.CreateSession(ctx, h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "session", Configuration: configuration}))
@@ -223,9 +225,9 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	if outcome.AppliedThrough != second.Sequence || outcome.Done.Usage.InputTokens != 7 {
 		t.Fatalf("missing result: %+v", outcome)
 	}
-	newStore, pool := store.NewTestStore(t)
-	defer pool.Close()
-	h.s = newStore
+	newStore, db := newTestStoreDB(t)
+	defer db.pool.Close()
+	h.s, h.db = newStore, db
 	h.d.Store = newStore
 	bound, err := newStore.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {

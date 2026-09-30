@@ -20,11 +20,11 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	// Exercise HTTP parsing and durable storage without starting a Runtime.
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), managedSandboxes(t, s), fixtureDeploymentProvider(s))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), managedSandboxes(t, s), fixtureDeploymentProvider(s))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -84,13 +84,13 @@ type SessionPage struct {
 
 type Store struct {
 	queries *sqlc.Queries
-	// pool supplies the execution lease's dedicated connection; pooled runs
-	// every other transaction.
+	// pool is the database the Store was built on; pooled runs every
+	// transaction that is not on the execution lease.
 	pool   *pgxpool.Pool
 	pooled *pgunit.Pool
 	// writer runs Session and execution-only transactions, and lease grants
 	// execution authority. New sets writer to pooled and leaves lease nil;
-	// NewExecution sets both to the same execution lease. Neither changes later.
+	// NewExecution sets both to the lease it borrows. Neither changes later.
 	writer           transactor
 	lease            *pgunit.Lease
 	credentialCipher *credentialcrypto.Cipher

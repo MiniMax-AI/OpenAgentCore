@@ -28,10 +28,7 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	defer cancel()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {
@@ -47,7 +44,7 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, auth, "claude_sdk", workerExecution(worker), nativeDeploymentDefaults(h.s, model, provider))
+	handler, err := publicHandler(t, h.s, h.db, auth, "claude_sdk", workerExecution(worker), nativeDeploymentDefaults(h.s, model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}

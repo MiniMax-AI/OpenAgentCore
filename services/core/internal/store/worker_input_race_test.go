@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,10 +60,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			h.d.Store = store.New(instrumented)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker, err := execution.StartWorker(ctx, h.d)
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, ctx, fixtureDB{pool: instrumented}, h.d)
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
 			defer func() {

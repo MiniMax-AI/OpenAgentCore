@@ -20,6 +20,7 @@ type Worker struct {
 	metrics             workerMetricsState
 	dispatcher          *Dispatcher
 	admission           *store.Store
+	lease               Ownership
 	directoryReads      chan directoryReadRequest
 	fileWrites          chan fileWriteRequest
 	scheduleWake        chan struct{}
@@ -29,22 +30,41 @@ type Worker struct {
 	enrolledConnections map[string]*runtimeConnection
 }
 
-func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
+// StartWorker takes over owner.Lease from the moment it is called: a failed
+// start closes the lease before returning, and a started Worker closes it after
+// Run drains.
+func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *Worker, err error) {
+	if owner.Lease == nil {
+		return nil, errors.New("execution worker requires an execution lease")
+	}
+	defer func() {
+		if err == nil {
+			return
+		}
+		if closeErr := closeLease(ctx, owner.Lease); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 	if dispatcher.MaxConcurrentExecutions < 0 || dispatcher.MaxConcurrentExecutions > 1024 {
 		return nil, errors.New("execution concurrency must be between 1 and 1024, or zero for the default")
 	}
-	writer, err := store.NewExecution(ctx, dispatcher.Store)
+	if owner.Store == nil {
+		return nil, errors.New("execution worker requires the execution Store")
+	}
+	owned := *dispatcher
+	owned.Store = owner.Store
+	owned.notifications = &executionNotifications{}
+	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: &owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
+	worker.runtimes, err = newRuntimeManager(owner, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		return nil, err
 	}
-	owned := *dispatcher
-	owned.Store = writer
-	owned.notifications = &executionNotifications{}
-	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: &owned, admission: dispatcher.Store, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
-	worker.runtimes, err = newRuntimeManager(owned.Store, owned.Registry, owned.ManagedRuntimes)
-	if err != nil {
-		_ = writer.CloseExecution(context.Background())
-		return nil, err
+	if worker.runtimes != nil {
+		defer func() {
+			if err != nil {
+				worker.runtimes.stop()
+			}
+		}()
 	}
 	var deployment *store.RuntimeDeployment
 	if worker.runtimes != nil && worker.runtimes.loadDeployment == nil {
@@ -60,24 +80,12 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 		err = owned.Store.ConfigureRuntimeDeployment(ctx, deployment)
 	}
 	if err != nil {
-		if worker.runtimes != nil {
-			worker.runtimes.stop()
-		}
-		_ = writer.CloseExecution(context.Background())
 		return nil, err
 	}
-	if err := owned.Store.ReconcileEnvironmentConnections(ctx); err != nil {
-		if worker.runtimes != nil {
-			worker.runtimes.stop()
-		}
-		_ = writer.CloseExecution(context.Background())
+	if err = owned.Store.ReconcileEnvironmentConnections(ctx); err != nil {
 		return nil, err
 	}
-	if err := worker.reconcile(ctx); err != nil {
-		if worker.runtimes != nil {
-			worker.runtimes.stop()
-		}
-		_ = writer.CloseExecution(context.Background())
+	if err = worker.reconcile(ctx); err != nil {
 		return nil, err
 	}
 	worker.observeOwnership(nil)
@@ -86,7 +94,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 
 // CheckOwnership checks the same database lease used for execution writes.
 func (w *Worker) CheckOwnership(ctx context.Context) error {
-	err := w.dispatcher.Store.CheckExecutionOwnership(ctx)
+	err := w.lease.CheckOwnership(ctx)
 	w.observeOwnership(err)
 	return err
 }
@@ -148,9 +156,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			// Drain an external provisioning caller before releasing the writer lease.
 			w.runtimes.drain()
 		}
-		closeCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
-		defer stop()
-		w.observeWorkerClosed(w.dispatcher.Store.CloseExecution(closeCtx))
+		w.observeWorkerClosed(closeLease(ctx, w.lease))
 	}()
 	active := make(map[string]bool)
 	w.observeSlots(len(active))

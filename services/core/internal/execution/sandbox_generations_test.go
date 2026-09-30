@@ -15,7 +15,8 @@ import (
 )
 
 func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) {
-	s, writer := resetManagerStore(t)
+	s, owner := resetManagerStore(t)
+	writer := owner.Store
 	id := uuid.NewString()
 	if err := writer.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
@@ -49,7 +50,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 			},
 			FenceCredential: func(context.Context) (func(), error) { fenced++; return func() { released++ }, nil }, Publish: func(*RuntimeProvider) { published++ }}, nil
 	})
-	m, err := newRuntimeManager(writer, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, runtimegateway.NewRegistry(), config)
 	if err != nil {
 		t.Fatal(err)
 	}

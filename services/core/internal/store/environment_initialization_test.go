@@ -52,7 +52,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			s := store.NewWithCredentialCipher(pool, cipher)
+			s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 			principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
 			session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
 				Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -79,10 +79,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
-			worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry})
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry})
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
@@ -171,7 +168,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 // Revocation can commit after the worker observes a connected peer but before
 // it claims preparation. It must remain a per-Environment admission result.
 func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
 	create := func() store.EnvironmentInitialization {
 		t.Helper()
@@ -198,11 +195,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		return store.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
-	owned, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer owned.CloseExecution(context.Background())
+	owned := executionOwner(t, db, s).Store
 	if err := s.RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}

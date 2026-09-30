@@ -15,7 +15,7 @@ import (
 func (s *Store) ListRuntimeLifecycleNodes(ctx context.Context) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	rows, err := s.queries.ListRuntimeLifecycleNodes(ctx)
@@ -53,7 +53,7 @@ func (s *Store) ListRuntimeAllocationsForNode(ctx context.Context, node, after s
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	rows, err := s.queries.ListRuntimeAllocationsForNode(ctx, sqlc.ListRuntimeAllocationsForNodeParams{NodeID: nodeID, AfterID: afterID})
@@ -76,7 +76,7 @@ func (s *Store) ListUnallocatedHostedEnvironmentsForNode(ctx context.Context, no
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return nil, err
 	}
 	rows, err := s.queries.ListUnallocatedHostedEnvironmentsForNode(ctx, sqlc.ListUnallocatedHostedEnvironmentsForNodeParams{NodeID: nodeID, AfterID: afterID})
@@ -99,7 +99,7 @@ func (s *Store) ResolveRuntimeLifecycleNode(ctx context.Context, tenant, environ
 	}
 	ctx, cancel := context.WithTimeout(ctx, pgunit.ExecutionTimeout)
 	defer cancel()
-	if err := s.CheckExecutionOwnership(ctx); err != nil {
+	if err := s.checkExecutionOwnership(ctx); err != nil {
 		return "", err
 	}
 	row, err := s.queries.GetRuntimeLifecyclePlacement(ctx, sqlc.GetRuntimeLifecyclePlacementParams{TenantID: lookup.TenantID, ID: lookup.ID})

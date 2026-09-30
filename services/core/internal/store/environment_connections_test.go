@@ -168,7 +168,7 @@ func TestEnvironmentConnectionRequiresOwnerAndRollsBackWithEvent(t *testing.T) {
 	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.CloseExecution(t.Context()); err != nil {
+	if err := writer.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	before = connectionSnapshot(t, pool, environment.ID)

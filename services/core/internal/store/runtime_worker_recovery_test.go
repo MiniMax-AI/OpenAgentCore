@@ -34,12 +34,8 @@ func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 
 func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.T) {
 	h, _ := runtimeWorkerHarness(t)
-	writer, err := store.NewExecution(t.Context(), h.s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
-	h.d.Store = writer
+	owner := executionOwner(t, h.db, h.s)
+	h.d.Store, h.lease = owner.Store, owner.Lease
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
@@ -65,10 +61,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), h.db, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -152,7 +145,7 @@ func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, h.session.ID); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(t.Context(), h.d)
+	worker, err := startWorkerErr(t.Context(), h.db, h.d)
 	if err != nil {
 		t.Fatal("queued wake blocked Core startup", err)
 	}

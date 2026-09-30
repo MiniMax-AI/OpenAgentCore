@@ -42,7 +42,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 		sessions[h.session.ID] = receipt.TurnID
 	}
 	frames := capacityWorkerFrames(t, h)
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	defer stop()
 	admissions := make(map[string]string)
 	started := make(map[string]int)
@@ -175,7 +175,7 @@ func TestWorkerDoesNotDeferOtherPreparationOrStartRejections(t *testing.T) {
 			h.session = publicSession(t, h, test.name)
 			receipt := h.message("work", "once")
 			frames := capacityWorkerFrames(t, h)
-			_, stop := startEnvironmentExpiryWorker(t, h.d)
+			_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 			defer stop()
 			prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 			if test.operation == proto.TypeExecutionStart {

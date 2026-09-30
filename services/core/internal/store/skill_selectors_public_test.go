@@ -26,20 +26,20 @@ func TestSkillSelectorsOfficialClientPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex")
+	h, err := publicHandler(t, s, db, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
-	recoveredStore := store.NewWithCredentialCipher(pool, cipher)
-	h, err = publicHandler(t, recoveredStore, auth, "codex")
+	recoveredStore, recoveredDB := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	h, err = publicHandler(t, recoveredStore, recoveredDB, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

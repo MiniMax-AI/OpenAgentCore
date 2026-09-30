@@ -89,7 +89,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 }
 
 func (w *Worker) runEnvironmentInput(ctx context.Context, item scheduledWork) error {
-	run, err := w.dispatcher.RunEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID)
+	run, err := w.dispatcher.RunEnvironmentInput(ctx, w.lease, item.TenantID, item.SessionID, item.reservationID)
 	if err == nil {
 		return nil
 	}

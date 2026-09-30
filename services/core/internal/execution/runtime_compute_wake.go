@@ -70,7 +70,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 }
 
 func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.CheckpointProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
-	if err := r.store.CheckExecutionOwnership(ctx); err != nil {
+	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
 	// An uncommitted artifact is found by its persisted attempt, never a directory

@@ -17,6 +17,7 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 
 type runtimeManager struct {
 	store               *store.Store
+	lease               Ownership
 	registry            *runtimegateway.Registry
 	config              RuntimeProvider
 	setupInstallationID string
@@ -81,7 +82,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 	if n == nil {
 		ctx, stop := context.WithCancel(m.ctx)
 		n = &runtimeNode{lifecycle: &runtimeLifecycle{
-			store: m.store, registry: m.registry, config: m.config, nodeID: id,
+			store: m.store, lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
 			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
 		}}

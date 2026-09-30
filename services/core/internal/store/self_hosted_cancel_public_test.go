@@ -21,7 +21,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewModelTestStore(t)
+	s, db := newModelTestStoreDB(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
@@ -30,8 +30,8 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	})
 	serve := func() (*httptest.Server, func(bool)) {
 		t.Helper()
-		worker, stop := publicInitialWorker(t, s)
-		handler, err := publicHandler(t, s, auth, "codex", workerExecution(worker), executorURL("https://offline-executor.example"))
+		worker, stop := publicInitialWorker(t, s, db)
+		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -75,7 +75,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	settings["accepted"] = accepted
 	receipts := func(key, target string) []store.InputReceipt {
 		t.Helper()
-		rows, err := pool.Query(t.Context(), `SELECT sequence, COALESCE(turn_id::text,'') FROM turn_inputs
+		rows, err := db.pool.Query(t.Context(), `SELECT sequence, COALESCE(turn_id::text,'') FROM turn_inputs
 			WHERE session_id=$1 AND idempotency_key=$2 ORDER BY batch_position`, created.ID, key)
 		if err != nil {
 			t.Fatal(err)
@@ -100,7 +100,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	snapshot := func(sessionID string) string {
 		t.Helper()
 		var value string
-		err := pool.QueryRow(t.Context(), `SELECT jsonb_build_object(
+		err := db.pool.QueryRow(t.Context(), `SELECT jsonb_build_object(
 			'session', (SELECT to_jsonb(s) FROM sessions s WHERE id=$1),
 			'reservations', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM environment_input_reservations r WHERE session_id=$1),
 			'turns', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM turns t WHERE session_id=$1),
@@ -171,8 +171,8 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		if reopen {
 			stop(false)
 			server.Close()
-			pool.Close()
-			s, pool = store.NewModelTestStore(t)
+			db.pool.Close()
+			s, db = newModelTestStoreDB(t)
 			server, stop = serve()
 			settings["base"] = server.URL
 		}

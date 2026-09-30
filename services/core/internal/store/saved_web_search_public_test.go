@@ -19,13 +19,13 @@ import (
 // and keeps tenant isolation (W8).
 func TestSavedWebSearchPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "search-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "search-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	enabledTools := map[string]string{"mode-live": agents["mode-live"], "mode-cached": agents["mode-cached"], "type-only": agents["type-only"], "updated-to-live": agents["mode-disabled"]}
 
 	// W4: every creation mode rejects enabled saved search without writes.
-	before := databaseDigest(t, pool)
+	before := databaseDigest(t, db.pool)
 	const rejection = `{"error":{"message":"Only disabled web_search is qualified for execution.","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
 	for name, id := range enabledTools {
 		for _, suffix := range []string{
@@ -223,7 +223,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	if status, raw := client.do(foreign, http.MethodGet, "/v1/agents?limit=100", "", nil); status != http.StatusOK || strings.Contains(raw, "search-model") {
 		t.Errorf("foreign list: %d %s", status, raw)
 	}
-	if after := databaseDigest(t, pool); !mapsEqual(before, after) {
+	if after := databaseDigest(t, db.pool); !mapsEqual(before, after) {
 		t.Fatal("rejected Session creation changed persisted state")
 	}
 

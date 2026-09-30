@@ -11,7 +11,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -55,10 +54,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			input := h.message("start", "Look up ticket")
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker, err := execution.StartWorker(ctx, h.d)
-			if err != nil {
-				t.Fatal(err)
-			}
+			worker := startWorker(t, ctx, h.db, h.d)
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
 			defer func() {
@@ -126,10 +122,7 @@ func TestClaudeDispatcherRejectsUnsupportedConfigurationBeforeClaim(t *testing.T
 func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T) {
 	h := newDispatchHarness(t)
 	claudeSession(t, h, functionConfiguration, false)
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), h.db, h.d)
 	defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 	input := h.message("start", "Run")
 	if _, err := h.s.TransitionTurn(t.Context(), h.tenant, h.session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {

@@ -13,13 +13,13 @@ import (
 )
 
 func TestProjectAndSharedKeysHTTPManagement(t *testing.T) {
-	st, _ := store.NewTestStore(t)
+	st, db := newTestStoreDB(t)
 	adminToken := uuid.NewString()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(adminToken)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := publicHandler(t, st, nil, "codex", storeKeys(st), withCoreKeys(admin))
+	h, err := publicHandler(t, st, db, nil, "codex", storeKeys(st), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}

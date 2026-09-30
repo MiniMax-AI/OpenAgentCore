@@ -21,7 +21,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	h.session = publicSession(t, h, "scan-barrier")
 	receipt := h.message("barrier", "ordinary work")
 	scanned := time.Now()
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	// Dispatch starts only after selectWork has examined the pending input on
 	// the same pass, while its exact Runtime is still incapable of preparation.
 	barrier := nextWorkerFrame(t, frames, testExecutionRequest)
@@ -69,7 +69,7 @@ func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 	h.session = publicSession(t, h, "page-barrier")
 	receipt := h.message("barrier", "ordinary work")
 	scanned := time.Now()
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	barrier := nextWorkerFrame(t, frames, testExecutionRequest)
 	if barrier.ID != receipt.TurnID {
 		t.Fatal("unexpected page barrier")

@@ -165,7 +165,7 @@ func TestEnvironmentInputReservationPromotionAndDirectRetries(t *testing.T) {
 	if err != nil || len(retry) != 2 || !retry[0].Replayed || retry[0].Sequence != promoted.Receipts[0].Sequence {
 		t.Fatal("direct retry after promotion", retry, err)
 	}
-	if err := writer.CloseExecution(ctx); err != nil {
+	if err := writer.lease.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
 	pool.Close()

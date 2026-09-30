@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -40,10 +39,10 @@ func (p *absentCreationProvider) GetInfo(_ context.Context, r sandbox.Reference)
 func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 	for _, cancelled := range []bool{false, true} {
 		t.Run(map[bool]string{false: "live caller", true: "cancelled caller"}[cancelled], func(t *testing.T) {
-			s, _ := store.NewManagedTestStore(t)
+			s, db := newManagedTestStoreDB(t)
 			key := uuid.NewString()
 			p := &absentCreationProvider{}
-			w, _ := managedWorker(t, s, key, p)
+			w, _ := managedWorker(t, s, db, key, p)
 			tenant, session, environment := managedSession(t, s)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
@@ -78,10 +77,10 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 	}
 }
 func TestManagedRuntimeForeignAbsenceCannotReleaseCreation(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	key := uuid.NewString()
 	p := &absentCreationProvider{foreign: true}
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorker(t, s, db, key, p)
 	tenant, _, environment := managedSession(t, s)
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err == nil {
 		t.Fatal("foreign absence accepted")
@@ -92,10 +91,10 @@ func TestManagedRuntimeForeignAbsenceCannotReleaseCreation(t *testing.T) {
 	}
 }
 func TestManagedRuntimeObservedSettlementAllowsOwnedCleanup(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	key := uuid.NewString()
 	p := &absentCreationProvider{observeSettled: true}
-	w, _ := managedWorker(t, s, key, p)
+	w, _ := managedWorker(t, s, db, key, p)
 	tenant, session, environment := managedSession(t, s)
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err == nil {
 		t.Fatal("uncertain Create succeeded")

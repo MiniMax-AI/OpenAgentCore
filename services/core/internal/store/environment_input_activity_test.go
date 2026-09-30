@@ -215,7 +215,7 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 		t.Fatal(err)
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
-	if err := old.CloseExecution(t.Context()); err != nil {
+	if err := old.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	next := executionWriter(t, s)

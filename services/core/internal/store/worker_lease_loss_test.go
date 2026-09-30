@@ -8,7 +8,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,10 +17,7 @@ func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})}}})
 	h.session = publicSession(t, h, "active")
 	queued := publicSession(t, h, "queued")
-	worker, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), h.db, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -75,10 +71,7 @@ func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	if err != nil || active.Status != store.TurnInProgress {
 		t.Fatal("lost owner persisted fallback completion", active, err)
 	}
-	successor, err := execution.StartWorker(t.Context(), h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	successor := startWorker(t, t.Context(), h.db, h.d)
 	stopped, stop := context.WithCancel(t.Context())
 	stop()
 	if err = successor.Run(stopped); err != context.Canceled {

@@ -227,7 +227,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err != nil || len(events) != expectedEvents || events[len(events)-1].Event.Type != "agent.session.failed" || events[len(events)-1].Turn != nil || events[len(events)-1].EnvironmentInputActivity.Status != "failed" {
 				t.Fatal("missing pre-Turn failure snapshot", events, err)
 			}
-			if err := writer.CloseExecution(t.Context()); err != nil {
+			if err := writer.lease.Close(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			pool.Close()

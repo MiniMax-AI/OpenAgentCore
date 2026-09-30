@@ -36,6 +36,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -226,8 +227,12 @@ func run() error {
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
-
-		worker, err = execution.StartWorker(ctx, dispatcher)
+		lease, err := pgunit.AcquireLease(ctx, pool)
+		if err != nil {
+			return err
+		}
+		// From this call on the Worker closes the lease, even when it fails to start.
+		worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{Lease: lease, Store: store.NewExecution(executionStore, lease)})
 		if err != nil {
 			return err
 		}

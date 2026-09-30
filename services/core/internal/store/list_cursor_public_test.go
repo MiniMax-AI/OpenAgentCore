@@ -221,25 +221,21 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := store.NewWithCredentialCipher(pool, cipher)
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = writer.CloseExecution(t.Context()) }()
+	writer := executionOwner(t, db, s).Store
 	a := seedCursorFixture(t, s, writer, client, owner, ownerTenant, "a")
 	b := seedCursorFixture(t, s, writer, client, foreign, foreignTenant, "b")
 

@@ -14,13 +14,10 @@ import (
 func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 	for _, deleted := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unbound", true: "deleted"}[deleted], func(t *testing.T) {
-			s, pool := store.NewTestStore(t)
+			s, db := newTestStoreDB(t)
 			tenant, pending := newEnvironmentExpiryReservation(t, s)
-			writer, err := store.NewExecution(t.Context(), s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
+			owner := executionOwner(t, db, s)
+			writer := owner.Store
 			got, err := writer.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if err != nil || len(got.Receipts) != 1 || got.Receipts[0].Replayed {
 				t.Fatal(got, err)
@@ -39,18 +36,15 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal("promotion did not retain the active claim", turn, err)
 			}
 			// Simulate owner loss after commit, without sending any daemon Start.
-			awaitRelease := observeExecutionLeaseRelease(t, pool)
-			if err := writer.CloseExecution(t.Context()); err != nil {
+			awaitRelease := observeExecutionLeaseRelease(t, db.pool)
+			if err := owner.Lease.Close(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			awaitRelease()
-			restarted, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
-			if err != nil {
-				t.Fatal(err)
-			}
+			restarted := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
 			stopped, cancel := context.WithCancel(t.Context())
 			cancel()
-			awaitRelease = observeExecutionLeaseRelease(t, pool)
+			awaitRelease = observeExecutionLeaseRelease(t, db.pool)
 			if err := restarted.Run(stopped); !errors.Is(err, context.Canceled) {
 				t.Fatal(err)
 			}
@@ -63,18 +57,14 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal("restart failed to settle the original claim", turn, err)
 			}
 			var turns, inputs, queued int
-			err = pool.QueryRow(t.Context(), `SELECT
+			err = db.pool.QueryRow(t.Context(), `SELECT
 				(SELECT count(*) FROM turns WHERE session_id=$1),
 				(SELECT count(*) FROM turn_inputs WHERE session_id=$1),
 				(SELECT count(*) FROM turns WHERE session_id=$1 AND status='queued')`, pending.SessionID).Scan(&turns, &inputs, &queued)
 			if err != nil || turns != 1 || inputs != 1 || queued != 0 {
 				t.Fatal("restart duplicated or requeued prepared work", turns, inputs, queued, err)
 			}
-			successor, err := store.NewExecution(t.Context(), s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = successor.CloseExecution(context.Background()) })
+			successor := executionOwner(t, db, s).Store
 			retry, err := successor.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if deleted {
 				if !errors.Is(err, store.ErrNotFound) {

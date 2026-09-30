@@ -41,6 +41,7 @@ type RuntimeProvider struct {
 
 type runtimeLifecycle struct {
 	store           *store.Store
+	lease           Ownership
 	registry        *runtimegateway.Registry
 	config          RuntimeProvider
 	nodeID          string
@@ -55,7 +56,7 @@ type runtimeLifecycle struct {
 	wakeHints       chan struct{}
 }
 
-func newRuntimeManager(s *store.Store, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
+func newRuntimeManager(owner Owner, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -73,7 +74,7 @@ func newRuntimeManager(s *store.Store, registry *runtimegateway.Registry, config
 		}
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{store: s, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{store: owner.Store, lease: owner.Lease, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -212,7 +213,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if owner.Replayed {
 		return owner, nil
 	}
-	if err := r.store.CheckExecutionOwnership(ctx); err != nil {
+	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
@@ -294,7 +295,7 @@ func (r *runtimeLifecycle) reconcile(ctx context.Context) error {
 		r.recordObservation(ctx, owner, err)
 		stop()
 		if err != nil {
-			if ownership := r.store.CheckExecutionOwnership(ctx); ownership != nil {
+			if ownership := r.lease.CheckOwnership(ctx); ownership != nil {
 				return ownership
 			}
 			// Provider errors can include operator configuration. Log safe identity
@@ -337,7 +338,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if owner.ProviderKey != r.config.InstallationID {
 		return sandbox.ErrInvalid
 	}
-	if err := r.store.CheckExecutionOwnership(ctx); err != nil {
+	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
 	info, err := provider.GetInfo(ctx, runtimeReference(owner))
@@ -366,7 +367,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 		if err != nil {
 			return err
 		}
-		if err := r.store.CheckExecutionOwnership(ctx); err != nil {
+		if err := r.lease.CheckOwnership(ctx); err != nil {
 			return err
 		}
 		if err := provider.Kill(ctx, runtimeReference(owner)); err != nil {

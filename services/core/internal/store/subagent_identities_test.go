@@ -109,7 +109,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if _, err = w.CompleteExecution(ctx, tenant, session.ID, input.TurnID, TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
-	if err = w.CloseExecution(ctx); err != nil {
+	if err = w.lease.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
 	reopened, _ := testStore(t)
@@ -157,7 +157,7 @@ func TestSubagentIdentityRejectsLostLease(t *testing.T) {
 	if err := old.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, []ExecutionEvent{subagentIdentityEvent("child", "root", 100)}); err == nil {
 		t.Fatal("lost owner committed identity")
 	}
-	if err := successor.CheckExecutionOwnership(context.Background()); err != nil {
+	if err := successor.lease.CheckOwnership(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	events, err := s.ListTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 0, 100)

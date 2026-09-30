@@ -19,9 +19,9 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 			var readOnce sync.Once
 			unblockRead := func() { readOnce.Do(func() { close(releaseRead) }) }
 			defer unblockRead()
-			writer, pool := delayedReadWriter(t, &armed, reading, releaseRead)
+			owner, pool := delayedReadWriter(t, &armed, reading, releaseRead)
 			m := testRuntimeManager(t)
-			m.store = writer
+			m.store, m.lease = owner.Store, owner.Lease
 			m.loadDeployment = func(context.Context) (*RuntimeProvider, error) { return nil, nil }
 			m.mutationGate = make(chan struct{}, 1)
 			// This fixture models an already loaded node deployment; its provider is
@@ -49,7 +49,7 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 				defer cancel()
 				queryDone = make(chan error, 1)
 				armed.Store(true)
-				go func() { queryDone <- writer.CheckExecutionOwnership(queryCtx) }()
+				go func() { queryDone <- owner.Lease.CheckOwnership(queryCtx) }()
 				select {
 				case <-reading:
 				case <-time.After(2 * time.Second):

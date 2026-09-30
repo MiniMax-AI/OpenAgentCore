@@ -21,7 +21,7 @@ func TestEnvironmentUploadWriteAuditSurvivesRequestAndLeaseContext(t *testing.T)
 	cancel()
 	sessionAuditCount(t, f.s, f.tenant, 0)
 	// Neither the settlement caller nor the newly acquired execution lease owns the request context.
-	if err := f.writer.CloseExecution(context.Background()); err != nil {
+	if err := f.writer.lease.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	next := executionWriter(t, f.s)

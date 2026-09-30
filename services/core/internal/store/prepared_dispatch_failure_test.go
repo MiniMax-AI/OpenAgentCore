@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -121,12 +122,14 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 	}
 }
 
-func TestPreparedDispatchRejectsPooledWriterBeforePreparation(t *testing.T) {
+func TestPreparedDispatchRejectsClosedLeaseBeforePreparation(t *testing.T) {
 	h, pending := preparedDispatchHarness(t)
-	h.d.Store = h.s
-	got, err := h.d.RunEnvironmentInput(context.Background(), h.tenant, h.session.ID, pending.ID)
-	if err == nil || got.Turn.ID != "" {
-		t.Fatal("pooled writer reached native preparation", got, err)
+	if err := h.lease.Close(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := h.d.RunEnvironmentInput(context.Background(), h.lease, h.tenant, h.session.ID, pending.ID)
+	if !errors.Is(err, pgunit.ErrLeaseClosed) || got.Turn.ID != "" {
+		t.Fatal("closed lease reached native preparation", got, err)
 	}
 }
 

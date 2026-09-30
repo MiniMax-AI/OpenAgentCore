@@ -19,7 +19,7 @@ func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 	h := newDispatchHarness(t)
 	_, pool := store.NewTestStore(t)
 	enableEnvironmentExpiryDispatch(h)
-	worker, stop := startEnvironmentExpiryWorker(t, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	var requests []proto.Envelope
 	var sessions []store.Session
 	for _, key := range []string{"one", "two", "three", "four"} {
@@ -64,7 +64,7 @@ func TestWorkerEnvironmentExpirySkipsBusySessionAndAllowsDispatch(t *testing.T) 
 	if _, err := tx.Exec(t.Context(), "SELECT id FROM sessions WHERE id=$1 FOR UPDATE", locked.SessionID); err != nil {
 		t.Fatal(err)
 	}
-	worker, stop := startEnvironmentExpiryWorker(t, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	h.session = publicSession(t, h, "unrelated")
 	receipt, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "work", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"make normal progress"}`)}})
 	if err != nil {

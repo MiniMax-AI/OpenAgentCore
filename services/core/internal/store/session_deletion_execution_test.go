@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -16,10 +15,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	h := newFunctionHarness(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {
@@ -81,10 +77,7 @@ func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 	if err := h.s.CommitLegacyDeletion(ctx, h.tenant, h.session.ID); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	stopped, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := worker.Run(stopped); !errors.Is(err, context.Canceled) {
@@ -105,10 +98,7 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	h := newFunctionHarness(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {

@@ -13,19 +13,21 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
-// executionWriter builds the execution writer on the shared test database.
-// Tests in this package run sequentially, so one writer at a time owns it.
+// executionWriter acquires the execution lease on the shared test database and
+// builds s's execution writer on it, as cmd/server does. Tests in this package
+// run sequentially, so one writer at a time owns it; writer.lease releases it.
 func executionWriter(t *testing.T, s *Store) *Store {
 	t.Helper()
-	writer, err := NewExecution(t.Context(), s)
+	lease, err := pgunit.AcquireLease(t.Context(), s.pool)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = writer.CloseExecution(context.Background()) })
-	return writer
+	t.Cleanup(func() { _ = lease.Close(context.Background()) })
+	return NewExecution(s, lease)
 }
 
 // executionOwnerPID finds the backend holding this database's execution lease,
@@ -105,7 +107,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	mustReject("reconciliation", err)
 	_, err = writer.ExpireEnvironmentInputs(t.Context())
 	mustReject("input expiry", err)
-	mustReject("ownership check", writer.CheckExecutionOwnership(t.Context()))
+	mustReject("ownership check", writer.lease.CheckOwnership(t.Context()))
 	after, err := s.GetSession(t.Context(), tenant, active.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("stale state persisted", after, err)
@@ -131,7 +133,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	}
 	// Public admission remains usable with a dead owner connection.
 	submitMessage(t, s, tenant, queued.ID, "additional")
-	if err = successor.CheckExecutionOwnership(t.Context()); err != nil {
+	if err = successor.lease.CheckOwnership(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = successor.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, TurnCompleted, json.RawMessage(`{"done":{"content":"accepted"}}`), "successor-native", input.Sequence); err != nil {
@@ -145,7 +147,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("terminal CAS changed", err)
 	}
-	if err = successor.CloseExecution(t.Context()); err != nil {
+	if err = successor.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	mustReject("closed writer", successor.BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
@@ -184,7 +186,7 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 			}
 			results <- err
 		})
-		group.Go(func() { results <- writer.CheckExecutionOwnership(t.Context()) })
+		group.Go(func() { results <- writer.lease.CheckOwnership(t.Context()) })
 	}
 	group.Wait()
 	close(results)
@@ -230,15 +232,11 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	operation, cancel := context.WithCancel(t.Context())
-	defer cancel()
 	_, archiveErr := s.ArchiveManagedSession(t.Context(), tenant, session.ID, 0)
 	_, expiryErr := s.ExpireEnvironmentInputs(t.Context())
 	subagent := []ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"visible"}`)}, subagentIdentityEvent("child", "root", 100)}
 	for name, err := range map[string]error{
-		"ownership check":   s.CheckExecutionOwnership(t.Context()),
-		"cancellation":      s.CancelExecutionOperations(t.Context(), cancel),
-		"close":             s.CloseExecution(t.Context()),
+		"ownership check":   s.checkExecutionOwnership(t.Context()),
 		"archive":           archiveErr,
 		"input expiry":      expiryErr,
 		"deployment":        s.ConfigureRuntimeDeployment(t.Context(), nil),
@@ -250,9 +248,6 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 		if !errors.Is(err, ErrExecutionAuthority) {
 			t.Fatalf("pooled Store ran %s: %v", name, err)
 		}
-	}
-	if operation.Err() != nil {
-		t.Fatal("pooled Store ran the cancellation callback")
 	}
 	after, err := s.GetSession(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {

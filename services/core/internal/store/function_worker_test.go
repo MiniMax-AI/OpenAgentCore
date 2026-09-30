@@ -65,10 +65,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				input := h.message("queued", "Look up ticket")
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				worker, err := execution.StartWorker(ctx, h.d)
-				if err != nil {
-					t.Fatal(err)
-				}
+				worker := startWorker(t, ctx, h.db, h.d)
 				done := make(chan error, 1)
 				go func() { done <- worker.Run(ctx) }()
 				defer func() {
@@ -127,7 +124,7 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.s = store.NewWithCredentialCipher(pool, cipher)
+	h.s, h.db = store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	h.d.Store = h.s
 	vault, err := h.s.CreateVault(t.Context(), h.tenant, store.CreateVaultInput{})
 	if err != nil {

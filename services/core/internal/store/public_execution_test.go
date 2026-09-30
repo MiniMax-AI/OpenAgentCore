@@ -8,7 +8,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -28,10 +27,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	h.session = publicSession(t, h, "public")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	t.Cleanup(func() {
@@ -42,7 +38,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 			t.Error("worker did not stop")
 		}
 	})
-	if second, err := execution.StartWorker(ctx, h.d); err == nil {
+	if second, err := startWorkerErr(ctx, h.db, h.d); err == nil {
 		cancel()
 		go second.Run(ctx)
 		t.Fatal("second service acquired database")
@@ -151,10 +147,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if _, err := h.s.SubmitMessage(ctx, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := execution.StartWorker(ctx, h.d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, h.db, h.d)
 	stopped, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := worker.Run(stopped); err != context.Canceled {
@@ -175,7 +168,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err != nil || pending.LastTurn.Status != store.TurnCancelled {
 		t.Fatal(pending, err)
 	}
-	restarted, err := execution.StartWorker(ctx, h.d)
+	restarted, err := startWorkerErr(ctx, h.db, h.d)
 	if err != nil {
 		t.Fatal("lease not released", err)
 	}

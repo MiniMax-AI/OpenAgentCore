@@ -24,7 +24,7 @@ import (
 // the Core key in /core/v1, and node and executor credentials only on their
 // own /api/v1 machine connection routes.
 func TestCredentialNamespaceMatrix(t *testing.T) {
-	s, _ := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	s.SetPublicURL("https://core.example")
 	ctx := t.Context()
 	coreKey := uuid.NewString()
@@ -32,7 +32,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,10 +94,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
 	})
-	worker, err := execution.StartWorker(ctx, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, ctx, db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
 	var stop sync.Once
 	t.Cleanup(func() {
 		stop.Do(func() {

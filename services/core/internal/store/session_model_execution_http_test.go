@@ -16,10 +16,10 @@ import (
 func TestModelExecutionHTTPWriteOnlyAndStrictAdmission(t *testing.T) {
 	_, pool := store.NewTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
-	st := store.NewWithCredentialCipher(pool, cipher)
+	st, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "catalog-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st))
 	if err != nil {
 		t.Fatal(err)
 	}

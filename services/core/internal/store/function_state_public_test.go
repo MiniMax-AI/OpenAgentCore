@@ -21,7 +21,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if python == "" {
 		t.Skip("OAC_TEST_OFFICIAL_SDK_PYTHON is required for official-client verification")
 	}
-	s, _ := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
@@ -45,7 +45,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	}
 	record("first")
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
-	handler, err := publicHandler(t, s, auth, "codex")
+	handler, err := publicHandler(t, s, db, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

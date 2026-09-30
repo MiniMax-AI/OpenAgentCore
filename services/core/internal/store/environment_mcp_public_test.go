@@ -15,9 +15,9 @@ import (
 func TestPublicEnvironmentMCPUsesAttachedVaultSelection(t *testing.T) {
 	for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
 		t.Run(kind, func(t *testing.T) {
-			s, pool, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
+			s, db, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
 			auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: runtimedevice.HashCredential("test-token")}})
-			handler, err := publicHandler(t, s, auth, kind, workerExecution(&execution.Worker{}), executorURL("https://executor.example"))
+			handler, err := publicHandler(t, s, db, auth, kind, workerExecution(&execution.Worker{}), executorURL("https://executor.example"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -48,7 +48,7 @@ func TestPublicEnvironmentMCPUsesAttachedVaultSelection(t *testing.T) {
 					}
 				}
 			}
-			assertSelfHostedMCPRejectionHasNoWrites(t, pool, tenant)
+			assertSelfHostedMCPRejectionHasNoWrites(t, db.pool, tenant)
 			for _, r := range []*httptest.ResponseRecorder{send("environment", []string{}, nil, nil, false), send("environment", []string{vault.ID}, credential.ID, nil, false), send("environment", []string{vault.ID}, nil, nil, false)} {
 				if r.Code != 201 {
 					t.Fatal("qualified public MCP rejected", r.Code, r.Body)

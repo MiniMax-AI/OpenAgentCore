@@ -13,7 +13,7 @@ import (
 )
 
 func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
-	s, pool := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "connection-worker", Configuration: []byte(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
 	if err != nil {
@@ -23,10 +23,8 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer, err := store.NewExecution(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	owner := executionOwner(t, db, s)
+	writer := owner.Store
 	generation := uuid.NewString()
 	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 		t.Fatal(err)
@@ -34,16 +32,12 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
-	awaitRelease := observeExecutionLeaseRelease(t, pool)
-	if err := writer.CloseExecution(t.Context()); err != nil {
+	awaitRelease := observeExecutionLeaseRelease(t, db.pool)
+	if err := owner.Lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	dispatcher := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
-	worker, err := execution.StartWorker(t.Context(), dispatcher)
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	exited := make(chan struct{})

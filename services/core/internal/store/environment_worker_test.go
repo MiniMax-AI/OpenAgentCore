@@ -31,7 +31,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 		receipt := h.message(key, "ordinary")
 		ordinary[receipt.TurnID] = session
 	}
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	var normal []proto.Envelope
 	var preparing []proto.Envelope
 	for range 4 {
@@ -132,7 +132,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	pending := workerEnvironmentReservation(t, h)
 	runtime := h.environments[pending.SessionID]
 	frames := workerFrames(t, h, runtime)
-	_, stop := startEnvironmentExpiryWorker(t, h.d)
+	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	first := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	started := time.Now()
 	handle := acknowledgePreparation(runtime, first.ID)
@@ -162,7 +162,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	if err != nil || stored.State != store.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
 		t.Fatal("retry or shutdown changed the original reservation", stored, err)
 	}
-	_, stop = startEnvironmentExpiryWorker(t, h.d)
+	_, stop = startEnvironmentExpiryWorker(t, h.db, h.d)
 	third := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	handle = acknowledgePreparation(runtime, third.ID)
 	runtime.write(third.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})

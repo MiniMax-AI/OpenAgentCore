@@ -130,7 +130,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner store.Environment
 	operations := setupOperations(setup)
 	for index := 0; index < len(cfg.Files)+len(operations); index++ {
 		step, stop := context.WithTimeout(ctx, 2*time.Minute)
-		err = w.dispatcher.Store.CheckExecutionOwnership(step)
+		err = w.lease.CheckOwnership(step)
 		if err == nil {
 			var currentPeer = peer
 			currentPeer, err = w.dispatcher.authorizedPeer(step, owner.DeviceID)

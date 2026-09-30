@@ -21,7 +21,7 @@ import (
 )
 
 func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
-	s, pool := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
 	session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
 		Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -83,10 +83,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	server.Start()
 	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
 	start := func() func() {
-		worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s, Registry: registry})
-		if err != nil {
-			t.Fatal(err)
-		}
+		worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry})
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() { done <- worker.Run(ctx) }()
@@ -148,7 +145,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	second := connect(rotated.Token)
 	await("connected")
 	assertConnection(environment.ID, rotated.Token, "connected", 200)
-	awaitRelease := observeExecutionLeaseRelease(t, pool)
+	awaitRelease := observeExecutionLeaseRelease(t, db.pool)
 	stop()
 	stop = nil
 	awaitRelease()
@@ -166,7 +163,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 		t.Fatal("revoked socket retained authority")
 	}
 	var allocations int
-	if err = pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
+	if err = db.pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
 		t.Fatal("user Runtime acquired managed allocation", allocations, err)
 	}
 	current, err := s.GetSession(t.Context(), principal.TenantID, session.ID)

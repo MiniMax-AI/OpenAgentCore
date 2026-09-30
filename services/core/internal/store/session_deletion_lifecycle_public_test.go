@@ -1,13 +1,11 @@
 package store_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -22,29 +20,21 @@ const deletionAgent = `"agent":{"id":"agent_deletion","model":"fixture","tools":
 // missing and malformed identifiers keep one not-found response.
 func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, pool := store.NewManagedTestStore(t)
+	s, db := newManagedTestStoreDB(t)
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "deletion-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "deletion-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer, err := store.NewExecution(ctx, s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		closing, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = writer.CloseExecution(closing)
-	})
+	writer := executionOwner(t, db, s).Store
 
 	create := func(environment string, initial bool) store.Session {
 		t.Helper()
@@ -140,7 +130,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 		"later_input_cancelled":     "",
 	}
 	expired := create(selfHosted, true)
-	if _, err := pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1", expired.ID); err != nil {
+	if _, err := db.pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1", expired.ID); err != nil {
 		t.Fatal(err)
 	}
 	if count, err := writer.ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
@@ -187,13 +177,13 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			if readStatus != http.StatusOK || decode(before)["status"] != projected[name] {
 				t.Fatal(readStatus, before)
 			}
-			digest := databaseDigest(t, pool)
+			digest := databaseDigest(t, db.pool)
 			notFound(foreign, http.MethodDelete, sessionPath(id))
 			status, raw := client.do(owner, http.MethodDelete, sessionPath(id), "", nil)
 			if status != http.StatusConflict || !reflect.DeepEqual(decode(raw), conflict) {
 				t.Fatalf("busy Session deletion: %d %s", status, raw)
 			}
-			if after := databaseDigest(t, pool); !reflect.DeepEqual(after, digest) {
+			if after := databaseDigest(t, db.pool); !reflect.DeepEqual(after, digest) {
 				t.Fatal("rejected deletion changed the database")
 			}
 			if readStatus, after := client.do(owner, http.MethodGet, sessionPath(id), "", nil); readStatus != http.StatusOK || after != before {
@@ -208,7 +198,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			if status != http.StatusOK || !reflect.DeepEqual(decode(first), map[string]any{"id": id, "object": "agent.session.deleted", "deleted": true}) {
 				t.Fatalf("settled Session deletion: %d %s", status, first)
 			}
-			digest := databaseDigest(t, pool)
+			digest := databaseDigest(t, db.pool)
 			filter := store.WriteOperationFilter{ResourceType: "session", ResourceID: id, Limit: 100}
 			beforeAudit, err := s.ListWriteOperations(ctx, tenant, filter)
 			if err != nil {
@@ -230,7 +220,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			}
 			// Only the new operation records may differ. Ownership, Session state,
 			// execution data and every public response remain unchanged.
-			after := databaseDigest(t, pool)
+			after := databaseDigest(t, db.pool)
 			delete(after, "write_audit_operations")
 			delete(digest, "write_audit_operations")
 			if !reflect.DeepEqual(after, digest) {

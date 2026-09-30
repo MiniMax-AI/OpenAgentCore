@@ -10,7 +10,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -44,10 +43,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				}
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				worker, err := execution.StartWorker(ctx, h.d)
-				if err != nil {
-					t.Fatal(err)
-				}
+				worker := startWorker(t, ctx, h.db, h.d)
 				done := make(chan error, 1)
 				go func() { done <- worker.Run(ctx) }()
 				defer func() {

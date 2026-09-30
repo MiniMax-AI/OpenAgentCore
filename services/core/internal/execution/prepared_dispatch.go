@@ -16,9 +16,10 @@ type EnvironmentRun struct {
 	Turn        store.Turn
 }
 
-// RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor.
-func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (run EnvironmentRun, err error) {
-	if err = d.Store.CheckExecutionOwnership(ctx); err != nil {
+// RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor. It
+// checks lease, the lease d.Store was built on, before any Runtime preparation.
+func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, tenantID, sessionID, reservationID string) (run EnvironmentRun, err error) {
+	if err = lease.CheckOwnership(ctx); err != nil {
 		return run, err
 	}
 	run.Reservation, err = d.Store.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)

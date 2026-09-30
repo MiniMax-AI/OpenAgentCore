@@ -21,13 +21,10 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, pool := store.NewTestStore(t)
+	s, db := newTestStoreDB(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
-	worker, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: s})
-	if err != nil {
-		t.Fatal(err)
-	}
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s})
 	t.Cleanup(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -35,13 +32,13 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, auth, "codex", workerExecution(worker))
+	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	recovered, err := publicHandler(t, store.New(pool), auth, "codex")
+	recovered, err := publicHandler(t, store.New(db.pool), db, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,9 +57,9 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 		}
 		var err error
 		if input.Delete {
-			_, err = pool.Exec(r.Context(), `DELETE FROM agents WHERE tenant_id=$1 AND id=$2`, tenant, input.ID)
+			_, err = db.pool.Exec(r.Context(), `DELETE FROM agents WHERE tenant_id=$1 AND id=$2`, tenant, input.ID)
 		} else {
-			_, err = pool.Exec(r.Context(), `UPDATE agents SET configuration=configuration || $3::jsonb WHERE tenant_id=$1 AND id=$2`, tenant, input.ID, input.Patch)
+			_, err = db.pool.Exec(r.Context(), `UPDATE agents SET configuration=configuration || $3::jsonb WHERE tenant_id=$1 AND id=$2`, tenant, input.ID, input.Patch)
 		}
 		if err != nil {
 			t.Error(err)
