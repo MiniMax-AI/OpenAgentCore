@@ -39,6 +39,8 @@ import native_service
 SOURCE_COMMIT = None  # Set by the packaged entrypoint from its build revision.
 UNSUPPORTED_VERSION = ("This installation version or historical conversion is not supported; "
                        "preserve its data and reinstall into a new empty directory. Nothing was changed.")
+INCOMPLETE = ("This installation did not finish installing. Rerun the installer command; it removes what is left "
+              "and installs again.")
 
 
 class OacError(Exception):
@@ -148,6 +150,12 @@ def load_state(root):
 
 def save_state(root, state):
     write_private(root / "state.json", json.dumps(state, indent=2) + "\n")
+
+
+def check_complete(state):
+    """Only the installer uses an installation before its first start has finished."""
+    if state.get("complete") is False:
+        raise OacError(INCOMPLETE)
 
 
 @contextlib.contextmanager
@@ -580,7 +588,7 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
         out("web.core_url changes; apply checks which Core it reaches.")
         return state.get("core_installation_id")
     status, installation = paired_core(root, config)
-    if status == 401:
+    if status == 401 and state.get("complete") is not False:
         out("Warning: Core rejects this Web host's Core key; the key is out of date. "
             "Copy secrets/core.key from the Core host, then run oac apply.")
     elif status == 404:
@@ -651,6 +659,7 @@ def apply(root, dry_run=False, yes=False, discard_edits=False, confirm_public_ur
     args = argparse.Namespace(dry_run=dry_run, yes=yes, confirm_public_url_change=confirm_public_url_change)
     interactive = sys.stdin.isatty() if interactive is None else interactive
     with locked(root):
+        check_complete(load_state(root))
         return _apply(root, args, discard_edits, start, interactive, out, retry=retry)
 
 
@@ -770,40 +779,44 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
 def remove(root, state, keep_root=False):
     """Remove one installation: native Core's unit, its Compose project with its volumes, then its files.
 
-    state is the loaded state.json, or None when there is none, so nothing was started. Only
-    this installation's own project and unit are touched; loaded images are kept. keep_root
-    keeps the directory and its .oac.lock, which the caller holds, and removes everything else
-    in it. The files stay while a service is left, so state.json still names it. Raises
-    OacError naming what is left and the commands that remove it.
+    state is the loaded state.json. Only this installation's own project and unit are
+    touched; loaded images are kept. keep_root keeps the directory and its .oac.lock, which
+    the caller holds, and removes everything else in it. The files stay while a service is
+    left, so state.json still names it. Nothing is printed, so a closed terminal can't stop
+    the removal. Raises OacError naming what is left and the commands that remove it.
     """
     root = Path(root)
     if not root.is_absolute() or root.is_symlink() or root.resolve() != root:
         raise OacError("The installation directory must be canonical and not a symlink; nothing was removed")
+    project = state.get("project")
+    if not isinstance(project, str) or not re.fullmatch(r"oac-[0-9a-f]{10}", project):
+        raise OacError("state.json names no Compose project of this installation; nothing was removed")
     left = []
-    if state is not None:
-        project = state.get("project")
-        if not isinstance(project, str) or not re.fullmatch(r"oac-[0-9a-f]{10}", project):
-            raise OacError("state.json names no Compose project of this installation; nothing was removed")
-        if native_service.is_native(state):
-            unit = native_service.unit_name(state)
-            try:
-                native_service.remove(state)
-            except (RuntimeError, KeyboardInterrupt):
-                left.append((f"native Core unit {unit}", f"systemctl --user disable --now {unit}"))
-        # -p without -f: Compose reads no project file and acts on this project's labels alone.
-        down = ["docker", "compose", "-p", project, "down", "--volumes", "--remove-orphans"]
+    if native_service.is_native(state):
+        unit = native_service.unit_name(state)
         try:
-            run(down, stdin=subprocess.DEVNULL)
-        except (subprocess.CalledProcessError, OSError, KeyboardInterrupt):
-            left.append((f"Compose project {project} and its volumes", " ".join(down)))
+            native_service.remove(state)
+        except (RuntimeError, KeyboardInterrupt):
+            left.append((f"native Core unit {unit}", f"systemctl --user disable --now {unit}"))
+    # -p without -f, outside any project directory and without COMPOSE_* settings: Compose
+    # reads no project file and acts on this project's labels alone.
+    down = ["docker", "compose", "-p", project, "down", "--volumes", "--remove-orphans"]
+    environment = {name: value for name, value in os.environ.items() if not name.startswith("COMPOSE_")}
+    try:
+        run(down, cwd="/", env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, OSError, KeyboardInterrupt):
+        left.append((f"Compose project {project} and its volumes", " ".join(down)))
     target = shlex.quote(str(root))
     files = (f"the files in {root}", f"find {target} -mindepth 1 -delete" if keep_root else f"rm -rf {target}")
     if left:
         left.append(files)
     else:
+        # state.json, then the oac command, then the lock go last: until then a rerun still finds
+        # the installation and finishes removing it, and no other command can lock it afresh.
+        last = ("state.json", "oac", ".oac.lock")
         try:
-            # state.json goes last, so a removal that is killed part way is still recognized and finished.
-            for path in sorted(root.iterdir(), key=lambda path: path.name == "state.json"):
+            for path in sorted(root.iterdir(), key=lambda path: last.index(path.name) if path.name in last else -1):
                 if keep_root and path.name == ".oac.lock":
                     continue
                 if path.is_dir() and not path.is_symlink():
@@ -813,7 +826,9 @@ def remove(root, state, keep_root=False):
             if not keep_root:
                 root.rmdir()
         except (OSError, KeyboardInterrupt):
-            left.append(files)
+            # A lock file alone, such as one another command just created, is harmless.
+            if root.is_dir() and any(path.name != ".oac.lock" for path in root.iterdir()):
+                left.append(files)
     if left:
         raise OacError("Removal did not finish. Left: " + "; ".join(what for what, _ in left) + ". Remove them with:\n"
                        + "\n".join("  " + command for _, command in left))
@@ -923,6 +938,7 @@ def status(root, out=print):
         out(f'Reverse proxy: /v1 and /api/v1 go to {configuration.service_address(config, "core", connect=True)}; '
             f'everything else goes to {configuration.service_address(config, "web", connect=True)}')
     out("Service health does not prove model execution. This check makes no model requests.")
+    check_complete(state)
     if not healthy:
         raise OacError("One or more installed services are unavailable")
 
@@ -932,6 +948,7 @@ def start(root, out=print):
     with locked(root):
         check_directories(root)
         state = load_state(root)
+        check_complete(state)
         config = load_config_or_report(root, out)
         if config is not None:
             rendered, disk, _ = render_now(root, config, state)
@@ -972,6 +989,7 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
     with locked(root):
         check_directories(root)
         state = load_state(root)
+        check_complete(state)
         if state["mode"] == "web-only":
             raise OacError("Core owns the Core key. Copy secrets/core.key from the Core host into this "
                               "installation, then run oac apply.")

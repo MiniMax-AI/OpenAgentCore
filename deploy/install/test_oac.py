@@ -128,6 +128,8 @@ class OacTests(unittest.TestCase):
             key.chmod(0o600)
         images = {name: IMAGES[name] for name in install.image_names(mode, native)}
         install.create(self.root, SimpleNamespace(core_key_file=key), config, {"source_commit": "a" * 40}, images)
+        # These tests use finished installations; the installer records that after the first start.
+        oac_cli.save_state(self.root, dict(oac_cli.load_state(self.root), complete=True))
         self.apply(start=True)
         self.host.recreated.clear()
         self.output.clear()

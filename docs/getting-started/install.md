@@ -43,7 +43,7 @@ The script picks the latest stable release, verifies its checksum and runs the b
 
 It creates no Project or key and makes no model request. It ends by printing the console address, the API base URL and the next steps.
 
-If installation fails or is interrupted before the services first start, including by Ctrl-C, the installer removes everything it created: its Compose project with its volumes, native Core's service and the files in the installation directory, and the directory itself when the installer created it. Only the loaded images stay. Fix the cause it prints and run the same command again. A rerun also removes an installation that stopped without this cleanup, for example after a power loss, and then installs with the options given now. Once the services have started, the installation is kept, and a rerun only [repairs](operations.md#installation-version-policy) it.
+If installation fails or is interrupted before the installer reports that the services are running, including by Ctrl-C or a closed SSH session, the installer removes everything it created: its Compose project with its volumes, native Core's service and the files in the installation directory, and the directory itself when the installer created it. Only the loaded images stay. Fix the cause it prints and run the same command again. A rerun also removes an installation that stopped without this cleanup, for example after a power loss, and then installs with the options given now; until then, the `oac` command refuses to change that installation. Once the installer has reported that the services are running, the installation is kept, and a rerun only [repairs](operations.md#installation-version-policy) it.
 
 ## Sign in to Web
 

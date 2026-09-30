@@ -163,9 +163,9 @@ class InstallerTests(unittest.TestCase):
     def test_an_interrupted_first_start_removes_what_it_created(self):
         self.root.mkdir()
         with mock.patch.object(install.oac_cli, "health", side_effect=KeyboardInterrupt), \
-                self.assertRaises(install.InstallError) as raised:
+                self.assertRaises(KeyboardInterrupt) as raised:
             self.install()
-        self.assertEqual(str(raised.exception), "interrupted\n" + install.NOTHING_KEPT)
+        self.assertEqual(install.error_text(raised.exception), "interrupted\n" + install.NOTHING_KEPT)
         # The directory existed, so it stays, with only the lock that a waiting command may hold.
         self.assertEqual([path.name for path in self.root.iterdir()], [".oac.lock"])
         self.assertIn(["docker", "compose", "-p", self.host.project, "down", "--volumes", "--remove-orphans"],
@@ -177,6 +177,9 @@ class InstallerTests(unittest.TestCase):
         old = self.host.project
         # What a first start killed before it finished leaves behind; its services hold their ports until removed.
         install.oac_cli.save_state(self.root, dict(self.document("state.json"), complete=False))
+        for command in (install.oac_cli.start, install.oac_cli.apply, install.oac_cli.status):
+            with self.assertRaisesRegex(install.oac_cli.OacError, "did not finish installing. Rerun the installer"):
+                command(self.root, out=lambda _: None)
         self.host.busy = {8080, 8091}
         remove = install.oac_cli.remove
         with mock.patch.object(install.oac_cli, "remove",
@@ -189,6 +192,17 @@ class InstallerTests(unittest.TestCase):
         self.assertNotEqual(state["project"], old)
         self.assertTrue(state["complete"])
         self.assertEqual(self.host.running(), {"database", "core"})
+
+    def test_a_directory_without_state_json_is_refused_and_untouched(self):
+        key = self.root / "secrets/e2b.key"
+        key.parent.mkdir(parents=True)
+        key.write_text("synthetic-e2b-key-0123456789")
+        key.chmod(0o600)
+        before = self.snapshot()
+        with self.assertRaisesRegex(install.InstallError, "not empty"):
+            self.install("--sandbox", "e2b", "--e2b-api-key-file", key, "--e2b-template", BUILD,
+                         "--public-url", "https://core.example")
+        self.assertEqual(self.snapshot(), before)
 
     def test_a_complete_installation_is_never_removed(self):
         self.install("--sandbox", "none")
@@ -541,7 +555,8 @@ class InstallerTests(unittest.TestCase):
                 self.host.core["fails"] = True
                 with self.assertRaises(install.InstallError) as raised:
                     self.install("--sandbox", "microsandbox", *flags)
-                self.assertEqual(str(raised.exception), f"The services did not start: {cause}\n{install.NOTHING_KEPT}")
+                self.assertEqual(install.error_text(raised.exception),
+                                 f"The services did not start: {cause}\n{install.NOTHING_KEPT}")
                 self.assertNotIn("Installation complete.", self.output.getvalue())
                 self.assertFalse(self.root.exists())
                 self.assertIn(["docker", "compose", "-p", self.host.project, "down", "--volumes", "--remove-orphans"],
@@ -626,7 +641,7 @@ class InstallerTests(unittest.TestCase):
         with mock.patch.object(distribution, "docker_command", side_effect=lambda arguments, **kwargs: (
                 subprocess.CompletedProcess(arguments, 0, "sha256:" + "f" * 64 + " linux/amd64", "")
                 if "inspect" in arguments else original(arguments, **kwargs))):
-            with self.assertRaisesRegex(install.InstallError, "identity or platform"):
+            with self.assertRaisesRegex(distribution.DistributionError, "identity or platform"):
                 self.install()
         self.assertFalse(self.root.exists())
 

@@ -67,6 +67,8 @@ def status(root):
 def prepare(root, name, confirmation):
     """Validate and reserve a job while the caller holds the installation lock."""
     config, state = oac_cli.load_config(root), oac_cli.load_state(root)
+    if state.get("complete") is False:
+        raise DomainError("installation_incomplete", oac_cli.INCOMPLETE, 409)
     if not gateway.enabled(config):
         raise DomainError("domain_setup_unavailable", "Managed HTTPS is available in combined Docker installations only")
     try:
