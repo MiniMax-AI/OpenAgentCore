@@ -287,6 +287,7 @@ func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
 	}
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
 	defer db.Close()
+	disableE2BIdlePolicyForLegacyDowngrade(t, db)
 	migrations, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))
 	if err != nil {
 		t.Fatal(err)
