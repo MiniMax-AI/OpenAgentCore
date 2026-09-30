@@ -10,7 +10,7 @@ The public `/v1` Agent API, Environment Templates and caller-managed `self_hoste
 provisioning are unchanged. A provider selection is independent of the harness.
 A deployment can remain unconfigured, with no execution nodes or hosted admission.
 
-See [Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md)
+See [Nodes](../../docs/getting-started/nodes.md)
 for the operator workflow. Generated schemas cover the
 [administrator routes](core.openapi.yaml) and the
 [node machine connection routes](runtime.openapi.yaml).
@@ -27,6 +27,9 @@ for the operator workflow. Generated schemas cover the
 | `POST /core/v1/sandbox/e2b/templates` | Core Web server or operator script with Core key | List up to 200 templates visible to a transient E2B credential |
 | `POST /core/v1/sandbox/e2b/templates/{template_id}/builds` | Core Web server or operator script with Core key | List up to 200 ready builds for one selected template |
 | `GET /api/v1/sandbox-node/configuration` | Enrollment token or retained node credential | Read the active node installation configuration without consuming enrollment |
+| `POST /api/v1/sandbox-node/enroll` | One-use enrollment token | Register a node; consumes the token |
+| `GET /api/v1/sandbox-node/identity?node_id=` | Node credential | Recover the node's registered identity, approved capacity and readiness |
+| WebSocket `GET /api/v1/sandbox-node/connect?node_id=` | Node credential | The node's connection to Core |
 
 Template discovery posts `{ "api_key": "...", "api_url": "https://sandbox.sandbase.ai", "domain": "sandbox.sandbase.ai" }`.
 The official E2B endpoint may omit both endpoint fields. The first response is
@@ -497,7 +500,7 @@ classifies the first failed readiness check and sends only the code; Core stores
 any other value as `provider_unavailable` and never stores or returns probe error
 text or host paths. Core and nodes must use the same distribution; unknown-code
 handling does not establish cross-version compatibility. See
-[Node readiness diagnostics](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md#node-readiness-diagnostics)
+[Readiness codes](../../docs/getting-started/nodes.md#readiness-codes)
 for causes, precedence and operator actions.
 
 Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`. A node provider file remains an

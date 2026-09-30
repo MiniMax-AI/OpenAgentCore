@@ -88,7 +88,6 @@ if "@SOURCE_REVISION@" not in readme:
 readme = readme.replace("@SOURCE_REVISION@", revision).replace("@ARCHIVE_NAME@", archive_name.removesuffix(".tar.gz"))
 (package / "README.md").write_text(readme, encoding="utf-8")
 (package / "LICENSE").write_bytes((source / "LICENSE").read_bytes())
-(package / "HOSTED-SANDBOX-MANAGER.md").write_bytes((source / "services/agents-api/HOSTED-SANDBOX-MANAGER.md").read_bytes())
 manifest = {
     "artifact": "oac-core",
     "source": {"commit": revision, "tree": tree, "commit_timestamp": int(epoch)},
@@ -98,7 +97,7 @@ manifest = {
     "binaries": {"bin/" + name: {"sha256": sha256(package / "bin" / name)} for name in binaries},
 }
 (package / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-members = sorted(["bin/" + name for name in binaries] + ["LICENSE", "README.md", "HOSTED-SANDBOX-MANAGER.md", "manifest.json"])
+members = sorted(["bin/" + name for name in binaries] + ["LICENSE", "README.md", "manifest.json"])
 (package / "SHA256SUMS").write_text("".join(sha256(package / name) + "  " + name + "\n" for name in members), encoding="utf-8")
 members = sorted(members + ["SHA256SUMS"])
 prefix = archive_name.removesuffix(".tar.gz")
