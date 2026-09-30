@@ -13,7 +13,7 @@ OpenAI Agents API compatible execution service. After signing in to the paired
 console they need to answer quickly: is the service healthy, is there enough
 sandbox capacity, how much is each project using, and where is work failing.
 They also create projects and issue their keys, enroll execution nodes, and clean
-up or redistribute assets between projects.
+up project assets.
 
 API callers (application developers, and Parsar itself) use the Agents API from
 their own code with the keys of their project, not this console. The console is
@@ -57,17 +57,17 @@ workbench.
   `node_installer_sha256`), offered only with a 64-hex digest. Native self-hosted
   installation does not depend on this endpoint. It also lists the providers it has node files
   for (`node_artifacts`); without the deployment's provider, Add node says so and
-  issues no command. Signing in grants administration, so sandbox
-  administration is available unless the console explicitly reports
-  `sandbox_admin: false`; then the Nodes page explains that it is not configured
-  and the fleet figures show as unavailable.
+  issues no command. Signing in grants administration, sandbox administration
+  included.
 - Chinese and English UI; light and dark themes; reduced motion honored.
 
 ## Information Architecture
 
 - **Monitor**: Overview (service status, running Sessions, sandbox slots, Sessions
   needing attention, 24-hour Session activity, the topology of Core and its nodes
-  with a popover glance at each, the attention table, usage by project), Agent metrics (requests, errors,
+  with a popover glance at each, the attention table, usage by project), Core
+  metrics (the Core process's CPU and memory, execution slots and the Turn queue,
+  connected daemons, the database and background jobs), Agent metrics (requests, errors,
   duration, tokens, models, tools, Agents and API keys for 1 h / 6 h / 24 h / 7 d),
   Sandbox metrics (node capacity and hosted Runtimes across projects; a node or a
   sandbox opens in a dialog with its figures and CPU and memory charts), Session log
@@ -85,8 +85,9 @@ workbench.
   individual node operations). Add node asks for limits before issuing its
   one-time command; installers use Core's public URL and require supported node
   artifacts. Removal offers the host's uninstall command. System owns installation
-  facts, each harness's default model configuration, startup settings, and a link to
-  the Sandbox configuration secondary page. That page owns setup, resource edits,
+  facts, the Domain and HTTPS secondary page, each harness's default model
+  configuration, startup settings, and a link to the Sandbox configuration
+  secondary page. That page owns setup, resource edits,
   rollout details and reset. Setup selects a backend, size and Runtime, then asks
   for a deliberate save; own-machine setup continues to Add node.
 - A node whose provider is not ready names the reason (Docker unreachable, no Docker
@@ -184,8 +185,8 @@ workbench.
   model provider shows its protocol, base URL, limits and whether a key is configured,
   never the key.
 - **Creators.** Core records the key behind every write. The console shows the
-  creating key of each asset and a project's write history; an asset an
-  administrator copied in an earlier release shows as Admin copy and an asset
+  creating key of each asset and a project's write history; an asset Core
+  records as an administrator copy (`admin_copy`) shows as Admin copy and an asset
   without a record as Unknown.
 - **Waiting for results.** Overview, Session log and Session details name the
   function whose result the calling application must submit. The console cannot
@@ -199,8 +200,8 @@ workbench.
   receipt interval separate from public Turn times and native tool duration.
   Historical missing timestamps stay unknown, negative clock intervals stay
   missing, and bounded response truncation remains visible.
-- **Executor credentials.** Only Core issues the credential file a self-hosted
-  executor needs, with the deployment's Core key. A Session page whose environment
+- **Executor credentials.** Core issues executor credentials; the console does so
+  with the deployment's Core key. A Session page whose environment
   is self-hosted has an Executor credentials section: issue a credential (shown
   once as one line of JSON, to copy or download, never stored), rotate it (the
   old one stops working immediately) or revoke it (the executor disconnects;
@@ -219,17 +220,16 @@ workbench.
   Host connected. Stale or failed reads withhold completion. Recovery rotates
   the bound key, stops the installed daemon, replaces the host credential file
   and starts the daemon again.
-- **Connect a host.** Native Linux/macOS and PowerShell installation instructions
-  depend on the Session's remote URL, Environment ID and workspace, not console
-  installer flags or served Python assets. Users privately save the issued JSON,
-  obtain a matching native distribution through the linked guide, and run the
-  interactive install command from its root. Installation asks for the credential
-  file path and does not automatically start the daemon. Run the installed binary
-  in the installation's bin directory with `start`. No model readiness is implied.
-  Credential rotation requires stopping the installed daemon, replacing the
-  configured file and starting that same daemon again. A disconnected daemon may
-  still be running; `start` alone does not replace it. A new key cannot reconnect an already-bound Environment.
-  Accept wss or loopback ws; withhold commands for missing or invalid facts.
+- **Connect a host.** The Linux/macOS and PowerShell commands come from Core's
+  installation read for the Session's environment; the console shows them as
+  they are, with a link to the native installation guide, and never builds one
+  itself. A command downloads the matching installer, installs the chosen
+  Harnesses, starts the daemon and checks its connection. Its authorization
+  expires after 30 minutes; the console reads a fresh one every 20 minutes, and
+  says the command is unavailable when Core has none. No model readiness is
+  implied. Rotating a credential requires stopping the installed daemon,
+  replacing the configured file and starting that same daemon again. A
+  disconnected daemon may still be running; `start` alone does not replace it.
 - **Typed write errors.** Known Core codes use shared bilingual copy and safe
   typed details. Exact Core field paths attach definite refusals to the relevant
   input. Unknown codes retain Core's fallback message; uncertain write outcomes
@@ -246,9 +246,8 @@ workbench.
   cannot complete that step, and a failed read offers Retry.
 - **Figures.** Project, Agent and key usage comes from Core's summary; Agent run,
   tool and activity figures are still assembled in the browser from bounded reads
-  and state their coverage. Metrics that need new Core endpoints are recorded as
-  backend requirements, not simulated. Usage is cumulative per Session and is not
-  billing.
+  and state their coverage. Metrics that would need new Core endpoints are not
+  simulated. Usage is cumulative per Session and is not billing.
 - Runtime CPU and memory exist only for Core-managed hosted sandboxes.
 - Preserve workflow safety: confirmed deletion, no automatic retry of uncertain
   writes, no secrets in browser storage.
@@ -259,14 +258,6 @@ workbench.
 - Keep the OpenAgentCore visual identity shared with the public landing (`site/`):
   neutral grays and a quiet indigo accent. The console uses Inter and Geist Mono
   on Beautiful UI's foundation tokens and structure; `DESIGN.md` records the system.
-
-Development and build settings use `OAC_WEB_*`. The Vite proxy uses the
-server-only `OAC_WEB_DEV_PROXY_TARGET`, `OAC_WEB_DEV_PROXY_TOKEN` and
-`OAC_WEB_DEV_PROXY_TOKEN_FILE`, defaulting to `~/.oac/dev/web-token` for its private
-token file. Retired `AGENTS_CORE_WEB_*` and the three `AGENTS_API_PROXY_*`
-settings stop startup or build with replacement names, without logging values
-or falling back to the old token path. Browser definitions contain only the
-existing capability flags and validated, non-secret Docker guide profiles.
 
 ## Evidence on Hand
 

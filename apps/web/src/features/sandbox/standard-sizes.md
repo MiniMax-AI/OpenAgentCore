@@ -25,15 +25,16 @@ accept.
 
 - The Web setup wizard, through `defaultSandboxResources` in
   `deployment-specification.ts`.
-- The release bundle: `build-core-distribution.sh` copies this file to
+- The release bundle: `scripts/build-core-distribution.sh` copies this file to
   `<bundle>/standard-sizes.json`.
-- The Core installer: `install.sh --sandbox` reads the bundled copy to create
-  the default deployment.
+- The Core installer: `deploy/install/sandbox_setup.py` reads the bundled copy
+  when `install.sh` saves the initial Docker or microsandbox deployment
+  (`--sandbox`, microsandbox by default).
 
 ## Contract
 
 The keys and structure are a contract with the Core installer. Changing a value
-is fine. Renaming, removing or adding keys, or restructuring the file, must be
-coordinated with the backend first, because `install.sh` parses the bundled copy.
-`deployment-specification.test.ts` pins the structure so that an accidental
-change fails.
+is fine. Renaming, removing or adding keys, or restructuring the file, needs a
+matching change to `deploy/install/sandbox_setup.py`, which rejects a bundled copy
+whose fields differ. `deployment-specification.test.ts` pins the structure so that
+an accidental change fails.
