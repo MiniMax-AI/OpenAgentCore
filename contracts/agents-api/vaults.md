@@ -135,12 +135,12 @@ Token endpoints must be HTTPS. Core resolves the host, rejects loopback, private
 
 ## Storage key
 
-Core seals every token, refresh token and client secret with AES-256-GCM under the installation's [`secrets/credential.key`](../../docs/configuration.md#installation-directory), bound to the Project, Vault, Credential, auth type and `mcp_server_url`. A wrong key, a modified row or a row moved to another binding fails to decrypt. Names are metadata outside the binding.
+Core seals every token, refresh token and client secret with AES-256-GCM under the installation's [`secrets/credential.key`](../../docs/configuration.md#installation-directory), bound to the Project, Vault, Credential, auth type and `mcp_server_url`. A wrong key, a modified row or a row moved to another binding fails to decrypt. Names are metadata outside the binding. The key and plaintext tokens exist in trusted service memory; encryption protects stored secrets and does not protect against a compromised service host.
 
 Without a configured key, Credential creation and replacement return 503 `credential_storage_unavailable` before writing; reads, lists, deletion and Vault operations still work. An unreadable or malformed key file stops Core at startup. Losing or replacing the key makes every stored secret unusable; Core supports one key, with no rotation or re-encryption.
 
 ## Deletion
 
-Deleting a Credential, or its Vault, removes the stored secrets. Afterwards its reads, updates and repeated deletion return 404, lists omit it, new Sessions cannot select it and new Credentials cannot be created in a deleted Vault (a missing storage key still answers 503 first).
+Deleting a Credential, or its Vault, removes the credential rows. It does not erase secrets from PostgreSQL pages, write-ahead logs, backups or native history. Afterwards its reads, updates and repeated deletion return 404, lists omit it, new Sessions cannot select it and new Credentials cannot be created in a deleted Vault (a missing storage key still answers 503 first).
 
 Existing Sessions keep their frozen attachments and selections, and their history stays readable. The next dispatch that needs a deleted Credential fails; Core neither selects another Credential nor connects anonymously. Deletion does not cancel running work, withdraw a token already sent to a Runtime or revoke the grant at its provider: cancel the Session and revoke the grant yourself when needed. Revoked or invalid OAuth grants likewise fail until replaced.

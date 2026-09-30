@@ -114,7 +114,7 @@ client.beta.agents.sessions.create(environment=..., extra_headers={"Idempotency-
 
 **After a lost response,** retry with the same key, then read the Session, Turns and Items. Never resend without the key. Core keeps creation keys even after the Session is deleted.
 
-> Core difference: OpenAI creates a new Session for each create request even with the same key. Core returns the original.
+See [creation retries](../../contracts/agents-api/wire-semantics.md#creation-retries) for comparison rules and the difference from OpenAI.
 
 ### Errors
 
@@ -126,11 +126,11 @@ client.beta.agents.sessions.create(environment=..., extra_headers={"Idempotency-
 | --- | --- | --- |
 | 400 | `invalid_request_error`, `invalid_beta`, `model_provider_required`, `unsupported_or_invalid_configuration` | Fix the request. `invalid_beta` means a missing or wrong `OpenAI-Beta` header |
 | 401 | `invalid_api_key` or none | Wrong or missing key, or a key from another namespace |
-| 404 | | Missing, or belongs to another Project. The two look the same |
+| 404 | `not_found_error` on Beta routes | Missing, or belongs to another Project. The two look the same |
 | 405 | `unsupported_operation` | Core doesn't support this operation |
 | 409 | `conflict_error`, `idempotency_conflict` | State conflict, for example deleting a busy Session |
-| 413 | | Body too large |
-| 503 | | Temporarily uncertain; read state before retrying |
+| 413 | `request_too_large` | Body too large |
+| 503 | `authentication_unavailable`, `execution_unavailable` | Temporarily uncertain; read state before retrying |
 
 Every response carries `X-Request-Id`; include it when reporting a problem.
 
@@ -143,7 +143,7 @@ Core runs several harnesses and accepts your own model access. Those settings ar
 | `harness` | Agent, or a Session's inline `agent` | `codex`, `claude_sdk` or `mcode` |
 | `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. The protocol must be one of the harness's native protocols |
 | `harness_config` | Agent, inline `agent`, or Session creation (top level, wins) | The harness's native model parameters, such as Codex's `model_reasoning_effort` |
-| `environment` | Session creation (top level), any placement | Portable preparation: `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins`, `capability_directories`. A field may not also appear in `environment`; see [Environments](../../contracts/agents-api/environments.md#preparation-order) |
+| `environment` | `openai_hosted` or `self_hosted` Session creation (top level) | Portable preparation: `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins`, `capability_directories`. A field may not also appear in `environment`; see [Environments](../../contracts/agents-api/environments.md#preparation-order) |
 | `installation` | Read-only, on `self_hosted` Sessions | Short-lived install commands for your machine; see [self-hosted execution](../getting-started/self-hosted.md) |
 
 Any other member is rejected with 400. `api_key` is write-only: reads return `api_key_configured`. `harness_config` replaces the whole object; `{}` clears it. With the SDK, pass these through `extra_body`.
@@ -181,7 +181,7 @@ oac "/agents" -d '{
 ```
 
 ```json
-{"id": "agent_...", "object": "agent", "model": "your-model-id", "name": "Reviewer",
+{"id": "00000000-0000-4000-8000-000000000001", "object": "agent", "model": "your-model-id", "name": "Reviewer",
  "instructions": "...", "tools": [], "metadata": {}, "created_at": 1790000000,
  "x_agents_core": {"harness": "codex"}}
 ```
@@ -218,7 +218,7 @@ session = client.beta.agents.sessions.create(
 ```sh
 oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
   "environment": {"type": "openai_hosted"},
-  "agent_id": "agent_...",
+  "agent_id": "00000000-0000-4000-8000-000000000001",
   "input": "Review the files in /workspace and summarize the risks.",
   "metadata": {"ticket": "T-123"}
 }'
@@ -227,7 +227,7 @@ oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
 Returns 201 with the Session:
 
 ```json
-{"id": "sess_...", "object": "agent.session", "status": "idle",
+{"id": "00000000-0000-4000-8000-000000000002", "object": "agent.session", "status": "idle",
  "agent": {"model": "...", ...}, "environment": {"id": "env_...", "type": "openai_hosted", ...},
  "metadata": {"ticket": "T-123"}, "required_actions": [], "vault_ids": [],
  "created_at": 1790000000, "last_active_at": 1790000000}
@@ -245,7 +245,7 @@ Returns 201 with the Session:
 
 | `environment.type` | Runs on | Notes |
 | --- | --- | --- |
-| `openai_hosted` | A sandbox Core creates on a node or E2B; the administrator provides the capacity | Optional `network`, `packages`, `files`, `skills`, `plugins`, `setup_commands`, or a template |
+| `openai_hosted` | A sandbox Core creates on a node or E2B; the administrator provides the capacity | Optional `network`, `packages`, `files`, `skills`, `plugins`, `env`, `capability_directories`, `setup_commands`, or a template |
 | `self_hosted` | Your own Linux, macOS or Windows machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [self-hosted execution](../getting-started/self-hosted.md). The Session brings its own `model_provider` |
 | `none` | A device connection an operator registered, with no workspace | `input` required. The model comes from the installation default, or from the device when no default is configured |
 
@@ -253,14 +253,7 @@ A new `openai_hosted` Session reads `idle` while Core prepares its sandbox; its 
 
 ### Session status
 
-| `status` | Meaning |
-| --- | --- |
-| `in_progress` | A Turn is queued or running |
-| `idle` | Waiting for input, or a hosted Environment is still being prepared |
-| `requires_action` | Waiting for you: a [function result](#function-tools) or a self-hosted machine to connect |
-| `failed` | The latest Turn failed, input waiting for the Environment failed, or the Environment could not be prepared. See `error`. After a failed Turn, new input starts a new Turn; an Environment failure is final |
-
-[Session status](../../contracts/agents-api/sessions-events.md#session-status) gives the exact rules.
+Read `status`, `error` and `required_actions` to decide whether to send input, return a [function result](#function-tools), connect a machine or diagnose a failure. [Session status](../../contracts/agents-api/sessions-events.md#session-status) defines every state and which failures allow new input.
 
 ### Update, list and delete
 
@@ -280,7 +273,7 @@ client.beta.agents.sessions.delete(session.id)
 
 ## Send input
 
-All input goes to one endpoint as a list of events. It returns 202 once the input is stored, before the agent reads it.
+All input goes to one endpoint as a list of events. It returns 202 after durable admission, before native application. On an idle `openai_hosted` or `self_hosted` Session, a message request can wait up to five minutes for its Turn to start and can end with a 409 expiry, cancellation or Environment error; allow that wait in client timeouts ([Environment input](../../contracts/agents-api/sessions-events.md#sessions-with-an-environment)).
 
 ### Send a message
 
@@ -316,7 +309,7 @@ client.beta.agents.sessions.events.create(session.id, events=[{"type": "agent.se
 oac "/agents/sessions/$SESSION_ID/events" -d '{"events": [{"type": "agent.session.input.cancel"}]}'
 ```
 
-The Turn is cancelled when it reaches `cancelled`, not when the request returns. A cancel while idle does nothing. A self-hosted machine keeps its workspace and history when you restart the same installation; see [operate the installation](../getting-started/self-hosted.md#operate-the-installation).
+The Turn is cancelled when it reaches `cancelled`, not when the request returns. A cancel while idle does nothing when no input is pending; a pending Environment input reservation returns 409. A self-hosted machine keeps its workspace and history when you restart the same installation; see [operate the installation](../getting-started/self-hosted.md#operate-the-installation).
 
 ## Stream events
 
@@ -400,6 +393,10 @@ agent = client.beta.agents.create(
 def get_weather(args):
     return f"Sunny in {args['city']}"
 
+session = client.beta.agents.sessions.create(
+    environment={"type": "openai_hosted"}, agent_id=agent.id,
+)
+
 with client.beta.agents.sessions.stream(
     session.id, input="What's the weather in Paris?", tool_handlers={"get_weather": get_weather}
 ) as stream:
@@ -453,7 +450,7 @@ page = client.beta.agents.environments.files.list(env_id, path="/workspace")
 ```
 
 ```sh
-oac "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "file_...", "path": "/workspace/data.csv"}'
+oac "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "file-...", "path": "/workspace/data.csv"}'
 ```
 
 - `inline` data is base64, up to 5 MiB decoded; `file_id` up to 50 MiB.
@@ -490,7 +487,7 @@ skill = client.skills.create(files=[("my-skill/SKILL.md", open("my-skill/SKILL.m
 client.skills.versions.create(skill.id, files=[...], default=True)
 ```
 
-- No Beta header. Up to 50 Skills; 5 MiB compressed, 20 MiB expanded per archive.
+- No Beta header. Select up to 50 Skills per Environment; each archive is at most 5 MiB compressed and 20 MiB expanded.
 - SDK 3.13.0 drops a single ZIP file from the upload; use HTTP for a ZIP.
 - Attach Skills to a Session through its `environment.skills` or a [template](#environment-templates).
 
@@ -510,8 +507,8 @@ template = client.beta.agents.environments.templates.create(
 
 | Field | Meaning |
 | --- | --- |
-| `network` | `access`: `enabled` (default), `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it. Current Runtimes don't enforce `disabled` or `restricted`, so a Session that needs them is rejected; see [restricted network policy](../../contracts/agents-api/environment-templates.md#restricted-network-policy) |
-| `packages` | `npm` and `python` packages. `system` packages are rejected: preinstall them in the image or on the machine |
+| `network` | `access`: `enabled` (default), `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it. See execution limits in [restricted network policy](../../contracts/agents-api/environment-templates.md#restricted-network-policy) |
+| `packages` | Package setup; see [package admission](../../contracts/agents-api/environments.md#preparation-order) |
 | `setup_commands`, `env` | Run and set at preparation. Never returned by reads |
 | `files`, `skills`, `plugins` | Initial content. Up to 50 files, 10 MiB inline in total |
 
@@ -530,7 +527,7 @@ client.beta.agents.vaults.credentials.create(
 session = client.beta.agents.sessions.create(environment={"type": "none"}, input="...", vault_ids=[vault.id], agent_id=agent.id)
 ```
 
-The HTTP path is `/vaults`, with the Beta header. A Session uses a credential from its `vault_ids` when an MCP server's URL matches the credential's `mcp_server_url` exactly, or when the tool names its `credential_id`. The [Vaults contract](../../contracts/agents-api/vaults.md) owns selection, errors, OAuth refresh and deletion. An MCP tool's `connection_origin` decides whether Core's side or the workspace connects to the server, and each harness supports a different set: see [MCP connection origin](../../contracts/agents-api/environments.md#public-mcp-connection-origin).
+The HTTP path is `/vaults`, with the Beta header. A Session selects credentials from its `vault_ids`, optionally by `credential_id`; the MCP server's URL must match the selected credential's `mcp_server_url` exactly in either case. The [Vaults contract](../../contracts/agents-api/vaults.md) owns selection, errors, OAuth refresh and deletion. An MCP tool's `connection_origin` decides whether Core's side or the workspace connects to the server, and each harness supports a different set: see [MCP connection origin](../../contracts/agents-api/environments.md#public-mcp-connection-origin).
 
 ## Diagnose a failure
 

@@ -36,7 +36,7 @@ Every Agents API response, including errors and event streams, carries:
 
 ### Authentication
 
-`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. All keys of one Project act as the same caller: they share its resources and its Session creation retries. Core resolves the key and its Project on every request; [Projects and keys](admin-api.md#projects-and-keys) describes the lookup and how keys are managed.
+`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. All keys of one Project act as the same caller: they share its resources and its Session creation retries. Core resolves the key and its Project in the database on every request, with no credential cache and a five-second timeout. Revoking a key or archiving its Project takes effect on the next request. All keys of a Project act as subject `service_account/project:<Project ID>`. [Projects and keys](admin-api.md#projects-and-keys) describes key management.
 
 The optional `OpenAI-Organization` and `OpenAI-Project` headers must, when sent, appear once and equal `core` and `proj_<Project ID>`; any other value rejects the key.
 
@@ -47,7 +47,7 @@ The optional `OpenAI-Organization` and `OpenAI-Project` headers must, when sent,
 
 ### Request bodies
 
-Every `/v1` JSON route passes one body gate before route decoding, validation or lookup: Agent create and update, Vault create, Credential create and update, Environment Template create and update, Environment file create, Session create and update, and Session events. DELETE routes, multipart Files and Skills uploads and Skill update keep their own readers. All gate errors are 400 with type and code `invalid_request_error` and a null param.
+Every `/v1` JSON route passes one body gate before route decoding, validation or lookup: Agent create and update, Vault create, Credential create and update, Environment Template create and update, Environment file create, Session create and update, and Session events. DELETE routes, multipart Files and Skills uploads and Skill update keep their own readers. Except for the 413 size error below, gate errors are 400 with type and code `invalid_request_error` and a null param.
 
 | Order | Case | Response |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ Every `/v1` JSON route passes one body gate before route decoding, validation or
 
 Member names match exactly. A case variant such as `Metadata` or a nested `Role` is an unknown member and gets the route's unknown-member error before any write.
 
-Core repeats a caller-supplied value in an error message (a key, path, member name, enum value, function name, schema type or cursor) only when it is at most 256 bytes of printable UTF-8. Otherwise the message leaves the value out and keeps its code and param.
+Errors guarded by `echotext.Allowed`, such as unknown-member, enum, schema-root and cursor errors, repeat caller values only when they are at most 256 bytes of printable UTF-8. An unknown member that cannot be repeated gets a generic message and a null param. Metadata errors use their own validation and may repeat longer keys.
 
 ### Resource identifiers
 
@@ -87,7 +87,7 @@ Other 400 responses use type `invalid_request_error`. Validation failures with a
 | Case | Response |
 | --- | --- |
 | More than 16 metadata pairs, a key over 64 characters or a value over 512 characters on Agent or Session create or update | Param `metadata` or `metadata.<key>` and the official message with the actual count or length. Pairs are checked before keys and values, keys in sorted order. |
-| A non-string metadata value on Agent, Session or Vault create or update | Param `metadata.<key>`, message "Invalid type for 'metadata.<key>': expected a string, but got <kind> instead." The first such value in document order is reported first. |
+| A non-string metadata value on Agent or Session create or update, or Vault create | Param `metadata.<key>`, message "Invalid type for 'metadata.<key>': expected a string, but got <kind> instead." The first such value in document order is reported first. |
 | Agent `name` over 128 characters | Param `name`. Empty and untrimmed names are accepted. |
 | U+0000 in a metadata key or value | Param `metadata.<key>` |
 | U+0000 or invalid UTF-8 in any other stored string or query filter | Null param, message "Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8." Nothing is written. PostgreSQL cannot store U+0000, which the official service accepts. |
@@ -120,7 +120,7 @@ Vault and Credential lists accept `status` as a scalar, as `status[]` entries, o
 | Skills, Skill versions | 20 | 0–100 | 0 returns an empty page whose `has_more` reports whether a resource follows the cursor. Negative: 400 `integer_below_min_value`, param `limit`. Above 100: 400 `integer_above_max_value`, param `limit` |
 | Files | 10000 | 1–10000 | 400 with a null code, "limit must be between 1 and 10000." |
 
-A `limit` that is not a decimal integer, including a leading sign or an empty value, returns 400 `invalid_request_error`, "Failed to deserialize query string: limit: invalid digit found in string" on Beta lists; a value above the signed 64-bit range returns "Failed to deserialize query string: limit: number too large to fit in target type". Skills return `invalid_request`, "limit must be an integer between 0 and 100."; Files return `invalid_request` with the Files range message.
+A `limit` that is not a decimal integer, including an empty value, returns 400 `invalid_request_error`, "Failed to deserialize query string: limit: invalid digit found in string" on Beta lists; outside Vault and Credential lists, a value above the signed 64-bit range returns "Failed to deserialize query string: limit: number too large to fit in target type". A leading `+` is accepted when encoded as `%2B`; a leading `-` returns the invalid-digit error on Beta lists except Vaults and Credentials. Skills return `invalid_request`, "limit must be an integer between 0 and 100."; Files return `invalid_request` with the Files range message.
 
 ### Cursors
 
@@ -132,7 +132,7 @@ A `limit` that is not a decimal integer, including a leading sign or an empty va
 | Session Items, Subagent Items, Subagent Turn Items | 400 `invalid_request_error`, null param, "Invalid session item ID in `after`" |
 | Subagents, Subagent Turns | 400 `invalid_request_error`, null param, "Invalid resource ID in `after`" |
 | Session Artifacts | 400 `invalid_request_error`, null param, "after is not a valid artifact ID" |
-| Skill versions | A value that does not begin with `skillver`: 400 `invalid_value`, param `after`, "Invalid 'after': '<value>'. Expected an ID that begins with 'skillver'." A version of another Skill: the same fields, "Skill version cursor does not match this skill." A missing, deleted or foreign version: 404 with a null code and param |
+| Skill versions | A value that does not begin with `skillver`: 400 `invalid_value`, param `after`, "Invalid 'after': '<value>'. Expected an ID that begins with 'skillver'." A version of another Skill: the same fields, "Skill version cursor does not match this skill." A malformed `skillver` suffix or a missing, deleted or foreign version: 404 with a null code and param |
 | Skills | 404 with a null code and param |
 | Files | 404, param `after` |
 
@@ -205,13 +205,15 @@ Omitted, null and explicit `medium` text verbosity give the same Session configu
 
 ### Configuration snapshot
 
-Session creation copies the effective Agent configuration into an immutable snapshot. With `agent_id`, the saved Agent is read once; fields in the inline `agent` replace the saved field whole, including arrays, and null `tools` clears the list. Omitted fields inherit. Saved Agent metadata never becomes Session metadata. Later Agent updates or deletion affect only new Sessions.
+Session creation copies the effective Agent configuration into an immutable snapshot. With `agent_id`, the saved Agent is read once; fields in the inline `agent` replace the saved field whole, including arrays, and null `tools` clears the list. Omitted fields inherit; an inline `x_agents_core` that omits `harness` keeps the saved harness. Saved Agent metadata never becomes Session metadata. Later Agent updates or deletion affect only new Sessions.
 
 `stream` defaults to false. `stream` and `agent_id` cannot be null. Omitted or null `metadata` is `{}`.
 
+Creation validates the body and metadata types, the request fields and initial input, and the placement and streaming input requirements before looking up a creation retry. For new work, Core resolves the Template, saved Agent and model configuration, binds Vault Credentials, then validates the selected Harness and execution configuration before writing. A failed dependency lookup rechecks the retry identity so an already committed creation remains recoverable.
+
 ### Creation retries
 
-Send an `Idempotency-Key` of 1–128 bytes that is not only whitespace; a longer or blank key returns 400 `invalid_request`. Without a key, every request creates a new Session. The official service creates a new Session for each request even with the same key; Core returns the original one.
+Send an `Idempotency-Key` of 1–128 bytes that is not only whitespace; a longer or whitespace-only key returns 400 `invalid_request`. An empty header counts as no key. Without a key, every request creates a new Session. The official service creates a new Session for each request even with the same key; Core returns the original one.
 
 | Case | Response |
 | --- | --- |
@@ -219,7 +221,7 @@ Send an `Idempotency-Key` of 1–128 bytes that is not only whitespace; a longer
 | Same key, different request | 409 `idempotency_conflict` |
 | Same key after the Session was deleted | 409 `idempotency_conflict` |
 
-Keys are scoped to the Project; any key of the Project, including one issued after a rotation, can retry. A request that names a saved Agent, a template, initial files or preparation, `vault_ids` or credential references, `x_agents_core`, or an `openai_hosted` environment is compared as sent, before any of those sources is read: a matching retry returns the original Session even after the Agent, template, Credential or deployment default changes or is deleted. Other requests are compared by their resolved configuration. Model provider keys enter the comparison only as fingerprints.
+Keys are scoped to the Project; any key of the Project, including one issued after a rotation, can retry. A request that has an inline Agent without `model` or names a saved Agent, a template, initial files or preparation, `vault_ids` or credential references, `x_agents_core`, or an `openai_hosted` environment is compared as sent, before any of those sources is read: a matching retry returns the original Session even after the Agent, template, Credential or deployment default changes or is deleted. Other requests are compared by their resolved configuration. Model provider keys enter the comparison only as fingerprints.
 
 ### Update and list
 

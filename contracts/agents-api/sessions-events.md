@@ -21,19 +21,20 @@ A Session's `status` and `last_active_at` derive from its latest root Turn and f
 | `idle` | No Turn yet, or the latest Turn completed or was cancelled. Input reserved for a hosted Environment that is still provisioning also reads `idle` |
 | `in_progress` | The latest Turn is queued, running or waiting |
 | `requires_action` | The latest Turn waits for a function result and no cancellation was requested, or input waits for a `self_hosted` machine to connect. `required_actions` lists `function_call` or `environment_connection` entries |
-| `failed` | The latest Turn failed (`error` is "The execution could not complete."), input reserved for the Environment failed or expired, or the Environment failed to initialize (see [Environment initialization failure](#environment-initialization-failure)) |
+| `failed` | The latest Turn failed (`error` is "The execution could not complete."), input reserved for the Environment failed, initial input expired before admission, or the Environment failed to initialize (see [Environment initialization failure](#environment-initialization-failure)) |
 
-A Session stays usable after a Turn fails: new input starts a new Turn. Only an Environment initialization failure is terminal.
+A Session stays usable after a Turn fails: new input starts a new Turn. Later reserved input that expires leaves the Session idle. An Environment initialization failure or expiry prevents new work.
 
 ## Send input
 
 `POST /v1/agents/sessions/{session_id}/events` takes an ordered array of 1 to 64 events: `agent.session.input.message`, `agent.session.input.cancel` and `agent.session.input.tool_result`. The whole batch is admitted atomically, and the response is 202 with no body once the batch is stored, before any harness reads it. Admission never confirms native application.
 
 - **Limits.** The request body is at most 1 MiB, and the stored input of one request at most 512 KiB.
+- **Null batch.** An explicit `null` for `events` is invalid.
 - **Empty batch.** `{"events": []}` checks that the Session exists and returns 202. It creates no Turn, Item or retry identity.
 - **Retries.** An `Idempotency-Key` of up to 128 bytes identifies the whole ordered batch. The same key and batch return 202 again without admitting anything twice; the same key with another batch returns 409 `idempotency_conflict`. A request without a key is always new.
 - **Messages.** On an idle Session a message batch starts a queued Turn. While a Turn runs, messages join it (steering); they never start a parallel Turn. Each message stays its own user Item, even when the harness receives several as one prompt.
-- **Cancellation.** A queued Turn is cancelled without a live Runtime. A running Turn is cancelled when the Runtime confirms it; completion can win that race. The Turn has stopped when it reads `cancelled`, not when the request returns. A cancellation on an idle Session is accepted and has no effect.
+- **Cancellation.** A queued Turn is cancelled without a live Runtime. A running Turn is cancelled when the Runtime confirms it; completion can win that race. The Turn has stopped when it reads `cancelled`, not when the request returns. A cancellation on an idle Session with no pending input is accepted and has no effect; while an input reservation is pending, it returns 409.
 - **Function results.** `turn_id`, `call_id` and `success` are required; `output` and `error` are optional and nullable ([content rules](message-content.md#function-results)). An identical repeated result returns 202 without another application or event. The result Item appears when the harness applies the result; a result that cancellation prevents from being applied stays stored but produces no Item.
 - **Queueing.** A queued Turn starts when a Runtime that supports the Session's harness and configuration is connected and one of Core's [`core.execution_concurrency`](../../docs/configuration.md#settings) work slots is free. A Session stays bound to the Runtime that first ran it.
 - **Execution availability.** A service without execution returns 503 `execution_unavailable`, and a Worker that loses execution ownership returns 503. A Session created without a model provider rejects new messages with 400 `model_provider_required` ([model execution](model-execution.md)).
@@ -42,7 +43,7 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Only an 
 
 On `openai_hosted` and `self_hosted` Sessions, messages sent while a Turn runs join it at once. Messages sent to an idle Session reserve the batch for the Environment: the request waits until a Turn starts, for at most five minutes from the reservation. While the reservation waits for a `self_hosted` machine, the Session reads `requires_action` with an `environment_connection` action. A batch that carries messages on these placements may contain only messages. Cancellation-only and result-only batches are admitted at once and create no Turn.
 
-The waiting request ends with 202 when the Turn starts, or with 409 `environment_input_expired` when the deadline passes, 409 `environment_input_cancelled` when the reservation is cancelled, or 409 `environment_unavailable` when the Environment fails or expires. Disconnecting the waiting request does not cancel the reservation or restart its deadline.
+The waiting request ends with 202 when the Turn starts, or with 409 `environment_input_expired` when the deadline passes, 409 `environment_input_cancelled` when an administrator archives the Session or resets its deployment and cancels the reservation, or 409 `environment_unavailable` when the Environment fails or expires. Disconnecting the waiting request does not cancel the reservation or restart its deadline.
 
 ### Input errors
 
@@ -55,7 +56,7 @@ Checks run in this order: request validation, Session lookup, retry lookup, the 
 | A result that differs from the call's stored result, before or after its Turn ends | 409 `conflict_error` | "The tool call already has a different result." |
 | The same `Idempotency-Key` with a different batch | 409 `idempotency_conflict` | "This idempotency key was used with different input." |
 | A result whose `call_id` names no function call of this Session | 400 `invalid_request_error`, param null | "Unknown pending tool call." |
-| A result for a call of this Session whose `turn_id` names another Turn, an unknown ID or no ID | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
+| A result for a call of this Session whose `turn_id` names another Turn, an unknown Turn ID or a value that is not a Turn ID | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
 | A missing, malformed or foreign Session | 404 `not_found_error` | "Resource not found." |
 | New input after an `openai_hosted` Environment failed to provision | 409 `conflict_error` | "the hosted environment failed to provision" |
 | New input after a `self_hosted` Environment failed, input already waiting when the Environment failed, or an expired Environment | 409 `environment_unavailable` | "The environment is no longer available for new input." |
@@ -80,6 +81,8 @@ An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Erro
 2. The stream then sends every committed event of the creation exactly once, starting at the creation's own position, so fast execution cannot skip its first events.
 3. It ends right after the first `agent.session.idle` recorded when a Turn ends or an input reservation stops waiting (expired, cancelled or failed), or after any `agent.session.failed`, and never sends later events. `requires_action`, function results, resumed work and a `self_hosted` connection keep it open. A reservation keeps it open until a Turn settles or the reservation ends.
 4. A creation that admitted nothing ends right after `agent.session.created`. When a settlement records no event, the stream ends after the events committed up to the settled state; another client's work committed before that point can still be sent.
+
+Input reserved while the ending Turn captures Artifacts can start a later Turn that the creation stream does not follow.
 
 A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only the connection comment and ends at once: it admits nothing and follows no work. To recover a lost Session ID, repeat the request with the same key and `stream: false`, then read the Session, Turns and Items. Disconnecting stops only the observer. Observe later Turns with the GET stream.
 

@@ -4,7 +4,7 @@ User messages and function results share one content model: an ordered list of `
 
 ## Messages
 
-A message has `role: "user"`, an optional `type: "message"` and a non-empty `content` array. Event `input` is an array of messages; Session creation `input` may also be a string, which becomes one text message. A string `content` or a string event `input` is a type error.
+A message has `role: "user"`, an optional `type: "message"` and a non-empty `content` array. Event `input` is an array of messages; Session creation `input` may also be a string, which becomes one text message. An explicit null or empty message `type`, a string `content` or a string event `input` is invalid.
 
 A message is valid when it has an image or at least one non-empty text part. Core never trims text. These requests return 400 `invalid_request` and write nothing:
 
@@ -56,9 +56,9 @@ An `agent.session.input.tool_result` event carries `success`, an optional nullab
 Admission (202) does not mean the harness used the result. The pending call clears when the adapter confirms native application:
 
 - **Claude Code** confirms with a live root native tool result that matches the Session, call ID, success flag, exact text, block count and order, with a native image at every image position. Replayed, synthetic and Subagent records do not confirm it.
-- **Codex** confirms with the live root dynamic-tool `item/completed` observation that matches thread, Turn, call, function name, status, success flag and the exact ordered content. A write to the harness alone does not confirm it. Without a receipt within 10 seconds, the execution ends as uncertain.
+- **Codex** confirms with the live root dynamic-tool `item/completed` observation that matches thread, Turn, call, function name, status, success flag and the exact ordered content. A write to the harness alone does not confirm it.
 
-Confirmation means the harness recorded the result, not that the model provider consumed it. Core never replays a result automatically; the submission stays stored for recovery reads.
+Both adapters wait at most 10 seconds for a receipt. A timeout or native release without confirmation leaves application uncertain. Confirmation means the harness recorded the result, not that the model provider consumed it. Core never replays a result automatically; the submission stays stored for recovery reads.
 
 ## Runtime boundary
 

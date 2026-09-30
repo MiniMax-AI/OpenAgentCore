@@ -27,7 +27,7 @@ The response has `object: "core.metrics"`, `range`, `service`, `execution`, `dat
 
 | Field | Meaning |
 | --- | --- |
-| `service.status` | `running`, or `degraded` when a measurement or job fails, the latest sample is missing or stale, or Core has execution slots but does not hold the execution lease. A sandbox reset is reported by the [deployment](sandbox-deployment.md), not here |
+| `service.status` | `running`, or `degraded` when a measurement or job fails, the latest sample is missing or stale, or execution ownership is unknown or Core has execution slots but does not hold the execution lease. A sandbox reset is reported by the [deployment](sandbox-deployment.md), not here |
 | `service.revision` | The full source commit injected at build time; null for builds without one |
 | `service.started_at` | When the process initialized |
 | `service.execution_owner` | Whether this process holds the execution worker's database lease |

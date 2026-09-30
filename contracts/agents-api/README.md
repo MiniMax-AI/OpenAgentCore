@@ -22,14 +22,14 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | Implemented. Every pinned setting is saved; Session admission runs a subset | [Agents](wire-semantics.md#agents) |
 | Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata` only; deletion requires an idle or failed Session | [Sessions](wire-semantics.md#sessions), [creation streaming](sessions-events.md#creation-streaming) |
-| Session events | create, stream | Implemented: messages with text and inline images, cancellation, function results; the stream is live only | [Sessions, events and history](sessions-events.md), [message content](message-content.md) |
+| Session events | create, stream | Partial: messages with text and inline images, cancellation, function results; the stream is live only | [Sessions, events and history](sessions-events.md), [message content](message-content.md) |
 | Turns | retrieve, list | Implemented; Session Turn routes hold root Turns only | [Turns and Items](sessions-events.md#turns-and-items) |
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | Partial: read-only child work; no live child progress or optional native operations | [Subagents](subagents.md) |
 | Environments | retrieve | Implemented | [Environments](environments.md) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](environment-files.md) |
-| Environment Templates | create, retrieve, update, list, delete | Implemented. Sessions that need a `disabled` or `restricted` network, or `packages.system`, are rejected | [Environment Templates](environment-templates.md) |
+| Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](environment-templates.md) |
 | Vaults | create, retrieve, list, delete | Implemented; no archive operation | [Vaults and Credentials](vaults.md) |
 | Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](source-files.md) |
@@ -104,6 +104,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Execution and history**
 
+- The stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.

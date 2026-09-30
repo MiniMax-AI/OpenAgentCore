@@ -37,6 +37,7 @@ Query errors, all with type and code `invalid_request_error` and a null `param` 
 | `path` relative, outside `/workspace`, longer than 4,096 bytes, not UTF-8, or containing a backslash, NUL, CR or LF | `path must be an absolute directory inside /workspace` |
 | `path` not in clean form: a trailing or repeated `/`, `.` or `..` | `path must identify a non-reserved directory inside /workspace` |
 | A malformed token, another request's token, or a token whose listing changed | `Invalid file page token for this request` |
+| `limit` outside 1–100 | `limit must be between 1 and 100`; malformed integers and invalid `order` use the shared [Beta list errors](wire-semantics.md#lists) |
 | A repeated `path`, `limit`, `order` or `page` | The shared duplicate-field error ([list rules](wire-semantics.md)) |
 
 Unknown query keys are ignored. An explicit empty value is invalid for every key. Malformed query encoding, such as `%GG` or a `;` separator, returns 400 `invalid_request`.
@@ -47,10 +48,10 @@ Unknown query keys are ignored. An explicit empty value is invalid for every key
 
 ```json
 {"type": "inline", "data": "<standard Base64>", "path": "/workspace/data/input.csv"}
-{"type": "file_id", "file_id": "file_…", "path": "/workspace/data/input.csv"}
+{"type": "file_id", "file_id": "file-…", "path": "/workspace/data/input.csv"}
 ```
 
-It returns 201 with the four EnvironmentFile fields. `file_id` names a [File](source-files.md) of the same Project; Core reads its bytes before contacting the Runtime.
+Empty inline `data` is valid and creates an empty file. It returns 201 with the four EnvironmentFile fields. `file_id` names a [File](source-files.md) of the same Project; Core reads its bytes before contacting the Runtime.
 
 | Case | Result |
 | --- | --- |

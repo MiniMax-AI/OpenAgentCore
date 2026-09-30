@@ -57,7 +57,7 @@ A Project owns one execution tenant; its keys share its principal and assets ([P
 - Only the issuance response contains the key's plaintext, in `key`; Core stores its digest. Show it once and never cache it. After an uncertain issuance response, list the keys and revoke any you cannot use before issuing another.
 - Archive marks the Project archived, revokes all its keys and writes the audit entry in one transaction. Issuing a key in an archived Project returns 409 `project_archived`. There is no Project deletion, unarchive or key reset.
 
-On `/v1`, Core looks up the presented key's digest and its Project in the database on every request, with no credential cache, so a revoked key or an archived Project fails on the next request. A database error during this lookup, including no answer within 5 seconds, returns 503 `authentication_unavailable`. All keys of a Project act as subject `service_account/project:<Project ID>`, with organization `core` and project `proj_<Project ID>` as their public scope. The [`/v1` authentication rules](wire-semantics.md#authentication) give the error responses and scope headers.
+The [`/v1` authentication rules](wire-semantics.md#authentication) define key lookup, revocation visibility, scope headers and authentication errors.
 
 ## Resource reads and deletion
 

@@ -14,7 +14,7 @@ A credential used in another namespace gets 401: a Project API key on `/core/v1`
 
 ## Machine connection API
 
-These routes are under `/api/v1`. Each accepts only the credential listed, never the Core key or a Project API key. The generated [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) covers the node routes and the installation grant routes.
+These routes are under `/api/v1`. Each accepts only the credential listed, never the Core key or a Project API key. The generated [machine OpenAPI](../../contracts/agents-api/runtime.openapi.yaml) covers the annotated node HTTP and installation grant routes; the node WebSocket `connect` route is described in the node generation protocol.
 
 | Routes | Caller | Credential | Contract |
 | --- | --- | --- | --- |
