@@ -219,6 +219,8 @@ Before starting, record the operation set, expected results, exclusions and stop
 | Deferred function discovery | `TestNativeToolSearchPublicExecution` | `OAC_TEST_TOOL_SEARCH_REAL_OPTIONS` |
 | Disabled web search and programmatic tool calling | `TestNativeToolPolicyPublicExecution` | `OAC_TEST_TOOL_POLICY_REAL_OPTIONS`, `OAC_TEST_TOOL_POLICY_ENGINE` |
 
+Environment acceptance uses `services/core/tests/official_environment_{templates,setup,skills,plugins,plugin_mcp,composition,initial_files,network,skill_references}.py`. For composed preparation, change the Skill default and Template, delete the sources, retry and restart; verify frozen bytes, one setup execution and MCP cancellation. `official_hosted_structured_native.py` covers hosted structured output. Record exact source revisions, native versions and commands with each acceptance result.
+
 Keep provider keys in private operator files, never in commits or logs. Existing focused tests, relative to `apps/daemon/internal/agent`:
 
 | Boundary | Tests |
@@ -242,7 +244,7 @@ Owned output pipes stay readable after the leader exits. Consumers drain stdout 
 
 Adapters run native tools unattended with the launching user's permissions: Codex with approval policy `never` and full access, Claude through the adapter's tool callback in native `default` permission mode with the SDK sandbox disabled, and MiniMax with bypassed permissions and its sandbox disabled. Do not add permission profiles, bubblewrap wrappers or native sandbox settings; there is one execution path for every Environment origin. Resource paths are operator configuration, not a permission boundary.
 
-The daemon does not enforce disabled or restricted network policies. Core rejects such a combination unless the outer Environment provides and qualifies the restriction; never advertise daemon-level network isolation or run a restricted request unrestricted. A self-hosted machine uses the host's existing network.
+Network admission follows [Restricted network](environments.md#restricted-network).
 
 ## Native references
 

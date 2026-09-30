@@ -33,7 +33,7 @@ with official observations separated from Core acceptance.
 
 Adapter and persistence design follows the
 [design rules](../../AGENTS.md#complexity-stays-in-the-adapter).
-The [harness contract and parity baseline](harness-capabilities.md) describes equal-engine
+The [harness contract and parity baseline](harness-onboarding.md) describes equal-engine
 registration, qualification and shared acceptance.
 Verify configuration against actual execution: response defaults must not merely
 describe values the adapter never applied.
@@ -440,9 +440,7 @@ The `x_agents_core.environment` extension supplies that configuration to either
 placement; self-hosted machines never need a managed allocation. See
 [shared preparation qualification](harness-capabilities.md#environment-preparation). They do not
 select an E2B image or make unsupported initialization executable.
-The supported Docker configuration has [composed real acceptance](harness-capabilities.md#environment-preparation)
-across the three harnesses, including frozen source deletion, cold continuation
-and cancellation. This does not close the remaining protocol/transport gaps.
+[Harness capabilities](harness-capabilities.md#environment-preparation) records composed preparation qualification by Harness and placement.
 
 ## Delivery and verification
 
@@ -499,11 +497,7 @@ The shared initialization path supports env/setup and user-directory npm/Python 
 See the [evidence and limits](harness-capabilities.md#environment-preparation). Remaining
 unsupported startup installations, unqualified restricted hostname forms and hosted
 service-origin HTTP MCP remain outside these accepted profiles. Environment-origin
-MCP Plugins have a separate [Docker qualification and transport matrix](environments.md#plugin-mcp):
-stdio on all three harnesses, Codex HTTP with literal headers or HTTPS bearer,
-and Claude/MiniMax anonymous HTTP or HTTPS bearer without literal headers. This batch
-does not qualify those new Plugin paths on E2B. MiniMax's private workspace MCP
-bridge remains internal transport, distinct from installed Environment MCP servers.
+MCP Plugin qualification and transport limits are recorded in [Harness capabilities](harness-capabilities.md#environment-preparation).
 
 The [self-hosted profile](environments.md#self-hosted-self_hosted) uses
 user-managed Runtime enrollment and remains distinct from Core-managed Docker. Product `claude_code`

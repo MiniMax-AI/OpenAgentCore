@@ -35,7 +35,7 @@ The Worker fails previously claimed work without replay after execution loss; qu
 
 ## Structured output
 
-`text.format` accepts `{type: "json_schema", schema: {...}}`, the Agents API form: it has no `name`, `strict` or other Responses API wrapper fields. The schema is saved, inherited through Agent and Session resolution and frozen in the Session snapshot. An explicit non-object root type is a protocol error on save and Session creation for every Harness. The Claude SDK reads JSON numbers as binary64, so Session admission rejects schemas whose numbers would change in that conversion; saved Agents keep them unchanged.
+`text.format` accepts `{type: "json_schema", schema: {...}}`, the Agents API form: it has no `name`, `strict` or other Responses API wrapper fields. The schema is saved, inherited through Agent and Session resolution and frozen in the Session snapshot. An explicit non-object root type is a protocol error on save and Session creation for every Harness. Claude requires an explicit `type: "object"` at the schema root. The Claude SDK reads JSON numbers as binary64, so Session admission rejects schemas whose numbers would change in that conversion; saved Agents keep them unchanged.
 
 Core carries the schema in `ExecutionControls.OutputFormat` and requires the profile's structured-output qualification plus the Runtime's `structured_output` and message-observation capabilities, only for requests that use the option. Frozen schemas reach preparation before input and apply to initial and resumed execution; Start cannot replace them.
 
@@ -81,11 +81,11 @@ Execution admits only `mode: "disabled"` and `enabled: false`. Enabled or omitte
 }
 ```
 
-- `server_label` is nonempty and unique within the Agent. Only the `http` transport is accepted; `server_url` is an absolute HTTP or HTTPS URL without credentials, query or fragment. Nonempty `headers` and `request_metadata` are rejected.
-- `connection_origin` is `service` or `environment`; omitted or null is saved as `service`. [Public MCP connection origin](environments.md#public-mcp-connection-origin) owns where each origin runs, per-Harness support and credential authority.
+- `server_label` is nonempty and unique within the Session. Only the `http` transport is accepted; `server_url` is an absolute HTTP or HTTPS URL without credentials, query or fragment. Nonempty `headers` and `request_metadata` are rejected.
+- [Public MCP connection origin](environments.md#public-mcp-connection-origin) owns origin defaults, placement and credential authority; [Harness capabilities](harness-capabilities.md#tools) owns per-Harness support.
 - Omitted or null `allowed_tools` permits every server tool; `[]` permits none.
 - `required: true` makes native thread creation and cold resume wait for the server to initialize; a failure stops execution without replacing retained history. It needs the Runtime's `mcp_http_required` capability. Public work can be accepted or queued during the wait.
-- A static bearer comes from a Vault credential attached to the Session. An explicit `credential_id` selects an attached credential for the exact HTTPS URL; omitted or null selects the unique matching credential, or stays anonymous if none matches. Ambiguity fails before Session creation with 409 `conflict_error`. The selection is frozen privately; Session reads and events show an implicitly selected credential ID in the public tool, while the stored request keeps the caller's field. Authenticated execution needs `mcp_http_bearer_auth`, and a missing or undecryptable credential never falls back to anonymous ([Vault credentials](../../services/core/credentials.md)).
+- Bearer authentication uses an attached static or OAuth Vault credential. [Vault credentials](../../services/core/credentials.md) owns selection, and [MCP credential authority](environments.md#public-mcp-connection-origin) owns the frozen Runtime binding. Authenticated execution requires `mcp_http_bearer_auth`.
 - The Runtime must advertise `mcp_http_tools`. The native Harness owns discovery, calls and results; public `mcp_call` Items use the original server and tool names and keep the observed native result.
 
 Codex verifies the exact effective MCP configuration before starting or resuming a thread, excludes undeclared servers, disables native apps and plugins, and rejects reserved native labels and stored native MCP credentials. Claude accepts labels of ASCII letters, digits, underscore and hyphen except `functions`, tool names that may also contain dots, and requires connected servers with static inventories. Anonymous Claude requests send a blank Authorization header to suppress native OAuth injection. Native OAuth login is not supported.

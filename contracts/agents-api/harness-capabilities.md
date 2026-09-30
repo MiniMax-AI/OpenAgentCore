@@ -8,7 +8,7 @@ This page lists what each Harness supports on each placement. Core decides admis
 | Admitted | Core admits it through the same Runtime path, but no real-model acceptance has run on that placement |
 | Rejected | Core rejects the request before execution |
 
-Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted (`self_hosted`). Hosted acceptance ran on Docker nodes; E2B and microsandbox run the same Runtime and adapters, and every hosted cell counts as Admitted there. Self-hosted acceptance ran on Linux machines; the [self-hosted guide](../../docs/getting-started/self-hosted.md#platforms) lists the supported platforms. A verified operation is verified on its own, not in every combination with other options; combinations that a profile rejects are listed in the operation's contract.
+Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted (`self_hosted`). Hosted acceptance ran on Docker nodes; E2B and microsandbox run the same Runtime and adapters, and every Verified hosted cell counts as Admitted there. Self-hosted acceptance ran on Linux machines; the [self-hosted guide](../../docs/getting-started/self-hosted.md#platforms) lists the supported platforms. A verified operation is verified on its own, not in every combination with other options; combinations that a profile rejects are listed in the operation's contract.
 
 ## Execution and input
 
@@ -50,7 +50,8 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 
 | Operation | Codex | Claude SDK | MiniMax Code |
 | --- | --- | --- | --- |
-| [Initial files, setup commands, Skills, Plugins and capability directories](environments.md#runtime-capability-preparation) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
+| [Initial files, setup commands, Skills and Plugins](environments.md#runtime-capability-preparation) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
+| Capability directories | Admitted | Admitted | Admitted |
 | npm and Python packages | Admitted | Admitted | Admitted |
 | `packages.system` | Rejected | Rejected | Rejected |
 | Network `disabled` or `restricted` | Rejected | Rejected | Rejected |

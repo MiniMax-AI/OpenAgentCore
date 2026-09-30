@@ -37,6 +37,8 @@ The two vocabularies are separate; never cast one to the other. Session environm
 
 Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment derives its Project and immutable configuration from the owning Session. Its first state is `pending`. After the Session is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A Session with `none` has no Environment.
 
+A managed outer Environment must exclude broader application credentials and other tenants’ secrets.
+
 ## Placements
 
 Both placements run the same Runtime: the daemon, the selected Harness, native tools and the workspace run together on one machine. They differ only in who owns that machine.
@@ -167,7 +169,7 @@ Core freezes resource versions, metadata and source selections at Session creati
 
 The runner uses only neutral Environment and Session identity and a Runtime peer, with no Provider, deployment or operating-system branch. Harness differences stay in the adapters.
 
-**Portable preparation input.** `self_hosted` input carries only `workspace_directory` and `capability_directories`. Any Session can also send `x_agents_core.environment`, a Core extension with `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins` and `capability_directories`. It uses the same parsers and inheritance rules as `openai_hosted` input. A field supplied both there and in `environment` is rejected, including an explicit null. A `self_hosted` Session names its Template only through this extension and cannot use a Template whose network is not `enabled` (400, param `x_agents_core.environment.environment_template_id`). Machine location, sizing and network policy are not extension fields.
+**Portable preparation input.** `self_hosted` input carries only `workspace_directory` and `capability_directories`. A Session with either workspace placement can also send `x_agents_core.environment`, a Core extension with `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins` and `capability_directories`. It uses the same parsers and inheritance rules as `openai_hosted` input. A field supplied both there and in `environment` is rejected, including an explicit null. A `self_hosted` Session names its Template only through this extension and cannot use a Template whose network is not `enabled` (400, param `x_agents_core.environment.environment_template_id`). Machine location, sizing and network policy are not extension fields.
 
 ```json
 {
@@ -359,11 +361,7 @@ The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_h
 
 A stdio server starts through the daemon's stdio helper, which resolves the installed declaration and launches the command with the Harness's permissions. On Unix the helper replaces itself with the server; on Windows it forwards stdio inside the owned process tree. Initialized values override the declaration's variables. Process groups and Windows Jobs own cancellation and descendant cleanup, not isolation.
 
-| Harness | Plugin MCP transports |
-| --- | --- |
-| Codex | stdio; HTTP with literal headers and HTTPS bearer |
-| Claude SDK | stdio; anonymous HTTP or HTTPS bearer, no literal headers |
-| MiniMax Code | stdio; anonymous HTTP or HTTPS bearer, no literal headers |
+[Harness capabilities](harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
 
 Environment MCP needs enabled network. Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
@@ -382,12 +380,8 @@ An Agent's HTTP MCP tool ([declaration](execution-tools.md#http-mcp)) has a `con
 
 Core's Harness profile declares `MCPOrigins`; admission and dispatch check the origin against the placement and the Runtime's advertised HTTP, bearer and required-initialization capabilities, and the Runtime validates the origin again before invoking an adapter. No Harness-name or Provider branch selects a different path.
 
-| Harness | `service` | `environment` | Policy limits |
-| --- | --- | --- | --- |
-| Codex | Supported | Supported | Nullable tool allowlist; `required` supported |
-| Claude SDK | Supported | Supported; the packaged bridge must report `workspace_mcp_http` | Nullable tool allowlist; `required` supported |
-| MiniMax Code | Rejected | Supported | `allowed_tools` must be null or omitted and `required` false |
+[Harness capabilities](harness-capabilities.md#tools) owns per-Harness origin support and policy limits.
 
 Both origins support anonymous HTTP and HTTPS bearer credentials. The attached-Vault selection freezes the credential identity, including a unique implicit URL match or an anonymous selection. Only that Project-authorized credential enters the transient Runtime request; Core defaults and unrelated Vaults are never searched. A decryption failure or missing credential fails execution without an anonymous fallback. Public Environment MCP keeps `project_vault` authority and Plugin credentials keep `environment_configuration` authority; neither overrides a duplicate server label. Bearers never enter persisted native configuration or process arguments.
 
-Omitted or null `allowed_tools` permits every tool on the server and `[]` permits none. Codex and Claude keep native allowlists and initialize required servers before releasing native input, including in cold recovery. `service` origin with a workspace is rejected: Core has no forwarding proxy.
+Tool allowlists and required initialization follow the [HTTP MCP contract](execution-tools.md#http-mcp).

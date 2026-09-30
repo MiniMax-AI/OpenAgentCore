@@ -48,7 +48,7 @@ An adapter freezes root output before child settlement, keeps its native owner a
 
 ## Native profiles
 
-Every profile rejects public functions and HTTP MCP combined with enabled `multi_agent`.
+[Harness capabilities](harness-capabilities.md#tools) lists rejected tool combinations.
 
 **Codex.** The adapter enables the native `multi_agent` feature with a nesting depth of 64 and maps the concurrency limit to `agents.max_threads`. It disables native hooks, plugins, code mode and `multi_agent_v2`, and refuses to start if the native hook list is not empty or managed requirements force a conflicting feature. Close and reopen facts come from direct tool output correlated with the same call's persisted completion, so they need native persisted receipts. Native Turn times have second precision. Child file work can finish under the same owner after the root Turn finishes. Cancellation continues under the same owner after a caller deadline; a later call can confirm settlement without repeating the native interrupt.
 
