@@ -23,9 +23,16 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 	}
 	// A changed installation address cannot admit guests that require a public
 	// origin. Existing owned resources remain available for cleanup.
-	if d.ProviderKind != "" && providers.RequiresPublicOrigin(d.ProviderKind) && LoopbackOrigin(publicURL) {
-		return ErrSandboxPublicURLUnreachable
+	if d.ProviderKind != "" {
+		publicOrigin, err := providers.RequiresPublicOrigin(d.ProviderKind)
+		if err != nil {
+			return err
+		}
+		if publicOrigin && LoopbackOrigin(publicURL) {
+			return ErrSandboxPublicURLUnreachable
+		}
 	}
+
 	if d.Mode == "direct" {
 		if d.AdmissionPaused {
 			return ErrRuntimeNodeUnavailable

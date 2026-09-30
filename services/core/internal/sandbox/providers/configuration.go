@@ -36,13 +36,35 @@ func Equal(kind string, a, b sandbox.Configuration) (bool, error) {
 	}
 	return adapter.Configuration.Equal(a, b)
 }
-func UsesCredential(kind string) bool {
-	a, e := Lookup(kind)
-	return e == nil && a.Configuration.Requirements().Credential == sandbox.Required
+func UsesCredential(kind string) (bool, error) {
+	a, err := Lookup(kind)
+	if err != nil {
+		return false, err
+	}
+	if a.Configuration == nil {
+		return false, providercontract.ErrContract
+	}
+	return required(a.Configuration.Requirements().Credential)
 }
-func RequiresPublicOrigin(kind string) bool {
-	a, e := Lookup(kind)
-	return e == nil && a.Configuration.Requirements().PublicOrigin == sandbox.Required
+func RequiresPublicOrigin(kind string) (bool, error) {
+	a, err := Lookup(kind)
+	if err != nil {
+		return false, err
+	}
+	if a.Configuration == nil {
+		return false, providercontract.ErrContract
+	}
+	return required(a.Configuration.Requirements().PublicOrigin)
+}
+func required(value sandbox.Requirement) (bool, error) {
+	switch value {
+	case sandbox.Required:
+		return true, nil
+	case sandbox.NotRequired:
+		return false, nil
+	default:
+		return false, providercontract.ErrContract
+	}
 }
 func Normalize(s sandbox.Selection) (sandbox.Selection, error) {
 	a, e := Lookup(s.Provider)
@@ -66,7 +88,11 @@ func WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, erro
 	if e != nil {
 		return owner, e
 	}
-	if a.Configuration.Requirements().Credential != sandbox.Required {
+	needsCredential, e := UsesCredential(owner.Provider)
+	if e != nil {
+		return owner, e
+	}
+	if !needsCredential {
 		return owner, &providercontract.UnsupportedError{Operation: "WithCredential", Reason: "credentials_not_required"}
 	}
 	owner.Configuration, e = a.Configuration.WithCredential(owner.Configuration, candidate.Configuration)

@@ -90,7 +90,11 @@ func (s *Store) GetSandboxAllocationSetup(ctx context.Context, ref sandbox.Refer
 		if err != nil {
 			return SandboxSetup{}, ErrSandboxDeploymentConflict
 		}
-		if providers.UsesCredential(g.ProviderKind) {
+		needsCredential, err := providers.UsesCredential(g.ProviderKind)
+		if err != nil {
+			return SandboxSetup{}, err
+		}
+		if needsCredential {
 			composed, err := providers.WithCredential(sandbox.Selection{Provider: g.ProviderKind, Configuration: retained}, sandbox.Selection{Provider: d.ProviderKind, Configuration: result.Configuration})
 			if err != nil {
 				return SandboxSetup{}, ErrSandboxDeploymentConflict
