@@ -181,11 +181,11 @@ func executorURL(url string) func(*api.Dependencies) {
 // administration and node routes and openai_hosted Environments. Deployment
 // changes, reset and discovery need the Worker and are strict stand-ins. It
 // follows the option that enables Execution.
-func managedSandboxes(t testing.TB, s *store.Store, db fixtureDB) func(*api.Dependencies) {
+func managedSandboxes(t testing.TB, db fixtureDB) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
 		d.Sandboxes = &api.Sandboxes{
 			Deployment:             fixtureDeployment(t, db),
-			NodeAllocations:        s,
+			NodeAllocations:        fixtureReader(db),
 			DeploymentChanges:      strictStandIn{t},
 			DeploymentReset:        strictStandIn{t},
 			ConfigurationDiscovery: strictStandIn{t},

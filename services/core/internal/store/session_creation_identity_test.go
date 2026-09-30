@@ -134,7 +134,7 @@ func TestProviderKeyEntersRetryHashesOnlyAsKeyedFingerprint(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		session, err := NewWithCredentialCipher(pool, cipher).CreateSession(t.Context(), uuid.NewString(), input)
+		session, err := withPlacement(t, NewWithCredentialCipher(pool, cipher)).CreateSession(t.Context(), uuid.NewString(), input)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -148,7 +148,7 @@ func TestProviderKeyEntersRetryHashesOnlyAsKeyedFingerprint(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{71}, 32))
 	unreadable := input
 	unreadable.IdempotencyKey, unreadable.CreationRequest = "unreadable", json.RawMessage(`{"x_agents_core":{"model_provider":"hash-key-canary"}}`)
-	if _, err := NewWithCredentialCipher(pool, cipher).CreateSession(t.Context(), uuid.NewString(), unreadable); !errors.Is(err, sessions.ErrInvalidInput) {
+	if _, err := withPlacement(t, NewWithCredentialCipher(pool, cipher)).CreateSession(t.Context(), uuid.NewString(), unreadable); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("unreadable provider intent was hashed", err)
 	}
 }

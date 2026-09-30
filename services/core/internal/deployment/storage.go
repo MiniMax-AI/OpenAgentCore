@@ -7,7 +7,9 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Storage is the persistence node management writes through, on pooled
@@ -28,6 +30,17 @@ type Storage interface {
 	// host history, at the Runtime sampler cadence, and returns the number of
 	// samples. Neither reads nor offline nodes fill gaps.
 	SampleHostHistory(ctx context.Context) (int64, error)
+	// WithActivity runs apply in one transaction that locks the Session of
+	// the tenant's Environment and then prunes the Session's journal. It
+	// commits only when both succeed. A missing Environment, or one of a
+	// deleted Session, is sessions.ErrNotFound.
+	WithActivity(ctx context.Context, key AllocationKey, apply func(sessions.LockedSession, ActivityTx) error) error
+}
+
+// ActivityTx is one Session-locked activity change.
+type ActivityTx interface {
+	// TouchActivity records live-compute activity of the Environment.
+	TouchActivity() error
 }
 
 // ExecutionStorage is the persistence deployment changes write through. Only
@@ -37,6 +50,87 @@ type ExecutionStorage interface {
 	// WithDeployment runs apply in one leased transaction that begins by
 	// locking the deployment. It commits only when apply returns nil.
 	WithDeployment(ctx context.Context, apply func(DeploymentTx) error) error
+	// WithReservation runs apply in one leased transaction that locks the
+	// Session of the tenant's Environment and then prunes the Session's
+	// journal. It commits only when both succeed. A missing Environment, or
+	// one of a deleted Session, is sessions.ErrNotFound.
+	WithReservation(ctx context.Context, key AllocationKey, apply func(sessions.LockedSession, ReservationTx) error) error
+	// WithAllocation runs apply in one leased transaction that locks the
+	// Session owning the Environment's allocation, deleted or not, and then
+	// prunes the Session's journal. It commits only when both succeed. A
+	// missing allocation is ErrNotFound.
+	WithAllocation(ctx context.Context, key AllocationKey, apply func(AllocationTx) error) error
+	AllocationCleanupStorage
+	// ClearWake clears the allocation's wake request unless activity newer
+	// than observed arrived. It runs on the lease.
+	ClearWake(ctx context.Context, allocationID string, observed time.Time) error
+}
+
+// AllocationCleanupStorage runs allocation cleanup, which settles the
+// owning Session's work and Environment with the allocation.
+type AllocationCleanupStorage interface {
+	// WithAllocationCleanup runs apply as WithAllocation does, with the
+	// Session's cancellation and Environment termination bound to the same
+	// transaction.
+	WithAllocationCleanup(ctx context.Context, key AllocationKey, apply func(AllocationCleanupTx) error) error
+}
+
+// ReservationTx is one Session-locked allocation reservation. The Session is
+// the owner of the Environment the transaction was opened for.
+type ReservationTx interface {
+	sessions.EnvironmentDeviceTx
+	// LoadEnvironment reads the Session's Environment.
+	LoadEnvironment(ctx context.Context) (sessions.Environment, error)
+	// FindAllocation returns the Environment's allocation and whether it has
+	// one.
+	FindAllocation() (Allocation, bool, error)
+	// LockDeployment locks the deployment and returns it as placement reads it.
+	LockDeployment() (placement.Deployment, error)
+	// LoadReserved returns the node placement the Session reserved for the
+	// Environment.
+	LoadReserved() (placement.Reserved, error)
+	// InsertAllocation stores the allocation of the Session's Environment.
+	InsertAllocation(allocation NewAllocation) (Allocation, error)
+}
+
+// AllocationTx is one Session-locked allocation change. Each write applies to
+// current, the allocation LoadAllocation returned, and returns it changed. A
+// write whose stored guard no longer holds is ErrAllocationConflict.
+type AllocationTx interface {
+	// LoadAllocation returns the Environment's allocation.
+	LoadAllocation() (Allocation, error)
+	// LoadSessionDevice returns the device the Session is bound to and
+	// whether it is bound to one.
+	LoadSessionDevice() (SessionDevice, bool, error)
+	// LoadActivity returns the allocation's activity.
+	LoadActivity(current Allocation) (Activity, error)
+	// LoadRestore locks the deployment and returns what restoring the
+	// allocation's suspended compute on its node reads.
+	LoadRestore(current Allocation) (placement.Restore, error)
+	// ObserveRunning records the allocation running with its creation settled.
+	ObserveRunning(current Allocation) (Allocation, error)
+	// Keep renews the allocation's lease.
+	Keep(current Allocation) (Allocation, error)
+	// SettleCreation records that the original Create can no longer change
+	// resources.
+	SettleCreation(current Allocation) (Allocation, error)
+	// Release releases the allocation and its node placement.
+	Release(current Allocation) (Allocation, error)
+	// SetCompute commits the compute phase and advances its revision.
+	SetCompute(current Allocation, change ComputeChange) (Allocation, error)
+	// RecordObservation records the diagnostic for current's compute
+	// revision and state. It changes nothing once either moved on.
+	RecordObservation(current Allocation, diagnostic string) error
+}
+
+// AllocationCleanupTx is one Session-locked allocation cleanup.
+type AllocationCleanupTx interface {
+	AllocationTx
+	sessions.EnvironmentTerminationTx
+	// RevokeDevice revokes the allocation's device.
+	RevokeDevice(current Allocation) error
+	// RequestCleanup records that the allocation's resources await cleanup.
+	RequestCleanup(current Allocation) (Allocation, error)
 }
 
 // Reader answers deployment and node queries.
@@ -72,6 +166,49 @@ type Reader interface {
 	// AddressBindings counts what is bound to an installation address, read
 	// in one snapshot. publicURL is the address nodes are compared against.
 	AddressBindings(ctx context.Context, publicURL string) (AddressBindings, error)
+	// EnvironmentAllocation returns the Environment's allocation, including
+	// for a deleted Session. It returns ErrInvalidInput for a malformed
+	// identifier and ErrNotFound for a missing allocation.
+	EnvironmentAllocation(ctx context.Context, key AllocationKey) (Allocation, error)
+	// CredentialAllocations returns up to 32 unreleased allocations after the
+	// given allocation ID, in ID order. An empty after starts at the
+	// beginning.
+	CredentialAllocations(ctx context.Context, after string) ([]Allocation, error)
+	// ObservationSessions returns up to limit undeleted hosted Sessions after
+	// the given Session ID, in ID order, whose allocation, if any, is
+	// unreleased. limit is 1 to 100. It reads only and renews nothing.
+	ObservationSessions(ctx context.Context, after string, limit int) (ObservationSessionPage, error)
+	// NodeAllocations returns up to 1000 unreleased allocations of the node,
+	// oldest first. A missing node is ErrNotFound.
+	NodeAllocations(ctx context.Context, nodeID string) ([]NodeAllocation, error)
+	// NodeOnline reports whether the node is connected; a missing node is
+	// offline.
+	NodeOnline(ctx context.Context, nodeID string) (bool, error)
+	// LifecycleNodes returns the node of each allocation lifecycle, offline
+	// ones included, with the empty ID for the lifecycle without a node.
+	LifecycleNodes(ctx context.Context) ([]string, error)
+	// LifecycleAllocations returns up to 32 allocations of the node's
+	// lifecycle after the given allocation ID, in ID order. An empty nodeID
+	// names the lifecycle without a node.
+	LifecycleAllocations(ctx context.Context, nodeID, after string) ([]Allocation, error)
+	// UnallocatedEnvironments returns up to 32 pending hosted Environments of
+	// the node's lifecycle without an allocation, after the given Environment
+	// ID, in ID order. It reads the committed placement and never selects a
+	// replacement node.
+	UnallocatedEnvironments(ctx context.Context, nodeID, after string) ([]UnallocatedEnvironment, error)
+	// LifecyclePlacement returns what routing the Environment to its
+	// lifecycle reads, including for a deleted Session. A missing Environment
+	// is sessions.ErrNotFound.
+	LifecyclePlacement(ctx context.Context, key AllocationKey) (LifecyclePlacement, error)
+	// Activity returns the allocation's activity; a missing allocation is
+	// ErrNotFound.
+	Activity(ctx context.Context, allocationID string) (Activity, error)
+	// CountComputeReservations counts the installation's allocations that
+	// reserve active compute.
+	CountComputeReservations(ctx context.Context, installationID string) (int64, error)
+	// CountRetainedAllocations counts the installation's allocations that
+	// retain resources.
+	CountRetainedAllocations(ctx context.Context, installationID string) (int64, error)
 }
 
 // NodeReads loads node authentication facts.

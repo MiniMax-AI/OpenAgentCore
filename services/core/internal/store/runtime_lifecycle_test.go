@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -127,13 +128,13 @@ func managedSession(t *testing.T, s *store.Store, db fixtureDB) (string, session
 	return tenant, v, env
 }
 
-func reconcileManagedState(t *testing.T, w *execution.Worker, s *store.Store, tenant, environment, state string) {
+func reconcileManagedState(t *testing.T, w *execution.Worker, db fixtureDB, tenant, environment, state string) {
 	t.Helper()
 	for range 100 {
 		if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 			t.Fatal(err)
 		}
-		got, err := s.GetRuntimeAllocation(t.Context(), tenant, environment)
+		got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -160,8 +161,8 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	}
 	stop()
 	next, _ := managedWorker(t, s, db, key, p)
-	reconcileManagedState(t, next, s, tenant, env.ID, "running")
-	recovered, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	reconcileManagedState(t, next, db, tenant, env.ID, "running")
+	recovered, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || recovered.ID != owner.ID || !recovered.CreateSettled || recovered.State != "running" {
 		t.Fatalf("lost response recovery: %+v %v", recovered, err)
 	}
@@ -173,8 +174,8 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A scan may first exhaust its previous cursor before starting a new cycle.
-	reconcileManagedState(t, next, s, tenant, env.ID, "released")
-	clean, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	reconcileManagedState(t, next, db, tenant, env.ID, "released")
+	clean, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || clean.State != "released" || p.kills != 1 {
 		t.Fatalf("deleted cleanup: %+v %v", clean, err)
 	}
@@ -196,8 +197,8 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, s, tenant, env.ID, "cleanup_pending")
-	got, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	reconcileManagedState(t, w, db, tenant, env.ID, "cleanup_pending")
+	got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "cleanup_pending" || got.CreateSettled || p.creates != 1 {
 		t.Fatalf("unknown creation forgotten: %+v %v", got, err)
 	}
@@ -206,8 +207,8 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	}
 	// A late completion is still owned and reclaimed on the next scan.
 	p.resources[owner.ID] = sandbox.Info{Reference: sandbox.Reference{TenantID: tenant, EnvironmentID: env.ID, AllocationID: owner.ID}, ProviderID: owner.ID, State: "running", BootstrapComplete: true}
-	reconcileManagedState(t, w, s, tenant, env.ID, "released")
-	got, err = s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	reconcileManagedState(t, w, db, tenant, env.ID, "released")
+	got, err = fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "released" || len(p.resources) != 0 {
 		t.Fatalf("late creation escaped cleanup: %+v %v", got, err)
 	}
@@ -227,8 +228,8 @@ func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.unavailable = true
-	reconcileManagedState(t, w, s, tenant, env.ID, "cleanup_pending")
-	got, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	reconcileManagedState(t, w, db, tenant, env.ID, "cleanup_pending")
+	got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "cleanup_pending" {
 		t.Fatalf("expiry lost on provider failure: %+v %v", got, err)
 	}
@@ -266,7 +267,7 @@ func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
 		if p.gets == before {
 			t.Fatal("fixture allocation not inspected")
 		}
-		got, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+		got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 		if err != nil || got.State != "running" || p.kills != 0 || p.creates != 1 {
 			t.Fatalf("compute interruption authorized replacement/cleanup: %+v %v", got, err)
 		}

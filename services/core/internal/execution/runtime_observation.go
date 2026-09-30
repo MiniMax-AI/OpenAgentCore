@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func (r *runtimeLifecycle) recordObservation(ctx context.Context, owner store.RuntimeAllocation, observed error) {
+func (r *runtimeLifecycle) recordObservation(ctx context.Context, owner deployment.Allocation, observed error) {
 	if owner.NodeID == "" {
 		return
 	}
@@ -26,11 +26,11 @@ func (r *runtimeLifecycle) recordObservation(ctx context.Context, owner store.Ru
 			diagnostic = "compute_unconfirmed"
 		default:
 			diagnostic = "provider_unavailable"
-			if online, err := r.store.RuntimeNodeAvailable(ctx, owner.NodeID); err == nil && !online {
+			if online, err := r.reader.NodeOnline(ctx, owner.NodeID); err == nil && !online {
 				diagnostic = "node_unavailable"
 			}
 		}
 	}
 	// Reconciliation remains authoritative; diagnostics must not interrupt cleanup.
-	_ = r.store.RecordRuntimeObservation(ctx, owner, diagnostic)
+	_ = r.deployment.RecordObservation(ctx, owner, diagnostic)
 }

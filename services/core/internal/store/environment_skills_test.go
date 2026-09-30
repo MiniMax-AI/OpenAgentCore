@@ -20,7 +20,7 @@ func TestSkillsFrozenInSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	header := &zip.FileHeader{Name: "proof/SKILL.md", Method: zip.Store}

@@ -30,15 +30,15 @@ import (
 // own /api/v1 machine connection routes.
 func TestCredentialNamespaceMatrix(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	s.SetPublicURL("https://core.example")
 	db.publicURL = "https://core.example"
+	s.SetPlacement(fixtureRules(t, db))
 	ctx := t.Context()
 	coreKey := uuid.NewString()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s, db), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, db), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -27,13 +26,4 @@ func (s *Store) checkExecutionAuthority() error {
 		return ErrExecutionAuthority
 	}
 	return nil
-}
-
-// checkExecutionOwnership confirms, before an execution-only pooled read, that
-// the borrowed lease still owns the database.
-func (s *Store) checkExecutionOwnership(ctx context.Context) error {
-	if err := s.checkExecutionAuthority(); err != nil {
-		return err
-	}
-	return s.lease.CheckOwnership(ctx)
 }

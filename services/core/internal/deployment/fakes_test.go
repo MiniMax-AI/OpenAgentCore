@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // The fakes are strict: each method runs its func field, and a nil field fails
@@ -25,6 +26,7 @@ type fakeStorage struct {
 	connectNode       func(context.Context, string, string, uint64) (bool, error)
 	disconnectNode    func(context.Context, string, string, uint64) error
 	sampleHostHistory func(context.Context) (int64, error)
+	withActivity      func(context.Context, AllocationKey, func(sessions.LockedSession, ActivityTx) error) error
 }
 
 func (f *fakeStorage) WithNodes(ctx context.Context, apply func(NodeTx) error) error {
@@ -56,8 +58,12 @@ func (f *fakeStorage) SampleHostHistory(ctx context.Context) (int64, error) {
 }
 
 type fakeExecutionStorage struct {
-	t              testing.TB
-	withDeployment func(context.Context, func(DeploymentTx) error) error
+	t                     testing.TB
+	withDeployment        func(context.Context, func(DeploymentTx) error) error
+	withReservation       func(context.Context, AllocationKey, func(sessions.LockedSession, ReservationTx) error) error
+	withAllocation        func(context.Context, AllocationKey, func(AllocationTx) error) error
+	withAllocationCleanup func(context.Context, AllocationKey, func(AllocationCleanupTx) error) error
+	clearWake             func(context.Context, string, time.Time) error
 }
 
 func (f *fakeExecutionStorage) WithDeployment(ctx context.Context, apply func(DeploymentTx) error) error {
@@ -68,17 +74,29 @@ func (f *fakeExecutionStorage) WithDeployment(ctx context.Context, apply func(De
 }
 
 type fakeReader struct {
-	t               testing.TB
-	deployment      func(context.Context) (Record, error)
-	snapshot        func(context.Context) (Snapshot, error)
-	ownerEpoch      func(context.Context) (uint64, error)
-	allocation      func(context.Context, sandbox.Reference) (AllocationRecord, error)
-	generations     func(context.Context, int64) ([]GenerationRecord, error)
-	nodes           func(context.Context) ([]NodeRecord, error)
-	nodeHistory     func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
-	readNodes       func(context.Context, func(NodeReads) error) error
-	resetSessions   func(context.Context, string, bool) ([]ResetSession, error)
-	addressBindings func(context.Context, string) (AddressBindings, error)
+	t                        testing.TB
+	deployment               func(context.Context) (Record, error)
+	snapshot                 func(context.Context) (Snapshot, error)
+	ownerEpoch               func(context.Context) (uint64, error)
+	allocation               func(context.Context, sandbox.Reference) (AllocationRecord, error)
+	generations              func(context.Context, int64) ([]GenerationRecord, error)
+	nodes                    func(context.Context) ([]NodeRecord, error)
+	nodeHistory              func(context.Context, string, coremetrics.Range) (NodeRecord, []HostHistoryPoint, error)
+	readNodes                func(context.Context, func(NodeReads) error) error
+	resetSessions            func(context.Context, string, bool) ([]ResetSession, error)
+	addressBindings          func(context.Context, string) (AddressBindings, error)
+	environmentAllocation    func(context.Context, AllocationKey) (Allocation, error)
+	credentialAllocations    func(context.Context, string) ([]Allocation, error)
+	observationSessions      func(context.Context, string, int) (ObservationSessionPage, error)
+	nodeAllocations          func(context.Context, string) ([]NodeAllocation, error)
+	nodeOnline               func(context.Context, string) (bool, error)
+	lifecycleNodes           func(context.Context) ([]string, error)
+	lifecycleAllocations     func(context.Context, string, string) ([]Allocation, error)
+	unallocatedEnvironments  func(context.Context, string, string) ([]UnallocatedEnvironment, error)
+	lifecyclePlacement       func(context.Context, AllocationKey) (LifecyclePlacement, error)
+	activity                 func(context.Context, string) (Activity, error)
+	countComputeReservations func(context.Context, string) (int64, error)
+	countRetainedAllocations func(context.Context, string) (int64, error)
 }
 
 func (f *fakeReader) Deployment(ctx context.Context) (Record, error) {
@@ -489,4 +507,123 @@ func (f *fakeDeploymentTx) RecordAuditAs(source adminaudit.Source, action, insta
 		unexpected(f.t, "RecordAuditAs")
 	}
 	return f.recordAuditAs(source, action, installationID)
+}
+
+func (f *fakeStorage) WithActivity(ctx context.Context, key AllocationKey, apply func(sessions.LockedSession, ActivityTx) error) error {
+	if f.withActivity == nil {
+		unexpected(f.t, "WithActivity")
+	}
+	return f.withActivity(ctx, key, apply)
+}
+
+func (f *fakeExecutionStorage) WithReservation(ctx context.Context, key AllocationKey, apply func(sessions.LockedSession, ReservationTx) error) error {
+	if f.withReservation == nil {
+		unexpected(f.t, "WithReservation")
+	}
+	return f.withReservation(ctx, key, apply)
+}
+
+func (f *fakeExecutionStorage) WithAllocation(ctx context.Context, key AllocationKey, apply func(AllocationTx) error) error {
+	if f.withAllocation == nil {
+		unexpected(f.t, "WithAllocation")
+	}
+	return f.withAllocation(ctx, key, apply)
+}
+
+func (f *fakeExecutionStorage) WithAllocationCleanup(ctx context.Context, key AllocationKey, apply func(AllocationCleanupTx) error) error {
+	if f.withAllocationCleanup == nil {
+		unexpected(f.t, "WithAllocationCleanup")
+	}
+	return f.withAllocationCleanup(ctx, key, apply)
+}
+
+func (f *fakeExecutionStorage) ClearWake(ctx context.Context, allocationID string, observed time.Time) error {
+	if f.clearWake == nil {
+		unexpected(f.t, "ClearWake")
+	}
+	return f.clearWake(ctx, allocationID, observed)
+}
+
+func (f *fakeReader) EnvironmentAllocation(ctx context.Context, key AllocationKey) (Allocation, error) {
+	if f.environmentAllocation == nil {
+		unexpected(f.t, "EnvironmentAllocation")
+	}
+	return f.environmentAllocation(ctx, key)
+}
+
+func (f *fakeReader) CredentialAllocations(ctx context.Context, after string) ([]Allocation, error) {
+	if f.credentialAllocations == nil {
+		unexpected(f.t, "CredentialAllocations")
+	}
+	return f.credentialAllocations(ctx, after)
+}
+
+func (f *fakeReader) ObservationSessions(ctx context.Context, after string, limit int) (ObservationSessionPage, error) {
+	if f.observationSessions == nil {
+		unexpected(f.t, "ObservationSessions")
+	}
+	return f.observationSessions(ctx, after, limit)
+}
+
+func (f *fakeReader) NodeAllocations(ctx context.Context, nodeID string) ([]NodeAllocation, error) {
+	if f.nodeAllocations == nil {
+		unexpected(f.t, "NodeAllocations")
+	}
+	return f.nodeAllocations(ctx, nodeID)
+}
+
+func (f *fakeReader) NodeOnline(ctx context.Context, nodeID string) (bool, error) {
+	if f.nodeOnline == nil {
+		unexpected(f.t, "NodeOnline")
+	}
+	return f.nodeOnline(ctx, nodeID)
+}
+
+func (f *fakeReader) LifecycleNodes(ctx context.Context) ([]string, error) {
+	if f.lifecycleNodes == nil {
+		unexpected(f.t, "LifecycleNodes")
+	}
+	return f.lifecycleNodes(ctx)
+}
+
+func (f *fakeReader) LifecycleAllocations(ctx context.Context, nodeID string, after string) ([]Allocation, error) {
+	if f.lifecycleAllocations == nil {
+		unexpected(f.t, "LifecycleAllocations")
+	}
+	return f.lifecycleAllocations(ctx, nodeID, after)
+}
+
+func (f *fakeReader) UnallocatedEnvironments(ctx context.Context, nodeID string, after string) ([]UnallocatedEnvironment, error) {
+	if f.unallocatedEnvironments == nil {
+		unexpected(f.t, "UnallocatedEnvironments")
+	}
+	return f.unallocatedEnvironments(ctx, nodeID, after)
+}
+
+func (f *fakeReader) LifecyclePlacement(ctx context.Context, key AllocationKey) (LifecyclePlacement, error) {
+	if f.lifecyclePlacement == nil {
+		unexpected(f.t, "LifecyclePlacement")
+	}
+	return f.lifecyclePlacement(ctx, key)
+}
+
+func (f *fakeReader) Activity(ctx context.Context, allocationID string) (Activity, error) {
+	if f.activity == nil {
+		unexpected(f.t, "Activity")
+	}
+	return f.activity(ctx, allocationID)
+}
+
+func (f *fakeReader) CountComputeReservations(ctx context.Context, installationID string) (int64, error) {
+	if f.countComputeReservations == nil {
+		unexpected(f.t, "CountComputeReservations")
+	}
+	return f.countComputeReservations(ctx, installationID)
+}
+
+func (f *fakeReader) CountRetainedAllocations(ctx context.Context, installationID string) (int64, error) {
+	if f.countRetainedAllocations == nil {
+		unexpected(f.t, "CountRetainedAllocations")
+	}
+	return f.countRetainedAllocations(ctx, installationID)
 }

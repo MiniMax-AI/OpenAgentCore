@@ -18,14 +18,13 @@ var (
 	ErrSpecificationMismatch = errors.New("node does not match the deployment specification")
 	ErrResetInProgress       = errors.New("a sandbox reset is in progress")
 	ErrNotConfigured         = errors.New("the sandbox deployment is not configured")
-	// ErrPublicURLUnreachable rejects selection and admission when the provider
-	// requires a reachable public origin and the installation is loopback.
-	ErrPublicURLUnreachable = errors.New("This sandbox provider needs a reachable HTTPS public URL before they can connect to Core.")
-	ErrNodesPreparing       = errors.New("sandbox nodes are preparing the target generation")
-	ErrNodeUnavailable      = errors.New("sandbox node unavailable")
-	ErrNodeInUse            = errors.New("sandbox node retains resources")
-	ErrNodeCredential       = errors.New("invalid sandbox node credential")
-	ErrLocalNodeConfigured  = errors.New("local sandbox node is enabled in deployment configuration")
+	ErrNodeInUse             = errors.New("sandbox node retains resources")
+	ErrNodeCredential        = errors.New("invalid sandbox node credential")
+	ErrLocalNodeConfigured   = errors.New("local sandbox node is enabled in deployment configuration")
+	// ErrAllocationConflict rejects an allocation change whose owner no longer
+	// matches the stored allocation, device binding, state or compute revision,
+	// or a replay for another installation.
+	ErrAllocationConflict = errors.New("the sandbox allocation changed")
 	// ErrNodeAddressMismatch rejects an enrollment whose Core address is not
 	// the installation public URL. The token stays unconsumed.
 	ErrNodeAddressMismatch = errors.New("sandbox node Core address differs from the public URL")

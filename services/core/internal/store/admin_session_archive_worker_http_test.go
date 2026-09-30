@@ -36,6 +36,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s.SetPlacement(fixtureRules(t, db))
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	deployments := fixtureDeployment(t, db)
@@ -114,7 +115,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &archived) != nil || archived.State != "cleanup_pending" || archived.SessionID != active.ID {
 		t.Fatalf("archive did not use Worker's leased Store: %d %s", w.Code, w.Body)
 	}
-	allocation, err := s.GetRuntimeAllocation(t.Context(), project.TenantID, active.Environment.ID)
+	allocation, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: active.Environment.ID})
 	if err != nil || allocation.ID != owner.ID || allocation.State != "cleanup_pending" {
 		t.Fatal("archive did not retain cleanup ownership", allocation, err)
 	}

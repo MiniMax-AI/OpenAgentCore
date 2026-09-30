@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -18,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func managedIdleClockFixture(t *testing.T) (*Store, *Store, RuntimeAllocation) {
+func managedIdleClockFixture(t *testing.T) (*Store, *Store, deployment.Allocation) {
 	t.Helper()
 	s, w, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
@@ -28,15 +29,15 @@ func managedIdleClockFixture(t *testing.T) (*Store, *Store, RuntimeAllocation) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = w.ObserveRuntimeRunning(t.Context(), owner)
+	owner, err = deploymentExecution(t, w).ObserveRunning(t.Context(), owner)
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
+	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,28 +52,28 @@ func runtimeDatabaseTime(t *testing.T, s *Store) time.Time {
 	}
 	return now
 }
-func verifyManagedIdleClock(t *testing.T, s, w *Store, owner RuntimeAllocation, before, after time.Time) RuntimeActivity {
+func verifyManagedIdleClock(t *testing.T, s, w *Store, owner deployment.Allocation, before, after time.Time) deployment.Activity {
 	t.Helper()
 	const idleTimeout = time.Minute
 	// Refresh the owner so the idle policy, rather than the stale-activity fence,
 	// must reject the recent completion.
-	owner, err := s.GetRuntimeAllocation(t.Context(), owner.TenantID, owner.EnvironmentID)
+	owner, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	observedBefore := runtimeDatabaseTime(t, s)
-	activity, err := w.RuntimeActivity(t.Context(), owner)
+	activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 	observedAfter := runtimeDatabaseTime(t, s)
 	if err != nil || activity.ObservedAt.Before(observedBefore) || activity.ObservedAt.After(observedAfter) || activity.ReadyToSuspend(idleTimeout) || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.Busy || activity.WakeRequested || !activity.HasCompletedTurn {
 		t.Fatal("idle clock did not use committed terminal ingestion", activity, before, after, err)
 	}
 	until := runtimeDatabaseTime(t, s).Add(time.Hour)
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("new completion admitted premature idle", err)
 	}
 	// Advance only the internal activity age; the remote public timestamp remains unchanged.
 	runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1", owner.ID)
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); err != nil {
+	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); err != nil {
 		t.Fatal("remote timestamp delayed elapsed idle timer", err)
 	}
 	return activity
@@ -91,14 +92,14 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("native completion changed or rejected", completed, err)
 			}
-			recorded, err := w.RuntimeActivity(t.Context(), owner)
+			recorded, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if _, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, outcome, "", 0); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("terminal replay accepted", err)
 			}
-			unchanged, err := w.RuntimeActivity(t.Context(), owner)
+			unchanged, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 			if err != nil || !unchanged.LastActivity.Equal(recorded.LastActivity) {
 				t.Fatal("terminal retry reset idle", unchanged, err)
 			}
@@ -132,14 +133,14 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 				t.Fatal(err)
 			}
 			after := runtimeDatabaseTime(t, s)
-			recorded, err := w.RuntimeActivity(t.Context(), owner)
+			recorded, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err := project(); err != nil {
 				t.Fatal(err)
 			}
-			unchanged, err := w.RuntimeActivity(t.Context(), owner)
+			unchanged, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 			if err != nil || !unchanged.LastActivity.Equal(recorded.LastActivity) {
 				t.Fatal("replayed child completion reset idle", unchanged, err)
 			}
@@ -211,12 +212,12 @@ func TestRootCompletionRejectsNonpositiveSourceTime(t *testing.T) {
 func TestManagedIdleClockReconnectPreservesReceipts(t *testing.T) {
 	s, _, owner := managedIdleClockFixture(t)
 	turn := runtimeSuspensionCompleted(t, s.pool, owner)
-	before, err := s.GetRuntimeAllocation(t.Context(), owner.TenantID, owner.EnvironmentID)
+	before, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 	if err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, owner.NodeID)
-	after, err := s.GetRuntimeAllocation(t.Context(), owner.TenantID, owner.EnvironmentID)
+	after, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("reconnect changed compute receipt or idle clock", err)
 	}

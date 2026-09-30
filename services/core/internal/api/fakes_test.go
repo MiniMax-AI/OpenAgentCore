@@ -266,15 +266,15 @@ func (f *fakeDeployment) DecodeConfiguration(a0 string, a1 json.RawMessage, a2 j
 }
 
 type fakeNodeAllocations struct {
-	t                          testing.TB
-	listNodeRuntimeAllocations func(context.Context, string) ([]store.RuntimeNodeAllocation, error)
+	t               testing.TB
+	nodeAllocations func(context.Context, string) ([]deployment.NodeAllocation, error)
 }
 
-func (f *fakeNodeAllocations) ListNodeRuntimeAllocations(a0 context.Context, a1 string) ([]store.RuntimeNodeAllocation, error) {
-	if f.listNodeRuntimeAllocations == nil {
-		unexpectedCall(f.t, "ListNodeRuntimeAllocations")
+func (f *fakeNodeAllocations) NodeAllocations(a0 context.Context, a1 string) ([]deployment.NodeAllocation, error) {
+	if f.nodeAllocations == nil {
+		unexpectedCall(f.t, "NodeAllocations")
 	}
-	return f.listNodeRuntimeAllocations(a0, a1)
+	return f.nodeAllocations(a0, a1)
 }
 
 type fakeDeploymentChanges struct {

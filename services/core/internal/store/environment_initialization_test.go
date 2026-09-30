@@ -14,6 +14,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -134,7 +135,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				want = "failed"
 			}
 			awaitInitialization(t, db.pool, principal.TenantID, environment.ID, want)
-			if _, err := s.GetRuntimeAllocation(t.Context(), principal.TenantID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: principal.TenantID, EnvironmentID: environment.ID}); !errors.Is(err, deployment.ErrNotFound) {
 				t.Fatal("self-hosted preparation fabricated allocation", err)
 			}
 			if outcome == "completed" {

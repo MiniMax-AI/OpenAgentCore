@@ -13,7 +13,7 @@ func (r *runtimeLifecycle) provisionPending(ctx context.Context) error {
 	if r.config.AdmissionPaused && r.config.Generation == 0 {
 		return nil
 	}
-	rows, err := r.store.ListUnallocatedHostedEnvironmentsForNode(ctx, r.nodeID, r.pendingCursor)
+	rows, err := r.reader.UnallocatedEnvironments(ctx, r.nodeID, r.pendingCursor)
 	if err != nil {
 		return err
 	}

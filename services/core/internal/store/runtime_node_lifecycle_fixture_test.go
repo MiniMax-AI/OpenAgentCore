@@ -78,6 +78,7 @@ func (p *nodeIsolationProvider) RunCommand(ctx context.Context, r sandbox.Refere
 type nodeIsolationFixture struct {
 	t                    *testing.T
 	store                *store.Store
+	db                   fixtureDB
 	nodes                *deployment.Service
 	pool                 *pgxpool.Pool
 	worker               *execution.Worker
@@ -98,6 +99,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		t.Fatal(err)
 	}
 	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s.SetPlacement(fixtureRules(t, db))
 	registry := runtimegateway.NewRegistry()
 	cp := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
 	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
@@ -125,7 +127,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		cp.mu.Unlock()
 		server.Close()
 	})
-	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: fixtureDeployment(t, db), pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
+	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, db: db, nodes: fixtureDeployment(t, db), pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
 	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
@@ -220,7 +222,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 	}
 	return tenant, session, env
 }
-func (f *nodeIsolationFixture) provision(tenant string, env sessions.Environment) store.RuntimeAllocation {
+func (f *nodeIsolationFixture) provision(tenant string, env sessions.Environment) deployment.Allocation {
 	f.t.Helper()
 	ctx, cancel := context.WithTimeout(f.t.Context(), 3*time.Second)
 	defer cancel()
@@ -230,13 +232,13 @@ func (f *nodeIsolationFixture) provision(tenant string, env sessions.Environment
 	}
 	return owner
 }
-func (f *nodeIsolationFixture) phase(tenant, environment, phase string) store.RuntimeAllocation {
+func (f *nodeIsolationFixture) phase(tenant, environment, phase string) deployment.Allocation {
 	f.t.Helper()
 	for range 10 {
 		if err := f.worker.ReconcileManagedRuntimes(f.t.Context()); err != nil {
 			f.t.Fatal(err)
 		}
-		owner, err := f.store.GetRuntimeAllocation(f.t.Context(), tenant, environment)
+		owner, err := fixtureReader(f.db).EnvironmentAllocation(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if err != nil {
 			f.t.Fatal(err)
 		}
@@ -245,7 +247,7 @@ func (f *nodeIsolationFixture) phase(tenant, environment, phase string) store.Ru
 		}
 	}
 	f.t.Fatal("manual lifecycle did not reach " + phase)
-	return store.RuntimeAllocation{}
+	return deployment.Allocation{}
 }
 func (f *nodeIsolationFixture) run() {
 	f.t.Helper()

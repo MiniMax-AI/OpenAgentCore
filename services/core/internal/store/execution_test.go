@@ -262,9 +262,8 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	_, archiveErr := s.ArchiveManagedSession(t.Context(), tenant, session.ID, 0)
 	_, expiryErr := s.ExpireEnvironmentInputs(t.Context())
 	for name, err := range map[string]error{
-		"ownership check": s.checkExecutionOwnership(t.Context()),
-		"archive":         archiveErr,
-		"input expiry":    expiryErr,
+		"archive":      archiveErr,
+		"input expiry": expiryErr,
 	} {
 		if !errors.Is(err, ErrExecutionAuthority) {
 			t.Fatalf("pooled Store ran %s: %v", name, err)

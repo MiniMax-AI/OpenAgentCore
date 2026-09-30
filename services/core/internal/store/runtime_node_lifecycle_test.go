@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/google/uuid"
 )
 
@@ -47,7 +47,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			case <-time.After(8 * time.Second):
 				t.Fatalf("node A did not enter blocked %s operation", mode)
 			}
-			online, err := f.store.RuntimeNodeAvailable(t.Context(), f.nodeA)
+			online, err := fixtureReader(f.db).NodeOnline(t.Context(), f.nodeA)
 			if err != nil || !online {
 				t.Fatal("test node must stay online while its helper is blocked", err)
 			}
@@ -61,7 +61,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			f.provider.mu.Unlock()
 			tenant, _, env := f.session(f.nodeB, true)
 			var callers sync.WaitGroup
-			results := make(chan store.RuntimeAllocation, 12)
+			results := make(chan deployment.Allocation, 12)
 			failures := make(chan error, 12)
 			for range 12 {
 				callers.Add(1)
@@ -97,7 +97,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			if created != 1 {
 				t.Fatalf("concurrent direct/scan replayed Create: %d", created)
 			}
-			if err := f.store.TouchRuntimeActivity(t.Context(), wakeTenant, wakeEnv.ID); err != nil {
+			if err := f.nodes.TouchActivity(t.Context(), wakeTenant, wakeEnv.ID); err != nil {
 				t.Fatal(err)
 			}
 			if err := f.store.DeleteSession(t.Context(), deleteTenant, deleteSession.ID); err != nil {
@@ -107,9 +107,9 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			// Only independent normal five-second loops drive these transitions.
 			// No manual reconciliation or wake hint accelerates healthy nodes.
 			waitNodeIsolation(t, 18*time.Second, func() (bool, string) {
-				wake, e1 := f.store.GetRuntimeAllocation(t.Context(), wakeTenant, wakeEnv.ID)
-				deleted, e2 := f.store.GetRuntimeAllocation(t.Context(), deleteTenant, deleteEnv.ID)
-				initialized, e3 := f.store.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+				wake, e1 := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: wakeTenant, EnvironmentID: wakeEnv.ID})
+				deleted, e2 := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: deleteTenant, EnvironmentID: deleteEnv.ID})
+				initialized, e3 := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 				f.provider.mu.Lock()
 				restores := f.provider.restores
 				f.provider.mu.Unlock()
@@ -139,7 +139,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 				t.Fatal(err)
 			}
 			waitNodeIsolation(t, 7*time.Second, func() (bool, string) {
-				owner, err := f.store.GetRuntimeAllocation(t.Context(), ct, ce.ID)
+				owner, err := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: ct, EnvironmentID: ce.ID})
 				return err == nil && owner.State == "released", fmt.Sprintf("new node allocation=%s/%s err=%v", owner.State, owner.ComputePhase, err)
 			})
 			if err := f.nodes.RemoveNode(t.Context(), nodeC); err != nil {

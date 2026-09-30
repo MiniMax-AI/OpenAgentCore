@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/placementpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -187,7 +188,7 @@ func (t *SessionTx) InsertEnvironmentDevice(ctx context.Context, device sessions
 }
 
 func (t *SessionTx) LoadComputeSuspension(ctx context.Context) (bool, error) {
-	return t.q.RuntimeComputeBlocksAdmission(ctx, t.session)
+	return placementpg.ComputeBlocksAdmission(ctx, t.q, t.session)
 }
 
 func (t *SessionTx) LoadPendingFileWrite(ctx context.Context) (bool, error) {

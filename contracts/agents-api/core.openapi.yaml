@@ -546,7 +546,7 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/store.RuntimeNodeAllocation'
+          $ref: '#/definitions/deployment.NodeAllocation'
         type: array
     type: object
   api.SandboxDeploymentChangeInput:
@@ -998,6 +998,35 @@ definitions:
       snapshots:
         type: integer
     type: object
+  deployment.NodeAllocation:
+    properties:
+      compute_phase:
+        type: string
+      compute_phase_changed_at:
+        description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+        type: string
+        x-nullable: true
+      created_at:
+        type: string
+      deployment_generation:
+        type: integer
+      diagnostic:
+        type: string
+      environment_id:
+        type: string
+      id:
+        type: string
+      initialization:
+        type: string
+      node_id:
+        type: string
+      session_id:
+        type: string
+      state:
+        type: string
+      tenant_id:
+        type: string
+    type: object
   deployment.NodeDetail:
     properties:
       active:
@@ -1407,35 +1436,6 @@ definitions:
         type: integer
       vaults:
         type: integer
-    type: object
-  store.RuntimeNodeAllocation:
-    properties:
-      compute_phase:
-        type: string
-      compute_phase_changed_at:
-        description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
-        type: string
-        x-nullable: true
-      created_at:
-        type: string
-      deployment_generation:
-        type: integer
-      diagnostic:
-        type: string
-      environment_id:
-        type: string
-      id:
-        type: string
-      initialization:
-        type: string
-      node_id:
-        type: string
-      session_id:
-        type: string
-      state:
-        type: string
-      tenant_id:
-        type: string
     type: object
   v1.Agent:
     properties:

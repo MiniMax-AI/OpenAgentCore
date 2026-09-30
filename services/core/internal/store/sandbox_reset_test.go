@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -70,7 +71,7 @@ func TestSandboxResetAutoUsesStartedWorkAndLockedRecheck(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			s, w, installation := managedArchiveFixture(t)
 			tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-			var owner RuntimeAllocation
+			var owner deployment.Allocation
 			if kind != "pending" {
 				owner = archiveAllocation(t, w, tenant, session, installation)
 			}
@@ -209,7 +210,7 @@ func TestSandboxResetAutoRechecksTurnStartedAfterListing(t *testing.T) {
 		t.Fatal("listed idle candidate cut a new Turn", err)
 	}
 	before := adminMutationSnapshot(t, s, "sessions", "environments", "environment_input_reservations", "turns", "runtime_placements")
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, ErrSandboxResetAdmission) {
+	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrResetAdmission) {
 		t.Fatal("new hosted admission during reset", err)
 	}
 	after := adminMutationSnapshot(t, s, "sessions", "environments", "environment_input_reservations", "turns", "runtime_placements")

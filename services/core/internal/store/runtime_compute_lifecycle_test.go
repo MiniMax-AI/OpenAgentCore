@@ -15,6 +15,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -304,7 +305,7 @@ func (f *computeLifecycleFixture) sql(query string, args ...any) {
 		f.t.Fatal(err)
 	}
 }
-func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.Environment, store.RuntimeAllocation) {
+func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.Environment, deployment.Allocation) {
 	t := f.t
 	t.Helper()
 	tenant, session, environment := managedSession(t, f.store, f.db)
@@ -321,9 +322,9 @@ func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.E
 	owner = f.phase(tenant, environment.ID, "running")
 	return tenant, session, environment, owner
 }
-func (f *computeLifecycleFixture) phase(tenant, environment, phase string) store.RuntimeAllocation {
+func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deployment.Allocation {
 	f.t.Helper()
-	var owner store.RuntimeAllocation
+	var owner deployment.Allocation
 	for range 100 {
 		ctx, cancel := context.WithTimeout(f.t.Context(), 3*time.Second)
 		err := f.worker.ReconcileManagedRuntimes(ctx)
@@ -331,7 +332,7 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) store
 		if err != nil {
 			f.t.Fatal(err)
 		}
-		owner, err = f.store.GetRuntimeAllocation(f.t.Context(), tenant, environment)
+		owner, err = fixtureReader(f.db).EnvironmentAllocation(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if err != nil {
 			f.t.Fatal(err)
 		}
@@ -342,13 +343,13 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) store
 	f.t.Fatalf("compute phase=%s, want %s state=%s", owner.ComputePhase, phase, owner.ComputeState)
 	return owner
 }
-func (f *computeLifecycleFixture) complete(owner store.RuntimeAllocation) string {
+func (f *computeLifecycleFixture) complete(owner deployment.Allocation) string {
 	id := uuid.NewString()
 	f.sql(`INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')`, id, owner.SessionID)
 	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
 	return id
 }
-func (f *computeLifecycleFixture) queued(owner store.RuntimeAllocation) string {
+func (f *computeLifecycleFixture) queued(owner deployment.Allocation) string {
 	id := uuid.NewString()
 	f.sql(`INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, id, owner.SessionID)
 	return id
@@ -439,7 +440,7 @@ func TestRuntimeComputeLifecycleQuiesceRejectionAndUnknownIntentRollback(t *test
 	}
 	// A restart with persisted quiescing but no acknowledgement must resume the
 	// source. Inject only the durable phase, never a fake snapshot or new source.
-	current, err := f.store.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	current, err := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,9 +462,10 @@ func TestRuntimeComputeLifecycleWakeDuringQuiesceResumesSource(t *testing.T) {
 	tenant, _, env, owner := f.create()
 	f.complete(owner)
 	wakeResult := make(chan error, 1)
+	activity := fixtureDeployment(t, f.db)
 	f.provider.mu.Lock()
 	f.provider.beforeQuiesce = func() {
-		wakeResult <- f.store.TouchRuntimeActivity(t.Context(), tenant, env.ID)
+		wakeResult <- activity.TouchActivity(t.Context(), tenant, env.ID)
 	}
 	f.provider.mu.Unlock()
 	for range 100 {
@@ -499,7 +501,7 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 			} else {
 				f.sql(`UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID)
 			}
-			reconcileManagedState(t, f.worker, f.store, tenant, env.ID, "released")
+			reconcileManagedState(t, f.worker, f.db, tenant, env.ID, "released")
 			if len(f.provider.computes) != 0 || len(f.provider.snapshots) != 0 || f.provider.snapshotDeletes != 1 {
 				t.Fatal("retained snapshot survived cleanup")
 			}
@@ -530,7 +532,7 @@ func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	for range 4 {
 		f.worker.ReconcileManagedRuntimes(t.Context())
 	}
-	first, err := f.store.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	first, err := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || first.ComputePhase != "suspended" || f.provider.restores != 0 {
 		t.Fatal("wake exceeded active capacity", err)
 	}

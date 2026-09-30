@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func legacyAdoptionFixture(t *testing.T) (*Store, *Store, deployment.ProcessDeployment, RuntimeAllocation) {
+func nodelessAllocationFixture(t *testing.T) (*Store, *Store, deployment.ProcessDeployment, deployment.Allocation) {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
 	w := executionWriter(t, s)
@@ -18,7 +18,7 @@ func legacyAdoptionFixture(t *testing.T) (*Store, *Store, deployment.ProcessDepl
 	deploymentConfigure(t, w, &d)
 	tenant := uuid.NewString()
 	_, e := localEnvironment(t, s, tenant)
-	a, err := w.ReserveRuntimeAllocation(t.Context(), tenant, e.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	a, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: e.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func legacyAdoptionFixture(t *testing.T) (*Store, *Store, deployment.ProcessDepl
 	d.LocalMaxActive, d.LocalMaxRetained = 4, 16
 	return s, w, d, a
 }
-func requireNoLegacyBinding(t *testing.T, s *Store) {
+func requireNoNodeBinding(t *testing.T, s *Store) {
 	t.Helper()
 	var nodes, placements, bound int
 	var kind string
@@ -43,12 +43,12 @@ func TestHistoricalRuntimeResourcesCannotBeAdopted(t *testing.T) {
 	for _, state := range []string{"creating", "running", "cleanup_pending", "released"} {
 		for _, pending := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/pending=%t", state, pending), func(t *testing.T) {
-				s, w, d, a := legacyAdoptionFixture(t)
+				s, w, d, a := nodelessAllocationFixture(t)
 				runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_allocations SET state=$2,create_settled=($2='released'),released_at=CASE WHEN $2='released' THEN clock_timestamp() ELSE NULL END WHERE id=$1`, a.ID, state)
 				if pending {
 					_, _ = localEnvironment(t, s, a.TenantID)
 				}
-				before, err := s.GetRuntimeAllocation(t.Context(), a.TenantID, a.EnvironmentID)
+				before, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: a.TenantID, EnvironmentID: a.EnvironmentID})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -61,9 +61,9 @@ func TestHistoricalRuntimeResourcesCannotBeAdopted(t *testing.T) {
 					if err == nil {
 						t.Fatal("historical resources adopted")
 					}
-					requireNoLegacyBinding(t, s)
+					requireNoNodeBinding(t, s)
 				}
-				after, err := s.GetRuntimeAllocation(t.Context(), a.TenantID, a.EnvironmentID)
+				after, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: a.TenantID, EnvironmentID: a.EnvironmentID})
 				if err != nil || !reflect.DeepEqual(before, after) {
 					t.Fatal("retained receipt changed", err)
 				}

@@ -36,13 +36,14 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	}
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{53}, 32))
 	st, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	st.SetPlacement(fixtureRules(t, db))
 	tenant, projectKey, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-http", TokenSHA256: runtimedevice.HashCredential(projectKey), TenantID: tenant}})
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st, db), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, db), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
 	if err != nil {
 		t.Fatal(err)
 	}

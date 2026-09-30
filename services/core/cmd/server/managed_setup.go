@@ -16,7 +16,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // managedSetup publishes one immutable selection to execution, bootstrap and
@@ -43,13 +42,15 @@ type deploymentSetups interface {
 	AllocationSetup(context.Context, sandbox.Reference) (deployment.Setup, error)
 	GenerationPage(context.Context, int64) ([]deployment.Setup, error)
 	WithCredential(owner, candidate deployment.Setup) (deployment.Setup, error)
+	// AllocationGeneration resolves the node and generation that own an
+	// allocation.
+	AllocationGeneration(context.Context, sandbox.Reference) (string, uint64, error)
 }
 
-// generationAllocations resolves the generation that owns each allocation.
-// *store.Store implements it.
+// generationAllocations pages the unreleased allocations whose generations
+// still hold a credential. deployment.Reader implements it.
 type generationAllocations interface {
-	ResolveRuntimeGeneration(context.Context, sandbox.Reference) (string, uint64, error)
-	SandboxCredentialAllocationPage(context.Context, string) ([]store.RuntimeAllocation, error)
+	CredentialAllocations(context.Context, string) ([]deployment.Allocation, error)
 }
 
 // DiscoverConfiguration asks a Provider which configuration values its
@@ -178,7 +179,7 @@ func (s *managedSetup) provider(setup deployment.Setup) (sandbox.SandboxProvider
 		if s.hub == nil {
 			return nil, errors.New("sandbox node transport is unavailable")
 		}
-		return s.hub.GenerationProvider(setup.Provider, setup.Operations, s.allocations.ResolveRuntimeGeneration), nil
+		return s.hub.GenerationProvider(setup.Provider, setup.Operations, s.deployment.AllocationGeneration), nil
 	}
 	return s.registry.BuildDirect(providers.DirectConfig{ProcessPaths: s.processPaths, InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls})
 }

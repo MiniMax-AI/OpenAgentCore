@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -93,7 +94,11 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	// registry it is built with.
 	deployments := func() *deployment.Service {
 		storage := deploymentpg.New(pgunit.NewPool(pool), nil)
-		service, err := deployment.NewService(storage, storage, registry, "")
+		rules, err := placement.NewRules(registry, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		service, err := deployment.NewService(storage, storage, registry, rules)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -147,7 +152,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 			SessionArchive:   s,
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 		},
-		Sandboxes: &api.Sandboxes{Deployment: service, NodeAllocations: s, DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
+		Sandboxes: &api.Sandboxes{Deployment: service, NodeAllocations: deploymentpg.New(pgunit.NewPool(pool), nil), DeploymentChanges: leaseSetup{t: t, changes: changes, installation: installation},
 			DeploymentReset: leaseSetup{t: t, changes: changes, installation: installation}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {

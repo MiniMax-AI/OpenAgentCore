@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 
@@ -11,8 +12,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/placementpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -40,18 +43,29 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 			return err
 		}
 		if row.ID == params.ID {
-			var placement struct {
+			var configuration struct {
 				Environment struct {
 					Type string `json:"type"`
 				} `json:"environment"`
 			}
-			if err := json.Unmarshal(row.Configuration, &placement); err != nil {
+			if err := json.Unmarshal(row.Configuration, &configuration); err != nil {
 				return err
 			}
-			if placement.Environment.Type == "openai_hosted" {
-				if err := checkRuntimeDeploymentAdmission(ctx, q, ""); err != nil {
+			// Hosted admission and placement share the deployment lock with
+			// deployment changes, restore and node removal.
+			var hosted *placement.Deployment
+			if configuration.Environment.Type == "openai_hosted" {
+				if s.placement == nil {
+					return errors.New("hosted Session creation requires placement rules")
+				}
+				d, err := placementpg.LockDeployment(ctx, q)
+				if err != nil {
 					return err
 				}
+				if err := s.placement.CheckAdmission(d, ""); err != nil {
+					return err
+				}
+				hosted = &d
 			}
 			setup, err = s.freezeEnvironmentSkills(ctx, q, tenant, setup)
 			if err != nil {
@@ -107,9 +121,20 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 					return err
 				}
 			}
-			if placement.Environment.Type == "openai_hosted" {
-				if err := reserveRuntimePlacement(ctx, q, row.ID, s.publicURL); err != nil {
+			if hosted != nil {
+				nodes, err := placementpg.LoadNodes(ctx, q)
+				if err != nil {
 					return err
+				}
+				// A Session creation retry never reaches the placement.
+				chosen, err := s.placement.DecidePlacement(*hosted, nodes)
+				if err != nil {
+					return err
+				}
+				if chosen != nil {
+					if err := placementpg.ReservePlacement(ctx, q, row.ID, *chosen); err != nil {
+						return err
+					}
 				}
 			}
 		}

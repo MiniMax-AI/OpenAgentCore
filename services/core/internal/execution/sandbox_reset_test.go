@@ -48,6 +48,7 @@ func resetManagerStoreDB(t *testing.T, configure func(*pgxpool.Config)) (*store.
 	pool := pgtest.OpenIsolated(t, configure)
 	cipher := testCredentialCipher(t)
 	s := store.NewWithCredentialCipher(pool, cipher)
+	s.SetPlacement(fixtureRules(t))
 	owner, deployments, reader := testOwner(t, pool, cipher, s)
 	return s, owner, deployments, reader, pool
 }

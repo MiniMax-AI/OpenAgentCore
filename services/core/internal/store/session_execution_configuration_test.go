@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -36,7 +37,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	for _, stream := range []bool{false, true} {
 		for _, source := range []string{"session", "agent", "deployment"} {
 			t.Run(source+map[bool]string{false: "/ordinary", true: "/stream"}[stream], func(t *testing.T) {
@@ -164,7 +165,7 @@ func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	tenant := uuid.NewString()
 	for _, kind := range []string{"model", "harness", "source", "provider", "provider_mismatch", "post_projection_failure"} {
 		input := executionProjectionInput("session")
@@ -260,15 +261,15 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = w.ObserveRuntimeRunning(t.Context(), owner)
+	owner, err = deploymentExecution(t, w).ObserveRunning(t.Context(), owner)
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = w.SetRuntimeCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
+	owner, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "running", json.RawMessage(`{"instance":"original"}`), nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +281,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 			retained = nil
 		}
 		owner = runtimeSuspensionStep(t, w, owner, phase, retained)
-		before, err := w.RuntimeActivity(t.Context(), owner)
+		before, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -288,7 +289,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(got, frozen) {
 			t.Fatal("runtime transition changed execution projection", phase, err)
 		}
-		after, err := w.RuntimeActivity(t.Context(), owner)
+		after, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 		if err != nil || !before.LastActivity.Equal(after.LastActivity) || before.WakeRequested != after.WakeRequested || before.Busy != after.Busy || before.HasCompletedTurn != after.HasCompletedTurn {
 			t.Fatal("configuration read changed runtime activity", err)
 		}

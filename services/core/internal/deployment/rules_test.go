@@ -34,17 +34,6 @@ func TestValidateCoreURL(t *testing.T) {
 	}
 }
 
-func TestLoopbackOrigin(t *testing.T) {
-	for value, want := range map[string]bool{
-		"http://localhost:8091": true, "http://127.0.0.1:8091": true, "http://127.0.0.2": true, "http://[::1]:8091": true,
-		"https://core.example": false, "https://[2001:db8::1]": false, "https://10.0.0.1": false, "": false, "http://host.localhost": false,
-	} {
-		if got := LoopbackOrigin(value); got != want {
-			t.Errorf("LoopbackOrigin(%q) = %v, want %v", value, got, want)
-		}
-	}
-}
-
 func TestParseID(t *testing.T) {
 	id := uuid.New()
 	if got, err := parseID(strings.ToUpper(id.String())); err != nil || got != id.String() {

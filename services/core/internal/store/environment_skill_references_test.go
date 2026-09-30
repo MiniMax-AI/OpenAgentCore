@@ -20,7 +20,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	skillService := SkillService(t, pool, cipher)
 	tenant := uuid.NewString()
 	first, second := skillArchive(t, "frozen-first"), skillArchive(t, "frozen-second")
@@ -130,7 +130,7 @@ func TestSkillReferenceAuthorizationRollsBackSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	skill, err := SkillService(t, pool, cipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: tenant, Archive: skillArchive(t, "private-owner")})
 	if err != nil {

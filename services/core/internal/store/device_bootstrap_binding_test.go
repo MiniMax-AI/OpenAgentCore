@@ -20,7 +20,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 	}
 	remote := uuid.NewString()
 	_, err = nodes.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
-		Name: "remote", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.publicURL})
+		Name: "remote", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			allocation, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, d.InstallationID, runtimedevice.HashCredential(bearer))
+			allocation, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, d.InstallationID, runtimedevice.HashCredential(bearer))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +66,7 @@ func TestDeviceCredentialWithoutManagedNodeRetainsPublicRouteIdentity(t *testing
 		t.Fatal(err)
 	}
 	_, environment := localEnvironment(t, s, tenant)
-	allocation, err := executionWriter(t, s).ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential("allocation-token"))
+	allocation, err := deploymentExecution(t, executionWriter(t, s)).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential("allocation-token"))
 	if err != nil {
 		t.Fatal(err)
 	}

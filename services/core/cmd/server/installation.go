@@ -7,7 +7,7 @@ import (
 	"regexp"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 )
 
 var sourceCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -22,7 +22,7 @@ func installationFacts(publicURL string) (api.Installation, error) {
 	}
 	if publicURL != "" {
 		base := publicURL + "/v1"
-		facts.PublicURL, facts.APIBaseURL, facts.LocalOnly = &publicURL, &base, deployment.LoopbackOrigin(publicURL)
+		facts.PublicURL, facts.APIBaseURL, facts.LocalOnly = &publicURL, &base, placement.LoopbackOrigin(publicURL)
 	}
 	if sourceCommit.MatchString(buildRevision) {
 		revision := buildRevision

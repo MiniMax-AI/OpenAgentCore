@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -94,7 +95,7 @@ func TestManagedRuntimeScanEmptyAfterCleanupAndCanceledCall(t *testing.T) {
 	if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "released" || p.kills != 1 {
 		t.Fatal("cleanup delayed at EOF", got, err, p.kills)
 	}

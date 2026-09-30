@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.CheckpointProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
 	if state.Rollback {
 		if _, err := p.ResumeCompute(ctx, runtimeReference(owner), state.Current); err != nil {
 			return err
@@ -64,13 +64,13 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 	if err != nil {
 		return err
 	}
-	if err := r.store.ClearRuntimeWake(ctx, next, owner.ComputeActivityAt); err != nil {
+	if err := r.deployment.ClearWake(ctx, next, owner.ComputeActivityAt); err != nil {
 		return err
 	}
 	return r.observeConnection(ctx, next)
 }
 
-func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.CheckpointProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Checkpo
 			return err
 		}
 	}
-	_, err := r.store.ReleaseRuntimeAllocation(ctx, owner)
+	_, err := r.deployment.ReleaseAllocation(ctx, owner)
 	return err
 }
 
@@ -108,8 +108,9 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 	if w.runtimes == nil {
 		return nil
 	}
-	owner, err := w.admission.GetRuntimeAllocation(ctx, environment.TenantID, environment.ID)
-	if errors.Is(err, sessions.ErrNotFound) {
+	key := deployment.AllocationKey{TenantID: environment.TenantID, EnvironmentID: environment.ID}
+	owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
+	if errors.Is(err, deployment.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
@@ -121,13 +122,13 @@ func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Envi
 	if owner.ComputePhase == "disabled" {
 		return nil
 	}
-	if err := w.admission.TouchRuntimeActivity(ctx, environment.TenantID, environment.ID); err != nil {
+	if err := w.dispatcher.Deployment.TouchActivity(ctx, environment.TenantID, environment.ID); err != nil {
 		return err
 	}
 	timer := time.NewTicker(100 * time.Millisecond)
 	defer timer.Stop()
 	for {
-		owner, err = w.admission.GetRuntimeAllocation(ctx, environment.TenantID, environment.ID)
+		owner, err = w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, key)
 		if err != nil {
 			return err
 		}

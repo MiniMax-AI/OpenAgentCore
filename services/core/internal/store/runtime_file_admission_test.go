@@ -9,10 +9,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func runtimeFileWriteKey(owner RuntimeAllocation) sessions.FileWriteIdentity {
+func runtimeFileWriteKey(owner deployment.Allocation) sessions.FileWriteIdentity {
 	return sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: owner.DeviceID, RequestSHA256: strings.Repeat("a", 64)}
 }
 
@@ -92,7 +93,7 @@ func TestRuntimeFileWriteAndQuiesceSerializeBothOrders(t *testing.T) {
 				if first == "quiesce" {
 					_, err = writes.ReserveEnvironmentFileWrite(ctx, owner.TenantID, owner.EnvironmentID, key)
 				} else {
-					_, err = w.SetRuntimeCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
+					_, err = deploymentExecution(t, w).SetCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
 				}
 				done <- err
 			}()
@@ -111,10 +112,16 @@ func TestRuntimeFileWriteAndQuiesceSerializeBothOrders(t *testing.T) {
 			if err := tx.Commit(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-done; !errors.Is(err, sessions.ErrTurnConflict) {
+			// The late write conflicts on the Turn; the late quiesce on the
+			// allocation.
+			want := deployment.ErrAllocationConflict
+			if first == "quiesce" {
+				want = sessions.ErrTurnConflict
+			}
+			if err := <-done; !errors.Is(err, want) {
 				t.Fatal("competing durable owner bypassed the phase fence", err)
 			}
-			allocation, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
+			allocation, err := deploymentStore(s).EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 			if err != nil {
 				t.Fatal(err)
 			}

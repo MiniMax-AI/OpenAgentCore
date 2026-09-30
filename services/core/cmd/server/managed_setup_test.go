@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -22,7 +23,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -34,10 +34,10 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", path)
-	if _, err := configureManagedNodes(nil, nil, nil, providers.Builtin(), "", nil); err == nil || !strings.Contains(err.Error(), "OAC_PUBLIC_URL") {
+	if _, err := configureManagedNodes(nil, nil, providers.Builtin(), "", nil); err == nil || !strings.Contains(err.Error(), "OAC_PUBLIC_URL") {
 		t.Fatal("sandbox manager started without a public URL", err)
 	}
-	m, err := configureManagedNodes(nil, nil, nil, providers.Builtin(), "https://core.example", func(context.Context) error { return nil })
+	m, err := configureManagedNodes(nil, nil, providers.Builtin(), "https://core.example", func(context.Context) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 		t.Fatal("zero-node setup unexpectedly instantiated local compute or omitted management")
 	}
 	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", "")
-	if _, err := configureManagedNodes(nil, nil, nil, providers.Builtin(), "https://core.example", nil); err == nil {
+	if _, err := configureManagedNodes(nil, nil, providers.Builtin(), "https://core.example", nil); err == nil {
 		t.Fatal("setup accepted without admin authentication")
 	}
 }
@@ -54,11 +54,12 @@ func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
 // fakeDeploymentSetups is a strict deploymentSetups: a call without a set
 // function fails the test.
 type fakeDeploymentSetups struct {
-	t               testing.TB
-	setup           func(context.Context) (deployment.Setup, error)
-	allocationSetup func(context.Context, sandbox.Reference) (deployment.Setup, error)
-	generationPage  func(context.Context, int64) ([]deployment.Setup, error)
-	withCredential  func(owner, candidate deployment.Setup) (deployment.Setup, error)
+	t                    testing.TB
+	setup                func(context.Context) (deployment.Setup, error)
+	allocationSetup      func(context.Context, sandbox.Reference) (deployment.Setup, error)
+	generationPage       func(context.Context, int64) ([]deployment.Setup, error)
+	withCredential       func(owner, candidate deployment.Setup) (deployment.Setup, error)
+	allocationGeneration func(context.Context, sandbox.Reference) (string, uint64, error)
 }
 
 func (f *fakeDeploymentSetups) Setup(ctx context.Context) (deployment.Setup, error) {
@@ -85,25 +86,24 @@ func (f *fakeDeploymentSetups) WithCredential(owner, candidate deployment.Setup)
 	}
 	return f.withCredential(owner, candidate)
 }
+func (f *fakeDeploymentSetups) AllocationGeneration(ctx context.Context, ref sandbox.Reference) (string, uint64, error) {
+	if f.allocationGeneration == nil {
+		return "", 0, unexpectedCall(f.t, "AllocationGeneration")
+	}
+	return f.allocationGeneration(ctx, ref)
+}
 
 // fakeGenerationAllocations is a strict generationAllocations.
 type fakeGenerationAllocations struct {
-	t                               testing.TB
-	resolveRuntimeGeneration        func(context.Context, sandbox.Reference) (string, uint64, error)
-	sandboxCredentialAllocationPage func(context.Context, string) ([]store.RuntimeAllocation, error)
+	t                     testing.TB
+	credentialAllocations func(context.Context, string) ([]deployment.Allocation, error)
 }
 
-func (f *fakeGenerationAllocations) ResolveRuntimeGeneration(ctx context.Context, ref sandbox.Reference) (string, uint64, error) {
-	if f.resolveRuntimeGeneration == nil {
-		return "", 0, unexpectedCall(f.t, "ResolveRuntimeGeneration")
+func (f *fakeGenerationAllocations) CredentialAllocations(ctx context.Context, after string) ([]deployment.Allocation, error) {
+	if f.credentialAllocations == nil {
+		return nil, unexpectedCall(f.t, "CredentialAllocations")
 	}
-	return f.resolveRuntimeGeneration(ctx, ref)
-}
-func (f *fakeGenerationAllocations) SandboxCredentialAllocationPage(ctx context.Context, after string) ([]store.RuntimeAllocation, error) {
-	if f.sandboxCredentialAllocationPage == nil {
-		return nil, unexpectedCall(f.t, "SandboxCredentialAllocationPage")
-	}
-	return f.sandboxCredentialAllocationPage(ctx, after)
+	return f.credentialAllocations(ctx, after)
 }
 
 // unexpectedCall fails the test from any goroutine and returns the error the
@@ -122,7 +122,11 @@ func committedSetup(value *deployment.Setup) func(context.Context) (deployment.S
 // deployment service does. That needs no storage.
 func credentialService(t *testing.T) func(owner, candidate deployment.Setup) (deployment.Setup, error) {
 	t.Helper()
-	service, err := deployment.NewService(deploymentpg.New(nil, nil), deploymentpg.New(nil, nil), providers.Builtin(), "")
+	rules, err := placement.NewRules(providers.Builtin(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := deployment.NewService(deploymentpg.New(nil, nil), deploymentpg.New(nil, nil), providers.Builtin(), rules)
 	if err != nil {
 		t.Fatal(err)
 	}

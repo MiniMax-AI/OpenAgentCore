@@ -7,9 +7,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -39,7 +38,7 @@ func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) erro
 	if policy == nil {
 		return nil
 	}
-	count, err := r.store.CountRuntimeComputeReservations(ctx, key)
+	count, err := r.reader.CountComputeReservations(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -48,7 +47,7 @@ func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) erro
 	}
 	return nil
 }
-func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner store.RuntimeAllocation, phase string, state runtimeCompute, until *time.Time) (store.RuntimeAllocation, error) {
+func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.Allocation, phase string, state runtimeCompute, until *time.Time) (deployment.Allocation, error) {
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return owner, err
@@ -61,9 +60,9 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner store.RuntimeA
 		}
 		idleTimeout = policy.IdleTimeout
 	}
-	return r.store.SetRuntimeCompute(ctx, owner, phase, raw, until, idleTimeout)
+	return r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
-func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.RuntimeAllocation) error {
+func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) error {
 	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
 	if capabilityErr != nil {
 		return capabilityErr
@@ -83,7 +82,7 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.Runtim
 	return err
 }
 
-func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner store.RuntimeAllocation) error {
+func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) error {
 	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
 	if capabilityErr != nil {
 		return capabilityErr
@@ -123,7 +122,7 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner store.Runti
 	}
 }
 
-func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
 	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
 	if err != nil {
 		return err
@@ -135,16 +134,16 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	if err != nil {
 		return err
 	}
-	if _, err := r.store.KeepRuntimeAllocation(ctx, owner); err != nil {
+	if _, err := r.deployment.KeepAllocation(ctx, owner); err != nil {
 		return err
 	}
-	activity, err := r.store.RuntimeActivity(ctx, owner)
+	activity, err := r.reader.Activity(ctx, owner.ID)
 	if err != nil {
 		return err
 	}
 	if activity.WakeRequested {
 		// Clearing only the observed timestamp cannot consume a newer live request.
-		return r.store.ClearRuntimeWake(ctx, owner, owner.ComputeActivityAt)
+		return r.deployment.ClearWake(ctx, owner, owner.ComputeActivityAt)
 	}
 	policy := r.config.Suspension
 	if policy == nil || !activity.ReadyToSuspend(policy.IdleTimeout) {
@@ -163,7 +162,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	if !result.Accepted {
 		// A rejected request did not park the daemon. Reset its idle clock so a
 		// continuing file operation is not immediately interrupted by another try.
-		if err := r.store.TouchRuntimeActivity(ctx, owner.TenantID, owner.EnvironmentID); err != nil {
+		if err := r.deployments.TouchActivity(ctx, owner.TenantID, owner.EnvironmentID); err != nil {
 			return err
 		}
 		_, err = r.saveCompute(ctx, next, "running", runtimeCompute{Current: state.Current}, nil)
@@ -176,7 +175,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	// The Session-locked phase commit checks pending work and wake requests.
 	// A competing request keeps its queue position and resumes this source.
 	suspending, err := r.saveCompute(ctx, next, "suspending", state, &until)
-	if errors.Is(err, sessions.ErrTurnConflict) {
+	if errors.Is(err, deployment.ErrAllocationConflict) {
 		state.Rollback = true
 		next, err = r.saveCompute(ctx, next, "waking", state, &until)
 		if err != nil {
@@ -190,7 +189,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	return r.captureCompute(ctx, p, suspending, state, false)
 }
 
-func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.CheckpointProvider, owner store.RuntimeAllocation, state runtimeCompute, observeOnly bool) error {
+func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
 	result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Snapshot: state.Snapshot, ObserveOnly: observeOnly})
 	if err != nil {
 		return err
@@ -223,8 +222,8 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Checkpo
 	return err
 }
 
-func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner store.RuntimeAllocation, state runtimeCompute) error {
-	activity, err := r.store.RuntimeActivity(ctx, owner)
+func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+	activity, err := r.reader.Activity(ctx, owner.ID)
 	if err != nil {
 		return err
 	}
@@ -248,7 +247,7 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.Che
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
 }
-func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.CheckpointProvider, owner store.RuntimeAllocation, state runtimeCompute, observeOnly bool) error {
+func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
 	if state.Target == nil || state.Snapshot == nil || state.Rollback {
 		return sandbox.ErrOwnership
 	}
@@ -276,8 +275,8 @@ func ignoreComputeAbsent(err error) error {
 	return err
 }
 
-// Node-backed restores reserve capacity atomically in SetRuntimeCompute.
-func (r *runtimeLifecycle) computeCapacityForAllocation(ctx context.Context, owner store.RuntimeAllocation) error {
+// Node-backed restores reserve capacity atomically in SetCompute.
+func (r *runtimeLifecycle) computeCapacityForAllocation(ctx context.Context, owner deployment.Allocation) error {
 	if owner.NodeID != "" {
 		return nil
 	}
