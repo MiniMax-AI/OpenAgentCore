@@ -3064,8 +3064,8 @@ paths:
         retry rules. These conflict policies are local and not verified hosted parity.
         A same-key stream=true retry of an existing creation returns 201 with no events
         and closes at once; retry with stream=false or use the GET events stream to
-        recover. Claude SDK on none and Core-managed Docker openai_hosted supports
-        qualified object-root json_schema output with medium verbosity, single-Agent
+        recover. Claude SDK on none, Core-managed Docker openai_hosted and self_hosted
+        supports qualified object-root json_schema output with medium verbosity, single-Agent
         execution and ordinary functions. Hosted execution reuses native workspace
         tools and Files/Artifacts; Skills, Plugins, capability directories, HTTP MCP,
         Subagent and tool_search combinations remain unqualified, including inherited
