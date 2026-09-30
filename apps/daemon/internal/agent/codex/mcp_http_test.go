@@ -42,7 +42,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if plan.Cwd != home {
-		t.Fatal("empty cwd did not resolve to the private home")
+		t.Fatal("environment:none cwd is not the private home")
 	}
 	config, err := os.ReadFile(filepath.Join(home, "config.toml"))
 	if err != nil {

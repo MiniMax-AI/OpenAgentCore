@@ -17,8 +17,8 @@ import (
 // the daemon's PromptRequestPayload.
 type SessionPlan struct {
 	// Cwd is the working directory passed to codex and the spawned
-	// app-server: the bound workspace root for an Environment request. For
-	// environment:none it is empty, or CODEX_HOME when MCP is configured.
+	// app-server: the bound workspace root for an Environment request and
+	// the Session's private CODEX_HOME for environment:none.
 	Cwd string
 
 	// Env is the full environment slice (KEY=value) to layer onto
@@ -231,6 +231,18 @@ func allocCodexHome(agentStateKey string) (string, error) {
 		return "", fmt.Errorf("codex: create CODEX_HOME %s: %w", dir, err)
 	}
 	return dir, nil
+}
+
+// nativeHomeFromPlan returns the CODEX_HOME codex receives: os/exec keeps the
+// last duplicate entry, and BuildSessionPlan appends the allocated home last.
+func nativeHomeFromPlan(plan SessionPlan) string {
+	var home string
+	for _, entry := range plan.Env {
+		if value, ok := strings.CutPrefix(entry, "CODEX_HOME="); ok {
+			home = value
+		}
+	}
+	return home
 }
 
 func resetGeneratedConfig(codexHome string) error {
