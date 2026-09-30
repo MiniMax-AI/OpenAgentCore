@@ -43,7 +43,7 @@ same contract. Operating-system support belongs in the implementation and its
 qualification. The native daemon supports Linux, macOS and Windows; each adapter
 declares its qualified platform scope. Managed Providers remain Linux-only.
 A platform-neutral interface alone does not qualify a harness on another platform.
-See [native Runtime validation](../../docs/self-hosted-native.md) for the current
+See [self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms) for the current
 acceptance limits. Runtime connection, installed capability snapshot, Session Executor and Turn
 each have their own lifetime; see
 [Executor and Turn lifetimes](../../docs/runtime-protocol.md#executor-and-turn-lifetimes).

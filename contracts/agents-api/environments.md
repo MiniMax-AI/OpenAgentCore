@@ -523,8 +523,12 @@ tools, files or network access. Outer Environments own managed isolation, and
 unsupported network restrictions reject instead of silently running unrestricted.
 
 Native installation and validation limits are in the
-[native guide](../../docs/self-hosted-native.md). Historical acceptance evidence
+[self-hosted guide](../../docs/getting-started/self-hosted.md#platforms). Historical acceptance evidence
 stays limited to its recorded binaries and inputs.
+
+On Windows, npm package installation and stdio MCP commands named `npm` or `npx`
+(including their `.cmd` shims) run through the resolved npm installation's
+JavaScript entrypoint with Node, without an extra shell.
 
 ### Environment initialization and compute wake
 

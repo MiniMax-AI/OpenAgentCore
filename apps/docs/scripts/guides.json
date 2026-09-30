@@ -90,12 +90,6 @@
     "description": "Connect a user-owned Runtime to its Environment with a restricted executor credential."
   },
   {
-    "slug": "self-hosted-native",
-    "source": "docs/self-hosted-native.md",
-    "title": "Native daemon installation",
-    "description": "Install and operate a self-hosted daemon on Linux, macOS or Windows."
-  },
-  {
     "slug": "console",
     "source": "docs/web/README.md",
     "title": "Administrator console",

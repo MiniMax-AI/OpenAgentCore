@@ -17,7 +17,6 @@ API. Pick the path that matches your role. New here? Read the
 | [Configuration](../configuration.md) | `config.json`, default models, sandbox deployment |
 | [Nodes](nodes.md) | Adding, checking and removing managed nodes |
 | [Self-hosted execution](self-hosted.md) | Connecting your own machine to a Session |
-| [Native Runtime](../self-hosted-native.md) | Platforms, installing and operating `oac-daemon` |
 | [Operations](operations.md) | Services, backups, keys, repair and troubleshooting |
 | [Web console](../web/README.md) | What the console shows and manages |
 

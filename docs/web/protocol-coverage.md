@@ -83,7 +83,7 @@ Resource-specific boundaries:
 
 The credential operations below also serve the native daemon on Linux, macOS and
 Windows. The existing **Connect a host** download command is the Linux container
-installer; use the [native installation guide](../self-hosted-native.md) for
+installer; use the [self-hosted guide](../getting-started/self-hosted.md) for
 `oac-daemon install` and lifecycle commands. Native credential rotation replaces
 the configured credential file and restarts the daemon, without rerunning install.
 
