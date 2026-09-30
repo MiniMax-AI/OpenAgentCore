@@ -20,7 +20,14 @@ workspaces through the common [daemon protocol](runtime-protocol.md); Harness
 adapters translate execution. A user-owned machine uses the same Runtime
 contract but has no Core-owned allocation to create or destroy.
 
-Use maintained provider SDKs behind thin adapters. Hosted deployments select one
+Use maintained provider SDKs behind thin adapters. Thin means replacing a Provider
+requires no changes to the common execution flow, not that an adapter contains
+little code. Core owns shared scheduling, persistence and recovery through
+capability contracts such as `ResidentPauseProvider`. Provider SDK calls and native
+behavior belong inside the adapter; shared policy decisions use the registered
+provider policy rather than vendor-name branches.
+
+Hosted deployments select one
 deployment-wide Provider: E2B cloud, or Docker/microsandbox on
 administrator-owned nodes. Providers never execute Core initialization commands;
 initialization, daily execution and Files use the daemon's typed Runtime operations.

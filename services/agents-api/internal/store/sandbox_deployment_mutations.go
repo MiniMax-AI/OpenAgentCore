@@ -39,16 +39,14 @@ func (s *Store) sandboxSelectionEqual(d sqlc.RuntimeDeployment, input SandboxDep
 	if d.ProviderKind != input.Provider {
 		return false, nil
 	}
-	if input.Provider == "e2b" {
-		policy, err := providers.Describe(input.Provider, runtimeUUID(d.InstallationID))
-		if err != nil {
-			return false, err
-		}
-		if d.IdleSeconds != policy.IdleSeconds || d.RetentionSeconds != policy.RetentionSeconds {
-			// A same-selection admin PUT explicitly opts an older deployment in
-			// without changing every installed E2B deployment during migration.
-			return false, nil
-		}
+	policy, err := providers.Describe(input.Provider, runtimeUUID(d.InstallationID))
+	if err != nil {
+		return false, err
+	}
+	if d.IdleSeconds != policy.IdleSeconds || d.RetentionSeconds != policy.RetentionSeconds {
+		// An explicit configuration write adopts the registered policy without
+		// changing installed deployments during migration or read-only access.
+		return false, nil
 	}
 	if input.E2B == nil {
 		return d.E2bTemplate == "", nil
