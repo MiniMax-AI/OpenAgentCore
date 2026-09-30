@@ -1,8 +1,6 @@
 # OpenAgentCore documentation
 
-OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents
-API. The [architecture overview](../architecture.md) explains its parts. Pick the
-guides for your role.
+OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents API. The [architecture overview](../architecture.md) explains its parts. Pick the guides for your role.
 
 ## Operators
 
@@ -19,8 +17,7 @@ Operators install Core and Web, add sandbox capacity and issue Project API keys.
 
 ## Application developers
 
-Application developers call the API with a Project API key, and can run Sessions on
-machines they own.
+Application developers call the API with a Project API key, and can run Sessions on machines they own.
 
 | Guide | Covers |
 | --- | --- |
@@ -31,5 +28,4 @@ machines they own.
 | [Examples](../examples.md) | Complete applications built on the API |
 | [API index](../api/README.md) | All three namespaces and their credentials |
 
-Contributors start with the [developer guide](../development.md) and
-[CONTRIBUTING.md](../../CONTRIBUTING.md).
+Contributors start with the [developer guide](../development.md) and [CONTRIBUTING.md](../../CONTRIBUTING.md).

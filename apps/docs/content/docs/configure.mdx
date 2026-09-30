@@ -10,18 +10,11 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 | [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.oac/core`) | Web domain setup or `oac domain` for managed HTTPS; otherwise edit the file, then run `oac apply` | `oac apply` restarts the services that read the changed settings |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | Saved without a Core restart; nodes prepare Runtime changes asynchronously |
 
-Web's **System** page shows the installation's addresses, the default models, the
-sandbox configuration and, under **Startup settings**, the process settings
-read-only with the path of `config.json` and the apply command. Secrets live in
-[`secrets/`](#installation-directory), one copy each. The files in `generated/` are
-derived from `config.json`. No configuration file defines Projects or API keys.
+Web's **System** page shows the installation's addresses, the default models, the sandbox configuration and, under **Startup settings**, the process settings read-only with the path of `config.json` and the apply command. Secrets live in [`secrets/`](#installation-directory), one copy each. The files in `generated/` are derived from `config.json`. No configuration file defines Projects or API keys.
 
 ## Process settings: config.json
 
-The installer writes every setting that applies to the installation's
-[mode](/install-options#modes), so the file shows each value.
-Installer flags listed in [installation options](/install-options)
-only seed it. To change a setting, edit the file and apply it:
+The installer writes every setting that applies to the installation's [mode](/install-options#modes), so the file shows each value. Installer flags listed in [installation options](/install-options) only seed it. To change a setting, edit the file and apply it:
 
 ```sh
 ~/.oac/core/oac apply --dry-run   # show the changed settings, files and restarts
@@ -30,62 +23,29 @@ only seed it. To change a setting, edit the file and apply it:
 
 ### How oac apply works
 
-1. It validates `config.json` and changes nothing if a value is invalid. `mode`,
-   `native_core` and `ingress` are fixed after installation; to change them, install
-   into a new directory.
-2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`,
-   `core.env`, `core-key-digests.json`, `settings.json` and, when used,
-   `runtime-history.json`, the managed `Caddyfile` and the native Core unit. Don't
-   edit them. A generated file edited by hand stops `apply` until you move the change
-   into `config.json` and run `oac apply --discard-edits`, which keeps the edited copy
-   as `generated/<file>.edited-<time>`.
-3. It compares what it wrote with what actually runs. Each container carries a digest
-   of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`), and
-   `apply` recreates or restarts exactly the services whose inputs differ: Core
-   first, then Web. The **Restarts** column below says which services a setting
-   affects. Restarting Web signs everyone out of the console.
-4. While any service runs, `apply` also starts the stopped ones. After `oac stop`, it
-   only writes the files and the installation stays stopped.
-5. If Core refuses a value at startup, `apply` prints Core's startup error. If every
-   service was running with the previous files, it restores them and starts the
-   services again; otherwise it reports the failure, and the next `apply` finishes
-   the work.
+1. It validates `config.json` and changes nothing if a value is invalid. `mode`, `native_core` and `ingress` are fixed after installation; to change them, install into a new directory.
+2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json` and, when used, `runtime-history.json`, the managed `Caddyfile` and the native Core unit. Don't edit them. A generated file edited by hand stops `apply` until you move the change into `config.json` and run `oac apply --discard-edits`, which keeps the edited copy as `generated/<file>.edited-<time>`.
+3. It compares what it wrote with what actually runs. Each container carries a digest of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`), and `apply` recreates or restarts exactly the services whose inputs differ: Core first, then Web. The **Restarts** column below says which services a setting affects. Restarting Web signs everyone out of the console.
+4. While any service runs, `apply` also starts the stopped ones. After `oac stop`, it only writes the files and the installation stays stopped.
+5. If Core refuses a value at startup, `apply` prints Core's startup error. If every service was running with the previous files, it restores them and starts the services again; otherwise it reports the failure, and the next `apply` finishes the work.
 
-`oac status` reports changes to `config.json` that are not applied yet and generated
-files edited by hand.
+`oac status` reports changes to `config.json` that are not applied yet and generated files edited by hand.
 
 ### Changing the public URL
 
-`public_url` is the one origin that applications, nodes, sandboxes and self-hosted
-executors use. Core derives the daemon WebSocket URL, the self-hosted `remote_url`
-and each sandbox's connection address from it. With `null`, Core uses its loopback
-origin. Until `public_url` is set, a managed installation serves only Web, over HTTP
-on the host's IP address at `ports.web`; afterwards that address redirects to
-`public_url`.
+`public_url` is the one origin that applications, nodes, sandboxes and self-hosted executors use. Core derives the daemon WebSocket URL, the self-hosted `remote_url` and each sandbox's connection address from it. With `null`, Core uses its loopback origin. Until `public_url` is set, a managed installation serves only Web, over HTTP on the host's IP address at `ports.web`; afterwards that address redirects to `public_url`.
 
-With managed ingress, change it in Web (**System** → **Configure domain and HTTPS**)
-or with `oac domain HOSTNAME`. Both take the installation lock, verify the new
-certificate and address, then write `config.json` and apply it. With external
-ingress, update your reverse proxy first, then edit `public_url` and run `oac apply`.
+With managed ingress, change it in Web (**System** → **Configure domain and HTTPS**) or with `oac domain HOSTNAME`. Both take the installation lock, verify the new certificate and address, then write `config.json` and apply it. With external ingress, update your reverse proxy first, then edit `public_url` and run `oac apply`.
 
-When nodes, hosted sandboxes or self-hosted executors are bound to the current
-address, `apply` lists them and asks you to type the new URL
-(`--confirm-public-url-change URL` without a terminal). Afterwards:
+When nodes, hosted sandboxes or self-hosted executors are bound to the current address, `apply` lists them and asks you to type the new URL (`--confirm-public-url-change URL` without a terminal). Afterwards:
 
-- Nodes on the old address get no new sandboxes: remove them in Web and add them
-  again.
-- Existing sandboxes and executors keep working only while the old address still
-  reaches this Core. A managed domain change replaces the previous domain route.
-- Self-hosted executors must restart with the new `remote_url`, and their installer
-  refuses an installation made for the old address: create new self-hosted Sessions
-  and connect their hosts again.
+- Nodes on the old address get no new sandboxes: remove them in Web and add them again.
+- Existing sandboxes and executors keep working only while the old address still reaches this Core. A managed domain change replaces the previous domain route.
+- Self-hosted executors must restart with the new `remote_url`, and their installer refuses an installation made for the old address: create new self-hosted Sessions and connect their hosts again.
 
 ### Settings
 
-`core.runtime_history.headers` may hold export credentials. They stay in the `0600`
-`config.json` and the generated file Core reads, and never appear in `oac` output or
-in Core's settings snapshot. Model providers are not process settings; see
-[Default models](#default-models).
+`core.runtime_history.headers` may hold export credentials. They stay in the `0600` `config.json` and the generated file Core reads, and never appear in `oac` output or in Core's settings snapshot. Model providers are not process settings; see [Default models](#default-models).
 
 
 | Key | Type | Default | Modes | Change | Restarts | Meaning |
@@ -124,17 +84,11 @@ in Core's settings snapshot. Model providers are not process settings; see
 | `ingress` | `"managed"` \| `"external"` | `"external"` | all | fixed | none | managed provides automatic HTTPS and Web domain setup for a combined Docker installation; install.sh selects it by default. external uses your existing proxy. Fixed after installation. |
 
 
-The schema is
-[`deploy/install/config.schema.json`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/deploy/install/config.schema.json); each
-installation keeps a copy in `generated/config.schema.json` for editors. Core serves
-the non-secret settings snapshot, with the path of `config.json` and the apply
-command, at `GET /core/v1/installation`. How Core collects and keeps Runtime history
-is in [retained history](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/runtime-observability.md#retained-history-and-optional-export).
+The schema is [`deploy/install/config.schema.json`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/deploy/install/config.schema.json); each installation keeps a copy in `generated/config.schema.json` for editors. Core serves the non-secret settings snapshot, with the path of `config.json` and the apply command, at `GET /core/v1/installation`. How Core collects and keeps Runtime history is in [retained history](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/runtime-observability.md#retained-history-and-optional-export).
 
 ## Runtime settings: Web
 
-Runtime settings live in Core's database. Change them in Web; scripts use the same
-Core API with the Core key.
+Runtime settings live in Core's database. Change them in Web; scripts use the same Core API with the Core key.
 
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
@@ -145,38 +99,21 @@ Core API with the Core key.
 | Default model per harness | **System** → **Default model configuration**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
 | Executor credentials of a self-hosted Session | **Session log**, the Session's page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](/self-hosted-execution) |
 
-Which harnesses are enabled, and the default one, are process settings
-(`core.harnesses`, `core.default_harness`); System shows them read-only. The
-[API index](/public-api#core-api) lists every Core API route, and the
-[deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md) defines the
-sandbox fields, limits and change rules.
+Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [API index](/public-api#core-api) lists every Core API route, and the [deployment contract](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
 
 ### Node capacity
 
-Core approves a node's capacity when you generate its Add node command: **Sandboxes at
-once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes**
-(`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never
-suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to
-`max_active`. Change them later with **Edit node**. Reservations and cleanup that is
-not confirmed count against capacity; lowering a limit stops no running sandbox. A
-node's own files can't change its capacity, size or Runtime.
+Core approves a node's capacity when you generate its Add node command: **Sandboxes at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes** (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later with **Edit node**. Reservations and cleanup that is not confirmed count against capacity; lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
 
 `core.execution_concurrency` is unrelated: it limits concurrent execution work in Core.
 
 ### Default models
 
-Set a default in **System** → **Default model configuration**, or use
-`PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys
-with `secrets/credential.key` and never returns them.
-[Model execution](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#deployment-defaults)
-owns the request fields and replacement rules, and
-[precedence](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#saved-defaults-and-precedence)
-says which Sessions use a default.
+Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/credential.key` and never returns them. [Model execution](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
 
 ## Installation directory
 
-The installer creates the installation directory, `~/.oac/core` by default, with
-mode `0700`; the files in `secrets/` are `0600`.
+The installer creates the installation directory, `~/.oac/core` by default, with mode `0700`; the files in `secrets/` are `0600`.
 
 | Path | Content | Changed by |
 | --- | --- | --- |
@@ -194,26 +131,13 @@ mode `0700`; the files in `secrets/` are `0600`.
 | `native/` | Core binaries, with native Core | The installer |
 | `.oac.lock` | The installation lock | The installer and mutating `oac` commands |
 
-A Web-only installation has only `secrets/core.key`, a copy of its Core's key, and no
-`state/` or `native-installers/`. A Core-only installation has no `node-payload/`.
-Only managed ingress has `ingress/`.
+A Web-only installation has only `secrets/core.key`, a copy of its Core's key, and no `state/` or `native-installers/`. A Core-only installation has no `node-payload/`. Only managed ingress has `ingress/`.
 
-In Docker, the Compose project is named `oac-<10 hex digits>` (`project` in
-`state.json`). Its services are `database`, `migrate`, `core` and `web`, plus
-`gateway` and `installation` with managed ingress. `gateway` publishes `ports.web`,
-80 and 443 and routes to Core and Web; `installation` applies domain changes from
-Web and uses the Docker socket to do so. The volume `<project>_database` holds all
-data. Native Core runs Core as the systemd user unit `<project>-core.service`
-instead of a container. Apart from Docker's storage, nothing is written outside your
-home directory.
+In Docker, the Compose project is named `oac-<10 hex digits>` (`project` in `state.json`). Its services are `database`, `migrate`, `core` and `web`, plus `gateway` and `installation` with managed ingress. `gateway` publishes `ports.web`, 80 and 443 and routes to Core and Web; `installation` applies domain changes from Web and uses the Docker socket to do so. The volume `<project>_database` holds all data. Native Core runs Core as the systemd user unit `<project>-core.service` instead of a container. Apart from Docker's storage, nothing is written outside your home directory.
 
 ## Appendix: Core environment without the installer
 
-Core reads only its environment. The installer renders `generated/core.env` from
-`config.json`; if you run Core yourself (see
-[Maintainers and advanced deployments](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md)), set these variables.
-Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so
-Compose must be 2.26.0 or newer.
+Core reads only its environment. The installer renders `generated/core.env` from `config.json`; if you run Core yourself (see [Maintainers and advanced deployments](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/maintainers.md)), set these variables. Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be 2.26.0 or newer.
 
 | Variable | Set from |
 | --- | --- |
@@ -234,9 +158,6 @@ Compose must be 2.26.0 or newer.
 
 Core logs the file paths it loads, never environment values or file contents.
 
-A Web you run without the installer reads the variables in
-[Connecting the administrator console to Core](/bootstrap-projects-keys#server-configuration-and-login),
-plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's
-node payload (the installer's `node-payload/`). Without it, Add node is unavailable.
+A Web you run without the installer reads the variables in [Connecting the administrator console to Core](/bootstrap-projects-keys#server-configuration-and-login), plus `OAC_WEB_NODE_PAYLOAD_DIR`: the absolute path of the matched distribution's node payload (the installer's `node-payload/`). Without it, Add node is unavailable.
 
 [Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/configuration.md)
