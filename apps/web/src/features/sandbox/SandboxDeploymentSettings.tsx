@@ -34,7 +34,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset
   const spec = deployment.specification;
   // An E2B selection may adopt its template build's size instead of saving one.
   const size = sandboxSize(deployment);
-  const build = deployment.e2b?.template_build;
+  const build = deployment.metadata?.template_build;
   const buildSize = templateBuildSize(deployment);
   const sizeLabel = (value: { cpus: number; memory_mib: number }) => t("{{cpus}} CPU · {{memory}}", { cpus: value.cpus, memory: formatBytes(value.memory_mib * MIB) });
   const canEdit = fresh && !deployment.reset;
@@ -58,17 +58,17 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset
     </dl>
     {deployment.provider === "e2b" ? <div className="sandbox-cloud-summary">
       <dl className="sandbox-summary">
-        <div><dt>{t("Sandbox API URL")}</dt><dd><code>{deployment.e2b?.api_url}</code></dd></div>
-        <div><dt>{t("Sandbox data-plane domain")}</dt><dd><code>{deployment.e2b?.domain}</code></dd></div>
+        <div><dt>{t("Sandbox API URL")}</dt><dd><code>{deployment.configuration?.api_url}</code></dd></div>
+        <div><dt>{t("Sandbox data-plane domain")}</dt><dd><code>{deployment.configuration?.domain}</code></dd></div>
         <div>
-          <dt>{t("Template build")}<HelpTip>{deployment.e2b?.template || t("Unknown state")}</HelpTip></dt>
+          <dt>{t("Template build")}<HelpTip>{deployment.configuration?.template || t("Unknown state")}</HelpTip></dt>
           <dd>{[
             t(buildStatusLabel[templateBuildStatus(build)]),
             ...(buildSize ? [sizeLabel(buildSize)] : []),
             ...(build?.resources.root_disk_mib != null ? [t("{{disk}} disk", { disk: formatBytes(build.resources.root_disk_mib * MIB) })] : []),
           ].join(" · ")}</dd>
         </div>
-        <div><dt>{t("E2B credential")}</dt><dd>{t(deployment.e2b?.credential_configured ? "Configured" : "Not configured")}</dd></div>
+        <div><dt>{t("E2B credential")}</dt><dd>{t(deployment.credential_configured ? "Configured" : "Not configured")}</dd></div>
       </dl>
     </div> : null}
     <SandboxRolloutSummary deployment={deployment} stale={!fresh} />
@@ -83,7 +83,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onReset
           key={editKey}
           coreUrl={deployment.core_url}
           expectedGeneration={deployment.generation}
-          current={deployment.provider ? { provider: deployment.provider, specification: deployment.specification, e2bTemplate: deployment.e2b?.template, e2bAPIURL: deployment.e2b?.api_url, e2bDomain: deployment.e2b?.domain } : undefined}
+          current={deployment.provider ? { provider: deployment.provider, specification: deployment.specification, e2bTemplate: deployment.configuration?.template, e2bAPIURL: deployment.configuration?.api_url, e2bDomain: deployment.configuration?.domain } : undefined}
           disabled={disabled || !canEdit}
           editing
           onSubmit={async (input) => { if (await onUpdate(input)) setChanging(false); }}

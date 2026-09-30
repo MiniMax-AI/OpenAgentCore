@@ -24,14 +24,17 @@ for the operator workflow. Generated schemas cover the
 | `PUT /core/v1/sandbox/deployment` | Core key | Advance the same-provider target online while retaining existing ownership |
 | `POST /core/v1/sandbox/deployment/reset` | Core key | Start or escalate a durable hosted clear |
 | `DELETE /core/v1/sandbox/deployment/reset?expected_generation=N` | Core key | Cancel the remaining clear without restoring archived work |
-| `POST /core/v1/sandbox/e2b/templates` | Core Web server or operator script with Core key | List up to 200 templates visible to a transient E2B credential |
-| `POST /core/v1/sandbox/e2b/templates/{template_id}/builds` | Core Web server or operator script with Core key | List up to 200 ready builds for one selected template |
+| `POST /core/v1/sandbox/providers/{provider}/discovery` | Core Web server or operator script with Core key | Query the registered provider's configuration catalog without saving credentials or allocating compute |
 | `GET /api/v1/sandbox-node/configuration` | Enrollment token or retained node credential | Read the active node installation configuration without consuming enrollment |
 | `POST /api/v1/sandbox-node/enroll` | One-use enrollment token | Register a node; consumes the token |
 | `GET /api/v1/sandbox-node/identity?node_id=` | Node credential | Recover the node's registered identity, approved capacity and readiness |
 | WebSocket `GET /api/v1/sandbox-node/connect?node_id=` | Node credential | The node's connection to Core |
 
-Template discovery posts `{ "api_key": "...", "api_url": "https://sandbox.sandbase.ai", "domain": "sandbox.sandbase.ai" }`.
+E2B discovery posts `{ "configuration": { "api_url": "https://sandbox.sandbase.ai", "domain": "sandbox.sandbase.ai" }, "credential": { "api_key": "..." }, "query": {} }`
+to `/core/v1/sandbox/providers/e2b/discovery`. Use `query: {"template":"template-id"}` for builds.
+Requests are limited to 64 KiB and 30 seconds. Docker and microsandbox explicitly
+reject discovery with `400 sandbox_operation_unsupported`. Unknown input members
+and null objects reject. A discovery result never proves deployment admission.
 The official E2B endpoint may omit both endpoint fields. The first response is
 `{ "templates": [{ "id": "...", "names": ["..."] }] }`;
 the second is `{ "builds": [{ "id": "build-uuid", "cpus": 2, "memory_mib": 2048 }] }`.
@@ -106,7 +109,8 @@ resource and same-selection conditions, including an identical old request body.
 | `provider` | Exactly one of `docker`, `microsandbox`, `e2b` |
 | `resources` | Per-sandbox resource limits described below; required for Docker/microsandbox, optional for E2B |
 | `runtime` | Required immutable distribution identity for Docker/microsandbox; absent for E2B |
-| `e2b` | Required only for E2B: immutable `template` build selector; write-only `api_key` required on POST, optional on same-provider PUT; optional paired `api_url` and `domain` selectors |
+| `configuration` | Provider-owned public selectors. E2B accepts immutable `template` and optional paired `api_url`/`domain`; node providers accept only `{}` or omission. |
+| `credential` | Write-only provider credential object. E2B accepts `{api_key}`; required at first setup, omitted on PUT to preserve the key. Null and empty keys reject. Node providers reject this object. |
 
 The request has no Core address. Core derives the deployment's `core_url` from the
 installation public URL (`public_url` in `config.json`, `OAC_PUBLIC_URL` for
@@ -177,18 +181,25 @@ IDs and OCI manifest digests identify different objects; do not substitute one
 for the other. The node installer verifies the saved release against its payload
 before registration and retains the exact local image identity it imports.
 
-E2B instead uses `e2b.template` in `template-id:build-uuid` form. The build UUID must
+E2B instead uses `configuration.template` in `template-id:build-uuid` form. The build UUID must
 be canonical and nonzero; a mutable template alias alone is insufficient. Omit
 `runtime`. The API key is encrypted in PostgreSQL and never returned in a safe
 view, bootstrap configuration, command argument or log. Same-team key, build or endpoint
 changes apply online while old sandboxes retain their original specification.
 By default Core uses `https://api.e2b.app` and `e2b.app`. For a compatible
-service, set both `e2b.api_url` (HTTPS API origin, with no path, port, query,
-fragment or credentials) and `e2b.domain` (sandbox data-plane DNS suffix).
+service, set both `configuration.api_url` (HTTPS API origin, with no path, port, query,
+fragment or credentials) and `configuration.domain` (sandbox data-plane DNS suffix).
 The API host must equal the data-plane domain or be its subdomain. Core rejects
 a sandbox response whose data-plane domain lies outside the selected suffix
 before sending daemon credentials or using envd. Existing sandboxes retain
 their original endpoint and credential across online changes.
+
+The operator contract uses these fields directly; the retired `e2b` request/response
+member and vendor-specific discovery routes have no fallback. Migration 91 moves
+existing selectors and observations into the generic objects without changing
+ciphertext, generation or immutable retained ownership. Downgrade refuses unknown
+provider configurations that the old schema cannot represent. The pinned `/v1`
+Agents API is unchanged.
 
 ## Safe response
 
@@ -196,18 +207,22 @@ GET and successful mutations return `installation_id`, `provider`, `core_url`
 (read-only: the installation public URL, present before configuration), `mode`,
 `generation`, `owner_epoch`, `reset`, `rollout`, `suspension` and resource
 accounting. A configured deployment also returns `specification` and
-`specification_digest`. E2B returns `e2b.template`, `e2b.api_url`,
-`e2b.domain`, `e2b.credential_configured` and `e2b.template_build`; the `e2b` object is absent
-for Docker and microsandbox.
+`specification_digest`, `configuration` and `metadata`. Every response includes
+`credential_configured`. E2B returns `configuration.template`, `configuration.api_url`,
+`configuration.domain` and optional `metadata.template_build`. Docker and microsandbox
+return empty configuration/metadata objects and `credential_configured: false`.
+Unconfigured deployments omit both objects. Native configuration values and secrets
+are never directly serialized; only the adapter's public projection is returned.
 
-`e2b.template_build` is `{status, resources: {cpus, memory_mib, root_disk_mib}}`:
+`metadata.template_build` is `{status, resources: {cpus, memory_mib, root_disk_mib}}`:
 the fixed build as Core read it through the pinned SDK when the selection was
 saved. GET does not call E2B, so it stays cheap and cannot fail on an E2B outage;
 the values describe the immutable build at selection time. Validation admits only
 a `ready` build whose CPU count and memory equal the selected `cpus` and
 `memory_mib`. `root_disk_mib` is the build's native disk size, which Core does not
-enforce separately. Unknown values are null, including every value of a selection
-saved before Core recorded them; a verified write records them. An omitted-key
+enforce separately. Unknown observed values are null. `metadata: {}` means no build observation
+was recorded. A verified write records the observation. Existing partial observations
+are preserved across schema upgrades and read projections. An omitted-key
 identical PUT is a no-op and does not refresh provider metadata.
 
 `suspension` is `{idle_seconds, retention_seconds}` for microsandbox and new E2B
@@ -262,7 +277,7 @@ retired by a same-provider update. Docker/microsandbox advance only the target;
 each node prepares it independently while continuing to serve its qualified old
 pin. No execution drain or reenrollment accompanies a target change.
 
-For E2B PUT, omit `e2b.api_key` to preserve the current key. Omitted-key identical
+For E2B PUT, omit the `credential` object to preserve the current key. Omitted-key identical
 selection is a no-op. Explicit nonempty key submission, including the same key,
 always verifies and advances generation. Null or empty keys are invalid. A key-only
 change uses the same full DTO: provider, existing template, optional resources and
@@ -278,11 +293,11 @@ settled live receipt in the installation-labelled sandbox listing.
 A legacy public-template selection without this ownership anchor, or a committed key
 that no longer authenticates, requires `409 sandbox_reset_required`; Core cannot
 establish a safe online replacement from that state. Keep the old key valid until the
-successful response. A candidate outside the verified team gives `409 e2b_team_mismatch`;
+successful response. A candidate outside the verified team gives `409 sandbox_credential_ownership`;
 explicitly reset before initializing another team. Candidate-key 401/403 gives
-`400 e2b_api_key_invalid`; an invalid candidate build gives
-`400 e2b_template_build_invalid`. Missing or unsettled receipts and unconfirmed reads
-fail closed with `503 e2b_request_unconfirmed`. No provider text or credential is
+`400 sandbox_credential_invalid`; an invalid candidate build gives
+`400 sandbox_configuration_invalid`. Missing or unsettled receipts and unconfirmed reads
+fail closed with `503 sandbox_verification_unconfirmed`. No provider text or credential is
 returned. The write and `change` or `replace_credential` audit share one transaction.
 
 A credential replacement briefly fences provider calls, waits for actual helper
@@ -468,8 +483,8 @@ fields from the administrator node routes; runtime fields from the
 | Field | E2B | Docker | microsandbox |
 | --- | --- | --- | --- |
 | Deployment `specification.resources` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` |
-| Deployment `specification.runtime` | Absent; the build is selected by `e2b.template` | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
-| Deployment `e2b.template_build` | The build as Core read it when the selection was saved | Absent, with the whole `e2b` object | Absent, with the whole `e2b` object |
+| Deployment `specification.runtime` | Absent; the build is selected by `configuration.template` | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
+| Deployment `metadata.template_build` | The build as Core read it when the selection was saved | Absent (`metadata` is empty) | Absent (`metadata` is empty) |
 | Deployment `suspension` | `{idle_seconds, retention_seconds}` | `null` | `{idle_seconds, retention_seconds}` |
 | Deployment `resources.allocations`, `resources.pending` | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes | Totals across all nodes |
 | Enrollment-token `max_active`, `max_retained` | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` | Both limits apply |

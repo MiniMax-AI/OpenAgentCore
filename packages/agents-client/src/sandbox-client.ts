@@ -30,12 +30,11 @@ export interface InitializeSandboxDeployment {
   resources?: SandboxResources;
   /** Required for Docker/microsandbox; E2B uses its fixed template build. */
   runtime?: SandboxRuntimeRelease;
-  e2b?: { api_key: string; template: string; api_url?: string; domain?: string };
+  configuration?: { template?: string; api_url?: string; domain?: string };
+  /** Write-only. Omission on update preserves the current credential. */
+  credential?: { api_key: string };
 }
-export interface UpdateSandboxDeployment extends Omit<InitializeSandboxDeployment, "e2b"> {
-  /** Omit api_key to preserve the current key. Supplying it, even unchanged, verifies and replaces it once. */
-  e2b?: { api_key?: string; template: string; api_url?: string; domain?: string };
-}
+export interface UpdateSandboxDeployment extends InitializeSandboxDeployment {}
 export interface SandboxRollout {
   /** Poll at high frequency only while preparing, independently of old Session retention. */
   state: "settled" | "preparing";
@@ -74,7 +73,9 @@ export interface SandboxDeployment {
   generation: number;
   mode: "nodes" | "direct" | "";
   resources: { allocations: number; pending: number };
-  e2b?: { template: string; api_url: string; domain: string; credential_configured: boolean; template_build: SandboxE2BTemplateBuild };
+  configuration?: { template?: string; api_url?: string; domain?: string };
+  metadata?: { template_build?: SandboxE2BTemplateBuild };
+  credential_configured: boolean;
   /** Idle suspension policy; microsandbox only, otherwise null. */
   suspension: { idle_seconds: number; retention_seconds: number } | null;
 }
@@ -197,20 +198,16 @@ function projectSpecification(value: unknown): SandboxSpecification {
   valid(strings(runtime, releaseFields));
   return { resources: { ...resources } as unknown as SandboxResources, runtime: { ...runtime } as unknown as SandboxRuntimeRelease };
 }
-/** The safe E2B view; it has no key member. */
-function projectE2B(value: unknown): NonNullable<SandboxDeployment["e2b"]> {
-  const e2b = members(value, ["template", "credential_configured", "template_build"], ["api_url", "domain"]);
-  const build = members(e2b.template_build, ["status", "resources"]);
+/** The adapter's public projection has no credential member. */
+function projectE2B(configuration: unknown, metadata: unknown): Pick<SandboxDeployment, "configuration" | "metadata"> {
+  const config = members(configuration, ["template", "api_url", "domain"]);
+  valid(strings(config, ["template", "api_url", "domain"]));
+  const facts = members(metadata, [], ["template_build"]);
+  if (!hasOwn(facts, "template_build")) return { configuration: { ...config }, metadata: {} };
+  const build = members(facts.template_build, ["status", "resources"]);
   const resources = members(build.resources, ["cpus", "memory_mib", "root_disk_mib"]);
-  valid(typeof e2b.template === "string" && typeof e2b.credential_configured === "boolean" &&
-    (!hasOwn(e2b, "api_url") || typeof e2b.api_url === "string") && (!hasOwn(e2b, "domain") || typeof e2b.domain === "string") &&
-    (hasOwn(e2b, "api_url") === hasOwn(e2b, "domain")) && (build.status === null || typeof build.status === "string") &&
-    Object.values(resources).every(nullable(isNonnegativeInteger)));
-  return {
-    template: e2b.template as string, api_url: (e2b.api_url as string | undefined) ?? "https://api.e2b.app",
-    domain: (e2b.domain as string | undefined) ?? "e2b.app", credential_configured: e2b.credential_configured as boolean,
-    template_build: { status: build.status as string | null, resources: { ...resources } as SandboxE2BTemplateBuild["resources"] },
-  };
+  valid((build.status === null || typeof build.status === "string") && Object.values(resources).every(nullable(isNonnegativeInteger)));
+  return { configuration: { ...config }, metadata: { template_build: { status: build.status as string | null, resources: { ...resources } as SandboxE2BTemplateBuild["resources"] } } };
 }
 /** Counts and blocker identities are one Core snapshot, never reconstructed from node lists. */
 function projectReset(value: unknown, held: number): SandboxReset | null {
@@ -245,11 +242,13 @@ function projectNodeRollout(value: unknown, online: unknown): SandboxNodeRollout
     (rollout.diagnostic === undefined || (typeof rollout.diagnostic === "string" && rollout.diagnostic !== "" && rollout.state === "failed")));
   return { ...rollout, ...(rollout.diagnostic !== undefined ? { diagnostic: nodeDiagnostics.has(rollout.diagnostic as string) ? rollout.diagnostic : "provider_unavailable" } : {}) } as unknown as SandboxNodeRollout;
 }
-/** `specification` and `specification_digest` appear together once configured; `e2b` appears exactly for E2B. */
+/** Configured deployments carry a validated public configuration and observation object. */
 function projectDeployment(value: unknown): SandboxDeployment {
   const e2b = isRecord(value) && value.provider === "e2b";
-  const fields = ["installation_id", "provider", "core_url", "reset", "rollout", "owner_epoch", "generation", "mode", "resources", "suspension"];
-  const deployment = members(value, e2b ? [...fields, "e2b"] : fields, ["specification", "specification_digest"]);
+  const fields = ["installation_id", "provider", "core_url", "reset", "rollout", "owner_epoch", "generation", "mode", "resources", "suspension", "credential_configured"];
+  const deployment = members(value, isRecord(value) && value.provider !== "" ? [...fields, "configuration", "metadata"] : fields, ["specification", "specification_digest"]);
+  valid(typeof deployment.credential_configured === "boolean");
+  if (!e2b && deployment.provider !== "") { members(deployment.configuration, []); members(deployment.metadata, []); valid(deployment.credential_configured === false); }
   const resources = members(deployment.resources, ["allocations", "pending"]);
   const suspension = deployment.suspension === null ? null : members(deployment.suspension, ["idle_seconds", "retention_seconds"]);
   const configured = hasOwn(deployment, "specification");
@@ -260,7 +259,7 @@ function projectDeployment(value: unknown): SandboxDeployment {
   return {
     ...deployment, rollout: projectRollout(deployment.rollout, deployment.mode, Number(resources.allocations) + Number(resources.pending)), reset: projectReset(deployment.reset, Number(resources.allocations) + Number(resources.pending)), resources: { ...resources } as SandboxDeployment["resources"], suspension: suspension && { ...suspension } as SandboxDeployment["suspension"],
     ...(configured ? { specification: projectSpecification(deployment.specification) } : {}),
-    ...(e2b ? { e2b: projectE2B(deployment.e2b) } : {}),
+    ...(e2b ? projectE2B(deployment.configuration, deployment.metadata) : {}),
   } as unknown as SandboxDeployment;
 }
 
@@ -323,7 +322,7 @@ export class SandboxAdminClient {
   }
 
   async listE2BTemplates(input: SandboxE2BDiscoveryInput, options?: ReadOptions): Promise<SandboxE2BTemplate[]> {
-    const value = await this.#core.json("/e2b/templates", options, "POST", input);
+    const value = await this.#core.json("/providers/e2b/discovery", options, "POST", { configuration: { api_url: input.api_url, domain: input.domain }, credential: { api_key: input.api_key }, query: {} });
     if (!isRecord(value) || !onlyFields(value, new Set(["templates"])) || !Array.isArray(value.templates) || value.templates.length > 200) invalidSandboxResponse();
     return value.templates.map((item) => {
       if (!isRecord(item) || !onlyFields(item, new Set(["id", "names"])) || typeof item.id !== "string" || !Array.isArray(item.names) || !item.names.every((name) => typeof name === "string")) invalidSandboxResponse();
@@ -331,7 +330,7 @@ export class SandboxAdminClient {
     });
   }
   async listE2BReadyBuilds(templateId: string, input: SandboxE2BDiscoveryInput, options?: ReadOptions): Promise<SandboxE2BReadyBuild[]> {
-    const value = await this.#core.json(`/e2b/templates/${encodeURIComponent(templateId)}/builds`, options, "POST", input);
+    const value = await this.#core.json("/providers/e2b/discovery", options, "POST", { configuration: { api_url: input.api_url, domain: input.domain }, credential: { api_key: input.api_key }, query: { template: templateId } });
     if (!isRecord(value) || !onlyFields(value, new Set(["builds"])) || !Array.isArray(value.builds) || value.builds.length > 200) invalidSandboxResponse();
     return value.builds.map((item) => {
       if (!isRecord(item) || !onlyFields(item, new Set(["id", "cpus", "memory_mib"])) || typeof item.id !== "string" || !isNonnegativeInteger(item.cpus) || !isNonnegativeInteger(item.memory_mib)) invalidSandboxResponse();
@@ -359,30 +358,32 @@ export class SandboxAdminClient {
   }
   async #writeDeployment(method: "POST" | "PUT", input: InitializeSandboxDeployment | UpdateSandboxDeployment, options?: ReadOptions): Promise<SandboxDeployment> {
     try {
-      // As with an unparsable body, an E2B write with an invalid response is unconfirmed.
+      // As with an unparsable body, a configuration write with an invalid response is unconfirmed.
       return projectDeployment(await this.#core.json("/deployment", options, method, input));
     } catch (error) {
-      if (!input.e2b) throw error;
       if (error instanceof AgentCoreError && [400, 409, 503].includes(error.status)) {
         const messages: Record<string, string> = {
+          invalid_sandbox_configuration: "Invalid sandbox provider configuration.",
+          sandbox_specification_mismatch: "The node specification differs from the deployment.",
+          sandbox_deployment_conflict: "The sandbox deployment cannot change in its current state.",
           sandbox_generation_stale: "The sandbox configuration changed. Refresh before submitting again.",
           sandbox_reset_required: "Reset the sandbox deployment before changing this configuration.",
           sandbox_reset_in_progress: "A sandbox reset is in progress.",
           sandbox_not_configured: "The sandbox deployment is not configured.",
           sandbox_in_use: "Hosted sandbox resources still belong to this deployment.",
-          e2b_team_mismatch: "This E2B key cannot manage the retained deployment. Reset before changing teams.",
-          e2b_api_key_invalid: "The E2B API key was rejected.",
-          e2b_template_build_invalid: "Select a ready immutable E2B template build with matching resources.",
-          e2b_request_unconfirmed: "E2B verification could not be confirmed. Refresh before submitting again.",
+          sandbox_credential_ownership: "This E2B key cannot manage the retained deployment. Reset before changing teams.",
+          sandbox_credential_invalid: "The E2B API key was rejected.",
+          sandbox_configuration_invalid: "Select a ready immutable E2B template build with matching resources.",
+          sandbox_verification_unconfirmed: "E2B verification could not be confirmed. Refresh before submitting again.",
         };
         if (error.code && Object.hasOwn(messages, error.code)) {
           // Credential-bearing errors expose fixed local copy and allowlisted
           // numeric facts plus exact status/code/field matches only.
-          const fields = error.code === "sandbox_generation_stale" ? ["current_generation"] : error.code === "sandbox_in_use" ? ["allocations", "pending"] : [];
+          const fields = error.code === "sandbox_generation_stale" ? ["current_generation"] : error.code === "sandbox_in_use" ? ["allocations", "pending"] : error.code === "invalid_sandbox_configuration" ? ["min", "max"] : [];
           const details = Object.fromEntries(fields.filter(field => isNonnegativeInteger(error.details?.[field])).map(field => [field, Number(error.details![field])]));
           const safeParam = error.status === 400
-            ? error.code === "e2b_api_key_invalid" ? "e2b.api_key" : error.code === "e2b_template_build_invalid" ? "e2b.template" : null
-            : error.status === 409 && error.code === "e2b_team_mismatch" ? "e2b.api_key" : null;
+            ? error.code === "sandbox_credential_invalid" ? "credential" : error.code === "sandbox_configuration_invalid" ? "configuration" : error.code === "invalid_sandbox_configuration" && ["runtime", "resources.cpus", "resources.memory_mib", "resources.root_disk_mib", "resources.environment_disk_mib"].includes(error.param ?? "") ? error.param : null
+            : error.status === 409 && error.code === "sandbox_credential_ownership" ? "credential" : null;
           const param = error.param === safeParam ? safeParam : null;
           throw new AgentCoreError(messages[error.code]!, error.status, error.code, param, undefined, Object.keys(details).length ? details : undefined);
         }

@@ -6,7 +6,7 @@ import { SandboxRolloutSummary } from "./SandboxRolloutSummary";
 import { NodeRolloutStatus } from "./NodeRolloutStatus";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 
-const deployment: SandboxDeployment = { installation_id: "i", owner_epoch: 1, generation: 4, provider: "docker", mode: "nodes", core_url: "https://core.example", resources: { allocations: 8, pending: 2 }, reset: null, suspension: null,
+const deployment: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, installation_id: "i", owner_epoch: 1, generation: 4, provider: "docker", mode: "nodes", core_url: "https://core.example", resources: { allocations: 8, pending: 2 }, reset: null, suspension: null,
   rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, update_required: 3, unknown: 4 } } };
 
 describe("authoritative configuration rollout", () => {

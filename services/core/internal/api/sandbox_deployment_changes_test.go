@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -22,7 +24,7 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 		if !ok || source.ProjectID != "" || source.CredentialID == "" || source.RequestID == "" || source.TraceID == "" {
 			t.Fatal("deployment mutation lost administrator audit source")
 		}
-		if in.Provider != "e2b" || in.ExpectedGeneration != 2 || in.E2B == nil || in.E2B.APIKey != "synthetic-private-key" {
+		if in.Provider != "e2b" || in.ExpectedGeneration != 2 || in.Configuration == nil || in.Configuration.(*e2b.DeploymentConfiguration).APIKey != "synthetic-private-key" {
 			t.Fatal("write-only fields were lost")
 		}
 		return store.RuntimeDeploymentView{Provider: in.Provider}, nil
@@ -40,7 +42,7 @@ func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const selection = `{"provider":"e2b","expected_generation":2,"e2b":{"api_key":"synthetic-private-key","template":"qualified:build"}}`
+	const selection = `{"provider":"e2b","expected_generation":2,"credential":{"api_key":"synthetic-private-key"},"configuration":{"template":"qualified:build"}}`
 	for _, tc := range []struct {
 		method, path, token, body string
 		status                    int

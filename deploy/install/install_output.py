@@ -38,7 +38,7 @@ def sandbox_lines(config, selection, deployment, reachable):
     return lines
 
 
-def summary(root, config, addresses, fresh, selection, deployment, reachable, incomplete):
+def summary(root, config, addresses, fresh, selection, deployment, reachable, incomplete, moved=()):
     mode = config["mode"]
     status = ("Services are running; sandbox setup needs attention." if incomplete else
               "Installation complete." if fresh else "Installation settings checked. Use Status below to inspect service health.")
@@ -46,6 +46,8 @@ def summary(root, config, addresses, fresh, selection, deployment, reachable, in
     heading("Access")
     for address in addresses:
         print("  " + address)
+    for purpose, taken, port in moved:
+        print(f"  Port {taken} was in use; {purpose} uses {port}.")
     heading("Sign in" if mode != "core-only" else "Authentication")
     print(f"  Core key file: {root / 'secrets/core.key'}")
     if mode != "core-only":

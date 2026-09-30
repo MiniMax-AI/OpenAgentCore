@@ -24,7 +24,7 @@ These flags seed the installation's `config.json` once. Their defaults, valid va
 | `--public-url` | `public_url` |
 | `--host` | `host` |
 | `--core-port` | `ports.core` |
-| `--port` | `ports.web` |
+| `--web-port` | `ports.web` |
 | `--core-url` | `web.core_url` |
 | `--ingress` | `ingress` |
 <!-- END install-flags -->
@@ -72,11 +72,22 @@ Docker and microsandbox start at the Standard size in Web's [`standard-sizes.jso
 
 ## Listeners and access
 
-The default combined Docker installation selects `--ingress managed` and `--host 0.0.0.0`. Its gateway publishes Web on `--port` (8080 by default) and uses ports 80 and 443 for automatic HTTPS. Core's `--core-port` stays on loopback and PostgreSQL stays private. `--host` accepts IPv4 or IPv6, without a port, scheme or zone. Use a concrete server IP in the browser, not a wildcard. Managed ingress needs a local Docker Unix socket and Docker's ability to publish ports 80 and 443.
+The default combined Docker installation selects `--ingress managed` and `--host 0.0.0.0`. Its gateway publishes Web on `--web-port` (8080 by default) and uses ports 80 and 443 for automatic HTTPS. Core's `--core-port` stays on loopback and PostgreSQL stays private. `--host` accepts IPv4 or IPv6, without a port, scheme or zone. Use a concrete server IP in the browser, not a wildcard. Managed ingress needs a local Docker Unix socket and Docker's ability to publish ports 80 and 443.
 
 `--ingress external` uses your own reverse proxy instead. It is the only choice for Core-only, Web-only and native Core installations, and their default. Core and Web then listen on `--host`, loopback by default. External non-loopback listeners require an HTTPS `public_url` and a [reverse proxy](#https-and-the-reverse-proxy), and Web's domain setup is unavailable: set `public_url` in `config.json` and run `oac apply`.
 
 `--public-url` seeds a DNS-based HTTPS origin for unattended setup; with managed ingress, the certificate and connectivity checks must pass. The ingress mode is fixed for an installation.
+
+### Ports
+
+Before it verifies the bundle or loads images, the installer checks `--host` and every port the installation will listen on: Web's and Core's, PostgreSQL's with native Core, and 80 and 443 with managed ingress.
+
+- `--host` must be an address of this machine, or a wildcard such as `0.0.0.0`.
+- A port set with `--web-port`, `--core-port` or in the `--config` file must be free, and so must a port that a loopback `--public-url` names, such as 8080 in `http://localhost:8080`. Otherwise the installer stops, names the port and prints the `ss` command that finds the program holding it.
+- A Web or Core port you leave out moves to the first free port above its default, at most 20 above, and never to another port of the same installation. The installer writes the chosen port to `config.json` and names it in the summary, for example `Port 8080 was in use; Web uses 8081.`
+- Managed ingress needs ports 80 and 443 and never moves them. If either is in use, free it, or install with `--ingress external` and use your own [reverse proxy](#https-and-the-reverse-proxy).
+
+After installation, `oac apply` [checks the ports](../configuration.md#how-oac-apply-works) of a changed `host` or port.
 
 ## HTTPS and the reverse proxy
 

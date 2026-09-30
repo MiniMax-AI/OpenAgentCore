@@ -100,13 +100,13 @@ func (p Policy) engineCapabilities(peer *gateway.Session, engine string, snapsho
 	if !caps.ExecutionControls {
 		return fail("device must advertise execution_controls")
 	}
-	if profile.WebSearchControl && !caps.WebSearchControl {
+	if profile.WebSearchControl.IsSupported() && !caps.WebSearchControl {
 		return fail("device must advertise web_search_control")
 	}
 	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput || !caps.MessageItems) {
 		return fail("device must support structured output and message observations")
 	}
-	if profile.TextVerbosity && !caps.TextVerbosity {
+	if profile.TextVerbosity.IsSupported() && !caps.TextVerbosity {
 		return fail("device must advertise text_verbosity")
 	}
 	if !caps.ToolObservations {

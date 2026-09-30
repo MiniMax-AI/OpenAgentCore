@@ -46,6 +46,7 @@ SETTING_FLAGS = ("core_only", "web_only", "native_core", *(
     flag.removeprefix("--").replace("-", "_") for flag in SETTING_ARGUMENTS))
 RETIRED_NODE_FLAGS = ("--sandbox-provider and --provider are retired: use --sandbox docker|microsandbox|e2b|none. "
                       "The installer no longer adds this host as a node; add it with Add node on the Nodes page in Web.")
+AVOID = 20  # An omitted Core or Web port moves at most this far above its default.
 DOCKER_RISKS = """Docker sandboxes isolate less than microsandbox, the default:
 - Containers share the node's kernel, so a container escape reaches the host;
   microsandbox runs each sandbox in its own microVM.
@@ -100,15 +101,6 @@ def verify_bundle(bundle):
                  "native/microsandbox/libkrunfw.so.5.6.1"):
         artifact(manifest, name)
     return manifest
-
-
-def free_port(port, host):
-    family = socket.AF_INET6 if ipaddress.ip_address(host).version == 6 else socket.AF_INET
-    with socket.socket(family) as sock:
-        try:
-            sock.bind((host, port))
-        except OSError:
-            raise InstallError(f"Port {port} is already in use; select another port") from None
 
 
 def database_port():
@@ -239,6 +231,50 @@ def seed_config(args, document):
         values["host"] = "0.0.0.0"
     values["ports.database"] = database_port() if native else None
     return config_model.initial(mode, native, **values)
+
+
+def check_listeners(args, document, config):
+    """Check every listener of a new installation, before anything slow runs.
+
+    A taken port that the flags or the --config file set fails, and so does one that a
+    loopback public_url names. An omitted Core or Web port moves to the first free port
+    above its default that no other listener uses. Returns the config and
+    (purpose, taken port, chosen port) for each move.
+    """
+    if document is None:
+        names, where = {key: flag for flag, (key, _) in SETTING_ARGUMENTS.items()}, ""
+        given = {key for key, flag in names.items() if getattr(args, flag.removeprefix("--").replace("-", "_")) is not None}
+    else:
+        names, where = {}, " in the --config file"
+        given = {key for key in ("ports.core", "ports.web") if config_model.lookup(document, key) is not None}
+    if not oac_cli.address_available(config["host"]):
+        raise InstallError(f"{config['host']} ({names.get('host', 'host')}{where}) is not an address of this machine; "
+                           "use one of its addresses")
+    public_url, moved = config["public_url"], []
+    for listener in configuration.listeners(config):
+        if oac_cli.port_free(listener.host, listener.port):
+            continue
+        if listener.purpose == "HTTPS":
+            remedy = "--ingress external" if document is None else '"ingress": "external" in the --config file'
+            raise InstallError(f"Automatic HTTPS needs ports 80 and 443, and port {listener.port} is already in use on "
+                               f"{listener.host}. Free it, or use an existing reverse proxy with {remedy}; "
+                               f"find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
+        name = names.get(listener.setting, listener.setting)
+        # Moving the port would leave a loopback public_url pointing at the old one.
+        pinned = bool(public_url) and loopback_origin(public_url) and origin_port(public_url) == listener.port
+        if pinned:
+            name += " and " + names.get("public_url", "public_url")
+        if listener.setting in given or pinned or listener.purpose not in ("Core", "Web"):
+            raise InstallError(oac_cli.port_in_use(listener, name + where))
+        taken = {other.port for other in configuration.listeners(config)}
+        port = next((port for port in range(listener.port + 1, listener.port + AVOID + 1)
+                     if port not in taken and oac_cli.port_free(listener.host, port)), None)
+        if port is None:
+            raise InstallError(f"Ports {listener.port} to {listener.port + AVOID} are in use on {listener.host}; "
+                               f"set a free port with {name}{where}")
+        config["ports"][listener.setting.removeprefix("ports.")] = port
+        moved.append((listener.purpose, listener.port, port))
+    return config, moved
 
 
 def loopback_origin(value):
@@ -529,7 +565,7 @@ def create(root, args, config, manifest, images):
     write(root / "config.json", json.dumps(config, indent=2) + "\n")
 
 
-def finish(root, bundle, manifest, fresh=False, selection=None):
+def finish(root, bundle, manifest, fresh=False, selection=None, moved=()):
     """Repair and start this release while the installer holds the installation lock."""
     state = oac_cli.load_state(root)
     step("Preparing service files")
@@ -563,13 +599,13 @@ def finish(root, bundle, manifest, fresh=False, selection=None):
             deployment = sandbox_setup.initialize(root, config, state, selection)
         except sandbox_setup.SandboxSetupError as error:
             failure = error
-    summary(root, config, fresh, selection, deployment, incomplete=failure is not None)
+    summary(root, config, fresh, selection, deployment, incomplete=failure is not None, moved=moved)
     if failure:
         raise InstallError(f"{str(failure).rstrip('.')}. Services are installed and running; "
                            f"choose the sandbox backend {choose_where(mode)}")
 
 
-def summary(root, config, fresh, selection=None, deployment=None, incomplete=False):
+def summary(root, config, fresh, selection=None, deployment=None, incomplete=False, moved=()):
     mode, public_url, ports = config["mode"], config["public_url"], config["ports"]
     addresses = []
     if mode != "core-only":
@@ -587,7 +623,7 @@ def summary(root, config, fresh, selection=None, deployment=None, incomplete=Fal
             # The loopback Web port does not serve the public API.
             addresses.append("API base URL: " + api + " (local only)")
     install_output.summary(root, config, addresses, fresh, selection, deployment,
-                           nodes_reach(public_url), incomplete)
+                           nodes_reach(public_url), incomplete, moved)
 
 
 def main(argv=None):
@@ -596,17 +632,18 @@ def main(argv=None):
     if root.is_symlink() or root.resolve() != root:
         raise InstallError("Installation directory must be canonical and not a symlink")
     bundle = Path(__file__).resolve().parent
+    if not args.explicit_install_dir:
+        old = Path.home() / ".parsar/core"
+        if (old / "state.json").exists() or (old / "installation.json").exists():
+            raise InstallError(oac_cli.UNSUPPORTED_VERSION)
+    # Settings and listeners take seconds to check, so they come before hashing the bundle.
+    step("Checking installation settings")
+    prepared = prepare_fresh(args) if layout(root) == "empty" else None
     step("Verifying installation files")
     manifest = verify_bundle(bundle)
     # Refuse foreign state before even creating a lock; repeat under the lock to
     # protect against another current installer finishing between these reads.
     check_release(root, manifest)
-    if not args.explicit_install_dir:
-        old = Path.home() / ".parsar/core"
-        if (old / "state.json").exists() or (old / "installation.json").exists():
-            raise InstallError(oac_cli.UNSUPPORTED_VERSION)
-    step("Checking installation settings")
-    prepared = prepare_fresh(args) if layout(root) == "empty" else None
     if root.parent == Path.home() / ".oac":
         root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -631,6 +668,7 @@ def prepare_fresh(args):
     choice = check_flags(args, document)
     config = seed_config(args, document)
     check_public_url(config, choice)
+    config, moved = check_listeners(args, document, config)
     if config["mode"] == "web-only":
         key = read_core_key_file(args.core_key_file)
         if oac_cli.core_installation(config["web"]["core_url"], key)[0] == 404:
@@ -641,7 +679,7 @@ def prepare_fresh(args):
            if choice == "e2b" else None)
     if choice == "docker":
         confirm_docker(args.accept_docker_risks)
-    return config, choice, e2b
+    return config, choice, e2b, moved
 
 
 def install_locked(args, root, bundle, manifest, prepared):
@@ -672,22 +710,18 @@ def install_locked(args, root, bundle, manifest, prepared):
                            "service. Preserve the directory and reinstall into a new empty directory")
     if kind == "other":
         raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
-    config, choice, e2b = prepared
+    config, choice, e2b, moved = prepared
     step("Checking host requirements")
     check_host()
-    manifest = verify_bundle(bundle)
     if config.get("native_core"):
         native_service.preflight(bundle, root)
-    for key in ("core", "web", "database"):
-        if key in config["ports"]:
-            free_port(config["ports"][key], "127.0.0.1" if key == "database" else config["host"])
     if ingress_config.enabled(config):
         ingress_config.preflight()
     selection = None if choice == "none" else sandbox_setup.selection(bundle, manifest, choice, e2b)
     images = image_loader(manifest, bundle)(image_names(config["mode"], config.get("native_core", False), ingress_config.enabled(config)))
     step("Creating installation settings and credentials")
     create(root, args, config, manifest, images)
-    finish(root, bundle, manifest, fresh=True, selection=selection)
+    finish(root, bundle, manifest, fresh=True, selection=selection, moved=moved)
 
 
 if __name__ == "__main__":

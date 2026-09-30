@@ -4,7 +4,7 @@ import type { SandboxAllocation, SandboxDeployment, SandboxNode } from "@oac/age
 import { expectManagementBoundary, failNext, openConsole, setDeployment, setNode, writes } from "./console";
 
 const deploymentPath = "/core/v1/sandbox/deployment";
-const templateDiscoveryPath = "/core/v1/sandbox/e2b/templates";
+const templateDiscoveryPath = "/core/v1/sandbox/providers/e2b/discovery";
 const rollout = (page: Page) => page.getByRole("region", { name: "Configuration rollout", exact: true });
 const fact = (scope: Locator, label: string) => scope.locator("dt").filter({ hasText: new RegExp(`^${label}`) }).locator("..").locator("dd");
 async function inspectRollout(page: Page, values: Record<string, string>) {
@@ -181,15 +181,15 @@ test("E2B omitted-key updates keep the saved key while explicit same-key replace
   const initial = await deploymentRead(page);
   await editE2B(page);
   const omitted = await saveConfiguration(page);
-  expect(omitted.input).toMatchObject({ provider: "e2b", expected_generation: 1, e2b: { template: initial.e2b!.template } });
-  expect(omitted.input.e2b).not.toHaveProperty("api_key");
+  expect(omitted.input).toMatchObject({ provider: "e2b", expected_generation: 1, configuration: { template: initial.configuration!.template } });
+  expect(omitted.input).not.toHaveProperty("credential");
   expect((await omitted.response.json()).generation).toBe(1);
   await expect(page.getByRole("dialog", { name: "Change resources", exact: true })).toBeHidden();
   const key = "fixture-same-team-key";
   for (const generation of [1, 2]) {
     await editE2B(page, key);
     const explicit = await saveConfiguration(page);
-    expect(explicit.input).toMatchObject({ provider: "e2b", expected_generation: generation, e2b: { template: initial.e2b!.template, api_key: key } });
+    expect(explicit.input).toMatchObject({ provider: "e2b", expected_generation: generation, configuration: { template: initial.configuration!.template } , credential: { api_key: key } });
     const current = await explicit.response.json() as SandboxDeployment;
     expect(current.generation).toBe(generation + 1);
     expect(current.resources).toEqual(initial.resources);

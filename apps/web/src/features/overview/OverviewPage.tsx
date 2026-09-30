@@ -318,7 +318,7 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
 
 function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
   if (fleet?.deployment.provider !== "e2b") return null;
-  return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending, template: fleet.deployment.e2b?.template || null };
+  return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending, template: fleet.deployment.configuration?.template || null };
 }
 
 /** Core and its sandbox nodes (or E2B's cloud) as a topology; each opens a popover with the way onward. */

@@ -43,7 +43,7 @@ import (
 	historystoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -186,17 +186,7 @@ func run() error {
 	options := []api.Option{api.WithCoreMetrics(metrics), api.WithSubagents(executionStore), api.WithSkills(executionStore), api.WithSourceFiles(executionStore), api.WithSessionArtifacts(executionStore), api.WithRuntimeObservations(observationService)}
 	if managedNodes != nil {
 		options = append(options, api.WithSandboxManager(executionStore, managedNodes.admin))
-		options = append(options, api.WithSandboxE2BDiscovery(func(ctx context.Context, input api.SandboxE2BDiscoveryInput, template string) (api.SandboxE2BDiscoveryResult, error) {
-			binary := os.Getenv("OAC_E2B_PROVIDER_BIN")
-			if binary == "" {
-				binary = "/opt/oac/e2b/oac-e2b-provider"
-			}
-			out, err := e2b.Discover(ctx, &e2b.ProcessCaller{}, binary, input.APIKey, input.APIURL, input.Domain, template)
-			if err != nil {
-				return api.SandboxE2BDiscoveryResult{}, err
-			}
-			return api.SandboxE2BDiscoveryResult{Templates: out.Templates, Builds: out.Builds}, nil
-		}))
+		options = append(options, api.WithSandboxConfigurationDiscovery(providers.DiscoverConfiguration))
 	}
 	var keyAdmin *api.DeploymentAuthenticator
 	if managedNodes != nil {

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
@@ -38,40 +40,40 @@ type ResourceStore interface {
 }
 
 type Handler struct {
-	nativeInstaller       *nativeinstaller.Catalog
-	nativeVersion         string
-	executorConnections   func(context.Context, string, string) (bool, error)
-	coreMetrics           CoreMetricsService
-	sandboxStore          *store.Store
-	deploymentAuth        *DeploymentAuthenticator
-	sandboxSetup          func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
-	sandboxE2BDiscover    func(context.Context, SandboxE2BDiscoveryInput, string) (SandboxE2BDiscoveryResult, error)
-	sandboxUpdate         func(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error)
-	sandboxReset          func(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error)
-	sandboxResetCancel    func(context.Context, uint64) (store.RuntimeDeploymentView, error)
-	policy                execution.Policy
-	store                 ResourceStore
-	auth                  *Authenticator
-	projectKeys           ProjectAPIKeyStore
-	writeAudit            WriteAuditStore
-	adminArchive          func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)
-	adminManagement       AdminManagementStore
-	harnesses             map[string]bool
-	modelProviderDefaults ModelProviderDefaults
-	engine                string
-	inputs                InputSubmitter
-	executorURL           string
-	hostedEnvironments    bool
-	directoryReader       EnvironmentDirectoryReader
-	fileWriter            EnvironmentFileWriter
-	skills                SkillStore
-	sourceFiles           SourceFileStore
-	artifacts             SessionArtifactStore
-	subagents             SubagentStore
-	runtimeObservations   RuntimeObservationService
-	runtimeHistory        RuntimeHistoryService
-	installation          *Installation
-	installationBindings  func(context.Context) (store.AddressBindings, error)
+	nativeInstaller              *nativeinstaller.Catalog
+	nativeVersion                string
+	executorConnections          func(context.Context, string, string) (bool, error)
+	coreMetrics                  CoreMetricsService
+	sandboxStore                 *store.Store
+	deploymentAuth               *DeploymentAuthenticator
+	sandboxSetup                 func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)
+	sandboxConfigurationDiscover func(context.Context, string, sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error)
+	sandboxUpdate                func(context.Context, store.SandboxDeploymentUpdateRequest) (store.RuntimeDeploymentView, error)
+	sandboxReset                 func(context.Context, store.SandboxResetRequest) (store.RuntimeDeploymentView, error)
+	sandboxResetCancel           func(context.Context, uint64) (store.RuntimeDeploymentView, error)
+	policy                       execution.Policy
+	store                        ResourceStore
+	auth                         *Authenticator
+	projectKeys                  ProjectAPIKeyStore
+	writeAudit                   WriteAuditStore
+	adminArchive                 func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)
+	adminManagement              AdminManagementStore
+	harnesses                    map[string]bool
+	modelProviderDefaults        ModelProviderDefaults
+	engine                       string
+	inputs                       InputSubmitter
+	executorURL                  string
+	hostedEnvironments           bool
+	directoryReader              EnvironmentDirectoryReader
+	fileWriter                   EnvironmentFileWriter
+	skills                       SkillStore
+	sourceFiles                  SourceFileStore
+	artifacts                    SessionArtifactStore
+	subagents                    SubagentStore
+	runtimeObservations          RuntimeObservationService
+	runtimeHistory               RuntimeHistoryService
+	installation                 *Installation
+	installationBindings         func(context.Context) (store.AddressBindings, error)
 }
 
 func NewHandler(s ResourceStore, auth *Authenticator, engine string, options ...Option) (http.Handler, error) {

@@ -7,10 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"strings"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/google/uuid"
@@ -76,7 +77,10 @@ func (s *Store) deploymentView(ctx context.Context, q *sqlc.Queries) (RuntimeDep
 		return RuntimeDeploymentView{}, err
 	}
 	d := row.RuntimeDeployment
-	result := runtimeDeploymentView(d, s.publicURL)
+	result, err := runtimeDeploymentView(d, s.publicURL)
+	if err != nil {
+		return RuntimeDeploymentView{}, err
+	}
 	if err := json.Unmarshal(row.Rollout, &result.Rollout); err != nil {
 		return RuntimeDeploymentView{}, err
 	}

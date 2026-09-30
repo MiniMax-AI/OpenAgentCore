@@ -32,7 +32,8 @@ func BuildDirect(c DirectConfig) (sandbox.SandboxProvider, error) {
 	return p, nil
 }
 func buildE2B(c DirectConfig) (sandbox.SandboxProvider, error) {
-	if c.Selection.E2B == nil {
+	configuration, ok := c.Selection.Configuration.(*e2b.DeploymentConfiguration)
+	if !ok || configuration == nil {
 		return nil, errors.New("E2B deployment configuration is unavailable")
 	}
 	binary := os.Getenv("OAC_E2B_PROVIDER_BIN")
@@ -46,8 +47,8 @@ func buildE2B(c DirectConfig) (sandbox.SandboxProvider, error) {
 		resources = &c.Selection.DeploymentSpec.Resources
 	}
 	provider, err := e2b.NewWithCaller(e2b.Config{Binary: binary, StateDir: os.Getenv("OAC_E2B_STATE_DIR"),
-		Resources: resources, InstallationID: c.InstallationID, APIKey: c.Selection.E2B.APIKey, Template: c.Selection.E2B.Template,
-		APIURL: c.Selection.E2B.APIURL, Domain: c.Selection.E2B.Domain, TimeoutSeconds: 3600}, &e2b.ProcessCaller{Fence: c.Fence})
+		Resources: resources, InstallationID: c.InstallationID, APIKey: configuration.APIKey, Template: configuration.Template,
+		APIURL: configuration.APIURL, Domain: configuration.Domain, TimeoutSeconds: 3600}, &e2b.ProcessCaller{Fence: c.Fence})
 	if err != nil {
 		return nil, errors.New("E2B provider cannot load; check the installed helper and private state directory")
 	}

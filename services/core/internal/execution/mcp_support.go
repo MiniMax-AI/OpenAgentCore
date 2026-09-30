@@ -14,7 +14,7 @@ func (p Policy) mcpCredentialBindings(engine string, snapshot Snapshot) (map[str
 		return nil, err
 	}
 	profile, qualified := p.Engines.Lookup(engine)
-	if len(selected) > 0 && (!qualified || !profile.MCPBearer) {
+	if len(selected) > 0 && (!qualified || !profile.MCPBearer.IsSupported()) {
 		return nil, errors.New("The configured engine currently supports anonymous HTTP MCP only.")
 	}
 	return selected, nil

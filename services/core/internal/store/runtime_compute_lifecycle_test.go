@@ -18,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -328,7 +329,7 @@ func (f *computeLifecycleFixture) start() {
 	if sandbox.SupportsResidentPause(f.managed) {
 		_, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{
 			Provider: "e2b", DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"),
-			E2B: &sandbox.E2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString(), TemplateBuild: &sandbox.TemplateBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048}},
+			Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString(), TemplateBuild: &e2b.DeploymentBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048}},
 		})
 		if err != nil {
 			t.Fatalf("initialize resident test deployment: %v", err)

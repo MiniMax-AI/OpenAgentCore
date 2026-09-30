@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -25,7 +26,7 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			// A registered text-only profile must stay closed regardless of the
 			// adapters currently qualified by the built-in catalog.
 			profile, _ := (engine.Catalog{}).Lookup("codex")
-			profile.MessageImages = false
+			profile.MessageImages = proto.CapabilityUnsupported
 			h.d.Policy = execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"codex": profile})}
 			worker, err := execution.StartWorker(t.Context(), h.d)
 			if err != nil {

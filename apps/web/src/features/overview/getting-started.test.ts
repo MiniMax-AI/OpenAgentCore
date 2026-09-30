@@ -5,7 +5,7 @@ import type { FleetState } from "../fleet/use-sandbox-fleet";
 import { checklistStorageKey, checklistView, gettingStartedSteps, nextStepAfterNode, rememberInstallation } from "./getting-started";
 import { node, project } from "./test-fixtures";
 
-const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({
+const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({ credential_configured: false, configuration: {}, metadata: {},
   rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes",
   resources: { allocations: 0, pending: 0 }, suspension: null, ...overrides,
 });
@@ -63,7 +63,7 @@ describe("Getting started steps", () => {
     expect(sandboxes(fleet(deployment(), []))).toMatchObject({ state: "todo", action: "add-node" });
     expect(sandboxes(fleet(deployment(), [node("n1", { provider_ready: false }), node("n2", { online: false })]))).toMatchObject({ state: "todo", action: "nodes" });
     expect(sandboxes(fleet(deployment()))).toMatchObject({ state: "done" });
-    const e2b = (status: string | null) => deployment({ provider: "e2b", mode: "direct", e2b: { template: "t", api_url: "https://api.e2b.app", domain: "e2b.app", credential_configured: true, template_build: { status, resources: { cpus: 2, memory_mib: 2048, root_disk_mib: null } } } });
+    const e2b = (status: string | null) => deployment({ provider: "e2b", mode: "direct", configuration: { template: "t", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status, resources: { cpus: 2, memory_mib: 2048, root_disk_mib: null } } } });
     expect(sandboxes(fleet(e2b("building"), []))).toMatchObject({ state: "todo", cloud: true });
     expect(sandboxes(fleet(e2b("ready"), []))).toMatchObject({ state: "done", cloud: true });
     // Saved before Core recorded the build: Core admitted it, so it counts as ready.

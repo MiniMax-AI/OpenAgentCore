@@ -17,7 +17,7 @@ This page follows the default path. Every flag, existing reverse proxies, split 
 - Linux amd64 with Python 3.9 or newer, and curl. No GitHub account or CLI is needed.
 - Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
 - An account that can run `docker` and write to its home directory. Ordinary users and root both work; the installer never calls sudo.
-- Free ports 8080 (initial Web access), 80 and 443 (HTTPS), and 8091 (Core, on loopback). Docker must be able to publish them; the installer does not change host policy.
+- Free ports 80 and 443 for HTTPS, and a port each for initial Web access (8080) and Core (8091, on loopback); see [ports](install-options.md#ports). Docker must be able to publish them; the installer does not change host policy.
 - A DNS hostname that points to this host, before you connect applications, nodes, E2B or self-hosted machines. You can install and sign in first.
 
 The Core host needs no KVM; nodes that run microsandbox do.
@@ -36,16 +36,16 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 The script picks the latest stable release, verifies its checksum and runs the bundled installer, which:
 
-1. checks the host and loads the Core, Web, PostgreSQL and HTTPS gateway images;
+1. checks its settings and the ports it needs, then the host, and loads the Core, Web, PostgreSQL and HTTPS gateway images;
 2. creates the [installation directory](../configuration.md#installation-directory), `~/.oac/core`, with the Core key, `config.json` and the `oac` management command;
-3. starts the services with Docker Compose. The gateway serves Web on port 8080 of all IPv4 interfaces; Core stays on loopback and PostgreSQL stays private;
+3. starts the services with Docker Compose. The gateway serves Web on all IPv4 interfaces, at the port the installer prints; Core stays on loopback and PostgreSQL stays private;
 4. selects the microsandbox sandbox backend at the Standard size. It adds no node.
 
 It creates no Project or key and makes no model request. It ends by printing the console address, the API base URL and the next steps.
 
 ## Sign in to Web
 
-1. Open the console address the installer printed: `http://SERVER_IP:8080`, or your public URL if you passed one. Behind NAT, use the IP address your browser reaches. Until a domain is set, Web accepts IP addresses only, not host names.
+1. Open the console address the installer printed, such as `http://SERVER_IP:8080`, or your public URL if you passed one. Behind NAT, use the IP address your browser reaches. Until a domain is set, Web accepts IP addresses only, not host names.
 2. Sign in with the [Core key](operations.md#core-key), the installation's administrator credential. Web has no user accounts.
 
    ```sh

@@ -28,9 +28,9 @@ func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
 	s := &managedSetup{installationID: id}
-	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, E2B: &sandbox.E2BConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
+	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	_, err := s.prepare(t.Context(), selection)
-	if !errors.Is(err, e2b.ErrTemplateInvalid) || strings.Contains(err.Error(), "synthetic-private-key") || s.selected.Load() != nil {
+	if !errors.Is(err, sandbox.ErrConfigurationSelection) || strings.Contains(err.Error(), "synthetic-private-key") || s.selected.Load() != nil {
 		t.Fatal("rejected candidate lost its safe diagnostic or was published", err)
 	}
 	s.store = &setupStore{value: selection}
@@ -67,7 +67,7 @@ else:
 	id := uuid.NewString()
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Generation: 1,
 		Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
-		E2B:           &sandbox.E2BConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
+		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	s := &managedSetup{installationID: id, store: &setupStore{value: selection}}
 	if _, err := s.prepare(t.Context(), selection); err == nil || s.selected.Load() != nil {
 		t.Fatal("invalid new template selection was published", err)
@@ -107,12 +107,12 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
 	s := &managedSetup{installationID: id, store: &setupStore{}}
-	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
+	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	candidate, err := s.prepare(t.Context(), selection)
 	disk := int32(24063)
-	if err != nil || candidate.Selection.E2B.TemplateBuild == nil || candidate.Selection.E2B.TemplateBuild.CPUs != 4 || candidate.Selection.E2B.TemplateBuild.MemoryMiB != 4096 ||
-		*candidate.Selection.E2B.TemplateBuild.RootDiskMiB != disk || candidate.Selection.E2B.TemplateBuild.Status != "ready" {
-		t.Fatalf("validated build was not recorded: %+v %v", candidate.Selection.E2B.TemplateBuild, err)
+	if err != nil || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild == nil || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.CPUs != 4 || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.MemoryMiB != 4096 ||
+		*candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.RootDiskMiB != disk || candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild.Status != "ready" {
+		t.Fatalf("validated build was not recorded: %+v %v", candidate.Selection.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild, err)
 	}
 	// The published candidate enforces the adopted resources.
 	selection.Specification.Resources = sandbox.Resources{CPUs: 4, MemoryMiB: 4096}
@@ -143,8 +143,8 @@ func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 	t.Setenv("OAC_E2B_STATE_DIR", state)
 	id := uuid.NewString()
 	s := &managedSetup{installationID: id, store: &setupStore{}}
-	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "synthetic-team-a", Template: "public-team-b:" + uuid.NewString()}}
-	if _, err := s.prepare(t.Context(), selection); !errors.Is(err, e2b.ErrTeamMismatch) || s.selected.Load() != nil {
+	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-team-a", Template: "public-team-b:" + uuid.NewString()}}
+	if _, err := s.prepare(t.Context(), selection); !errors.Is(err, sandbox.ErrCredentialOwnership) || s.selected.Load() != nil {
 		t.Fatal("public readability accepted as team ownership", err)
 	}
 }

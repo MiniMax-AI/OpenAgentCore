@@ -80,18 +80,18 @@ function nodeRollout(previous = 0) {
 }
 
 function unconfiguredDeployment(generation = 0, ownerEpoch = 3) {
-  return { installation_id: INSTALLATION_ID, provider: "", core_url: publicUrl(), reset: null, rollout: noNodeRollout(), owner_epoch: ownerEpoch, generation, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
+  return { installation_id: INSTALLATION_ID, provider: "", credential_configured: false, core_url: publicUrl(), reset: null, rollout: noNodeRollout(), owner_epoch: ownerEpoch, generation, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
 }
 
 function configuredDeployment() {
-  return { installation_id: INSTALLATION_ID, provider: "docker", core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
+  return { installation_id: INSTALLATION_ID, provider: "docker", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
 }
 /** The E2B template build as Core read it when the selection was saved. */
 const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
 
 // E2B runs sandboxes in its cloud: no nodes, only what Core holds there.
 function e2bDeployment() {
-  return { ...configuredDeployment(), provider: "e2b", mode: "direct", rollout: noNodeRollout(), resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, e2b: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", api_url: "https://api.e2b.app", domain: "e2b.app", credential_configured: true, template_build: templateBuild } };
+  return { ...configuredDeployment(), provider: "e2b", mode: "direct", rollout: noNodeRollout(), resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, configuration: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } };
 }
 
 function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", credentials = "configured", installers = true, artifacts = "docker,microsandbox") {
@@ -331,16 +331,16 @@ function nodeDetail(node) {
 }
 
 async function sandboxRoute(request, response, path, url) {
-  const e2bTemplates = ["/e2b/templates", "/e2b/templates/template/builds"];
+  const e2bTemplates = ["/providers/e2b/discovery"];
   if (e2bTemplates.includes(path)) {
     if (request.method !== "POST") return error(response, 405, "Method not allowed.");
     const input = await body(request);
     const knownEndpoint = [
       ["https://sandbox.sandbase.ai", "sandbox.sandbase.ai"],
       ["https://api.e2b.app", "e2b.app"],
-    ].some(([apiURL, domain]) => input.api_url === apiURL && input.domain === domain);
-    if (input.api_key !== "fixture-private-key" || !knownEndpoint) return error(response, 400, "Invalid E2B connection.");
-    if (path === "/e2b/templates") return send(response, 200, { templates: [{ id: "template", names: ["fixture-runtime"] }] });
+    ].some(([apiURL, domain]) => input.configuration?.api_url === apiURL && input.configuration?.domain === domain);
+    if (input.credential?.api_key !== "fixture-private-key" || !knownEndpoint) return error(response, 400, "Invalid E2B connection.");
+    if (!input.query?.template) return send(response, 200, { templates: [{ id: "template", names: ["fixture-runtime"] }] });
     return send(response, 200, { builds: [{ id: "94be54a1-138c-4f30-bc87-b13686272dbe", cpus: 2, memory_mib: 2048 }] });
   }
   // Retired even for authenticated callers; never reinterpret maintenance as reset.
@@ -393,16 +393,16 @@ async function sandboxRoute(request, response, path, url) {
     if (e2b && state.installation === "local") return error(response, 409, "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback (public_url in config.json, OAC_PUBLIC_URL for Core).", "sandbox_configuration_error");
     // Synthetic classifier outcomes only; never persist or echo submitted keys.
     if (e2b) {
-      if (!input.e2b?.template || (initialize && !input.e2b.api_key) || (Object.hasOwn(input.e2b ?? {}, "api_key") && !input.e2b.api_key)) return error(response, 400, "The E2B API key was rejected.", "e2b_api_key_invalid");
-      if (input.e2b.api_key === "fixture-other-team-key") return error(response, 409, "This E2B key cannot manage the retained deployment. Reset before changing teams.", "e2b_team_mismatch");
-      if (input.e2b.api_key === "fixture-invalid-key") return error(response, 400, "The E2B API key was rejected.", "e2b_api_key_invalid");
+      if (!input.configuration?.template || (initialize && !input.credential?.api_key) || (Object.hasOwn(input, "credential") && !input.credential?.api_key)) return error(response, 400, "The E2B API key was rejected.", "sandbox_credential_invalid");
+      if (input.credential?.api_key === "fixture-other-team-key") return error(response, 409, "This E2B key cannot manage the retained deployment. Reset before changing teams.", "sandbox_credential_ownership");
+      if (input.credential?.api_key === "fixture-invalid-key") return error(response, 400, "The E2B API key was rejected.", "sandbox_credential_invalid");
     }
     // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
     const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
     const previous = state.deployment;
     const specification = { resources, ...(input.runtime ? { runtime: input.runtime } : {}) };
-    const explicitKey = e2b && Object.hasOwn(input.e2b, "api_key");
-    const sameSelection = !initialize && JSON.stringify(specification) === JSON.stringify(previous.specification) && (!e2b || input.e2b.template === previous.e2b?.template);
+    const explicitKey = e2b && Object.hasOwn(input, "credential");
+    const sameSelection = !initialize && JSON.stringify(specification) === JSON.stringify(previous.specification) && (!e2b || input.configuration.template === previous.configuration?.template);
     // Omission can be a no-op; every explicit key, including identical bytes,
     // takes the verified replacement path and advances the target generation.
     if (sameSelection && !explicitKey) return send(response, 200, previous);
@@ -416,7 +416,7 @@ async function sandboxRoute(request, response, path, url) {
       resources: held,
       rollout: e2b ? { ...noNodeRollout(), previous_generation_sandboxes: held.allocations + held.pending } : nodeRollout(held.allocations + held.pending),
       specification,
-      ...(e2b ? { e2b: { template: input.e2b?.template ?? "", api_url: input.e2b?.api_url ?? state.deployment.e2b?.api_url ?? "https://api.e2b.app", domain: input.e2b?.domain ?? state.deployment.e2b?.domain ?? "e2b.app", credential_configured: true, template_build: templateBuild } } : {}),
+      ...(e2b ? { configuration: { template: input.configuration?.template ?? "", api_url: input.configuration?.api_url ?? state.deployment.configuration?.api_url ?? "https://api.e2b.app", domain: input.configuration?.domain ?? state.deployment.configuration?.domain ?? "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } } : { configuration: {}, metadata: {}, credential_configured: false }),
       suspension: input.provider === "microsandbox" ? { idle_seconds: 300, retention_seconds: 86400 } : null,
     };
     return send(response, 200, state.deployment);

@@ -512,8 +512,10 @@ definitions:
     type: object
   api.SandboxDeploymentChangeInput:
     properties:
-      e2b:
-        $ref: '#/definitions/api.SandboxE2BInput'
+      configuration:
+        type: object
+      credential:
+        type: object
       expected_generation:
         type: integer
       provider:
@@ -531,8 +533,10 @@ definitions:
     type: object
   api.SandboxDeploymentInput:
     properties:
-      e2b:
-        $ref: '#/definitions/api.SandboxE2BInput'
+      configuration:
+        type: object
+      credential:
+        type: object
       expected_generation:
         type: integer
       provider:
@@ -547,37 +551,6 @@ definitions:
         $ref: '#/definitions/sandbox.RuntimeRelease'
     required:
       - expected_generation
-    type: object
-  api.SandboxE2BDiscoveryInput:
-    properties:
-      api_key:
-        type: string
-      api_url:
-        type: string
-      domain:
-        type: string
-    type: object
-  api.SandboxE2BDiscoveryResult:
-    properties:
-      builds:
-        items:
-          $ref: '#/definitions/e2b.ReadyBuild'
-        type: array
-      templates:
-        items:
-          $ref: '#/definitions/e2b.TemplateSummary'
-        type: array
-    type: object
-  api.SandboxE2BInput:
-    properties:
-      api_key:
-        type: string
-      api_url:
-        type: string
-      domain:
-        type: string
-      template:
-        type: string
     type: object
   api.SandboxEnrollmentToken:
     properties:
@@ -890,23 +863,14 @@ definitions:
       service:
         $ref: '#/definitions/coremetrics.ServiceState'
     type: object
-  e2b.ReadyBuild:
+  sandbox.ConfigurationDiscoveryInput:
     properties:
-      cpus:
-        type: integer
-      id:
-        type: string
-      memory_mib:
-        type: integer
-    type: object
-  e2b.TemplateSummary:
-    properties:
-      id:
-        type: string
-      names:
-        items:
-          type: string
-        type: array
+      configuration:
+        type: object
+      credential:
+        type: object
+      query:
+        type: object
     type: object
   sandbox.DeploymentSpec:
     properties:
@@ -1147,15 +1111,19 @@ definitions:
     type: object
   store.RuntimeDeploymentView:
     properties:
+      configuration:
+        type: object
       core_url:
         description: 'Read-only: the installation public URL (OAC_PUBLIC_URL), which nodes and sandboxes use to reach Core. The deployment API does not accept it.'
         type: string
-      e2b:
-        $ref: '#/definitions/store.SandboxE2BView'
+      credential_configured:
+        type: boolean
       generation:
         type: integer
       installation_id:
         type: string
+      metadata:
+        type: object
       mode:
         type: string
       owner_epoch:
@@ -1375,30 +1343,6 @@ definitions:
       pending:
         type: integer
     type: object
-  store.SandboxE2BTemplateBuildView:
-    properties:
-      resources:
-        $ref: '#/definitions/store.SandboxTemplateResources'
-      status:
-        description: Build status at selection time; validation admits only ready builds.
-        type: string
-        x-nullable: true
-    type: object
-  store.SandboxE2BView:
-    properties:
-      api_url:
-        type: string
-      credential_configured:
-        type: boolean
-      domain:
-        type: string
-      template:
-        type: string
-      template_build:
-        allOf:
-          - $ref: '#/definitions/store.SandboxE2BTemplateBuildView'
-        description: The fixed template build as Core read it when this selection was saved.
-    type: object
   store.SandboxNodeRollout:
     properties:
       diagnostic:
@@ -1516,18 +1460,6 @@ definitions:
         type: integer
       retention_seconds:
         type: integer
-    type: object
-  store.SandboxTemplateResources:
-    properties:
-      cpus:
-        type: integer
-        x-nullable: true
-      memory_mib:
-        type: integer
-        x-nullable: true
-      root_disk_mib:
-        type: integer
-        x-nullable: true
     type: object
   store.WriteOperation:
     properties:
@@ -6427,83 +6359,6 @@ paths:
       summary: Start or escalate a durable sandbox deployment reset
       tags:
         - Sandbox Manager
-  /core/v1/sandbox/e2b/templates:
-    post:
-      consumes:
-        - application/json
-      description: Core key only. Uses a transient E2B credential and endpoint through the pinned SDK helper; returns safe template metadata. Does not save the credential or allocate compute.
-      parameters:
-        - description: Transient E2B connection
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.SandboxE2BDiscoveryInput'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.SandboxE2BDiscoveryResult'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List templates visible to an E2B credential
-      tags:
-        - Sandbox Manager
-  /core/v1/sandbox/e2b/templates/{template_id}/builds:
-    post:
-      consumes:
-        - application/json
-      description: Core key only. Reads one template through the pinned SDK helper with a transient E2B credential. Returns ready builds only, without allocating compute.
-      parameters:
-        - description: Template ID
-          in: path
-          name: template_id
-          required: true
-          type: string
-        - description: Transient E2B connection
-          in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/api.SandboxE2BDiscoveryInput'
-      produces:
-        - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.SandboxE2BDiscoveryResult'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/api.CoreErrorResponse'
-      security:
-        - DeploymentAdminAuth: []
-      summary: List ready builds for an E2B template
-      tags:
-        - Sandbox Manager
   /core/v1/sandbox/enrollment-tokens:
     post:
       consumes:
@@ -6779,6 +6634,52 @@ paths:
       security:
         - DeploymentAdminAuth: []
       summary: List retained allocations on a sandbox node
+      tags:
+        - Sandbox Manager
+  /core/v1/sandbox/providers/{provider}/discovery:
+    post:
+      consumes:
+        - application/json
+      description: Core key only. Uses transient write-only credentials. The provider validates configuration and query fields and returns safe catalog metadata. Does not save credentials, change a deployment or allocate compute. Discovery is not deployment admission.
+      parameters:
+        - description: Registered provider kind
+          in: path
+          name: provider
+          required: true
+          type: string
+        - description: Transient provider connection and query
+          in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/sandbox.ConfigurationDiscoveryInput'
+      produces:
+        - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+      security:
+        - DeploymentAdminAuth: []
+      summary: Discover sandbox provider configuration
       tags:
         - Sandbox Manager
   /core/v1/sandbox/runtime-observations:

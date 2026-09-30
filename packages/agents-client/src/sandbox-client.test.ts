@@ -39,8 +39,10 @@ const allocation = {
   state: "running", compute_phase: "running", compute_phase_changed_at: null, diagnostic: "", initialization: "ready", created_at: created,
 };
 const runtime = { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) };
-const unconfigured = { rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
+const unconfigured = {
+  credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
 const docker = {
+  configuration: {}, metadata: {},
   ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
   resources: { allocations: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 }, runtime }, specification_digest: "0".repeat(64),
 };
@@ -51,7 +53,7 @@ const microsandbox = {
 /** An E2B selection saved before Core recorded its template build. */
 const e2bDeployment = {
   ...docker, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 } },
-  e2b: { template: "runtime:00000000-0000-0000-0000-000000000001", api_url: "https://api.e2b.app", domain: "e2b.app", credential_configured: true, template_build: { status: null, resources: { cpus: null, memory_mib: null, root_disk_mib: null } } },
+  configuration: { template: "runtime:00000000-0000-0000-0000-000000000001", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status: null, resources: { cpus: null, memory_mib: null, root_disk_mib: null } } },
 };
 const reads: Record<string, (client: SandboxAdminClient) => Promise<unknown>> = {
   nodes: (client) => client.listNodes(),
@@ -94,7 +96,7 @@ describe("strict sandbox administration projections", () => {
     ["allocations", "another node's allocation", { data: [{ ...allocation, node_id: unready.id }] }],
     ["deployment", "a missing suspension", unsuspended],
     ["deployment", "a specification without its digest", undigested],
-    ["deployment", "an e2b member for Docker", { ...docker, e2b: e2bDeployment.e2b }],
+    ["deployment", "an e2b member for Docker", { ...docker, configuration: e2bDeployment.configuration }],
     ["deployment", "E2B without its e2b member", { ...docker, provider: "e2b", mode: "direct" }],
     ["deployment", "an unknown mode", { ...docker, mode: "hybrid" }],
   ])("rejects %s with %s", async (name, _, body) => {
@@ -102,7 +104,7 @@ describe("strict sandbox administration projections", () => {
   });
 
   it("never passes a reflected E2B key through", async () => {
-    const reflected = { ...e2bDeployment, e2b: { ...e2bDeployment.e2b, api_key: "e2b-private-key" } };
+    const reflected = { ...e2bDeployment, configuration: { ...e2bDeployment.configuration, api_key: "e2b-private-key" } };
     const error = await read("deployment", reflected).catch((caught: unknown) => caught);
     expect(error).toMatchObject({ status: 502, code: "invalid_admin_response" });
     expect(JSON.stringify(error) + String(error)).not.toContain("e2b-private-key");
@@ -118,7 +120,7 @@ describe("Core sandbox credential boundaries", () => {
     const input = { api_key: "private-test-key", api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai" };
     expect(await client.listE2BTemplates(input)).toHaveLength(1);
     expect(await client.listE2BReadyBuilds("tpl_123", input)).toHaveLength(1);
-    expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/core/v1/sandbox/e2b/templates", "/core/v1/sandbox/e2b/templates/tpl_123/builds"]);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/core/v1/sandbox/providers/e2b/discovery", "/core/v1/sandbox/providers/e2b/discovery"]);
     expect(fetch.mock.calls.every(([, init]) => init?.method === "POST" && !new Headers(init?.headers).has("Authorization") && String(init?.body).includes("private-test-key"))).toBe(true);
   });
 
@@ -196,13 +198,13 @@ describe("Core sandbox credential boundaries", () => {
   it.each([409, 503])("does not retry initialization after HTTP %s", async (status) => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { message: "Setup failed", code: "sandbox_deployment_conflict" } }, status));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin", fetch });
-    await expect(admin.initializeDeployment({ expected_generation: 0, provider: "microsandbox" })).rejects.toThrow("Setup failed");
+    await expect(admin.initializeDeployment({ expected_generation: 0, provider: "microsandbox" })).rejects.toThrow("The sandbox deployment cannot change in its current state.");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
   it("does not retry an uncertain initialization transport failure", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Connection lost"));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin", fetch });
-    await expect(admin.initializeDeployment({ expected_generation: 0, provider: "docker" })).rejects.toThrow("Connection lost");
+    await expect(admin.initializeDeployment({ expected_generation: 0, provider: "docker" })).rejects.toThrow("Sandbox configuration could not be confirmed.");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
   it("uses the explicit admin credential and admin routes without a project beta header", async () => {
@@ -234,19 +236,19 @@ describe("hosted provider configuration", () => {
   it("writes E2B configuration and generation without beta headers or browser credentials", async () => {
     const deployment = {
       ...e2bDeployment, generation: 2, resources: { allocations: 0, pending: 0 },
-      e2b: { template: e2b.template, api_url: "https://api.e2b.app", domain: "e2b.app", credential_configured: true, template_build: { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 24063 } } },
+      configuration: { template: e2b.template, api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 24063 } } },
     };
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response(deployment));
     const client = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch });
     const controller = new AbortController();
     // Omitted E2B resources are filled from the validated template build.
-    expect(await client.initializeDeployment({ expected_generation: 0, provider: "e2b", e2b })).toEqual(deployment);
-    await client.updateDeployment({ provider: "e2b", e2b, expected_generation: 1 }, { signal: controller.signal });
+    expect(await client.initializeDeployment({ expected_generation: 0, provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key } })).toEqual(deployment);
+    await client.updateDeployment({ provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key }, expected_generation: 1 }, { signal: controller.signal });
     await client.cancelReset(2);
     expect(fetch.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
       ["/core/v1/sandbox/deployment", "POST"], ["/core/v1/sandbox/deployment", "PUT"], ["/core/v1/sandbox/deployment/reset?expected_generation=2", "DELETE"],
     ]);
-    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toEqual({ provider: "e2b", e2b, expected_generation: 1 });
+    expect(JSON.parse(String(fetch.mock.calls[1]?.[1]?.body))).toEqual({ provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key }, expected_generation: 1 });
     expect(fetch.mock.calls[1]?.[1]?.signal).toBe(controller.signal);
     expect(fetch.mock.calls[2]?.[1]?.body).toBeUndefined();
     for (const [, init] of fetch.mock.calls) {
@@ -257,8 +259,8 @@ describe("hosted provider configuration", () => {
   it.each([409, 503])("does not expose reflected E2B keys or retry configuration after HTTP %s", async (status) => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { message: e2b.api_key, code: e2b.api_key, param: e2b.api_key } }, status));
     const client = new SandboxAdminClient({ fetch });
-    await expect(client.updateDeployment({ provider: "e2b", e2b, expected_generation: 1 })).rejects.toMatchObject({ code: "sandbox_configuration_unconfirmed", status });
-    await client.initializeDeployment({ expected_generation: 0, provider: "e2b", e2b }).catch((error) => {
+    await expect(client.updateDeployment({ provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key }, expected_generation: 1 })).rejects.toMatchObject({ code: "sandbox_configuration_unconfirmed", status });
+    await client.initializeDeployment({ expected_generation: 0, provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key } }).catch((error) => {
       expect(JSON.stringify(error)).not.toContain(e2b.api_key);
       expect(error.message).not.toContain(e2b.api_key);
     });
@@ -270,10 +272,10 @@ describe("hosted provider configuration", () => {
       .mockResolvedValueOnce(response({ error: rejection }, 409))
       .mockResolvedValueOnce(response({ error: { ...rejection, message: rejection.message + e2b.api_key } }, 409));
     const client = new SandboxAdminClient({ fetch });
-    const shown = await client.initializeDeployment({ expected_generation: 0, provider: "e2b", e2b }).catch((error: unknown) => error);
+    const shown = await client.initializeDeployment({ expected_generation: 0, provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key } }).catch((error: unknown) => error);
     expect(shown).toMatchObject({ status: 409, code: "sandbox_configuration_error", message: rejection.message, param: null });
     expect((shown as AgentCoreError).errorType).toBeUndefined();
-    await expect(client.initializeDeployment({ expected_generation: 0, provider: "e2b", e2b })).rejects.toMatchObject({ status: 409, code: "sandbox_configuration_error", message: rejection.message, param: null });
+    await expect(client.initializeDeployment({ expected_generation: 0, provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key } })).rejects.toMatchObject({ status: 409, code: "sandbox_configuration_error", message: rejection.message, param: null });
   });
   it("keeps legacy E2B ownership reset actionable without reflecting either key", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: {
@@ -281,7 +283,7 @@ describe("hosted provider configuration", () => {
       param: "revoked-old-key", details: { current_provider: "e2b", requested_provider: "e2b", secret: e2b.api_key },
     } }, 409));
     const client = new SandboxAdminClient({ fetch });
-    const error = await client.updateDeployment({ provider: "e2b", e2b, expected_generation: 1 }).catch((error: unknown) => error);
+    const error = await client.updateDeployment({ provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key }, expected_generation: 1 }).catch((error: unknown) => error);
     expect(error).toMatchObject({ status: 409, code: "sandbox_reset_required", message: "Reset the sandbox deployment before changing this configuration.", param: null });
     expect((error as AgentCoreError).details).toBeUndefined();
     expect(JSON.stringify(error)).not.toContain("revoked-old-key");
@@ -339,7 +341,7 @@ describe("durable reset projection", () => {
       details: { current_generation: 7, arbitrary: secret },
     } }, 409));
     const error = await new SandboxAdminClient({ fetch }).updateDeployment({ provider: "e2b", expected_generation: 1,
-      e2b: { api_key: secret, template: "runtime:00000000-0000-0000-0000-000000000001" } }).catch(error => error);
+      credential: { api_key: secret }, configuration: { template: "runtime:00000000-0000-0000-0000-000000000001" } }).catch(error => error);
     expect(error).toMatchObject({ code: "sandbox_generation_stale", status: 409, details: { current_generation: 7 } });
     expect(JSON.stringify(error)).not.toContain(secret);
     expect(error.message).not.toContain(secret);
@@ -365,18 +367,18 @@ it("uses the authoritative rollout signal instead of retained old Sessions for p
 it("omits a preserved key and submits an explicit same key once without retry", async () => {
   const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response(e2bDeployment));
   const client = new SandboxAdminClient({ fetch });
-  await client.updateDeployment({ provider: "e2b", expected_generation: 1, e2b: { template: e2bDeployment.e2b.template } });
-  await client.updateDeployment({ provider: "e2b", expected_generation: 1, e2b: { template: e2bDeployment.e2b.template, api_key: "same-key" } });
+  await client.updateDeployment({ provider: "e2b", expected_generation: 1, configuration: { template: e2bDeployment.configuration.template } });
+  await client.updateDeployment({ provider: "e2b", expected_generation: 1, configuration: { template: e2bDeployment.configuration.template }, credential: { api_key: "same-key" } });
   expect(fetch).toHaveBeenCalledTimes(2);
-  expect(JSON.parse(String(fetch.mock.calls[0]![1]!.body)).e2b).not.toHaveProperty("api_key");
-  expect(JSON.parse(String(fetch.mock.calls[1]![1]!.body)).e2b.api_key).toBe("same-key");
+  expect(JSON.parse(String(fetch.mock.calls[0]![1]!.body))).not.toHaveProperty("credential");
+  expect(JSON.parse(String(fetch.mock.calls[1]![1]!.body)).credential.api_key).toBe("same-key");
 });
 
 it("keeps omitted-key public-URL errors actionable without reflecting a stored key", async () => {
   const secret = "previously-stored-secret";
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_configuration_error", message: `arbitrary upstream ${secret}`, param: secret, details: { credential: secret } } }, 409));
   const client = new SandboxAdminClient({ fetch });
-  const error = await client.updateDeployment({ provider: "e2b", expected_generation: 1, e2b: { template: e2bDeployment.e2b.template } }).catch(error => error);
+  const error = await client.updateDeployment({ provider: "e2b", expected_generation: 1, configuration: { template: e2bDeployment.configuration.template } }).catch(error => error);
   expect(error).toMatchObject({ status: 409, code: "sandbox_configuration_error", param: null, message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback." });
   expect(JSON.stringify(error)).not.toContain(secret);
   expect(error.message).not.toContain(secret);

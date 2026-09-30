@@ -7,10 +7,8 @@ import (
 	"math"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrSandboxCredentialUnavailable = errors.New("sandbox credential encryption is unavailable")
@@ -29,13 +27,6 @@ func validateSandboxSelection(input SandboxDeploymentSetupRequest) error {
 }
 
 func (s *Store) sandboxSelectionEqual(d sqlc.RuntimeDeployment, input SandboxDeploymentSetupRequest) (bool, error) {
-	var spec sandbox.DeploymentSpec
-	if json.Unmarshal(d.Specification, &spec) != nil {
-		return false, ErrSandboxDeploymentConflict
-	}
-	if spec.Digest(d.ProviderKind) != input.DeploymentSpec.Digest(input.Provider) {
-		return false, nil
-	}
 	if d.ProviderKind != input.Provider {
 		return false, nil
 	}
@@ -48,28 +39,27 @@ func (s *Store) sandboxSelectionEqual(d sqlc.RuntimeDeployment, input SandboxDep
 		// changing installed deployments during migration or read-only access.
 		return false, nil
 	}
-	if input.E2B == nil {
-		return d.E2bTemplate == "", nil
-	}
-	if d.E2bTemplate != input.E2B.Template {
-		return false, nil
-	}
-	saved := input
-	saved.E2B = &sandbox.E2BConfiguration{APIKey: input.E2B.APIKey, Template: d.E2bTemplate, APIURL: d.E2bApiUrl, Domain: d.E2bDomain}
-	saved, savedErr := providers.Normalize(saved)
-	normalized, inputErr := providers.Normalize(input)
-	if savedErr != nil || inputErr != nil || saved.E2B.APIURL != normalized.E2B.APIURL || saved.E2B.Domain != normalized.E2B.Domain {
-		return false, nil
-	}
-	key, err := s.credentialCipher.OpenSandboxDeployment(d.E2bCredential, runtimeUUID(d.InstallationID), uint64(d.Generation))
+	previous, err := s.sandboxSetup(d)
 	if err != nil {
-		return false, ErrSandboxCredentialUnavailable
+		return false, err
 	}
-	return string(key) == input.E2B.APIKey, nil
+	normalized, err := providers.Normalize(input)
+	if err != nil {
+		return false, sandboxConfigurationError(err)
+	}
+	if previous.Specification.Digest(d.ProviderKind) != normalized.DeploymentSpec.Digest(input.Provider) {
+		return false, nil
+	}
+	return providers.Equal(input.Provider, previous.Configuration, normalized.Configuration)
 }
 
+func configurationJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return raw
+}
 func (s *Store) saveSandboxSelection(ctx context.Context, q *sqlc.Queries, d sqlc.RuntimeDeployment, input SandboxDeploymentSetupRequest) error {
-	// Only a complete specification is stored, including derived E2B resources.
 	if err := providers.ValidateSpecification(input.Provider, input.DeploymentSpec); err != nil {
 		return sandboxConfigurationError(err)
 	}
@@ -81,48 +71,34 @@ func (s *Store) saveSandboxSelection(ctx context.Context, q *sqlc.Queries, d sql
 	if err != nil {
 		return sandboxConfigurationError(err)
 	}
-	normalized, err := providers.Normalize(input)
+	input, err = providers.Normalize(input)
 	if err != nil {
 		return sandboxConfigurationError(err)
 	}
-	input = normalized
-	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, BackendFingerprint: description.BackendFingerprint, Generation: generation, Mode: description.Mode, IdleSeconds: description.IdleSeconds, RetentionSeconds: description.RetentionSeconds}
+	record, err := providers.Encode(input.Provider, input.Configuration)
+	if err != nil {
+		return sandboxConfigurationError(err)
+	}
+	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: input.Provider, BackendFingerprint: description.BackendFingerprint, Generation: generation, Mode: description.Mode, IdleSeconds: description.IdleSeconds, RetentionSeconds: description.RetentionSeconds, ProviderConfig: configurationJSON(record.Public), ProviderMetadata: configurationJSON(record.Metadata)}
 	params.Specification, _ = json.Marshal(input.DeploymentSpec)
-	if input.E2B != nil {
-		encrypted, err := s.credentialCipher.SealSandboxDeployment([]byte(input.E2B.APIKey), runtimeUUID(d.InstallationID), uint64(generation))
+	if len(record.Secret) > 0 {
+		params.ProviderCredential, err = s.credentialCipher.SealSandboxDeployment(record.Secret, runtimeUUID(d.InstallationID), uint64(generation))
 		if err != nil {
 			return ErrSandboxCredentialUnavailable
 		}
-		params.E2bCredential, params.E2bTemplate = encrypted, input.E2B.Template
-		params.E2bApiUrl, params.E2bDomain = input.E2B.APIURL, input.E2B.Domain
-		build := templateBuildColumns(input.E2B.TemplateBuild)
-		params.E2bTemplateBuildStatus, params.E2bTemplateCpus = build.E2bTemplateBuildStatus, build.E2bTemplateCpus
-		params.E2bTemplateMemoryMib, params.E2bTemplateRootDiskMib = build.E2bTemplateMemoryMib, build.E2bTemplateRootDiskMib
 	}
 	return q.InitializeSandboxDeployment(ctx, params)
 }
 
-func templateBuildColumns(build *sandbox.TemplateBuild) sqlc.RecordSandboxTemplateBuildParams {
-	var params sqlc.RecordSandboxTemplateBuildParams
-	if build != nil {
-		params.E2bTemplateBuildStatus = pgtype.Text{String: build.Status, Valid: true}
-		params.E2bTemplateCpus = pgtype.Int4{Int32: build.CPUs, Valid: true}
-		params.E2bTemplateMemoryMib = pgtype.Int4{Int32: build.MemoryMiB, Valid: true}
-		if build.RootDiskMiB != nil {
-			params.E2bTemplateRootDiskMib = pgtype.Int4{Int32: *build.RootDiskMiB, Valid: true}
-		}
+func recordConfigurationMetadata(ctx context.Context, q *sqlc.Queries, input SandboxDeploymentSetupRequest) error {
+	record, err := providers.Encode(input.Provider, input.Configuration)
+	if err != nil {
+		return sandboxConfigurationError(err)
 	}
-	return params
-}
-
-// recordTemplateBuild saves the build read by this request's validation when
-// the selection is otherwise unchanged, without a new generation. Saving the
-// same E2B selection again thus records a build that an older Core did not.
-func recordTemplateBuild(ctx context.Context, q *sqlc.Queries, input SandboxDeploymentSetupRequest) error {
-	if input.E2B == nil || input.E2B.TemplateBuild == nil {
+	if len(record.Metadata) == 0 {
 		return nil
 	}
-	return q.RecordSandboxTemplateBuild(ctx, templateBuildColumns(input.E2B.TemplateBuild))
+	return q.RecordSandboxConfigurationMetadata(ctx, record.Metadata)
 }
 
 func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID string, input SandboxDeploymentSetupRequest) (RuntimeDeploymentView, error) {
@@ -162,7 +138,7 @@ func (s *Store) InitializeSandboxDeployment(ctx context.Context, installationID 
 			if !equal {
 				return ErrSandboxDeploymentConflict
 			}
-			if err := recordTemplateBuild(ctx, q, input); err != nil {
+			if err := recordConfigurationMetadata(ctx, q, input); err != nil {
 				return err
 			}
 		} else if err := s.saveSandboxSelection(ctx, q, d, input); err != nil {
@@ -237,7 +213,7 @@ func (s *Store) UpdateSandboxDeployment(ctx context.Context, installation string
 		if err != nil {
 			return err
 		}
-		if !equal || input.E2B != nil && input.E2B.ReplaceCredential {
+		if !equal || input.ReplacesCredential() {
 			if err := q.RetainSandboxGeneration(ctx); err != nil {
 				return err
 			}
@@ -249,14 +225,14 @@ func (s *Store) UpdateSandboxDeployment(ctx context.Context, installation string
 			}
 			{
 				action := "change"
-				if input.E2B != nil && input.E2B.ReplaceCredential {
+				if input.ReplacesCredential() {
 					action = "replace_credential"
 				}
 				if err := recordDeploymentMutation(ctx, q, action, "sandbox_deployment", installation); err != nil {
 					return err
 				}
 			}
-		} else if err := recordTemplateBuild(ctx, q, input.SandboxDeploymentSetupRequest); err != nil {
+		} else if err := recordConfigurationMetadata(ctx, q, input.SandboxDeploymentSetupRequest); err != nil {
 			return err
 		}
 		result, err = s.deploymentView(ctx, q)

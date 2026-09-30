@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+
 	"github.com/google/uuid"
 )
 
@@ -155,7 +157,7 @@ func TestSandboxSelectionRejectsWhitespaceInE2BCredential(t *testing.T) {
 	for _, separator := range []string{" ", "\t", "\r", "\n", "\x00", "\u00a0", "\u2003", "\u3000"} {
 		t.Run(fmt.Sprintf("U+%04X", []rune(separator)[0]), func(t *testing.T) {
 			selection := e2bSelection()
-			selection.E2B.APIKey = "prefix" + separator + "suffix"
+			selection.Configuration.(*e2b.DeploymentConfiguration).APIKey = "prefix" + separator + "suffix"
 			if err := validateSandboxSelection(selection); !errors.Is(err, ErrInvalidInput) {
 				t.Fatalf("credential containing whitespace or NUL accepted: %v", err)
 			}

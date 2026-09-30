@@ -9,8 +9,8 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -102,6 +102,8 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	if writeCoreValidationError(w, err) {
 		return
 	}
+	var configuration *sandbox.ConfigurationError
+	var unsupported *providercontract.UnsupportedError
 	var cursor *store.InvalidCursorError
 	var selection *store.MCPCredentialSelectionError
 	var sandboxConfiguration *store.SandboxConfigurationError
@@ -109,14 +111,28 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	var resetRequired *store.SandboxResetRequiredError
 	var inUse *store.SandboxInUseError
 	switch {
-	case errors.Is(err, e2b.ErrRequestUnconfirmed):
-		writeError(w, http.StatusServiceUnavailable, "e2b_request_unconfirmed", "E2B verification could not be confirmed.")
-	case errors.Is(err, e2b.ErrTemplateInvalid):
-		writeError(w, http.StatusBadRequest, "e2b_template_build_invalid", "Select a ready immutable E2B template build with matching resources.", "e2b.template")
-	case errors.Is(err, e2b.ErrCredentialInvalid):
-		writeError(w, http.StatusBadRequest, "e2b_api_key_invalid", "The E2B API key was rejected.", "e2b.api_key")
-	case errors.Is(err, e2b.ErrTeamMismatch):
-		writeError(w, http.StatusConflict, "e2b_team_mismatch", "The E2B key cannot manage the retained deployment. Reset before changing teams.", "e2b.api_key")
+	case errors.As(err, &configuration):
+		status := http.StatusInternalServerError
+		switch configuration.Class {
+		case sandbox.ConfigurationInvalid:
+			status = http.StatusBadRequest
+		case sandbox.ConfigurationConflict:
+			status = http.StatusConflict
+		case sandbox.ConfigurationUnconfirmed:
+			status = http.StatusServiceUnavailable
+		default:
+			writeError(w, status, "internal_error", "The operation could not be completed.")
+			return
+		}
+		if configuration.Param == "" {
+			writeError(w, status, configuration.Code, configuration.Message)
+		} else {
+			writeError(w, status, configuration.Code, configuration.Message, configuration.Param)
+		}
+	case errors.As(err, &unsupported):
+		writeError(w, http.StatusBadRequest, "sandbox_operation_unsupported", "The selected sandbox provider does not support this operation.")
+	case errors.Is(err, sandbox.ErrInvalid):
+		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", "Invalid sandbox provider configuration.", "configuration")
 	case errors.As(err, &stale):
 		writeCoreError(w, http.StatusConflict, "sandbox_generation_stale", "The sandbox deployment generation changed. Refresh before submitting again.", CoreErrorDetails{"current_generation": CoreErrorNumber(float64(stale.CurrentGeneration))})
 	case errors.As(err, &resetRequired):

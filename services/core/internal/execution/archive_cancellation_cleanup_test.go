@@ -3,13 +3,15 @@ package execution
 import (
 	"context"
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
@@ -66,7 +68,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 				t.Fatal(err)
 			}
-			selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
+			selection := store.SandboxDeploymentSetupRequest{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-key", Template: "runtime:" + uuid.NewString()}}
 			selection.Resources.CPUs = 2
 			selection.Resources.MemoryMiB = 2048
 			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, selection); err != nil {

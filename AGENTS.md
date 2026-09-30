@@ -60,9 +60,9 @@ Existing code still breaks these rules in places. The bullets below are examples
 - Protocol definitions spread over several files, such as the Sandbox Provider contract across `services/core/internal/sandbox/` and `services/core/internal/providercontract/`.
 - Support discovered by type assertion, such as daemon workspace reads in `apps/daemon/internal/dispatch/workspace_read.go` and Core's observation source selection in `services/core/cmd/server/main.go`.
 - Harness-specific code in shared places, such as Core engine profiles in `services/core/internal/engine/<harness>.go`, daemon discovery and registration, the installer's Harness list and default in `deploy/install/config.schema.json`, and Core's own default Harness when `OAC_DEFAULT_HARNESS` is unset.
-- Vendor-specific configuration, routes and UI outside the adapter, such as the E2B selection and store fields (`services/core/internal/sandbox/selection.go`), the `/core/v1/sandbox/e2b/*` routes, E2B credential hooks in `providers.Adapter` and the E2B Web views.
+- Vendor-specific UI outside the adapter, such as E2B Web views. Configuration storage and management now use the adapter codec contract described in the [Sandbox Provider guide](docs/sandbox-provider.md#register-the-provider-kind).
 - Host-local state spread over several `~/.oac/` directories, such as the Runtime's `~/.oac/daemon/`, `~/.oac/runtime/<kind>/` and `~/.oac/environments/<environment-id>/`.
-- Persistence and vendor types in the Core and machine OpenAPI documents, such as the `store.*` and `e2b.*` definitions in `contracts/agents-api/core.openapi.yaml`.
+- Persistence and vendor types in the Core and machine OpenAPI documents, such as the `store.*` definitions in `contracts/agents-api/core.openapi.yaml`.
 
 ## Documentation
 

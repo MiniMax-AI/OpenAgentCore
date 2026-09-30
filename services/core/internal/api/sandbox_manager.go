@@ -53,8 +53,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 		return
 	}
 	r.Get("/sandbox/deployment", h.sandboxDeployment)
-	r.Post("/sandbox/e2b/templates", h.discoverSandboxE2BTemplates)
-	r.Post("/sandbox/e2b/templates/{template_id}/builds", h.discoverSandboxE2BBuilds)
+	r.Post("/sandbox/providers/{provider}/discovery", h.discoverSandboxConfiguration)
 	r.Post("/sandbox/deployment", h.initializeSandboxDeployment)
 	r.Put("/sandbox/deployment", h.updateSandboxDeployment)
 	r.Post("/sandbox/deployment/reset", h.startSandboxReset)

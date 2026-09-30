@@ -37,9 +37,9 @@ export const coreErrors = {
   "runtime_node_in_use": "The node has active allocations or retained resources. Clear allocations, snapshots, reservations and pending cleanup before removal.",
   "runtime_node_unavailable": "The selected sandbox node is unavailable or has no capacity.",
   "sandbox_admin_not_configured": "Sandbox administration is not configured on this console.",
-  "e2b_team_mismatch": "This E2B key cannot manage the retained deployment. Reset before changing teams.",
-  "e2b_api_key_invalid": "The E2B API key was rejected. The saved configuration is unchanged.",
-  "e2b_template_build_invalid": "Select a ready immutable E2B template build with matching resources.",
-  "e2b_request_unconfirmed": "E2B verification could not be confirmed. Refresh before submitting again.",
+  "sandbox_credential_ownership": "This E2B key cannot manage the retained deployment. Reset before changing teams.",
+  "sandbox_credential_invalid": "The E2B API key was rejected. The saved configuration is unchanged.",
+  "sandbox_configuration_invalid": "Select a ready immutable E2B template build with matching resources.",
+  "sandbox_verification_unconfirmed": "E2B verification could not be confirmed. Refresh before submitting again.",
   "sandbox_configuration_error": "E2B sandboxes need a public HTTPS address. Configure a domain and HTTPS in System."
 } as const;

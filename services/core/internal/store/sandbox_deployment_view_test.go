@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -31,7 +33,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	}
 	disk := int32(24063)
 	input.Resources = sandbox.Resources{CPUs: 2, MemoryMiB: 2048}
-	input.E2B.TemplateBuild = &sandbox.TemplateBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048, RootDiskMiB: &disk}
+	input.Configuration.(*e2b.DeploymentConfiguration).TemplateBuild = &e2b.DeploymentBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048, RootDiskMiB: &disk}
 	view, err := w.InitializeSandboxDeployment(t.Context(), id, input)
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +52,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	// saving the identical selection again records it without a new generation.
 	forget := func() {
 		t.Helper()
-		if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET e2b_template_build_status=NULL, e2b_template_cpus=NULL, e2b_template_memory_mib=NULL, e2b_template_root_disk_mib=NULL"); err != nil {
+		if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET provider_metadata='{}'::jsonb"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -58,7 +60,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	forget()
 	view, err = s.GetRuntimeDeployment(t.Context())
 	raw, _ = json.Marshal(view)
-	if err != nil || !bytes.Contains(raw, []byte(`"template_build":{"status":null,"resources":{"cpus":null,"memory_mib":null,"root_disk_mib":null}}`)) {
+	if err != nil || !bytes.Contains(raw, []byte(`"metadata":{}`)) {
 		t.Fatalf("unknown build was not null: %s %v", raw, err)
 	}
 	input.ExpectedGeneration = 1
@@ -89,7 +91,16 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{
 		DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}, ExpectedGeneration: 2}
 	view, err = resetAndSelect(t, w, id, update.ExpectedGeneration, update.SandboxDeploymentSetupRequest)
-	if err != nil || view.E2B != nil || view.Suspension == nil || view.Suspension.IdleSeconds != 300 || view.Suspension.RetentionSeconds != 86400 {
+	if err != nil || string(view.Configuration) != "{}" || view.Suspension == nil || view.Suspension.IdleSeconds != 300 || view.Suspension.RetentionSeconds != 86400 {
 		t.Fatalf("microsandbox suspension view = %+v %v", view, err)
 	}
+}
+
+func e2bPublicConfiguration(t *testing.T, v RuntimeDeploymentView) *e2b.DeploymentConfiguration {
+	t.Helper()
+	c, err := (e2b.ConfigurationAdapter{}).Decode(sandbox.ConfigurationRecord{Public: v.Configuration, Metadata: v.Metadata})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c.(*e2b.DeploymentConfiguration)
 }

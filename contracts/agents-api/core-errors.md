@@ -66,10 +66,10 @@ message, template name, key or unlisted-resource count is returned in details.
 
 | HTTP | Code | Meaning | Param |
 | --- | --- | --- | --- |
-| 400 | `e2b_api_key_invalid` | Provider explicitly rejected authentication | `e2b.api_key` |
-| 400 | `e2b_template_build_invalid` | Candidate immutable build is invalid or does not match resources | `e2b.template` |
-| 409 | `e2b_team_mismatch` | Candidate key does not prove ownership/manageability of the retained deployment | `e2b.api_key` |
-| 503 | `e2b_request_unconfirmed` | Verification, receipt settlement or bounded credential fencing could not be confirmed | null |
+| 400 | `sandbox_credential_invalid` | Provider explicitly rejected authentication | `credential` |
+| 400 | `sandbox_configuration_invalid` | Candidate immutable build is invalid or does not match resources | `configuration` |
+| 409 | `sandbox_credential_ownership` | Candidate key does not prove ownership/manageability of the retained deployment | `credential` |
+| 503 | `sandbox_verification_unconfirmed` | Verification, receipt settlement or bounded credential fencing could not be confirmed | null |
 
 Missing or unsettled Create receipts are uncertainty, never evidence of a different
 team or released compute. The typed client projects these codes to fixed local

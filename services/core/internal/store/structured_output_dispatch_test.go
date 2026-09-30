@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -16,7 +17,7 @@ import (
 func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	h := newDispatchHarness(t)
 	configuration := json.RawMessage(`{"agent":{"model":"fixture","text":{"format":{"type":"json_schema","schema":{"type":"object"}}}},"environment":{"type":"none"}}`)
-	profile := engine.Profile{Placements: []string{"none"}, StructuredOutput: true}
+	profile := enginetest.Profile(func(p *engine.Profile) { p.StructuredOutput = proto.CapabilitySupported })
 	policy := execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"fixture_harness": profile})}
 	if err := policy.ValidateSessionConfiguration("fixture_harness", configuration); err != nil {
 		t.Fatal(err)
@@ -45,7 +46,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	input := h.message("start", "Run")
 	// A restart can remove qualification while admitted work remains queued.
 	// Runtime advertisements cannot qualify an operation on their own.
-	profile.StructuredOutput = false
+	profile.StructuredOutput = proto.CapabilityUnsupported
 	h.d.Policy = execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"fixture_harness": profile})}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()

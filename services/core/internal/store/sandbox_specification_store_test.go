@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/google/uuid"
@@ -61,7 +63,7 @@ func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *test
 				t.Fatal("saved deployment lost its resources or Runtime provenance", err)
 			}
 			preview, err := SandboxSetupForSelection(view.InstallationID, input)
-			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || preview.IdleSeconds != setup.IdleSeconds || preview.RetentionSeconds != setup.RetentionSeconds || !reflect.DeepEqual(preview.E2B, setup.E2B) {
+			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || preview.IdleSeconds != setup.IdleSeconds || preview.RetentionSeconds != setup.RetentionSeconds || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
 				t.Fatal("preview and persisted normalized deployment disagree", err)
 			}
 			input.ExpectedGeneration = view.Generation
@@ -273,15 +275,15 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 func TestSandboxSpecificationInitialCredentialRemainsPrivate(t *testing.T) {
 	s, _, view, input := webSpecificationFixture(t, "e2b")
 	raw, err := json.Marshal(view)
-	if err != nil || bytes.Contains(raw, []byte(input.E2B.APIKey)) || bytes.Contains(raw, []byte("api_key")) {
+	if err != nil || bytes.Contains(raw, []byte(input.Configuration.(*e2b.DeploymentConfiguration).APIKey)) || bytes.Contains(raw, []byte("api_key")) {
 		t.Fatal("public deployment serialized a private credential", err)
 	}
 	var stored []byte
-	if err := s.pool.QueryRow(t.Context(), "SELECT e2b_credential FROM runtime_deployment").Scan(&stored); err != nil || len(stored) == 0 || bytes.Contains(stored, []byte(input.E2B.APIKey)) {
+	if err := s.pool.QueryRow(t.Context(), "SELECT provider_credential FROM runtime_deployment").Scan(&stored); err != nil || len(stored) == 0 || bytes.Contains(stored, []byte(input.Configuration.(*e2b.DeploymentConfiguration).APIKey)) {
 		t.Fatal("private credential was not encrypted", err)
 	}
 	// The credential is rejected before the cloud deployment mode is reported.
-	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", input.E2B.APIKey); !errors.Is(err, ErrRuntimeNodeCredential) {
+	if _, err := s.RuntimeNodeConfiguration(t.Context(), "", input.Configuration.(*e2b.DeploymentConfiguration).APIKey); !errors.Is(err, ErrRuntimeNodeCredential) {
 		t.Fatal("cloud key authorized node bootstrap", err)
 	}
 }

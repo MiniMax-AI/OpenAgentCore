@@ -153,7 +153,9 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `Core installation requires Linux amd64 with Docker access` | Use Linux amd64 and an account with Docker access; root and ordinary users are supported |
 | `Installation failed: inspect prerequisites and private deployment files` | A prerequisite failed without its own message, most often Docker: check that `docker info` and `docker compose version` work for this user |
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
-| `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--port` |
+| `Port N (…) is already in use on ADDRESS …` | Another program holds a port the installation needs. Find it with the printed `ss` command and stop it, or choose another port: `--web-port` or `--core-port` at [installation](install-options.md#ports), or the port in `config.json` before `oac apply` |
+| `ADDRESS (…) is not an address of this machine …` | Set `--host`, or `host` in `config.json`, to one of the machine's IP addresses or a wildcard such as `0.0.0.0` |
+| `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
 | `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
 | `This installation version or historical conversion is not supported …` | The target directory holds an installation of another release, or a default install found one at `~/.parsar/core`. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |

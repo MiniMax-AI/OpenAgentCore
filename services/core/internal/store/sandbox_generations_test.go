@@ -3,12 +3,15 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"os"
+	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
-	"os"
-	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -19,9 +22,9 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
 	ctx := SandboxResetTestContext(t.Context())
-	oldTemplate := input.E2B.Template
-	input.E2B.Template = "next:" + uuid.NewString()
-	input.E2B.APIURL, input.E2B.Domain = "https://sandbox.example.com", "sandbox.example.com"
+	oldTemplate := input.Configuration.(*e2b.DeploymentConfiguration).Template
+	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
+	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox.example.com", "sandbox.example.com"
 	input.Resources.CPUs++
 	changed, err := w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1})
 	if err != nil || changed.Generation != 2 || changed.OwnerEpoch != view.OwnerEpoch || changed.Rollout.PreviousGenerationSandboxes != 1 || changed.Rollout.State != "settled" {
@@ -30,17 +33,17 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 	assertSandboxSnapshotEquivalent(t, s.pool)
 	ref := sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID}
 	retained, err := s.GetSandboxAllocationSetup(t.Context(), ref)
-	if err != nil || retained.Generation != 1 || retained.E2B.Template != oldTemplate || retained.E2B.APIURL != "https://api.e2b.app" || retained.Specification.Resources.CPUs == input.Resources.CPUs {
+	if err != nil || retained.Generation != 1 || retained.Configuration.(*e2b.DeploymentConfiguration).Template != oldTemplate || retained.Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://api.e2b.app" || retained.Specification.Resources.CPUs == input.Resources.CPUs {
 		t.Fatal(retained, err)
 	}
-	input.E2B.APIKey = "replacement-secret"
-	input.E2B.ReplaceCredential = true
+	input.Configuration.(*e2b.DeploymentConfiguration).APIKey = "replacement-secret"
+	input.Configuration.(*e2b.DeploymentConfiguration).CredentialSupplied = true
 	changed, err = w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 2})
 	if err != nil || changed.Generation != 3 || changed.OwnerEpoch != view.OwnerEpoch {
 		t.Fatal(changed, err)
 	}
 	retained, err = s.GetSandboxAllocationSetup(t.Context(), ref)
-	if err != nil || retained.Generation != 1 || retained.E2B.APIKey != input.E2B.APIKey || retained.E2B.Template != oldTemplate || retained.E2B.APIURL != "https://api.e2b.app" {
+	if err != nil || retained.Generation != 1 || retained.Configuration.(*e2b.DeploymentConfiguration).APIKey != input.Configuration.(*e2b.DeploymentConfiguration).APIKey || retained.Configuration.(*e2b.DeploymentConfiguration).Template != oldTemplate || retained.Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://api.e2b.app" {
 		t.Fatal("old generation did not use committed key", err)
 	}
 	if _, err = s.pool.Exec(t.Context(), `UPDATE runtime_allocations SET deployment_generation=3 WHERE id=$1`, owner.ID); err == nil {
@@ -50,7 +53,7 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	generations, err := s.SandboxGenerationPage(t.Context(), -1)
-	if err != nil || len(generations) != 1 || generations[0].Generation != 1 || generations[0].E2B.APIURL != "https://api.e2b.app" {
+	if err != nil || len(generations) != 1 || generations[0].Generation != 1 || generations[0].Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://api.e2b.app" {
 		t.Fatal(generations, err)
 	}
 	if _, err = w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
@@ -78,40 +81,40 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 func TestE2BRetainedCustomEndpointAfterOnlineSwitch(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "e2b")
 	ctx := SandboxResetTestContext(t.Context())
-	input.E2B.APIURL, input.E2B.Domain = "https://sandbox.example.com", "sandbox.example.com"
+	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox.example.com", "sandbox.example.com"
 	custom, err := w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: view.Generation})
 	if err != nil || custom.Generation != 2 {
 		t.Fatal(custom, err)
 	}
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
-	input.E2B.APIURL, input.E2B.Domain = "", ""
+	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "", ""
 	current, err := w.UpdateSandboxDeployment(ctx, view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: custom.Generation})
-	if err != nil || current.Generation != 3 || current.E2B.APIURL != "https://api.e2b.app" {
+	if err != nil || current.Generation != 3 || e2bPublicConfiguration(t, current).APIURL != "https://api.e2b.app" {
 		t.Fatal(current, err)
 	}
 	ref := sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID}
 	retained, err := s.GetSandboxAllocationSetup(t.Context(), ref)
-	if err != nil || retained.Generation != 2 || retained.E2B.APIURL != "https://sandbox.example.com" || retained.E2B.Domain != "sandbox.example.com" {
+	if err != nil || retained.Generation != 2 || retained.Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://sandbox.example.com" || retained.Configuration.(*e2b.DeploymentConfiguration).Domain != "sandbox.example.com" {
 		t.Fatal(retained, err)
 	}
 	generations, err := s.SandboxGenerationPage(t.Context(), -1)
-	if err != nil || len(generations) != 1 || generations[0].E2B.APIURL != "https://sandbox.example.com" {
+	if err != nil || len(generations) != 1 || generations[0].Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://sandbox.example.com" {
 		t.Fatal(generations, err)
 	}
 }
 
 func TestE2BChangeClassifierOmittedKeyAndExplicitSameKey(t *testing.T) {
 	_, w, view, input := webSpecificationFixture(t, "e2b")
-	key := input.E2B.APIKey
-	input.E2B.APIKey = ""
+	key := input.Configuration.(*e2b.DeploymentConfiguration).APIKey
+	input.Configuration.(*e2b.DeploymentConfiguration).APIKey = ""
 	input.Resources = sandbox.Resources{}
 	resolved, noOp, err := w.ClassifySandboxDeploymentChange(t.Context(), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1})
-	if err != nil || !noOp || resolved.E2B.APIKey != key || resolved.Resources.CPUs == 0 {
+	if err != nil || !noOp || resolved.Configuration.(*e2b.DeploymentConfiguration).APIKey != key || resolved.Resources.CPUs == 0 {
 		t.Fatal(noOp, err)
 	}
-	input.E2B.APIKey = key
-	input.E2B.ReplaceCredential = true
+	input.Configuration.(*e2b.DeploymentConfiguration).APIKey = key
+	input.Configuration.(*e2b.DeploymentConfiguration).CredentialSupplied = true
 	_, noOp, err = w.ClassifySandboxDeploymentChange(t.Context(), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1})
 	if err != nil || noOp {
 		t.Fatal("explicit same key skipped verification", err)
@@ -281,7 +284,7 @@ func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "e2b")
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
-	input.E2B.Template = "next:" + uuid.NewString()
+	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
 	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), view.InstallationID, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +321,7 @@ func TestGenerationUpdateSerializesWithAllocationAdmission(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "e2b")
 	for generation := uint64(1); generation <= 6; generation++ {
 		tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-		input.E2B.Template = "next:" + uuid.NewString()
+		input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
 		start := make(chan struct{})
 		changed := make(chan error, 1)
 		go func() {

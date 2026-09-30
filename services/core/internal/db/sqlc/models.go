@@ -253,47 +253,37 @@ type RuntimeAllocation struct {
 }
 
 type RuntimeDeployment struct {
-	Singleton              bool               `json:"singleton"`
-	InstallationID         pgtype.UUID        `json:"installation_id"`
-	BackendFingerprint     string             `json:"backend_fingerprint"`
-	AdmissionPaused        bool               `json:"admission_paused"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	ProviderKind           string             `json:"provider_kind"`
-	LocalNodeID            pgtype.UUID        `json:"local_node_id"`
-	OwnerEpoch             int64              `json:"owner_epoch"`
-	WebManaged             bool               `json:"web_managed"`
-	IdleSeconds            int64              `json:"idle_seconds"`
-	RetentionSeconds       int64              `json:"retention_seconds"`
-	Generation             int64              `json:"generation"`
-	Mode                   string             `json:"mode"`
-	E2bTemplate            string             `json:"e2b_template"`
-	E2bCredential          []byte             `json:"e2b_credential"`
-	Specification          []byte             `json:"specification"`
-	E2bTemplateBuildStatus pgtype.Text        `json:"e2b_template_build_status"`
-	E2bTemplateCpus        pgtype.Int4        `json:"e2b_template_cpus"`
-	E2bTemplateMemoryMib   pgtype.Int4        `json:"e2b_template_memory_mib"`
-	E2bTemplateRootDiskMib pgtype.Int4        `json:"e2b_template_root_disk_mib"`
-	ResetClear             pgtype.Text        `json:"reset_clear"`
-	ResetRequestedAt       pgtype.Timestamptz `json:"reset_requested_at"`
-	ResetDeadlineAt        pgtype.Timestamptz `json:"reset_deadline_at"`
-	ResetForcedAt          pgtype.Timestamptz `json:"reset_forced_at"`
-	ResetAudit             []byte             `json:"reset_audit"`
-	E2bApiUrl              string             `json:"e2b_api_url"`
-	E2bDomain              string             `json:"e2b_domain"`
+	Singleton          bool               `json:"singleton"`
+	InstallationID     pgtype.UUID        `json:"installation_id"`
+	BackendFingerprint string             `json:"backend_fingerprint"`
+	AdmissionPaused    bool               `json:"admission_paused"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ProviderKind       string             `json:"provider_kind"`
+	LocalNodeID        pgtype.UUID        `json:"local_node_id"`
+	OwnerEpoch         int64              `json:"owner_epoch"`
+	WebManaged         bool               `json:"web_managed"`
+	IdleSeconds        int64              `json:"idle_seconds"`
+	RetentionSeconds   int64              `json:"retention_seconds"`
+	Generation         int64              `json:"generation"`
+	Mode               string             `json:"mode"`
+	ProviderCredential []byte             `json:"provider_credential"`
+	Specification      []byte             `json:"specification"`
+	ResetClear         pgtype.Text        `json:"reset_clear"`
+	ResetRequestedAt   pgtype.Timestamptz `json:"reset_requested_at"`
+	ResetDeadlineAt    pgtype.Timestamptz `json:"reset_deadline_at"`
+	ResetForcedAt      pgtype.Timestamptz `json:"reset_forced_at"`
+	ResetAudit         []byte             `json:"reset_audit"`
+	ProviderConfig     []byte             `json:"provider_config"`
+	ProviderMetadata   []byte             `json:"provider_metadata"`
 }
 
 type RuntimeDeploymentGeneration struct {
-	Generation             int64              `json:"generation"`
-	ProviderKind           string             `json:"provider_kind"`
-	Specification          []byte             `json:"specification"`
-	E2bTemplate            string             `json:"e2b_template"`
-	E2bTemplateBuildStatus pgtype.Text        `json:"e2b_template_build_status"`
-	E2bTemplateCpus        pgtype.Int4        `json:"e2b_template_cpus"`
-	E2bTemplateMemoryMib   pgtype.Int4        `json:"e2b_template_memory_mib"`
-	E2bTemplateRootDiskMib pgtype.Int4        `json:"e2b_template_root_disk_mib"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	E2bApiUrl              string             `json:"e2b_api_url"`
-	E2bDomain              string             `json:"e2b_domain"`
+	Generation       int64              `json:"generation"`
+	ProviderKind     string             `json:"provider_kind"`
+	Specification    []byte             `json:"specification"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	ProviderConfig   []byte             `json:"provider_config"`
+	ProviderMetadata []byte             `json:"provider_metadata"`
 }
 
 type RuntimeDeviceAuthority struct {

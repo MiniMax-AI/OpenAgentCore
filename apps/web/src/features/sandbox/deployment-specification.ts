@@ -30,7 +30,7 @@ export function savedSpecification(provider: SandboxProvider, savedProvider?: Sa
 
 /** CPU and memory of the E2B template build as Core read them when the selection was saved; null while either is unknown. */
 export function templateBuildSize(deployment: SandboxDeployment): { cpus: number; memory_mib: number } | null {
-  const build = deployment.e2b?.template_build?.resources;
+  const build = deployment.metadata?.template_build?.resources;
   return build && build.cpus !== null && build.memory_mib !== null ? { cpus: build.cpus, memory_mib: build.memory_mib } : null;
 }
 

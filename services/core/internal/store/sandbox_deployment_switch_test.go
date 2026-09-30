@@ -8,14 +8,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
 
 func e2bSelection() SandboxDeploymentSetupRequest {
-	return SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
+	return SandboxDeploymentSetupRequest{DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-private-api-key", Template: "runtime:" + uuid.NewString()}}
 }
 
 func TestSandboxE2BEndpointPersistenceAndOnlineSwitch(t *testing.T) {
@@ -31,20 +32,20 @@ func TestSandboxE2BEndpointPersistenceAndOnlineSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := e2bSelection()
-	input.E2B.APIURL, input.E2B.Domain = "https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"
+	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"
 	view, err := w.InitializeSandboxDeployment(t.Context(), id, input)
-	if err != nil || view.E2B == nil || view.E2B.APIURL != input.E2B.APIURL || view.E2B.Domain != input.E2B.Domain {
+	if err != nil || view.Configuration == nil || e2bPublicConfiguration(t, view).APIURL != input.Configuration.(*e2b.DeploymentConfiguration).APIURL || e2bPublicConfiguration(t, view).Domain != input.Configuration.(*e2b.DeploymentConfiguration).Domain {
 		t.Fatal("custom endpoint was not returned", view, err)
 	}
 	setup, err := s.GetSandboxSetup(t.Context())
-	if err != nil || setup.E2B == nil || setup.E2B.APIURL != input.E2B.APIURL || setup.E2B.Domain != input.E2B.Domain {
+	if err != nil || setup.Configuration == nil || setup.Configuration.(*e2b.DeploymentConfiguration).APIURL != input.Configuration.(*e2b.DeploymentConfiguration).APIURL || setup.Configuration.(*e2b.DeploymentConfiguration).Domain != input.Configuration.(*e2b.DeploymentConfiguration).Domain {
 		t.Fatal("custom endpoint was not persisted", setup, err)
 	}
 	change := e2bSelection()
-	change.E2B.Template = input.E2B.Template
+	change.Configuration.(*e2b.DeploymentConfiguration).Template = input.Configuration.(*e2b.DeploymentConfiguration).Template
 	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: change, ExpectedGeneration: view.Generation}
 	changed, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), id, update)
-	if err != nil || changed.Generation != view.Generation+1 || changed.E2B == nil || changed.E2B.APIURL != "https://api.e2b.app" || changed.E2B.Domain != "e2b.app" {
+	if err != nil || changed.Generation != view.Generation+1 || changed.Configuration == nil || e2bPublicConfiguration(t, changed).APIURL != "https://api.e2b.app" || e2bPublicConfiguration(t, changed).Domain != "e2b.app" {
 		t.Fatal("online endpoint switch failed", changed, err)
 	}
 }
@@ -62,7 +63,7 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := e2bSelection()
-	input.E2B.APIURL, input.E2B.Domain = "https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"
+	input.Configuration.(*e2b.DeploymentConfiguration).APIURL, input.Configuration.(*e2b.DeploymentConfiguration).Domain = "https://sandbox-test.sandbase.ai", "sandbox-test.sandbase.ai"
 	configured, err := w.InitializeSandboxDeployment(t.Context(), installation, input)
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +78,7 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 		t.Fatal("custom endpoint blocked reset completion", empty, err)
 	}
 	var apiURL, domain string
-	if err := pool.QueryRow(t.Context(), "SELECT e2b_api_url, e2b_domain FROM runtime_deployment").Scan(&apiURL, &domain); err != nil || apiURL != "" || domain != "" {
+	if err := pool.QueryRow(t.Context(), "SELECT COALESCE(provider_config->>'api_url',''), COALESCE(provider_config->>'domain','') FROM runtime_deployment").Scan(&apiURL, &domain); err != nil || apiURL != "" || domain != "" {
 		t.Fatal("reset retained custom endpoint", apiURL, domain, err)
 	}
 }
@@ -96,19 +97,19 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	}
 	input := e2bSelection()
 	view, err := w.InitializeSandboxDeployment(t.Context(), id, input)
-	if err != nil || view.Generation != 1 || view.Mode != "direct" || view.E2B == nil || !view.E2B.CredentialConfigured {
+	if err != nil || view.Generation != 1 || view.Mode != "direct" || view.Configuration == nil || !view.CredentialConfigured {
 		t.Fatal("direct setup", view, err)
 	}
 	raw, _ := json.Marshal(view)
-	if bytes.Contains(raw, []byte(input.E2B.APIKey)) {
+	if bytes.Contains(raw, []byte(input.Configuration.(*e2b.DeploymentConfiguration).APIKey)) {
 		t.Fatal("credential in public view")
 	}
 	var ciphertext []byte
-	if err := pool.QueryRow(t.Context(), "SELECT e2b_credential FROM runtime_deployment").Scan(&ciphertext); err != nil || bytes.Contains(ciphertext, []byte(input.E2B.APIKey)) {
+	if err := pool.QueryRow(t.Context(), "SELECT provider_credential FROM runtime_deployment").Scan(&ciphertext); err != nil || bytes.Contains(ciphertext, []byte(input.Configuration.(*e2b.DeploymentConfiguration).APIKey)) {
 		t.Fatal("credential not encrypted", err)
 	}
 	setup, err := s.GetSandboxSetup(t.Context())
-	if err != nil || setup.E2B.APIKey != input.E2B.APIKey {
+	if err != nil || setup.Configuration.(*e2b.DeploymentConfiguration).APIKey != input.Configuration.(*e2b.DeploymentConfiguration).APIKey {
 		t.Fatal("internal credential unavailable", err)
 	}
 	if _, err := s.CreateRuntimeEnrollment(t.Context(), RuntimeNodeCapacity{MaxActive: 2, MaxRetained: 8}); !errors.Is(err, ErrSandboxDeploymentConflict) {
@@ -159,7 +160,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	changed, err := resetAndSelect(t, w, id, update.ExpectedGeneration, update.SandboxDeploymentSetupRequest)
-	if err != nil || changed.Generation != 3 || changed.Mode != "nodes" || changed.Reset != nil || changed.E2B != nil || changed.Resources != (SandboxDeploymentResources{}) {
+	if err != nil || changed.Generation != 3 || changed.Mode != "nodes" || changed.Reset != nil || string(changed.Configuration) != "{}" || changed.Resources != (SandboxDeploymentResources{}) {
 		t.Fatal("clean switch", changed, err)
 	}
 	if _, err := w.CancelSandboxReset(SandboxResetTestContext(t.Context()), id, 1); !errors.Is(err, ErrSandboxDeploymentConflict) {

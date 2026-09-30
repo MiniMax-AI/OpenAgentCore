@@ -10,11 +10,14 @@ so an interrupted apply, rotation or rollback is finished by the next apply.
 import argparse
 import contextlib
 import datetime
+import errno
 import fcntl
+import ipaddress
 import json
 import os
 from pathlib import Path
 import secrets
+import socket
 import stat
 import subprocess
 import sys
@@ -178,6 +181,72 @@ def observe(state):
         inputs = native_service.running_inputs(state)
         result["core"] = {"running": inputs is not None or native_service.active(state), "inputs": inputs, "health": ""}
     return result
+
+
+def tcp_listeners():
+    """(address, port) of each listening TCP socket in this network namespace."""
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            lines = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for line in lines:
+            fields = line.split()
+            if fields[3] != "0A":  # TCP_LISTEN
+                continue
+            raw, _, port = fields[1].partition(":")
+            # The kernel prints each 32-bit word of the address in host byte order, little-endian on amd64.
+            packed = b"".join(bytes.fromhex(raw[index:index + 8])[::-1] for index in range(0, len(raw), 8))
+            yield ipaddress.ip_address(packed), int(port, 16)
+
+
+def overlaps(first, second):
+    if first.version != second.version:
+        # Of two families, only a dual-stack IPv6 wildcard also takes IPv4 addresses.
+        return (first if first.version == 6 else second).is_unspecified
+    return first.is_unspecified or second.is_unspecified or first == second
+
+
+def bind_error(host, port):
+    """The errno of binding host:port as the services do, or 0 when the bind succeeds.
+
+    SO_REUSEADDR, which Go and Docker listeners set, lets connections in TIME_WAIT pass.
+    """
+    try:
+        with socket.socket(socket.AF_INET6 if ipaddress.ip_address(host).version == 6 else socket.AF_INET) as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind((host, port))
+    except OSError as error:
+        return error.errno
+    return 0
+
+
+def address_available(host):
+    """Whether host is an address of this machine or a wildcard, so services can bind to it."""
+    return bind_error(host, 0) not in (errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT)
+
+
+def port_free(host, port, own=()):
+    """Whether a listener could bind host:port now.
+
+    own holds this installation's (address, port) listeners, which do not count. Where
+    one overlaps host:port, or the account may not bind a port below 1024, the kernel's
+    table of listening sockets decides instead of a bind.
+    """
+    address = ipaddress.ip_address(host)
+    own = {(other, held) for other, held in own if held == port and overlaps(address, other)}
+    if not own:
+        error = bind_error(host, port)
+        if error not in (errno.EACCES, errno.EPERM):
+            return error != errno.EADDRINUSE
+    return not any(held == port and overlaps(address, other) and (other, held) not in own
+                   for other, held in tcp_listeners())
+
+
+def port_in_use(listener, name, outcome=""):
+    """The message for a port that another program holds; name is its flag or config.json key."""
+    return (f"Port {listener.port} ({name}) is already in use on {listener.host}.{outcome} Free it or choose another "
+            f"port; find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
 
 
 def stale(actual, desired, will_run):
@@ -415,8 +484,7 @@ def render_now(root, config, state):
 
 def old_public_url(root, config, previous, disk, actual):
     """The public URL things are bound to: Core's own answer, else the written core.env."""
-    old_config = {"host": previous["host"], "ingress": previous.get("ingress"),
-                  "ports": {"core": previous["ports.core"]}} if previous else config
+    old_config = applied_view(config, previous) if previous else config
     base = core_base(old_config)
     if actual.get("core", {}).get("running"):
         status, body = http(base + "/core/v1/installation", bearer(configuration.read_core_key(root)))
@@ -512,6 +580,21 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
     return installation
 
 
+def check_new_listeners(config, previous):
+    """Each listener this change adds must be free; this installation's own listeners do not count."""
+    if previous is None:
+        return
+    applied = applied_view(config, previous)
+    if config["host"] != applied["host"] and not address_available(config["host"]):
+        raise OacError(f"{config['host']} (host) is not an address of this machine; use one of its addresses. "
+                       "Nothing was applied.")
+    own = {(ipaddress.ip_address(listener.host), listener.port) for listener in configuration.listeners(applied)}
+    for listener in configuration.listeners(config):
+        if (ipaddress.ip_address(listener.host), listener.port) not in own and \
+                not port_free(listener.host, listener.port, own):
+            raise OacError(port_in_use(listener, listener.setting, " Nothing was applied."))
+
+
 def finish_apply(root, config, state, gateway_document, will_run):
     managed = ingress_config.enabled(config) and "gateway" in will_run
     if managed:
@@ -548,6 +631,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         raise OacError("\n".join(f"generated/{name} was edited by hand." for name in edited)
                           + "\nPut the change in config.json and run oac apply --discard-edits, which keeps the"
                           " edited copy as generated/<file>.edited-<time>. Nothing was applied.")
+    check_new_listeners(config, previous)
     changed = [name for name, text in rendered.files.items() if disk.get(name) != text.encode()]
     removed = [name for name in (state.get("generated") or {}) if name not in rendered.files and disk.get(name) is not None]
 
@@ -653,7 +737,13 @@ def written_view(root, state, config):
         if config is None:
             raise OacError("Neither config.json nor generated/settings.json can be read")
         return config
-    return {"mode": state["mode"], "ingress": values.get("ingress"), "public_url": values.get("public_url"), "host": values["host"],
+    return applied_view(state, values)
+
+
+def applied_view(fixed, values):
+    """The config the settings last written describe; fixed supplies mode and native_core, which never change."""
+    return {"mode": fixed["mode"], "native_core": fixed.get("native_core", False), "ingress": values.get("ingress"),
+            "public_url": values.get("public_url"), "host": values["host"],
             "ports": {name: values[f"ports.{name}"] for name in ("core", "web", "database") if f"ports.{name}" in values},
             "web": {"core_url": values.get("web.core_url")}}
 

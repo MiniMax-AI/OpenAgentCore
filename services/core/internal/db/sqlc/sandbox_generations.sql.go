@@ -31,7 +31,7 @@ func (q *Queries) CollectSandboxGenerations(ctx context.Context) error {
 }
 
 const getSandboxGeneration = `-- name: GetSandboxGeneration :one
-SELECT generation, provider_kind, specification, e2b_template, e2b_template_build_status, e2b_template_cpus, e2b_template_memory_mib, e2b_template_root_disk_mib, created_at, e2b_api_url, e2b_domain FROM runtime_deployment_generations WHERE generation=$1
+SELECT generation, provider_kind, specification, created_at, provider_config, provider_metadata FROM runtime_deployment_generations WHERE generation=$1
 `
 
 func (q *Queries) GetSandboxGeneration(ctx context.Context, generation int64) (RuntimeDeploymentGeneration, error) {
@@ -41,20 +41,15 @@ func (q *Queries) GetSandboxGeneration(ctx context.Context, generation int64) (R
 		&i.Generation,
 		&i.ProviderKind,
 		&i.Specification,
-		&i.E2bTemplate,
-		&i.E2bTemplateBuildStatus,
-		&i.E2bTemplateCpus,
-		&i.E2bTemplateMemoryMib,
-		&i.E2bTemplateRootDiskMib,
 		&i.CreatedAt,
-		&i.E2bApiUrl,
-		&i.E2bDomain,
+		&i.ProviderConfig,
+		&i.ProviderMetadata,
 	)
 	return i, err
 }
 
 const listSandboxGenerations = `-- name: ListSandboxGenerations :many
-SELECT generation, provider_kind, specification, e2b_template, e2b_template_build_status, e2b_template_cpus, e2b_template_memory_mib, e2b_template_root_disk_mib, created_at, e2b_api_url, e2b_domain FROM runtime_deployment_generations WHERE generation > $1 ORDER BY generation LIMIT 32
+SELECT generation, provider_kind, specification, created_at, provider_config, provider_metadata FROM runtime_deployment_generations WHERE generation > $1 ORDER BY generation LIMIT 32
 `
 
 func (q *Queries) ListSandboxGenerations(ctx context.Context, generation int64) ([]RuntimeDeploymentGeneration, error) {
@@ -70,14 +65,9 @@ func (q *Queries) ListSandboxGenerations(ctx context.Context, generation int64) 
 			&i.Generation,
 			&i.ProviderKind,
 			&i.Specification,
-			&i.E2bTemplate,
-			&i.E2bTemplateBuildStatus,
-			&i.E2bTemplateCpus,
-			&i.E2bTemplateMemoryMib,
-			&i.E2bTemplateRootDiskMib,
 			&i.CreatedAt,
-			&i.E2bApiUrl,
-			&i.E2bDomain,
+			&i.ProviderConfig,
+			&i.ProviderMetadata,
 		); err != nil {
 			return nil, err
 		}
@@ -90,8 +80,8 @@ func (q *Queries) ListSandboxGenerations(ctx context.Context, generation int64) 
 }
 
 const retainSandboxGeneration = `-- name: RetainSandboxGeneration :exec
-INSERT INTO runtime_deployment_generations(generation,provider_kind,specification,e2b_template,e2b_template_build_status,e2b_template_cpus,e2b_template_memory_mib,e2b_template_root_disk_mib,e2b_api_url,e2b_domain)
-SELECT generation,provider_kind,specification,e2b_template,e2b_template_build_status,e2b_template_cpus,e2b_template_memory_mib,e2b_template_root_disk_mib,e2b_api_url,e2b_domain
+INSERT INTO runtime_deployment_generations(generation,provider_kind,specification,provider_config,provider_metadata)
+SELECT generation,provider_kind,specification,provider_config,provider_metadata
 FROM runtime_deployment d WHERE provider_kind <> '' AND (
  EXISTS(SELECT 1 FROM runtime_allocations a WHERE a.state <> 'released' AND a.deployment_generation=d.generation)
  OR EXISTS(SELECT 1 FROM runtime_placements p WHERE p.released_at IS NULL AND p.deployment_generation=d.generation)

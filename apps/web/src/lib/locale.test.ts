@@ -34,8 +34,8 @@ describe("sandbox localization", () => {
     // A refusal is Core's to explain: one code, such as a 409 conflict, covers several reasons.
     expect(sandboxRequestError(new AgentCoreError("This console is read-only.", 403), "zh")).toBe("This console is read-only.");
     expect(sandboxRequestError(new AgentCoreError("expected_generation is stale.", 409, "sandbox_deployment_conflict"), "zh")).toBe("expected_generation is stale.");
-    // An E2B refusal whose reason the client withheld is named without it.
-    expect(sandboxRequestError(new AgentCoreError("withheld", 400, "sandbox_configuration_unconfirmed"), "zh")).toBe("Core 拒绝了这个 E2B 配置。");
+    // A sandbox refusal whose reason the client withheld is named without it.
+    expect(sandboxRequestError(new AgentCoreError("withheld", 400, "sandbox_configuration_unconfirmed"), "zh")).toBe("Core 拒绝了这个沙箱配置。");
     expect(sandboxRequestError(new AgentCoreError("raw secret", 502), "zh")).not.toContain("raw secret");
     expect(sandboxRequestError(new Error("raw secret"), "zh")).not.toContain("raw secret");
   });

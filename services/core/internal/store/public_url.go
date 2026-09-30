@@ -5,10 +5,9 @@ import (
 	"errors"
 )
 
-// ErrSandboxPublicURLUnreachable rejects E2B selections and new E2B Sessions
-// while the installation public URL is loopback: E2B sandboxes reach Core from
-// E2B's cloud.
-var ErrSandboxPublicURLUnreachable = errors.New("E2B sandboxes need a reachable HTTPS public URL before they can connect to Core.")
+// ErrSandboxPublicURLUnreachable rejects selection and admission when the provider
+// requires a reachable public origin and the installation is loopback.
+var ErrSandboxPublicURLUnreachable = errors.New("This sandbox provider needs a reachable HTTPS public URL before they can connect to Core.")
 
 // SetPublicURL records OAC_PUBLIC_URL, validated by the caller. Core
 // reports it as the deployment and node configuration core_url and records it

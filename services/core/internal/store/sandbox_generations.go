@@ -24,7 +24,7 @@ func (s *Store) ClassifySandboxDeploymentChange(ctx context.Context, installatio
 		if err != nil {
 			return err
 		}
-		resolved, err := providers.ResolveChange(input.SandboxDeploymentSetupRequest, sandbox.Selection{Provider: previous.Provider, DeploymentSpec: previous.Specification, E2B: previous.E2B})
+		resolved, err := providers.ResolveChange(input.SandboxDeploymentSetupRequest, sandbox.Selection{Provider: previous.Provider, DeploymentSpec: previous.Specification, Configuration: previous.Configuration})
 		if err != nil {
 			return sandboxConfigurationError(err)
 		}
@@ -33,7 +33,7 @@ func (s *Store) ClassifySandboxDeploymentChange(ctx context.Context, installatio
 			return err
 		}
 		equal, err := s.sandboxSelectionEqual(d, input.SandboxDeploymentSetupRequest)
-		unchanged = equal && (input.E2B == nil || !input.E2B.ReplaceCredential)
+		unchanged = equal && !input.ReplacesCredential()
 		return err
 	})
 	return input, unchanged, err
@@ -86,10 +86,23 @@ func (s *Store) GetSandboxAllocationSetup(ctx context.Context, ref sandbox.Refer
 		if err = json.Unmarshal(g.Specification, &result.Specification); err != nil {
 			return SandboxSetup{}, err
 		}
-		if result.E2B != nil {
-			result.E2B.Template = g.E2bTemplate
-			result.E2B.APIURL, result.E2B.Domain = g.E2bApiUrl, g.E2bDomain
+		retained, err := providers.Decode(g.ProviderKind, sandbox.ConfigurationRecord{Public: g.ProviderConfig, Metadata: g.ProviderMetadata})
+		if err != nil {
+			return SandboxSetup{}, ErrSandboxDeploymentConflict
 		}
+		needsCredential, err := providers.UsesCredential(g.ProviderKind)
+		if err != nil {
+			return SandboxSetup{}, err
+		}
+		if needsCredential {
+			composed, err := providers.WithCredential(sandbox.Selection{Provider: g.ProviderKind, Configuration: retained}, sandbox.Selection{Provider: d.ProviderKind, Configuration: result.Configuration})
+			if err != nil {
+				return SandboxSetup{}, ErrSandboxDeploymentConflict
+			}
+			retained = composed.Configuration
+		}
+		result.Configuration = retained
+
 	}
 	return result, tx.Commit(ctx)
 }
@@ -106,9 +119,11 @@ func (s *Store) SandboxGenerationPage(ctx context.Context, after int64) ([]Sandb
 		if err := json.Unmarshal(r.Specification, &v.Specification); err != nil {
 			return nil, err
 		}
-		if providers.UsesCredential(r.ProviderKind) {
-			v.E2B = &sandbox.E2BConfiguration{Template: r.E2bTemplate, APIURL: r.E2bApiUrl, Domain: r.E2bDomain}
+		v.Configuration, err = providers.Decode(r.ProviderKind, sandbox.ConfigurationRecord{Public: r.ProviderConfig, Metadata: r.ProviderMetadata})
+		if err != nil {
+			return nil, ErrSandboxDeploymentConflict
 		}
+
 		result = append(result, v)
 	}
 	return result, nil

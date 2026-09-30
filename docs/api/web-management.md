@@ -118,11 +118,11 @@ Response `resources.allocations` and `resources.pending` are cleanup counts, not
 CPU, memory or disk settings. E2B accepts a write-only key and exact template build
 instead of a node Runtime release, and provisions without a node installation. E2B
 may omit `resources` to adopt the validated build's CPU and memory. An E2B-compatible
-service may also supply paired `e2b.api_url` and `e2b.domain`; omitted selectors
+service may also supply paired `configuration.api_url` and `configuration.domain`; omitted selectors
 use official E2B. Responses expose these addresses but never the key, and changing
 them requires the same drained maintenance transition as changing the template.
 Responses show
-the build as read at selection time in `e2b.template_build`. Microsandbox responses
+the build as read at selection time in `metadata.template_build`. Microsandbox responses
 return its idle `suspension` policy; other providers return null.
 
 Same-team E2B updates apply online after verification. Existing sandboxes retain

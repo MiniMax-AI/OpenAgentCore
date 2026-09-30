@@ -20,6 +20,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -27,17 +28,21 @@ import (
 
 func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	h := newDispatchHarness(t)
-	profile := engine.Profile{Placements: []string{"none"}, ValidateConfiguration: func(a v1.Agent, _ *v1.Environment, _ bool) error {
+	profile := enginetest.Profile(nil)
+	profile.ConfigurationValidation = engine.AdditionalValidation
+	profile.ToolsValidation = engine.AdditionalValidation
+	profile.ValidateConfiguration = func(a v1.Agent, _ *v1.Environment, _ bool) error {
 		if a.Text.Verbosity != "medium" || a.Text.Format.Type != "text" || a.MultiAgent.Enabled || a.Reasoning.Effort != nil || a.Reasoning.Summary != nil || a.ServiceTier != "auto" {
 			return engine.ErrInvalidInput
 		}
 		return nil
-	}, ValidateTools: func(_ *v1.Environment, _ bool, f []proto.FunctionTool, m []proto.MCPHTTPServer) error {
+	}
+	profile.ValidateTools = func(_ *v1.Environment, _ bool, f []proto.FunctionTool, m []proto.MCPHTTPServer) error {
 		if len(f)+len(m) > 0 {
 			return engine.ErrInvalidInput
 		}
 		return nil
-	}}
+	}
 	policy := execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"fixture_harness": profile})}
 	h.d.Policy = policy
 	// The fixture only supplies an adapter and registration to the real daemon router.

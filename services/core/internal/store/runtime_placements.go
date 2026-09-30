@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,16 +21,23 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 	if d.ResetClear.Valid {
 		return ErrSandboxResetAdmission
 	}
+	// A changed installation address cannot admit guests that require a public
+	// origin. Existing owned resources remain available for cleanup.
+	if d.ProviderKind != "" {
+		publicOrigin, err := providers.RequiresPublicOrigin(d.ProviderKind)
+		if err != nil {
+			return err
+		}
+		if publicOrigin && LoopbackOrigin(publicURL) {
+			return ErrSandboxPublicURLUnreachable
+		}
+	}
+
 	if d.Mode == "direct" {
 		if d.AdmissionPaused {
 			return ErrRuntimeNodeUnavailable
 		}
-		// E2B guests reach Core over the internet. A selection saved before the
-		// public URL became loopback admits nothing, while its existing sandboxes
-		// stay reachable for cleanup through the loaded provider.
-		if LoopbackOrigin(publicURL) {
-			return ErrSandboxPublicURLUnreachable
-		}
+
 		return nil
 	}
 	if d.ProviderKind == "" {

@@ -13,7 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrSandboxDeploymentConflict = errors.New("sandbox deployment is already configured differently")
@@ -28,7 +27,7 @@ type SandboxSetup struct {
 	Generation                                   uint64
 	Mode                                         string
 	AdmissionPaused                              bool
-	E2B                                          *sandbox.E2BConfiguration
+	Configuration                                sandbox.Configuration `json:"-"`
 	IdleSeconds, RetentionSeconds                int64
 }
 
@@ -55,17 +54,22 @@ func (s *Store) sandboxSetup(d sqlc.RuntimeDeployment) (SandboxSetup, error) {
 			return SandboxSetup{}, err
 		}
 	}
-	if providers.UsesCredential(d.ProviderKind) {
-		credential, err := s.credentialCipher.OpenSandboxDeployment(d.E2bCredential, result.InstallationID, result.Generation)
-		if err != nil {
-			return SandboxSetup{}, ErrSandboxCredentialUnavailable
+	if d.ProviderKind != "" {
+		var secret []byte
+		if len(d.ProviderCredential) > 0 {
+			var err error
+			secret, err = s.credentialCipher.OpenSandboxDeployment(d.ProviderCredential, result.InstallationID, result.Generation)
+			if err != nil {
+				return SandboxSetup{}, ErrSandboxCredentialUnavailable
+			}
 		}
-		selection, err := providers.Restore(sandbox.Selection{Provider: d.ProviderKind, DeploymentSpec: result.Specification, E2B: &sandbox.E2BConfiguration{APIKey: string(credential), Template: d.E2bTemplate, APIURL: d.E2bApiUrl, Domain: d.E2bDomain}})
+		var err error
+		result.Configuration, err = providers.Decode(d.ProviderKind, sandbox.ConfigurationRecord{Public: d.ProviderConfig, Metadata: d.ProviderMetadata, Secret: secret})
 		if err != nil {
 			return SandboxSetup{}, ErrSandboxDeploymentConflict
 		}
-		result.E2B = selection.E2B
 	}
+
 	return result, nil
 }
 
@@ -160,7 +164,7 @@ func LoopbackOrigin(value string) bool {
 	return u.Hostname() == "localhost"
 }
 
-func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) RuntimeDeploymentView {
+func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) (RuntimeDeploymentView, error) {
 	result := RuntimeDeploymentView{InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: publicURL, OwnerEpoch: uint64(d.OwnerEpoch), Generation: uint64(d.Generation), Mode: d.Mode}
 	if len(d.Specification) > 0 && string(d.Specification) != "{}" {
 		var spec sandbox.DeploymentSpec
@@ -169,26 +173,21 @@ func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) RuntimeDe
 			result.SpecificationDigest = spec.Digest(d.ProviderKind)
 		}
 	}
-	if providers.UsesCredential(d.ProviderKind) {
-		selection, _ := providers.Restore(sandbox.Selection{Provider: d.ProviderKind, E2B: &sandbox.E2BConfiguration{Template: d.E2bTemplate, APIURL: d.E2bApiUrl, Domain: d.E2bDomain}})
-		apiURL, domain := selection.E2B.APIURL, selection.E2B.Domain
-		result.E2B = &SandboxE2BView{Template: d.E2bTemplate, APIURL: apiURL, Domain: domain, CredentialConfigured: len(d.E2bCredential) > 0,
-			TemplateBuild: SandboxE2BTemplateBuildView{Resources: SandboxTemplateResources{
-				CPUs: optionalInt32(d.E2bTemplateCpus), MemoryMiB: optionalInt32(d.E2bTemplateMemoryMib), RootDiskMiB: optionalInt32(d.E2bTemplateRootDiskMib)}}}
-		if d.E2bTemplateBuildStatus.Valid {
-			status := d.E2bTemplateBuildStatus.String
-			result.E2B.TemplateBuild.Status = &status
+	if d.ProviderKind != "" {
+		value, err := providers.Decode(d.ProviderKind, sandbox.ConfigurationRecord{Public: d.ProviderConfig, Metadata: d.ProviderMetadata})
+		if err != nil {
+			return RuntimeDeploymentView{}, ErrSandboxDeploymentConflict
 		}
+		record, err := providers.Encode(d.ProviderKind, value)
+		if err != nil {
+			return RuntimeDeploymentView{}, ErrSandboxDeploymentConflict
+		}
+		result.Configuration = configurationJSON(record.Public)
+		result.Metadata = configurationJSON(record.Metadata)
+		result.CredentialConfigured = len(d.ProviderCredential) > 0
 	}
 	if d.IdleSeconds > 0 && d.RetentionSeconds > 0 {
 		result.Suspension = &SandboxSuspensionView{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 	}
-	return result
-}
-
-func optionalInt32(value pgtype.Int4) *int32 {
-	if !value.Valid {
-		return nil
-	}
-	return &value.Int32
+	return result, nil
 }

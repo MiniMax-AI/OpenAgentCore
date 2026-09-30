@@ -89,7 +89,7 @@ func TestDeploymentAddressIsNotInput(t *testing.T) {
 	}{
 		{http.MethodPost, `{"provider":"docker","core_url":"https://core.example","expected_generation":0}`, `"param":"core_url"`, http.StatusBadRequest},
 		{http.MethodPut, `{"provider":"docker","core_url":"https://core.example","expected_generation":1}`, `"param":"core_url"`, http.StatusBadRequest},
-		{http.MethodPost, `{"provider":"e2b","expected_generation":0,"e2b":{"api_key":"key","template":"runtime:build"}}`, `"code":"sandbox_configuration_error"`, http.StatusConflict},
+		{http.MethodPost, `{"provider":"e2b","expected_generation":0,"credential":{"api_key":"key"},"configuration":{"template":"runtime:build"}}`, `"code":"sandbox_configuration_error"`, http.StatusConflict},
 	} {
 		request := httptest.NewRequest(test.method, "/core/v1/sandbox/deployment", strings.NewReader(test.body))
 		request.Header.Set("Authorization", "Bearer administrator")

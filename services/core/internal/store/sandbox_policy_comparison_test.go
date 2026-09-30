@@ -23,7 +23,7 @@ func TestSandboxSelectionComparesRegisteredPolicyForNodeProviders(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			original := sqlc.RuntimeDeployment{ProviderKind: kind, InstallationID: pgtype.UUID{Bytes: id, Valid: true}, Specification: spec, IdleSeconds: policy.IdleSeconds, RetentionSeconds: policy.RetentionSeconds}
+			original := sqlc.RuntimeDeployment{WebManaged: true, ProviderKind: kind, InstallationID: pgtype.UUID{Bytes: id, Valid: true}, Specification: spec, IdleSeconds: policy.IdleSeconds, RetentionSeconds: policy.RetentionSeconds}
 			for _, tc := range []struct {
 				name            string
 				idle, retention int64

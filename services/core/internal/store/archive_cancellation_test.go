@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -45,7 +46,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture", Template: "runtime:" + uuid.NewString()}}); err != nil {
+			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture", Template: "runtime:" + uuid.NewString()}}); err != nil {
 				t.Fatal(err)
 			}
 			projectID := uuid.NewString()

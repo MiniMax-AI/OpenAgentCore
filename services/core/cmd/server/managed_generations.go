@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"maps"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
@@ -111,6 +112,10 @@ func (p *observedGenerationRouter) Observe(ctx context.Context, t runtimeobs.Tar
 }
 
 func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeployment, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+	usesCredential, err := providers.UsesCredential(setup.Provider)
+	if err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
+	}
 	adapter, err := providers.Lookup(setup.Provider)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
@@ -130,13 +135,13 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 	if err := sandbox.ValidateProvider(candidate.Config.Provider); err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
 	}
-	if !adapter.Credential {
+	if !usesCredential {
 		return candidate, nil
 	}
 	candidate.FenceCredential = func(ctx context.Context) (func(), error) {
 		release, err := s.providerCalls.Fence(ctx)
 		if err != nil {
-			return nil, adapter.CredentialUnconfirmed
+			return nil, sandbox.ErrConfigurationUnconfirmed
 		}
 		return release, nil
 	}
@@ -168,7 +173,7 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			return &store.SandboxResetRequiredError{CurrentProvider: current.Provider, RequestedProvider: setup.Provider}
 		}
 		if err := verify(current, nil); err != nil {
-			if adapter.CredentialRequiresReset != nil && adapter.CredentialRequiresReset(err) {
+			if errors.Is(err, sandbox.ErrCredentialRejected) || errors.Is(err, sandbox.ErrCredentialOwnership) {
 				// A revoked legacy key or a public template outside its team cannot
 				// anchor ownership. This says nothing about the candidate key's validity.
 				return &store.SandboxResetRequiredError{CurrentProvider: setup.Provider, RequestedProvider: setup.Provider}
@@ -176,11 +181,11 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			return err
 		}
 		withCandidateKey := func(value store.SandboxSetup, refs []sandbox.Reference) error {
-			selection, err := providers.WithCredential(sandbox.Selection{Provider: value.Provider, DeploymentSpec: value.Specification, E2B: value.E2B}, sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, E2B: setup.E2B})
+			selection, err := providers.WithCredential(sandbox.Selection{Provider: value.Provider, DeploymentSpec: value.Specification, Configuration: value.Configuration}, sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration})
 			if err != nil {
 				return err
 			}
-			value.E2B = selection.E2B
+			value.Configuration = selection.Configuration
 			return verify(value, refs)
 		}
 		if err := withCandidateKey(current, nil); err != nil {
@@ -219,7 +224,7 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			for generation, refs := range refsByGeneration {
 				owner, ok := generations[generation]
 				if !ok {
-					return adapter.CredentialUnconfirmed
+					return sandbox.ErrConfigurationUnconfirmed
 				}
 				if err := withCandidateKey(owner, refs); err != nil {
 					return err

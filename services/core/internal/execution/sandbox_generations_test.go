@@ -21,7 +21,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 	if err := writer.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
-	input := store.SandboxDeploymentSetupRequest{Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "old-key", Template: "runtime:" + uuid.NewString()}}
+	input := store.SandboxDeploymentSetupRequest{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "old-key", Template: "runtime:" + uuid.NewString()}}
 	input.Resources.CPUs = 2
 	input.Resources.MemoryMiB = 2048
 	if _, err := writer.InitializeSandboxDeployment(t.Context(), id, input); err != nil {
@@ -32,7 +32,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 	provider := hub.Proxy(uuid.NewString(), "docker", 1)
 	verifyCalls, published, fenced, released := 0, 0, 0, 0
 	var rejectAt int
-	var rejection error = e2b.ErrTeamMismatch
+	var rejection error = sandbox.ErrCredentialOwnership
 	config := NewDeferredRuntimeProvider(id, func(ctx context.Context) (*RuntimeProvider, error) {
 		setup, err := s.GetSandboxSetup(ctx)
 		if err != nil {
@@ -63,7 +63,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 		t.Fatal(err)
 	}
 	worker := &Worker{runtimes: m}
-	input.E2B.APIKey = "candidate-key"
+	input.Configuration.(*e2b.DeploymentConfiguration).APIKey = "candidate-key"
 	request := store.SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1}
 	audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "test", RequestID: "test", TraceID: "test"})
 	for _, failure := range []string{"preliminary", "final", "unanchored legacy or revoked committed key", "unknown ownership", "commit"} {
@@ -80,7 +80,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 			rejection = &store.SandboxResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}
 		case "unknown ownership":
 			rejectAt = 1
-			rejection = e2b.ErrRequestUnconfirmed
+			rejection = sandbox.ErrConfigurationUnconfirmed
 		case "commit":
 			ctx = t.Context()
 		}
@@ -88,7 +88,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 			t.Fatal("failure published", failure)
 		}
 		committed, err := s.GetSandboxSetup(t.Context())
-		if err != nil || committed.Generation != 1 || committed.E2B.APIKey != "old-key" || published != 0 || fenced != released {
+		if err != nil || committed.Generation != 1 || committed.Configuration.(*e2b.DeploymentConfiguration).APIKey != "old-key" || published != 0 || fenced != released {
 			t.Fatal("partial credential publication", failure, err)
 		}
 		current, err := m.node("")

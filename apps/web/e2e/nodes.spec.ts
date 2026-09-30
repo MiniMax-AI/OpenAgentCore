@@ -261,13 +261,10 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
   await page.getByRole("button", { name: "Save configuration" }).click();
   await expect(page.getByRole("heading", { name: "Sandbox configuration", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  expect(submitted).toMatchObject({ provider: "e2b", e2b: {
-    api_key: "fixture-private-key", template: "template:94be54a1-138c-4f30-bc87-b13686272dbe",
-    api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai",
-  } });
+  expect(submitted).toMatchObject({ provider: "e2b", configuration: { template: "template:94be54a1-138c-4f30-bc87-b13686272dbe", api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai" } , credential: { api_key: "fixture-private-key" } });
   expect(await writes(request)).toEqual([
-    "POST /core/v1/sandbox/e2b/templates",
-    "POST /core/v1/sandbox/e2b/templates/template/builds",
+    "POST /core/v1/sandbox/providers/e2b/discovery",
+    "POST /core/v1/sandbox/providers/e2b/discovery",
     "POST /core/v1/sandbox/deployment",
   ]);
 });
@@ -308,7 +305,7 @@ test("edits only the saved backend, preserving a custom size and Runtime", async
   const runtime = { source_commit: "0".repeat(40), image_id: `sha256:${"a".repeat(64)}`, image_manifest_digest: `sha256:${"b".repeat(64)}`,
     microsandbox_ref: `oac-runtime@sha256:${"b".repeat(64)}`, runtime_sha256: "c".repeat(64), firmware_sha256: "d".repeat(64) };
   const current = { resources: { cpus: 7, memory_mib: 8192 }, runtime };
-  let deployment = { installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, update_required: 0, unknown: 0 } },
+  let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, update_required: 0, unknown: 0 } },
     owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
     suspension: null };
   let submitted: Record<string, unknown> | null = null;
@@ -330,7 +327,7 @@ test("edits only the saved backend, preserving a custom size and Runtime", async
   expect(submitted).not.toHaveProperty("core_url");
 });
 
-test("keeps the page usable when Core refuses a sandbox change, and shows Core's reason", async ({ page, request }) => {
+test("keeps the page usable when Core refuses a sandbox change, and shows a safe refusal", async ({ page, request }) => {
   await openConsole(page, request, "system?id=sandbox", { sandbox: "none" });
   await failNext(request, { method: "POST", path: "/sandbox/deployment", status: 403, message: "This console is read-only." });
   await page.getByRole("button", { name: "Own machines" }).click();
@@ -339,12 +336,12 @@ test("keeps the page usable when Core refuses a sandbox change, and shows Core's
   const save = page.getByRole("button", { name: "Save configuration" });
   await save.click();
   // A clear refusal changed nothing: no "couldn't confirm" dialog, and the same page to try again.
-  await expect(page.getByText("This console is read-only.")).toBeVisible();
+  await expect(page.getByText("Core rejected the sandbox configuration.")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  // One code covers several reasons, so a conflict shows Core's own.
+  // Only fixed safe copy is shown for configuration errors.
   await failNext(request, { method: "POST", path: "/sandbox/deployment", status: 409, code: "sandbox_deployment_conflict", message: "Another administrator changed the deployment; it is now at generation 2." });
   await save.click();
-  await expect(page.getByText("Another administrator changed the deployment; it is now at generation 2.")).toBeVisible();
+  await expect(page.getByText("The sandbox deployment cannot change in its current state.")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await save.click();
   const added = page.getByRole("dialog", { name: "Add node" });

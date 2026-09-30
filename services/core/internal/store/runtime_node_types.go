@@ -1,9 +1,11 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 var (
@@ -95,34 +97,6 @@ type SandboxDeploymentResources struct {
 	Pending     int64 `json:"pending"`
 }
 
-// SandboxE2BView is the safe E2B selection. It never includes the API key.
-type SandboxE2BView struct {
-	Template             string `json:"template"`
-	APIURL               string `json:"api_url"`
-	Domain               string `json:"domain"`
-	CredentialConfigured bool   `json:"credential_configured"`
-	// The fixed template build as Core read it when this selection was saved.
-	TemplateBuild SandboxE2BTemplateBuildView `json:"template_build"`
-}
-
-// SandboxE2BTemplateBuildView is the fixed template build as Core read it when
-// this selection was saved; GET does not call E2B. Unknown values are null,
-// including every value of a selection saved before Core recorded them.
-type SandboxE2BTemplateBuildView struct {
-	// Build status at selection time; validation admits only ready builds.
-	Status    *string                  `json:"status" extensions:"x-nullable"`
-	Resources SandboxTemplateResources `json:"resources"`
-}
-
-// SandboxTemplateResources uses the specification.resources names. Validation
-// requires cpus and memory_mib to equal the selected limits; root_disk_mib is
-// the build's native disk size, which Core does not enforce separately.
-type SandboxTemplateResources struct {
-	CPUs        *int32 `json:"cpus" extensions:"x-nullable"`
-	MemoryMiB   *int32 `json:"memory_mib" extensions:"x-nullable"`
-	RootDiskMiB *int32 `json:"root_disk_mib" extensions:"x-nullable"`
-}
-
 // SandboxSuspensionView is the idle suspension policy. Only microsandbox
 // suspends sandboxes; Docker and E2B deployments return null.
 type SandboxSuspensionView struct {
@@ -149,13 +123,15 @@ type SandboxRollout struct {
 	Nodes                       *SandboxRolloutNodes `json:"nodes" extensions:"x-nullable"`
 }
 type RuntimeDeploymentView struct {
-	Rollout             SandboxRollout             `json:"rollout"`
-	Specification       *sandbox.DeploymentSpec    `json:"specification,omitempty"`
-	SpecificationDigest string                     `json:"specification_digest,omitempty"`
-	Generation          uint64                     `json:"generation"`
-	Mode                string                     `json:"mode"`
-	Resources           SandboxDeploymentResources `json:"resources"`
-	E2B                 *SandboxE2BView            `json:"e2b,omitempty"`
+	Rollout              SandboxRollout             `json:"rollout"`
+	Specification        *sandbox.DeploymentSpec    `json:"specification,omitempty"`
+	SpecificationDigest  string                     `json:"specification_digest,omitempty"`
+	Generation           uint64                     `json:"generation"`
+	Mode                 string                     `json:"mode"`
+	Resources            SandboxDeploymentResources `json:"resources"`
+	Configuration        json.RawMessage            `json:"configuration,omitempty" swaggertype:"object"`
+	Metadata             json.RawMessage            `json:"metadata,omitempty" swaggertype:"object"`
+	CredentialConfigured bool                       `json:"credential_configured"`
 	// Idle suspension policy; microsandbox only, otherwise null.
 	Suspension     *SandboxSuspensionView `json:"suspension" extensions:"x-nullable"`
 	InstallationID string                 `json:"installation_id"`

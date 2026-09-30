@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -18,42 +19,32 @@ import (
 // Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
 	Policy                        sandbox.DeploymentPolicy
-	ReplaceCredential             func(sandbox.Selection, sandbox.Selection) sandbox.Selection
-	CredentialRequiresReset       func(error) bool
-	CredentialUnconfirmed         error
-	Restore                       func(sandbox.Selection) (sandbox.Selection, error)
-	ResolveChange                 func(sandbox.Selection, sandbox.Selection) sandbox.Selection
+	Configuration                 sandbox.ConfigurationAdapter
 	BuildLocal                    func(Config, *Built) (func(), error)
 	BuildDirect                   func(DirectConfig) (sandbox.SandboxProvider, error)
-	Credential                    bool
-	PublicOrigin                  bool
 	Mode                          string
 	Operations                    func() providercontract.Operations
 	IdleSeconds, RetentionSeconds int64
 	ValidateSpecification         func(sandbox.DeploymentSpec) error
 	ValidateResources             func(sandbox.Resources) error
-	Normalize                     func(sandbox.Selection) (sandbox.Selection, error)
 }
 
 var adapters = map[string]Adapter{
 	"docker": {
 		Policy: docker.Policy(), Operations: docker.Operations, Mode: "nodes", BuildLocal: buildDocker,
 		ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
-		Normalize: nodeSelection(docker.ValidateSpecification),
+		Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
 	},
 	"microsandbox": {
 		Policy: microsandbox.Policy(), Operations: microsandbox.Operations, Mode: "nodes", BuildLocal: buildMicrosandbox,
 		IdleSeconds: 300, RetentionSeconds: 86400,
 		ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
-		Normalize: nodeSelection(microsandbox.ValidateSpecification),
+		Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
 	},
 	"e2b": {
 		Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
 		IdleSeconds: 300, RetentionSeconds: 86400,
-		Credential: true, PublicOrigin: true,
-		ReplaceCredential: e2b.ReplaceCredential, CredentialRequiresReset: e2b.CredentialRequiresReset,
-		CredentialUnconfirmed: e2b.ErrRequestUnconfirmed, Restore: e2b.RestoreSelection,
-		ResolveChange: e2b.ResolveChange, Normalize: e2b.NormalizeSelection,
+		Configuration:         e2b.ConfigurationAdapter{},
 		ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
 	},
 }
@@ -97,21 +88,6 @@ func ValidateResources(kind string, s sandbox.Resources) error {
 	}
 	return a.ValidateResources(s)
 }
-func Normalize(s sandbox.Selection) (sandbox.Selection, error) {
-	a, e := Lookup(s.Provider)
-	if e != nil {
-		return s, e
-	}
-	return a.Normalize(s)
-}
-func nodeSelection(validate func(sandbox.DeploymentSpec) error) func(sandbox.Selection) (sandbox.Selection, error) {
-	return func(s sandbox.Selection) (sandbox.Selection, error) {
-		if s.E2B != nil {
-			return s, sandbox.ErrInvalid
-		}
-		return s, validate(s.DeploymentSpec)
-	}
-}
 
 // Description is derived once for both preview and persistence. Its fingerprint
 // identifies a namespace, never mutable capacity or a credential.
@@ -131,40 +107,6 @@ func Describe(kind, installation string) (Description, error) {
 	}
 	digest := sha256.Sum256([]byte(kind + "\x00" + namespace + ":" + installation))
 	return Description{a.Mode, hex.EncodeToString(digest[:]), a.IdleSeconds, a.RetentionSeconds}, nil
-}
-
-func UsesCredential(kind string) bool { a, e := Lookup(kind); return e == nil && a.Credential }
-func Restore(s sandbox.Selection) (sandbox.Selection, error) {
-	a, e := Lookup(s.Provider)
-	if e != nil {
-		return s, e
-	}
-	if a.Restore != nil {
-		return a.Restore(s)
-	}
-	s.E2B = nil
-	return s, nil
-}
-func ResolveChange(next, previous sandbox.Selection) (sandbox.Selection, error) {
-	a, e := Lookup(next.Provider)
-	if e != nil {
-		return next, e
-	}
-	if a.ResolveChange != nil {
-		next = a.ResolveChange(next, previous)
-	}
-	return Normalize(next)
-}
-
-func WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, error) {
-	a, e := Lookup(owner.Provider)
-	if e != nil {
-		return owner, e
-	}
-	if a.ReplaceCredential == nil {
-		return owner, sandbox.ErrInvalid
-	}
-	return a.ReplaceCredential(owner, candidate), nil
 }
 
 // PythonDeploymentContract projects the same registered adapter policies into
