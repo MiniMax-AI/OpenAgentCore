@@ -5,7 +5,6 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"net"
 	"os"
 	"testing"
@@ -14,6 +13,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/authoring"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestAuthoringSocketEndsWithTurnWhileSessionIsRetained(t *testing.T) {

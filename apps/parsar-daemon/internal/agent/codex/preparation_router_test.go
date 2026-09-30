@@ -7,7 +7,6 @@ import (
 	"errors"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"github.com/google/uuid"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type preparationWireSender chan proto.Envelope

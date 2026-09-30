@@ -5,7 +5,6 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -17,6 +16,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentcapabilities"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type controlledPreparation struct {

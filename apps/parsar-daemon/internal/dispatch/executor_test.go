@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type reusableExecutor struct {
@@ -312,4 +312,8 @@ func TestExecutorRejectsOutputFromAnotherTurn(t *testing.T) {
 			t.Fatal("old Turn output escaped")
 		}
 	}
+}
+
+func (*reusableTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
+	return agent.ErrSteeringRejected
 }

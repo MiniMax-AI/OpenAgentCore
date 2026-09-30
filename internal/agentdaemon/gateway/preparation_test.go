@@ -2,10 +2,10 @@ package gateway
 
 import (
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T) {

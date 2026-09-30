@@ -27,7 +27,7 @@
     "docs/development.md": "f5c340253036a2cabc43e22aecdf70522d90280d6511e7649278ae93712ab8b6",
     "contracts/agents-api/harness-onboarding.md": "acbc9bf8c1365e1242d4c9a934b068a19ef3450a4aef2fc08356624380222266",
     "docs/runtime-bootstrap.md": "0d49aed73b298039e04453e6f465b0e925fb2227fa35d4206820bb3acbd8df39",
-    "docs/runtime-protocol.md": "1d48186fa84140403358d2d01ddaca56d7122e1b3606cb6855ddefffeb3b8ed6",
+    "docs/runtime-protocol.md": "4bce016e8ec239281969c84c8483044cf3247051eb062ec30d3effa00b661001",
     "docs/sandbox-provider.md": "4d47b234a457f874f3ff7e61a7f5da6fc8b75b0c6df0ce0ce9ead1c07afdfb3e",
     "apps/docs/scripts/guides.json": "3c3768fb94fd3d42464d4ce8c55724b9ba8360133c7cc19d513d8ec83a8e034f"
   },
@@ -58,7 +58,7 @@
     "content/docs/development.mdx": "2e5249ddfca571d264e93fd1e0e390a4bd5b0b623bda100cd02f2982929850bb",
     "content/docs/harness-onboarding.mdx": "f0d91fd8f4cbaaa9475a25e24b08d9bfb0c25a8549af47b81073886444e5ac44",
     "content/docs/runtime-bootstrap.mdx": "58982955811c9ad46a9fc04d8d2aef5a762fc9d25d5833f88aa75ee3fc46523f",
-    "content/docs/runtime-protocol.mdx": "caa7700e442b0666340c091f3ec0bff32e6217b3be4bc845c3b9c23ee0c8d0f6",
+    "content/docs/runtime-protocol.mdx": "560f887d5fc9fa673275a6481220f5fb997c4ece30c09384b81b14dbc7aa0dd4",
     "content/docs/sandbox-provider.mdx": "9db833fe9ff3f30a65451f80d7251348695a08e7830f9e95871739a710529818"
   }
 }

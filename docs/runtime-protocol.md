@@ -56,6 +56,37 @@ leases and evicts old Run/interaction routes; the new connection does not inheri
 them. A valid credential and connection are not authority to choose another
 Session or Environment binding.
 
+### Explicit capability declarations
+
+`AgentKindCapabilities` describes the composed Runtime and Harness, independently
+of `Available` and the Core model profile. Every field uses `CapabilitySupport`:
+`CapabilitySupported` or `CapabilityUnsupported`. Zero means unspecified and is
+invalid even for an unavailable Harness. Registration validates the complete
+struct before changing the registry; there is no implicit basic descriptor.
+
+The wire still uses JSON booleans and includes every field, including `false`.
+Encoding incomplete declarations fails; decoding rejects omitted, null, invalid
+or unknown capability fields, including a missing capability object. An invalid
+heartbeat clears the connection's admission snapshot and closes its transport.
+That establishes no native completion or cancellation result. Both peers use the
+same exact wire version; no historical declaration format is accepted.
+
+Each admitted Executor and Turn retains its declaration. Rediscovery cannot add
+operations to an existing owner. Optional operations check this snapshot before
+native calls; interface presence alone never grants support. A declared operation
+returning `agent.ErrUnsupportedOperation` is a contract violation, distinct from
+unavailability, a failed native call or an uncertain write. Uncertain operations
+keep their existing receipts and ownership; they are never automatically replayed.
+Workspace support includes the common Runtime workspace implementation, so a
+native adapter's unsupported workspace method does not disable that composition.
+
+New fields require an explicit decision in each production declaration. Contract
+tests enumerate every field for registration, wire round trips and the persisted
+boolean projection. The shared test fixture lists current fields individually;
+it does not supply defaults for future fields. The Harness interface inventory
+also requires a role decision and compile assertions for every public adapter;
+see [Harness onboarding](../contracts/agents-api/harness-onboarding.md).
+
 ### Executor and Turn lifetimes
 
 This section owns the separation of execution and resource lifetimes.

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"os"
 	"reflect"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	opencodeagent "github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent/opencode"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent/pi"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestScrubInlineConnectArgsRemovesTokenURLAndDeviceName(t *testing.T) {

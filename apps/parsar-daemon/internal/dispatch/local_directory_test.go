@@ -5,7 +5,6 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -16,6 +15,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/dispatch"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"github.com/google/uuid"
 )
 

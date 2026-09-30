@@ -7,7 +7,6 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 const credential = "synthetic-contract-credential"

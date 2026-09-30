@@ -4,13 +4,13 @@ import "github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
 
 import (
 	"context"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 type durableSteeringSession struct {

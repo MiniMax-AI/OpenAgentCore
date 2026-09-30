@@ -242,7 +242,9 @@ The Runtime is not a sandbox; see
 
 Shared wire types and validators live only in `internal/agentdaemon/proto`.
 Change both peers together with an exact wire-version check; do not add a
-parallel schema or a historical wire fallback.
+parallel schema or a historical wire fallback. Capability completeness and
+interface coverage are mandatory extension gates under the
+[explicit declaration contract](docs/runtime-protocol.md#explicit-capability-declarations).
 
 ### Pre-release policy
 

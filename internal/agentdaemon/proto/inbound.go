@@ -262,7 +262,7 @@ type SupportedAgentKind struct {
 	Kind         string                `json:"kind"`
 	Available    bool                  `json:"available"`
 	Version      string                `json:"version,omitempty"`
-	Capabilities AgentKindCapabilities `json:"capabilities,omitempty"`
+	Capabilities AgentKindCapabilities `json:"capabilities"`
 }
 
 // HeartbeatPayload advertises only explicit engine descriptors. Missing

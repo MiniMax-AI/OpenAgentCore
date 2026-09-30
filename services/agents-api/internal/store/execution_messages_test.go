@@ -3,11 +3,11 @@ package store_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 )
 

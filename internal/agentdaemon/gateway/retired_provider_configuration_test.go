@@ -2,11 +2,11 @@ package gateway
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto/prototest"
 )
 
 func TestRetiredProviderConfigurationDoesNotAffectHeartbeatAdmission(t *testing.T) {
