@@ -34,12 +34,12 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 		subagentFact(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: "child", TurnID: "turn", ItemID: "native-file-change", Position: 0, Kind: proto.TypeToolCall, Payload: call}),
 		subagentFact(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: "child", TurnID: "turn", ItemID: "answer", Position: 1, Kind: proto.TypeOutputMessage, Payload: message}),
 	}
-	if err = owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, facts); err != nil {
+	if err = sessionExecution(t, owner.lease).AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, facts); err != nil {
 		t.Fatal(err)
 	}
 	finished := int64(101000)
 	terminal := subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "turn", Status: sessions.TurnCompleted, CreatedAtMS: 100000, CompletedAtMS: &finished})
-	if err = owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{terminal, facts[2], facts[3]}); err != nil {
+	if err = sessionExecution(t, owner.lease).AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{terminal, facts[2], facts[3]}); err != nil {
 		t.Fatal("identical native tool history must survive replay after completion", err)
 	}
 	child, err := s.GetSubagentIdentity(t.Context(), tenant, session.ID, "child")
@@ -112,7 +112,7 @@ func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 		// A cold history read must preserve the partial answer without re-execution.
 		message, terminal,
 	}
-	if err := owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, facts); err != nil {
+	if err := sessionExecution(t, owner.lease).AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, facts); err != nil {
 		t.Fatal(err)
 	}
 	child, err := s.GetSubagentIdentity(t.Context(), tenant, session.ID, "child")

@@ -25,10 +25,11 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
 	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	journal := sessionExecution(t, executionWriter(t, s).lease)
 	before := diagnosticToolEvent("cmd", "before", "in_progress")
 	after := diagnosticToolEvent("cmd", "after", "failed")
 	for i, event := range []sessions.ExecutionEvent{before, after} {
-		if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, int32(i+1), []sessions.ExecutionEvent{event}); err != nil {
+		if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, int32(i+1), []sessions.ExecutionEvent{event}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -47,12 +48,12 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 	if item.CompletedAt == nil || !item.CompletedAt.Equal(received) || item.CompletedAt.Before(item.StartedAt) {
 		t.Fatal("Item did not use terminal receipt", item, received)
 	}
-	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 2, []sessions.ExecutionEvent{after}); err != nil {
+	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 2, []sessions.ExecutionEvent{after}); err != nil {
 		t.Fatal(err)
 	}
 	// A terminal legacy Item with unknown settlement must remain unknown even on a repeated upsert.
 	runtimeSuspensionSQL(t, s.pool, "UPDATE session_items SET settled_at=NULL WHERE id=$1", item.ItemID)
-	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, []sessions.ExecutionEvent{after}); err != nil {
+	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, []sessions.ExecutionEvent{after}); err != nil {
 		t.Fatal(err)
 	}
 	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
@@ -69,7 +70,7 @@ func TestDiagnosticForceSettlementIgnoresNativeClock(t *testing.T) {
 			turn := uuid.NewString()
 			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at) VALUES($1,$2,'in_progress',clock_timestamp())", turn, owner.SessionID)
 			events := []sessions.ExecutionEvent{diagnosticToolEvent("first", "before", "in_progress"), diagnosticToolEvent("second", "before", "in_progress")}
-			if err := w.AppendTurnEvents(t.Context(), owner.TenantID, owner.SessionID, turn, 1, events); err != nil {
+			if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), owner.TenantID, owner.SessionID, turn, 1, events); err != nil {
 				t.Fatal(err)
 			}
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
@@ -281,7 +282,8 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
 	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	events := []sessions.ExecutionEvent{diagnosticToolEvent("cmd", "before", "in_progress"), diagnosticToolEvent("cmd", "after", "completed")}
-	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 1, events); err != nil {
+	journal := sessionExecution(t, executionWriter(t, s).lease)
+	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 1, events); err != nil {
 		t.Fatal(err)
 	}
 	first, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
@@ -298,7 +300,7 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 		runtimeSuspensionSQL(t, pool, "UPDATE session_items SET payload=jsonb_set(payload,'{status}','\"in_progress\"') WHERE id=$1", item.ItemID)
 		if force {
 			transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
-		} else if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, events[1:]); err != nil {
+		} else if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, events[1:]); err != nil {
 			t.Fatal(err)
 		}
 		got, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)

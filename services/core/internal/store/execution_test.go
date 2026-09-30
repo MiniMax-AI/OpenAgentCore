@@ -72,7 +72,7 @@ func executionOwnerPID(t *testing.T, pool *pgxpool.Pool) int32 {
 func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	s, pool := testStore(t)
 	writer := executionWriter(t, s)
-	functions := sessionExecution(t, writer.lease)
+	operations := sessionExecution(t, writer.lease)
 	tenant, active := newTurnSession(t, s)
 	input := submitMessage(t, s, tenant, active.ID, "active")
 	transition(t, writer, tenant, active.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
@@ -95,7 +95,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	waitInput := submitMessage(t, s, tenant, waiting.ID, "waiting")
 	transition(t, writer, tenant, waiting.ID, waitInput.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	call := functionCallFixture("saved")
-	if err = functions.RecordFunctionCall(t.Context(), tenant, waiting.ID, waitInput.TurnID, call); err != nil {
+	if err = operations.RecordFunctionCall(t.Context(), tenant, waiting.ID, waitInput.TurnID, call); err != nil {
 		t.Fatal(err)
 	}
 	if err = SubmitFixtureFunctionResult(t.Context(), s, tenant, waiting.ID, waitInput.TurnID, call.CallID, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
@@ -124,9 +124,9 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	mustReject("binding", writer.BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
 	_, err = writer.TransitionTurn(t.Context(), tenant, queued.ID, pending.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	mustReject("claim", err)
-	mustReject("journal", writer.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"stale"}`)}}))
-	mustReject("callback", functions.RecordFunctionCall(t.Context(), tenant, active.ID, input.TurnID, functionCallFixture("late")))
-	mustReject("receipt", functions.ConfirmFunctionResult(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID))
+	mustReject("journal", operations.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"stale"}`)}}))
+	mustReject("callback", operations.RecordFunctionCall(t.Context(), tenant, active.ID, input.TurnID, functionCallFixture("late")))
+	mustReject("receipt", operations.ConfirmFunctionResult(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID))
 	_, err = writer.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"content":"stale"}}`), "stale-native", input.Sequence)
 	mustReject("completion", err)
 	_, err = writer.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
@@ -196,6 +196,7 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 	if backend(writer) != owner || backend(s) == owner {
 		t.Fatal("execution transactions do not run on the leased connection")
 	}
+	journal := sessionExecution(t, writer.lease)
 	type work struct{ tenant, session, turn string }
 	tasks := make([]work, 4)
 	for i := range tasks {
@@ -208,7 +209,7 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 		group.Go(func() {
 			_, err := writer.TransitionTurn(t.Context(), task.tenant, task.session, task.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			if err == nil {
-				err = writer.AppendTurnEvents(t.Context(), task.tenant, task.session, task.turn, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"accepted"}`)}})
+				err = journal.AppendTurnEvents(t.Context(), task.tenant, task.session, task.turn, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"accepted"}`)}})
 			}
 			results <- err
 		})
@@ -249,7 +250,7 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
-	input := submitMessage(t, s, tenant, session.ID, "start")
+	submitMessage(t, s, tenant, session.ID, "start")
 	before, err := s.GetSession(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -260,14 +261,11 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	}
 	_, archiveErr := s.ArchiveManagedSession(t.Context(), tenant, session.ID, 0)
 	_, expiryErr := s.ExpireEnvironmentInputs(t.Context())
-	subagent := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"visible"}`)}, subagentIdentityEvent("child", "root", 100)}
 	for name, err := range map[string]error{
 		"ownership check":   s.checkExecutionOwnership(t.Context()),
 		"archive":           archiveErr,
 		"input expiry":      expiryErr,
 		"reconciliation":    s.ReconcileEnvironmentConnections(t.Context()),
-		"mixed batch":       s.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, subagent),
-		"subagent only":     s.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, subagent[1:]),
 		"connection change": s.ReplaceEnvironmentConnection(t.Context(), tenant, uuid.NewString(), uuid.NewString()),
 	} {
 		if !errors.Is(err, ErrExecutionAuthority) {
@@ -280,8 +278,5 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	}
 	if next, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
 		t.Fatal("rejected execution operation published events", next, err)
-	}
-	if events, err := s.ListTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 0, 100); err != nil || len(events) != 0 {
-		t.Fatal("rejected batch reached the journal", events, err)
 	}
 }

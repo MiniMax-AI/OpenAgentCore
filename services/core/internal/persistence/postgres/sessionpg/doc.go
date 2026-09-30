@@ -4,11 +4,13 @@
 // queries, the participants load the facts the sessions and items decisions
 // read and apply what they decide: they lock the Session, allocate event
 // sequence positions, event IDs, Item positions and output indexes, and write
-// the public change journal, Items, Turn usage, Artifact settlement,
-// Environment state, input reservations and devices. SessionTx binds a Session
-// to its caller's transaction for the sessions procedures. Store is the pooled
-// adapter: it stores the sessions.Service use cases and serves the Session
-// reads.
+// the public change journal, a Turn's execution journal and its counters,
+// Items, Turn usage, Subagent bindings, child Turns and child Items, Artifact
+// settlement, Environment state, input reservations and devices. SessionTx
+// binds a Session to its caller's transaction for the sessions procedures.
+// Store is the pooled adapter: it stores the sessions.Service use cases and
+// serves the Session reads. Execution is the lease-bound adapter: it runs the
+// sessions.ExecutionOperations transactions on the execution lease.
 package sessionpg
 
 import (

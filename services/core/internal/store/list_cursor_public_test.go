@@ -34,7 +34,7 @@ type cursorFixture struct {
 	file                                                            string
 }
 
-func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillService *skills.Service, artifacts *sessions.Service, client pathIDClient, token, tenant, label string) cursorFixture {
+func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, journal *sessions.ExecutionOperations, skillService *skills.Service, artifacts *sessions.Service, client pathIDClient, token, tenant, label string) cursorFixture {
 	t.Helper()
 	ctx := t.Context()
 	var f cursorFixture
@@ -121,7 +121,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillS
 			turn("child", "child-turn", opened), message("child", "child-turn", "child-item", 0), message("child", "child-turn", "child-item-2", 1),
 			turn("child", "later-child-turn", opened+1000), message("child", "later-child-turn", "later-child-item", 0),
 			turn("sibling", "sibling-turn", opened), message("sibling", "sibling-turn", "sibling-item", 0)}
-		if err = writer.AppendTurnEvents(ctx, tenant, created.ID, receipt.TurnID, 1, facts); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, created.ID, receipt.TurnID, 1, facts); err != nil {
 			t.Fatal(err)
 		}
 		return created.ID, receipt.TurnID
@@ -239,14 +239,15 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer := executionOwner(t, db, s).Store
+	leased := executionOwner(t, db, s)
+	writer := leased.Store
 	skillService := store.SkillService(t, db.pool, db.cipher)
 	_, sessionService, err := fixtureSessions(db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := seedCursorFixture(t, s, writer, skillService, sessionService, client, owner, ownerTenant, "a")
-	b := seedCursorFixture(t, s, writer, skillService, sessionService, client, foreign, foreignTenant, "b")
+	a := seedCursorFixture(t, s, writer, leased.Sessions, skillService, sessionService, client, owner, ownerTenant, "a")
+	b := seedCursorFixture(t, s, writer, leased.Sessions, skillService, sessionService, client, foreign, foreignTenant, "b")
 
 	text := func(value string) *string { return &value }
 	var (

@@ -317,7 +317,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.AppendTurnEvents(t.Context(), tenant, history.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained answer"}`)}}); err != nil {
+	if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), tenant, history.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained answer"}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {

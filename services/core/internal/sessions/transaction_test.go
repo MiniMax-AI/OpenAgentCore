@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
 // fakeTx is a strict Session transaction. Each method records its call, with
@@ -34,6 +38,29 @@ type fakeTx struct {
 	loadPendingFileWrite     func() (bool, error)
 	loadBoundDevice          func() (bool, error)
 	insertEnvironmentDevice  func() error
+
+	loadJournalTurn        func() (JournalTurn, bool, error)
+	matchEvents            func() (bool, error)
+	insertEvents           func() error
+	insertEvent            func() error
+	countEvents            func() error
+	loadEventSources       func() ([]Source, error)
+	loadInputSource        func() (Source, error)
+	putTurnUsage           func(v1.TokenUsage) error
+	loadItem               func() (items.Stored, error)
+	putItem                func(items.Change) (*int32, error)
+	loadRootAgent          func() (string, error)
+	loadNativeSubagent     func(native string) (NativeSubagent, bool, error)
+	putSubagentIdentity    func(SubagentIdentity) (string, error)
+	publishSubagent        func() error
+	loadPublicSubagent     func() (v1.Subagent, error)
+	putSubagentEffect      func() (bool, error)
+	applySubagentLifecycle func(SubagentLifecycle) error
+	loadChildTurn          func() (ChildTurn, bool, error)
+	putChildTurn           func(ChildTurn) error
+	recordTerminalActivity func() error
+	loadChildItem          func() (StoredChildItem, bool, error)
+	putChildItem           func(ChildItem) error
 }
 
 var (
@@ -41,6 +68,9 @@ var (
 	_ InputStartTx             = (*fakeTx)(nil)
 	_ ComputeAdmissionTx       = (*fakeTx)(nil)
 	_ EnvironmentDeviceTx      = (*fakeTx)(nil)
+	_ TurnJournalTx            = (*fakeTx)(nil)
+	_ TurnEventTx              = (*fakeTx)(nil)
+	_ InputProjectionTx        = (*fakeTx)(nil)
 )
 
 func (f *fakeTx) record(name string, set bool, detail ...string) {
@@ -134,6 +164,116 @@ func (f *fakeTx) LoadBoundDevice(context.Context) (bool, error) {
 func (f *fakeTx) InsertEnvironmentDevice(_ context.Context, device ExecutionDevice, credentialHash string) error {
 	f.record("InsertEnvironmentDevice", f.insertEnvironmentDevice != nil, device.ID, device.Name, device.EnvironmentID, credentialHash)
 	return f.insertEnvironmentDevice()
+}
+
+func (f *fakeTx) LoadJournalTurn(_ context.Context, turn string) (JournalTurn, bool, error) {
+	f.record("LoadJournalTurn", f.loadJournalTurn != nil, turn)
+	return f.loadJournalTurn()
+}
+
+func (f *fakeTx) MatchEvents(_ context.Context, turn string, first int32, events []ExecutionEvent) (bool, error) {
+	f.record("MatchEvents", f.matchEvents != nil, turn, fmt.Sprint(first), fmt.Sprint(len(events)))
+	return f.matchEvents()
+}
+
+func (f *fakeTx) InsertEvents(_ context.Context, turn string, first int32, events []ExecutionEvent) error {
+	f.record("InsertEvents", f.insertEvents != nil, turn, fmt.Sprint(first), fmt.Sprint(len(events)))
+	return f.insertEvents()
+}
+
+func (f *fakeTx) InsertEvent(_ context.Context, turn string, ordinal int32, event ExecutionEvent) error {
+	f.record("InsertEvent", f.insertEvent != nil, turn, fmt.Sprint(ordinal), event.Kind)
+	return f.insertEvent()
+}
+
+func (f *fakeTx) CountEvents(_ context.Context, turn string, count int32, size int64) error {
+	f.record("CountEvents", f.countEvents != nil, turn, fmt.Sprint(count), fmt.Sprint(size))
+	return f.countEvents()
+}
+
+func (f *fakeTx) LoadEventSources(_ context.Context, turn string, first int32) ([]Source, error) {
+	f.record("LoadEventSources", f.loadEventSources != nil, turn, fmt.Sprint(first))
+	return f.loadEventSources()
+}
+
+func (f *fakeTx) LoadInputSource(_ context.Context, sequence int64) (Source, error) {
+	f.record("LoadInputSource", f.loadInputSource != nil, fmt.Sprint(sequence))
+	return f.loadInputSource()
+}
+
+func (f *fakeTx) PutTurnUsage(_ context.Context, turn string, usage v1.TokenUsage) error {
+	f.record("PutTurnUsage", f.putTurnUsage != nil, turn)
+	return f.putTurnUsage(usage)
+}
+
+func (f *fakeTx) LoadItem(_ context.Context, turn string, update items.Update) (items.Stored, error) {
+	f.record("LoadItem", f.loadItem != nil, turn, update.Item.ID)
+	return f.loadItem()
+}
+
+func (f *fakeTx) PutItem(_ context.Context, turn string, _ time.Time, change items.Change) (*int32, error) {
+	f.record("PutItem", f.putItem != nil, turn, change.Item.ID)
+	return f.putItem(change)
+}
+
+func (f *fakeTx) LoadRootAgent(context.Context) (string, error) {
+	f.record("LoadRootAgent", f.loadRootAgent != nil)
+	return f.loadRootAgent()
+}
+
+func (f *fakeTx) LoadNativeSubagent(_ context.Context, native string) (NativeSubagent, bool, error) {
+	f.record("LoadNativeSubagent", f.loadNativeSubagent != nil, native)
+	return f.loadNativeSubagent(native)
+}
+
+func (f *fakeTx) PutSubagentIdentity(_ context.Context, identity SubagentIdentity) (string, error) {
+	f.record("PutSubagentIdentity", f.putSubagentIdentity != nil, identity.NativeID)
+	return f.putSubagentIdentity(identity)
+}
+
+func (f *fakeTx) PublishSubagent(_ context.Context, id string, _, _ *string) error {
+	f.record("PublishSubagent", f.publishSubagent != nil, id)
+	return f.publishSubagent()
+}
+
+func (f *fakeTx) LoadPublicSubagent(_ context.Context, id string) (v1.Subagent, error) {
+	f.record("LoadPublicSubagent", f.loadPublicSubagent != nil, id)
+	return f.loadPublicSubagent()
+}
+
+func (f *fakeTx) PutSubagentEffect(_ context.Context, effect string, _ json.RawMessage) (bool, error) {
+	f.record("PutSubagentEffect", f.putSubagentEffect != nil, effect)
+	return f.putSubagentEffect()
+}
+
+func (f *fakeTx) ApplySubagentLifecycle(_ context.Context, id string, lifecycle SubagentLifecycle) error {
+	f.record("ApplySubagentLifecycle", f.applySubagentLifecycle != nil, id, lifecycle.Status)
+	return f.applySubagentLifecycle(lifecycle)
+}
+
+func (f *fakeTx) LoadChildTurn(_ context.Context, subagent, id string) (ChildTurn, bool, error) {
+	f.record("LoadChildTurn", f.loadChildTurn != nil, subagent, id)
+	return f.loadChildTurn()
+}
+
+func (f *fakeTx) PutChildTurn(_ context.Context, turn ChildTurn) error {
+	f.record("PutChildTurn", f.putChildTurn != nil, turn.ID, turn.Status)
+	return f.putChildTurn(turn)
+}
+
+func (f *fakeTx) RecordTerminalActivity(context.Context) error {
+	f.record("RecordTerminalActivity", f.recordTerminalActivity != nil)
+	return f.recordTerminalActivity()
+}
+
+func (f *fakeTx) LoadChildItem(_ context.Context, subagent, id string, _ json.RawMessage) (StoredChildItem, bool, error) {
+	f.record("LoadChildItem", f.loadChildItem != nil, subagent, id)
+	return f.loadChildItem()
+}
+
+func (f *fakeTx) PutChildItem(_ context.Context, item ChildItem) error {
+	f.record("PutChildItem", f.putChildItem != nil, item.ID, fmt.Sprint(item.Position))
+	return f.putChildItem(item)
 }
 
 // returns is a fake method that reads value.

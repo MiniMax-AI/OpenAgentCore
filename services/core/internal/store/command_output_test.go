@@ -16,7 +16,7 @@ import (
 func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
-	defer pool.Close()
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "command-output"})
 	if err != nil {
@@ -38,13 +38,13 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 		event("command_output", `{"id":"cmd","delta":"same\n"}`),
 	}
 	for range 2 {
-		if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+		if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 			t.Fatal(err)
 		}
 	}
 	before, _ := s.SessionEventCursor(ctx, tenant, session.ID)
 	// A bad command reference rolls back preceding valid fragments and their events.
-	if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, []sessions.ExecutionEvent{
+	if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, []sessions.ExecutionEvent{
 		event("command_output", `{"id":"cmd","delta":"rollback"}`),
 		event("command_output", `{"id":"unknown","delta":"orphan"}`),
 	}); err == nil {
@@ -67,7 +67,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 		event("tool_call", `{"id":"partial","stage":"before","observation":{"kind":"command","command":"wait","status":"in_progress"}}`),
 		event("command_output", `{"id":"partial","delta":"已观察\n"}`),
 	}
-	if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, final); err != nil {
+	if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, final); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {

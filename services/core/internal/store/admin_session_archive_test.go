@@ -136,7 +136,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	}
 	input := submitMessage(t, s, tenant, session.ID, "completed")
 	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	if err := w.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained"}`)}}); err != nil {
+	if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained"}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	body := []byte("retained artifact")

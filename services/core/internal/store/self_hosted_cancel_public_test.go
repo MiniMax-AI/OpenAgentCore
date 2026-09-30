@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -28,9 +30,11 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "cancel-caller", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "cancel-caller", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
+	var owner execution.Owner
 	serve := func() (*httptest.Server, func(bool)) {
 		t.Helper()
-		worker, stop := publicInitialWorker(t, s, db)
+		owner = executionOwner(t, db, s)
+		worker, stop := publicOwnedWorker(t, s, db, owner)
 		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
@@ -136,7 +140,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		return input.TurnID
 	}
 	first := start()
-	if err := s.AppendTurnEvents(t.Context(), tenant, created.ID, first, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"controlled-partial","delta":"Retained partial output."}`)}}); err != nil {
+	if err := owner.Sessions.AppendTurnEvents(t.Context(), tenant, created.ID, first, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"controlled-partial","delta":"Retained partial output."}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	before := snapshot(created.ID)
@@ -169,7 +173,9 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	transition(first, sessions.TurnInProgress, sessions.TurnCancelled)
 	for _, reopen := range []bool{false, true} {
 		if reopen {
+			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 			stop(false)
+			awaitRelease()
 			server.Close()
 			db.pool.Close()
 			s, db = newModelTestStoreDB(t)

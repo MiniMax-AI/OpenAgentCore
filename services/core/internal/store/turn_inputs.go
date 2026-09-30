@@ -175,16 +175,17 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 	if err != nil {
 		return sessions.InputReceipt{}, err
 	}
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return sessions.InputReceipt{}, err
+	}
+	bound := sessionpg.BindSession(q, tenant, session)
 	if input.Kind == "cancel" && turn.ID.Valid {
-		tenant, err := parseID(tenantID)
-		if err != nil {
-			return sessions.InputReceipt{}, err
-		}
-		if err := sessions.CancelTurn(ctx, sessionpg.BindSession(q, tenant, session), sessionpg.TurnFromRow(turn)); err != nil {
+		if err := sessions.CancelTurn(ctx, bound, sessionpg.TurnFromRow(turn)); err != nil {
 			return sessions.InputReceipt{}, err
 		}
 	}
-	if err := indexInput(ctx, q, session, sequence); err != nil {
+	if err := sessions.ProjectInput(ctx, bound, sequence); err != nil {
 		return sessions.InputReceipt{}, err
 	}
 	if created {

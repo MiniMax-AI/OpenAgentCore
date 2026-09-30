@@ -23,6 +23,7 @@ func subagentIdentityEvent(child, parent string, created int64) sessions.Executi
 func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	s, pool := testStore(t)
 	w := executionWriter(t, s)
+	journal := sessionExecution(t, w.lease)
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
 	host, err := s.CreateDevice(ctx, tenant, "identity test", runtimedevice.HashCredential(uuid.NewString()))
@@ -36,16 +37,10 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	a, b := subagentIdentityEvent("child-a", "root", 102), subagentIdentityEvent("child-b", "root", 101)
 	batch := []sessions.ExecutionEvent{a, b, a}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); !errors.Is(err, ErrExecutionAuthority) {
-		t.Fatal("unleased discovery accepted", err)
-	}
 	for range 2 {
-		if err = w.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); !errors.Is(err, ErrExecutionAuthority) {
-		t.Fatal("unleased replay of a committed discovery accepted", err)
 	}
 	saved, err := s.GetSubagentIdentity(ctx, tenant, session.ID, "child-a")
 	if err != nil || saved.ID == "" || saved.ID == saved.NativeID || saved.SessionID != session.ID || saved.FirstTurnID != input.TurnID || saved.FirstEventOrdinal != 1 || saved.NativeCreatedAt != 102 || saved.FirstObservedAt.IsZero() {
@@ -59,7 +54,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 		if _, err = s.GetSubagentIdentity(ctx, owner.tenant, owner.session, "child-a"); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign read", err)
 		}
-		if err = w.AppendTurnEvents(ctx, owner.tenant, owner.session, input.TurnID, 4, []sessions.ExecutionEvent{a}); !errors.Is(err, sessions.ErrNotFound) {
+		if err = journal.AppendTurnEvents(ctx, owner.tenant, owner.session, input.TurnID, 4, []sessions.ExecutionEvent{a}); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign write", err)
 		}
 	}
@@ -75,7 +70,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 		// A preceding new identity and public output must roll back with the conflict.
 		bad := []sessions.ExecutionEvent{subagentIdentityEvent("rollback-child", "root", 105),
 			{Kind: proto.TypeDelta, Payload: json.RawMessage(`{"delta":"must roll back","sequence":1}`)}, conflict}
-		if err = w.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, bad); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, bad); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("conflicting facts accepted", err)
 		}
 		if _, err = s.GetSubagentIdentity(ctx, tenant, session.ID, "rollback-child"); !errors.Is(err, sessions.ErrNotFound) {
@@ -99,13 +94,13 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	}
 	foreignInput := submitMessage(t, s, tenant, foreign.ID, "first")
 	transition(t, w, tenant, foreign.ID, foreignInput.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	if err = w.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{a}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+	if err = journal.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{a}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("same device/native child reassigned to another Session", err)
 	}
 	if _, err = pool.Exec(ctx, "UPDATE session_devices SET native_session_id='known-root' WHERE session_id=$1", foreign.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err = w.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{subagentIdentityEvent("other-child", "root", 101)}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+	if err = journal.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{subagentIdentityEvent("other-child", "root", 101)}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("known root binding ignored", err)
 	}
 	if _, err = w.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
@@ -118,18 +113,19 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	awaitRelease()
 	reopened, _ := testStore(t)
 	nextOwner := executionWriter(t, reopened)
+	nextJournal := sessionExecution(t, nextOwner.lease)
 	again, err := reopened.GetSubagentIdentity(ctx, tenant, session.ID, "child-a")
 	if err != nil || !reflect.DeepEqual(again, saved) {
 		t.Fatal("restart changed identity", again, err)
 	}
 	second := submitMessage(t, reopened, tenant, session.ID, "second")
 	transition(t, nextOwner, tenant, session.ID, second.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	if err = w.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, []sessions.ExecutionEvent{a}); err == nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, []sessions.ExecutionEvent{a}); err == nil {
 		t.Fatal("closed owner wrote identity")
 	}
 	continued := proto.SubagentIdentityPayload{NativeID: "child-a", ParentNativeID: "root", NativeCreatedAt: 102, ParentTurnID: "later-native-turn", SourceItemID: "resume-item"}
 	raw, _ := json.Marshal(continued)
-	if err = nextOwner.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, []sessions.ExecutionEvent{{Kind: proto.TypeSubagentIdentity, Payload: raw}}); err != nil {
+	if err = nextJournal.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, []sessions.ExecutionEvent{{Kind: proto.TypeSubagentIdentity, Payload: raw}}); err != nil {
 		t.Fatal(err)
 	}
 	again, err = reopened.GetSubagentIdentity(ctx, tenant, session.ID, "child-a")
@@ -158,7 +154,7 @@ func TestSubagentIdentityRejectsLostLease(t *testing.T) {
 		t.Fatal(killed, err)
 	}
 	successor := executionWriter(t, s)
-	if err := old.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{subagentIdentityEvent("child", "root", 100)}); err == nil {
+	if err := sessionExecution(t, old.lease).AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{subagentIdentityEvent("child", "root", 100)}); err == nil {
 		t.Fatal("lost owner committed identity")
 	}
 	if err := successor.lease.CheckOwnership(context.Background()); err != nil {

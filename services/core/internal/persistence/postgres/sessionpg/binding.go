@@ -33,6 +33,9 @@ var (
 	_ sessions.InputStartTx             = (*SessionTx)(nil)
 	_ sessions.ComputeAdmissionTx       = (*SessionTx)(nil)
 	_ sessions.EnvironmentDeviceTx      = (*SessionTx)(nil)
+	_ sessions.TurnJournalTx            = (*SessionTx)(nil)
+	_ sessions.TurnEventTx              = (*SessionTx)(nil)
+	_ sessions.InputProjectionTx        = (*SessionTx)(nil)
 )
 
 // BindSession binds the tenant's Session to the caller's transaction-bound

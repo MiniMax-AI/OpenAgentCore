@@ -15,6 +15,7 @@ import (
 type fakeExecutionStorage struct {
 	t                *testing.T
 	withFunctionTurn func(ctx context.Context, tenant, session, turn string, apply func(context.Context, FunctionTx, Turn) error) error
+	withTurnJournal  func(ctx context.Context, tenant, session string, apply func(context.Context, TurnJournalTx) error) error
 }
 
 var _ ExecutionStorage = (*fakeExecutionStorage)(nil)
@@ -25,6 +26,14 @@ func (f *fakeExecutionStorage) WithFunctionTurn(ctx context.Context, tenant, ses
 		f.t.Fatal("unexpected call to WithFunctionTurn")
 	}
 	return f.withFunctionTurn(ctx, tenant, session, turn, apply)
+}
+
+func (f *fakeExecutionStorage) WithTurnJournal(ctx context.Context, tenant, session string, apply func(context.Context, TurnJournalTx) error) error {
+	f.t.Helper()
+	if f.withTurnJournal == nil {
+		f.t.Fatal("unexpected call to WithTurnJournal")
+	}
+	return f.withTurnJournal(ctx, tenant, session, apply)
 }
 
 const testTenant = "4f0d0c35-8b8e-4d7c-9d1c-1f0a5b8a2e61"

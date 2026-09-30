@@ -10,7 +10,7 @@ import (
 )
 
 type journal struct {
-	store                 eventWriter
+	writer                eventWriter
 	tenant, session, turn string
 	next                  int32
 	batch                 []sessions.ExecutionEvent
@@ -93,7 +93,7 @@ func (j *journal) flush(ctx context.Context) error {
 		}
 		// An uncertain commit must retry the same batch even after more frames arrive.
 		j.pendingCount = count
-		if err := j.store.AppendTurnEvents(ctx, j.tenant, j.session, j.turn, j.next, j.batch[:count]); err != nil {
+		if err := j.writer.AppendTurnEvents(ctx, j.tenant, j.session, j.turn, j.next, j.batch[:count]); err != nil {
 			return err
 		}
 		j.pendingCount = 0

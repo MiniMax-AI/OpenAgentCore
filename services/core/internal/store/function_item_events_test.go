@@ -2,10 +2,11 @@ package store
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"reflect"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestFunctionResultEventsAreInputs(t *testing.T) {
@@ -17,7 +18,7 @@ func TestFunctionResultEventsAreInputs(t *testing.T) {
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"call","stage":"after","observation":{"status":"completed","kind":"function","name":"lookup","arguments":{},"content":[{"type":"input_text","text":"result"}]}}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"answer"}`)},
 	}
-	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, turn, 1, events); err != nil {
+	if err := sessionExecution(t, executionWriter(t, s).lease).AppendTurnEvents(t.Context(), tenant, session.ID, turn, 1, events); err != nil {
 		t.Fatal(err)
 	}
 	changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
@@ -76,7 +77,7 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 				t.Fatal(err)
 			}
 			event := sessions.ExecutionEvent{Kind: "tool_call", Payload: json.RawMessage(`{"id":"call","stage":"after","observation":{"status":"completed","kind":"function","name":"lookup","arguments":{},"content":[{"type":"input_text","text":"normalized"}]}}`)}
-			if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, turn, 1, []sessions.ExecutionEvent{event}); err != nil {
+			if err := functions.AppendTurnEvents(t.Context(), tenant, session.ID, turn, 1, []sessions.ExecutionEvent{event}); err != nil {
 				t.Fatal(err)
 			}
 			assertFields := func(value any) {

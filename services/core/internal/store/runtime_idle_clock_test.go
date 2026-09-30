@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -120,9 +121,10 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			created := source - 1000
 			payload, _ := json.Marshal(proto.SubagentTurnPayload{NativeID: "child", TurnID: "remote-turn", Status: sessions.TurnCompleted, CreatedAtMS: created, StartedAtMS: &created, CompletedAtMS: &source})
+			tenant, _ := parseID(owner.TenantID)
 			project := func() error {
 				return w.withSession(t.Context(), owner.TenantID, owner.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-					return projectSubagentTurn(ctx, q, session, payload)
+					return sessions.ProjectSource(ctx, sessionpg.BindSession(q, tenant, session), sessions.Source{Turn: root, Kind: proto.TypeSubagentTurn, Payload: payload})
 				})
 			}
 			before := runtimeDatabaseTime(t, s)
