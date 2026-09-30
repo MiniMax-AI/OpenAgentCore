@@ -50,7 +50,9 @@ Agents API is the primary infrastructure deliverable. Parsar is an ordinary clie
 
 `example/parsar/` is an optional, independently started Agent workbench maintained in this repository, with no dependency on the external Parsar product repository. Its [README](example/parsar/README.md) owns its product behavior. The boundary rules are:
 
-- It calls only public `/v1` APIs. Its Project key stays server-side; it never   holds a Core key or issues machine credentials. Self-hosted connection displays   the public Session installation command unchanged; Core owns bootstrap   authorization and machine credential issuance. - It may keep a small product-owned SQLite database (Node's   built-in module, Node 22.13+), outside the checkout and isolated by Core origin   and Project key fingerprint. Provider keys never reach the browser. - Core owns Skills and all execution and history state. The example stores only   Session references and pending creation requests with stable idempotency keys.
+- It calls only public `/v1` APIs. Its Project key stays server-side; it never holds a Core key or issues machine credentials. Self-hosted connection displays the public Session installation command unchanged; Core owns bootstrap authorization and machine credential issuance.
+- It may keep a small product-owned SQLite database (Node's built-in module, Node 22.13+), outside the checkout and isolated by Core origin and Project key fingerprint. Provider keys never reach the browser.
+- Core owns Skills and all execution and history state. The example stores only Session references and pending creation requests with stable idempotency keys.
 - Product resources use `/app/` and never become Core API or database conventions.
 - It is excluded from Core distributions and cannot become a service dependency.
 
