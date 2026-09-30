@@ -388,7 +388,7 @@ settings remain unchanged. No old label is accepted as a fallback.
 
 Historical Runtime and project-version upgrades are not supported. Do not ship
 retired installer conversion implementations; preserve rejection guards under the
-[installer lifecycle contract](docs/maintainers.md#distribution-and-installer-rules). Preserve
+[installer lifecycle contract](deploy/install/README.md#versions-and-the-lock). Preserve
 older installations, Runtime files, provider resources and Session history;
 install the current release separately. Startup never verifies and rebinds historical
 allocations or accepts node deployments without a valid specification. Keep the

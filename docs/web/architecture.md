@@ -44,7 +44,7 @@ exception: the console authenticates the same browser session and origin, then
 calls the installer's private Unix socket with its server-held Core key. This is
 not a Core `/core/v1` route and does not use `AdminClient`. It can configure only
 the managed domain; it cannot submit shell commands or arbitrary process settings.
-The [installer rules](../maintainers.md#managed-https-ownership) own application,
+The [installer rules](../../deploy/install/README.md#managed-https) own application,
 certificates and recovery. Before a domain is configured, the console accepts
 same-origin HTTP requests at literal IP addresses; after apply, only the configured
 HTTPS origin is accepted.
