@@ -116,7 +116,7 @@ It excludes Parsar product Web and server gates.
 | `OAC_TEST_DATABASE_URL` | A dedicated test database. The full gate fails when it is missing. |
 | `OAC_TEST_OFFICIAL_SDK_PYTHON` | The pinned official SDK interpreter |
 
-The role needs `CREATE DATABASE`: managed-provider tests create and drop isolated `oac_*_tests` databases because provider identity is deployment-wide. `PARSAR_AGENTS_API_TEST_DATABASE_URL` is retired; `make check-database` reports its replacement when only the old name is set. Tests must not bypass the production provider-switch guard.
+The role needs `CREATE DATABASE`: managed-provider tests create and drop isolated `oac_*_tests` databases because provider identity is deployment-wide. Tests must not bypass the production provider-switch guard.
 
 ### Contract and schema rules
 

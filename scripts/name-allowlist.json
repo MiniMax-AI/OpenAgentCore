@@ -165,16 +165,6 @@
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "Makefile",
-    "regex": "PARSAR_AGENTS_API_TEST_DATABASE_URL",
-    "reason": "R0 deliberately rejects the old test database variable with an actionable replacement message."
-  },
-  {
-    "path": "CONTRIBUTING.md",
-    "regex": "PARSAR_AGENTS_API_TEST_DATABASE_URL",
-    "reason": "R0 deliberately rejects the old test database variable with an actionable replacement message."
-  },
-  {
     "path": "services/core/internal/store/oac_runtime_names_migration_test.go",
     "regex": "parsar-core-runtime@sha256:|parsar_worker /home/runtime/\\.parsar",
     "reason": "Migration input and historical Session content assertions prove only the Runtime reference changes, never stored conversation data."
@@ -303,11 +293,6 @@
     "path": "services/core/deploy/claude/README.md",
     "regex": "Parsar is not a dependency",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "CONTRIBUTING.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
   {
     "path": "docs/getting-started/operations.md",
