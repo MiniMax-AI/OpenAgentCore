@@ -48,7 +48,7 @@ Core serves three namespaces: the Agents API (`/v1`) for applications, the Core 
 
 Core is the only owner of durable execution facts: Projects and keys, Agents, Sessions, Turns, Items, Environments, files and audit records, all in PostgreSQL. It schedules Turns, handles cancellation and pending interactions, and checks that a requested harness, Environment and capability combination is supported before starting work.
 
-Core does not isolate tools, run a model or talk to a vendor SDK directly. It selects implementations through interfaces and never branches on a harness, operating system or provider name. See [Complexity stays in the adapter](../AGENTS.md#complexity-stays-in-the-adapter) and the [repository map](development.md#repository-map).
+Core does not isolate tools, run a model or talk to a vendor SDK directly; it reaches Sandbox Providers, Runtimes and Harnesses through the protocols below. The [repository map](development.md#repository-map) shows where each component lives.
 
 ## Protocol boundaries
 

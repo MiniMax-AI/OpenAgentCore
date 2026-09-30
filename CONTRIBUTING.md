@@ -1,17 +1,15 @@
 # Contributing to OpenAgentCore
 
-Start with [Develop OpenAgentCore](docs/development.md) for checkout, toolchains, the repository map and focused checks. [AGENTS.md](AGENTS.md) owns the design principles and documentation rules. This guide owns how to work in the repository: documentation ownership, the repository boundary, workflow and review, required checks and naming.
-
-Every other subject has one canonical owner, listed below.
+This guide owns how to work in the repository: documentation ownership, the repository boundary, workflow and review, required checks and naming. Every other subject has one canonical owner, listed below.
 
 ## Documentation ownership
 
 | Subject | Canonical source |
 | --- | --- |
-| Design principles, storage layout and documentation rules | [AGENTS.md](AGENTS.md) |
+| Design principles, including public API fidelity and the storage rule, and documentation rules | [AGENTS.md](AGENTS.md) |
 | Protocol boundaries: each boundary's protocol code and document | [AGENTS.md](AGENTS.md#protocols-at-every-boundary) |
 | User concepts and authority | [Concepts and ownership](docs/design-principles.md) |
-| Architecture overview and diagrams (a map that links to the owners below) | [Architecture](docs/architecture.md) |
+| Architecture overview, component responsibilities and diagrams | [Architecture](docs/architecture.md) |
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/README.md) |
 | Public wire types and qualified behavior | [Agents API contracts](contracts/agents-api/README.md), [pinned upstream](contracts/agents-api/upstream.json), and linked operation contracts |
@@ -26,7 +24,7 @@ Every other subject has one canonical owner, listed below.
 | Claude private bridge and Runtime artifact | [Claude SDK adapter](packages/claude-sdk-adapter/README.md) |
 | MiniMax Code and Claude Runtime adapter rules | [MiniMax Code Runtime](services/agents-api/deploy/mcode/README.md), [Claude Runtime](services/agents-api/deploy/claude/README.md) |
 | CI, distribution builds, installer lifecycle and managed HTTPS, release publication | [Maintainer guide](docs/maintainers.md) |
-| Operator installation and configuration | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md), [configuration](docs/configuration.md), [operations](docs/getting-started/operations.md) |
+| Operator installation, installation layout and configuration | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md), [configuration](docs/configuration.md), [operations](docs/getting-started/operations.md) |
 | Core Web console server and sign-in | [Web README](apps/web/README.md) |
 | Web components, interaction and visual rules | [Web design](apps/web/DESIGN.md) and [Web architecture](docs/web/architecture.md) |
 | Documentation website generation | [Docs app](apps/docs/README.md) |
@@ -43,19 +41,8 @@ Preserve copied Runtime and protocol behavior. Existing Go import paths stay unc
 
 Agents API is the primary infrastructure deliverable. Parsar is an ordinary client and example application; its feature backlog must not dictate the execution service's public protocol or internal model. Agents API must build, deploy and run without the Parsar product service, frontend or database. An optional Compose deployment may install both services with one PostgreSQL instance, but separate databases, credentials and migrations. The product uses Core exclusively; it has no native daemon or HTTP Agent fallback.
 
-#### Design and compatibility requirements
-
-- The complete pinned `openai/openai-python` `beta/agents` protocol is the target, including its referenced resources and types. Match paths, methods, headers, field presence, nullability, discriminators, defaults, status transitions, pagination, errors and streaming behavior. Engine limitations are implementation gaps to solve, not grounds for narrowing or redefining the upstream contract.
-- Preserve qualified native capability differences across harnesses. If a material difference from the official API has no clear mapping, pause that part and ask the user before changing its semantics. Explicit unsupported enablement rejects; ordinary requests retain native behavior with any official default discrepancy recorded in the coverage ledger. In particular, native programmatic tool calling is not currently qualified as the official default-on behavior. This does not relax authentication, isolation, credential protection or data consistency.
-- Pin upstream source and SDK versions in `contracts/agents-api/upstream.json`. Use official SDKs for clients and reuse upstream types or schemas where suitable. SDK deserialization alone is not server validation or proof of compatibility: test raw HTTP payloads and observable workflows as well. Synthetic data and mock model responses may support controlled tests; live execution acceptance must call a real model API through the service, daemon and harness. A real daemon with a synthetic model does not constitute live model validation. Keep provider credentials in private test configuration, outside source, logs and task records. Record unspecified or unverified behavior explicitly; never invent official semantics. When current documentation adds operations or fields absent from the fixed baseline, queue a protocol upgrade instead of silently implementing a new version. Owned-resource live probes can qualify status codes and wire details left unspecified by the SDK; retain request evidence and distinguish observations from guaranteed or fully covered behavior. Track partial coverage in `contracts/agents-api/README.md` until the complete target is verified. Reconcile current coverage summaries with merged routes and recorded acceptance; distinguish accepted profiles, partial implementation, missing operations and unverified semantics. Handler counts are not compatibility percentages, and an active provider probe is not deployment qualification.
-- Qualify public workflows through the common Runtime contract and Harness adapter; direct native probes establish feasibility only.
-- Native workspace execution must use the declared Environment directory; a separate native history/configuration directory is not a workspace. The public API and persistence/application core must not interpret Parsar product payloads.
-- Verify an independent official-client workflow before a Parsar integration. Parsar uses the same public contract as any other client, with no privileged endpoint or direct execution-table access. An OpenAI endpoint is a possible client target only where the requested capabilities and credentials support it.
-
-- Parsar owns users, workspaces, business authorization, Agent/Team definitions, capabilities, product conversations, IM/sharing, approval decisions and billing.
-- Agents API owns protocol saved Agents, execution sessions/turns, effective configuration snapshots, dispatch/cancel, environments, vaults, raw usage, pending interactions, protocol subagents and durable events. Protocol saved Agents/vaults are execution resources, not Parsar marketplace or business roles. Neither service reads the other's tables. Parsar uses a versioned client contract.
 - A product conversation may map to several execution sessions. An execution session is distinct from a live daemon socket, process or sandbox. Native engine session identifiers belong to the execution service.
-- Establish single-Agent execution, approval, cancellation, idempotent submission, persisted recovery queries before Team orchestration. The upstream SSE stream is live-only; recover through Session/Turn/Items reads. Any additional product cursor replay must be documented as an extension, not upstream semantics. Team definitions, management and orchestration belong to Parsar. Agents API establishes single-Agent execution first; business Team loops are deferred. This does not exclude upstream `multi_agent` configuration or subagent resources from protocol coverage. Future business Team orchestration directly depends on `openai/openai-agents-python` in Parsar.
+- Establish single-Agent execution, approval, cancellation, idempotent submission, persisted recovery queries before Team orchestration. The upstream SSE stream is live-only; recover through Session/Turn/Items reads. Any additional product cursor replay must be documented as an extension, not upstream semantics. Agents API establishes single-Agent execution first; business Team loops are deferred. This does not exclude upstream `multi_agent` configuration or subagent resources from protocol coverage. Future business Team orchestration directly depends on `openai/openai-agents-python` in Parsar.
 - Daemon Skill/SP authoring remains a product operation: forward through a scoped product callback with the original requester and workspace checks. A runtime credential alone must not grant business write permissions.
 
 ### Optional application example
@@ -132,8 +119,17 @@ The role needs `CREATE DATABASE`: managed-provider tests create and drop isolate
 - `internal/harnessconfig/builtin/catalog.json` is the single authored public Harness registration list. `make generate-harness-catalog` generates Go configuration/profile registration, client identifiers/names and the reference; `make openapi` derives the matching enums. `make check-harness-catalog` verifies freshness in the full gate. Native configuration rules stay in their adapter declarations; Core qualification and Runtime availability stay separate.
 
 - `make sqlc-generate` owns only `services/agents-api/internal/db/sqlc` (sqlc v1.29.0). Do not rewrite landed migrations.
-- The public protocol schema is `contracts/agents-api/openapi.yaml`. Preserve its pinned types, coverage ledgers and official SDK/raw HTTP tests when changing API behavior. Core changes keep the independent build and official-client workflow.
 - `make check-runtime-contract` is the focused Core–Runtime contract entry point; see [Contract verification](docs/runtime-protocol.md#contract-verification). It also runs through `check-go` and `check-agents-api`.
+
+### Compatibility evidence
+
+- Use official SDKs for clients and reuse upstream types or schemas where suitable. SDK deserialization alone is not server validation or proof of compatibility: test raw HTTP payloads and observable workflows as well.
+- When changing API behavior, preserve the pinned types, coverage ledgers and official SDK and raw HTTP tests. Core changes keep the independent build and official-client workflow.
+- Verify an independent official-client workflow before a Parsar integration. An OpenAI endpoint is a possible client target only where the requested capabilities and credentials support it.
+- Qualify public workflows through the common Runtime contract and Harness adapter; direct native probes establish feasibility only.
+- Synthetic data and mock model responses may support controlled tests; live execution acceptance must call a real model API through the service, daemon and harness. A real daemon with a synthetic model does not constitute live model validation. Keep provider credentials in private test configuration, outside source, logs and task records.
+- Owned-resource live probes can qualify status codes and wire details left unspecified by the SDK; retain request evidence and distinguish observations from guaranteed or fully covered behavior.
+- Track partial coverage in `contracts/agents-api/README.md` until the complete target is verified. Reconcile current coverage summaries with merged routes and recorded acceptance; distinguish accepted profiles, partial implementation, missing operations and unverified semantics. Handler counts are not compatibility percentages, and an active provider probe is not deployment qualification.
 
 ### Live acceptance
 
