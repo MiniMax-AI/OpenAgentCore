@@ -526,4 +526,15 @@ The public `connected` state describes transport; initialization completion and
 native executor readiness remain separate prerequisites for execution. Input
 sources and frozen metadata follow the [Environment contract](/environments-and-files#runtime-capability-preparation).
 
+
+### MCP connection authority
+
+Public `MCPHTTPServer` messages carry an explicit `connection_origin`; missing or
+unknown values reject rather than selecting a default. Core freezes the public
+default before dispatch. Both peers require the exact wire version. Runtime uses
+the common origin validator before selecting a factory and resolves public and
+installed MCP into transient effective bindings. See the
+[origin and credential contract](/environments-and-files#public-mcp-connection-origin)
+for supported combinations, native limits and failure ownership.
+
 [Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/runtime-protocol.md)

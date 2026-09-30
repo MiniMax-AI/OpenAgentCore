@@ -121,3 +121,23 @@ test("MCP identity validation preserves host functions and ordinary child enviro
   assert.equal((await workspace.canUseTool(functions[0], {}, { signal })).behavior, "allow");
   mcp.close();
 });
+
+test("public workspace HTTP preserves required startup and null versus empty allowlists", t => {
+  const http = {server_label:"remote",server_url:"https://example.invalid/mcp",allowed_tools:[],required:true};
+  const {dirs,config,request}=fixture(t,[http]);
+  assert.deepEqual(parseStart(JSON.stringify(request)),request);
+  for(const allowed_tools of [null,[],["prove"]]) {
+    const declaration={...http,allowed_tools};
+    assert.deepEqual(parseEnvironmentMCP([declaration]),[declaration]);
+    const mcp=new MCPProfile([declaration],[]);
+    const workspace=new WorkspaceProfile(dirs.work,{...config,mcp:[declaration]},[],mcp);
+    assert.throws(()=>mcp.verifyRequired([{name:"remote",status:"pending"}]),/required/);
+    const statuses=[{name:"remote",status:"connected",tools:[{name:"prove"},{name:"other"}]}];
+    mcp.verifyRequired(statuses);
+    const selected=allowed_tools===null?["prove","other"]:allowed_tools;
+    workspace.verify([...baseline,...selected.map(name=>"mcp__remote__"+name)],statuses,"session");
+    assert.equal(mcp.permits("mcp__remote__prove"),allowed_tools===null||allowed_tools.includes("prove"));
+    assert.equal(mcp.permits("mcp__remote__other"),allowed_tools===null);
+    mcp.close();
+  }
+});

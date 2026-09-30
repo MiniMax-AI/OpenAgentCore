@@ -211,7 +211,9 @@ The Runtime is not a sandbox; see
   in the common protocol or flow, not with Harness-, Runtime- or vendor-specific
   branches in Core. Adapters may differ natively but keep shared semantics.
 - Express compatibility through declared capabilities and validate selected
-  combinations explicitly. Replaceability does not mean every model, Harness and
+  combinations explicitly. Public MCP origin and credential authority follow the
+  [Environment MCP contract](contracts/agents-api/environments.md#public-mcp-connection-origin);
+  changing an input source must not change outbound network or credential scope. Replaceability does not mean every model, Harness and
   Environment combination is supported. Never silently substitute another
   implementation or give a capability different meanings per vendor.
 - Core preparation and execution never branch on operating system or

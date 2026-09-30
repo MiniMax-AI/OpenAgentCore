@@ -17,8 +17,8 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 	tools := []string{"lookup.docs", `quote"tool`}
 	denyAll := []string{}
 	servers := []proto.MCPHTTPServer{
-		{ServerLabel: "docs.server", ServerURL: "https://docs.example/mcp", AllowedTools: &tools, Required: true},
-		{ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
+		{ConnectionOrigin: "service", ServerLabel: "docs.server", ServerURL: "https://docs.example/mcp", AllowedTools: &tools, Required: true},
+		{ConnectionOrigin: "service", ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
 	}
 	original := map[string]any{
 		"mcp_servers":     map[string]any{"operator": map[string]any{"command": "operator-mcp"}},
@@ -64,7 +64,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 	if err := os.WriteFile(history, []byte("native-history"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	servers = []proto.MCPHTTPServer{{ServerLabel: "replacement", ServerURL: "https://new.example/mcp"}}
+	servers = []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "replacement", ServerURL: "https://new.example/mcp"}}
 	second, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 }
 
 func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
-	valid := []proto.MCPHTTPServer{{ServerLabel: "docs", ServerURL: "https://docs.example/mcp"}}
+	valid := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp"}}
 	for _, req := range []proto.PromptRequestPayload{
 		{MCPHTTPServers: &valid},
 	} {
@@ -90,10 +90,10 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		}
 	}
 	for _, server := range []proto.MCPHTTPServer{
-		{ServerLabel: "codex_apps", ServerURL: "https://docs.example/mcp"},
-		{ServerLabel: "docs", ServerURL: "https://user:synthetic-secret@docs.example/mcp"},
-		{ServerLabel: "docs", ServerURL: "https://docs.example/mcp?token=synthetic-secret"},
-		{ServerLabel: "docs", ServerURL: "file:///tmp/mcp"},
+		{ConnectionOrigin: "service", ServerLabel: "codex_apps", ServerURL: "https://docs.example/mcp"},
+		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://user:synthetic-secret@docs.example/mcp"},
+		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp?token=synthetic-secret"},
+		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "file:///tmp/mcp"},
 	} {
 		servers := []proto.MCPHTTPServer{server}
 		if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}); err == nil || strings.Contains(err.Error(), "synthetic-secret") {
@@ -149,7 +149,7 @@ func writeMCPHTTPConfigResponse(t *testing.T, path string, response any) {
 func TestPublicMCPBearerRequiresHTTPS(t *testing.T) {
 	req := proto.PromptRequestPayload{DisableExecutionEnvironment: true}
 	token := "synthetic-private-token"
-	servers := []proto.MCPHTTPServer{{ServerLabel: "tools", ServerURL: "http://tools.example/mcp", BearerToken: &token}}
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "http://tools.example/mcp", BearerToken: &token}}
 	req.MCPHTTPServers = &servers
 	if _, _, err := runtimeMCPServers(req); err == nil || strings.Contains(err.Error(), token) {
 		t.Fatal("plaintext bearer accepted or exposed")

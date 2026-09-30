@@ -141,7 +141,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         reads.bind(stream, request.cwd);
         if (process.platform === "linux") await directories.bind(request.cwd);
       }
-      if (request.mcp_http_servers?.some(server=>server.required)) profile?.verifyRequired(await stream.mcpServerStatus());
+      if (declarations?.some(server => "required" in server && server.required)) profile?.verifyRequired(await stream.mcpServerStatus());
       if(turns) {
         turns.configure(stream,(input,output)=>{
           inputs=new Inputs(input);
@@ -164,7 +164,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       stream = warm.query(turns ?? inputs);
       const initialized = await stream.initializationResult();
       if (initialized.hooks_applied !== true || children.length !== 1) throw new Error("MCP initialization unavailable");
-      if (request.mcp_http_servers?.some(server => server.required)) profile.verifyRequired(await stream.mcpServerStatus());
+      if (declarations?.some(server => "required" in server && server.required)) profile.verifyRequired(await stream.mcpServerStatus());
       if (abort.signal.aborted || !nativeAlive) throw new Error("MCP initialization interrupted");
       inputs.release(request.input);
     } else stream = query({ prompt: inputs, options });

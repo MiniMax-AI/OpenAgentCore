@@ -72,7 +72,7 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			functions = append(functions, function)
 			positions = append(positions, i)
 		default:
-			return nil, errors.New("Unsupported execution tool; supported tools include functions, qualified tool_search, service-origin HTTP MCP and explicit disabled controls.")
+			return nil, errors.New("Unsupported execution tool; supported tools include functions, qualified tool_search, qualified HTTP MCP and explicit disabled controls.")
 		}
 	}
 	resolved, err := resolveFunctions(functions)

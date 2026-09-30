@@ -28,7 +28,6 @@ export function parseEnvironmentMCP(value: unknown): EnvironmentMCPServer[] | un
 
     } else {
       parseHTTPServers([server]);
-      if (server.allowed_tools !== null || server.required !== undefined) throw new Error("invalid_request");
     }
     labels.add(server.server_label);
   }

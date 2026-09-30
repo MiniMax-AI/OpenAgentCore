@@ -99,7 +99,7 @@ func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {
 
 func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 	for name, replacement := range map[string]map[string]json.RawMessage{
-		"environment origin":   {"connection_origin": json.RawMessage(`"environment"`)},
+		"unknown origin":       {"connection_origin": json.RawMessage(`"unknown"`)},
 		"stdio origin missing": {"connection_origin": nil, "transport": json.RawMessage(`{"type":"stdio","command":"private-marker"}`)},
 		"stdio origin null":    {"connection_origin": json.RawMessage("null"), "transport": json.RawMessage(`{"type":"stdio","command":"private-marker"}`)},
 		"origin missing, case": {"connection_origin": nil, "transport": json.RawMessage(`{"Type":"http","server_url":"https://mcp.example.test"}`)},
@@ -151,5 +151,21 @@ func TestSessionMCPKeepsToolOrderAndStripsSavedHeaders(t *testing.T) {
 	}
 	if _, err := resolveSessionTools([]json.RawMessage{saved, function, saved}); err == nil {
 		t.Fatal("duplicate MCP server labels were admitted")
+	}
+}
+
+func TestPublicEnvironmentMCPPreservesDeclaration(t *testing.T) {
+	for _, saved := range []bool{false, true} {
+		for _, allowed := range []string{"null", "[]", `["prove"]`} {
+			raw := []byte(`{"type":"mcp","server_label":"remote","connection_origin":"environment","transport":{"type":"http","server_url":"https://example.test/mcp"},"allowed_tools":` + allowed + `,"required":true,"credential_id":"selected"}`)
+			resolved, err := resolveMCPTool(raw, saved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got map[string]json.RawMessage
+			if json.Unmarshal(resolved, &got) != nil || string(got["connection_origin"]) != `"environment"` || string(got["allowed_tools"]) != allowed || string(got["credential_id"]) != `"selected"` || string(got["required"]) != "true" {
+				t.Fatal("public declaration changed")
+			}
+		}
 	}
 }

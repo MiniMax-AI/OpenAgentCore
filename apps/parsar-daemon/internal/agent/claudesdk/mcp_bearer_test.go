@@ -18,9 +18,9 @@ func TestMCPBearerUsesFreshOwnedEnvironmentReferences(t *testing.T) {
 	tokens := []string{"first.synthetic+/==", "second-synthetic_token~"}
 	tools := []string{"echo.v1"}
 	servers := []proto.MCPHTTPServer{
-		{ServerLabel: "first", ServerURL: "https://first.example/mcp", AllowedTools: &tools, BearerToken: &tokens[0]},
-		{ServerLabel: "second", ServerURL: "https://second.example/mcp", BearerToken: &tokens[1]},
-		{ServerLabel: "anonymous", ServerURL: "http://anonymous.example/mcp"},
+		{ConnectionOrigin: "service", ServerLabel: "first", ServerURL: "https://first.example/mcp", AllowedTools: &tools, BearerToken: &tokens[0]},
+		{ConnectionOrigin: "service", ServerLabel: "second", ServerURL: "https://second.example/mcp", BearerToken: &tokens[1]},
+		{ConnectionOrigin: "service", ServerLabel: "anonymous", ServerURL: "http://anonymous.example/mcp"},
 	}
 	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}
 	seen := map[string]bool{}
@@ -65,7 +65,7 @@ func TestMCPBearerRejectsInvalidCredentialBeforeStateCreation(t *testing.T) {
 		root := t.TempDir()
 		t.Setenv("OAC_RUNTIME_HOME", root)
 		config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
-		servers := []proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}
+		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "fixture"}}
 		if _, _, err := prepare(config, req); err == nil || err.Error() != "claudesdk: unsupported HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer accepted or unsafe error returned")
@@ -77,7 +77,7 @@ func TestMCPBearerRejectsInvalidCredentialBeforeStateCreation(t *testing.T) {
 	}
 	for _, url := range []string{"http://example.invalid/mcp", "https://example.invalid/mcp#", "https://example.invalid/mcp?", "https://user:secret@example.invalid/mcp"} {
 		token := "synthetic-token"
-		servers := []proto.MCPHTTPServer{{ServerLabel: "fixture", ServerURL: url, BearerToken: &token}}
+		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: url, BearerToken: &token}}
 		if err := validateMCP(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}); err == nil {
 			t.Fatal("unsafe authenticated endpoint accepted")
 		}

@@ -131,7 +131,7 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 			case "functions":
 				req.FunctionTools = []proto.FunctionTool{{Name: "hello", Parameters: json.RawMessage(`{"type":"object"}`)}}
 			case "mcp":
-				req.MCPHTTPServers = &[]proto.MCPHTTPServer{}
+				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			case "controls":
 				req.ExecutionControls = &proto.ExecutionControls{WebSearch: "enabled", TextVerbosity: "medium"}
 			}

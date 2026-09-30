@@ -14,6 +14,7 @@ import (
 func claudeProfile() Profile {
 	return Profile{
 		ProgrammaticToolCallingDisable: true,
+		MCPOrigins:                     []string{"service", "environment"},
 		StructuredOutput:               true,
 		ToolSearch:                     true,
 		MessageImages:                  true,
@@ -83,9 +84,6 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 }
 
 func validateClaudeTools(environment *v1.Environment, _ bool, tools []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
-	if environment.Type != "none" && len(mcp) != 0 {
-		return errors.New("The configured workspace profile does not support HTTP MCP tools.")
-	}
 	if err := validateClaudeMCP(mcp); err != nil {
 		return err
 	}
