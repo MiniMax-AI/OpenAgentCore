@@ -15,10 +15,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Registered routes that are deliberately not contract operations.
+// Registered routes that are deliberately not contract operations, keyed
+// "METHOD /path"; the method * matches every method.
 var unpublishedRoutes = map[string]string{
-	"/healthz":                       "liveness probe, not part of the Agent API",
-	"/api/v1/agent-daemon/install/*": "public immutable native release content, not an API operation",
+	"GET /healthz":                     "liveness probe, not part of the Agent API",
+	"* /api/v1/agent-daemon/install/*": "public immutable native release content, not an API operation",
 }
 
 // contractOperations reads one committed contract as "METHOD /path" keys and
@@ -54,9 +55,9 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 	return operations
 }
 
-// The Core and machine contracts are generated from handler annotations, so
-// they must publish exactly the routes the server registers. /v1 is checked
-// against the pinned upstream set by TestEveryRouteAuthenticatesItsCanonicalPath
+// The contracts are generated from handler annotations, so they must publish
+// exactly the routes the server registers, with the same path parameter names.
+// The pinned upstream /v1 set is checked by TestEveryRouteAuthenticatesItsCanonicalPath
 // and the contract tests.
 func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) {
 	admin, err := NewDeploymentAuthenticator([]string{device.HashCredential(routingAdminKey)})
@@ -70,17 +71,19 @@ func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) 
 		WithInstallation(Installation{}, s.AddressBindings), WithNativeInstaller(&nativeinstaller.Catalog{}, "contract-test")} {
 		option(h)
 	}
-	contractOperations(t, "openapi.yaml", "/v1")
-	contracts := map[string]string{"/core/v1": "core.openapi.yaml", "/api/v1": "runtime.openapi.yaml"}
+	contracts := map[string]string{"/v1": "openapi.yaml", "/core/v1": "core.openapi.yaml", "/api/v1": "runtime.openapi.yaml"}
 	published := map[string]map[string]bool{}
 	for prefix, file := range contracts {
 		published[prefix] = contractOperations(t, file, prefix)
 	}
 	guard := reflect.ValueOf(methodNotAllowed).Pointer()
-	registered := map[string]bool{}
+	registered, excluded := map[string]bool{}, map[string]bool{}
 	err = chi.Walk(h.routes(), func(method, route string, handler http.Handler, _ ...func(http.Handler) http.Handler) error {
-		if _, ok := unpublishedRoutes[route]; ok || strings.HasPrefix(route, "/v1/") {
-			return nil
+		for _, key := range []string{method + " " + route, "* " + route} {
+			if _, ok := unpublishedRoutes[key]; ok {
+				excluded[key] = true
+				return nil
+			}
 		}
 		// An explicit HEAD or OPTIONS 405 guard is not an operation.
 		if f, ok := handler.(http.HandlerFunc); ok && (method == http.MethodHead || method == http.MethodOptions) && reflect.ValueOf(f).Pointer() == guard {
@@ -100,6 +103,11 @@ func TestContractsPublishExactlyTheRegisteredCoreAndMachineRoutes(t *testing.T) 
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for key := range unpublishedRoutes {
+		if !excluded[key] {
+			t.Errorf("exclusion %s matches no registered route", key)
+		}
 	}
 	for prefix, operations := range published {
 		for operation := range operations {
