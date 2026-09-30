@@ -52,6 +52,19 @@ Self-hosted enrollment exchanges its executor credential for a daemon identity
 through the machine API; it is a different source of authority, not a managed
 bootstrap-file fallback. Both paths enter the same Runtime execution loop.
 
+## Hosted suspension control
+
+The private control-file path is defined once in
+[`suspension.json`](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/internal/runtimebootstrap/suspension.json). Core recovery
+commands and Go providers read it through `runtimebootstrap.SuspendControlFile()`.
+The E2B template packager writes the same value into its protected Runtime
+environment configuration; managed startup reads that value and prepares its
+parent directory with mode 0700 and Runtime ownership. The daemon enables the
+existing suspension protocol through `OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE`.
+This is a packaged internal protocol setting, not an operator-editable idle policy
+or a Provider lease timeout. The control file is not part of the bootstrap
+credential document above.
+
 ## Verification
 
 `go test ./internal/runtimebootstrap ./apps/parsar-daemon/internal/cli` covers the

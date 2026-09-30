@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/runtimebootstrap"
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"
@@ -184,7 +185,7 @@ func (r *runtimeLifecycle) wakeResidentCompute(ctx context.Context, p sandbox.Re
 		if !errors.Is(err, store.ErrNotFound) && !errors.Is(err, gateway.ErrDeviceNotRegistered) && !errors.Is(err, gateway.ErrSessionClosed) {
 			return err
 		}
-		result, err := p.RunCommand(ctx, runtimeReference(owner), sandbox.Command{Args: []string{"oac-daemon", "resume", "--control-file", "/run/oac/daemon-suspend.json", "--environment-id", owner.EnvironmentID, "--suspend-id", state.SuspendID}})
+		result, err := p.RunCommand(ctx, runtimeReference(owner), sandbox.Command{Args: []string{"oac-daemon", "resume", "--control-file", runtimebootstrap.SuspendControlFile(), "--environment-id", owner.EnvironmentID, "--suspend-id", state.SuspendID}})
 		if err != nil {
 			return err
 		}

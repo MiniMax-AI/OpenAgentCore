@@ -27,6 +27,8 @@ environment = dict(value.split('=', 1) for value in image['Config']['Env']
                    if value.startswith(('HOME=', 'OAC_')))
 if environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace':
     parser.error('Image does not use the colocated Runtime layout')
+suspension = json.loads((Path(__file__).resolve().parents[4] / 'internal/runtimebootstrap/suspension.json').read_text())
+environment['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'] = suspension['control_file']
 dev_home = Path(os.environ.get('OAC_DEV_HOME') or Path.home() / '.oac')
 if not dev_home.is_absolute():
     parser.error('OAC_DEV_HOME must be absolute')
