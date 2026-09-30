@@ -99,9 +99,9 @@ Do not use `codex exec` as a substitute reviewer.
 
 Toolchain setup and focused commands are in [Develop OpenAgentCore](docs/development.md#set-up-a-checkout). CI coverage, caches and release publication are owned by the [maintainer guide](docs/maintainers.md#publish-a-version).
 
-### Full gate
+### Checks for a change
 
-Run `make check` before completing code changes. The `check` target in the [Makefile](Makefile) is the authoritative list of gates. [Focused validation](docs/development.md#validate-a-change) selects checks for development; [live acceptance](#live-acceptance) qualifies native execution beyond fixtures and builds.
+Run the checks for the changed behavior and its consumers before completion, including database migration and cross-component tests when affected. Use the [CI selection policy](docs/maintainers.md#continuous-integration) to determine the relevant groups; record what passed and any validation limits. A small follow-up needs its relevant checks, not another unrelated full run. The [Makefile](Makefile) retains `make check` as the complete local gate; main and release CI run all groups, and releases require the full gate. [Live acceptance](#live-acceptance) qualifies native execution beyond fixtures and builds.
 
 ### Test database
 

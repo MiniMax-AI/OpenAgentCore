@@ -1,47 +1,33 @@
 name: native-check
 
 on:
-  pull_request:
-    paths:
-      - 'apps/daemon/**'
-      - 'internal/**'
-      - 'contracts/agents-api/**'
-      - 'packages/claude-sdk-adapter/**'
-      - 'packages/mcode-harness/**'
-      - 'packages/tsconfig/**'
-      - 'scripts/build-native-installer*'
-      - 'scripts/native-harness-smoke.mjs'
-      - 'scripts/native-onboarding-smoke.mjs'
-      - 'services/core/internal/nativeinstaller/**'
-      - 'scripts/build-mcode-harness.sh'
-      - 'go.mod'
-      - 'go.sum'
-      - 'go.work'
-      - 'go.work.sum'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'tsconfig.base.json'
-      - '.npmrc'
-      - '.github/workflows/native.yml'
   workflow_dispatch:
+    inputs:
+      upload-artifacts:
+        description: Retain the three native installers for packaging
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       ref:
         type: string
         required: true
+      upload-artifacts:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: native-check-${{ github.ref }}
+  group: native-check-${{ github.workflow }}-${{ github.run_id }}
   cancel-in-progress: true
 
 jobs:
   platform:
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - platform: linux-amd64
@@ -66,14 +52,16 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v6
+      - uses: ./.github/actions/node
         with:
           node-version: '22.22.0'
       - name: Build the native daemon and test bundle boundaries
+        id: build
         run: |
           go build -ldflags "-X github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/daemon/cmd/oac-daemon
           node --test scripts/build-native-installer.test.mjs
       - name: Native filesystem, authentication and process lifecycle
+        id: filesystem
         run: >-
           go test -race -count=1
           ./internal/runtimefs
@@ -82,6 +70,7 @@ jobs:
           ./apps/daemon/internal/daemonize
           ./apps/daemon/internal/agent/clirunner
       - name: Native Harness ownership and environment identity
+        id: harness
         run: >-
           go test -race -count=1
           ./apps/daemon/internal/agent/codex
@@ -89,6 +78,7 @@ jobs:
           ./apps/daemon/internal/agent/mcode
           -run 'TestJSONRPCClientOwnsToolDescendants|TestSelfHostedToolEnvironment'
       - name: Native capability snapshots, files and installation
+        id: files
         run: >-
           go test -race -count=1
           ./apps/daemon/internal/localworkspace
@@ -103,7 +93,6 @@ jobs:
           -run 'TestWindowsPackageManager|TestWindowsRuntimeMCP'
       - name: Build pinned native components
         run: |
-          npm install --global pnpm@10.30.3
           pnpm install --frozen-lockfile --filter @oac/claude-sdk-adapter...
           pnpm --filter @oac/claude-sdk-adapter build --outDir "$RUNNER_TEMP/claude-compiled"
           pnpm --config.inject-workspace-packages=true --config.extend-node-path=false --filter @oac/claude-sdk-adapter deploy --prod "$RUNNER_TEMP/claude-runtime"
@@ -130,25 +119,55 @@ jobs:
           MCODE_HARNESS_BUILD_DIR="$RUNNER_TEMP/minimax-runtime" \
             bash scripts/build-mcode-harness.sh
       - name: Package and exercise CLI-only installation, additions and reuse
+        id: package
         run: |
           if [[ "$RUNNER_OS" == Windows ]]; then
             export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
           fi
           node scripts/build-native-installer-ci.mjs
       - name: Bootstrap, authenticate, install and connect natively
+        id: onboarding
         run: node scripts/native-onboarding-smoke.mjs
       - name: Verify native Harness protocols without model requests
+        id: protocol
         run: |
           if [[ "$RUNNER_OS" == Windows ]]; then
             export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
           fi
           node scripts/native-harness-smoke.mjs --codex-binary "$RUNNER_TEMP/native-installer/components/codex/bin/codex${{ runner.os == 'Windows' && '.exe' || '' }}" --claude-runtime "$RUNNER_TEMP/native-installer/components/claude"
       - name: Archive the native distribution
+        if: inputs.upload-artifacts
         run: |
           cd "$RUNNER_TEMP"
           tar -C native-installer -czf "oac-native-installer-${{ runner.os }}-${{ runner.arch }}.tar.gz" .
       - uses: actions/upload-artifact@v6
+        if: inputs.upload-artifacts
         with:
           name: oac-native-installer-${{ runner.os }}-${{ runner.arch }}
           path: ${{ runner.temp }}/oac-native-installer-*.tar.gz
           if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Record failed native check phases
+        if: failure()
+        env:
+          PHASES: ${{ toJSON(steps) }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          node --input-type=module <<'JS'
+          import { mkdirSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          const dir = join(process.env.RUNNER_TEMP, 'native-ci-diagnostics');
+          mkdirSync(dir, { recursive: true });
+          const phases = Object.fromEntries(Object.entries(JSON.parse(process.env.PHASES))
+            .map(([name, step]) => [name, step.outcome]));
+          writeFileSync(join(dir, 'phases.json'), JSON.stringify({ platform: process.env.PLATFORM, phases }, null, 2));
+          JS
+      - name: Retain native failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: native-diagnostics-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/native-ci-diagnostics/
+          retention-days: 7
+          if-no-files-found: ignore

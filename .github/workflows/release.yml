@@ -30,14 +30,10 @@ jobs:
     uses: ./.github/workflows/check.yml
     with:
       ref: ${{ inputs.ref || github.sha }}
-
-  native:
-    uses: ./.github/workflows/native.yml
-    with:
-      ref: ${{ inputs.ref || github.sha }}
+      native-artifacts: true
 
   build:
-    needs: native
+    needs: check
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 120
     outputs:
@@ -88,12 +84,9 @@ jobs:
             core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-release-
             core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-
             core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
+      - uses: ./.github/actions/node
       - name: Install build prerequisites
         run: |
-          npm install --global pnpm@10.30.3
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev
       - name: Check release metadata and prepare pinned harnesses
