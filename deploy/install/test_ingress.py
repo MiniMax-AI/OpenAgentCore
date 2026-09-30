@@ -201,19 +201,30 @@ class DomainTests(unittest.TestCase):
 
     def test_failed_retry_restores_the_receipt_before_and_after_service_convergence(self):
         before = (self.root / "generated/core.env").read_bytes()
+        self.host.bindings["self_hosted_executors"] = 1
+        target = "https://core.example.com"
         converge = oac_cli.converge
         for restarted in (False, True):
             with self.subTest(services_restarted=restarted):
+                calls = []
                 def interrupt(*args, **kwargs):
-                    if restarted:
+                    # The gateway converges for the candidate; the switch stops before or after converging.
+                    calls.append(args)
+                    if len(calls) == 1 or restarted:
                         converge(*args, **kwargs)
-                    raise KeyboardInterrupt()
+                    if len(calls) == 2:
+                        raise KeyboardInterrupt()
                 with mock.patch.object(oac_cli, "converge", side_effect=interrupt), self.assertRaises(KeyboardInterrupt):
+                    ingress.configure(self.root, "core.example.com", target, out=lambda _: None)
+                self.assertEqual(len(calls), 2)
+                # The retry returns Core to the applied address first, so it confirms the change from there.
+                with self.assertRaises(ingress.DomainError) as error:
                     ingress.configure(self.root, "core.example.com", out=lambda _: None)
+                self.assertEqual(error.exception.code, "public_url_confirmation_required")
                 ingress_config.reload.reset_mock()
                 ingress.verify.side_effect = ingress.DomainError("https_not_ready", "DNS not ready")
                 with self.assertRaisesRegex(ingress.DomainError, "DNS not ready"):
-                    ingress.configure(self.root, "core.example.com", out=lambda _: None)
+                    ingress.configure(self.root, "core.example.com", target, out=lambda _: None)
                 for call in ingress_config.reload.call_args_list:
                     self.assertNotIn("redir", call.args[1])
                 self.assertIsNone(oac_cli.load_config(self.root)["public_url"])

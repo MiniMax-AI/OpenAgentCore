@@ -163,7 +163,7 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
 | `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
-| `Port 80 is already in use on this server …` during domain setup | Another program holds port 80 or 443. Stop it, using the printed `ss` command to find it, and retry; automatic HTTPS cannot share [these ports](install-options.md#ports) |
+| `… already in use on this server. Automatic HTTPS cannot run beside another program …` during domain setup | Another program holds port 80 or 443. Stop it, using the printed `ss` command to find it, and retry; automatic HTTPS cannot share [these ports](install-options.md#ports) |
 | `HTTPS verification failed …` during domain setup | DNS points elsewhere, a firewall or NAT blocks inbound ports 80 and 443, or the certificate request failed; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; a reverse proxy must pass the original Host |
 | `/v1` or `/api/v1` answers 404 | Those paths reach Web; route them to Core ([reverse proxy](install-options.md#https-and-the-reverse-proxy)) |

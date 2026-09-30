@@ -581,12 +581,15 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
     return installation
 
 
-def own_listeners(config, previous, disk):
+def own_listeners(config, previous, disk, actual):
     """(address, port) of this installation's listeners: those of the settings last written, and
-    those of the written gateway, which domain setup widens before public_url changes."""
+    those of the gateway, which domain setup widens before public_url changes, while it runs as written."""
     applied = applied_view(config, previous)
-    return ({(ipaddress.ip_address(listener.host), listener.port) for listener in configuration.listeners(applied)}
-            | ingress_config.written_listeners(disk.get("compose.json")))
+    own = {(ipaddress.ip_address(listener.host), listener.port) for listener in configuration.listeners(applied)}
+    gateway = actual.get("gateway", {})
+    if gateway.get("running") and gateway.get("inputs") == configuration.rendered_inputs(disk, None).get("gateway"):
+        own |= ingress_config.written_listeners(disk.get("compose.json"))
+    return own
 
 
 def taken_listeners(config, own, candidate=None):
@@ -596,7 +599,7 @@ def taken_listeners(config, own, candidate=None):
             and not port_free(listener.host, listener.port, own)]
 
 
-def check_new_listeners(config, previous, disk, candidate=None):
+def check_new_listeners(config, previous, disk, actual, candidate=None):
     """Each listener this change adds must be free; this installation's own listeners do not count."""
     if previous is None:
         return
@@ -604,13 +607,14 @@ def check_new_listeners(config, previous, disk, candidate=None):
     if config["host"] != applied["host"] and not address_available(config["host"]):
         raise OacError(f"{config['host']} (host) is not an address of this machine; use one of its addresses. "
                        "Nothing was applied.")
-    taken = taken_listeners(config, own_listeners(config, previous, disk), candidate)
+    taken = taken_listeners(config, own_listeners(config, previous, disk, actual), candidate)
     if taken:
         raise OacError(port_in_use(taken[0], taken[0].setting, " Nothing was applied."))
 
 
-def finish_apply(root, config, state, gateway_document, will_run, candidate=None):
-    """With a candidate, domain setup verifies it and records its own status."""
+def finish_apply(root, config, state, gateway_document, will_run, candidate=None, keep_unfinished=False):
+    """With a candidate, domain setup verifies it and records its own status. keep_unfinished
+    leaves an unfinished domain setup recorded, so its status reports the interruption."""
     managed = ingress_config.enabled(config) and "gateway" in will_run
     if managed:
         import ingress
@@ -619,7 +623,7 @@ def finish_apply(root, config, state, gateway_document, will_run, candidate=None
         if config["public_url"] and not candidate:
             ingress.verify(config["public_url"], state["installation_id"])
     health(root, config, will_run)
-    if managed and not candidate:
+    if managed and not candidate and not (keep_unfinished and ingress.unfinished(root)):
         ingress.save(root, {"state": "ready" if config["public_url"] else "unconfigured",
                             "public_url": config["public_url"], "target_url": config["public_url"], "message": None})
 
@@ -647,11 +651,11 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         raise OacError("\n".join(f"generated/{name} was edited by hand." for name in edited)
                           + "\nPut the change in config.json and run oac apply --discard-edits, which keeps the"
                           " edited copy as generated/<file>.edited-<time>. Nothing was applied.")
-    check_new_listeners(config, previous, disk, candidate)
+    actual = observe(state)
+    check_new_listeners(config, previous, disk, actual, candidate)
     changed = [name for name, text in rendered.files.items() if disk.get(name) != text.encode()]
     removed = [name for name in (state.get("generated") or {}) if name not in rendered.files and disk.get(name) is not None]
 
-    actual = observe(state)
     running = {name for name, item in actual.items() if item["running"] and name != "migrate"}
     will_run = (set(rendered.services) - {"migrate"}) if (start or running) else set()
     todo = stale(actual, rendered.services, will_run)
@@ -878,7 +882,7 @@ def start(root, out=print):
         will_run = set(desired) - {"migrate"}
         converge(root, state, desired, will_run)
         gateway_document = (root / "generated/Caddyfile").read_text() if ingress_config.enabled(written) else None
-        finish_apply(root, written, state, gateway_document, will_run)
+        finish_apply(root, written, state, gateway_document, will_run, keep_unfinished=True)
     out("Services started.")
 
 
