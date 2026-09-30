@@ -26,6 +26,10 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 	if entry == "" || keyPath == "" || proof == "" {
 		t.Skip("explicit installed runtime, private key file and proof directory required")
 	}
+	endpoint, model := os.Getenv("OAC_TEST_CLAUDE_EXECUTOR_BASE_URL"), os.Getenv("OAC_TEST_CLAUDE_EXECUTOR_MODEL")
+	if endpoint == "" || model == "" {
+		t.Fatal("explicit provider endpoint and model required")
+	}
 	if !filepath.IsAbs(proof) {
 		t.Fatal("absolute proof directory required")
 	}
@@ -38,8 +42,8 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 	}
 	t.Setenv("OAC_RUNTIME_HOME", proof)
 	config := Config{Node: os.Getenv("OAC_TEST_CLAUDE_EXECUTOR_NODE"), Entrypoint: entry, StateDir: filepath.Join(proof, "state"), Env: []string{
-		"ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic", "ANTHROPIC_AUTH_TOKEN=" + strings.TrimSpace(string(key)), "ANTHROPIC_API_KEY=", "CLAUDE_CODE_OAUTH_TOKEN=", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL=kimi-k3", "ANTHROPIC_DEFAULT_OPUS_MODEL=kimi-k3", "ANTHROPIC_DEFAULT_HAIKU_MODEL=kimi-k3",
+		"ANTHROPIC_BASE_URL=" + endpoint, "ANTHROPIC_AUTH_TOKEN=" + strings.TrimSpace(string(key)), "ANTHROPIC_API_KEY=", "CLAUDE_CODE_OAUTH_TOKEN=", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL=" + model, "ANTHROPIC_DEFAULT_OPUS_MODEL=" + model, "ANTHROPIC_DEFAULT_HAIKU_MODEL=" + model,
 	}}
 	if proxy := os.Getenv("OAC_TEST_CLAUDE_EXECUTOR_HTTP_PROXY"); proxy != "" {
 		config.Env = append(config.Env, "HTTP_PROXY="+proxy, "HTTPS_PROXY="+proxy, "http_proxy="+proxy, "https_proxy="+proxy)
@@ -76,7 +80,7 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(proof, "executor-evidence.json"), raw, 0600)
 	}
 	defer persist()
-	request := proto.PromptRequestPayload{StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "kimi-k3", "system_prompt": "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}}
+	request := proto.PromptRequestPayload{StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": model, "system_prompt": "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}}
 	factory := NewExecutorFactory(config)
 	prepared := time.Now()
 	owner, err := factory(ctx, request)
