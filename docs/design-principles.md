@@ -87,4 +87,4 @@ execution or compatibility with old private protocols. Implementers follow the
 Native failure classification is adapter-owned and uses finite, structured native
 values. Optional Runtime error metadata is normalized once; it never replaces Core's
 terminal authority, cancellation receipts, Usage or native identity. See
-[native failure classification](../contracts/agents-api/native-error-classification.md).
+[native failure classification](runtime-protocol.md#native-failure-classification).

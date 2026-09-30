@@ -23,9 +23,6 @@ type managedNodes struct {
 }
 
 func configureManagedNodes(s *store.Store, publicURL string, owner func(context.Context) error) (*managedNodes, error) {
-	if os.Getenv("AGENTS_API_MANAGED_RUNTIMES_FILE") != "" {
-		return nil, errors.New("file-managed sandbox configuration is no longer supported; retain existing resources, drain them with the previous release, this release does not automatically adopt file-managed deployment records")
-	}
 	setupID := os.Getenv("OAC_INSTALLATION_ID")
 	if setupID == "" {
 		return nil, nil

@@ -354,7 +354,7 @@ class BundledDocsTests(unittest.TestCase):
 
     def test_repository_markdown_links_resolve(self):
         repository = pathlib.Path(__file__).resolve().parent.parent
-        names = subprocess.run(["git", "ls-files", "-z", "--", "*.md", ":(exclude)example", ":(exclude)provenance"],
+        names = subprocess.run(["git", "ls-files", "-z", "--", "*.md", ":(exclude)example"],
                                cwd=repository, check=True, capture_output=True, text=True).stdout.split("\0")
         self.assertIn("README.md", names)
         distribution.docs(repository, self.bundle, REVISION, names=[name for name in names if name], files=())

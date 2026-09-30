@@ -93,7 +93,7 @@ var fieldPlacementPending = map[string]string{
 }
 
 // Official list pages also carry object, first_id and last_id (recorded in
-// official-semantics-alignment.md), which the SDK's hand-written page classes
+// wire-semantics.md#lists), which the SDK's hand-written page classes
 // do not declare.
 var listEnvelopeFields = []string{"object", "first_id", "last_id"}
 

@@ -28,10 +28,10 @@ permissions:
 
 jobs:
   actionlint:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-24.04' || 'blacksmith-2vcpu-ubuntu-2404' }}
     timeout-minutes: 5
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
       - name: Download actionlint
         run: bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12
       - name: Run actionlint

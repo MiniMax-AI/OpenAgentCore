@@ -2,9 +2,9 @@
 
 Compose is modelled by its observable contract: `up` recreates a container exactly
 when its resolved configuration (including env_file content) changed, each container
-keeps the labels it was created with, and Core loads its Core key digests when it
-starts. systemd runs the unit it last loaded; its process keeps the environment it
-started with.
+keeps the labels it was created with and holds the host ports it publishes while it
+runs, and Core loads its Core key digests when it starts. systemd runs the unit it
+last loaded; its process keeps the environment it started with.
 """
 import errno
 import hashlib
@@ -32,15 +32,16 @@ class FakeHost:
     def __init__(self, test):
         self.commands, self.requests = [], []
         self.containers = {}  # service -> {hash, inputs, running}
-        self.project = None
+        self.project = None  # the Compose project the containers belong to
         self.recreated = []
-        self.native = {"active": False, "starts": 0, "restarts": 0, "reloads": 0, "addr": None, "digests": [],
-                       "inputs": None, "loaded": None, "environment": ""}
+        self.native = {"active": False, "enabled": False, "starts": 0, "restarts": 0, "reloads": 0, "addr": None,
+                       "digests": [], "inputs": None, "loaded": None, "environment": ""}
         # fails: Core never starts; rejects(core.env text): Core refuses that configuration.
         self.core = {"port": None, "digests": [], "fails": False, "log": "", "rejects": lambda environment: False}
         self.web_port = None
         self.native_root = None  # the installation whose native unit systemctl manages
         self.missing_images = set()
+        self.other_containers = {}  # image ID -> containers of other installations that use it
         self.core_installation_id = "11111111-2222-4333-8444-555555555555"
         self.bindings = {"nodes": 0, "nodes_on_other_address": 0, "hosted_sandboxes": 0, "self_hosted_executors": 0}
         self.nodes = []
@@ -49,13 +50,13 @@ class FakeHost:
         self.deployment = {"provider": "", "generation": 0, "reset": None, "resources": {"allocations": 0, "pending": 0}}  # what sandbox_setup reads and posts
         self.deployment_posts = []
         self.deployment_refusal = None  # Core's message when it refuses the POST
-        self.busy = set()  # (address, port) of every listening socket, the installation's own included
+        self.busy = set()  # (address, port) of listening sockets besides the ports running containers publish
         self.unassigned = set()  # addresses this host does not have
         for target, name, value in ((subprocess, "run", mock.Mock(side_effect=self.run)),
                                     (oac_cli, "http", self.http),
                                     (oac_cli, "bind_error", self.bind_error),
                                     (oac_cli, "tcp_listeners", lambda: [(ipaddress.ip_address(host), port)
-                                                                        for host, port in self.busy]),
+                                                                        for host, port in self.listening()]),
                                     (oac_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
                                     (native_service, "_process_environment", self.process_environment),
                                     (sandbox_setup, "send", self.sandbox_send)):
@@ -68,10 +69,15 @@ class FakeHost:
             return errno.EADDRNOTAVAIL
         address = ipaddress.ip_address(host)
         return errno.EADDRINUSE if any(held == port and oac_cli.overlaps(address, ipaddress.ip_address(other))
-                                       for other, held in self.busy) else 0
+                                       for other, held in self.listening()) else 0
 
     def running(self):
         return {name for name, item in self.containers.items() if item["running"]}
+
+    def listening(self):
+        """(address, port) of every listening socket: busy, and the ports running containers publish."""
+        return self.busy | {tuple(pair) for item in self.containers.values() if item["running"]
+                            for pair in item.get("ports", ())}
 
     def run_container(self, name, port=None, digests=None):
         """A container of an installation made outside the test, such as an earlier release."""
@@ -86,11 +92,21 @@ class FakeHost:
         code, stdout = 0, ""
         if args[:2] == ["docker", "compose"] and args[2:3] == ["-f"]:
             code, stdout = self.compose(Path(args[3]), args[4:])
+        elif args[:2] == ["docker", "compose"] and args[2:3] == ["-p"]:
+            # Without a project file Compose acts on the named project's labels alone.
+            if args[4:5] == ["down"] and args[3] == self.project:
+                self.containers.clear()
         elif args[:2] == ["docker", "compose"]:
             stdout = "2.30.0"
         elif args[:3] == ["docker", "image", "inspect"]:
             code = 1 if args[3] in self.missing_images else 0
-            stdout = "" if code else args[3] + " linux/amd64"
+            stdout = "" if code else "[]" if "{{json .RepoTags}}" in args else args[3] + " linux/amd64"
+        elif args[:3] == ["docker", "image", "rm"]:
+            self.missing_images.add(args[3])
+        elif args[:3] == ["docker", "image", "ls"]:
+            stdout = "\n".join(sorted(set(MANIFEST["images"].values()) - self.missing_images))
+        elif args[:2] == ["docker", "ps"] and args[-1].startswith("ancestor="):
+            stdout = "\n".join(self.other_containers.get(args[-1].removeprefix("ancestor="), []))
         elif args[:2] == ["docker", "ps"]:
             stdout = "\n".join(name for name, item in self.containers.items() if item["running"]) if "--format" in args else "\n".join("id-" + name for name in self.containers)
         elif args[:2] == ["docker", "inspect"]:
@@ -118,6 +134,7 @@ class FakeHost:
     def compose(self, path, args):
         document = json.loads(path.read_text()) if path.exists() else {"services": {}}
         services = document["services"]
+        self.project = document.get("name", self.project)
         if args[:1] == ["down"]:
             self.containers.clear()
             return 0, ""
@@ -144,7 +161,9 @@ class FakeHost:
                 current = self.containers.get(name)
                 if current is None or current["hash"] != digest:
                     self.containers[name] = {"hash": digest, "inputs": services[name].get("labels", {}).get(LABEL),
-                                             "running": False}
+                                             "running": False,
+                                             "ports": [[host.strip("[]"), int(port)] for host, port, _ in
+                                                       (item.rsplit(":", 2) for item in services[name].get("ports", []))]}
                     self.recreated.append(name)
                     if name == "core":
                         self.load_core(path.parent.parent, services[name])
@@ -182,6 +201,7 @@ class FakeHost:
             native["reloads"] += 1
             native["loaded"] = self.unit_file()
         elif args[0] in ("enable", "restart", "start"):
+            native["enabled"] = native["enabled"] or args[0] == "enable"
             if args[0] != "restart" and native["active"]:
                 return 0, ""  # systemd leaves an active unit alone on start and enable --now
             native["starts" if args[0] != "restart" else "restarts"] += 1
@@ -202,10 +222,18 @@ class FakeHost:
                 native["environment"] = environment.read_text()
         elif args[0] == "stop":
             native["active"], native["inputs"] = False, None
+        elif args[0] == "disable":
+            if not native["enabled"]:
+                return 1, ""  # the unit file was never linked
+            native["enabled"] = False
+            if "--now" in args:
+                native["active"], native["inputs"] = False, None
         elif args[0] == "is-active":
             return (0 if native["active"] else 3), ""
         elif args[0] == "show" and "--property=MainPID" in args:
             return 0, "4242" if native["active"] else "0"
+        elif args[0] == "show" and "--property=LoadState" in args:
+            return 0, "loaded" if native["enabled"] or native["active"] else "not-found"
         elif args[0] == "show":
             return 0, "252"
         return 0, ""

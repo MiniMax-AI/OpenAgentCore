@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyDomain, domainHostname, domainTarget, DomainRequestError } from "./domain-api";
+// QueryObserver enables browser polling only when window exists at module load.
+vi.hoisted(() => vi.stubGlobal("window", {}));
 
-afterEach(() => vi.unstubAllGlobals());
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { applyDomain, DOMAIN_RECONNECT_GRACE_MS, domainHostname, domainQuery, domainReconnecting, domainTarget, DomainRequestError } from "./domain-api";
+
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("domain navigation and writes", () => {
   it("accepts DNS names while rejecting URLs, IPs and path-like input", () => {
@@ -27,5 +31,32 @@ describe("domain navigation and writes", () => {
   it("rejects a malformed or unsafe manager response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ supported: true, state: "ready", public_url: null, target_url: "https://evil.example.com/path", message: null }))));
     await expect(applyDomain("core.example.com", false, new AbortController().signal)).rejects.toBeInstanceOf(DomainRequestError);
+  });
+  it("keeps polling setup while the gateway restarts and reports a disconnect only after the grace period", async () => {
+    vi.useFakeTimers();
+    const status = (state: string) => new Response(JSON.stringify({ supported: true, state, public_url: null, target_url: "https://core.example.com", message: null }));
+    const fetch = vi.fn().mockResolvedValueOnce(status("checking")).mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockImplementation(() => Promise.resolve(new Response(null, { status: 502 })));
+    vi.stubGlobal("fetch", fetch);
+    const client = new QueryClient();
+    const observer = new QueryObserver(client, domainQuery);
+    const unsubscribe = observer.subscribe(() => undefined);
+    try {
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(observer.getCurrentResult().isError).toBe(true);
+      expect(domainReconnecting(observer.getCurrentResult())).toBe(true);
+      await vi.advanceTimersByTimeAsync(DOMAIN_RECONNECT_GRACE_MS - 4_000);
+      expect(domainReconnecting(observer.getCurrentResult())).toBe(true);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(observer.getCurrentResult().isError).toBe(true);
+      expect(domainReconnecting(observer.getCurrentResult())).toBe(false);
+      fetch.mockImplementation(() => Promise.resolve(status("ready")));
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(observer.getCurrentResult()).toMatchObject({ isError: false, data: { state: "ready" } });
+      const calls = fetch.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(fetch).toHaveBeenCalledTimes(calls);
+      expect(fetch.mock.calls.every(([, init]) => init.method === undefined)).toBe(true);
+    } finally { unsubscribe(); client.clear(); }
   });
 });

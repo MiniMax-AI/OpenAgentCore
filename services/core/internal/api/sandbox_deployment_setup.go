@@ -36,20 +36,6 @@ func (v SandboxDeploymentInput) request() (store.SandboxDeploymentSetupRequest, 
 	return store.SandboxDeploymentSetupRequest{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Runtime: v.Runtime}, Configuration: c}, nil
 }
 
-// rejectCoreURL names the retired member instead of reporting a generic unknown
-// member: Core derives core_url from the installation public URL.
-func rejectCoreURL(w http.ResponseWriter, raw json.RawMessage) bool {
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil {
-		return false
-	}
-	if _, present := fields["core_url"]; !present {
-		return false
-	}
-	writeError(w, http.StatusBadRequest, "invalid_request_error", "core_url is derived from the installation public URL (public_url in config.json, OAC_PUBLIC_URL for Core) and cannot be set here. Remove it.", "core_url")
-	return true
-}
-
 func WithSandboxDeploymentSetup(initialize func(context.Context, store.SandboxDeploymentSetupRequest) (store.RuntimeDeploymentView, error)) Option {
 	return func(h *Handler) { h.sandboxSetup = initialize }
 }
@@ -75,9 +61,6 @@ func WithSandboxDeploymentChanges(
 func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
 	if !ok {
-		return
-	}
-	if rejectCoreURL(w, raw) {
 		return
 	}
 	var input SandboxDeploymentInput
@@ -115,9 +98,6 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONBody(w, r)
 	if !ok {
-		return
-	}
-	if rejectCoreURL(w, raw) {
 		return
 	}
 	var input SandboxDeploymentChangeInput

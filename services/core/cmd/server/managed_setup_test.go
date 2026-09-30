@@ -20,7 +20,6 @@ import (
 )
 
 func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
-	t.Setenv("AGENTS_API_MANAGED_RUNTIMES_FILE", "")
 	t.Setenv("OAC_INSTALLATION_ID", uuid.NewString())
 	digest := sha256.Sum256([]byte("synthetic-admin"))
 	path := filepath.Join(t.TempDir(), "core-key-digests.json")
@@ -141,13 +140,6 @@ func TestE2BRequiresAPublicURLOutsideTheHost(t *testing.T) {
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
 	if !errors.Is(err, store.ErrSandboxPublicURLUnreachable) {
 		t.Fatal("E2B accepted a loopback public URL", err)
-	}
-}
-
-func TestCoreRejectsFileManagedSandboxConfiguration(t *testing.T) {
-	t.Setenv("AGENTS_API_MANAGED_RUNTIMES_FILE", "/retained/config.json")
-	if _, err := configureManagedNodes(nil, "https://core.example", nil); err == nil {
-		t.Fatal("accepted a second configuration source")
 	}
 }
 

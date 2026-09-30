@@ -44,12 +44,17 @@ def load_rules(path: Path) -> list[ExceptionRule]:
     return rules
 
 
-def violations(path: str, content: str, rules: list[ExceptionRule]) -> list[tuple[int, int, str]]:
-    allowed = [match.span() for rule in rules if fnmatch.fnmatchcase(path, rule.path)
+def violations(path: str, content: str, rules: list[ExceptionRule],
+               used: set[int] | None = None) -> list[tuple[int, int, str]]:
+    """Return unexcused identifiers; add the index of each rule that excuses one to used."""
+    allowed = [(index, match.span()) for index, rule in enumerate(rules) if fnmatch.fnmatchcase(path, rule.path)
                for match in rule.regex.finditer(content)]
     result = []
     for match in FORBIDDEN.finditer(content):
-        if any(start <= match.start() and match.end() <= end for start, end in allowed):
+        excusing = {index for index, (start, end) in allowed if start <= match.start() and match.end() <= end}
+        if excusing:
+            if used is not None:
+                used.update(excusing)
             continue
         line = content.count("\n", 0, match.start()) + 1
         column = match.start() - content.rfind("\n", 0, match.start())
@@ -66,6 +71,7 @@ def main() -> int:
         rules = load_rules(args.allowlist)
         names = subprocess.check_output(["git", "-C", str(args.root), "ls-files", "-z"]).split(b"\0")
         failures = []
+        used: set[int] = set()
         for raw in names:
             if not raw:
                 continue
@@ -78,14 +84,19 @@ def main() -> int:
             if b"\0" in data:
                 continue
             content = data.decode("utf-8")
-            failures.extend((name, *item) for item in violations(name, content, rules))
+            failures.extend((name, *item) for item in violations(name, content, rules, used))
     except (OSError, ValueError, re.error, subprocess.CalledProcessError) as error:
         print(f"Name guard failed: {error}", file=sys.stderr)
         return 2
     for name, line, column, token in failures:
         print(f"{name}:{line}:{column}: retired identifier {token!r}")
-    if failures:
-        print(f"Name guard found {len(failures)} unapproved identifiers.", file=sys.stderr)
+    # An exception that excuses nothing hides nothing today but would silently allow the name later.
+    unused = [rule for index, rule in enumerate(rules) if index not in used]
+    for rule in unused:
+        print(f"{args.allowlist.name}: exception {rule.path} {rule.regex.pattern!r} excuses no retired identifier")
+    if failures or unused:
+        print(f"Name guard found {len(failures)} unapproved identifiers and {len(unused)} unused exceptions.",
+              file=sys.stderr)
         return 1
     print("OpenAgentCore name guard passed.")
     return 0

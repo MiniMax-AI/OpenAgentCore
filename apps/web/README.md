@@ -23,7 +23,7 @@ OAC_WEB_DEV_PROXY_TARGET=http://127.0.0.1:18092 pnpm dev:web
 
 Open `http://127.0.0.1:4173` and sign in with the fixture-only key `fixture-core-key-3f9a2c71`.
 
-`pnpm dev:web` runs Vite on `127.0.0.1:4173` and proxies `/console`, `/node-install` and `/core/v1` to `OAC_WEB_DEV_PROXY_TARGET` (default `http://127.0.0.1:8091`). Vite reads the setting from the environment or the repository's `.env` file; it never reaches browser code. The target must serve the console routes. The development server also forwards `/v1` to the same target for local tooling such as `scripts/core-doctor.mjs`, adding a bearer token from `OAC_WEB_DEV_PROXY_TOKEN` or from the private file `OAC_WEB_DEV_PROXY_TOKEN_FILE` (default `~/.oac/dev/web-token`, used when it exists); the console itself never calls `/v1`. `apps/web/e2e/fixture-console.mjs` is a synthetic console service with deterministic data; `AGENTS_FIXTURE_PORT` changes its port (default 18092).
+`pnpm dev:web` runs Vite on `127.0.0.1:4173` and proxies `/console`, `/node-install` and `/core/v1` to `OAC_WEB_DEV_PROXY_TARGET` (default `http://127.0.0.1:8091`). Vite reads the setting from the environment or the repository's `.env` file; it never reaches browser code. The target must serve the console routes. `apps/web/e2e/fixture-console.mjs` is a synthetic console service with deterministic data; `AGENTS_FIXTURE_PORT` changes its port (default 18092).
 
 ## Checks
 

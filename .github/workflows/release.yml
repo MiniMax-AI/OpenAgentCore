@@ -38,13 +38,13 @@ jobs:
 
   build:
     needs: native
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 120
     outputs:
       revision: ${{ steps.source.outputs.revision }}
       release_tag: ${{ steps.source.outputs.release_tag }}
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
@@ -83,8 +83,10 @@ jobs:
           path: |
             ~/.oac/cache/go-build
             ~/.oac/cache/go-mod
-          key: core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-${{ steps.source.outputs.revision }}
+          key: core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-release-${{ steps.source.outputs.revision }}
           restore-keys: |
+            core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-release-
+            core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-
             core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-
       - uses: actions/setup-node@v6
         with:
@@ -135,11 +137,11 @@ jobs:
   release:
     if: github.event_name == 'push' || inputs.draft_release
     needs: [check, build]
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     permissions:
       contents: write
     steps:
-      - uses: useblacksmith/checkout@v1
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.build.outputs.revision }}
           persist-credentials: false

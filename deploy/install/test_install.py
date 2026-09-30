@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import signal
 import stat
 import subprocess
 import sys
@@ -16,6 +17,8 @@ from unittest import mock
 
 import config_model
 import distribution
+import ingress
+import ingress_config
 import install
 import node_spec
 from installer_fakes import MANIFEST, STANDARD_SIZES, FakeHost, make_bundle, run_installer
@@ -159,17 +162,138 @@ class InstallerTests(unittest.TestCase):
                 self.install()
         self.assertEqual(before, self.snapshot())
 
-    def test_interrupted_finish_repairs_with_original_identity_and_lock(self):
-        with mock.patch.object(install, "prepare_node_payload", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                self.install()
-        before = self.document("state.json")
-        inode = (self.root / ".oac.lock").stat().st_ino
-        secret = (self.root / "secrets/core.key").read_bytes()
-        self.install()
-        self.assertEqual(before["installation_id"], self.document("state.json")["installation_id"])
-        self.assertEqual(inode, (self.root / ".oac.lock").stat().st_ino)
-        self.assertEqual(secret, (self.root / "secrets/core.key").read_bytes())
+    def test_an_interrupted_first_start_removes_what_it_created(self):
+        self.root.mkdir()
+        with mock.patch.object(install.oac_cli, "health", side_effect=KeyboardInterrupt), \
+                self.assertRaises(KeyboardInterrupt) as raised:
+            self.install()
+        self.assertEqual(install.error_text(raised.exception), "interrupted\n" + install.NOTHING_KEPT)
+        # The directory existed, so it stays, with only the lock that a waiting command may hold.
+        self.assertEqual([path.name for path in self.root.iterdir()], [".oac.lock"])
+        self.assertIn(["docker", "compose", "-p", self.host.project, "down", "--volumes", "--remove-orphans"],
+                      self.host.commands)
+        self.assertEqual(self.host.containers, {})
+
+    def test_a_rerun_replaces_an_incomplete_installation(self):
+        self.install("--sandbox", "none")
+        for marker in (False, None):
+            with self.subTest(marker=marker):
+                old = self.host.project
+                # A first start killed before completion; its services still hold their ports.
+                state = dict(self.document("state.json"), complete=marker)
+                if marker is None:
+                    del state["complete"]
+                install.oac_cli.save_state(self.root, state)
+                for command in (install.oac_cli.start, install.oac_cli.apply, install.oac_cli.status):
+                    with self.assertRaisesRegex(install.oac_cli.OacError, "did not finish installing. Rerun the installer"):
+                        command(self.root, out=lambda _: None)
+                with self.assertRaisesRegex(ingress.DomainError, "did not finish installing"):
+                    ingress.prepare(self.root, "core.example", None)
+                self.host.busy = {8080, 8091}
+                remove = install.oac_cli.remove
+                with mock.patch.object(install.oac_cli, "remove",
+                                       side_effect=lambda *args, **kwargs: (remove(*args, **kwargs), self.host.busy.clear())):
+                    self.install("--core-only", "--sandbox", "none")
+                self.assertIn(["docker", "compose", "-p", old, "down", "--volumes", "--remove-orphans"], self.host.commands)
+                self.assertEqual((self.document("config.json")["mode"], self.document("config.json")["ports"]["core"]),
+                                 ("core-only", 8091))
+                state = self.document("state.json")
+                self.assertNotEqual(state["project"], old)
+                self.assertTrue(state["complete"])
+                self.assertEqual(self.host.running(), {"database", "core"})
+
+    def test_removal_keeps_recovery_state_on_failure_and_finishes_despite_signals(self):
+        self.install("--sandbox", "none")
+        state = dict(self.document("state.json"), complete=False)
+        install.oac_cli.save_state(self.root, state)
+        command = (self.root / "oac").read_bytes()
+        unlink = Path.unlink
+
+        def fail_command(path, *args, **kwargs):
+            if path == self.root / "oac":
+                raise PermissionError("command unlink refused")
+            return unlink(path, *args, **kwargs)
+
+        with install.oac_cli.locked(self.root), mock.patch.object(Path, "unlink", fail_command), \
+                self.assertRaisesRegex(install.oac_cli.OacError, "Removal did not finish"):
+            install.oac_cli.remove(self.root, state, keep_root=True)
+        self.assertEqual(self.document("state.json"), state)
+        self.assertEqual((self.root / "oac").read_bytes(), command)
+        self.assertEqual(install.layout(self.root), "incomplete")
+
+        signals = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+        for signum in signals:
+            previous = signal.signal(signum, install.interrupted)
+            self.addCleanup(signal.signal, signum, previous)
+        delivered = []
+
+        def interrupt_command(path, *args, **kwargs):
+            if path == self.root / "oac":
+                self.assertFalse((self.root / "state.json").exists())
+                for signum in signals:
+                    signal.raise_signal(signum)
+                    delivered.append(signum)
+            return unlink(path, *args, **kwargs)
+
+        with install.oac_cli.locked(self.root), mock.patch.object(Path, "unlink", interrupt_command):
+            install.oac_cli.remove(self.root, state, keep_root=True)
+        self.assertEqual(delivered, list(signals))
+        self.assertEqual([path.name for path in self.root.iterdir()], [".oac.lock"])
+        for signum in signals:
+            self.assertIs(signal.getsignal(signum), install.interrupted)
+
+    def test_manual_removal_command_keeps_automatic_compose_isolation(self):
+        self.install("--sandbox", "none")
+        state = self.document("state.json")
+        foreign = self.work / "other-project"
+        foreign.mkdir()
+        (foreign / "compose.yaml").write_text("volumes:\n  database:\n    name: unrelated-database\n")
+        binaries = self.work / "bin"
+        binaries.mkdir()
+        docker = binaries / "docker"
+        docker.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                          "print(json.dumps({'cwd': os.getcwd(), 'args': sys.argv[1:], "
+                          "'compose': [key for key in os.environ if key.startswith('COMPOSE_')], "
+                          "'docker_host': os.environ.get('DOCKER_HOST')}))\n")
+        docker.chmod(0o700)
+        environment = dict(os.environ, COMPOSE_FILE=str(foreign / "compose.yaml"), COMPOSE_PROJECT_NAME="unrelated",
+                           DOCKER_HOST="unix:///synthetic-docker.sock", PATH=str(binaries) + os.pathsep + os.environ["PATH"])
+        with mock.patch.dict(os.environ, environment, clear=True):
+            with install.oac_cli.locked(self.root), \
+                    mock.patch.object(install.oac_cli, "run", side_effect=OSError("Docker unavailable")) as run, \
+                    self.assertRaises(install.oac_cli.OacError) as raised:
+                install.oac_cli.remove(self.root, state)
+            self.assertEqual(run.call_args.kwargs["cwd"], "/")
+            self.assertFalse(any(name.startswith("COMPOSE_") for name in run.call_args.kwargs["env"]))
+            manual = str(raised.exception).splitlines()[1].strip()
+            result = REAL_RUN(["sh", "-c", manual], cwd=foreign, capture_output=True, text=True, check=True)
+        observed = json.loads(result.stdout)
+        self.assertEqual(observed, {"cwd": "/", "args": run.call_args.args[0][1:], "compose": [],
+                                    "docker_host": environment["DOCKER_HOST"]})
+        self.assertEqual(self.document("state.json"), state)
+
+    def test_a_directory_without_state_json_is_refused_and_untouched(self):
+        key = self.root / "secrets/e2b.key"
+        key.parent.mkdir(parents=True)
+        key.write_text("synthetic-e2b-key-0123456789")
+        key.chmod(0o600)
+        before = self.snapshot()
+        with self.assertRaisesRegex(install.InstallError, "not empty"):
+            self.install("--sandbox", "e2b", "--e2b-api-key-file", key, "--e2b-template", BUILD,
+                         "--public-url", "https://core.example")
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_complete_installation_is_never_removed(self):
+        self.install("--sandbox", "none")
+        before = self.snapshot()
+        with self.assertRaisesRegex(install.InstallError, "configured by"):
+            self.install("--core-only")
+        self.host.containers.clear()
+        self.host.core["fails"] = True
+        with self.assertRaisesRegex(install.oac_cli.OacError, "config.json not applied"):
+            self.install()
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(any("down" in command for command in self.host.commands))
 
     def test_fresh_web_refuses_old_core_before_creating_installation(self):
         self.host.remote_core["https://core.example"] = (404, None)
@@ -261,13 +385,20 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("  Port 8080 was in use; Web uses 8081.\n", output)
         self.assertIn("  Port 8091 was in use; Core uses 8092.\n", output)
 
+    def test_managed_ingress_without_https_leaves_ports_80_and_443_alone(self):
+        self.host.busy.add(("0.0.0.0", 80))
+        with mock.patch.object(ingress_config, "preflight", return_value={"docker_socket": "/var/run/docker.sock", "docker_gid": 999}), \
+                mock.patch.object(ingress_config, "reload"), contextlib.redirect_stdout(self.output):
+            run_installer(install, self.bundle, ["--install-dir", self.root, "--sandbox", "none"])
+        self.assertEqual(self.document("generated/compose.json")["services"]["gateway"]["ports"], ["0.0.0.0:8080:8080"])
+
     def test_managed_https_needs_ports_80_and_443(self):
         self.host.busy.add(("0.0.0.0", 80))
         with contextlib.redirect_stdout(self.output), self.assertRaisesRegex(
                 install.InstallError, "^Automatic HTTPS needs ports 80 and 443, and port 80 is already in use on 0.0.0.0. "
                 "Free it, or use an existing reverse proxy with --ingress external; find the process with: "
                 "sudo ss -ltnp 'sport = :80'$"):
-            run_installer(install, self.bundle, ["--install-dir", self.root])
+            run_installer(install, self.bundle, ["--install-dir", self.root, "--public-url", "https://core.example"])
         self.assertFalse(self.root.exists())
 
     def test_output_labels_public_and_local_addresses(self):
@@ -285,6 +416,7 @@ class InstallerTests(unittest.TestCase):
         }
         for name, (flags, expected) in cases.items():
             with self.subTest(name=name):
+                self.host.containers.clear()  # Each case installs on a host of its own.
                 self.root, self.output = self.work / name, io.StringIO()
                 self.install(*flags)
                 output = " ".join(self.output.getvalue().split())
@@ -347,11 +479,7 @@ class InstallerTests(unittest.TestCase):
         (self.root / "installation.json").write_text("{}")
         with self.assertRaisesRegex(install.InstallError, "not supported;.*reinstall"):
             self.install()
-        # A fresh install stopped before config.json started nothing: starting over is safe.
         (self.root / "installation.json").unlink()
-        (self.root / "secrets").mkdir()
-        with self.assertRaisesRegex(install.InstallError, "stopped before writing config.json"):
-            self.install()
         (self.root / "state.json").write_text('{"format": 1, "generated": {}}')
         (self.root / "state.json").chmod(0o600)
         with self.assertRaisesRegex(install.oac_cli.OacError, "not supported;.*reinstall"):
@@ -498,18 +626,29 @@ class InstallerTests(unittest.TestCase):
                 self.install(*flags)
             self.assertFalse(self.root.exists())
 
-    def test_a_failed_first_start_says_the_sandbox_backend_was_not_chosen(self):
-        self.host.core["fails"] = True
-        with self.assertRaisesRegex(install.oac_cli.OacError,
-                                    f"rerun ./install.sh --install-dir {self.root}. The sandbox backend was not chosen; "
-                                    "after the repair, choose it on the Nodes page in Web$"):
-            self.install("--sandbox", "microsandbox")
-        self.assertNotIn("Installation complete.", self.output.getvalue())
-        self.assertIn("==> Applying settings and starting services as needed...", self.output.getvalue())
-        self.host.core["fails"] = False
-        self.install()
-        self.assertIn("Installation settings checked.", self.output.getvalue())
-        self.assertEqual(self.host.deployment_posts, [])
+    def test_a_failed_first_start_removes_what_it_created(self):
+        for flags, cause in (((), "`docker compose up` failed"), (("--native-core",), "Core did not become healthy")):
+            with self.subTest(flags=flags):
+                self.root = self.host.native_root = self.work / ("native" if flags else "compose")
+                self.host.containers, self.output = {}, io.StringIO()
+                self.host.core["fails"] = True
+                with self.assertRaises(install.InstallError) as raised:
+                    self.install("--sandbox", "microsandbox", *flags)
+                self.assertEqual(install.error_text(raised.exception),
+                                 f"The services did not start: {cause}\n{install.NOTHING_KEPT}")
+                self.assertNotIn("Installation complete.", self.output.getvalue())
+                self.assertFalse(self.root.exists())
+                self.assertIn(["docker", "compose", "-p", self.host.project, "down", "--volumes", "--remove-orphans"],
+                              self.host.commands)
+                self.assertEqual(self.host.containers, {})
+                if flags:
+                    self.assertIn(["systemctl", "--user", "disable", "--now", self.host.project + "-core.service"],
+                                  self.host.commands)
+                    self.assertFalse(self.host.native["enabled"] or self.host.native["active"])
+                # The same command installs once the cause is fixed, sandbox backend included.
+                self.host.core["fails"] = False
+                self.install("--sandbox", "microsandbox", *flags)
+                self.assertEqual(self.host.deployment_posts[-1]["provider"], "microsandbox")
 
     def test_a_refused_selection_leaves_the_services_running(self):
         secret = "synthetic-e2b-key-0123456789"
@@ -583,7 +722,7 @@ class InstallerTests(unittest.TestCase):
                 if "inspect" in arguments else original(arguments, **kwargs))):
             with self.assertRaisesRegex(distribution.DistributionError, "identity or platform"):
                 self.install()
-        self.assertEqual({p.name for p in self.root.iterdir()}, {".oac.lock"})
+        self.assertFalse(self.root.exists())
 
     def test_cli_failure_does_not_print_external_command_secrets(self):
         secret = "synthetic-sensitive-command-value"

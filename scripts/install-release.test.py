@@ -40,7 +40,8 @@ class BootstrapTests(unittest.TestCase):
         stack.enter_context(mock.patch.object(bootstrap.platform, "system", return_value="Linux"))
         stack.enter_context(mock.patch.object(bootstrap.platform, "machine", return_value="x86_64"))
         stack.enter_context(mock.patch.object(bootstrap.os, "geteuid", return_value=1000))
-        self.invoke = stack.enter_context(mock.patch.object(bootstrap.subprocess, "call", return_value=0))
+        # The downloader replaces itself with the installer.
+        self.invoke = stack.enter_context(mock.patch.object(bootstrap.os, "execvp"))
 
     def make_archive(self, files):
         data = io.BytesIO()
@@ -61,13 +62,13 @@ class BootstrapTests(unittest.TestCase):
         raise AssertionError("Unexpected URL: " + url)
 
     def test_default_latest_is_resolved_once_and_installer_arguments_forwarded(self):
-        self.assertEqual(bootstrap.main(["--host", "127.0.0.1", "--web-port", "8088", "--public-url", "https://core.example"]), 0)
+        bootstrap.main(["--host", "127.0.0.1", "--web-port", "8088", "--public-url", "https://core.example"])
         urls = [c.args[0] for c in self.http.call_args_list]
         self.assertEqual(sum(url.endswith("/releases/latest") for url in urls), 1)
         self.assertTrue(urls[1].endswith("/assets/8"))
         self.assertTrue(urls[2].endswith("/assets/7"))
-        command = self.invoke.call_args.args[0]
-        self.assertEqual(command[0], "bash")
+        program, command = self.invoke.call_args.args
+        self.assertEqual((program, command[0]), ("bash", "bash"))
         self.assertEqual(command[2:], ["--host", "127.0.0.1", "--web-port", "8088", "--public-url", "https://core.example"])
         self.assertTrue(pathlib.Path(command[1]).is_file())
         self.assertFalse(list((self.root / ".oac/releases").glob(".download-*")))
@@ -79,7 +80,7 @@ class BootstrapTests(unittest.TestCase):
         urls = [call.args[0] for call in self.http.call_args_list]
         self.assertEqual(len(urls), 3)
         self.assertTrue(urls[-1].endswith("/assets/7"))
-        self.assertFalse((pathlib.Path(self.invoke.call_args.args[0][1]).parent / "artifacts").exists())
+        self.assertFalse((pathlib.Path(self.invoke.call_args.args[1][1]).parent / "artifacts").exists())
 
     def test_offline_only_release_is_not_silently_downloaded(self):
         self.metadata["assets"][0]["name"] = self.stem + "-offline.tar.gz"
@@ -92,7 +93,7 @@ class BootstrapTests(unittest.TestCase):
         self.metadata.update(tag_name="v2.0.0-rc.1", prerelease=True)
         bootstrap.main(["--version", "v2.0.0-rc.1", "--core-only"])
         self.assertTrue(self.http.call_args_list[0].args[0].endswith("/releases/tags/v2.0.0-rc.1"))
-        self.assertEqual(self.invoke.call_args.args[0][-1], "--core-only")
+        self.assertEqual(self.invoke.call_args.args[1][-1], "--core-only")
 
     def test_latest_never_selects_prerelease_or_draft(self):
         for key in ("prerelease", "draft"):
@@ -162,16 +163,11 @@ class BootstrapTests(unittest.TestCase):
 
     def test_root_uses_the_same_verified_installation_path(self):
         with mock.patch.object(bootstrap.os, "geteuid", return_value=0):
-            self.assertEqual(bootstrap.main(["--core-only"]), 0)
-        command = self.invoke.call_args.args[0]
+            bootstrap.main(["--core-only"])
+        command = self.invoke.call_args.args[1]
         self.assertEqual(command, ["bash", command[1], "--core-only"])
         self.assertTrue(pathlib.Path(command[1]).is_relative_to(self.root / ".oac/releases"))
         self.assertTrue(pathlib.Path(command[1]).is_file())
-
-    def test_installer_failure_is_returned_and_bundle_retained(self):
-        self.invoke.return_value = 17
-        self.assertEqual(bootstrap.main([]), 17)
-        self.assertTrue(pathlib.Path(self.invoke.call_args.args[0][1]).is_file())
 
     def test_new_private_directories_do_not_inherit_public_umask(self):
         previous = os.umask(0o022)

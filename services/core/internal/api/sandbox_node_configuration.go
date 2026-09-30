@@ -18,11 +18,6 @@ import (
 // @Failure 400,401,409,500,503 {object} v1.ErrorResponse
 // @Router /api/v1/sandbox-node/configuration [get]
 func (h *Handler) sandboxNodeConfiguration(w http.ResponseWriter, r *http.Request) {
-	if _, present := r.Header[http.CanonicalHeaderKey("X-Parsar-Node-ID")]; present {
-		writeError(w, http.StatusBadRequest, "invalid_request", "X-Parsar-Node-ID was renamed to X-OAC-Node-ID; use the node command from this Core's Web")
-		return
-	}
-
 	token, ok := sandboxBearer(r)
 	if !ok || len(r.Header.Values("X-OAC-Node-ID")) > 1 {
 		writeStoreError(w, r, store.ErrRuntimeNodeCredential)

@@ -1,4 +1,4 @@
-import type { SandboxNodeDiagnostic } from "@oac/agents-client";
+import { sandboxNodeDiagnostics, type SandboxNodeDiagnostic } from "@oac/agents-client";
 import { describe, expect, it } from "vitest";
 import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "./sandbox-diagnostic";
 
@@ -46,5 +46,17 @@ describe("sandbox diagnostics", () => {
     for (const locale of ["en", "zh"] as const) {
       expect(sandboxDiagnosticMessage(diagnostic, locale)).not.toEqual(sandboxDiagnosticMessage("runtime_image_unavailable", locale));
     }
+  });
+});
+
+describe("shared node readiness diagnostics", () => {
+  it.each(sandboxNodeDiagnostics)("preserves %s with localized messages", (diagnostic) => {
+    expect(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic })).toBe(diagnostic);
+    const english = sandboxDiagnosticMessage(diagnostic, "en");
+    const chinese = sandboxDiagnosticMessage(diagnostic, "zh");
+    expect(english?.label).not.toBe("Sandbox state needs attention");
+    expect(english?.advice).not.toBe("Inspect the assigned node and resource, then refresh.");
+    expect(chinese?.label).not.toBe(english?.label);
+    expect(chinese?.advice).not.toBe(english?.advice);
   });
 });

@@ -32,21 +32,3 @@ func TestPasswordComesOnlyFromTheFile(t *testing.T) {
 		t.Fatal("standalone URL changed", got, err)
 	}
 }
-
-func TestRetiredDatabaseSettingsFailBeforeReadingCredentials(t *testing.T) {
-	t.Setenv("AGENTS_API_DATABASE_URL", "postgres://private-secret")
-	t.Setenv("AGENTS_API_DATABASE_PASSWORD_FILE", "")
-	t.Setenv("OAC_DATABASE_URL", "postgres://new:private-secret@localhost/db")
-	value, err := FromEnvironment()
-	if value != "" || err == nil {
-		t.Fatal("retired database settings accepted")
-	}
-	for _, want := range []string{"AGENTS_API_DATABASE_URL → OAC_DATABASE_URL", "AGENTS_API_DATABASE_PASSWORD_FILE → OAC_DATABASE_PASSWORD_FILE"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("missing %s in %v", want, err)
-		}
-	}
-	if strings.Contains(err.Error(), "private-secret") {
-		t.Fatal("credential leaked in diagnostic")
-	}
-}

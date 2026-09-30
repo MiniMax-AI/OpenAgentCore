@@ -31,7 +31,7 @@ import { HelpTip } from "../../../components/console-ui";
 import { MessageMarkdown } from "../../../components/MessageMarkdown";
 import { StatusIcon, type StatusKind } from "../../../components/StatusIcon";
 import { ApplyPatchDiffViewer } from "../items/ApplyPatchDiffViewer";
-import { parseParsarApplyPatch } from "../items/apply-patch";
+import { parseApplyPatch } from "../items/apply-patch";
 import {
   buildTraceModel,
   filterTraceModel,
@@ -273,7 +273,7 @@ function TracePreviewPanel({ row }: { row: TraceRow }) {
 
 function ApplyPatchPreview({ row }: { row: TraceRow }) {
   const item = applyPatchItem(row);
-  const patch = item ? parseParsarApplyPatch(item.arguments) : null;
+  const patch = item ? parseApplyPatch(item.arguments) : null;
   if (!item || !patch) return null;
   const result = row.tool?.result.state === "available" ? row.tool.result.value : undefined;
   const effectiveItem = row.status ? { ...item, status: row.status } : item;

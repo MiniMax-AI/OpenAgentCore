@@ -1,927 +1,149 @@
-# Agents API contract
+# Agents API coverage ledger
 
-Start with the [API surface index](../../docs/api/README.md) to distinguish public
-application APIs, Web administration and Runtime transport. This document is the
-protocol coverage/evidence record, not the Web integration guide.
+Core targets the complete OpenAI Agents API as pinned below ([public API rule](../../AGENTS.md#public-api)). This ledger records how much of each resource Core implements and which contract holds its details, then every known difference from the OpenAI service and every open gap. [API namespaces and credentials](../../docs/api/README.md) says who calls which API; the [Agents API guide](../../docs/api/public-agent-api.md) shows how to use it.
 
-See the [58-operation evidence inventory](operation-evidence.md) for observed official behavior, local verification and remaining unknowns.
-The [list-query comparison](list-query-semantics.md) distinguishes measured order
-errors from unresolved range, cursor and lookup semantics.
-The external reference is [openai-python beta/agents](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents),
-pinned in `upstream.json`. Its resource methods, corresponding types, pagination
-and streaming helpers define the compatibility target. This directory records
-the boundary; it does not imply that every upstream feature is implemented.
-`upstream-routes.json` and `upstream-fields.json` are extracted from that SDK by
-`scripts/extract-agents-api-upstream.py` (run it with the pinned SDK installed).
-Contract tests require `openapi.yaml` and the live router to have exactly those
-method and path pairs, every query parameter to be official, and every other
-field to sit inside `x_agents_core` on Agents and Sessions. The
-[API index](../../docs/api/README.md) identifies the extension fields; request and
-response types live in [`v1/`](v1/).
+## Pinned baseline
 
-Parsar owns product Agents and Teams. This service owns upstream execution
-resources, including reusable Agents and protocol subagents. The OpenAI Agents
-Python **SDK** is a separate future dependency for business Team orchestration in
-Parsar, not the HTTP contract. Design rules live in
-[AGENTS.md](../../AGENTS.md#public-api).
-
-The [resource selector and error qualification](resource-selector-semantics.md)
-records nullable Skill references and source Files not-found parameter fields,
-with official observations separated from Core acceptance.
-
-## Implementation direction
-
-Adapter and persistence design follows the
-[design rules](../../AGENTS.md#complexity-stays-in-the-adapter).
-The [harness contract and parity baseline](harnesses.md) describes equal-engine
-registration, qualification and shared acceptance.
-Verify configuration against actual execution: response defaults must not merely
-describe values the adapter never applied.
-
-The Worker persists fenced authenticated daemon connection observations and pinned
-Environment-event snapshots through the existing execution owner. Session reads
-and live SSE also expose safe `self_hosted` output and reservation-owned connection
-actions. Public self-hosted creation accepts initial text or empty Sessions on the three enabled harness profiles;
-initial input reserves work while returning the connection target promptly.
-Later idle text submissions wait for preparation/admission. Cancellation-only events
-reuse durable admission without creating work or retargeting retries; pending
-pre-Turn input still blocks new cancellation. HTTP acceptance does not establish
-native completion or process quiescence. Environment retrieval
-exposes durable status and safe empty installation metadata for that profile.
-Non-deferred functions and homogeneous result-only batches reuse the existing
-callback/application path, with explicit call identity and no new Turn on results.
-These callbacks are not installed Environment resources.
-Message-only batches append to an active Turn under the same Session lock that
-reserves idle work; retries retain their original target through completion and later work.
-Populated installation metadata, mixed input and full lifecycle conformance remain
-unimplemented; see the [Environment scope](environments.md).
-Initial messages commit with creation and a connection action; an initial deadline
-failure is queryable before a Turn exists. Ordinary and streamed creation share this path.
-
-The three-harness Docker V1 MVP is accepted: Codex, Claude Code and MiniMax Code
-share the execution/workspace contract, with independent Core/database deployment,
-Files/Artifacts, cancellation and owned-history continuation. Optional features
-still differ. See the [accepted scope and evidence](#accepted-milestone-and-evidence).
-The same three harnesses passed historical Core-managed E2B V1 qualification in
-PR #705. That original route is historical evidence; it does not qualify the later
-user-managed enrollment or current deployment-level E2B configuration. See the
-[current hosted provider contract](sandbox-deployment.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
-records separate real deployment acceptance and its exact scope.
-Select further work only within current user authorization. Parsar cutover and
-business Team orchestration are separate from protocol coverage.
-
-## Upstream resource inventory
-
-This inventory is based on the pinned Python source, not our generated OpenAPI.
-It contains 42 distinct HTTP operations in 15 resource classes, excluding async
-duplicates, overloads and client-side helpers. There are 42 handler entries; the six
-[Subagent reads](subagents.md) have three-harness Docker workflow qualification. The separate
-general `/v1/files` source-file API and `/v1/skills` resource/version operations
-are outside this 42-operation count.
-
-An implemented route is not complete semantic compatibility. **Accepted** below
-means a recorded workflow passed under a specific profile; **partial** means some
-variants work; **missing** means no implementation; **unverified** means behavior
-has not been shown to match upstream. Do not convert the route count into a
-compatibility percentage or treat a Docker result as E2B qualification.
-
-The [execution and tools matrix](execution-tools.md) records message input,
-structured output, tool configuration/results, discovery and required-action
-recovery by operation, with exact qualified profiles and remaining gaps.
-
-Paths below are SDK resource paths beneath `client.beta.agents`, except Skills
-and Versions under `client.skills`. Method names use the Python SDK. Vault HTTP
-paths start at `/vaults`, not `/agents/vaults`.
-
-| Resource | Upstream operations | Current coverage |
-| --- | --- | --- |
-| Root reusable Agents | create, retrieve, update, list, delete | Partial create/retrieve/update/list/delete and Session references; configuration/error gaps remain |
-| Skills and Versions | create, retrieve, update default, list, delete, content | [Tenant-owned encrypted bundles and hosted references](environment-templates.md); [default metadata/content and deletion evidence](file-resource-semantics.md), qualified upload limits and unresolved semantics |
-| sessions | create, retrieve, update, list, delete | Create (ordinary/live), retrieve, list with root-Agent filter, metadata-only update, [idle-only public deletion](official-semantics-alignment.md#session-deletion-lifecycle--september-23) with idempotent owner repeat and owned Docker cleanup; user-managed compute stays caller-owned; general physical cleanup and exact hosted semantics remain open |
-| sessions.events | create, stream | Text/cancel/function-result admission and live events; function-action state snapshots supported |
-| sessions.turns | retrieve, list | Implemented reads; lifecycle conformance still partial |
-| sessions.items | list | Partial Item variants |
-| sessions.artifacts | retrieve, list, delete, content | Shared output capture and immutable stored reads/deletion on accepted Docker profiles and [qualified user-managed workflows](user-managed-runtime-v1.md) (prior Core-managed E2B evidence remains historical), including retained downloads after Runtime loss. [Aligned](official-semantics-alignment.md#artifact-capture-and-listing--september-23) output symlink skipping, unchanged-path non-republication, the list envelope and malformed filters; exact upstream defaults/errors, hard-link/special-file capture and cancellation-edge parity remain unverified |
-| sessions.subagents | retrieve, list | [Three-harness Docker reads, native lifecycle limits and real evidence](subagents.md); full multi-agent semantics remain partial |
-| sessions.subagents.items | list | Qualified own-child history reads; [limit clamping and the list envelope](subagents.md#subagent-visibility--september-23-2026) aligned; full Item variants remain partial. Child work is not streamed on the Session, as observed officially |
-| sessions.subagents.turns | retrieve, list | Implemented; child Turns carry the Session's Agent ID and are not Session Turns |
-| sessions.subagents.turns.items | list | Implemented; scoped persisted reads |
-| environments | retrieve | Three-harness colocated self-hosted implementation and qualified Docker hosted profiles: durable status and safe initial-file metadata; other installation inventory and full lifecycle parity remain gaps |
-| environments.files | create, list | [Bounded live listing and inline/source-file creation](environment-files.md) on qualified Docker workspaces; [user-managed enrollment](user-managed-runtime-v1.md) reuses the local implementation with separate real public acceptance. [Aligned](environment-files.md#wire-alignment--september-23-2026) the 201 status, page envelope, query keys, empty pages for non-directory paths on local workspace readers, sampled path/token errors and pending hosted rejection; [aligned](environment-files.md#write-semantics--september-23-2026) parent creation, no-replacement and the 5 MiB inline bound; recursion and other errors remain partial |
-| environments.templates | create, retrieve, update, list, delete | [Reusable network, files, env/setup/packages, inline/referenced Skills and Session snapshots](environment-templates.md); other initialization and full semantics remain gaps |
-| vaults | create, retrieve, list, delete | Create/retrieve/list/delete with independent tenant persistence, stored status filtering, atomic Credential cascade and frozen Session attachments; archive semantics and full hosted lifecycle parity remain missing |
-| vaults.credentials | create, retrieve, update, list, delete | Static-bearer and OAuth create/retrieve/list/replacement/deletion with scoped encrypted storage and dispatch-time refresh; Session attachment and exact-URL HTTPS MCP binding; archive semantics and full hosted lifecycle parity remain missing |
-
-## Core extension inventory
-
-The operations below are implemented Core extensions. They are excluded
-from the 42-operation upstream inventory and must not be counted as OpenAI Agents
-compatibility. None is under `/v1`: [upstream-routes.json](upstream-routes.json)
-pins the exact `/v1` route set, and `/v1` objects carry Core fields only inside
-`x_agents_core`.
-
-| Extension | Operations | Current coverage |
-| --- | --- | --- |
-| Administration | `/core/v1/**` | Core-key Projects with shared keys, read/delete projections, executor credentials, summary, metrics, runtime observations, audit and sandbox deployment. Separate from caller authority; see [Administrator API](admin-api.md). |
-| API-key provenance | Project-scoped `/core/v1/projects/{project_id}/resource-owners` and `/write-operations` | Batch ownership and retained cursor-paginated write history; see [write provenance](write-audit.md). |
-| Runtime observations | `GET /core/v1/sandbox/runtime-observations`; `GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-observation` | Administrator only; the `/v1` forms are removed. Current, read-only Session contexts labelled by Project, with stable Session-keyset pagination, bounded concurrent sampling, Docker and microsandbox metrics, explicit unsupported/unavailable states, strict `AdminClient` projection, and no lifecycle mutation. Kubernetes, E2B, self-hosted telemetry, and automatic idle policy remain unimplemented. See [Runtime observation API](runtime-observability-api.md). |
-| Runtime history | `GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history` | Administrator only; the `/v1` forms and the capability read are removed. Optional backend-neutral bounded Project/Session-scoped history contract with allocation/incarnation fencing, explicit coverage and strict client projection. Disabled by default until a production Reader and qualified periodic collection are configured; Durable Web rendering remains pending. See [Runtime history API](runtime-history-api.md). |
-
-For each resource, verify the referenced request/response unions and observable
-behavior, not just the route. Non-text initial input, configuration
-options, text/image content, function results, environment variants, full Item/SSE
-variants, defaults, field omission/nullability and errors need their own cases.
-Use strict official-client tests plus raw HTTP assertions; SDKs can accept extra
-fields and cannot prove that reported configuration matches the running engine.
-Where SDK types or public documentation do not establish behavior, record the
-uncertainty and obtain upstream evidence before marking it conformant. Temporary
-unsupported errors are implementation gaps, never evidence of full compatibility.
-
-## Accepted milestone and evidence
-
-The three-harness Docker V1 milestone was accepted on 2026-09-20 after
-[PR #703](https://github.com/MiniMax-AI-Dev/parsar/pull/703). A fresh source-free Core
-package and main-built daemon passed fixed Python SDK 3.13.0/raw HTTP/real Kimi K3
-regressions for Codex, Claude Code and MiniMax Code. The profiles use independent
-execution databases and no Parsar services or product database.
-
-These final regressions supplement, rather than repeat, every earlier check.
-Codex's full 26-check deployment evidence, Claude's hosted/Artifact/crash/security
-evidence, and MiniMax's real MiniMax Artifact and Core/Runtime SIGKILL evidence
-retain their exact tested scope. The full gate, focused race checks and fresh
-Astra high review passed for the candidate; no additional live run is claimed by
-this documentation update. Evidence on `zju_a100_2`:
-
-- `~/.parsar/remediation/20260920/three-harness-mvp/REPORT.md` and
-  `acceptance-results.json`: final baseline, runs, reused evidence and cleanup.
-- `~/.parsar/remediation/20260919/docker-mvp/` and `claude-v1/`:
-  preceding deployment and safety acceptance.
-- `~/.parsar/remediation/20260919/mcode-workspace/`: MiniMax workspace native
-  isolation and recovery (historical).
-
-Qualification is Linux amd64 Docker V1, not arbitrary host isolation, production
-HA, E2B, or Anthropic-model acceptance for Claude Code. No exactly-once guarantee
-is made for future model choices: the recorded Kimi continuation limitation is a
-new model-issued command after a recovery prompt, not automatic API replay.
-
-### E2B V1 qualification
-
-This is historical evidence for the original Core-managed E2B route. Current
-deployment-level E2B configuration is documented in the
-[sandbox deployment contract](sandbox-deployment.md).
-This older run does not qualify later enrollment/configuration changes or transfer
-caller-owned compute to Core.
-
-PR #705 (`9cd1c46c7fab6eeef8cb35ce71f1ea0ca2cf8bc1`) separately qualified
-Codex, Claude Code and MiniMax Code with actual E2B and real Kimi/MiniMax APIs.
-Fixed SDK/raw HTTP acceptance covered independent Core/database deployment,
-Files/Artifacts, auth/tenant and native credential/history isolation, cancellation,
-Core/Runtime crashes, exact-history continuation without replay and native network
-restrictions. All three runs completed cleanup without fallback. The five Provider
-operations passed real lifecycle/race acceptance; `make check` and fresh independent
-Astra high review passed. The merged tree matches the accepted candidate.
-
-Evidence: `~/.parsar/remediation/20260920/e2b-runtime-v1/` on `zju_a100_2`, including
-`acceptance-results.json`, `provider-real-final.log`, `make-check.log`,
-`blind-review.md` and exact image/template build pins. This uses the existing
-colocated Runtime contract, with no public resource or protocol expansion.
-The qualified Linux amd64 templates require a reachable HTTPS/WSS Core and a
-minimum two-hour renewable E2B lease. Expiry destroys volatile workspace/history;
-unknown effects cannot authorize recreation or replay. Pools, migration and
-user-managed enrollment remain outside this qualification.
-
-### Remaining protocol work
-
-| Area | Missing or unverified scope |
+| File | Contents |
 | --- | --- |
-| Subagents / multi_agent | Six reads and same-child recovery have three-harness Docker evidence; optional native operations, live child progress, full lifecycle/interactions and tool combinations remain explicit gaps |
-| Environment Templates | Unsupported restricted hostname forms and exact hosted errors remain gaps. Referenced null network and capability-list selection follow [qualified inheritance rules](template-null-selection.md). Template-reference env/files/commands/packages composition follows [qualified field rules](environment-templates.md#template-and-inline-configuration-composition). CRUD/list, files, env/setup/npm/Python, inline/referenced Skills, Plugins, workspace capability directories and Session references have recorded coverage. System-package and inner-isolation evidence is historical; current `packages.system` rejects and the daemon adds no sandbox. Environment Plugin MCP transport and placement limits are [listed separately](environment-templates.md#environment-origin-mcp-plugins) |
-| Input and configuration | Non-text initial input, broader content/configuration unions and reasoning/verbosity combinations; [structured output](structured-output.md) has qualified Claude function profiles on none and Core-managed Docker openai_hosted, with other combinations remaining gaps |
-| Tools and interactions | [Deferred discovery qualification](tool-search.md), other tool types, effective tool-set enforcement and result/cancel publication ordering; MiniMax public functions and service-origin MCP remain unsupported |
-| Vault and Credentials | Archive semantics, in-flight token withdrawal and exact hosted selection/error behavior; static/OAuth CRUD, replacement and scoped dispatch-time refresh are implemented (see credential guide for qualification) |
-| Existing resources | Full Item/SSE/Usage variants, omitted/null/default/error semantics, pagination and overlapping lifecycle behavior beyond recorded cases |
-
-An implementation gap and an unknown upstream behavior require different follow-up
-work. Retain both explicitly; a restrictive local policy or successful SDK parse
-cannot establish upstream equivalence. This inventory describes merged behavior.
-
-## Public semantics
-
-The [September 22 wire comparison](official-semantics-alignment.md) records the
-bounded official-service observations, aligned responses and remaining differences.
-It supplements the fixed SDK baseline; current documentation does not silently
-upgrade the protocol.
-
-- Credentials use `POST /vaults/{vault_id}/credentials` and
-  `GET /vaults/{vault_id}/credentials/{credential_id}`. The static profile accepts
-  `static_bearer` with required string token and HTTPS destination, plus a
-  required name trimmed to 1–256 UTF-8 bytes. Tokens remain opaque and nonempty; explicitly empty tokens are rejected before
-  mutation, following the sampled official create/update behavior. The local URL profile
-  excludes userinfo/fragments and preserves queries without normalization or network
-  contact. Public metadata contains identity, owning Vault, name, timestamps and
-  auth type/destination; it never returns tokens or ciphertext and can be read
-  without the encryption key. Missing encryption configuration locally rejects
-  creation/replacement with 503. Attached Sessions can use static credentials for
-  exact-URL HTTPS MCP. OAuth grants use the same binding plus
-  [scoped refresh and replacement](../../services/core/oauth-credentials.md);
-  storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/core/credentials.md)
-  for encryption and operational limits; this does not establish complete Credential
-  or hosted error/retry compatibility.
-- `GET /vaults/{vault_id}/credentials` lists only safe metadata, with parent and
-  cursor ownership checked within the authenticated project and requested Vault.
-  It uses the same paging/filter grammar as Vault listing below. Credential status
-  is stored separately from Vault status, defaults active, and never appears in
-  the public response. Both active and archived Credentials are included by default;
-  synthetic archived fixtures establish read/filter behavior, not archive lifecycle.
-  No token/ciphertext column, decryption, execution or encryption key is needed.
-  An inaccessible parent is not returned as an authorized empty collection. Existing
-  create/retrieve/token replacement and dispatch rules are unchanged; exact hosted
-  errors and pagination under concurrent mutation remain unverified.
-- `POST /vaults/{vault_id}/credentials/{credential_id}` replaces a static token using
-  only required `auth.type=static_bearer` and string `auth.token`. It preserves opaque
-  strings, rejects missing/null/type/extra-field mutations and returns safe metadata.
-  Ciphertext/update time change atomically within the same tenant/Vault/ID/type/URL;
-  name, destination, identity, creation time and Session bindings are unchanged. No
-  old-token decryption or MCP call occurs. Subsequent dispatch reads use the committed
-  replacement; already-resolved requests may retain the old token. OAuth partial
-  replacement follows its pinned union and authenticates the stored grant.
-  Storage-key rotation, hot reload/revocation and exact hosted concurrent-update,
-  timestamp and retry semantics remain gaps.
-- `DELETE /vaults/{vault_id}/credentials/{credential_id}` returns only `id`,
-  `deleted: true` and `object: vault.credential.deleted`. It removes one owned row
-  and its ciphertext without an encryption key. Local retrieval/update/repeated
-  deletion then return 404; lists omit it. Frozen Session choices and history remain
-  intact, while subsequent secret lookups fail without credential reselection or
-  anonymous fallback. Already-resolved tokens and running Sessions are not revoked.
-  Archive relationships, exact hosted post-delete visibility and repeat/error
-  semantics are unverified; physical storage erasure is not established.
-- Vaults use `POST /vaults`, `GET /vaults` and `GET /vaults/{vault_id}` with the same project/tenant
-  authentication and Beta header as other resources. The response contains only
-  `id`, `object: vault`, `created_at`, `name` and `metadata`. Omitted name stays null;
-  explicit null is rejected. Supplied strings are trimmed and must contain 1–256
-  UTF-8 bytes. Omitted/null metadata becomes `{}`; a non-string value returns
-  `invalid_request_error` with param `metadata.<key>`.
-  Session-specific metadata pair/character limits do not apply. The existing
-  64 KiB encoded metadata and 1 MiB HTTP body bounds are local implementation
-  limits. Creation does not start execution. Retrieval maps missing, malformed and
-  foreign IDs to the same local not-found response. Exact hosted error/retry semantics,
-  restricted-key scopes and archive lifecycle remain unverified or unimplemented;
-  this is not complete Vault compatibility. Listing accepts `after`, creation order
-  (default `desc`), a default limit of 20 clamped to 1–100, and scalar or SDK bracket-array
-  `status` filters. Both `active` and `archived` are included by default. The private
-  classification is stored, never returned; existing/new Vaults default active.
-  Synthetic archived fixtures prove read/filter behavior only. No public archive
-  writer or delete-to-archive mapping is implemented. Equal creation times use ID
-  order locally. A repeated scalar status is rejected; a scalar combined with
-  `status[]` filters by their union. Other hosted query errors and pagination over
-  changing data remain unverified.
-- `DELETE /vaults/{vault_id}` returns `id`, `deleted: true` and `object: vault.deleted`
-  after project-scoped parent removal and atomic cascade of all stored Credentials.
-  It needs no encryption key or execution connection. Local parent/child reads,
-  repeated deletion and new references return 404; lists omit the removed resources.
-  Existing Session snapshots and recorded retries retain their IDs and selections.
-  Subsequent secret lookup fails without reselection; already-dispatched tokens are
-  not withdrawn. Archive relationships, exact hosted visibility/concurrent errors,
-  provider revocation and physical erasure remain separate gaps.
-- Reusable Agents use `POST /agents` and `GET /agents/{agent_id}`. Keep their own
-  identity, timestamps and metadata separate from Session effective configuration.
-  On creation, omitted/null name and instructions resolve to null, metadata to `{}`, tools to
-  `[]`, text to ordinary/medium, and multi-agent settings to disabled/null. Enabled
-  multi-agent settings default to six concurrent subagents. Function defer-loading
-  defaults to false and programmatic tool calling to true. Saving these values
-  does not itself admit a native execution. Session references are admitted separately.
-- [Explicit disabled tools](tool-policy.md) can be saved, used inline or resolved from saved Agents:
-  `web_search.mode=disabled` and `programmatic_tool_calling.enabled=false`. Search
-  responses include `context_size=medium` for omitted/null size, nullable domains
-  and location; an empty domain list stays empty. Saved Agents keep every pinned
-  search mode, saving omitted/null mode as `live`; only explicit disabled mode is
-  qualified, so Session admission rejects enabled search unless the Session
-  replaces the saved tools. Sessions reject enabled programmatic execution,
-  including the default true on a supplied PTC declaration. An omitted PTC declaration preserves native behavior: this is an
-  approved difference from the official default-on behavior, not full compatibility.
-  Core carries the frozen disabled intent through the common Runtime contract;
-  native translation and inventory restrictions stay in adapters. Codex checks
-  managed requirements before new/resumed execution; conflicting forced features
-  reject before model input. Claude and MiniMax use their restricted tool profiles.
-  No independent executor or model/tool loop is introduced. Resource defaults and
-  hosted error parity beyond this supported subset remain unverified.
-- `POST /agents/{agent_id}` updates only supplied fields. Omitted fields remain
-  unchanged; metadata replaces all pairs and null/empty clears it. Name/instructions
-  null clears them. Concurrent updates preserve unrelated fields. Existing Session
-  snapshots and their recorded creation-retry identity remain unchanged; new Sessions
-  resolve the latest saved configuration. No-field updates leave timestamps unchanged.
-  Nested fields currently replace whole values and null uses the saved defaults;
-  hosted nested/null behavior, no-op timestamp policy and exact errors remain
-  unverified. This operation shares the existing saved-configuration coverage gaps.
-- `DELETE /agents/sessions/{session_id}` returns the canonical `id`,
-  `object=agent.session.deleted` and `deleted=true` after durable public removal
-  of a durably idle or failed Session without required actions or pending input.
-  A queued, running or waiting root Turn or pending input returns 409
-  `conflict_error` without any change; callers cancel first and delete once idle.
-  Subagent child Turns and pending Environment file writes do not block deletion. Session/Turn/Items
-  reads, live streams, metadata updates and new input exclude the resource.
-  Existing streams close on observing removal without an invented deletion event.
-  Creation keys remain reserved (local 409); the owner's repeated deletion returns
-  the same confirmation and missing or foreign deletion returns 404
-  ([batch record](official-semantics-alignment.md#session-deletion-lifecycle--september-23)).
-  Qualified managed Docker deletion also reclaims its owned Runtime;
-  broader physical SQL/native history cleanup, immediate native quiescence and
-  exact hosted error/retry/overlapping-stream semantics remain unverified or
-  unimplemented. Shared devices, saved Agents and other Sessions are independent.
-- `DELETE /agents/{agent_id}` removes the tenant-owned saved configuration and
-  returns `id`, `object=agent.deleted`, and `deleted=true`. Existing Sessions and
-  history are retained; recorded creation retries recover their frozen snapshot,
-  while new references to the source fail. Local missing/repeated deletion returns
-  404. Exact hosted errors and overlapping creation/deletion ordering are unverified.
-- `GET /agents` lists tenant-owned reusable resources with `after`, `limit` and
-  `order` (default `desc`). It uses creation-time/ID keysets and the same resource
-  mapping as retrieval. Limit 0 is treated as 1 and larger limits as 100; negative
-  and non-integer limits reject. Pages contain up to 100 resources, with `has_more`
-  and the final resource ID guiding continuation.
-  The local default is 20. The list envelope includes `object`, `data`, `has_more`,
-  `first_id` and `last_id`; empty pages use null IDs. The pinned SDK omits null
-  limits and empty cursors. Exact upstream default/cap, empty-envelope nullability
-  and error taxonomy remain unverified; SDK auto-pagination does not prove them.
-- Saved Agent model-default reasoning resolution remains missing: an omitted effort
-  stays unresolved rather than being populated from a guessed model default. An
-  explicit effort/summary is retained. Omitted/null service tier currently follows
-  the service's `auto` policy; complete upstream-default/error/retry conformance is
-  unverified. HTTP MCP with `service` origin (omitted or null on HTTP transport is
-  saved as `service`) and
-  boolean `required` (default false) supports saved configuration and Codex `none` execution,
-  with Claude SDK
-  also supporting its qualified `none` subset. V1 `self_hosted` explicitly rejects
-  service-origin MCP; the old remote combination is retired. Required initialization
-  additionally needs `mcp_http_required` on the pinned native profile. Native root
-  thread creation/cold resume must initialize required servers before a native
-  Turn starts; failure cannot silently replace retained history. Public acceptance
-  or queued work does not prove native readiness. Hosted creation timing/error
-  parity and continuing server health remain unverified.
-  The saved HTTP transport includes `headers:{}`; effective Session transport omits
-  headers. Omitted/null `allowed_tools` is unrestricted; `[]` denies all tools.
-  Session `vault_ids` attaches tenant-owned Vaults. Explicit `credential_id` must
-  belong to an attached Vault and match the exact HTTPS URL; omission/null selects
-  one matching static or OAuth credential, zero stays anonymous and ambiguity is a
-  409 `conflict_error`. Selection errors use the observed official messages, with
-  one message for missing, foreign and unattached references. Session projections
-  show an implicitly selected credential ID in the public field; the immutable
-  stored selection and caller intent are unchanged. Scope is
-  rechecked before dispatch-only decryption; authenticated execution requires the
-  separate bearer capability and never downgrades on failure. Exact URL/selection
-  timing and hosted redirect behavior remain local or unverified.
-  Other MCP variants and enabled web-search execution remain gaps, not changes to the pinned target
-  or claims of complete resource coverage.
-
-- Use `/agents/sessions` beneath the configured API base URL, bearer authentication
-  and `OpenAI-Beta: agents=v1`. Do not introduce a competing `/sessions` surface.
-- Session creation takes an environment and inline agent configuration or a saved
-  agent reference. The saved ID and effective configuration are copied into an
-  immutable Session snapshot. Omitted fields inherit; supplied objects and arrays
-  replace the entire field ([configuration guide](https://developers.openai.com/api/docs/guides/agents-api/configuration)).
-  Tools null clears the list as specified by pinned `session_create_params.py`.
-  Saved metadata never becomes Session metadata. A model name is not a daemon engine name.
-  Current admission uses the qualified harness profile for multi-agent execution,
-  implicit reasoning, tier `auto`, ordinary text and non-deferred functions.
-  Enabled multi-agent/function combinations remain unsupported. Unsupported saved settings fail before
-  Session persistence, unless replaced by supported overrides. Other native options
-  remain implementation gaps, not excluded protocol variants.
-  Fixed SDK/raw HTTP checks cover inherited/overridden configuration, tenant ownership,
-  source preservation, independent Session snapshots, retries and service restart.
-  New saved-reference Sessions record caller intent before source lookup. Matching
-  creation retries recover their accepted snapshot even after source update/deletion;
-  changed overrides conflict. Retries also require the original typed creator.
-  Known creators without recorded request intent retain resolved-hash behavior;
-  records without creator identity reject retries. Neither identity is backfilled. These local
-  retry rules are not verified hosted semantics.
-  In the pinned `session_create_params.py`, `stream` defaults to false and neither
-  `stream` nor `agent_id` permits null. Metadata omission/null defaults to an empty
-  map; individual values must be strings, including valid empty strings. Validate
-  these distinctions before persistence rather than coercing null to Go zero values.
-- `POST /agents/sessions/{id}` updates metadata only: an empty update body
-  rejects; `metadata: null` or `metadata: {}` clears it, and an object replaces all pairs. Apply the same string
-  and character limits as creation. Preserve execution state, effective configuration
-  and the original creation retry identity. Fixed SDK/raw HTTP checks cover these
-  distinctions, tenant isolation, active Session reads and restart persistence.
-- `GET /agents/sessions` accepts `after`, `limit` (default 20; 0 is treated as 1 and
-  values above 100 as 100), `order`
-  (default `desc`) and optional `agent_id`. The filter matches the immutable root
-  Agent ID, including inline IDs and Sessions whose saved source was changed or
-  deleted. Filter before pagination within the authenticated tenant; no source
-  lookup is required. Omission lists all Agents. Empty filters, same-tenant cursors
-  outside the filter and exact hosted errors/defaults remain unverified.
-- `AgentSession` includes the effective agent/environment, Unix-second timestamps,
-  `object: agent.session`, metadata, required actions, status, usage and vault IDs.
-  A Session remains reusable after its current Turn completes.
-- Input, cancellation and function results are submitted through session events.
-  Turns are queried through `/agents/sessions/{id}/turns`; do not invent turn-create
-  endpoints. Event submissions support the `Idempotency-Key` header.
-- Per the [official Session guide](https://developers.openai.com/api/docs/guides/agents-api/sessions),
-  input steers an active Turn and starts a new Turn when idle. Streams are live-only;
-  recover missed work through persisted Session/Turn/Items queries, not assumed SSE
-  replay. Internal input ordering is not a public event-stream cursor.
-- List operations use the upstream `after`, `limit`, `order` and resource-specific
-  filters. Stream events preserve the upstream discriminators and payload shapes.
-- The upstream self-hosted environment includes an exec-server `remote_url`.
-  V1 retains that public resource field while explicitly selecting our private
-  daemon transport. It does not claim stock `exec-server` wire interoperability;
-  public resource semantics require independent acceptance.
-- Environment retrieval returns `object: agent.environment`, its ID/type, durable
-  resource status and required non-null `files`, `plugins` and `skills` arrays.
-  Hosted initial files report safe frozen metadata; empty arrays do not
-  describe native discovery or workspace files created by commands. Unknown
-  installation configurations are rejected, not reported as empty. Reads use the
-  owning live Session's project partition and do not require execution setup.
-  Remaining unsupported installation configuration, full hosted lifecycle and
-  exact hosted error semantics remain gaps.
-
-[Environment Templates](environment-templates.md) provide tenant-owned CRUD/list
-and immutable Session resolution through common Environment preparation.
-The `x_agents_core.environment` extension supplies that configuration to either
-placement; self-hosted machines never need a managed allocation. See
-[shared preparation qualification](environment-preparation-qualification.md). They do not
-select an E2B image or make unsupported initialization executable.
-The supported Docker configuration has [composed real acceptance](environment-templates.md#composed-initialization-acceptance)
-across the three harnesses, including frozen source deletion, cold continuation
-and cancellation. This does not close the remaining protocol/transport gaps.
-
-## Delivery and verification
-
-| Capability | Current state |
-| --- | --- |
-| Independent deployment | Source-free Core package and separate execution PostgreSQL ownership; Docker-hosted and user-managed Runtime colocate daemon, selected harness and workspace; Core owns Docker only; no Parsar dependency |
-| Saved Agents and Sessions | Saved Agent routes, immutable inline/referenced Session configuration, metadata updates, root-Agent filtering and scoped cursor pagination |
-| Public execution | Initial/later text, active input and cancellation through Codex, Claude Code or MiniMax Code; Codex/Claude additionally support qualified public functions; see profile limits below |
-| Required actions | Persisted function calls/results/application receipts and pending Environment connection actions; Session reads and live snapshots expose the two pinned variants. See the [operation matrix](execution-tools.md) for qualification and unresolved timing |
-| Public recovery and SSE | Persisted Turn/Items queries and partial Usage; live lifecycle/Item/text events, creation streaming and the official one-Turn tool-handler helper |
-| Execution ownership | Immutable Session engine/device, durable input receipts and database writer fencing; uncertain claimed work fails on restart, without blind replay |
-| Files and Artifacts | Bounded Environment listing and inline/file_id copies into qualified V1 workspaces; source-file lifecycle and immutable output capture/download/deletion; [Files limits](environment-files.md), [source limits](source-files.md) |
-| Clients | Fixed Python SDK 3.13.0 and official Go SDK v3.61.0; raw HTTP and real provider acceptance supplement controlled tests |
-| Release and product | Registry publication and Parsar cutover remain open; Docker hosting and user-side E2B provisioning are explicit opt-ins; business Team orchestration is deferred |
-
-### Public engine profiles
-
-`OAC_DEFAULT_HARNESS` supplies the default for new Sessions. The optional
-[Core harness extension](harness-selection.md) explicitly selects an enabled engine;
-existing Sessions retain their immutable choice. `OAC_HARNESSES` explicitly
-adds installed deployment profiles without requiring a managed Provider. Model
-identity is independent.
-All three profiles require implicit reasoning and service tier `auto`. Ordinary
-text output is the baseline; [structured output](structured-output.md) has a
-separately qualified Claude profile. Enabled `multi_agent` qualification is tracked separately in
-[Subagents](subagents.md); other profiles continue to reject unsupported execution. Optional tools/configuration are qualified per
-operation and placement; native support is not public admission by itself.
-
-| Engine | Qualified placements and limits |
-| --- | --- |
-| `codex` (default) | Qualified `none` and Docker `openai_hosted`; public functions with ordered text/image results; service-origin HTTP MCP on `none` only; Environment-origin HTTP uses the common workspace path; verbosity follows native policy |
-| `claude_sdk` | Qualified `none` and Docker `openai_hosted`; medium verbosity, object-root function schemas and text or successful inline PNG/JPEG results; anonymous/static-bearer HTTP MCP on `none` (service origin) or a workspace (Environment origin), subject to qualification |
-| `mcode` | Qualified `none` text and Docker `openai_hosted`; medium verbosity; Environment-origin HTTP MCP with null/omitted allowlist and optional initialization; public functions/service-origin MCP, image input and complete public usage breakdown remain unsupported |
-
-All three profiles implement user-managed `self_hosted` enrollment at `/workspace`
-through our private daemon transport; [separate real acceptance](user-managed-runtime-v1.md)
-records qualified deployments and limits. A `self_hosted` Session supplies its own
-model provider in the request or through a saved Agent; deployment defaults apply
-to `openai_hosted` and `none`, never to `self_hosted` ([model execution](model-execution.md)). Service-origin HTTP MCP is rejected on `self_hosted` and hosted local
-placements. Explicit Environment-origin HTTP declarations use the same Runtime
-binding path as Plugin MCP; see the [origin matrix](environments.md#public-mcp-connection-origin)
-and [public qualification](public-mcp-qualification.md).
-The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
-workspace Files/Artifacts, cancellation and recovery. Managed isolation belongs to
-the outer Environment; native tools use the starting account's permissions.
-Configure immutable Runtime images explicitly: [Codex](../../services/core/deploy/codex/README.md),
-[Claude](../../services/core/deploy/claude/README.md),
-[MiniMax](../../services/core/deploy/mcode/README.md).
-[E2B packaging](../../services/core/deploy/e2b/README.md) reuses the Runtime
-with the official SDK; the user owns provisioning, renewal and destruction.
-
-The shared initialization path supports env/setup and user-directory npm/Python packages;
-`packages.system` rejects explicitly and system dependencies must be preinstalled.
-See the [evidence and limits](environment-templates.md#verification). Remaining
-unsupported startup installations, unqualified restricted hostname forms and hosted
-service-origin HTTP MCP remain outside these accepted profiles. Environment-origin
-MCP Plugins have a separate [Docker qualification and transport matrix](environment-templates.md#environment-origin-mcp-plugins):
-stdio on all three harnesses, Codex HTTP with literal headers or HTTPS bearer,
-and Claude/MiniMax anonymous HTTP or HTTPS bearer without literal headers. This batch
-does not qualify those new Plugin paths on E2B. MiniMax's private workspace MCP
-bridge remains internal transport, distinct from installed Environment MCP servers.
-
-The [self-hosted profile](environments.md#initial-public-self-hosted-profile) uses
-user-managed Runtime enrollment and remains distinct from Core-managed Docker. Product `claude_code`
-is likewise a separate integration from the API's `claude_sdk` engine key.
-Unsupported configurations fail before Session creation; unsupported results fail
-before a batch write. Native capability claims cannot replace service profile
-qualification, tenant authority or exact binding checks. An existing Session
-never silently changes engine/device. See the
-[HTTP MCP limits](../../services/core/README.md#http-mcp-execution).
-
-The Store's internal DTO is not the upstream response model. The API layer must
-validate and resolve the upstream schema before persistence, and report only
-supported options. For example, upstream metadata is limited to 16 pairs with
-64-character keys and 512-character values; a storage byte limit is not a
-replacement for that public validation. Violations return `invalid_request_error`
-with the official `metadata` or `metadata.<key>` param, and Agent configuration
-protocol errors report their JSON path; see the
-[configuration validation batch](official-semantics-alignment.md#agent-configuration-validation--september-23).
-U+0000 in stored strings
-is a local PostgreSQL limit and returns 400 without writing; see the
-[validation error batch](official-semantics-alignment.md#validation-error-fields--september-23).
-
-Use the pinned official Python client against the actual service, with response
-validation enabled, for supported Session/Turn/Items operations, pagination, streaming,
-errors, idempotency and tenant isolation. A client import or permissive parsing
-alone is not evidence of compatibility. Unsupported capabilities must be explicit
-errors, not successful placeholder resources. Add any provider or engine-specific
-extension separately from upstream fields and document it here when implemented.
-
-`openapi.yaml` is our generated supported surface; it is not the full upstream
-specification. The shared Go wire types are in `v1`. Physical Session cleanup, broader image
-message profiles, broader structured-output combinations, broader options/tools, remaining Vault lifecycle,
-Subagents and environment/provider resources remain incomplete. Reject unsupported
-requests explicitly; persisted saved configuration is not execution admission.
-
-### Native subagent control
-
-The pinned `types/beta/multi_agent_config.py` defines `enabled=false` as disabling
-subagent tools. The dispatcher enforces that effective value with a typed daemon
-policy and capability admission; the Codex adapter applies native feature controls
-on fresh and resumed Turns. Operator feature preferences cannot re-enable them.
-Controlled model-boundary tests check absence of direct/deferred subagent tools
-while the official function workflow continues to run.
-
-Disabled `multi_agent` continues to remove native child tools. The six public reads
-and their neutral identity/lifecycle/Turn/Item observations are described in
-[Subagents](subagents.md); native qualification is tracked there. The service does
-not infer closure from idle/unload, and public capability declarations alone do
-not qualify an adapter. Environment and child tools have separate configuration;
-`Agent.tools` is not assumed to enumerate every native utility.
-
-### Turn recovery reads
-
-`GET /v1/agents/sessions/{session_id}/turns` and retrieval by `turn_id`
-return persisted Turn states using the pinned official client contract. Lists
-support `after`, `limit` (1..100, default 20), and `order` (default `desc`).
-The cursor is a Turn ID in the same tenant and Session. Failed turns expose a
-generic `internal_error`, never raw engine diagnostics. `usage` exposes the latest persisted complete token breakdown, including cached input
-and reasoning output. Missing measurements remain null; Session usage sums recorded
-Turn measurements as best-effort usage, without estimating missing history; it is
-null while any root Turn has not ended or once one ends with unknown usage. Session runtime state derives from the latest Turn.
-
-### Item recovery reads
-
-`GET /v1/agents/sessions/{session_id}/items` supports the same list controls,
-with a stable Item ID cursor and first-observation ordering. Messages preserve
-text, phase (null when none) and completion snapshots. Commands preserve reported output, exit
-code, duration and working directory. MCP calls preserve server/tool identity,
-arguments and structured results/errors. Dynamic functions have linked call and
-result Items. Native file changes appear as `apply_patch` function calls with
-reported changes as arguments; no result is invented when the engine reports none.
-Web search exposes its supported action fields.
-
-Terminal Turns make unfinished Items `incomplete`; a failed tool does not imply
-that the Turn failed. Native start/completion snapshots and Codex command-output fragments are
-available when the daemon emits them; other
-tool-output deltas remain unsupported. Tool output is visible to the Session's
-authenticated tenant and may include the command's or tool's own diagnostic text.
-
-Reads use the durable index without reconstructing native journals. Existing
-indexed history is preserved. Migration 15 refuses unindexed historical Turns.
-Historical database conversion is unsupported; preserve the old data and install
-separately. See [historical Item storage](../../services/core/README.md#historical-item-storage).
-The retired archive format could not recover unrecorded message boundaries or
-outcomes; those limitations remain in already indexed historical Items.
-Other native variants, full reasoning coverage and Items mutation remain gaps.
-Qualified child Items are described in [Subagents](subagents.md). Public submission
-supports text messages, cancellation and function results.
-
-Legacy Done frames alone do not complete assistant Items. Aggregate answer text
-is confirmed by successful Turn termination; failed Turns retain observed deltas
-instead of treating adapter diagnostics as assistant output.
-
-Pagination orders by first-observation timestamp, then the Item's immutable
-Session position and public ID. New Items retain observation order even when
-timestamps match. The index also stores a zero-based output index per Turn for
-streaming; inputs do not consume it. Updates and retries do not move Items
-or change output indexes. Existing indexed history retains its recorded
-deterministic order rather than guessing an unavailable original source order.
-
-### No-environment execution
-
-The dispatcher executes public `environment.type=none` on an authenticated,
-bound host advertising `environment_none`. Codex uses `CODEX_EXEC_SERVER_URL=none`
-and verifies native environment state before starting/resuming. Claude SDK uses
-its restrictive profile with no built-in tools and only declared function callbacks.
-A missing capability or unsupported native method fails rather than silently
-allocating a local execution environment. Native state still lives on the host;
-function callbacks may access their own resources. This is not filesystem isolation.
-User-managed `self_hosted` uses an exact enrolled local Runtime instead. The
-former native registry/Noise transport is retired. The pinned native source remains
-a dependency reference, not a requirement to expose its executor protocol.
-The [Environment assessment](environments.md) separates current boundaries from
-historical native transport evidence.
-
-### Public execution admission
-
-`POST /v1/agents/sessions/{session_id}/events` accepts `agent.session.input.message`
-with ordered user `input_text` content and [qualified image content](message-input.md), `agent.session.input.cancel` and
-`agent.session.input.tool_result`. Successful atomic
-admission returns 202 with no body, as observed from the official service.
-An empty event array is an authenticated no-op: it creates no Turn or Item and
-does not reserve an execution retry key. A retry
-key identifies the entire ordered request; conflict does not partially admit it.
-Messages start queued work or steer the active Turn. Individual input messages
-remain distinct Items even when their text shares one native prompt.
-
-Enable the standalone daemon gateway to run the worker; without it, admission
-returns 503. The worker selects capable same-tenant engine hosts, binds each Session
-once, and runs at most four Turns concurrently. Queued cancellation needs no live
-engine. Active cancellation waits for a native receipt; terminal completion can
-win that race. Query Turn/Items to recover results after a stream interruption.
-
-The worker takes a database advisory lease; a second worker cannot start on the
-same database. All execution writes use that lease connection and stop after loss
-of ownership. Startup marks previously claimed Turns failed without replaying them
-and retains queued work. Database fencing does not stop already queued native
-commands, recover missing daemon frames or guarantee exactly-once external effects.
-Session status reflects the latest persisted Turn; usage reports recorded measurements.
-
-Native verification uses `OAC_TEST_NATIVE_DAEMON_BIN`, `OAC_TEST_NATIVE_PROOF_DIR` under
-`~/.oac/`, and `OAC_TEST_OFFICIAL_SDK_PYTHON` pointing to the pinned SDK environment.
-The Store native integration test runs `tests/official_execution.py` against a real
-HTTP handler, PostgreSQL, daemon and Codex with a synthetic model provider.
-
-Token measurements use the pinned SDK's `TokenUsage` fields. The optional daemon
-`usage.tokens` supplies complete per-Turn counters; journal and terminal writes
-replace that Turn's snapshot atomically. Repeated snapshots do not increase totals.
-Codex publishes observed active-Turn snapshots before completion through this same
-contract. Persisted measurements remain available after cancellation or worker
-restart; measurements never received by Core cannot be recovered this way.
-Unknown historical breakdowns are not backfilled, and a Session total includes only
-recorded root-Turn measurements. Session Turn pages hold root Turns only; Subagent
-Turn pages are not an additional accounting ledger. Costs and prices are outside
-this execution contract. See [history, events and usage](history-events-usage.md) for client
-recovery rules, native measurement limits and bounded official-service evidence.
-
-### Live events
-
-`GET /v1/agents/sessions/{session_id}/events` implements the official live-only
-stream. Open it before submitting input. Session in-progress/idle/failed and Turn
-created/in-progress/completed/failed/cancelled events carry transition snapshots.
-Supported Items emit added/done events; assistant text emits content-part and
-text-delta/done events. Inputs, including function results, have no output index. Function results emit
-`item.added` and remain queryable; `item.done` only carries agent output. Public
-function-result output/error retain the saved submission and field presence;
-native error-to-text translation does not rewrite those fields. Completed text replaces
-accumulated deltas; cancelled unfinished Items retain their partial content and
-`incomplete` status. Codex command-output fragments use the pinned
-`agent.output.command_execution_output.delta` event with the command Item ID and
-stable output index. Draft Item output accumulates fragments; a supplied final
-snapshot replaces it and is not emitted as another delta. Native output quotas and
-text conversion apply, so the stream is not a byte-complete stdout/stderr capture.
-Pinned native 0.153.4 can omit output emitted before its streaming subscription,
-including from the eventual aggregate; this bridge cannot recover unobserved bytes.
-That native gap remains open. Older peers may provide completion snapshots only.
-Reasoning summaries and other
-interim tool-output variants remain outside the supported surface.
-
-Events publish only after their transaction commits. An idle Session keeps its
-stream open for later Turns. Reconnection starts at the latest committed position,
-including when Last-Event-ID is sent; it does not replay missed work. Connect,
-buffer new events, then retrieve saved Session/Turn/Items state to recover. Deduplicate
-by Item ID and retain finalized Items when applying buffered updates.
-
-The internal buffer is limited to 256 events / 64 MiB per Session, with a single
-oversized-event exception. A lagging reader receives a customer-safe `error` and
-disconnects rather than silently skipping output. Slow socket writes time out
-without blocking execution. Unsupported event variants are not implied by this endpoint.
-
-Internal function execution uses the same native daemon harness, with resolved
-non-deferred definitions and Store result admission. It verifies ordered text/image
-results, error text, application receipts, matching action/Item call IDs, cancellation
-and native Session continuity. Codex supplies the model transport's default image
-detail. This proof uses a synthetic model responder and the real daemon/Codex;
-the public workflow below exercises the same native bridge through HTTP. Deferred functions,
-other tool kinds and the native 64-definition limit remain compatibility gaps.
-
-Function-action read coverage uses persisted-call fixtures with the real service
-handler, PostgreSQL and pinned official client. Call insertion and application
-receipts update Turn/Session state atomically; duplicate notifications emit no new
-state. Actions remain visible until the execution adapter acknowledges application,
-or cancellation/terminal state removes them. This acknowledgement timing and the
-exact sequence of repeated `requires_action` notifications are implementation
-choices: the pinned source defines their shape but not that precise ordering.
-Session state events contain `event_id`, `type` and `session`; Turn events retain
-`session_id` and `turn_id`. There is no invented Turn `waiting` event.
-
-Public function-result admission is verified with the pinned Python client and
-raw HTTP against a dedicated PostgreSQL fixture: required fields, nullable output
-and error, ordered text/image output, variant rejection, atomic batches, scoped
-access and retries after terminal state. This admission verification complements the native public workflow below.
-The generated Swagger 2.0 document leaves the output union unconstrained because
-it cannot express string-or-content-array unions; the pinned upstream types and
-server validation define the supported alternatives.
-
-### Public function configuration
-
-Inline `agent.tools` accepts `function` definitions with the upstream
-required name, description and JSON Schema parameter object. Missing
-`defer_loading` resolves to `false`; null and other types are rejected. Omitted,
-null and empty tool lists resolve to an empty list. The resolved tools are part of
-the immutable Session configuration and creation retry identity. Saved-Agent
-inheritance uses the same resolved tools. The bounded [deferred discovery path](tool-search.md)
-adds type-only `tool_search` for its qualified profile. Other discovery combinations, other tool kinds,
-the native 64-definition cap and nonblank names of at most 512 bytes remain
-compatibility gaps; repeated names and explicit non-object root types reject as
-officially. Claude SDK additionally requires an explicit object root. It accepts text and
-successful inline PNG/JPEG function results on `none`, Docker `openai_hosted` and `self_hosted`;
-failed images and remote references
-remain gaps. See [function image coverage](function-result-images.md). Codex internal Goal/Skills/user-input/discovery semantics need
-upstream evidence; their presence alone does not prove a tool-set mismatch.
-
-The worker selects a same-tenant host advertising `function_tools` for configured
-Sessions. Work remains queued when no compatible host is available, including
-when a previously bound host no longer advertises that capability. It does not
-silently discard the definitions or move an existing native Session.
-
-`TestNativePublicFunctionExecution` runs `tests/official_functions.py` using the
-pinned official SDK against the actual HTTP handler, worker, PostgreSQL, daemon
-and Codex. A synthetic model requests a configured function; the client reads
-`required_actions`, submits ordered text/image results through public events,
-retries the same result, receives completion, and reuses the Session. A subsequent
-Turn verifies error output, and a third verifies cancellation while waiting.
-The test checks native result receipts, retained function Items and no duplicate
-native continuation. This proves the implemented workflow, not compatibility
-with every tool variant or the upstream service's exact event timing.
-
-Accepted results currently enter public Items through native execution observations.
-If cancellation prevents native application (for example, a result followed by
-cancel in one admitted batch), the submission remains saved internally but has no
-public result Item or `item.added`. Admission-time result indexing and unapplied
-result recovery remain a separate compatibility gap; retries do not repair it.
-
-`TestNativePublicFunctionStreamHelper` runs `tests/official_function_stream.py`
-with the same native fixture and pinned SDK. `sessions.stream(tool_handlers=...)`
-submits a mapping returned by a handler and a generic failure when the handler
-raises. It verifies one invocation per call, retained output/error field presence,
-native application, and termination after the matching Turn completes and Session
-returns idle. These are controlled tests with synthetic model responses. Live
-execution acceptance additionally requires a real model API; provider connectivity
-alone does not prove the Agents API/daemon/harness workflow.
-
-### Default verbosity on native models
-
-The pinned `AgentTextParam` defines `medium` as the default text amount. Omitted,
-null and explicit `medium` keep the same effective Session configuration and retry
-identity. Supported native models receive the explicit requested level. For
-unsupported or unknown models, the Codex adapter removes a `medium` override and
-uses native defaults while preserving the requested model and catalog snapshot.
-It still rejects unsupported `low`/`high` and unreadable catalogs.
-
-This follows [Codex 0.153.4 request selection](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/core/src/client.rs#L951)
-and its [unknown-model fallback](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/models-manager/src/model_info.rs#L134).
-Controlled native verification checks explicit levels on supported models, absent
-verbosity on an unknown model, initial/resumed Turns, and default retry equivalence.
-This does not imply support for non-default verbosity on every model.
-
-Live MiniMax-M3 verification used the pinned SDK, actual service/worker/PostgreSQL,
-daemon and Codex with MiniMax's real Responses API. Two Turns verified a successful
-function result, handler failure, retained result fields, stream termination and
-native history continuity by recalling a random value returned only by the first
-tool invocation. Omitted, null and explicit medium reused the same creation
-identity. The tool data was synthetic; model responses were live. This does not
-establish non-default verbosity, tool-set enforcement or full protocol conformance.
-
-### Initial input at Session creation
-
-Session creation accepts the pinned string and user-message-array input
-forms. It shares message validation and admission with the events endpoint,
-including the [qualified image profile](message-input.md). The
-Session and its initial work commit atomically; an identical
-creation retry never re-admits the input, including after later or terminal Turns.
-With `none`, this includes the first Turn and input Items. With `self_hosted`, it
-includes the initial reservation and connection action; preparation and Turn
-admission belong to the existing Worker. Creation returns while the executor is
-offline, and an initial deadline failure leaves a failed Session without a Turn.
-Initial input is required for `none`, and for streamed creation outside
-`self_hosted`. Non-streaming hosted and self-hosted creation may omit input or
-supply null. These conditions apply before creation retry lookup; valid retries
-retain the same Session and never duplicate initial work. Existing Session reads
-and subsequent events are unaffected. Execution must be enabled and the
-configured engine must support admission before any initial work is persisted.
-
-Fixed SDK/raw HTTP and PostgreSQL tests cover the accepted forms, saved and inline
-configuration, ordering, tenant isolation, retries, rollback and persistence.
-Image support is bounded as documented above. Empty arrays, empty content and
-empty text fail the shared message validator, as official probes also did.
-Whitespace-only text is admitted and stored verbatim, as officially observed
-([text content](message-input.md#text-content)). Full local size-limit and error-detail parity remains unverified. Swagger 2 cannot
-express the string/array union, so input is unconstrained with a type description.
-
-### Session creation streaming
-
-`POST /v1/agents/sessions` also accepts `stream=true` for the supported creation
-inputs. Fresh creation sends `agent.session.created` with the committed Session,
-the same projection as the JSON 201 body (`in_progress` after `none` initial
-input), then its committed activity/Turn/Item/output events. A new Turn publishes
-`turn.created`, its user input `item.added`, `agent.session.in_progress`, then
-`turn.in_progress`. Self-hosted initial creation shows and then emits the
-Environment connection request, before native readiness and a Turn. The cursor
-comes from the atomic creation upsert, so rapid initial execution cannot move the
-start past its own events. The ordinary bounded-buffer/gap policy still applies.
-
-A fresh creation stream ends right after the first `agent.session.idle` recorded
-when a Turn ends or an input reservation stops being pending (expired, cancelled
-or failed), or any `agent.session.failed`, and never sends the events after it. A
-pinned-SDK loop over `sessions.create(..., stream=True)` therefore ends right
-after the initial Turn's idle. `requires_action`, function results, resumed work
-and a self-hosted connection clearing pending input keep it open, and a
-provisioning or offline reservation keeps it open until a Turn settles or the
-reservation expires or fails. A creation that admitted nothing ends right after
-`created`. A settlement that records no event ends the stream after the events
-up to the cursor read with a settled projection in one snapshot; another client's
-work drained before that read can still be sent. Observe later Turns with the GET
-event stream, which does not end on settlement or a Turn failure; it ends only
-after the terminal `agent.session.failed` of a hosted provisioning failure, as
-officially observed ([initialization failure](environment-templates.md#initialization-failure--september-23)),
-or when the Session is deleted. Terminal Turn events carry the Turn
-snapshot's `usage` at the top level, null when unknown.
-
-The local `Idempotency-Key` creation extension shares identity across response
-modes. A same-key `stream=true` retry of an existing creation returns 201 with
-only the connection comment and ends at once: it replays nothing, resubmits no
-input and follows no work, since official same-key requests create distinct
-Sessions. Recover a lost
-Session ID by repeating the same request/key with `stream=false`, then use
-Session/Turn/Items reads. Disconnect only stops the HTTP observer; committed
-reservations and admitted execution continue. September 23 official `none`
-observations match the created snapshot, the end at idle, the start order and the
-terminal usage field ([evidence](history-events-usage.md#creation-stream-settlement-2026-09-23)).
-Self-hosted, hosted and no-input creation stream lifetimes and the stream retry
-behavior are local choices.
-These choices are not full conformance.
-
-`official_session_creation_stream.py` covers the pinned client and raw HTTP on
-real PostgreSQL: initial text and saved Agents, created snapshots equal to the JSON
-201 body, Turn start order, terminal usage, the end at idle, GET continuation,
-immediately ending stream retries and JSON retries, disconnect recovery, isolation
-and errors before stream headers. Store tests cover concurrent upsert ownership,
-pre-admission cursors, post-admission projections and observers draining after
-execution has completed; API tests cover the stream lifetimes.
-
-## Acceptance evidence and remaining scope
-
-These accepted changes have distinct evidence levels. The associated PR records
-include validation and limitations; later acceptance does not upgrade an earlier
-controlled fixture into a real-provider test.
-
-| Area | Evidence |
-| --- | --- |
-| Codex function stream/default text | [#544](https://github.com/MiniMax-AI-Dev/parsar/pull/544), [#545](https://github.com/MiniMax-AI-Dev/parsar/pull/545): fixed SDK/raw HTTP, actual PostgreSQL/daemon/native harness; #545 adds real MiniMax success/error and native history continuity |
-| Independent build/container | [#552](https://github.com/MiniMax-AI-Dev/parsar/pull/552), [#563](https://github.com/MiniMax-AI-Dev/parsar/pull/563): isolated binaries/container, official Python/Go clients and real MiniMax execution across API restart |
-| Session creation and source identity | [#564](https://github.com/MiniMax-AI-Dev/parsar/pull/564), [#567](https://github.com/MiniMax-AI-Dev/parsar/pull/567), [#572](https://github.com/MiniMax-AI-Dev/parsar/pull/572): atomic initial text, creation streaming and mutation-independent saved-reference retries |
-| Saved resource lifecycle and Session filtering | [#573](https://github.com/MiniMax-AI-Dev/parsar/pull/573), [#574](https://github.com/MiniMax-AI-Dev/parsar/pull/574), [#581](https://github.com/MiniMax-AI-Dev/parsar/pull/581): official client/raw HTTP, PostgreSQL, tenant isolation and source mutation/deletion; #581 also filters completed real MiniMax Sessions |
-| Claude SDK public execution | [#580](https://github.com/MiniMax-AI-Dev/parsar/pull/580): built API/registered daemon/packaged SDK with real MiniMax text, function success/error, active input, SSE/Items, pending-call cancellation and daemon cold continuation with retained native identity/history |
-
-Principal workflows above are accepted within their profiles. Missing resources,
-broader configuration/content, complete Usage provenance, unapplied result
-visibility, exact hosted errors/event timing and crash-window reconciliation remain
-open. Claude SDK raw usage is retained internally; public usage stays null without
-a complete token breakdown. Neither successful cold continuation nor database
-writer fencing proves recovery of interrupted native side effects. Full protocol
-compatibility, other harnesses/platforms and Parsar cutover are not established.
-
-### Caller principal foundation
-
-Caller keys resolve their database-owned Project and its shared service-account
-principal on every request. Projects own distinct tenant scopes; keys within one
-Project share the same scope and Session creator. Deployment configuration defines
-no Projects or business keys. Administrator credentials cannot authenticate `/v1`. Optional official organization/project headers
-must match the key's authorized scope; ambiguous or conflicting headers use the
-existing 401 response. Every Agents API 401 has type `invalid_request_error`, as observed
-officially; Beta routes report a null code, while Files and Skills report
-`invalid_api_key` for a rejected Bearer credential and a null code without one. This scope-header policy is an implementation choice, not
-verified hosted error parity. Project resource access remains shared
-within the authorized project. New Sessions persist immutable creator kind/ID from
-the authenticated principal; ordinary and streaming creation retries require the
-same typed subject, including when recovering before saved-Agent lookup. Rotated
-keys for that subject share retry identity. Unknown historical creators cannot be
-claimed by retry. This local 409 policy is not verified hosted retry parity.
-Creator fields remain internal and do not extend the public Session schema.
-Executor keys now require the target Session's verified project and typed creator,
-with optional exact-Environment restriction. Key issuance can precede Session
-creation; rotation/revocation and current authorization reuse the durable ledger
-and exact Runtime enrollment/gateway binding. Historical keys remain revoked and unclaimed. This
-executor-specific prerequisite does not open public Environment admission or
-establish complete ownership, hosted key lifecycle or error compatibility. See the
-[standalone configuration](../../services/core/README.md#standalone-http-service).
-
-Core documents its optional [harness selection extension](harness-selection.md) separately from the pinned upstream contract.
-
-The former Core startup configuration read is removed; the [installation read](installation.md) reports the public URL and installer process settings.
-
-Model endpoints and credentials may be supplied at Session creation through the
-[write-only execution extension](model-execution.md). Provider catalogs and their
-business permissions remain client/product responsibilities.
-
-API-key ownership and write history are documented in
-[write-audit.md](write-audit.md). These are Core-key `/core/v1` reads; the pinned
-public `/v1` schema is unchanged.
+| [upstream.json](upstream.json) | The pin: [openai-python](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents) 3.13.0 at commit `d7c41ef`, resources under `beta/agents`, Beta header `agents=v1` |
+| [upstream-routes.json](upstream-routes.json), [upstream-fields.json](upstream-fields.json) | The 58 method and path pairs and their official fields: 42 operations under `beta/agents`, 5 Files and 11 Skills operations. `scripts/extract-agents-api-upstream.py` extracts them from the pinned SDK; run it with that SDK installed |
+| [openapi.yaml](openapi.yaml) | Core's public schema, generated by `make openapi` from the route annotations in `services/core/internal/api/` and the wire types in [`v1/`](v1/) |
+
+Contract tests hold Core to the pin: the router and `openapi.yaml` serve exactly the pinned routes (`services/core/internal/api/routing_test.go`, `v1/upstream_contract_test.go`), every query parameter and field is official, and Core-only fields sit only inside `x_agents_core` on Agents and Sessions. Swagger 2.0 cannot express string-or-array unions, so `openapi.yaml` leaves Session `input` and function-result `output` unconstrained; the pinned types and Core's validation define them. Operations and fields newer than the pin wait for a protocol upgrade.
+
+Evidence for a status comes from the pinned official SDK and raw HTTP against the running service, as [CONTRIBUTING](../../CONTRIBUTING.md#compatibility-evidence) requires.
+
+## Coverage by resource
+
+**Implemented** means every operation serves the pinned shapes; limits that remain are listed under [known gaps](#known-gaps). **Partial** names what is missing.
+
+| Resource | Operations | Status | Contract |
+| --- | --- | --- | --- |
+| Agents | create, retrieve, update, list, delete | Implemented. Every pinned setting is saved; Session admission runs a subset | [Agents](wire-semantics.md#agents) |
+| Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata` only; deletion requires an idle or failed Session | [Sessions](wire-semantics.md#sessions), [creation streaming](sessions-events.md#creation-streaming) |
+| Session events | create, stream | Partial: messages with text and inline images, cancellation, function results; the stream is live only | [Sessions, events and history](sessions-events.md), [message content](message-content.md) |
+| Turns | retrieve, list | Implemented; Session Turn routes hold root Turns only | [Turns and Items](sessions-events.md#turns-and-items) |
+| Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](sessions-events.md#turns-and-items) |
+| Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](environment-files.md) |
+| Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | Partial: read-only child work; no live child progress or optional native operations | [Subagents](subagents.md) |
+| Environments | retrieve | Implemented | [Environments](environments.md) |
+| Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](environment-files.md) |
+| Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](environments.md#templates) |
+| Vaults | create, retrieve, list, delete | Implemented; no archive operation | [Vaults and Credentials](vaults.md) |
+| Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth` | [Vaults and Credentials](vaults.md) |
+| Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](source-files.md) |
+| Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](source-files.md) |
+
+Which operation each Harness supports on each placement is in the [Harness capabilities](harness-capabilities.md). [Core wire behavior](wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
+
+Core's own fields sit inside `x_agents_core` ([Core extensions](../../docs/api/public-agent-api.md#core-extensions-x_agents_core)). The Core administration API (`/core/v1`) and the machine API (`/api/v1`) are not part of the Agents API.
+
+## Differences from OpenAI
+
+Each item is Core's deliberate or native behavior where the official service behaves otherwise. The linked rule states the exact behavior.
+
+**Requests and errors** ([Core wire behavior](wire-semantics.md))
+
+- Core sends no `OpenAI-Organization` or `OpenAI-Project` response headers.
+- `HEAD` on the event stream, on content downloads and on the Environment files list returns 405.
+- A JSON array body is rejected; the official service reads `[]` as `{}`.
+- U+0000 in a stored string returns 400; the official service stores it.
+- Not-found messages never name the resource; Core quotes a full metadata key where the official message abbreviates it.
+- UUID identifiers also resolve in other spellings, such as uppercase or braces.
+- The Files routes keep a local `unsupported_parameter` code for a repeated query key.
+
+**Lists** ([lists](wire-semantics.md#lists))
+
+- A deleted Agent or Session used as a cursor returns 404; the official service still pages from it.
+- A Turn cursor from another Session, a Credential cursor equal to its Vault ID, and a Skills cursor that is not a Skill ID return 404.
+- Vault and Credential lists clamp a negative `limit`, as the pinned SDK describes; the official service returns 400.
+
+**Agents and Sessions** ([Agents](wire-semantics.md#agents), [Sessions](wire-semantics.md#sessions))
+
+- A repeated Session creation with the same `Idempotency-Key` returns the original Session; the official service creates a new one.
+- Omitted programmatic tool calling keeps the harness's native behavior; the official default is on.
+- An omitted reasoning effort stays null instead of taking the model's default.
+- A Session's `agent.tools` omits `tool_search` declarations.
+- Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returned 200.
+
+**Input, events and history** ([Sessions, events and history](sessions-events.md), [message content](message-content.md))
+
+- Input to a `none` Session is admitted synchronously; Core does not emulate the official asynchronous admission window.
+- A function result that resumes a waiting Turn emits `turn.in_progress`, and cancelling a Turn that waits on a function result emits an interim `agent.session.in_progress`.
+- Attaching to the stream mid-Turn sends no catch-up Item snapshots.
+- The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
+- Error messages omit the call and executor IDs that official messages include.
+- An empty text part beside other text is accepted and stored.
+- Empty input returns 400 `invalid_request` with a generic message and a null param; the official response is `invalid_request_error` with param `input`.
+- Session usage is available as soon as every root Turn has settled; official reads lag by seconds.
+
+**Files, Skills, Environment files and Artifacts** ([Files and Skills](source-files.md), [Environment files and Artifacts](environment-files.md))
+
+- File uploads hold up to 512 MiB; the official limit is 512 MB. The Files list returns up to 10,000 Files by default, and a `purpose` filter other than `user_data` returns an empty page.
+- Skill version numbers are never reused, and uploads and deletions of one Skill run one at a time.
+- Environment files work on `self_hosted` Environments, which the official service refuses.
+- Creating an Environment file over an existing regular file returns the "must not traverse symlinks or overwrite existing files" message. A parent symbolic link that stays inside the workspace is followed, and a parent that escapes the workspace or is a regular file gets a generic 400; the official service rejects symbolic-link parents.
+- Artifact IDs are UUIDs.
+
+**Vaults and Credentials** ([Vaults and Credentials](vaults.md))
+
+- Vault and Credential status is stored privately and defaults to `active`; with no archive operation, lists without a filter include both statuses.
+- An unknown or foreign Vault in `vault_ids` returns 404 "Resource not found."; the official message names the ID.
+- An explicit `null` for OAuth `access_token`, `refresh` or `token_endpoint_auth` in an update keeps the stored value.
+- A static token must be an RFC 6750 `b64token` to run; other stored tokens fail at dispatch.
+- Vault metadata has a 64 KiB bound and no pair or length limits; names are 1–256 bytes after trimming.
+
+## Known gaps
+
+**Configuration and tools**
+
+- Explicit reasoning effort or summary, service tiers other than `auto`, enabled `web_search` and enabled programmatic tool calling are saved but rejected at Session admission.
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](harness-capabilities.md). MiniMax Code has no public functions, no service-origin MCP and no image input.
+- Model-derived reasoning defaults are not resolved.
+
+**Execution and history**
+
+- The stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
+- Native Item variants beyond those listed under [Turns and Items](sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
+- A function result that cancellation prevents from being applied never appears as an Item.
+- Pinned Codex can lose command output emitted before its stream subscription.
+- Claude Code and MiniMax Code report no public usage.
+- Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
+- Images must be inline PNG or JPEG data URIs; remote URLs, `file_id` and `detail` are rejected.
+
+**Environments and Templates**
+
+- Runtimes do not enforce `disabled` or `restricted` networks, so Sessions that need them are rejected ([restricted network policy](environments.md#restricted-network)).
+- `packages.system` is rejected; system packages must be preinstalled.
+
+**Files and Environment files**
+
+- Files accept only `purpose=user_data`; other purposes, `expires_after` and the Uploads API are not supported.
+- An Environment file write whose outcome is uncertain is never retried or recovered automatically; it blocks further writes and messages to the Session.
+
+**Vaults and Credentials**
+
+- There is no archive lifecycle, storage-key rotation or re-encryption.
+- OAuth refresh happens only at dispatch: there is no refresh on a provider 401, no mid-Turn replacement and no withdrawal of a token already sent to a Runtime.
+- Input sent to a Session whose selected Credential was deleted is admitted and then fails at dispatch.
+- Credential creation takes no `Idempotency-Key`.
+
+**Sessions**
+
+- Session deletion does not purge the stored history physically.
+- Stream lifetimes for `self_hosted`, hosted and no-input creation, and the creation-stream retry, are Core's own choices.
+
+### Unverified against the official service
+
+- The order of errors when one request has several faults, and error, default and payload-limit parity in general.
+- Whether Subagent child Turns and pending Environment file writes block Session deletion.
+- The official order between the pending-input error and an unknown result target.
+- Failure reasons for npm, initial-file and Skill installation have no official sample.
+- Codex behavior for an empty text part beside text, and for images in failed function results or as remote references; Claude behavior for a whitespace-only or empty text block inside a mixed message.
+- Official `HEAD` behavior on the routes where Core returns 405.
+- Environment Template hostname forms beyond exact hosts, and `disabled` combined with domains.
+- Files purpose filtering and pagination while Files change; official Skill upload limits and error timing.
+- Environment file list defaults (limit 20, the workspace root as the default path, no recursion, page-token invalidation), the 50 MiB `file_id` copy limit and the check order on create.
+- Artifact capture of hard links, special files and a linked `outputs` directory, republication after changed bytes, and content headers and ranges.
+- Vault and Credential error and retry semantics, pagination under concurrent writes, visibility after deletion, exact-URL matching against the official normalization, OAuth refresh timing and errors, and restricted-key scopes.

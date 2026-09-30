@@ -17,7 +17,7 @@ export const system: TranslationShape<typeof english> = {
     "hostnameHelp": "只填写域名，不包含 https://、端口或路径。",
     "invalidHostname": "请填写有效域名，例如 core.example.com。",
     "automatic": "自动配置 HTTPS",
-    "dnsHelp": "将域名的 A 或 AAAA 记录指向这台服务器，并开放 80 和 443 端口，用于证书验证和 HTTPS 访问。",
+    "dnsHelp": "将域名的 A 或 AAAA 记录指向这台服务器。80 和 443 端口用于证书验证和 HTTPS 访问，需能从公网访问，且不能被服务器上的其他程序占用。",
     "prerequisites": "应用前，请先将域名解析到这台服务器。",
     "submitting": "正在应用…",
     "retry": "重试配置",

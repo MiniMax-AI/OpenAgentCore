@@ -15,17 +15,6 @@ import (
 // file and the URL must not contain one. An empty result means the URL is
 // unset; each command reports that in its own terms.
 func FromEnvironment() (string, error) {
-	var renamed []string
-	for _, suffix := range []string{"DATABASE_URL", "DATABASE_PASSWORD_FILE"} {
-		old := "AGENTS_API_" + suffix
-		if _, present := os.LookupEnv(old); present {
-			renamed = append(renamed, old+" → OAC_"+suffix)
-		}
-	}
-	if len(renamed) > 0 {
-		return "", errors.New("OpenAgentCore renamed these settings; set the new names and remove the old ones: " + strings.Join(renamed, ", "))
-	}
-
 	raw := os.Getenv("OAC_DATABASE_URL")
 	file := os.Getenv("OAC_DATABASE_PASSWORD_FILE")
 	if raw == "" || file == "" {

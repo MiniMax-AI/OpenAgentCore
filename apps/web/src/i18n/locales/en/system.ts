@@ -15,7 +15,7 @@ export const system = {
     "hostnameHelp": "Enter a domain without https://, a port or a path.",
     "invalidHostname": "Enter a domain such as core.example.com.",
     "automatic": "Automatic HTTPS",
-    "dnsHelp": "Point the domain’s A or AAAA record to this server. Ports 80 and 443 must be open for certificate verification and HTTPS access.",
+    "dnsHelp": "Point the domain’s A or AAAA record to this server. For certificate verification and HTTPS access, ports 80 and 443 must be reachable from the internet and not used by another program on the server.",
     "prerequisites": "Point your domain to this server before applying.",
     "submitting": "Applying…",
     "retry": "Retry setup",

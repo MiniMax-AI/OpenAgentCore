@@ -1,11 +1,12 @@
-# Runtime observability contract
+# Runtime observability
 
-This document defines the internal Runtime observation boundary. It does not add
-an Agents API resource or change the pinned public protocol.
+This is the contributor contract for how Core observes Runtimes and keeps their history. The routes and response fields are in the [Runtime telemetry API](runtime-observability-api.md). The code lives in `services/core/internal/runtimeobs` (resolution, sources, sampler and export), `internal/runtimehistory` (history queries and the PostgreSQL store) and `internal/runtimeobs/otlpexporter`.
 
-## Ownership and identity
+Observations are telemetry. They never create, renew, wake, restore or stop compute, never touch Session activity, and never decide idle time, suspension, admission or execution outcomes.
 
-Runtime telemetry is attributed to durable Core identity before it is sampled:
+## Identity and source selection
+
+Core attributes every observation to durable Core identity before it reads a provider:
 
 ```text
 managed:     tenant_id -> session_id -> environment_id -> runtime_allocation_id
@@ -13,180 +14,111 @@ self-hosted: tenant_id -> session_id -> environment_id -> device_id + connection
 none:        tenant_id -> session_id (no Session-owned Runtime instance)
 ```
 
-The managed allocation's persisted `provider_key` selects exactly one configured
-observation source. A provider must independently verify the allocation labels or
-equivalent ownership data. A Session, daemon connection, process, container, and
-native harness Session are different identities and must not be substituted for
-one another.
+The resolver (`internal/runtimeobs/storeresolver`) reads the Session, its Environment, the current allocation and the Session's measured usage from the store. A Session, daemon connection, process, container and native Harness Session are different identities and never stand in for one another.
 
-The current implementation supports managed Docker, microsandbox and E2B allocations.
-`self_hosted` and `none` are recognized but explicitly unsupported. A future self-hosted source must
-use authenticated daemon telemetry fenced by the current connection generation.
-Core must not attribute shared host statistics to an `environment:none` Session.
+Managed Docker, microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
+
+The allocation's persisted `provider_key` selects exactly one configured source, which verifies the allocation's labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, `cleanup_pending` or `released` gives `runtime_not_running`, and a provider key without a source gives `source_not_configured`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
+
+A source implements `Observe` and declares `ObserveBatch` in its provider operations. When `ObserveBatch` is declared supported, one call reads up to 100 targets of that provider; when it is declared unsupported, Core reads each target with `Observe`. A failed batch read is never retried target by target. The [Sandbox Provider guide](../../docs/sandbox-provider.md) describes the operation declarations.
 
 ## Sample semantics
 
-One sample contains:
+A sample carries:
 
-- `observed_at`, the provider observation time;
-- `started_at`, the current compute incarnation start time;
-- cumulative CPU usage in seconds;
-- configured CPU capacity in cores, when known;
-- current memory usage in bytes;
-- configured memory limit in bytes, when known;
-- a provider-reported CPU utilization ratio, only for providers without
-  cumulative CPU time (E2B); and
-- current disk usage and capacity in bytes, only where the provider reports
-  them (E2B). Only the administrator list exposes disk.
+- `observed_at`, the provider's observation time, and `started_at`, the start of the current compute incarnation;
+- cumulative CPU seconds and the configured CPU capacity in cores;
+- a provider-reported CPU utilization ratio, only from providers without cumulative CPU time (E2B);
+- current memory usage and the memory limit in bytes;
+- current disk usage and capacity in bytes, only where the provider reports them (E2B).
 
-Measurements are optional. A present pointer with value zero means the provider
-observed zero. An absent measurement means it was unavailable and must never be
-rendered or aggregated as zero. A whole observation has one of three states:
-`observed`, `unsupported`, or `unavailable`. Provider and permission failures are
-errors, not ordinary unavailability.
+Every measurement is optional. A present zero is an observed zero; an absent value is unavailable and is never shown or aggregated as zero. Core rejects a sample whose `observed_at` is later than its own clock, whose `started_at` is later than `observed_at`, or whose values are negative, non-finite, a zero capacity or limit, or beyond the JSON safe-integer range.
 
-Managed observations also expose a provider-neutral `lifecycle_state` derived
-from Core's allocation and compute lifecycle: `active`, `sleeping`,
-`transitioning`, `pending`, or `stopped`. Non-managed modes return `null`.
-This field is current control-plane state; it is not inferred from a failed
-provider sample.
+`lifecycle_state` is derived from the allocation state and compute phase in Core's records, never from a sample: no allocation or `creating` is `pending`; `running` with compute phase `running` or `disabled` is `active`, `suspended` is `sleeping`, and `quiescing`, `suspending`, `restoring` or `waking` is `transitioning`; `cleanup_pending` and `released` are `stopped`.
 
-Docker reports cumulative cgroup CPU time and current cgroup memory usage. CPU and
-memory capacity come from the inspected container configuration. Inspect and Stats
-are read-only; observation must not renew, restart, create, or stop the container.
-The Docker `StartedAt` value defines current compute uptime and resets after a
-container restart.
+## Provider mapping
 
-Microsandbox reports cumulative vCPU time, current guest memory usage, its effective
-memory limit, and compute uptime through the pinned SDK's point-in-time metrics
-operation. Core invokes that SDK only through the existing one-shot Linux helper.
-The helper first verifies the allocation labels and exact persisted compute
-generation/ID, then reads metrics under the allocation lock. Restored generations
-therefore reset compute uptime without resetting allocation age. Paused, stopped,
-suspended, metrics-disabled, and no-current-sample states are unavailable, never
-observed zero. The SDK also supplies instantaneous CPU percent, host RSS, disk,
-network, and overlay values; those are intentionally outside this public sample
-until their cross-provider semantics and API fields are designed.
-Legacy suspension-disabled allocations without a persisted exact compute receipt
-are also unavailable. A deterministic sandbox name is not an incarnation identity
-and is never used as a sampling fallback.
+### Docker
 
-E2B reports only the latest point of a current CPU percentage, memory and disk,
-through `GET /sandboxes/metrics?sandbox_ids=...`. One helper request reads a whole
-page: at most 100 allocations, one metrics request and, concurrently, one listing
-of this installation's running sandboxes by their allocation labels. The helper
-takes each sandbox ID from its private receipt without the allocation lock; the
-listing confirms that exactly that sandbox is running with the allocation's labels
-and supplies its `started_at`; it stops paging once every requested sandbox has
-been listed, so duplicate-label detection covers only the pages read. A listed
-sandbox without a metrics point or with a malformed point, an ambiguous listing
-or an E2B API failure (including a rejected key) is unavailable; a malformed
-point affects only its own row. A sandbox absent from the running listing is
-`runtime_not_running`. Observation
-never connects to, renews or changes a sandbox and never writes receipts.
+One non-streaming Inspect and Stats read of the owned container. Cumulative CPU time comes from the cgroup counter, memory usage from the current cgroup usage, and CPU and memory capacity from the container's configured limits. The container's `StartedAt` is the incarnation start, so a container restart resets compute uptime. A missing or stopped container is `runtime_not_running`. Disk is null.
 
-The E2B mapping is: `cpuUsedPct / 100` to `cpu.utilization_ratio`, `cpuCount` to
-`cpu.capacity_cores`, `memUsed` and `memTotal` to `memory.usage_bytes` and
-`memory.limit_bytes`, and `diskUsed` and `diskTotal` to the administrator
-`disk.usage_bytes` and `disk.limit_bytes`. E2B has no cumulative CPU time, so
-`usage_seconds_total` and `usage_cores` stay null. A template whose envd predates
-E2B disk metrics reports no disk capacity; disk is then null. `observed_at` is the
-point's E2B timestamp; a point up to 30 seconds ahead of Core's clock is recorded
-at Core's time, and a larger lead is unavailable. Docker disk is null;
-microsandbox disk is null until its disk semantics are designed.
+### microsandbox
 
-## Duration boundaries
+A suspended allocation is `runtime_not_running` without calling the helper. Otherwise Core sends the helper a `metrics` request for the exact compute recorded on the allocation. Under the allocation lock, the helper checks the sandbox's identity through the pinned SDK, runs the pinned `msb metrics <name> --format json` CLI read, and checks the identity again; the sandbox must be running or draining. The [microsandbox helper](../../services/core/tools/microsandbox-provider/README.md) owns that request.
 
-These durations answer different questions and must remain separate:
+Cumulative vCPU time, guest memory usage and the effective memory limit come from that one CLI sample. CPU capacity is the deployment's configured CPU count. `started_at` is the sample's own timestamp minus its millisecond uptime, never rounded uptime subtracted from a later clock reading, so a restored generation restarts compute uptime while the allocation age continues. Instantaneous CPU percent, host memory, disk and network values are not used, and disk is null. A suspension-disabled allocation without a recorded compute identity is `sample_unavailable`, and any other allocation without one fails the read; a deterministic sandbox name is never used instead.
 
-- allocation age: `runtime_allocations.created_at` through `released_at` or now;
-- compute uptime: provider `started_at` through `observed_at`; and
-- busy Turn duration: `turns.started_at` through `completed_at` or now.
+### E2B
 
-This phase supplies compute uptime evidence and retains the existing durable
-allocation and Turn timestamps. It does not infer idle time. CPU quietness,
-heartbeat age, connection status, and `kept_at` are not authoritative idle state.
+One helper `observe` request reads a page of at most 100 allocations: E2B's batch metrics for the sandboxes named in the private receipts, and a labelled listing of the installation's running sandboxes that confirms each one. The [E2B helper](../../services/core/tools/e2b-provider/README.md) owns that request. It never connects to, renews or changes a sandbox and writes no receipts.
 
-Web projects active Runtime state differently by scope. The Dashboard shows one
-summed series of distinct allocation identities: live snapshots count
-`lifecycle_state: active`, while retained buckets count successfully observed
-allocations because lifecycle state is not retained yet. The single-Session view
-collapses the same value to `1` or `0`. Missing or unavailable retained values are
-currently rendered as zero, so this presentation intentionally does not yet
-distinguish sleeping from collection failure.
+| E2B value | Sample field |
+| --- | --- |
+| `cpuUsedPct / 100` | CPU utilization ratio |
+| `cpuCount` | CPU capacity |
+| `memUsed`, `memTotal` | Memory usage and limit |
+| `diskUsed`, `diskTotal` | Disk usage and capacity, kept only when both are present and the total is nonzero |
 
-Future automatic suspension requires a separate durable control model, including
-an activity revision and timestamps such as `idle_since` and
-`shutdown_requested_at`. Metrics, an in-memory cache, or a monitoring backend must
-not become the lifecycle authority.
+E2B reports no cumulative CPU time, so CPU seconds stay null. `observed_at` is E2B's point time; a point up to 30 seconds ahead of Core's clock is recorded at Core's time, and a larger lead is `sample_unavailable`. A sandbox missing from the running listing is `runtime_not_running`. A missing or malformed point, an ambiguous listing and an E2B API failure, a rejected key included, are `sample_unavailable`; a malformed point affects only its own row.
+
+## Read budgets
+
+A current list read handles one page of up to 100 Sessions (default 20) with at most eight concurrent provider reads. Each provider read has two seconds, a batch read at least five, and the whole list request ten; beyond that the list returns 503. A single-Session read has two seconds. No provider call is retried within a request, and Core keeps no observation cache.
+
+## Durations
+
+These durations answer different questions and stay separate:
+
+- allocation age: `runtime_allocations.created_at` to `released_at`, or now;
+- compute uptime: the sample's `started_at` to `observed_at`;
+- busy Turn duration: `turns.started_at` to `completed_at`, or now.
+
+CPU quietness, heartbeat age, connection state and keepalive time are not idle time.
 
 ## Retained history and optional export
 
-Periodic Runtime observations are persisted asynchronously in the existing Core
-PostgreSQL database. The execution owner samples every 30 seconds by default,
-using bounded pages, concurrency and source deadlines. Collection never wakes or
-mutates compute. The worker lease is checked during the sweep and before each
-handoff. Only periodic samples populate durable history; current API reads cannot
-inflate cadence coverage. Retention is seven days; history reads span at most
-24 hours and have explicit input and output limits.
+### Periodic sampling
 
-`OAC_HISTORY_SETTINGS_FILE` optionally changes sampling and adds OTLP/HTTP
-export. The local database and external exporter have independent bounded queues.
-No Collector is required for the Dashboard. Failures and queue saturation remain
-missing observations rather than fabricated zeroes or failed executions. Transport
-credentials stay server-only; native identifiers, receipts, raw errors, paths and
-credentials are excluded from observations.
+Periodic collection runs only with the execution worker (Core started with `OAC_PUBLIC_URL`; see the [Core environment](../../docs/configuration.md#appendix-core-environment-without-the-installer)) and under the worker's database lease. A Core without it stores no history and answers every history read with 503; current reads work on either.
 
-The internal `runtimehistory` boundary validates Core scope, bucket coverage,
-nullability, time bounds and point limits. One chart series represents an allocation;
-CPU deltas reset across compute incarnations or counter regressions. E2B samples
-store their reported utilization ratio instead, and a bucket holds the mean of the
-ratios sampled in it. Disk is not retained in history. Core's
-measured Session usage (recorded root Turn snapshots, active Turns included)
-supplies independently sampled token counters. History queries survive
-Core restart and browser reload without replaying execution.
+The sampler sweeps once at startup and again each sampling interval after the previous sweep ends. A sweep is a keyset scan, in Session ID order, of the Sessions that are not deleted, are `openai_hosted` and have no released allocation. It reads pages of 32 Sessions through the same resolver and sources as current reads, with eight concurrent reads and two seconds per source. The sampler checks the lease before each page and every 100 ms during a sweep, cancels in-flight reads when ownership is lost, and checks it again before handing each record to export. A failed row does not stop the sweep, and an incomplete sweep is repeated at the next interval.
 
-See the [design](runtime-observability-design.md),
-[current API](runtime-observability-api.md), [history API](runtime-history-api.md)
-and [configuration](../../docs/configuration.md#settings).
-Additional provider telemetry and idle-policy authority remain separate work.
+Every observation, current or periodic, is marked with its collection source, `on_read` or `periodic`, and handed to each exporter's bounded queue. A full queue drops the record, which becomes a missing sample, never a zero. The PostgreSQL history store and the optional OTLP exporter have independent queues, so an exporter outage cannot delay local history or execution. The [`core.runtime_history` settings](../../docs/configuration.md#settings) set the interval, queue capacity, timeout and OTLP destination.
 
-The OTLP resource identifies Core with `service.name=oac-core` and
-`service.namespace=oac`. Metric names retain the `agents.*` namespace.
+### Stored history
 
-## Implementation rules
+The PostgreSQL store keeps only periodic `openai_hosted` records, so API reads cannot inflate coverage. Each goes into one `runtime_history_samples` row keyed by tenant, Session, Environment and resolution time: the allocation, provider type, status, observation and start times, CPU seconds, capacity and utilization ratio, memory usage and limit, and the measured token counters. Disk is not stored. A sample without `started_at` keeps its coverage and drops its resource values, since they cannot be tied to an incarnation.
 
-Runtime telemetry uses a separate read-only service boundary documented in
-[`contracts/agents-api/runtime-observability.md`](runtime-observability.md).
-Resolve durable Session, Environment and Runtime-instance identity before selecting
-a provider source. Observation never extends a lease or changes compute lifecycle.
-Keep observed zero, unavailable data and unsupported Runtime modes distinct. Metrics
-may inform operators, but automatic suspension requires durable Core-owned activity
-state and must not use a monitoring backend as lifecycle authority.
-Managed Docker observes one non-streaming Inspect/Stats sample. Managed microsandbox
-observes the exact persisted compute generation through the existing one-shot helper
-and pinned native CLI metrics report, with SDK identity checks before and after
-observation. Derive compute start from the same native sample timestamp and precise
-uptime; never subtract rounded uptime from a new wall-clock timestamp. Preserve
-cumulative CPU seconds, memory usage/limit and
-compute uptime semantics across both. Do not use microsandbox's instantaneous CPU
-percent, wake suspended compute, or expose provider-native identifiers to fill a
-common field. E2B has no cumulative CPU time: one read-only helper request per
-page of at most 100 allocations reads E2B's batch metrics and confirms each
-receipt's sandbox in a labelled running listing. Its reported CPU share fills
-`utilization_ratio`; disk appears only in the administrator list. Page reads go
-through the Service's optional batch source; do not add a second collector.
+The history service resolves the Project, Session and Environment before it queries; the query always carries that scope and bounded times, never provider identity. The store keeps seven days. A read covers at most 24 hours, reads at most 20,000 raw samples, starts two sampling intervals before the range to find CPU baselines, and returns at most 1,000 buckets per array, 64 series and 10,000 points in total. Results outside the requested scope, range or limits fail the read. The API's [Series](runtime-observability-api.md#series) section describes the aggregation.
 
-Runtime history uses the existing Core PostgreSQL database: one sanitized row per
-periodic observation, seven-day retention and bounded reads. It is best-effort
-operational evidence, not execution or Usage authority. The execution owner samples
-by default every 30 seconds. Core's internal measured Session usage (every
-recorded root Turn snapshot, active Turns included) supplies token snapshots, not
-the public Session usage rule; never aggregate provider counters as model tokens. Preserve missing data
-and reset CPU derivation across compute incarnations or counter regressions. E2B
-history stores the reported utilization ratio; a bucket holds their mean.
-The bounded asynchronous database writer and optional OTLP exporter have independent
-queues; external telemetry outages must not stall local history or execution.
-Retention cleanup also runs without active Runtimes. The browser queries only Core,
-never storage or a Collector, and stays a lightweight administrator console.
-No additional metrics database or Collector is required for retained charts.
+`runtimehistory.Capabilities` states the collection mode, interval, seven-day retention, minimum bucket width (30 seconds or the interval, whichever is longer), 24-hour range and point limits; the history route answers 503 unless they are valid and periodic.
+
+A cleanup loop runs every minute, even without active Runtimes. Each pass has at most two seconds and deletes expired Runtime and node host rows in batches of 256 per table, at most 16 batches. Reads never return rows older than the retention.
+
+### Node host history
+
+After each sweep, within two seconds and after a lease check, Core copies every fresh node heartbeat into `node_host_history_samples`: the host CPU utilization, used memory and available disk, keyed by node and the heartbeat's own time, so repeated sweeps add nothing. A heartbeat is fresh when its node is not removed, is connected under the current owner epoch, was seen within 45 seconds and reported a host time within the last 45 seconds and not in the future. The same seven-day cleanup applies. Node host history is telemetry, never scheduling or capacity truth, and reads never sample or backfill it.
+
+### Token usage
+
+Each observation carries the Session's measured usage from `MeasuredSessionUsage`: the sum of every recorded root Turn snapshot, active Turns included. It is not the public Session usage rule, and Core never derives tokens from provider counters, context occupancy or costs.
+
+### OTLP export
+
+With an OTLP endpoint configured, Core exports every record, both `on_read` and `periodic`, as OTLP/HTTP metrics. The resource has `service.name=oac-core` and `service.namespace=oac`.
+
+| Instrument | Aggregation | Source |
+| --- | --- | --- |
+| `agents.runtime.cpu.usage` | Monotonic cumulative sum, seconds | Cumulative CPU counter |
+| `agents.runtime.cpu.capacity` | Gauge, cores | Configured CPU capacity |
+| `agents.runtime.cpu.utilization` | Gauge, ratio | Provider-reported CPU share (E2B) |
+| `agents.runtime.memory.usage` | Gauge, bytes | Memory usage |
+| `agents.runtime.memory.limit` | Gauge, bytes | Memory limit |
+| `agents.session.tokens.input` | Gauge, tokens | Measured Session input tokens |
+| `agents.session.tokens.output` | Gauge, tokens | Measured Session output tokens |
+| `agents.runtime.sample` | Monotonic delta sum | One per validated result, unavailable and unsupported included |
+| `agents.runtime.sample.duration` | Delta histogram, seconds | Provider read duration; a batch read counts once |
+
+CPU and memory points are exported only when the sample has `started_at`; a missing measurement produces no point. Attributes are `agents.tenant.id`, `agents.session.id`, `agents.environment.id`, `agents.runtime.allocation.id`, `agents.runtime.mode`, `agents.runtime.provider.type`, `agents.runtime.status`, `agents.runtime.reason`, `agents.runtime.collection.source` and nanosecond `agents.runtime.resolved_at_unix_nano`, `agents.runtime.observed_at_unix_nano` and `agents.runtime.compute.started_at_unix_nano`. The nanosecond times keep records joinable when a backend stores event time at lower precision. Provider keys, receipts, native identifiers, raw errors, paths and credentials are never attributes.
+
+Web reads history only through Core; neither a Collector nor another metrics store is needed for its charts.

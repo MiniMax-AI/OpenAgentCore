@@ -20,7 +20,7 @@ The installer writes every setting that applies to the installation's [mode](get
 
 ### How oac apply works
 
-1. It validates `config.json` and changes nothing if a value is invalid. `mode`, `native_core` and `ingress` are fixed after installation; to change them, install into a new directory. It also checks the listeners that a changed `host` or port adds, and changes nothing if `host` is not an address of this machine or another program holds one of their ports; the installation's own listeners do not count.
+1. It validates `config.json` and changes nothing if a value is invalid. `mode`, `native_core` and `ingress` are fixed after installation; to change them, install into a new directory. It also checks the listeners that a changed `host`, port or managed-ingress `public_url` adds ([ports](getting-started/install-options.md#ports)), and changes nothing if `host` is not an address of this machine or another program holds one of their ports; the installation's own listeners do not count.
 2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`, `core.env`, `core-key-digests.json`, `settings.json` and, when used, `runtime-history.json`, the managed `Caddyfile` and the native Core unit. Don't edit them. A generated file edited by hand stops `apply` until you move the change into `config.json` and run `oac apply --discard-edits`, which keeps the edited copy as `generated/<file>.edited-<time>`.
 3. It compares what it wrote with what actually runs. Each container carries a digest of its inputs (the `io.oac.inputs` label; native Core carries `OAC_INPUTS`), and `apply` recreates or restarts exactly the services whose inputs differ: Core first, then Web. The **Restarts** column below says which services a setting affects; see [stop and restart](getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 4. While any service runs, `apply` also starts the stopped ones. After `oac stop`, it only writes the files and the installation stays stopped.
@@ -96,7 +96,7 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Default model per harness | **System** → **Default model configuration**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
 | Executor credentials of a self-hosted Session | **Session log**, then the **Session** page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](getting-started/self-hosted.md) |
 
-Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [API index](api/README.md#core-api) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
+Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
 
 ### Node capacity
 
@@ -116,7 +116,7 @@ The installer creates the installation directory, `~/.oac/core` by default, with
 | --- | --- | --- |
 | `config.json` | [Process settings](#process-settings-configjson). The only file you edit | You, then `oac apply`; managed domain setup for `public_url` |
 | `oac` | The [management command](getting-started/operations.md#the-oac-command) | The installer |
-| `state.json` | Installation ID, Compose project name, image IDs, source commit and the digests of generated files | The tools only |
+| `state.json` | Installation ID, Compose project name, image IDs, source commit, the digests of generated files and whether the services have started once | The tools only |
 | `secrets/core.key` | The [Core key](getting-started/operations.md#core-key) | `oac rotate-core-key` |
 | `secrets/credential.key` | Encryption key for what Core stores sealed in the database: model providers, the E2B key, Vault credentials, Skills, initial files and environment setup | Nothing. Keep it with the database; `oac apply` refuses a changed file |
 | `secrets/database.password` | PostgreSQL password | Nothing. PostgreSQL reads it only when the database is created; `oac apply` refuses a changed file |
@@ -130,11 +130,11 @@ The installer creates the installation directory, `~/.oac/core` by default, with
 
 A Web-only installation has only `secrets/core.key`, a copy of its Core's key, and no `state/` or `native-installers/`. A Core-only installation has no `node-payload/`. Only managed ingress has `ingress/`. With native Core, the installation directory and the bundle must be canonical absolute paths without control characters, quotes, backslashes or wildcards.
 
-In Docker, the Compose project is named `oac-<10 hex digits>` (`project` in `state.json`). Its services are `database`, `migrate`, `core` and `web`, plus `gateway` and `installation` with managed ingress. `gateway` publishes `ports.web`, 80 and 443 and routes to Core and Web; `installation` applies domain changes from Web and uses the Docker socket to do so. The volume `<project>_database` holds all data. Native Core runs Core as the systemd user unit `<project>-core.service` instead of a container. Apart from Docker's storage, nothing is written outside your home directory.
+In Docker, the Compose project is named `oac-<10 hex digits>` (`project` in `state.json`). Its services are `database`, `migrate`, `core` and `web`, plus `gateway` and `installation` with managed ingress. `gateway` routes to Core and Web and publishes `ports.web`, plus [80 and 443](getting-started/install-options.md#ports) once HTTPS is on; `installation` applies domain changes from Web and uses the Docker socket to do so. The volume `<project>_database` holds all data. Native Core runs Core as the systemd user unit `<project>-core.service` instead of a container. Apart from Docker's storage, nothing is written outside your home directory.
 
 ## Appendix: Core environment without the installer
 
-Core reads only its environment. The installer renders `generated/core.env` from `config.json`; if you run Core yourself (see [Maintainers and advanced deployments](maintainers.md)), set these variables. Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be 2.26.0 or newer.
+Core reads only its environment. The installer renders `generated/core.env` from `config.json`; if you run Core yourself (see the [service guide](../services/core/README.md)), set these variables. Compose loads the file with `env_file` and systemd with `EnvironmentFile`, so Compose must be 2.26.0 or newer.
 
 | Variable | Set from |
 | --- | --- |

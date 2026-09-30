@@ -56,7 +56,7 @@ def summary(root, config, addresses, fresh, selection, deployment, reachable, in
         paragraph("Use this key for the Core management API. Keep it private.")
     heading("Next")
     if ingress_config.enabled(config) and not config["public_url"]:
-        paragraph("Open Web at the server IP and sign in. In System → Domain and HTTPS, enter your DNS hostname; the installation requests and renews its certificate. DNS must point to this server and ports 80 and 443 must be reachable.")
+        paragraph("Open Web at the server IP and sign in. In System → Domain and HTTPS, enter your DNS hostname; the installation requests and renews its certificate. HTTPS then uses ports 80 and 443: DNS must point to this server, no other program on it may use those ports, and they must be reachable from the internet. Web checks DNS and the ports before it starts.")
     if mode != "core-only":
         paragraph("Create a Project and its API key on the Projects and keys page.")
     else:
@@ -69,6 +69,6 @@ def summary(root, config, addresses, fresh, selection, deployment, reachable, in
     heading("Manage")
     print(f"  Settings: {root / 'config.json'}")
     command = shlex.quote(str(root / "oac"))
-    for label, action in (("Apply settings", "apply"), ("Status", "status"), ("Start", "start"), ("Stop", "stop")):
+    for label, action in (("Apply settings", "apply"), ("Status", "status"), ("Start", "start"), ("Stop", "stop"), ("Uninstall", "uninstall")):
         print(f"  {label}: {command} {action}")
     print("\nNo model request was made. Quickstart: docs/getting-started/quickstart.md", flush=True)

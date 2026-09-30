@@ -1,213 +1,235 @@
-# Administrator API
+# Core administration API
 
-These routes live under `/core/v1` and are called by Core Web's server and
-operator scripts. Every `/core/v1` route requires the Core key as a Bearer
-credential; an unknown `/core/v1` path returns 404 only after authentication.
-They do not change `/v1`, the fixed Python SDK, or native Runtime interfaces.
-Project API keys and machine credentials cannot authenticate these routes; the
-Core key cannot authenticate `/v1` or `/api/v1`. Paths below are relative to
-`/core/v1`. `X-Core-Console-Actor` is a caller-asserted, display-only label that
-Core records without verifying. Web sends `console`; direct Core key scripts
-normally send none but could set any label. Never use it for authorization or as
-proof of origin.
+The Core administration API (`/core/v1`) manages an installation: Projects and their API keys, reads and deletion of Project resources, executor credentials, deployment default models, the sandbox deployment and its nodes, monitoring and audit. Web's console server calls it for the signed-in administrator ([console server](../../docs/web/console-server.md#forwarding-to-core)); operators call it from scripts on the Core host ([script the Core API](../../docs/getting-started/operations.md#script-the-core-api)). The generated schema is [core.openapi.yaml](core.openapi.yaml), and every error uses the [Core error envelope](core-errors.md).
 
-## Error envelope
+Applications never call `/core/v1`. It has no operation that creates or edits Agents, Sessions, templates, Files, Skills or Vaults, starts or cancels work, reads Source File content or streams events; applications do those through the [Agents API](../../docs/api/public-agent-api.md).
 
-See [Core administration errors](core-errors.md) for the optional flat `details`
-object and the distinct console proxy failure codes. Public and machine response
-shapes remain unchanged.
+## Authentication
+
+Every `/core/v1` request, including one for an unknown path, must send `Authorization: Bearer <Core key>`. Without it Core answers 401 `invalid_admin_key` with `WWW-Authenticate: Bearer`; an unknown path answers 404 `not_found` only after authentication.
+
+- Core compares the SHA-256 of the bearer with the Core key digest it reads at startup from `generated/core-key-digests.json`, which `oac apply` derives from `secrets/core.key` ([Core key](../../docs/getting-started/operations.md#core-key)). A rotated Core key takes effect when Core restarts. Core serves no `/core/v1` route when no digest is configured.
+- The Core key authenticates only `/core/v1`. Project API keys and machine credentials get 401 here, and the Core key gets 401 on `/v1` and `/api/v1` ([API namespaces and credentials](../../docs/api/README.md)).
+- `X-Core-Console-Actor` is a label the caller asserts. Core records it as the audit `actor_label` without checking it. The console server sends `console`; scripts normally send none, which records an empty label. Never use it for authorization or as proof of origin.
+- A `{project_id}` in a path selects the target Project, including an archived one; it grants nothing.
+
+## Routes
+
+Paths are relative to `/core/v1`.
+
+| Routes | Purpose | Contract |
+| --- | --- | --- |
+| `installation` | Public URL, API base URL, source commit, the installer's process settings and what is bound to the public URL | [Installation facts](#installation-facts) |
+| `projects`, `projects/{project_id}`, `projects/{project_id}/archive`, `projects/{project_id}/keys[/{key_id}]` | Projects and their API keys | [Projects and keys](#projects-and-keys) |
+| `projects/{project_id}/{agents,environment-templates,skills,files,vaults,sessions}/**` | Resource reads and deletion, Session history and Artifacts | [Resource reads and deletion](#resource-reads-and-deletion) |
+| `projects/{project_id}/sessions/{session_id}/archive` | Archive one hosted Session | [Session archive](#session-archive) |
+| `projects/{project_id}/sessions/{session_id}/execution-configuration` | The Session's frozen model, Harness and provider selection | [Execution configuration](#execution-configuration) |
+| `projects/{project_id}/sessions/{session_id}/diagnostics`, `…/turns/{turn_id}/diagnostics` | Failure categories and Item receipt timing | [Session diagnostics](session-diagnostics.md) |
+| `projects/{project_id}/sessions/{session_id}/runtime-observation`, `sandbox/runtime-observations` | Current Runtime observations | [Runtime observations](runtime-observability-api.md), [the list's disk field](#runtime-observations) |
+| `projects/{project_id}/sessions/{session_id}/runtime-history` | Stored Runtime history | [Runtime history](runtime-observability-api.md#session-runtime-history) |
+| `projects/{project_id}/environments/{environment_id}/installation` | Install commands of a `self_hosted` Environment | [Installation grant](environment-executor-credentials.md#installation-grant) |
+| `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials of a `self_hosted` Environment | [Executor credentials](environment-executor-credentials.md#core-key-routes) |
+| `projects/{project_id}/resource-owners`, `projects/{project_id}/write-operations` | Which API key created a resource and each key's writes | [Write provenance](#write-provenance) |
+| `harnesses`, `harnesses/{harness}/model-configuration` | Enabled Harnesses and each Harness's deployment default model | [Deployment defaults](model-execution.md#deployment-defaults) |
+| `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](sandbox-deployment.md#routes) |
+| `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](sandbox-deployment.md), [node host history](runtime-observability-api.md#node-host-observations-and-history) |
+| `summary` | Session counts and usage by Project, Agent or key | [Summary](#summary) |
+| `metrics` | Core's own process, execution, database and job metrics | [Core metrics](core-metrics.md) |
+| `audit-log` | Administrator writes | [Audit log](#audit-log) |
 
 ## Projects and keys
 
-A Project owns one tenant and shared principal. Its keys have equal access to all
-its assets. Projects and keys are database-owned; deployment configuration defines
-neither. There are no API users, roles or configuration-managed business keys.
-Core requires the Core key digest file (`OAC_CORE_KEY_DIGESTS_FILE`) at
-startup for bootstrap and management.
+A Project owns one execution tenant; its keys share its principal and assets ([Projects own assets](../../docs/design-principles.md#projects-own-assets)). Web's **Projects and keys** page uses these routes.
 
-| Operation | Path | Result |
+| Operation | Route | Result |
 | --- | --- | --- |
 | List Projects | `GET /projects` | `{data, has_more}` |
-| Create Project | `POST /projects` with `{name}` | Project metadata; HTTP 201 |
-| Rename Project | `POST /projects/{project_id}` with `{name}` | Project metadata |
-| Archive Project | `POST /projects/{project_id}/archive` | Project metadata |
+| Create a Project | `POST /projects` with `{name}` | 201 and the Project |
+| Rename a Project | `POST /projects/{project_id}` with `{name}` | The Project |
+| Archive a Project | `POST /projects/{project_id}/archive` | The Project |
 | List keys | `GET /projects/{project_id}/keys` | `{data, has_more}` |
-| Issue key | `POST /projects/{project_id}/keys` with `{name}` | Key metadata and one-time `key`; HTTP 201 |
-| Revoke key | `DELETE /projects/{project_id}/keys/{key_id}` | `{id, deleted: true}` |
-| List executor credentials | `GET /projects/{project_id}/environments/{environment_id}/executor-credentials` | `{data}` metadata only |
-| Issue or rotate executor credential | `POST /projects/{project_id}/environments/{environment_id}/executor-credentials` with `{key_id, rotate}` | One-time credential; HTTP 201 |
-| Revoke executor credential | `DELETE /projects/{project_id}/environments/{environment_id}/executor-credentials/{key_id}` | HTTP 204 |
+| Issue a key | `POST /projects/{project_id}/keys` with `{name}` | 201, the key metadata and the plaintext `key` |
+| Revoke a key | `DELETE /projects/{project_id}/keys/{key_id}` | `{id, deleted: true}` |
 
-Executor credentials apply only to a `self_hosted` Environment of the Project
-whose Session exists. An archived Project returns 409 `project_archived` for
-issuance and rotation but still lists and revokes; see
-[executor credentials](environment-executor-credentials.md).
-Project and key IDs are server-generated UUIDs. Project metadata contains `id`, `name`,
-`created_at`, nullable `archived_at`, and `active_key_count`. Key metadata contains
-`id`, `project_id`, `name`, `prefix`, `created_at`, and nullable `revoked_at`.
-Project names contain 1–128 characters; key names contain 1–80. Names are display
-labels and may repeat; control characters are rejected. Lists use lexical ID
-ordering, `order=asc|desc` (default `desc`), `limit=1..100` (default 20), and `after`.
-No response includes the stored digest or an existing credential's plaintext.
-The catalog UUID identifies management paths. Its public authentication scope uses
-organization `core` and project `proj_<catalog UUID>`; optional OpenAI scope headers
-must match those values. All keys share subject `service_account/project:<UUID>`.
+- A Project has `id`, `name`, `created_at`, nullable `archived_at` and `active_key_count`. A key has `id`, `project_id`, `name`, `prefix`, `created_at` and nullable `revoked_at`. IDs are server-generated UUIDs.
+- Project names have 1–128 characters and key names 1–80; names are labels and may repeat, and control characters are rejected.
+- Lists order by ID with `order=asc|desc` (default `desc`), `limit=1..100` (default 20) and `after`.
+- Only the issuance response contains the key's plaintext, in `key`; Core stores its digest. Show it once and never cache it. After an uncertain issuance response, list the keys and revoke any you cannot use before issuing another.
+- Archive marks the Project archived, revokes all its keys and writes the audit entry in one transaction. Issuing a key in an archived Project returns 409 `project_archived`. There is no Project deletion, unarchive or key reset.
 
-Rotate by issuing a new key in the same Project and revoking the old one. Revoking
-one key leaves other keys, assets and admitted work intact. Archive atomically
-marks the Project archived, revokes all its keys and records audit. Archived
-Projects cannot issue keys; their assets remain available for administrator
-inspection and deletion. There is no Project deletion, unarchive, key reset or
-automatic write retry operation.
-After an uncertain issuance response, inspect metadata and explicitly revoke any
-unusable key before issuing another; plaintext cannot be recovered.
+The [`/v1` authentication rules](wire-semantics.md#authentication) define key lookup, revocation visibility, scope headers and authentication errors.
 
 ## Resource reads and deletion
 
-Paths below are relative to `/projects/{project_id}`. The Project selects a tenant, including
-an archived Project; it does not authenticate. Shared resource handlers preserve their
-public object serialization, pagination, errors and deletion preconditions. They
-receive an explicit target tenant, not a fabricated caller identity.
+Paths are relative to `/core/v1/projects/{project_id}`. Each read returns the same object, pagination and errors as the matching `/v1` operation, and each deletion has the same preconditions.
 
-| Resource | GET routes | DELETE routes |
+| Resource | Reads | Deletion |
 | --- | --- | --- |
 | Agents | `/agents`, `/agents/{agent_id}` | `/agents/{agent_id}` |
-| Templates | `/environment-templates`, `/environment-templates/{environment_template_id}` | Item route |
-| Skills | `/skills`, `/skills/{skill_id}`, item `/content`, item `/versions`, `/versions/{version}`, version `/content` | Skill and version item routes |
-| Files | `/files`, `/files/{file_id}` | Item route |
-| Vaults | `/vaults`, `/vaults/{vault_id}`, item `/credentials`, `/credentials/{credential_id}` | Vault and Credential item routes |
-| Sessions | `/sessions`, `/sessions/{session_id}`, item `/turns`, `/turns/{turn_id}`, `/items`, `/artifacts`, `/artifacts/{artifact_id}`, Artifact `/content`, `/execution-configuration`, `/runtime-observation`, `/runtime-history` | Session and Artifact item routes |
-| Provenance | `/resource-owners`, `/write-operations` | None |
+| Environment Templates | `/environment-templates`, `/environment-templates/{environment_template_id}` | The item route |
+| Skills | `/skills`, `/skills/{skill_id}`, `/skills/{skill_id}/content`, `/skills/{skill_id}/versions`, `/skills/{skill_id}/versions/{version}` and its `/content` | Skill and version item routes |
+| Files | `/files`, `/files/{file_id}` | The item route |
+| Vaults | `/vaults`, `/vaults/{vault_id}`, `/vaults/{vault_id}/credentials`, `/vaults/{vault_id}/credentials/{credential_id}` | Vault and Credential item routes |
+| Sessions | `/sessions`, `/sessions/{session_id}`, and under it `/turns`, `/turns/{turn_id}`, `/items`, `/artifacts`, `/artifacts/{artifact_id}` and its `/content` | Session and Artifact item routes |
 
-Source File content, Session events/SSE, arbitrary creation/update and execution
-operations are deliberately absent. Session deletion still requires idle state;
-management deletion never cancels implicitly. Deleting a Credential does not revoke
-its provider authorization. Deleting a default Skill version retains the public
-constraint. Skill and Artifact downloads reject HEAD like the corresponding project
-operations; the Runtime observation (single and list) and Runtime history reads also
-reject HEAD with 405, so HEAD never samples a provider or queries telemetry.
+- Administrator deletion never cancels work: a Session that `/v1` could not delete, because a Turn or input is pending, returns the same 409.
+- Deleting a Credential removes Core's copy only; it does not revoke the authorization at the provider.
+- `HEAD` on Skill and Artifact content, a Runtime observation, the Runtime observation list and Runtime history returns 405, so it never samples a provider or queries telemetry.
+- Administrator deletions appear in the [audit log](#audit-log), not in key write history.
 
-## Administrative Session archive
+## Session archive
 
-`POST /projects/{project_id}/sessions/{session_id}/archive` takes
-`{"expected_generation": N}`, where N is a positive uint64 from the current
-sandbox deployment. It requires the Core key, a
-Web-managed configured deployment and the current generation. A stale generation
-returns 409 `sandbox_generation_stale`; reset is not a precondition. Only Core-managed
-`openai_hosted` Sessions are eligible; other environment types return 400. A
-Session outside the selected Project returns the same 404 as a missing Session.
+`POST /projects/{project_id}/sessions/{session_id}/archive` with `{"expected_generation": N}` releases one Core-managed `openai_hosted` Session's sandbox without a deployment reset. N is the current generation of the [sandbox deployment](sandbox-deployment.md), a positive integer. The deployment must be configured in Web.
 
-One transaction marks the Environment expired (retaining an existing failed
-state), requests cancellation, revokes Runtime authority and records the
-administrator audit. The existing lifecycle owns compute and snapshot cleanup;
-no provider operation runs inside that transaction. Unknown outcomes retain
-ownership until matching provider receipts confirm release. The Session itself
-is not deleted. Public history and persisted Files/Artifacts remain available;
-unpersisted workspace contents are lost and the original Session cannot resume.
+| Case | Result |
+| --- | --- |
+| Stale generation | 409 `sandbox_generation_stale` |
+| Environment type other than `openai_hosted` | 400 |
+| Session missing or in another Project | 404 |
 
-Both POST and `GET /projects/{project_id}/sessions/{session_id}/archive` return
-`{session_id, environment_id, state}`. GET is read-only and does not require
-an active reset or an expected generation. `state` describes current resource
-disposition: `active`, `cleanup_pending`, or `released`. It is not archive
-provenance: resources may already have expired through their normal lifecycle.
-`released` does not prove that an active Turn has finished cancellation or
-terminal publication; inspect that Turn separately when needed.
+One transaction marks the Environment expired (a failed Environment stays failed), requests cancellation of running work, revokes the Runtime's authority and writes the audit entry. Cleanup of the sandbox and its snapshot follows through the normal lifecycle; a resource whose release is uncertain stays owned until the provider confirms it. The Session is not deleted: its history and persisted Files and Artifacts stay readable, unpersisted workspace contents are lost and the Session cannot resume.
 
-After an uncertain POST response, GET this resource before choosing another
-write. A repeated POST has an idempotent state effect, with a separate audit
-record for each accepted request. Clients never automatically retry the mutation.
-`AdminClient.archiveSession` sends the generation and
-`AdminClient.retrieveSessionArchive` reads the disposition; the TypeScript client
-accepts only positive safe integer generations to avoid rounding JSON numbers.
+`POST` and `GET /projects/{project_id}/sessions/{session_id}/archive` return `{session_id, environment_id, state}`. `GET` is read-only and needs no generation. `state` is the resource's current disposition: `active`, `cleanup_pending` or `released`, whatever released it. `released` does not mean an active Turn has finished cancelling; read the Turn for that.
 
-Archive each retained hosted Session explicitly, then verify deployment allocation
-and pending counts are zero before changing provider, resources or Runtime.
-Snapshots and uncertain cleanup remain blockers. This is not a deployment-wide
-bulk operation, Session migration or public Session deletion.
+After an uncertain `POST` response, `GET` the archive before writing again. Repeating the `POST` has the same effect and records one audit entry per accepted request. To clear every hosted Session before changing the deployment, use the [deployment reset](sandbox-deployment.md#reset).
 
-## Historical copy provenance
+## Execution configuration
 
-Cross-Project asset copying has been removed; no route creates copies. Resources
-copied before the removal keep `api_key:null`, `source:"admin_copy"` and their
-`admin_audit_id` in resource ownership, and their `copy` audit entries keep their
-`result_ids` mappings. Historical unknown resources have null source and audit ID.
+`GET /projects/{project_id}/sessions/{session_id}/execution-configuration` reports the model, Harness, native parameters and model provider a Session froze at creation. It reads only stored configuration: it never contacts a provider, starts a Turn or wakes a sandbox. Responses carry `Cache-Control: no-store`.
 
-## Monitoring and audit
+```json
+{
+  "object": "agent.session.execution_configuration",
+  "schema_version": 1,
+  "session_id": "013773a9-44b9-4f84-baca-b51c04a01201",
+  "model": {"value": "requested-model", "source": "session"},
+  "harness": {"value": "codex", "source": "agent"},
+  "harness_config": {"value": {"model_reasoning_effort": "high"}, "source": "agent"},
+  "model_provider": {
+    "source": "agent",
+    "status": "available",
+    "configuration": {"protocol": "responses", "base_url": "https://model.example/v1", "api_key_configured": true}
+  }
+}
+```
 
-`GET /summary` supports optional `project_id`, `group_by=project|agent|key`
-(default `project`), inclusive `created_after` and exclusive `created_before`
-RFC3339 Session-creation bounds. Agent grouping requires `project_id`. `after`,
-`limit`, `order` paginate Projects. Response `{data, has_more, next_cursor}` rows
-contain `project_id`, nullable `agent_id` and `key_id`, current `assets` counts
-(null for Agent/key groups), `sessions` counts (`total`, `idle`, `in_progress`,
-`requires_action`, `failed`), cumulative `usage`, `coverage` (`measured_sessions`,
-`total_sessions`, nullable `ratio`), and nullable Unix `last_active_at`.
-Key groups attribute the entire Session to its recorded creation key, even if a
-different key later sends input. Missing provenance becomes a null-key group.
-Null public Session usage contributes no tokens but counts in the coverage
-denominator. Each Project is read from one database snapshot; the page is not a
-simultaneous deployment-wide snapshot. Totals are not billing records.
+Each `source` is `session`, `agent`, `deployment` or `unknown`, recorded independently: a Session can override the model and keep its Agent's Harness and provider. An explicit inline Harness is `session`; an inline `agent.x_agents_core: null` resets the Harness to `deployment` and keeps the inherited provider; a null Session provider inherits normally. `harness_config.value` is `{}` when no native parameters apply. [Model execution](model-execution.md) owns how each value is resolved.
 
-`GET /sandbox/runtime-observations` uses existing Session creation-order pagination and
-returns `{object:"list", data:[{project_id, observation}], has_more, first_id, last_id}`.
-It reuses the bounded read-only Runtime sampler and never provisions compute; a
-provider with a batch metrics read (E2B) samples the page in one bounded request.
-Each `observation` is the Runtime observation plus `disk:
-{usage_bytes, limit_bytes}` with memory's null rules: E2B fills it from its
-reported disk usage and capacity, Docker returns null, and microsandbox returns
-null until its disk semantics are designed. The per-Session administrator
-observation read keeps the shape without `disk`. The per-Session execution
-configuration, Runtime observation and Runtime history exist only here; `/v1` has
-no equivalents.
+| `model_provider.status` | Meaning | `configuration` |
+| --- | --- | --- |
+| `available` | Core recorded a safe view of the frozen provider, including a deployment default (source `deployment`) | `protocol`, `base_url`, `api_key_configured` and, when set, `context_window` and `max_output_tokens` |
+| `redacted` | A deployment selection recorded without a safe view | null |
+| `unavailable` | Core has no trustworthy record of the provider (source `unknown`). Execution may still have succeeded | null |
 
-`GET /metrics?range=1h|6h|24h|7d` returns Core's own process metrics; see
-[Core metrics](core-metrics.md).
+Core writes this record in the same transaction that creates the Session. Later Agent edits or deletion, deployment default changes, restarts and same-key creation retries never change it. A Session without the record reports its stored model and Harness with source `unknown`, a null value where none is stored, and an `unavailable` provider. A missing Session and one in another Project return the same 404. The response never contains keys, ciphertext, secret references, native headers or query parameters.
 
-`GET /audit-log` lists administrator writes newest first with `project_id`,
-`resource_type`, `resource_id`, `action`, inclusive `created_after`, exclusive
-`created_before`, `limit=1..100` (default 50), and opaque `after` filters. Response
-is `{data, has_more, next_cursor}`. Each row has `id`, `created_at`,
-`admin_credential_id` (credential digest prefix), `actor_label` (the caller-asserted
-display label: normally `console` from Web and empty from direct Core key requests), `action`,
-`project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id`,
-`trace_id`. `result_ids` is an empty array except on historical `copy` entries.
-Executor credential writes appear with `resource_type:"executor_credential"`,
-the key ID as `resource_id` and action `issue`, `rotate` or `revoke`. Deployment
-default model provider writes are deployment-wide: `project_id` is null,
-`resource_type:"deployment_model_provider"`, the harness as `resource_id` and
-action `set` or `delete`; a `project_id` filter excludes them.
-No credential values or request bodies are recorded. Logs and historical copy
-ownership do not cascade away on resource removal or key revocation.
+## Installation facts
 
-Administrator writes and their audit record share one PostgreSQL transaction.
-Reuse existing resource deletion and serialization code. Cross-Project copying was
-removed; only the historical `source:"admin_copy"` provenance read remains, fed by
-`admin_resource_owners`. Unknown historical provenance remains unknown. No secrets
-or request bodies enter logs. The console's fixed actor label (`console`) is only
-an audit display label, never an authorization input.
+`GET /installation` reports what an administrator needs to call and change this installation. It answers before any sandbox deployment exists and calls no provider or model.
 
-## Private installation transition
+| Field | Meaning |
+| --- | --- |
+| `object` | `core.installation` |
+| `installation_id` | The installation ID from `state.json` ([installation directory](../../docs/configuration.md#installation-directory)); null when Core runs without the sandbox manager |
+| `public_url` | The [`public_url`](../../docs/configuration.md#settings) setting: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset |
+| `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys. Null when `public_url` is null |
+| `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
+| `source_commit` | The full source commit Core was built from; null for development builds |
+| `configuration` | The installer's snapshot of `config.json`; null when the installer did not start Core |
+| `address_bindings` | What a change of `public_url` affects, counted on each read |
 
-The old configured business keys, inherited-binding issuer and key-space
-management routes are removed. The Core key remains separately configured. The
-migration refuses an installation containing old issued key records instead of
-silently changing their ownership or deleting data. Use a clean private deployment,
-or explicitly retire old key records after preserving the assets and evidence you
-need. There is no automatic data migration or historical ownership backfill.
+`configuration` has:
 
-The typed `AdminClient`, `SandboxAdminClient` and `CoreMetricsClient` in
-`packages/agents-client` use `/core/v1`.
-Public SDK applications continue to use the existing Agents API client and their
-own API key. See [design principles](../../docs/design-principles.md).
+- `path`: the absolute host path of `config.json`, by default `~/.oac/core/config.json`;
+- `apply_command`: the command that applies changes, by default `~/.oac/core/oac apply`;
+- `applied_at`: when the snapshot was last applied;
+- `settings`: one entry per setting, with its dotted `key`, applied `value`, `default`, whether it is `changeable` after installation, whether it is `sensitive`, and the services it `restarts` (`core`, `web`, `database`).
 
-Sandbox deployment reset records `reset_start`, explicit `reset_force`, automatic
-`reset_deadline`, `reset_cancel` and `reset_complete` in administrator audit.
-Background archives retain the reset requester's credential/actor/request/trace
-provenance and recover each Session's real Project scope. Audit failure rolls back
-the corresponding state transition. Cancel does not undo an archive already committed.
+A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. Core refuses to start when the snapshot breaks this rule, repeats a key or has an unknown member. Core only reports the snapshot; [configuration](../../docs/configuration.md) describes each setting.
 
-Online E2B deployment updates audit `change`, or `replace_credential` when an API
-key is explicitly supplied (including the existing key), under resource type
-`sandbox_deployment` and the installation ID. The audit and generation/credential
-write commit together; verification failures and omitted-key no-ops produce no
-mutation audit. No credential, request body or provider response text is recorded.
+| `address_bindings` field | Meaning |
+| --- | --- |
+| `nodes` | Enrolled nodes that are not removed |
+| `nodes_on_other_address` | Nodes enrolled with an address other than `public_url`. They receive no new sandboxes; remove and add them again. At most `nodes` |
+| `hosted_sandboxes` | Retained and pending hosted sandboxes, which run with the address current when they started |
+| `self_hosted_executors` | Unrevoked executor credentials, whose executors were installed with the `remote_url` then advertised |
+
+## Write provenance
+
+Core records which Project API key made each successful public write, in the same transaction as the write; if the record fails, the write fails. Reads, rejected requests and Core's own maintenance, such as OAuth token refresh and cleanup, are not recorded.
+
+- A write is recorded when it commits. Session input counts once admitted, including input reserved for an Environment that is still preparing; a later execution failure or a lost response does not remove the record. An explicit empty input batch and a repeated creation or deletion are recorded without changing ownership.
+- An Environment file upload is recorded when the Runtime confirms the write. Core saves the key, request and trace before sending the file, and records only confirmed uploads.
+- Creating a resource also records its creation owner. Updates, retries and no-op writes never change it. A new Skill's first version and a new Session's Environment share the creating operation. Artifacts come from the Runtime and have no creation owner; deleting one is recorded.
+- Revoking a key stops new writes but keeps its history. Deleting a resource keeps its creation owner and operation history.
+- Each record holds its ID, time, key metadata, action, resource type and ID, parent ID, `request_id` and `trace_id`. `request_id` is server-generated per request; a shared `trace_id` is not an idempotency key. Records never hold request or response bodies, secrets, model credentials, tokens, file paths or file contents.
+
+| Public write | `action` | `resource_type` (parent) |
+| --- | --- | --- |
+| Agent create, update, delete | `create`, `update`, `delete` | `agent` |
+| Session create, update, delete | `create`, `update`, `delete` | `session` |
+| Session events | `send_events` | `session` |
+| Artifact delete | `delete` | `artifact` (`session`) |
+| Environment file upload | `upload_file` | `environment` (`session`) |
+| Environment Template create, update, delete | `create`, `update`, `delete` | `environment_template` |
+| Skill create, default version change, delete | `create`, `update_default_version`, `delete` | `skill` |
+| Skill version upload, delete | `upload_version`, `delete` | `skill_version` (`skill`) |
+| Source File upload, delete | `create`, `delete` | `file` |
+| Vault create, delete | `create`, `delete` | `vault` |
+| Credential create, replace, delete (static and OAuth) | `create`, `update`, `delete` | `credential` (`vault`) |
+
+Both routes accept only the parameters listed; an unknown, repeated or empty parameter returns 400, and a missing Project 404.
+
+`GET /projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2` returns the creating key of 1–100 resources of one type, in request order. `resource_type` is `agent`, `session`, `environment`, `environment_template`, `skill`, `skill_version`, `file`, `vault`, `credential` or `artifact`.
+
+```json
+{"data":[
+  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null},"source":"api_key","admin_audit_id":null},
+  {"resource_id":"id2","api_key":null,"source":null,"admin_audit_id":null}
+]}
+```
+
+`api_key` and `source` are null when Core has no creation record, including for resources in another Project. `source: "admin_copy"` with an `admin_audit_id` marks a resource recorded by a `copy` entry in the audit log; no current route writes one.
+
+`GET /projects/{project_id}/write-operations` lists writes newest first by `(created_at, id)`. Filters: `key_id`, `resource_type`, `resource_id`, inclusive `created_after` and exclusive `created_before` (RFC 3339). `limit` is 1–100, default 50. Pass the previous `next_cursor` as `after` with unchanged filters. The response is `{data, has_more, next_cursor}`; each entry has `id`, `created_at`, `api_key`, `action`, `resource_type`, `resource_id`, `parent_id` (empty when absent), `request_id` and `trace_id`.
+
+Creation records are kept for good, including after the resource is deleted. Other records are kept for [`core.write_audit_retention`](../../docs/configuration.md#settings), 90 days by default; every minute Core deletes up to 1,000 expired records, so a backlog drains over several passes. Revoking a key or deleting a resource never deletes records.
+
+## Summary
+
+`GET /summary` counts Sessions and usage.
+
+| Parameter | Meaning |
+| --- | --- |
+| `project_id` | One Project; required for `group_by=agent` |
+| `group_by` | `project` (default), `agent` or `key` |
+| `created_after`, `created_before` | Inclusive and exclusive RFC 3339 bounds on Session creation |
+| `after`, `limit`, `order` | Paginate Projects |
+
+The response is `{data, has_more, next_cursor}`. Each row has `project_id`, nullable `agent_id` and `key_id`, current `assets` counts (null for Agent and key groups), `sessions` counts (`total`, `idle`, `in_progress`, `requires_action`, `failed`), summed `usage`, `coverage` (`measured_sessions`, `total_sessions`, nullable `ratio`) and nullable Unix `last_active_at`.
+
+- A key group counts each Session under the key that created it, even when another key later sends input. Sessions without a recorded creator form a group with a null `key_id`.
+- A Session whose public usage is null adds no tokens but counts in the coverage denominator.
+- Each Project is read in one database snapshot; a page is not one snapshot of the whole deployment. Totals are operational counts, not billing records.
+
+## Runtime observations
+
+The [Runtime telemetry API](runtime-observability-api.md) owns current observations, the [list-only disk field](runtime-observability-api.md#disk), Session history and node host observations and history.
+
+## Audit log
+
+`GET /audit-log` lists administrator writes newest first. Filters: `project_id`, `resource_type`, `resource_id`, `action`, inclusive `created_after` and exclusive `created_before` (RFC 3339). `limit` is 1–100, default 50, with the opaque `after` cursor. The response is `{data, has_more, next_cursor}`.
+
+Each entry has `id`, `created_at`, `admin_credential_id` (the first 8 hex characters of the Core key digest), `actor_label`, `action`, `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id` and `trace_id`. `result_ids` is an empty array except on `copy` entries. Deployment-wide entries have `project_id: null`, and a `project_id` filter excludes them.
+
+| `resource_type` | `action` | `resource_id` |
+| --- | --- | --- |
+| `project` | `create`, `rename`, `archive` | Project ID |
+| `api_key` | `create`, `revoke` | Key ID |
+| `executor_credential` | `issue`, `rotate`, `revoke` | Key ID |
+| `session` | `archive` | Session ID |
+| `agent`, `environment_template`, `skill`, `skill_version`, `file`, `vault`, `credential`, `session`, `artifact` | `delete` | Resource ID |
+| `deployment_model_provider` (deployment-wide) | `set`, `delete` | Harness |
+| `sandbox_deployment` (deployment-wide) | `change`, `replace_credential` (a provider credential was submitted, even the same one), `reset_start`, `reset_force`, `reset_deadline`, `reset_cancel`, `reset_complete` | Installation ID |
+
+An administrator write and its audit entry commit in one transaction; if the entry fails, the write fails. A reset's background archives and its `reset_deadline` and `reset_complete` entries carry the requester's credential, actor label, request and trace, and each archive keeps its Session's Project. Cancelling a reset does not undo archives already committed. Rejected provider verifications and no-op updates write no entry. Entries never contain credential values, request bodies or provider response text, and they survive the deletion of their resource and the revocation of keys.

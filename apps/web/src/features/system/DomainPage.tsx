@@ -8,7 +8,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { TableSkeleton } from "../../components/Skeleton";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useConsoleAccount } from "../first-run/ConsoleAccess";
-import { applyDomain, domainHostname, domainInProgress, domainQuery, DomainRequestError, type DomainStatus } from "./domain-api";
+import { applyDomain, domainHostname, domainInProgress, domainQuery, domainReconnecting, DomainRequestError, type DomainStatus } from "./domain-api";
 import { DomainHandoff } from "./DomainHandoff";
 import "./domain.css";
 
@@ -59,6 +59,7 @@ function DomainForm({ initial }: { initial: DomainStatus }) {
   const host = domainHostname(hostname);
   const active = domainInProgress(snapshot);
   const blocked = busy || active || uncertain || query.isError || query.isFetching || !snapshot.supported;
+  const failed = query.isError && !domainReconnecting(query);
   const reconnect = uncertain || busy ? attemptedUrl : snapshot.state === "ready" ? snapshot.target_url ?? snapshot.public_url : (active || query.isError) ? snapshot.target_url : null;
   useEffect(() => {
     if (reconnect) setDomainHandoff?.(reconnect);
@@ -127,9 +128,9 @@ function DomainForm({ initial }: { initial: DomainStatus }) {
           <RefreshButton label={t("domain.refresh")} refreshing={query.isFetching} disabled={busy} onClick={() => void refresh()} />
         </div>
       </form>
-      {(active || snapshot.state === "ready") && !query.isError && !busy && !uncertain ? <p className="domain-state" role="status">{t(`domain.states.${snapshot.state}`)}</p> : null}
+      {(active || snapshot.state === "ready") && !failed && !busy && !uncertain ? <p className="domain-state" role="status">{t(`domain.states.${snapshot.state}`)}</p> : null}
       {snapshot.state === "failed" ? <p className="domain-error" role="alert">{t("domain.failed")} {snapshot.message ? <HelpTip label={t("domain.details")}>{snapshot.message}</HelpTip> : null}</p> : null}
-      {query.isError ? <p className="domain-error" role="alert">{t(active ? "domain.disconnected" : "domain.loadFailed")}</p> : null}
+      {failed ? <p className="domain-error" role="alert">{t(active ? "domain.disconnected" : "domain.loadFailed")}</p> : null}
       {error && !confirmation ? <p className="domain-error" role="alert">{error.text} {error.detail ? <HelpTip label={t("domain.details")}>{error.detail}</HelpTip> : null}</p> : null}
       <DomainHandoff url={reconnect} />
     </>}

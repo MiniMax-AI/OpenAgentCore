@@ -1,8 +1,10 @@
 """Acceptance behavior of the oac command against a fake Docker/systemd host."""
 import hashlib
+import http.client
 import json
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -128,6 +130,8 @@ class OacTests(unittest.TestCase):
             key.chmod(0o600)
         images = {name: IMAGES[name] for name in install.image_names(mode, native)}
         install.create(self.root, SimpleNamespace(core_key_file=key), config, {"source_commit": "a" * 40}, images)
+        # These tests use finished installations; the installer records that after the first start.
+        oac_cli.save_state(self.root, dict(oac_cli.load_state(self.root), complete=True))
         self.apply(start=True)
         self.host.recreated.clear()
         self.output.clear()
@@ -410,6 +414,125 @@ class OacTests(unittest.TestCase):
                         self.host.core.update(fails=False, failed=False)
                         self.apply()
                         self.assertConverged()
+
+    def test_uninstall_removes_the_services_volumes_unused_images_and_directory(self):
+        self.install()
+        project = oac_cli.load_state(self.root)["project"]
+        self.host.other_containers[IMAGES["database"]] = ["id-of-another-installation"]
+        self.host.deployment.update(provider="e2b", resources={"allocations": 2, "pending": 0})
+        oac_cli.main(["uninstall", "--yes"], root=self.root, out=self.output.append)
+        self.assertTrue(any(line.startswith("Core has 2 sandbox(es) in use. Uninstall does not stop them: E2B keeps "
+                                            "running them, and billing for them.") for line in self.output))
+        self.assertIn(["docker", "compose", "-p", project, "down", "--volumes", "--remove-orphans"], self.host.commands)
+        self.assertEqual(self.host.containers, {})
+        self.assertEqual(self.host.missing_images, {IMAGES["core"], IMAGES["web"]})
+        self.assertIn(f'Kept the database image {IMAGES["database"]}: another container uses it.', self.output)
+        self.assertFalse(self.root.exists())
+
+    def test_uninstall_changes_nothing_unless_confirmed(self):
+        self.install()
+        before = {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(oac_cli.OacError, "--yes"):
+            oac_cli.uninstall(self.root, interactive=False, out=self.output.append)
+        with mock.patch("builtins.input", return_value=str(self.work)), \
+                self.assertRaisesRegex(oac_cli.OacError, "not confirmed; nothing was removed"):
+            oac_cli.uninstall(self.root, interactive=True, out=self.output.append)
+        self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+        self.assertEqual(self.host.running(), {"database", "core", "web"})
+        self.assertFalse(any("down" in command or "rm" in command for command in self.host.commands))
+
+    def test_uninstall_removes_an_installation_that_never_finished(self):
+        install.create(self.root, SimpleNamespace(core_key_file=None), config_model.initial("all", False),
+                       {"source_commit": "a" * 40}, IMAGES)
+        (self.root / "config.json").unlink()
+        installation = oac_cli.load_state(self.root)["installation_id"]
+        # create() marks it incomplete, which other mutating commands refuse.
+        with self.assertRaisesRegex(oac_cli.OacError, "or remove it with oac uninstall"):
+            oac_cli.start(self.root, out=self.output.append)
+        oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertFalse(self.root.exists())
+        self.assertIn("Core did not answer, so its nodes and sandboxes can't be listed. Nodes stay on their hosts.",
+                      self.output)
+        self.assertIn(f"  sudo python3 node-install.pyz --uninstall --installation-id {installation} --force", self.output)
+
+    def test_a_rerun_finishes_an_interrupted_uninstall(self):
+        self.install()
+        (self.root / "oac").write_text("the installed command")
+        with interrupt(oac_cli.shutil, "rmtree"), self.assertRaisesRegex(oac_cli.OacError, "Removal did not finish"):
+            oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertEqual(self.host.containers, {})
+        self.assertTrue((self.root / "state.json").exists() and (self.root / "oac").exists())
+        oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertFalse(self.root.exists())
+        # Once state.json is gone, a rerun only says so.
+        self.root.mkdir()
+        (self.root / "oac").write_text("the installed command")
+        oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertIn(f"No installation is left in {self.root}: it has no state.json. Nothing was removed.", self.output)
+        self.assertEqual([path.name for path in self.root.iterdir()], ["oac"])
+
+    def test_uninstall_lists_registered_nodes_and_how_to_uninstall_them(self):
+        self.install()
+        self.host.nodes = [{"name": "node-a", "online": True}, {"name": "node-b", "online": False}]
+        installation = oac_cli.load_state(self.root)["installation_id"]
+        oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        listed = self.output.index("Nodes registered with this Core, which stay on their hosts: node-a (online), node-b (offline)")
+        self.assertLess(listed, self.output.index(f"Removed the installation in {self.root}."))
+        self.assertIn(f"  sudo python3 node-install.pyz --uninstall --installation-id {installation} --force", self.output)
+
+    def test_uninstall_preserves_state_when_docker_cannot_inspect_images(self):
+        self.install()
+        original = oac_cli.run
+        for daemon_unavailable in (False, True):
+            def fail_inspection(args, **kwargs):
+                if args[:3] == ["docker", "image", "inspect"]:
+                    return subprocess.CompletedProcess(args, 1, stdout="")
+                if daemon_unavailable and args[:3] == ["docker", "image", "ls"]:
+                    raise subprocess.CalledProcessError(1, args)
+                return original(args, **kwargs)
+
+            with self.subTest(daemon_unavailable=daemon_unavailable), \
+                    mock.patch.object(oac_cli, "run", side_effect=fail_inspection), \
+                    self.assertRaisesRegex(oac_cli.OacError, "the images of this installation"):
+                oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+            self.assertTrue((self.root / "state.json").is_file())
+            self.assertEqual(self.host.missing_images, set())
+        self.host.missing_images.add(IMAGES["core"])
+        oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertFalse(self.root.exists())
+        self.assertEqual(self.host.missing_images, set(IMAGES.values()))
+
+    def test_uninstall_completes_when_core_returns_a_truncated_response(self):
+        self.install()
+        with mock.patch.object(oac_cli, "http", side_effect=http.client.IncompleteRead(b"{")):
+            oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        self.assertFalse(self.root.exists())
+        self.assertIn("Core did not answer, so its nodes and sandboxes can't be listed. Nodes stay on their hosts.",
+                      self.output)
+        self.assertTrue(any("node-install.pyz --uninstall" in line and "--force" in line for line in self.output))
+
+    def test_uninstall_does_not_probe_core_through_private_file_or_directory_links(self):
+        self.install()
+        for name in ("secrets/core.key", "generated", "secrets"):
+            path = self.root / name
+            outside = self.work / path.name
+            path.rename(outside)
+            path.symlink_to(outside, target_is_directory=outside.is_dir())
+            with self.subTest(path=name), mock.patch.object(oac_cli, "http") as request, \
+                    self.assertRaisesRegex(oac_cli.OacError, "--yes"):
+                oac_cli.uninstall(self.root, interactive=False, out=self.output.append)
+            request.assert_not_called()
+            path.unlink()
+            outside.rename(path)
+        # An unsafe probe does not prevent removing the installation's own files.
+        path.rename(outside)
+        path.symlink_to(outside, target_is_directory=True)
+        with mock.patch.object(oac_cli, "http") as request:
+            oac_cli.uninstall(self.root, yes=True, out=self.output.append)
+        request.assert_not_called()
+        self.assertFalse(self.root.exists())
+        self.assertTrue((outside / "core.key").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

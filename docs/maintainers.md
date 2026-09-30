@@ -35,7 +35,7 @@ The build reuses the Core, Web, Runtime, SDK and helper builders. The manifest r
 
 The control archive carries no Runtime image or node execution artifacts; the offline archive carries them. The [download contract](../deploy/install/README.md#download-contract) describes how nodes obtain them.
 
-A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distribution-manifest.py`. Links between bundled docs stay relative; every other relative link is rewritten to the same file on GitHub at the bundle's commit. The build fails when a link or anchor does not resolve, and `make check-distribution` runs the same check on every tracked Markdown file outside `example/` and `provenance/`. Update the list when you add or move a doc that the installer or its output refers to.
+A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distribution-manifest.py`. Links between bundled docs stay relative; every other relative link is rewritten to the same file on GitHub at the bundle's commit. The build fails when a link or anchor does not resolve, and `make check-distribution` runs the same check on every tracked Markdown file outside `example/`. Update the list when you add or move a doc that the installer or its output refers to.
 
 ### Native installers
 
@@ -111,8 +111,6 @@ The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-pr
 
 `make docker-build-core` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those five commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. The image is Linux amd64 only and is not pushed to a registry. Changes to the image or its build need `make check-core-container` in addition to `make check`: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, and the [test database and pinned SDK](../services/core/README.md#official-client-verification) of the service checks (`OAC_TEST_DATABASE_URL` naming an `oac_*_tests` database with the migrations applied, and `OAC_TEST_OFFICIAL_SDK_PYTHON`).
 
-`make build-core-release` packages the same five commands into `oac-core-<commit>-linux-amd64.tar.gz` and its `.sha256` under `~/.oac/build/oac-core-release` (`OAC_DEV_RELEASE_DIR`). Beside `bin/`, the archive holds the [archive README](../services/core/RELEASE.md), the license, `manifest.json` (commit, tree, platform, Go version, upstream protocol and binary hashes) and `SHA256SUMS`, which lists every packaged file. The build needs clean committed source and Python 3.9 or newer, and packages deterministically. It carries no configuration, credentials, Web or Runtime. Test archive changes by extracting a fresh copy and running its commands.
-
 ## Publish a version
 
 Push a version tag on the reviewed commit to run the `core-release` workflow:
@@ -128,7 +126,7 @@ The workflow runs three jobs on the tagged commit: `check` (the full `make check
 
 `install.sh` resolves the latest stable release once, or the release named by `--version`, verifies the control archive and runs that bundle's installer; the [installation guide](getting-started/install.md#install) covers its use.
 
-The `check` and `build` jobs share Go module and build caches under `~/.oac/cache/`, keyed by runner OS and architecture, the Go module files and the commit. An older cache only seeds downloads and compilation; every check still runs. New keys are saved only after a successful job.
+Go check and build jobs share Go module and compiler-cache directories under `~/.oac/cache/`, keyed by runner OS and architecture, all Go module files, the check/build partition and the commit. Partitioned keys prevent concurrent jobs from saving different compiler subsets under one key. Release builds can seed their cache from backend checks as well as earlier release builds. An older cache only seeds downloads and compilation; every check still runs. New keys are saved only after a successful job.
 
 Never move a release tag or overwrite published assets. If the `release` job fails, inspect the Release first: publication may have completed despite a lost response. Leave a complete published Release as it is. For an incomplete draft, delete that draft (the job refuses any existing Release or draft for the tag), then rerun the failed `release` job, which reuses the original Actions artifact. Do not rerun the build or recreate the tag to recover a failed upload.
 
@@ -144,46 +142,37 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 With `draft_release=true` the result is an unpublished `build-<full SHA>` draft Release; with `draft_release=false` the files stay in the Actions artifact. Use the exact matched asset set; never mix builds or resolve components through `latest`.
 
-### Promote a qualified candidate
-
-`scripts/promote-qualified-release.py` qualifies a candidate on a supervised host and publishes it once main reaches the reviewed promotion commit. Pass the candidate's flat files, built for the `build-<full SHA>` release base: the thin and offline archives and the native installers, each with its `.sha256`, and the Runtime and node assets. Take them from a local build with that release base and `CORE_DISTRIBUTION_OFFLINE=1`, or from the Actions artifact of a manual `core-release` run with `draft_release=false` after removing `install.sh` and `install.sh.sha256`. The command creates the draft Release itself and refuses any other file, so a draft created by `draft_release=true` cannot be promoted. Its module docstring lists the inputs, the qualification stages and the publication checks.
-
 ## Continuous integration
 
 | Workflow | Runs on | Covers |
 | --- | --- | --- |
-| `core-check` (`check.yml`) | Pushes to `main`, every pull request, releases | `make check` with a PostgreSQL service and the Playwright browser, then a daemon build |
-| `api-acceptance` | Pushes to `main` and pull requests that touch Core, its contracts, clients, shared Go code or build scripts | Standalone commands and migration, the pinned official client over HTTP, and the standalone container |
+| `core-check` (`check.yml`) | Pushes to `main`, every pull request, releases | All `make check` checks in concurrent partitions, plus a daemon build; see the partitions below |
+| `api-acceptance` | Pushes to `main` and pull requests that touch Core, its contracts, clients, shared Go code or build scripts | Standalone commands and migration, the pinned official client over HTTP, and the distribution's Core image |
 | `native-check` (`native.yml`) | Pull requests that touch native sources, shared dependencies or packaging inputs; manual runs; releases | Daemon, process lifecycle, Harness protocols and the installer bundle on Linux, macOS and Windows; uploads the native installers |
 | `actionlint` | Changes to workflows | Workflow syntax |
 | `core-release` | Version tags and manual runs | See [Publish a version](#publish-a-version) |
 
 Changes limited to Web or to documentation outside `contracts/agents-api` do not start `native-check`. A newer `core-check`, `api-acceptance` or `native-check` run on the same branch or pull request cancels the older one.
 
-## Run Core without the installer
+The full gate starts these partitions concurrently:
 
-The standalone archive and container give you Core alone: no Web, no `oac` command and no `config.json`. They suit development, testing and operators who supervise Core themselves. Core reads only its environment; the [configuration appendix](configuration.md#appendix-core-environment-without-the-installer) lists the variables. `OAC_DATABASE_URL` and `OAC_CORE_KEY_DIGESTS_FILE` are required; set `OAC_PUBLIC_URL` to the origin machines use to reach Core, or Core runs without the daemon transport.
+| Job | Checks |
+| --- | --- |
+| `backend` | Dedicated PostgreSQL guard, sqlc freshness, Runtime/shared Go tests, Linux microsandbox helper, standalone Core build and service/client tests, daemon build |
+| `tooling` | Harness catalog, name guard, distribution/installer, Claude SDK packaging, optional example including browser acceptance, MiniMax companion scripts |
+| `web` | TypeScript checks and Web/client tests, Web build |
+| `web-acceptance` (two shards) | The complete Web Playwright suite, split by test files between two isolated runners |
 
-- The [archive README](../services/core/RELEASE.md) covers the standalone archive.
-- The [service guide](../services/core/README.md) covers building and running Core from source.
+Each check has its own named step. Only the backend job needs a database. Each browser job starts its own fixture and Web server, retaining one Playwright worker per runner so tests never share mutable fixtures across concurrent jobs. Failed Web shards upload their reports and traces for seven days. The final `check` job runs after every partition and succeeds only when all results are `success`; failed, cancelled or skipped jobs cannot produce a green required gate. Releases use this same workflow. Local `make check` still runs every check and the unsharded Web suite; `make check-web-unit` and `make check-web-acceptance` expose its Web parts. `OAC_WEB_TEST_SHARD=1/2` selects a shard for focused CI validation.
 
-To run the container, create a private directory (mode 0700) with `api.env` (`OAC_DATABASE_URL` for a dedicated database, reachable from the container, `OAC_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json`, and `OAC_PUBLIC_URL`) and `core-key-digests.json`, a JSON array with the lowercase hex SHA-256 digest of your Core key. Keep both files mode 0600 and the Core key itself elsewhere. Run the migrations, then start Core:
+### CI runners and free allowance
+
+Linux jobs use Blacksmith's 2-vCPU Ubuntu 22.04 or 24.04 runners; native Windows uses its 2-vCPU Windows 2025 runner. Blacksmith has no 2-vCPU macOS runner, so native macOS uses the standard GitHub `macos-15` ARM64 runner. Release building and publication also use 2-vCPU Blacksmith runners.
+
+Set the repository Actions variable `OAC_USE_GITHUB_RUNNERS` to `true` to run all jobs on standard GitHub-hosted runners instead. Linux keeps its matching Ubuntu version, Windows uses `windows-2025`, and macOS continues using `macos-15`. Remove the variable or set it to `false` to return to Blacksmith's 2-vCPU defaults. For example, maintainers can switch when the organization's free allowance is used up, then restore Blacksmith after the allowance resets:
 
 ```sh
-config_dir="$HOME/.oac/oac-core-deployment"
-docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges \
-  --env-file "$config_dir/api.env" \
-  oac-core:dev /usr/local/bin/oac-core-migrate
-docker run --name oac-core --detach --read-only \
-  --cap-drop=ALL --security-opt=no-new-privileges \
-  --user "$(id -u):$(id -g)" \
-  --publish 127.0.0.1:8091:8091 \
-  --env-file "$config_dir/api.env" \
-  --mount "type=bind,source=$config_dir/core-key-digests.json,target=/run/core-key-digests.json,readonly" \
-  oac-core:dev
-curl --fail http://127.0.0.1:8091/healthz
+gh variable set OAC_USE_GITHUB_RUNNERS --body true --repo MiniMax-AI/OpenAgentCore
 ```
 
-`--user` lets the container read the key digest file as your non-root host user; alternatively grant UID 65532 read access and omit it. Put a TLS reverse proxy in front for remote clients. `/healthz` reports liveness only. Keep credentials out of the image. All state is in PostgreSQL, so the container needs no writable volume; stop and start it with `docker stop` and `docker start`, and never remove the database to replace it. One Core process serves each database; replicas add no availability. After startup, use the Core key with the [administrator API](../contracts/agents-api/admin-api.md) to create Projects and issue application keys.
-
-The image also contains `oac-core-device` for an [internal execution device](../services/core/README.md#internal-execution-device-connection) and `oac-core-environment-key`, the [break-glass credential command](../contracts/agents-api/environment-executor-credentials.md#break-glass-command).
+This is an explicit operator switch, not an automatic billing balance probe. Runner selection applies to newly scheduled runs. Check current allowance and platform conversion rates in [Blacksmith's runner documentation](https://docs.blacksmith.sh/blacksmith-runners/overview) before treating 2-vCPU usage as free; Windows minutes consume more allowance than Linux minutes. Standard GitHub runner usage follows the repository's visibility and GitHub plan. These workflows request no Blacksmith runner larger than 2 vCPU and no paid cache add-on.

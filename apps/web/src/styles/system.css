@@ -2,14 +2,14 @@
  * The console's component system, in Beautiful UI's vocabulary
  * (src/app/beautifui/foundation.css): cool canvas, white cards drawn by a
  * hairline ring and a smooth shadow, an ink ramp for text, pill buttons with an
- * ink primary, filled fields with a hairline ring, dark tooltips, and Parsar
+ * ink primary, filled fields with a hairline ring, dark tooltips, and
  * indigo as the only accent. Loaded after the legacy stylesheets, so every
  * shared atom is defined here once; feature stylesheets only arrange them.
  */
 
 /* Brand and palette ----------------------------------------------------- */
 
-/* Parsar indigo, a shade quieter than stock indigo, is the only accent. Status
+/* Indigo, a shade quieter than the stock colour, is the only accent. Status
    and data colours share one lightness band and a moderate chroma, so a page
    reads as one palette rather than a set of default hues. */
 :root {

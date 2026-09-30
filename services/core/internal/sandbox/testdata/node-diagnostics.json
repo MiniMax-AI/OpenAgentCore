@@ -1,0 +1,10 @@
+[
+  "provider_unavailable",
+  "docker_unavailable",
+  "docker_limits_unsupported",
+  "runtime_download_failed",
+  "runtime_image_unavailable",
+  "kvm_unavailable",
+  "microsandbox_artifacts_unavailable",
+  "capacity_insufficient"
+]

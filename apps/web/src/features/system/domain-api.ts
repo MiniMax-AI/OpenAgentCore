@@ -57,11 +57,25 @@ async function domainRequest(init: RequestInit): Promise<DomainStatus> {
   return parseStatus(await response.json());
 }
 
+/** Setup restarts the gateway, which briefly drops the console's own connection; polls ride that out before reporting a disconnect. */
+export const DOMAIN_RECONNECT_GRACE_MS = 30_000;
+
+/** No response, or a proxy error while the gateway restarts. */
+function connectionLost(error: unknown): boolean {
+  return !(error instanceof DomainRequestError) || error.status === 502 || error.status === 503 || error.status === 504;
+}
+
+/** A lost connection during setup, before the grace period since the last status has passed. */
+export function domainReconnecting(query: { data: DomainStatus | undefined; error: unknown; dataUpdatedAt: number; errorUpdatedAt: number }): boolean {
+  return query.error != null && domainInProgress(query.data) && connectionLost(query.error) &&
+    query.errorUpdatedAt - query.dataUpdatedAt < DOMAIN_RECONNECT_GRACE_MS;
+}
+
 export const domainQuery = queryOptions({
   queryKey: ["console-domain"],
   queryFn: ({ signal }) => domainRequest({ signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) }),
   retry: false,
-  refetchInterval: (query) => domainInProgress(query.state.data) && !query.state.error ? 2_000 : false,
+  refetchInterval: (query) => domainInProgress(query.state.data) && (!query.state.error || connectionLost(query.state.error)) ? 2_000 : false,
 });
 
 /** One same-origin write per user action; never retries a possibly accepted apply. */

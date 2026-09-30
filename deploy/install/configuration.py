@@ -146,16 +146,18 @@ def service_address(config, service, connect=False):
 Listener = collections.namedtuple("Listener", "purpose host port setting")
 
 
-def listeners(config):
+def listeners(config, candidate=None):
     """Every host listener the services bind, from the addresses they are rendered with.
 
-    setting is the config.json key that owns the port.
+    setting is the config.json key that owns the port. candidate is the address domain
+    setup verifies, as in render.
     """
     mode, ports, result = config["mode"], config["ports"], []
     if ingress_config.enabled(config):
-        # The gateway publishes Web's port and the HTTPS ports; Web itself publishes none.
+        # The gateway publishes Web's port and, for HTTPS, 80 and 443; Web itself publishes none.
         result += [Listener("Web", config["host"], port, "ports.web") if port == ports["web"] else
-                   Listener("HTTPS", config["host"], port, "ingress") for port, _ in ingress_config.published(config)]
+                   Listener("HTTPS", config["host"], port, "public_url")
+                   for port, _ in ingress_config.published(config, candidate)]
     elif mode != "core-only":
         result.append(Listener("Web", service_host(config, "web"), ports["web"], "ports.web"))
     if mode != "web-only":
@@ -229,7 +231,7 @@ def settings_document(root, config, applied_at):
             "applied_at": applied_at, "settings": config_model.settings(config)}
 
 
-def compose_config(root, config, state):
+def compose_config(root, config, state, candidate=None):
     root = Path(root)
     mode, native = config["mode"], config.get("native_core", False)
     identity = f'{state["uid"]}:{state["gid"]}'
@@ -297,7 +299,7 @@ def compose_config(root, config, state):
             web["volumes"].append(bind(root / "ingress/api", "/installation"))
         services["web"] = web
     if ingress_config.enabled(config):
-        services.update(ingress_config.services(root, config, state, bind))
+        services.update(ingress_config.services(root, config, state, bind, candidate))
     return doc
 
 
@@ -327,7 +329,9 @@ def native_installer_inputs(root):
     return [sha256(catalog.read_bytes()), sorted(p.name for p in directory.glob("*.tar.gz") if p.is_file())]
 
 
-def render(root, config, state, applied_at):
+def render(root, config, state, applied_at, candidate=None):
+    """candidate is an HTTPS address domain setup verifies before public_url changes:
+    the gateway publishes 80 and 443 and serves it too."""
     root = Path(root)
     mode, native = config["mode"], config.get("native_core", False)
     secrets = secret_digests(root, mode)
@@ -354,7 +358,7 @@ def render(root, config, state, applied_at):
         }, sort_keys=True)
     if mode != "core-only":
         external["web"] = json.dumps({"core.key": secrets["core.key"]})
-    compose = compose_config(root, config, state)
+    compose = compose_config(root, config, state, candidate)
     services = {}
     for name, service in compose["services"].items():
         # Compose resolves env_file into the service configuration, so its content counts.
@@ -362,7 +366,7 @@ def render(root, config, state, applied_at):
         services[name] = sha256(text + external.get("core" if name == "migrate" else name, ""))
         service["labels"] = {LABEL: services[name]}
     if ingress_config.enabled(config):
-        files["Caddyfile"] = ingress_config.caddyfile(config, state)
+        files["Caddyfile"] = ingress_config.caddyfile(config, state, candidate)
     files["compose.json"] = json.dumps(compose, indent=2) + "\n"
     if native:
         unit = native_service.unit_name(state)

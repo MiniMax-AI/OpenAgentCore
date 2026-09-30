@@ -17,9 +17,9 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Environment ownership and capability preparation (Skills, Plugins, MCP, `packages.system`) | [Environments](contracts/agents-api/environments.md) |
 | Built-in Harness identifiers, configuration/profile bindings and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
 | Effective MCP bindings and credential authority | [Environment MCP](contracts/agents-api/environments.md#skills-plugins-and-environment-mcp) and `apps/daemon/internal/agent/mcp_binding.go` |
-| Harness qualification and acceptance | [Harness integration](contracts/agents-api/harnesses.md) |
+| Harness qualification and acceptance | [Harness capabilities](contracts/agents-api/harness-capabilities.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md#qualify-the-adapter) |
 | Harness service qualification declarations and registration | [Explicit service qualification](contracts/agents-api/harness-onboarding.md#explicit-service-qualification) and `services/core/internal/engine/profile.go` |
-| Harness selection and Agent defaults | [Harness selection](contracts/agents-api/harness-selection.md) |
+| Harness selection and Agent defaults | [Harness selection](contracts/agents-api/model-execution.md#harness-selection) |
 | Provider registration validation | [Sandbox Provider guide](docs/sandbox-provider.md#registration-validation) |
 | Provider selection, sandbox deployment and E2B setup | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Hosted sandbox nodes | [Nodes guide](docs/getting-started/nodes.md) and [sandbox deployment contract](contracts/agents-api/sandbox-deployment.md) |
@@ -33,11 +33,11 @@ This guide owns how to work in the repository: documentation ownership, the repo
 
 ## Repository boundary
 
-This repository is the standalone execution substrate copied from Parsar at the revision in `provenance/source.json`. It holds the API and its migrations, the Runtime protocol and daemon, Harness adapters, shared execution packages, the standalone Core Web console and build/test tools.
+This repository is the standalone execution substrate, copied from the Parsar repository. It holds the API and its migrations, the Runtime protocol and daemon, Harness adapters, shared execution packages, the standalone Core Web console and build/test tools.
 
 Product users, workspaces, model catalogs, business assets, the Parsar product Web, product API and product migrations remain in Parsar. Do not import `server/`, `apps/parsar/`, product CLI/plugin packages or their deployment stack.
 
-Preserve copied Runtime and protocol behavior. Go import paths use this repository's module and do not require fetching the original repository. The source snapshot and per-file hashes are an audit trail; future Core development need not preserve them. Do not automatically sync or delete the original repository's Core.
+Preserve copied Runtime and protocol behavior. Go import paths use this repository's module and do not require fetching the original repository. Do not automatically sync or delete the original repository's Core.
 
 ### Product and execution service separation
 
@@ -116,7 +116,7 @@ It excludes Parsar product Web and server gates.
 | `OAC_TEST_DATABASE_URL` | A dedicated test database. The full gate fails when it is missing. |
 | `OAC_TEST_OFFICIAL_SDK_PYTHON` | The pinned official SDK interpreter |
 
-The role needs `CREATE DATABASE`: managed-provider tests create and drop isolated `oac_*_tests` databases because provider identity is deployment-wide. `PARSAR_AGENTS_API_TEST_DATABASE_URL` is retired; `make check-database` reports its replacement when only the old name is set. Tests must not bypass the production provider-switch guard.
+The role needs `CREATE DATABASE`: managed-provider tests create and drop isolated `oac_*_tests` databases because provider identity is deployment-wide. Tests must not bypass the production provider-switch guard.
 
 ### Contract and schema rules
 
@@ -150,7 +150,7 @@ Native adapter changes require their build/check targets and live provider accep
 | Provider ownership labels | `io.oac.*` |
 | E2B metadata | `oac_*` |
 
-Provider bootstrap, Runtime images and Harness adapters must agree on these names. Daemon startup rejects renamed settings before any subcommand and reports replacements without values; the separate Parsar product integration settings remain unchanged. No old label is accepted as a fallback.
+Provider bootstrap, Runtime images and Harness adapters must agree on these names. The separate Parsar product integration settings keep their own names.
 
 Historical Runtime and project-version upgrades are not supported. Do not ship retired installer conversion implementations; preserve rejection guards under the [installer lifecycle contract](deploy/install/README.md#versions-and-the-lock). Preserve older installations, Runtime files, provider resources and Session history; install the current release separately. Startup never verifies and rebinds historical allocations or accepts node deployments without a valid specification. Keep the original Core responsible for unresolved resources; see the [installation version policy](docs/getting-started/operations.md#installation-version-policy). Use this release's template builder for new E2B templates. Ordinary current-version database initialization uses the migration runner.
 
@@ -168,6 +168,7 @@ Public project branding uses OpenAgentCore. The canonical vector mark is `docs/a
 
 - An exception covers only its matched text: an allowed repository import cannot hide a retired setting elsewhere on the line.
 - Keep exceptions narrow and explain the preserved contract or historical input.
+- The guard also fails on an exception that excuses no retired identifier. Remove an exception together with the last text it covered.
 
 These identities stay unchanged:
 

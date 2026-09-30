@@ -12,7 +12,6 @@ import pathlib
 import platform
 import re
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -147,7 +146,9 @@ def install(version, arguments):
     # Keep the verified extracted bundle for same-version repair.
     print("Verified bundle: " + str(root), flush=True)
     print("==> Starting the bundled installer...", flush=True)
-    return subprocess.call(["bash", str(root / "install.sh"), *arguments])
+    # Become the installer: it gets Ctrl-C, SIGTERM and SIGHUP itself, and nothing here can stop
+    # it while it removes a failed new installation. The temporary download is already gone.
+    os.execvp("bash", ["bash", str(root / "install.sh"), *arguments])
 
 
 def main(argv):
@@ -156,12 +157,12 @@ def main(argv):
         allow_abbrev=False)
     parser.add_argument("--version", default="latest", help="Release tag (default: latest stable release)")
     options, arguments = parser.parse_known_args(argv)
-    return install(options.version, arguments)
+    install(options.version, arguments)
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main(sys.argv[1:]))
+        main(sys.argv[1:])
     except (ReleaseError, OSError, ValueError, tarfile.TarError) as error:
         print("Installation failed: " + str(error), file=sys.stderr)
         sys.exit(1)

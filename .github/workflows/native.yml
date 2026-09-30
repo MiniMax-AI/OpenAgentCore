@@ -43,8 +43,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [blacksmith-4vcpu-ubuntu-2204, blacksmith-6vcpu-macos-15, blacksmith-4vcpu-windows-2025]
-    runs-on: ${{ matrix.os }}
+        include:
+          - platform: linux-amd64
+            runner: blacksmith-2vcpu-ubuntu-2204
+            github-runner: ubuntu-22.04
+          - platform: darwin-arm64
+            runner: macos-15
+            github-runner: macos-15
+          - platform: windows-amd64
+            runner: blacksmith-2vcpu-windows-2025
+            github-runner: windows-2025
+    name: platform (${{ matrix.platform }})
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && matrix.github-runner || matrix.runner }}
     timeout-minutes: 30
     defaults:
       run:

@@ -29,6 +29,7 @@ class DomainTests(unittest.TestCase):
             (ingress_config, "preflight", mock.Mock(return_value={"docker_socket": "/var/run/docker.sock", "docker_gid": 999})),
             (ingress_config, "reload", mock.Mock()),
             (ingress, "verify", mock.Mock()),
+            (ingress, "resolves", mock.Mock(return_value=True)),
         ):
             patch = mock.patch.object(owner, name, replacement)
             patch.start()
@@ -37,6 +38,9 @@ class DomainTests(unittest.TestCase):
             run_installer(install, self.bundle, ["--install-dir", self.root, "--sandbox", "none"])
         self.host.recreated.clear()
 
+    def gateway_ports(self):
+        return json.loads((self.root / "generated/compose.json").read_text())["services"]["gateway"]["ports"]
+
     def test_default_bootstrap_then_https_reuses_installer_and_retains_data(self):
         config = oac_cli.load_config(self.root)
         self.assertEqual((config["host"], config["ingress"], config["public_url"]), ("0.0.0.0", "managed", None))
@@ -44,7 +48,7 @@ class DomainTests(unittest.TestCase):
         self.assertEqual(services["core"]["ports"], ["127.0.0.1:8091:8091"])
         self.assertNotIn("ports", services["web"])
         self.assertNotIn("ports", services["database"])
-        self.assertIn("0.0.0.0:8080:8080", services["gateway"]["ports"])
+        self.assertEqual(services["gateway"]["ports"], ["0.0.0.0:8080:8080"])
         for name in ("core", "web"):
             self.assertNotIn("/docker.sock", str(services[name]))
         preserved = {name: (self.root / "secrets" / name).read_bytes()
@@ -52,7 +56,8 @@ class DomainTests(unittest.TestCase):
         ingress.configure(self.root, "core.example.com", out=lambda _: None)
         self.assertEqual(ingress.status(self.root)["state"], "ready")
         self.assertEqual(oac_cli.load_config(self.root)["public_url"], "https://core.example.com")
-        self.assertEqual(set(self.host.recreated), {"core", "migrate", "web"})
+        self.assertEqual(set(self.host.recreated), {"core", "migrate", "web", "gateway"})
+        self.assertEqual(self.gateway_ports(), ["0.0.0.0:8080:8080", "0.0.0.0:80:80", "0.0.0.0:443:443"])
         self.assertIn("redir https://core.example.com{uri} 308", (self.root / "generated/Caddyfile").read_text())
         self.assertEqual(preserved, {name: (self.root / "secrets" / name).read_bytes() for name in preserved})
         self.host.recreated.clear()
@@ -70,10 +75,38 @@ class DomainTests(unittest.TestCase):
         self.assertEqual((self.root / "config.json").read_bytes(), before)
         self.assertNotIn("redir", (self.root / "generated/Caddyfile").read_text())
         self.assertEqual(ingress.status(self.root)["state"], "failed")
-        self.assertEqual(self.host.recreated, [])
+        # The gateway published 80 and 443 for the attempt and was restored without them.
+        self.assertEqual(self.host.recreated, ["gateway", "gateway"])
+        self.assertEqual(self.gateway_ports(), ["0.0.0.0:8080:8080"])
         ingress.verify.side_effect = None
         ingress.configure(self.root, "core.example.com", out=lambda _: None)
         self.assertEqual(ingress.status(self.root)["state"], "ready")
+
+    def test_busy_https_port_refuses_setup_before_reserving_a_job(self):
+        self.host.busy.add(("0.0.0.0", 80))
+        before = (self.root / "ingress/status.json").read_bytes()
+        with self.assertRaises(ingress.DomainError) as error:
+            ingress.configure(self.root, "core.example.com", out=lambda _: None)
+        self.assertEqual((error.exception.code, error.exception.status), ("https_ports_unavailable", 409))
+        self.assertIn("Port 80 is already in use", str(error.exception))
+        self.assertEqual((self.root / "ingress/status.json").read_bytes(), before)
+        self.assertEqual((self.gateway_ports(), self.host.recreated), (["0.0.0.0:8080:8080"], []))
+
+    def test_unresolved_hostname_refuses_setup_before_reserving_a_job(self):
+        ingress.resolves.return_value = False
+        before = (self.root / "ingress/status.json").read_bytes()
+        with self.assertRaises(ingress.DomainError) as error:
+            ingress.configure(self.root, "core.example.com", out=lambda _: None)
+        self.assertEqual((error.exception.code, error.exception.status), ("hostname_unresolved", 409))
+        self.assertEqual((self.root / "ingress/status.json").read_bytes(), before)
+        self.assertEqual(self.host.recreated, [])
+
+    def test_domain_change_with_https_on_passes_its_own_port_check(self):
+        ingress.configure(self.root, "core.example.com", out=lambda _: None)
+        # The gateway itself now holds 80 and 443.
+        self.assertTrue({("0.0.0.0", 80), ("0.0.0.0", 443)} <= self.host.listening())
+        ingress.configure(self.root, "another.example.com", out=lambda _: None)
+        self.assertEqual(ingress.status(self.root)["public_url"], "https://another.example.com")
 
     def test_apply_failure_restores_previous_inputs_and_interruption_can_retry(self):
         self.host.core["rejects"] = lambda env: 'OAC_PUBLIC_URL="https://core.example.com"' in env
@@ -168,19 +201,30 @@ class DomainTests(unittest.TestCase):
 
     def test_failed_retry_restores_the_receipt_before_and_after_service_convergence(self):
         before = (self.root / "generated/core.env").read_bytes()
+        self.host.bindings["self_hosted_executors"] = 1
+        target = "https://core.example.com"
         converge = oac_cli.converge
         for restarted in (False, True):
             with self.subTest(services_restarted=restarted):
+                calls = []
                 def interrupt(*args, **kwargs):
-                    if restarted:
+                    # The gateway converges for the candidate; the switch stops before or after converging.
+                    calls.append(args)
+                    if len(calls) == 1 or restarted:
                         converge(*args, **kwargs)
-                    raise KeyboardInterrupt()
+                    if len(calls) == 2:
+                        raise KeyboardInterrupt()
                 with mock.patch.object(oac_cli, "converge", side_effect=interrupt), self.assertRaises(KeyboardInterrupt):
+                    ingress.configure(self.root, "core.example.com", target, out=lambda _: None)
+                self.assertEqual(len(calls), 2)
+                # The retry returns Core to the applied address first, so it confirms the change from there.
+                with self.assertRaises(ingress.DomainError) as error:
                     ingress.configure(self.root, "core.example.com", out=lambda _: None)
+                self.assertEqual(error.exception.code, "public_url_confirmation_required")
                 ingress_config.reload.reset_mock()
                 ingress.verify.side_effect = ingress.DomainError("https_not_ready", "DNS not ready")
                 with self.assertRaisesRegex(ingress.DomainError, "DNS not ready"):
-                    ingress.configure(self.root, "core.example.com", out=lambda _: None)
+                    ingress.configure(self.root, "core.example.com", target, out=lambda _: None)
                 for call in ingress_config.reload.call_args_list:
                     self.assertNotIn("redir", call.args[1])
                 self.assertIsNone(oac_cli.load_config(self.root)["public_url"])

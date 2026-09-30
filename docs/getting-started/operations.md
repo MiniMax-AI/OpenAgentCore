@@ -22,6 +22,7 @@ Each installation has its own management command in its directory. It needs neit
 | `oac apply --yes` | Web-only: pairs Web with a different Core without asking |
 | `oac domain HOSTNAME [--confirm-public-url-change URL]` | Managed ingress: sets the public URL to `https://HOSTNAME`, as **Configure domain and HTTPS** in Web does; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | `oac rotate-core-key [--yes]` | Replaces the Core key; see [Rotate the Core key](#rotate-the-core-key) |
+| `oac uninstall [--yes]` | Removes the installation and all its data from this host; see [Uninstall](#uninstall) |
 
 For a second installation, use its own command, such as `~/.oac/web/oac status`.
 
@@ -92,7 +93,7 @@ core() {  # core METHOD PATH [JSON body]
 | Set Codex's default model | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
 | Installation facts, including the API base URL | `core GET /installation` |
 
-The [API index](../api/README.md#core-api) lists every route; errors use the [Core error envelope](../../contracts/agents-api/core-errors.md).
+The [Core administration API](../../contracts/agents-api/admin-api.md) lists every route; errors use the [Core error envelope](../../contracts/agents-api/core-errors.md).
 
 ### Rotate the Core key
 
@@ -136,13 +137,29 @@ Back up these together; a restore needs all of them:
 
 Never prune Docker volumes or delete native harness history to make a retry pass. A deleted Session does not prove that all provider resources were reclaimed.
 
+## Uninstall
+
+```sh
+~/.oac/core/oac uninstall
+```
+
+It removes the installation from this host: its Compose project with the containers, networks and database volume, native Core's service, the images the installer loaded, and the installation directory, including `secrets/` and the `oac` command itself. It keeps an image that has a tag or that another container uses, such as one of another installation of the same release, and says so.
+
+All data goes with it: Projects and API keys, Session history, stored credentials and the Core key. The database volume is useless without `secrets/`, so it is never kept on its own. To keep the data, stop the installation with `oac stop` instead, or [back it up](#back-up) first.
+
+The command lists what it removes and, when Core answers, the registered nodes. Confirm by typing the installation directory, or pass `--yes`, which a run without a terminal requires. It holds the installation lock and needs only `state.json`, so it also removes an installation that did not finish installing or lost `config.json`. It removes the directory last; if it stops part way, run it again.
+
+Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](nodes.md#change-the-sandbox-configuration) and let it complete; the command shows how many sandboxes Core has in use.
+
+Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](nodes.md#remove-a-node). After `oac uninstall` their Core is gone: on each node host, run the node uninstall command with `--force`, using `node-install.pyz` from the [bundle you installed from](#installation-version-policy). `oac uninstall` prints that command with the installation ID. A Web-only installation removes only Web; its Core keeps its data and nodes.
+
 ## Installation version policy
 
 An installation runs one release for its whole life. In-place version upgrades, downgrades and historical conversions are not supported. Nothing migrates data between releases.
 
 To move to a new release, install it into a new, empty directory, with its own database, Core key and nodes, and add nodes from its Web. Keep the old installation, its data and its nodes until their work is finished. Nodes run the program of the console that added them and are never upgraded in place; Core accepts only nodes that speak its own node protocol.
 
-Repair the current release by rerunning `./install.sh --install-dir DIR` from the exact same bundle; the downloader keeps it under `~/.oac/releases/`. Repair reloads missing images, restores the `oac` command, applies `config.json` and starts the services. It preserves identity, settings, secrets and history, accepts only `--install-dir`, and refuses a bundle from another release.
+Repair the current release by rerunning `./install.sh --install-dir DIR` from the exact same bundle; the downloader keeps it under `~/.oac/releases/`. Repair reloads missing images, restores the `oac` command, applies `config.json` and starts the services. It preserves identity, settings, secrets and history, accepts only `--install-dir`, and refuses a bundle from another release. An installation the installer never reported as running is not repaired but [removed and installed again](install.md#install).
 
 The installer and mutating `oac` commands hold the same installation lock, `.oac.lock`, including during repair and interrupted apply recovery. If another command holds it, retry after that command finishes; never remove or replace `.oac.lock` to get past a busy installation. Reinstallation never deletes another installation's files, database, Runtime resources or Session history.
 
@@ -155,15 +172,19 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
 | `Port N (…) is already in use on ADDRESS …` | Another program holds a port the installation needs. Find it with the printed `ss` command and stop it, or choose another port: `--web-port` or `--core-port` at [installation](install-options.md#ports), or the port in `config.json` before `oac apply` |
 | `ADDRESS (…) is not an address of this machine …` | Set `--host`, or `host` in `config.json`, to one of the machine's IP addresses or a wildcard such as `0.0.0.0` |
-| `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
+| `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, install without `--public-url` and set up the domain later, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
-| `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
+| `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply`. To start over with other flags, [uninstall](#uninstall) it first |
 | `This installation version or historical conversion is not supported …` | The target directory holds an installation of another release, or a default install found one at `~/.parsar/core`. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
 | `generated/<file> was edited by hand` | Put the change in `config.json`, then `oac apply --discard-edits` |
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
 | `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
-| `HTTPS verification failed …` during domain setup | See [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
+| `The services did not start: …` | A new installation's first start failed, and the installer [removed what it created](install.md#install). Compose's or Core's error is printed above it; fix the cause and run the same command again |
+| `Removal did not finish. Left: …` | The installer, cleaning up a failed new installation, or `oac uninstall` could not remove everything. Run the printed commands to remove what is left, or fix the cause and run the same command again |
+| `This installation did not finish installing …` | The installer stopped before reporting that the services were running. Rerun the installer command, which [removes what is left](install.md#install) and installs again, or [uninstall](#uninstall) it |
+| `… already in use on this server. Automatic HTTPS cannot run beside another program …` during domain setup | Another program holds port 80 or 443. Stop it, using the printed `ss` command to find it, and retry; automatic HTTPS cannot share [these ports](install-options.md#ports) |
+| `HTTPS verification failed …` during domain setup | DNS points elsewhere, a firewall or NAT blocks inbound ports 80 and 443, or the certificate request failed; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; a reverse proxy must pass the original Host |
 | `/v1` or `/api/v1` answers 404 | Those paths reach Web; route them to Core ([reverse proxy](install-options.md#https-and-the-reverse-proxy)) |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `oac status`, then Core's log |
@@ -175,7 +196,7 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 
 | Listener | Managed ingress (default) | External ingress |
 | --- | --- | --- |
-| Web | Reached only through the `gateway` service, which publishes `ports.web` (8080), 80 and 443 on `host` (all IPv4 interfaces by default) | `host:ports.web` (loopback by default), behind your reverse proxy |
+| Web | Reached only through the `gateway` service, which publishes `ports.web` (8080) on `host` (all IPv4 interfaces by default), plus [80 and 443](install-options.md#ports) once HTTPS is on | `host:ports.web` (loopback by default), behind your reverse proxy |
 | Core | `127.0.0.1:ports.core` (8091); the gateway routes `/v1` and `/api/v1` to it | `host:ports.core`, behind your reverse proxy |
 | PostgreSQL | No published port | No published port, or a loopback port with native Core |
 

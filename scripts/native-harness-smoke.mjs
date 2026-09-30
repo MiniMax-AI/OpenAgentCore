@@ -9,12 +9,11 @@ import { createInterface } from 'node:readline';
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i];
-  if (!['--codex-binary', '--claude-runtime', '--only'].includes(key) || !process.argv[i + 1]) {
-    throw new Error('Expected --codex-binary PATH, --claude-runtime PATH or --only codex|claude');
+  if (!['--codex-binary', '--claude-runtime'].includes(key) || !process.argv[i + 1]) {
+    throw new Error('Expected --codex-binary PATH or --claude-runtime PATH');
   }
   options[key] = process.argv[i + 1];
 }
-if (options['--only'] && !['codex', 'claude'].includes(options['--only'])) throw new Error('Invalid --only selection');
 const limit = 1024 * 1024;
 const failure = code => Object.assign(new Error(code), { safeCode: code });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -97,7 +96,6 @@ const root = await realpath(await mkdtemp(join(tmpdir(), 'oac-native-smoke-')));
 const report = { platform: process.platform, arch: process.arch, model_requests: 0 };
 try {
   for (const [name, run] of [['codex', () => codexSmoke(root)], ['claude', claudeSmoke]]) {
-    if (options['--only'] && options['--only'] !== name) continue;
     try { report[name] = await run(); }
     catch (error) { report[name] = { status: 'failed', code: error.safeCode ?? 'native_smoke_unavailable' }; process.exitCode = 1; }
   }

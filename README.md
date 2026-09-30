@@ -58,7 +58,7 @@ Core exposes two APIs:
 | API | Path | Used by |
 | --- | --- | --- |
 | **[Agents API](docs/api/public-agent-api.md)** | `/v1` | Your applications. Same protocol as [OpenAI's Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) |
-| **[Core API](docs/api/README.md#core-api)** | `/core/v1` | Operators, through Web |
+| **[Core API](contracts/agents-api/admin-api.md)** | `/core/v1` | Operators, through Web |
 
 Core keeps all state. The Runtime runs the chosen harness inside the Environment.
 Each connection is a defined protocol, so any part can be replaced on its own. See
@@ -72,7 +72,7 @@ the [architecture guide](docs/architecture.md).
 | Build an application on the API | [Quickstart](docs/getting-started/quickstart.md), then the [Agents API guide](docs/api/public-agent-api.md) |
 | See a complete application | [Examples](docs/examples.md) |
 | Run agents on my own machine | [Self-hosted execution](docs/getting-started/self-hosted.md) |
-| Check verified Runtime capabilities and limits | [Capability qualification](contracts/agents-api/environment-capabilities-qualification.md) |
+| Check verified Runtime capabilities and limits | [Harness capabilities](contracts/agents-api/harness-capabilities.md) |
 | Understand the design | [Architecture](docs/architecture.md) |
 | Add a sandbox, harness or other component | [Developer guide](docs/development.md) |
 

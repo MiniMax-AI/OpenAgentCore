@@ -64,7 +64,7 @@ The numbers below match the overview. Each protocol defines behavior, ownership,
 
 The [bootstrap contract](runtime-bootstrap.md) carries the Runtime's startup input across the provisioning boundary. After connection, capability preparation belongs to Runtime; the Provider does not become a second execution path.
 
-Not every combination of Harness, model and Environment works. The supported ones are recorded in [Harness selection](../contracts/agents-api/harness-selection.md) and the [coverage record](../contracts/agents-api/README.md).
+Not every combination of Harness, model and Environment works. The supported ones are recorded in [Harness capabilities](../contracts/agents-api/harness-capabilities.md) and the [coverage record](../contracts/agents-api/README.md).
 
 ## A Session, end to end
 
@@ -89,5 +89,5 @@ The `none` profile shares the execution protocol without workspace preparation. 
 
 - **Isolation belongs to the outer Environment.** The daemon is not a sandbox ([Runtime and outer isolation](design-principles.md#runtime-and-outer-isolation)).
 - **Execution and compute have separate lifetimes.** Closing an executor does not release its allocation, destroy its Environment or delete its workspace. Reclamation is an explicit Sandbox Provider operation.
-- **Model keys stay with the compute that owns them.** A self-hosted Session brings its own model provider ([why](user-guide.md#which-model-provider-a-session-uses)).
+- **Model keys stay with the compute that owns them.** A self-hosted Session brings its own model provider ([why](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence)).
 - **Core Web is an administrator console.** It calls only `/core/v1` and cannot start Sessions or send input ([console API usage](web/console-api-usage.md#not-consumed)).

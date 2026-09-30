@@ -24,35 +24,35 @@ export function ApplyPatchDiffViewer({ item, patch, result }: { item: SessionIte
   });
 
   return (
-    <section className="parsar-diff" aria-label={t("items.applyPatchDiff")} data-patch-status={item.status}>
-      <header className="parsar-diff__summary">
+    <section className="patch-diff" aria-label={t("items.applyPatchDiff")} data-patch-status={item.status}>
+      <header className="patch-diff__summary">
         <FileDiff size={14} strokeWidth={1.5} aria-hidden="true" />
         <strong>{t("items.fileCount", { count: patch.changes.length })}</strong>
-        <span className="parsar-diff__additions">+{patch.additions}</span>
-        <span className="parsar-diff__deletions">−{patch.deletions}</span>
-        <span className="parsar-diff__status">{status}</span>
+        <span className="patch-diff__additions">+{patch.additions}</span>
+        <span className="patch-diff__deletions">−{patch.deletions}</span>
+        <span className="patch-diff__status">{status}</span>
       </header>
-      <div className="parsar-diff__files">
+      <div className="patch-diff__files">
         {patch.changes.map((change, index) => {
           const open = openFiles.has(index);
           return (
-            <section className="parsar-diff__file" key={`${change.path}:${index}`}>
-              <button type="button" className="parsar-diff__file-toggle" aria-expanded={open} onClick={() => toggle(index)}>
+            <section className="patch-diff__file" key={`${change.path}:${index}`}>
+              <button type="button" className="patch-diff__file-toggle" aria-expanded={open} onClick={() => toggle(index)}>
                 <ChevronRight className={open ? "open" : ""} size={14} strokeWidth={1.5} aria-hidden="true" />
-                <span className={`parsar-diff__kind parsar-diff__kind--${change.kind}`}>{t(`items.changeKind.${change.kind}` as never)}</span>
+                <span className={`patch-diff__kind patch-diff__kind--${change.kind}`}>{t(`items.changeKind.${change.kind}` as never)}</span>
                 <code title={change.path}>{change.path}</code>
-                <span className="parsar-diff__counts"><i>+{change.additions}</i><b>−{change.deletions}</b></span>
+                <span className="patch-diff__counts"><i>+{change.additions}</i><b>−{change.deletions}</b></span>
               </button>
               {open ? (
-                <pre className="parsar-diff__content" tabIndex={0} aria-label={t("items.unifiedDiffFor", { path: change.path })}>
-                  {change.lines.map((line, lineIndex) => <span className={`parsar-diff__line parsar-diff__line--${line.kind}`} key={lineIndex}>{line.text || " "}{"\n"}</span>)}
+                <pre className="patch-diff__content" tabIndex={0} aria-label={t("items.unifiedDiffFor", { path: change.path })}>
+                  {change.lines.map((line, lineIndex) => <span className={`patch-diff__line patch-diff__line--${line.kind}`} key={lineIndex}>{line.text || " "}{"\n"}</span>)}
                 </pre>
               ) : null}
             </section>
           );
         })}
       </div>
-      <div className="parsar-diff__raw">
+      <div className="patch-diff__raw">
         <details><summary>{t("items.rawArguments")}</summary><pre>{pretty(item.arguments)}</pre></details>
         <details><summary>{t("items.rawResult")}</summary><pre>{result === undefined ? t("items.noResultYet") : pretty(result)}</pre></details>
       </div>

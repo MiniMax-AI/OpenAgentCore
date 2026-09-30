@@ -2,7 +2,7 @@
 
 Owned fixtures use real Worker admission with dispatch paused. No native executor
 or model runs, and initial Turn/Item history remains visible throughout the test.
-The tolerance and cursor checks follow contracts/agents-api/list-query-semantics.md.
+The tolerance and cursor checks follow contracts/agents-api/wire-semantics.md#lists.
 """
 
 import importlib.metadata

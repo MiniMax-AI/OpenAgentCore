@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core build-core-release check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -25,9 +25,6 @@ check-names:
 	python3 scripts/check-names.py
 
 check-database:
-	@if [[ -n "$${PARSAR_AGENTS_API_TEST_DATABASE_URL+x}" && -z "$${OAC_TEST_DATABASE_URL+x}" ]]; then \
-	    echo 'PARSAR_AGENTS_API_TEST_DATABASE_URL was renamed; set OAC_TEST_DATABASE_URL instead' >&2; exit 1; \
-	fi
 	@test -n "$${OAC_TEST_DATABASE_URL:-}" || { echo 'Set OAC_TEST_DATABASE_URL to a dedicated test PostgreSQL database' >&2; exit 1; }
 
 sqlc-generate:
@@ -67,17 +64,19 @@ build-daemon:
 build-core:
 	./scripts/build-core.sh
 
-build-core-release:
-	./scripts/build-core-release.sh
-
 check-core: build-core
 	# Persistence integration tests include bounded lifecycle waits that together exceed Go's 10m default.
 	go test ./services/core/... ./packages/agents-client/... -count=1 -timeout=20m
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/core/tests -p 'official_diagnostics_test.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/e2b/managed_init_test.py
 
+# The distribution's Core image, without the native installer catalog.
 docker-build-core:
-	./scripts/build-core-image.sh
+	@set -e; root="$${OAC_DEV_HOME:-$$HOME/.oac}"; \
+	mkdir -p "$$root/cache/oac-core-builds"; \
+	context=$$(mktemp -d "$$root/cache/oac-core-builds/image.XXXXXX"); trap 'rm -rf "$$context"' EXIT; \
+	./scripts/build-core-image-context.sh "$$context"; \
+	docker build --platform linux/amd64 --tag "$${OAC_DEV_CORE_IMAGE:-oac-core:dev}" "$$context"
 
 check-core-container: docker-build-core
 	OAC_DEV_CORE_IMAGE="$${OAC_DEV_CORE_IMAGE:-oac-core:dev}" OAC_TEST_SERVER_BIN="$(CURDIR)/services/core/tests/container_server.py" $${OAC_TEST_OFFICIAL_SDK_PYTHON:-python3} services/core/tests/official_client.py
@@ -89,12 +88,19 @@ check-claude-sdk: node-deps
 	pnpm --filter @oac/claude-sdk-adapter test
 	$(MAKE) build-claude-sdk-runtime
 
-check-web: node-deps
+.PHONY: check-web-unit check-web-acceptance
+check-web: override OAC_WEB_TEST_SHARD :=
+check-web: check-web-unit check-web-acceptance
+
+check-web-unit: node-deps
 	pnpm typecheck
-	pnpm test:core-doctor
 	pnpm test:web
 	pnpm --filter @oac/web build
-	pnpm test:web:acceptance
+
+# CI shards run in separate jobs, each with its own fixture and Web server.
+# An unset shard keeps the complete local make check gate.
+check-web-acceptance: node-deps
+	pnpm test:web:acceptance $(if $(OAC_WEB_TEST_SHARD),--shard=$(OAC_WEB_TEST_SHARD))
 
 build-claude-sdk-runtime:
 	./scripts/build-claude-sdk-runtime.sh
@@ -148,10 +154,8 @@ check-distribution:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/publish-core-release.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/install-release.test.py
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/promote-qualified-release.test.py
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/qualification-control.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/config-reference.py --check
-	bash -n deploy/install/install.sh deploy/install-release.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/prepare-release-runtimes.sh
+	bash -n deploy/install/install.sh deploy/install-release.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh
 	./scripts/build-web.sh
 
 build-core-distribution:
