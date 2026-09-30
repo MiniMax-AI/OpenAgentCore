@@ -221,3 +221,24 @@ func TestManagedIdleClockReconnectPreservesReceipts(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDirectManagedIdleClockIgnoresNativeClockSkew(t *testing.T) {
+	for _, skew := range []time.Duration{-269 * time.Second, 269 * time.Second} {
+		t.Run(skew.String(), func(t *testing.T) {
+			s, w, owner := managedIdleClockFixture(t)
+			runtimeSuspensionSQL(t, s.pool, "UPDATE runtime_allocations SET node_id=NULL WHERE id=$1", owner.ID)
+			owner.NodeID = ""
+			turn := uuid.NewString()
+			runtimeSuspensionSQL(t, s.pool, "INSERT INTO turns(id,session_id,status,started_at) VALUES($1,$2,'in_progress',clock_timestamp())", turn, owner.SessionID)
+			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
+			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
+			before := runtimeDatabaseTime(t, s)
+			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, TurnCompleted, outcome, "", 0)
+			after := runtimeDatabaseTime(t, s)
+			if err != nil || completed.CompletedAt.UnixMilli() != source {
+				t.Fatal(completed, err)
+			}
+			verifyManagedIdleClock(t, s, w, owner, before, after)
+		})
+	}
+}

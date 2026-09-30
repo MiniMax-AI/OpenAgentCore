@@ -190,7 +190,7 @@ Suspend owns native resource release and returns a bound retained handle, suspen
 
 Resume consumes the retained state into the precommitted target exactly once. Recovery observes the same attempt. Core persists waking, authenticates and resumes the daemon, deletes the consumed retained resource, then commits running and admits work. DeleteRetained is idempotent artifact cleanup and preserves running compute. Failed cleanup keeps the waking phase and cannot trigger another restore. KillCompute remains genuinely destructive; cleanup of an old generation must not kill a newer live incarnation sharing its native ID.
 
-The existing Session lock, lifecycle lease, idle rule, capacity queries and cleanup order remain authoritative. Every unreleased allocation consumes max_retained, including running allocations. This pre-release retained-state shape requires ordinary cleanup of old live compute state before activation; deployments must refuse activation with unreleased checkpoint or resident receipts. Session history is preserved.
+The existing Session lock, lifecycle lease, idle rule, capacity queries and cleanup order remain authoritative. Every unreleased allocation consumes max_retained, including running allocations. Every allocation is stamped with the shared compute protocol version at reservation, including allocations whose suspension phase is disabled. Activation refuses any unreleased allocation with a missing or different version; the previous release must complete ordinary cleanup before upgrading. Session history is preserved.
 
 ### Reset and archive
 

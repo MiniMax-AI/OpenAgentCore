@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // RuntimeAllocation retains compute ownership, not public readiness. It survives
@@ -118,6 +119,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 		row, err := q.CreateRuntimeAllocation(ctx, sqlc.CreateRuntimeAllocationParams{
 			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, EnvironmentID: lookup.ID,
 			DeviceID: device.ID, ProviderKey: provider, NodeID: nodeID, DeploymentGeneration: generation,
+			ProtocolVersion: sandbox.SuspensionStateVersion,
 		})
 		if err == nil {
 			result = runtimeAllocationFromRow(row, session, lookup.TenantID, pgtype.Timestamptz{}, false)

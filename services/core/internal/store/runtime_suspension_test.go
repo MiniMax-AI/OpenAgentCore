@@ -405,6 +405,12 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 			default:
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
+			if kind == "root" || kind == "subagent" {
+				id, _ := parseConnectionGeneration(owner.SessionID)
+				if err := s.queries.RecordRuntimeTerminalActivity(t.Context(), id); err != nil {
+					t.Fatal(err)
+				}
+			}
 			until := time.Now().Add(time.Hour)
 			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, ErrTurnConflict) {
 				t.Fatal("completion after idle observation did not fence quiesce", err)

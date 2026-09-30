@@ -611,3 +611,18 @@ func TestRuntimeComputeRepeatedWakeStillRenewsCurrentIncarnation(t *testing.T) {
 		t.Fatal("wake requests bypassed native lease renewal")
 	}
 }
+
+func TestRuntimeComputeProtocolRejectsOldDisabledAllocation(t *testing.T) {
+	f := newComputeLifecycleFixture(t, 1, 2)
+	_, _, _, owner := f.create()
+	f.stop()
+	f.sql(`UPDATE runtime_allocations SET compute_phase='disabled',compute_state='{}'::jsonb WHERE id=$1`, owner.ID)
+	before := f.provider.renewals.Load()
+	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: f.provider, Suspension: &f.policy}})
+	if err == nil || w != nil || !strings.Contains(err.Error(), "previous release") {
+		t.Fatal("old disabled allocation activated", err)
+	}
+	if f.provider.renewals.Load() != before || len(f.provider.computes) != 1 {
+		t.Fatal("upgrade changed owned native compute")
+	}
+}
