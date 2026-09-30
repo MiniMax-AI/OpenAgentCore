@@ -16,8 +16,8 @@ statuses of the uncoded tables to equal the statuses their handlers write.
 `apps/docs/scripts/verify-error-codes.mjs` does the same for client-generated
 codes and for every code the client and Web compare against, and the Go test
 also compares the installation domain setup codes with the installer. The
-Namespaces column tokens are checked in both files; which namespace a shared
-writer reaches is maintained by review, as is the Meaning column.
+Namespaces column tokens are checked in both files: `all`, or the namespaces
+whose routes can answer with the code.
 
 ## Which "code" is meant
 
