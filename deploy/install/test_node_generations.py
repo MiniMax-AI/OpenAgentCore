@@ -164,14 +164,6 @@ class CollectionTests(unittest.TestCase):
         installer.checked.assert_not_called()
         self.assertFalse(self.release.exists())
 
-    def test_legacy_unfenced_marker_blocks_before_collection_journal(self):
-        (self.directory / "1.legacy-unfenced").write_text("retained")
-        with self.assertRaisesRegex(installer.InstallError, "legacy helpers"):
-            node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertFalse((self.directory / "1.collecting").exists())
-        self.assertTrue(self.release.exists())
-
     def micro_fixture(self):
         self.value["provider"] = "microsandbox"
         del self.value["docker"]

@@ -25,12 +25,12 @@ OpenAgentCore is protocol-first and modular. Core orchestrates operations that p
 | Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |
 
-Most boundaries still span several files; the listed file or directory is the entry point. Do not add files to a boundary; this is a [known gap](#known-gaps).
+Each row names the protocol's code entry point and its document.
 
 ### Complexity stays in the adapter
 
 - New complexity lives in the adapter that needs it and never spreads outward. A new Sandbox Provider, Harness, model provider or vendor feature changes only its adapter. It adds no Core execution path, store table or column, migration, deployment or configuration field, API field or Web UI specific to one vendor or Harness.
-- The [Sandbox Provider guide](docs/sandbox-provider.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md) list the files an adapter touches today. Any step there that edits shared code is a known gap, not a pattern.
+- The [Sandbox Provider guide](docs/sandbox-provider.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md) describe how to add an adapter.
 - When the protocol cannot express what an adapter needs, change the protocol. Never add an optional side interface for one implementation.
 - Example: implementing the complete declared `CheckpointProvider` lifecycle in one vendor's Provider is an adapter change. A vendor-only pause interface, a Core path for that vendor, vendor receipts in the store or a vendor idle setting in the deployment is not.
 - Fix shared lifecycle, admission, cancellation, reuse and performance problems in the common flow, never in branches selected by a Harness, Runtime or vendor name. Core preparation and execution never branch on operating system or Environment source; platform support requires native CI builds and automated tests.
@@ -52,17 +52,6 @@ The categories are [process settings](docs/configuration.md#process-settings-con
 ### Pre-release: no compatibility layers
 
 OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and files outright. Keep no version fallback, compatibility shim or migration for superseded behavior unless an explicit upgrade contract requires it. Keep the pinned official public protocol, valid data and still-used, verified infrastructure; do not rewrite working infrastructure only to rename it.
-
-### Known gaps
-
-Existing code still breaks these rules in places. The bullets below are examples, not a complete list. Do not copy these patterns. Until a gap is closed, follow the extension guide; a change that touches a gap moves it toward the rule.
-
-- Protocol definitions spread over several files, such as the Sandbox Provider contract across `services/core/internal/sandbox/` and `services/core/internal/providercontract/`.
-- Support discovered by type assertion, such as daemon workspace reads in `apps/daemon/internal/dispatch/workspace_read.go` and Core's observation source selection in `services/core/cmd/server/main.go`.
-- Harness-specific code in shared places, such as Core engine profiles in `services/core/internal/engine/<harness>.go`, daemon discovery and registration, the installer's Harness list and default in `deploy/install/config.schema.json`, and Core's own default Harness when `OAC_DEFAULT_HARNESS` is unset.
-- Vendor-specific UI outside the adapter, such as E2B Web views. Configuration storage and management now use the adapter codec contract described in the [Sandbox Provider guide](docs/sandbox-provider.md#register-the-provider-kind).
-- Host-local state spread over several `~/.oac/` directories, such as the Runtime's `~/.oac/daemon/`, `~/.oac/runtime/<kind>/` and `~/.oac/environments/<environment-id>/`.
-- Persistence and vendor types in the Core and machine OpenAPI documents, such as the `store.*` definitions in `contracts/agents-api/core.openapi.yaml`.
 
 ## Documentation
 

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/placement"
 )
 
 func runPlacement(ctx *runContext, args []string) error {

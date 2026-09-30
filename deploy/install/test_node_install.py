@@ -67,8 +67,7 @@ class NodeInstallTests(unittest.TestCase):
         self.fail_service = False
         self.fail_registration = False
         self.register_stderr = None
-        for patch in (mock.patch.object(installer, "refuse_legacy_node"),
-                      mock.patch.object(installer.Path, "home", return_value=self.home),
+        for patch in (mock.patch.object(installer.Path, "home", return_value=self.home),
                       mock.patch.object(installer, "preflight"),
                       mock.patch.object(installer, "wait_ready"),
                       mock.patch.object(installer, "open_request", side_effect=self.configuration_response),
@@ -115,7 +114,6 @@ class NodeInstallTests(unittest.TestCase):
     def checked(self, arguments, failure, **kwargs):
         self.calls.append((arguments, kwargs))
         self.assertNotIn("synthetic-once-token", str(arguments))
-        self.assertNotIn("PARSAR_NODE_ENROLLMENT_TOKEN", os.environ)
         if "register" in arguments:
             self.assertNotIn("--max-active", arguments)
             self.assertNotIn("--max-retained", arguments)
@@ -987,21 +985,6 @@ class NodeInstallTests(unittest.TestCase):
                 mock.patch.object(installer.os, "geteuid", return_value=0):
             installer.main(arguments)
         self.assertEqual(install.call_args.args[1], "synthetic-once-token")
-
-    def test_the_retired_token_variable_is_refused_in_every_mode(self):
-        install = ["--source-url", self.args.source_url, "--core-url", self.args.core_url,
-                   "--installation-id", self.args.installation_id, "--enrollment-token-stdin"]
-        for euid in (1000, 0):
-            for arguments in (install, install[:-1], ["--uninstall", "--installation-id", self.args.installation_id]):
-                errors = io.StringIO()
-                with mock.patch.dict(os.environ, {"PARSAR_NODE_ENROLLMENT_TOKEN": "synthetic-once-token"}), \
-                        mock.patch.object(installer.os, "geteuid", return_value=euid), mock.patch.object(installer.sys, "stderr", errors), \
-                        mock.patch.multiple(installer, install_system=mock.DEFAULT, uninstall_system=mock.DEFAULT) as steps, self.assertRaises(SystemExit):
-                    installer.main(arguments)
-                self.assertEqual(errors.getvalue().splitlines(), ["PARSAR_NODE_ENROLLMENT_TOKEN is retired: pass the enrollment "
-                                                                  "token on standard input with --enrollment-token-stdin."])
-                self.assertFalse(any(step.called for step in steps.values()))
-
 
     def test_offline_bundle_uses_same_bootstrap_and_verified_artifacts(self):
         bundle = self.home / "bundle"

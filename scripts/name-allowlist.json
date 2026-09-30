@@ -285,21 +285,6 @@
     "reason": "Historical migration commentary records the environment name used when this migration was written."
   },
   {
-    "path": "deploy/install/node_install.py",
-    "regex": "parsar-node(?:-)?|\\.parsar(?:/nodes)?|PARSAR_NODE_ENROLLMENT_TOKEN",
-    "reason": "Only the old node service/state paths and retired enrollment variable are recognized for scoped refusal and uninstall guidance."
-  },
-  {
-    "path": "deploy/install/test_node_legacy.py",
-    "regex": "parsar-node(?:-)?|\\.parsar(?:/nodes)?|PARSAR_NODE_ENROLLMENT_TOKEN",
-    "reason": "Only the old node service/state paths and retired enrollment variable are recognized for scoped refusal and uninstall guidance."
-  },
-  {
-    "path": "deploy/install/test_node_install.py",
-    "regex": "parsar-node(?:-)?|\\.parsar(?:/nodes)?|PARSAR_NODE_ENROLLMENT_TOKEN",
-    "reason": "Only the old node service/state paths and retired enrollment variable are recognized for scoped refusal and uninstall guidance."
-  },
-  {
     "path": "deploy/install/install.py",
     "regex": "\\.parsar/core|\\bparsar\\b",
     "reason": "These old default paths and command names are used only by conversion refusal or the explicit retired-command stub."

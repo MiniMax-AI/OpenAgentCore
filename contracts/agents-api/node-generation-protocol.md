@@ -87,9 +87,6 @@ Neither opener adopts a missing identity, replaces its inode, or erases
 it after GC. Initialization interrupted before the identity is durable refuses
 re-adoption; preserve the installation for inspection. A removed identity or an
 owned replacement 0600 lease still refuses, even when its current fstat/lstat agree.
-Historical installations and their `legacy-unfenced` records are retained
-for inspection; the current installer does not adopt or upgrade them. Do not
-create a new fence to bypass a missing historical lease identity.
 
 A dropped generation cannot be prepared or used again; a future rollback
 would require a new generation and a separate policy.
@@ -173,9 +170,7 @@ metadata refuse cleanup. Interruption resumes under the same collection journal.
 The current node executable, preparer, identity, base provider configuration and
 manifests remain, so restart can read its enrolled identity and construct a newer
 retained provider after the original Runtime bytes have gone. Shared native paths
-are compared across all retained configurations before removal. A historical
-`legacy-unfenced` marker remains a reason to retain its original payload, not
-evidence that upgrading or serving the historical installation is supported.
+are compared across all retained configurations before removal.
 
 New preparation has two distinct records. Before downloads, `.preparing` holds the
 immutable installation/generation/specification identity, private provider paths
@@ -198,10 +193,8 @@ An interrupted download repairs only missing bytes at the original paths. If
 collection precedes any import attempt, the preparation journal proves that this
 generation has no imported native image. An older or interrupted generation whose
 native executable is missing and whose import may have started remains retained;
-missing files do not prove native absence. Receipt/store history and a
-historical `legacy-unfenced` record are never erased using an empty native
-inventory. These retention checks do not authorize historical installation
-conversion or adoption.
+missing files do not prove native absence. Receipt/store history is never
+erased using an empty native inventory.
 
 Preparation diagnostics preserve fixed typed causes. Only artifact transfer,
 checksum or release-provenance failures report `runtime_download_failed`. A private
@@ -225,10 +218,7 @@ flow. Reinstallation does not automatically delete or migrate existing data.
 
 Current Runtime generation changes operate within an installation of the current
 node program. They do not upgrade that program or establish compatibility with
-historical node installations. A historical `legacy-unfenced` marker records that
-older helpers did not share the current lease protocol. Preserve its files and
-resources for inspection; do not clear it, recreate its lease, or infer safe
-collection from an empty allocation list, process absence or a node restart.
+historical node installations.
 
 ## Qualification boundary
 

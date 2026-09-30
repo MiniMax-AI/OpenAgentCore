@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -146,5 +147,41 @@ func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 	selection := store.SandboxSetup{InstallationID: id, Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-team-a", Template: "public-team-b:" + uuid.NewString()}}
 	if _, err := s.prepare(t.Context(), selection); !errors.Is(err, sandbox.ErrCredentialOwnership) || s.selected.Load() != nil {
 		t.Fatal("public readability accepted as team ownership", err)
+	}
+}
+
+func TestManagedSetupRejectsUnknownRegistrationBeforePreparationOrRouting(t *testing.T) {
+	// No store or node hub is available: rejection must precede any use of them.
+	s := &managedSetup{installationID: "installation", publicURL: "http://127.0.0.1"}
+	setup := store.SandboxSetup{InstallationID: "installation", Provider: "missing-registration"}
+	for _, call := range []struct {
+		name string
+		run  func() (execution.PreparedRuntimeDeployment, error)
+	}{
+		{"prepare", func() (execution.PreparedRuntimeDeployment, error) {
+			return s.prepare(t.Context(), setup)
+		}},
+		{"route", func() (execution.PreparedRuntimeDeployment, error) {
+			return s.routeGenerations(execution.PreparedRuntimeDeployment{}, setup)
+		}},
+	} {
+		t.Run(call.name, func(t *testing.T) {
+			candidate, err := call.run()
+			if !errors.Is(err, sandbox.ErrInvalid) || candidate.Config != nil || s.selected.Load() != nil {
+				t.Fatalf("invalid registration reached preparation or publication: %v", err)
+			}
+		})
+	}
+}
+
+func TestManagedSetupRoutesProviderWithoutCredentialRequirement(t *testing.T) {
+	s := &managedSetup{}
+	config := &execution.RuntimeProvider{ProviderKind: "docker"}
+	candidate, err := s.routeGenerations(
+		execution.PreparedRuntimeDeployment{Config: config},
+		store.SandboxSetup{Provider: "docker"},
+	)
+	if err != nil || candidate.Config != config || candidate.FenceCredential != nil || candidate.VerifyCredential != nil {
+		t.Fatalf("explicit no-credential provider required credential routing: %v", err)
 	}
 }

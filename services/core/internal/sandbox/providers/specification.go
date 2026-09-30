@@ -7,7 +7,11 @@ import (
 // Local paths belong to the node. Core owns reservation capacity, execution
 // resources and the immutable deployment release it enrolled with.
 func validateSpecification(c Config) error {
-	if !IsNode(c.Provider) {
+	adapter, err := Lookup(c.Provider)
+	if err != nil {
+		return err
+	}
+	if adapter.Mode != "nodes" {
 		return errors.New("nodes support Docker or microsandbox; E2B is managed by Core")
 	}
 	if c.Generation == 0 {
