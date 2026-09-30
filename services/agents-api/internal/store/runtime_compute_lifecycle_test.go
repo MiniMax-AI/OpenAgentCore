@@ -300,7 +300,19 @@ func (f *computeLifecycleFixture) start() {
 	t.Helper()
 	config := &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.managed, Suspension: &f.policy}
 	if _, resident := f.managed.(sandbox.ResidentPauseProvider); resident {
-		config.Mode, config.ProviderKind = "direct", "e2b"
+		f.store.SetPublicURL("https://core.example")
+		build := func(setup store.SandboxSetup) *execution.RuntimeProvider {
+			return &execution.RuntimeProvider{CoreURL: "https://core.example/api/v1", InstallationID: setup.InstallationID, BackendFingerprint: setup.BackendFingerprint, Provider: f.managed, Mode: setup.Mode, ProviderKind: setup.Provider, Generation: setup.Generation, Suspension: &f.policy}
+		}
+		config = execution.NewDeferredRuntimeProvider(f.key, func(ctx context.Context) (*execution.RuntimeProvider, error) {
+			setup, err := f.store.GetSandboxSetup(ctx)
+			if err != nil || setup.Provider == "" {
+				return nil, err
+			}
+			return build(setup), nil
+		}, func(_ context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
+			return execution.PreparedRuntimeDeployment{Config: build(setup)}, nil
+		})
 	}
 	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: config})
 	if err != nil {
@@ -312,6 +324,15 @@ func (f *computeLifecycleFixture) start() {
 	}
 	f.worker, f.stop = w, stop
 	t.Cleanup(stop)
+	if _, resident := f.managed.(sandbox.ResidentPauseProvider); resident {
+		_, err := w.InitializeSandboxDeployment(t.Context(), store.SandboxDeploymentSetupRequest{
+			Provider: "e2b", DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"),
+			E2B: &sandbox.E2BConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString(), TemplateBuild: &sandbox.TemplateBuild{Status: "ready", CPUs: 2, MemoryMiB: 2048}},
+		})
+		if err != nil {
+			t.Fatalf("initialize resident test deployment: %v", err)
+		}
+	}
 }
 func (f *computeLifecycleFixture) sql(query string, args ...any) {
 	f.t.Helper()
