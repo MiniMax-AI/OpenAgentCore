@@ -15,10 +15,19 @@ def timestamp(value):
 def measure(run, jobs):
     # created_at belongs to the original run; run_started_at resets on reruns.
     attempt_start = run.get("run_started_at") or (run["created_at"] if run.get("run_attempt", 1) == 1 else None)
+    if not attempt_start:
+        raise ValueError("Rerun start is unavailable; cannot separate reused jobs")
+    origin = timestamp(attempt_start)
     intervals = []
     platform_seconds = defaultdict(float)
     outcomes = Counter()
+    reused_outcomes = Counter()
     for job in jobs:
+        # Failed-job reruns include successful prior jobs, relabeled with the
+        # new run_attempt but retaining their original execution timestamps.
+        if run.get("run_attempt", 1) > 1 and job.get("started_at") and timestamp(job["started_at"]) < origin:
+            reused_outcomes[job.get("conclusion") or "unfinished"] += 1
+            continue
         outcomes[job.get("conclusion") or "unfinished"] += 1
         if not job.get("started_at") or not job.get("completed_at") or job.get("conclusion") == "skipped":
             continue
@@ -42,9 +51,10 @@ def measure(run, jobs):
         "status": run["status"], "conclusion": run.get("conclusion"),
         "runner_minutes": round(sum(platform_seconds.values()) / 60, 2),
         "platform_minutes": {p: round(seconds / 60, 2) for p, seconds in sorted(platform_seconds.items())},
-        "elapsed_minutes": round((max(ends) - timestamp(attempt_start)) / 60, 2) if ends and attempt_start else None,
-        "initial_queue_seconds": min(starts) - timestamp(attempt_start) if starts and attempt_start else None,
+        "elapsed_minutes": round((max(ends) - origin) / 60, 2) if ends else None,
+        "initial_queue_seconds": min(starts) - origin if starts else None,
         "peak_parallel_jobs": peak, "job_outcomes": dict(outcomes),
+        "reused_job_outcomes": dict(reused_outcomes),
         "failed_job_fraction": (outcomes["failure"] + outcomes["timed_out"] + outcomes["startup_failure"]) / finished if finished else None,
     }
 
