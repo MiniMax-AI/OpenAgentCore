@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/e2b"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
@@ -42,8 +44,9 @@ func TestE2BRouterKeepsOldSpecificationWithCommittedCredential(t *testing.T) {
 import json,sys,pathlib
 q=json.load(sys.stdin)
 with (pathlib.Path(q['Config']['StateDir'])/'requests').open('a') as f: f.write(json.dumps(q)+'\n')
-info=dict(q['Reference'],State='running',ProviderID='owned',CreateSettled=True)
+info=dict(q['Reference'],State='running',ProviderID='owned',CreateSettled=True,BootstrapComplete=True)
 if q['Operation']=='kill': info['State']='absent'
+if q['Operation']=='pause': info['State']='paused'
 print(json.dumps({'Version':1,'Info':info}))
 `
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
@@ -61,13 +64,34 @@ print(json.dumps({'Version':1,'Info':info}))
 	db := &routingSetupStore{setupStore: setupStore{value: current}, old: old, oldID: ref.AllocationID}
 	setup := &managedSetup{store: db, installationID: id}
 	// A facade retained by a generation-one lifecycle still reads current credentials.
-	router := &generationRouter{setup: setup, store: db}
+	provider, err := setup.provider(current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := setup.routeGenerations(execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{Provider: provider}}, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := candidate.Config.Provider
+	resident, ok := router.(sandbox.ResidentPauseProvider)
+	if !ok {
+		t.Fatal("generation facade lost resident pause capability")
+	}
+	if _, ok := router.(runtimeobs.Source); !ok {
+		t.Fatal("generation facade lost observation capability")
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	if _, err := router.GetInfo(ctx, ref); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := router.Renew(ctx, ref); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resident.Pause(ctx, ref); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resident.Resume(ctx, ref); err != nil {
 		t.Fatal(err)
 	}
 	if err := router.Kill(ctx, ref); err != nil {
@@ -83,7 +107,7 @@ print(json.dumps({'Version':1,'Info':info}))
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	if len(lines) != 4 {
+	if len(lines) != 6 {
 		t.Fatal(len(lines))
 	}
 	for i, line := range lines {
@@ -97,7 +121,7 @@ print(json.dumps({'Version':1,'Info':info}))
 			t.Fatal(err)
 		}
 		expected := old
-		if i == 3 {
+		if i == 5 {
 			expected = current
 		}
 		if q.Config.APIKey != "new-key" || q.Config.Template != expected.E2B.Template || q.Config.Resources != expected.Specification.Resources {

@@ -113,9 +113,16 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 		return execution.PreparedRuntimeDeployment{}, errors.New("sandbox generation store is unavailable")
 	}
 	router := &generationRouter{setup: s, store: db}
-	if _, ok := candidate.Config.Provider.(runtimeobs.Source); ok {
+	_, observed := candidate.Config.Provider.(runtimeobs.Source)
+	_, resident := candidate.Config.Provider.(sandbox.ResidentPauseProvider)
+	switch {
+	case observed && resident:
+		candidate.Config.Provider = &observedResidentGenerationRouter{&residentGenerationRouter{router}}
+	case resident:
+		candidate.Config.Provider = &residentGenerationRouter{router}
+	case observed:
 		candidate.Config.Provider = &observedGenerationRouter{router}
-	} else {
+	default:
 		candidate.Config.Provider = router
 	}
 	if !adapter.Credential {
