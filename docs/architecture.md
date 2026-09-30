@@ -36,7 +36,7 @@ flowchart TB
         H <--> F
     end
 
-    H <-->|"Native model API (direct)"| Model["Model service"]
+    H <-->|"Model API"| Model["Model service"]
     H <-->|"MCP protocol"| MCP["MCP servers"]
 ```
 
@@ -46,12 +46,9 @@ contracts are primarily in-process interfaces. The daemon initiates the
 Core-Runtime WebSocket connection and exchanges ordered messages with Core.
 MCP servers may be local processes or remote services.
 
-Model connections use the Harness's native capabilities. Its adapter declares
-supported protocols in `internal/harnessconfig`; Core and Runtime validate against
-that declaration. The adapter applies the selected model, endpoint, credentials
-and native parameters, then the Harness calls the model service directly. There
-is no model API proxy or cross-protocol conversion in Core, Runtime or our adapters.
-The supported protocol matrix belongs to [model execution](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence).
+Each Harness adapter declares its supported model protocols. Core and Runtime
+validate that declaration; model calls use the Harness's own implementation. See
+[model execution](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence).
 
 ## Two APIs, and a machine channel
 
@@ -87,7 +84,7 @@ errors and completion semantics as well as types or method signatures.
 | 2. Core / Sandbox Provider | `SandboxProvider` interface | Compute creation, observation, renewal, bootstrap and reclamation | [Sandbox Provider guide](sandbox-provider.md) |
 | 3. Core / Runtime | Typed Core-Runtime messages | Capability declarations, preparation, execution, cancellation, recovery and receipts | [Core-Runtime protocol](runtime-protocol.md) |
 | 4. Runtime / Harness | `ExecutorFactory`, `Executor`, `Turn` and separate optional interfaces | Native configuration, execution, event translation and confirmed cleanup | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
-| Harness / Model Provider | Harness-declared native model protocol | Direct inference using the selected Harness's native client | [Model execution](../contracts/agents-api/model-execution.md) |
+| Harness / Model Provider | Model API | Model inference through a protocol supported by the selected Harness | [Model execution](../contracts/agents-api/model-execution.md) |
 
 The [bootstrap contract](runtime-bootstrap.md) carries the Runtime's startup
 input across the provisioning boundary. After connection, capability preparation
