@@ -16,7 +16,10 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import secrets
+import shlex
+import shutil
 import socket
 import stat
 import subprocess
@@ -40,6 +43,13 @@ UNSUPPORTED_VERSION = ("This installation version or historical conversion is no
 
 class OacError(Exception):
     pass
+
+
+class ApplyFailed(OacError):
+    """apply wrote the files, but the services did not converge on them; cause says why."""
+    def __init__(self, message, cause):
+        super().__init__(message)
+        self.cause = cause
 
 
 def run(args, **kwargs):
@@ -150,6 +160,13 @@ def locked(root):
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise OacError("Another oac command is running for this installation") from None
+        try:
+            current = os.stat(root / ".oac.lock", follow_symlinks=False)
+        except FileNotFoundError:
+            current = None
+        if current is None or not os.path.samestat(current, os.fstat(descriptor)):
+            # The holder removed the installation, lock file included, after this command opened it.
+            raise OacError("Another oac command is running for this installation")
         if (root / "state.json").exists():
             load_state(root)
         yield
@@ -721,9 +738,9 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         if line:
             out(line)
         if not (rollback and in_sync):
-            raise OacError(f"config.json not applied: {describe(error)}. The services were not all running with "
+            raise ApplyFailed(f"config.json not applied: {describe(error)}. The services were not all running with "
                               f"the previous files, so nothing was rolled back; run oac status, fix the cause "
-                              f"and {retry}") from None
+                              f"and {retry}", describe(error)) from None
         # Record the restored files as oac's own before writing them back; a restored
         # hand edit stays one.
         restored = {name: data for name, data in disk.items()
@@ -740,12 +757,66 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
             if ingress_config.enabled(config) and "gateway" in will_run:
                 ingress_config.reload(root, disk["Caddyfile"].decode())
         except (OacError, RuntimeError, subprocess.CalledProcessError) as second:
-            raise OacError(f"config.json not applied: {describe(error)}. The previous generated files were restored, "
+            raise ApplyFailed(f"config.json not applied: {describe(error)}. The previous generated files were restored, "
                               f"but the services could not be started with them either ({describe(second)}); run "
-                              f"oac status, fix the cause and {retry}") from None
-        raise OacError(f"config.json not applied: {describe(error)}. The previous generated files were restored "
-                          f"and the services converged on them; fix config.json and {retry}") from None
+                              f"oac status, fix the cause and {retry}", describe(error)) from None
+        raise ApplyFailed(f"config.json not applied: {describe(error)}. The previous generated files were restored "
+                          f"and the services converged on them; fix config.json and {retry}", describe(error)) from None
     out("Applied config.json.")
+
+
+# Removal -----------------------------------------------------------------------
+
+def remove(root, state, keep_root=False):
+    """Remove one installation: native Core's unit, its Compose project with its volumes, then its files.
+
+    state is the loaded state.json, or None when there is none, so nothing was started. Only
+    this installation's own project and unit are touched; loaded images are kept. keep_root
+    keeps the directory and its .oac.lock, which the caller holds, and removes everything else
+    in it. The files stay while a service is left, so state.json still names it. Raises
+    OacError naming what is left and the commands that remove it.
+    """
+    root = Path(root)
+    if not root.is_absolute() or root.is_symlink() or root.resolve() != root:
+        raise OacError("The installation directory must be canonical and not a symlink; nothing was removed")
+    left = []
+    if state is not None:
+        project = state.get("project")
+        if not isinstance(project, str) or not re.fullmatch(r"oac-[0-9a-f]{10}", project):
+            raise OacError("state.json names no Compose project of this installation; nothing was removed")
+        if native_service.is_native(state):
+            unit = native_service.unit_name(state)
+            try:
+                native_service.remove(state)
+            except (RuntimeError, KeyboardInterrupt):
+                left.append((f"native Core unit {unit}", f"systemctl --user disable --now {unit}"))
+        # -p without -f: Compose reads no project file and acts on this project's labels alone.
+        down = ["docker", "compose", "-p", project, "down", "--volumes", "--remove-orphans"]
+        try:
+            run(down, stdin=subprocess.DEVNULL)
+        except (subprocess.CalledProcessError, OSError, KeyboardInterrupt):
+            left.append((f"Compose project {project} and its volumes", " ".join(down)))
+    target = shlex.quote(str(root))
+    files = (f"the files in {root}", f"find {target} -mindepth 1 -delete" if keep_root else f"rm -rf {target}")
+    if left:
+        left.append(files)
+    else:
+        try:
+            # state.json goes last, so a removal that is killed part way is still recognized and finished.
+            for path in sorted(root.iterdir(), key=lambda path: path.name == "state.json"):
+                if keep_root and path.name == ".oac.lock":
+                    continue
+                if path.is_dir() and not path.is_symlink():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+            if not keep_root:
+                root.rmdir()
+        except (OSError, KeyboardInterrupt):
+            left.append(files)
+    if left:
+        raise OacError("Removal did not finish. Left: " + "; ".join(what for what, _ in left) + ". Remove them with:\n"
+                       + "\n".join("  " + command for _, command in left))
 
 
 # Commands --------------------------------------------------------------------

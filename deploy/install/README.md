@@ -24,13 +24,13 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 - The Core/Web installer never adds its own host as a node, imports no Runtime image and gives Core neither the Docker socket nor host devices. Nodes are added afterwards from Web, this host included.
 - Ingress is an installation concern, independent of Runtime and Sandbox Provider selection.
 - A repeated installation or repair never changes provider identity, the backend namespace or native history. The database, Projects and their keys, provider identity and the credential encryption key survive repair.
-- Recovery never deletes data and never prunes containers, volumes or images.
+- Recovery never deletes data and never prunes containers, volumes or images. The one removal is a [new installation's own cleanup](#new-installations).
 - Do not add another launcher, scheduler, supervisor or recovery path.
 
 ## Configuration and apply
 
 - Every process setting has one home: the installation's private `config.json`, described by `config.schema.json`. Keep the schema, `config_model.py`, the generator and the reference tables that `scripts/config-reference.py` renders into [configuration](../../docs/configuration.md) and [installation options](../../docs/getting-started/install-options.md) in step.
-- Installation flags only seed `config.json`. A rerun of the installer accepts only `--install-dir` and repairs.
+- Installation flags only seed `config.json`. A rerun of the installer over a complete installation accepts only `--install-dir` and repairs.
 - `oac apply` validates `config.json`, derives `generated/` and converges on what actually runs. Each service carries the digest of its inputs (Compose label `io.oac.inputs`, native `OAC_INPUTS`), and exactly the services whose running inputs differ are recreated or restarted. Decide restarts from what runs, never from recorded bookkeeping, so the next apply finishes an interrupted one. Apply contacts running services at the last applied address before changing listeners.
 - Health checks, setup, apply and generated service files derive addresses from the same `config.json`. `host` selects the gateway listener for managed ingress and the Core and Web listeners for external ingress. A non-loopback external bind requires an HTTPS public origin.
 - `configuration.listeners` lists every host listener from the same helpers that render the port mappings and listen addresses, so port checks and real binds cannot diverge. A new installation checks them all before it hashes the bundle or loads images, and `oac apply` checks those a change adds before it touches a service; the installation's own listeners do not count. The probe binds with `SO_REUSEADDR`, as the services do. Where a port overlaps one of the installation's own listeners, or the account may not bind a port below 1024, it reads the kernel's listening sockets instead.
@@ -40,9 +40,16 @@ This directory holds the Core/Web installer, the `oac` command and the node inst
 
 ## Versions and the lock
 
-- Install only into an empty directory, or repair the same source revision. Refuse older formats and different revisions before changing anything; keep their data and direct the operator to install separately. Distributions carry only current installation code: no conversion, migration or binary replacement. Keep the refusal checks and their tests.
+- Install only into an empty directory or over an [incomplete installation](#new-installations), or repair a complete installation of the same source revision. Refuse older formats and different revisions before changing anything; keep their data and direct the operator to install separately. Distributions carry only current installation code: no conversion, migration or binary replacement. Keep the refusal checks and their tests.
 - The packaged `oac.pyz` embeds its build revision and refuses a `state.json` whose `source_commit` differs.
-- The installer and every mutating `oac` command share `.oac.lock`. The installer holds it across creation, payload, native service and launcher repair, and apply, calling the already-locked apply implementation without locking again. Never unlink or replace the lock file, even after an interrupted fresh installation; its inode must stay stable.
+- The installer and every mutating `oac` command share `.oac.lock`. The installer holds it across creation, payload, native service and launcher repair, and apply, calling the already-locked apply implementation without locking again. Never replace the lock file; its inode must stay stable. Only the cleanup of a new installation unlinks it, with the directory the installer created, while holding it, and `locked` refuses a lock whose path no longer names the file it locked.
+
+## New installations
+
+- An installation is complete after its first start: apply converged and the services are healthy. `create()` writes `state.json` with `"complete": false`, and the installer sets it to `true` at that moment. A later failure, such as a refused sandbox selection, keeps the installation.
+- Any failure or interrupt (Ctrl-C, SIGTERM) of an installation that is not complete runs `oac_cli.remove`, and the installer prints the cause followed by `Nothing was kept; fix the problem and rerun the same command.` `remove` disables native Core's unit, runs `docker compose -p <project> down --volumes --remove-orphans` and deletes every file in the installation directory. The directory goes too when the installer created it; otherwise it stays with its lock. Loaded images stay.
+- `remove` touches only the `oac-<10 hex digits>` project and its `<project>-core.service` named in `state.json`, and never follows a link. `state.json` is removed last, and stays when a service can't be removed, so the next run still recognizes the incomplete installation. The error lists what is left and the commands that remove it.
+- A rerun over an incomplete installation, which is a `state.json` with `"complete": false` or only the directories `create()` makes before writing it, removes it the same way under the lock and installs with the flags given now. Any other non-empty directory is refused.
 
 ## Install-time sandbox selection
 

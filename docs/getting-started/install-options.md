@@ -37,7 +37,7 @@ These options choose an installation location or perform initial setup; they are
 
 | Option | Purpose |
 | --- | --- |
-| `--install-dir DIR` | Absolute installation directory; defaults to `~/.oac/core`. A new installation requires an empty or missing directory |
+| `--install-dir DIR` | Absolute installation directory; defaults to `~/.oac/core`. A new installation requires an empty or missing directory, or one holding an [installation that never started](install.md#install) |
 | `--sandbox docker\|microsandbox\|e2b\|none` | Select the initial [sandbox backend](#sandbox-backend), saved in Core's database; change it later in Web |
 | `--accept-docker-risks` | Accept Docker's weaker isolation without an interactive prompt |
 | `--e2b-api-key-file FILE` | With E2B: absolute path to a private key file, no group/other access and at most 4 KiB |

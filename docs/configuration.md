@@ -116,7 +116,7 @@ The installer creates the installation directory, `~/.oac/core` by default, with
 | --- | --- | --- |
 | `config.json` | [Process settings](#process-settings-configjson). The only file you edit | You, then `oac apply`; managed domain setup for `public_url` |
 | `oac` | The [management command](getting-started/operations.md#the-oac-command) | The installer |
-| `state.json` | Installation ID, Compose project name, image IDs, source commit and the digests of generated files | The tools only |
+| `state.json` | Installation ID, Compose project name, image IDs, source commit, the digests of generated files and whether the services have started once | The tools only |
 | `secrets/core.key` | The [Core key](getting-started/operations.md#core-key) | `oac rotate-core-key` |
 | `secrets/credential.key` | Encryption key for what Core stores sealed in the database: model providers, the E2B key, Vault credentials, Skills, initial files and environment setup | Nothing. Keep it with the database; `oac apply` refuses a changed file |
 | `secrets/database.password` | PostgreSQL password | Nothing. PostgreSQL reads it only when the database is created; `oac apply` refuses a changed file |

@@ -142,7 +142,7 @@ An installation runs one release for its whole life. In-place version upgrades, 
 
 To move to a new release, install it into a new, empty directory, with its own database, Core key and nodes, and add nodes from its Web. Keep the old installation, its data and its nodes until their work is finished. Nodes run the program of the console that added them and are never upgraded in place; Core accepts only nodes that speak its own node protocol.
 
-Repair the current release by rerunning `./install.sh --install-dir DIR` from the exact same bundle; the downloader keeps it under `~/.oac/releases/`. Repair reloads missing images, restores the `oac` command, applies `config.json` and starts the services. It preserves identity, settings, secrets and history, accepts only `--install-dir`, and refuses a bundle from another release.
+Repair the current release by rerunning `./install.sh --install-dir DIR` from the exact same bundle; the downloader keeps it under `~/.oac/releases/`. Repair reloads missing images, restores the `oac` command, applies `config.json` and starts the services. It preserves identity, settings, secrets and history, accepts only `--install-dir`, and refuses a bundle from another release. Only an installation whose services have started is repaired; a new installation that fails before that [removes what it created](install.md#install).
 
 The installer and mutating `oac` commands hold the same installation lock, `.oac.lock`, including during repair and interrupted apply recovery. If another command holds it, retry after that command finishes; never remove or replace `.oac.lock` to get past a busy installation. Reinstallation never deletes another installation's files, database, Runtime resources or Session history.
 
@@ -163,6 +163,8 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
 | `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
+| `The services did not start: …` | A new installation's first start failed, and the installer [removed what it created](install.md#install). Compose's or Core's error is printed above it; fix the cause and run the same command again |
+| `Removal did not finish. Left: …` | The installer could not remove everything a failed new installation created. Run the printed commands to remove what is left, then run the same command again |
 | `… already in use on this server. Automatic HTTPS cannot run beside another program …` during domain setup | Another program holds port 80 or 443. Stop it, using the printed `ss` command to find it, and retry; automatic HTTPS cannot share [these ports](install-options.md#ports) |
 | `HTTPS verification failed …` during domain setup | DNS points elsewhere, a firewall or NAT blocks inbound ports 80 and 443, or the certificate request failed; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; a reverse proxy must pass the original Host |

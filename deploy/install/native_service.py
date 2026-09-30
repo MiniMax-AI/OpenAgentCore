@@ -170,6 +170,20 @@ def stop(root, state):
         _checked(["systemctl", "--user", "stop", unit_name(state)], "Cannot stop this installation's native Core service")
 
 
+def remove(state):
+    """Stop and disable the unit, which removes the links enable made; a unit never enabled is already gone."""
+    if not is_native(state):
+        return
+    unit = unit_name(state)
+    # disable fails for a unit that was never enabled; its load state below decides.
+    _run(["systemctl", "--user", "disable", "--now", unit], "Cannot remove this installation's native Core service")
+    daemon_reload()
+    loaded = _checked(["systemctl", "--user", "show", "--property=LoadState", "--value", unit],
+                      "Cannot query this installation's native Core service")
+    if loaded != "not-found" or active(state):
+        raise RuntimeError("Cannot remove this installation's native Core service")
+
+
 def _process_environment(pid):
     try:
         raw = Path(f"/proc/{pid}/environ").read_bytes()

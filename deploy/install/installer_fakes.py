@@ -32,10 +32,10 @@ class FakeHost:
     def __init__(self, test):
         self.commands, self.requests = [], []
         self.containers = {}  # service -> {hash, inputs, running}
-        self.project = None
+        self.project = None  # the Compose project the containers belong to
         self.recreated = []
-        self.native = {"active": False, "starts": 0, "restarts": 0, "reloads": 0, "addr": None, "digests": [],
-                       "inputs": None, "loaded": None, "environment": ""}
+        self.native = {"active": False, "enabled": False, "starts": 0, "restarts": 0, "reloads": 0, "addr": None,
+                       "digests": [], "inputs": None, "loaded": None, "environment": ""}
         # fails: Core never starts; rejects(core.env text): Core refuses that configuration.
         self.core = {"port": None, "digests": [], "fails": False, "log": "", "rejects": lambda environment: False}
         self.web_port = None
@@ -91,6 +91,10 @@ class FakeHost:
         code, stdout = 0, ""
         if args[:2] == ["docker", "compose"] and args[2:3] == ["-f"]:
             code, stdout = self.compose(Path(args[3]), args[4:])
+        elif args[:2] == ["docker", "compose"] and args[2:3] == ["-p"]:
+            # Without a project file Compose acts on the named project's labels alone.
+            if args[4:5] == ["down"] and args[3] == self.project:
+                self.containers.clear()
         elif args[:2] == ["docker", "compose"]:
             stdout = "2.30.0"
         elif args[:3] == ["docker", "image", "inspect"]:
@@ -123,6 +127,7 @@ class FakeHost:
     def compose(self, path, args):
         document = json.loads(path.read_text()) if path.exists() else {"services": {}}
         services = document["services"]
+        self.project = document.get("name", self.project)
         if args[:1] == ["down"]:
             self.containers.clear()
             return 0, ""
@@ -189,6 +194,7 @@ class FakeHost:
             native["reloads"] += 1
             native["loaded"] = self.unit_file()
         elif args[0] in ("enable", "restart", "start"):
+            native["enabled"] = native["enabled"] or args[0] == "enable"
             if args[0] != "restart" and native["active"]:
                 return 0, ""  # systemd leaves an active unit alone on start and enable --now
             native["starts" if args[0] != "restart" else "restarts"] += 1
@@ -209,10 +215,18 @@ class FakeHost:
                 native["environment"] = environment.read_text()
         elif args[0] == "stop":
             native["active"], native["inputs"] = False, None
+        elif args[0] == "disable":
+            if not native["enabled"]:
+                return 1, ""  # the unit file was never linked
+            native["enabled"] = False
+            if "--now" in args:
+                native["active"], native["inputs"] = False, None
         elif args[0] == "is-active":
             return (0 if native["active"] else 3), ""
         elif args[0] == "show" and "--property=MainPID" in args:
             return 0, "4242" if native["active"] else "0"
+        elif args[0] == "show" and "--property=LoadState" in args:
+            return 0, "loaded" if native["enabled"] or native["active"] else "not-found"
         elif args[0] == "show":
             return 0, "252"
         return 0, ""

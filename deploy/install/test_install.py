@@ -160,17 +160,47 @@ class InstallerTests(unittest.TestCase):
                 self.install()
         self.assertEqual(before, self.snapshot())
 
-    def test_interrupted_finish_repairs_with_original_identity_and_lock(self):
-        with mock.patch.object(install, "prepare_node_payload", side_effect=KeyboardInterrupt):
-            with self.assertRaises(KeyboardInterrupt):
-                self.install()
-        before = self.document("state.json")
-        inode = (self.root / ".oac.lock").stat().st_ino
-        secret = (self.root / "secrets/core.key").read_bytes()
-        self.install()
-        self.assertEqual(before["installation_id"], self.document("state.json")["installation_id"])
-        self.assertEqual(inode, (self.root / ".oac.lock").stat().st_ino)
-        self.assertEqual(secret, (self.root / "secrets/core.key").read_bytes())
+    def test_an_interrupted_first_start_removes_what_it_created(self):
+        self.root.mkdir()
+        with mock.patch.object(install.oac_cli, "health", side_effect=KeyboardInterrupt), \
+                self.assertRaises(install.InstallError) as raised:
+            self.install()
+        self.assertEqual(str(raised.exception), "interrupted\n" + install.NOTHING_KEPT)
+        # The directory existed, so it stays, with only the lock that a waiting command may hold.
+        self.assertEqual([path.name for path in self.root.iterdir()], [".oac.lock"])
+        self.assertIn(["docker", "compose", "-p", self.host.project, "down", "--volumes", "--remove-orphans"],
+                      self.host.commands)
+        self.assertEqual(self.host.containers, {})
+
+    def test_a_rerun_replaces_an_incomplete_installation(self):
+        self.install("--sandbox", "none")
+        old = self.host.project
+        # What a first start killed before it finished leaves behind; its services hold their ports until removed.
+        install.oac_cli.save_state(self.root, dict(self.document("state.json"), complete=False))
+        self.host.busy = {8080, 8091}
+        remove = install.oac_cli.remove
+        with mock.patch.object(install.oac_cli, "remove",
+                               side_effect=lambda *args, **kwargs: (remove(*args, **kwargs), self.host.busy.clear())):
+            self.install("--core-only", "--sandbox", "none")
+        self.assertIn(["docker", "compose", "-p", old, "down", "--volumes", "--remove-orphans"], self.host.commands)
+        self.assertEqual((self.document("config.json")["mode"], self.document("config.json")["ports"]["core"]),
+                         ("core-only", 8091))
+        state = self.document("state.json")
+        self.assertNotEqual(state["project"], old)
+        self.assertTrue(state["complete"])
+        self.assertEqual(self.host.running(), {"database", "core"})
+
+    def test_a_complete_installation_is_never_removed(self):
+        self.install("--sandbox", "none")
+        before = self.snapshot()
+        with self.assertRaisesRegex(install.InstallError, "configured by"):
+            self.install("--core-only")
+        self.host.containers.clear()
+        self.host.core["fails"] = True
+        with self.assertRaisesRegex(install.oac_cli.OacError, "config.json not applied"):
+            self.install()
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(any("down" in command for command in self.host.commands))
 
     def test_fresh_web_refuses_old_core_before_creating_installation(self):
         self.host.remote_core["https://core.example"] = (404, None)
@@ -356,11 +386,7 @@ class InstallerTests(unittest.TestCase):
         (self.root / "installation.json").write_text("{}")
         with self.assertRaisesRegex(install.InstallError, "not supported;.*reinstall"):
             self.install()
-        # A fresh install stopped before config.json started nothing: starting over is safe.
         (self.root / "installation.json").unlink()
-        (self.root / "secrets").mkdir()
-        with self.assertRaisesRegex(install.InstallError, "stopped before writing config.json"):
-            self.install()
         (self.root / "state.json").write_text('{"format": 1, "generated": {}}')
         (self.root / "state.json").chmod(0o600)
         with self.assertRaisesRegex(install.oac_cli.OacError, "not supported;.*reinstall"):
@@ -507,18 +533,28 @@ class InstallerTests(unittest.TestCase):
                 self.install(*flags)
             self.assertFalse(self.root.exists())
 
-    def test_a_failed_first_start_says_the_sandbox_backend_was_not_chosen(self):
-        self.host.core["fails"] = True
-        with self.assertRaisesRegex(install.oac_cli.OacError,
-                                    f"rerun ./install.sh --install-dir {self.root}. The sandbox backend was not chosen; "
-                                    "after the repair, choose it on the Nodes page in Web$"):
-            self.install("--sandbox", "microsandbox")
-        self.assertNotIn("Installation complete.", self.output.getvalue())
-        self.assertIn("==> Applying settings and starting services as needed...", self.output.getvalue())
-        self.host.core["fails"] = False
-        self.install()
-        self.assertIn("Installation settings checked.", self.output.getvalue())
-        self.assertEqual(self.host.deployment_posts, [])
+    def test_a_failed_first_start_removes_what_it_created(self):
+        for flags, cause in (((), "`docker compose up` failed"), (("--native-core",), "Core did not become healthy")):
+            with self.subTest(flags=flags):
+                self.root = self.host.native_root = self.work / ("native" if flags else "compose")
+                self.host.containers, self.output = {}, io.StringIO()
+                self.host.core["fails"] = True
+                with self.assertRaises(install.InstallError) as raised:
+                    self.install("--sandbox", "microsandbox", *flags)
+                self.assertEqual(str(raised.exception), f"The services did not start: {cause}\n{install.NOTHING_KEPT}")
+                self.assertNotIn("Installation complete.", self.output.getvalue())
+                self.assertFalse(self.root.exists())
+                self.assertIn(["docker", "compose", "-p", self.host.project, "down", "--volumes", "--remove-orphans"],
+                              self.host.commands)
+                self.assertEqual(self.host.containers, {})
+                if flags:
+                    self.assertIn(["systemctl", "--user", "disable", "--now", self.host.project + "-core.service"],
+                                  self.host.commands)
+                    self.assertFalse(self.host.native["enabled"] or self.host.native["active"])
+                # The same command installs once the cause is fixed, sandbox backend included.
+                self.host.core["fails"] = False
+                self.install("--sandbox", "microsandbox", *flags)
+                self.assertEqual(self.host.deployment_posts[-1]["provider"], "microsandbox")
 
     def test_a_refused_selection_leaves_the_services_running(self):
         secret = "synthetic-e2b-key-0123456789"
@@ -590,9 +626,9 @@ class InstallerTests(unittest.TestCase):
         with mock.patch.object(distribution, "docker_command", side_effect=lambda arguments, **kwargs: (
                 subprocess.CompletedProcess(arguments, 0, "sha256:" + "f" * 64 + " linux/amd64", "")
                 if "inspect" in arguments else original(arguments, **kwargs))):
-            with self.assertRaisesRegex(distribution.DistributionError, "identity or platform"):
+            with self.assertRaisesRegex(install.InstallError, "identity or platform"):
                 self.install()
-        self.assertEqual({p.name for p in self.root.iterdir()}, {".oac.lock"})
+        self.assertFalse(self.root.exists())
 
     def test_cli_failure_does_not_print_external_command_secrets(self):
         secret = "synthetic-sensitive-command-value"

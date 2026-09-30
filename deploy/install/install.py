@@ -2,7 +2,8 @@
 """Install one matched Core distribution, repair it, without changing versions.
 
 A new installation's flags seed <install-dir>/config.json. Afterwards, edit that file
-and run <install-dir>/oac apply; rerunning this installer only repairs.
+and run <install-dir>/oac apply; rerunning this installer only repairs. A new installation
+that fails before its services first start removes what it created; rerun the same command.
 """
 import argparse
 import base64
@@ -15,6 +16,7 @@ import platform
 import re
 import secrets
 import shutil
+import signal
 import socket
 import stat
 import subprocess
@@ -57,6 +59,20 @@ DOCKER_RISKS = """Docker sandboxes isolate less than microsandbox, the default:
 
 class InstallError(Exception):
     pass
+
+
+REPORTED = (InstallError, oac_cli.OacError, config_model.ConfigError, sandbox_setup.SandboxSetupError,
+            DistributionError, RuntimeError)
+NOTHING_KEPT = "Nothing was kept; fix the problem and rerun the same command."
+
+
+def error_text(error):
+    """What the installer prints for an error. It never includes generated configuration or command output."""
+    if isinstance(error, REPORTED):
+        return str(error)
+    if isinstance(error, KeyboardInterrupt):
+        return "interrupted"
+    return "inspect prerequisites and private deployment files"
 
 
 def run(args, **kwargs):
@@ -517,23 +533,32 @@ def install_oac(root, bundle):
 def layout(root):
     if not root.exists() or not any(path.name != ".oac.lock" for path in root.iterdir()):
         return "empty"
-    config, legacy = (root / "config.json").exists(), (root / "installation.json").exists()
-    if config and legacy:
-        return "interrupted"
-    if config or legacy:
-        return "config" if config else "legacy"
-    generated = root / "generated"
-    never_applied = not (generated.is_dir() and any(generated.iterdir()))
     if (root / "state.json").exists():
         try:
-            recorded = json.loads((root / "state.json").read_text()).get("generated")
+            # create() records complete: false; the first successful start sets it.
+            incomplete = json.loads((root / "state.json").read_text()).get("complete") is False
         except (OSError, ValueError, AttributeError):
-            recorded = True
-        # Never applied: nothing started, so nothing depends on these secrets yet.
-        return "incomplete" if never_applied and not recorded else "missing-config"
-    if never_applied and {path.name for path in root.iterdir()} <= {"secrets", "generated", "state", ".oac.lock"}:
+            incomplete = False
+        if incomplete:
+            return "incomplete"
+    if (root / "config.json").exists():
+        return "config"
+    if (root / "state.json").exists():
+        return "missing-config"
+    generated = root / "generated"
+    # create() stopped before writing state.json, so nothing was started.
+    if (not (generated.is_dir() and any(generated.iterdir()))
+            and {path.name for path in root.iterdir()} <= {"secrets", "generated", "state", "ingress", ".oac.lock"}):
         return "incomplete"
     return "other"
+
+
+def written_state(root):
+    """state.json, or None while create() has not finished writing it; then nothing was started."""
+    try:
+        return oac_cli.load_state(root)
+    except (oac_cli.OacError, ValueError):
+        return None
 
 
 def create(root, args, config, manifest, images):
@@ -555,7 +580,7 @@ def create(root, args, config, manifest, images):
              "uid": os.getuid(), "gid": os.getgid(), "mode": mode, "native_core": config.get("native_core", False),
              "source_commit": manifest["source_commit"], "images": images,
              "secrets_sha256": configuration.secret_digests(root, mode), "core_installation_id": None,
-             "generated": {}}
+             "generated": {}, "complete": False}
     if ingress_config.enabled(config):
         state["ingress"] = ingress_config.preflight()
         ingress_config.prepare(root)
@@ -575,17 +600,19 @@ def finish(root, bundle, manifest, fresh=False, selection=None, moved=()):
     install_oac(root, bundle)
     if ingress_config.enabled(oac_cli.load_config(root)):
         ingress_config.prepare(root)
-    retry = f"rerun ./install.sh --install-dir {root}"
+    args = argparse.Namespace(dry_run=False, yes=False, confirm_public_url_change=None)
+    step("Applying settings and starting services as needed")
     try:
-        args = argparse.Namespace(dry_run=False, yes=False, confirm_public_url_change=None)
-        step("Applying settings and starting services as needed")
         oac_cli._apply(root, args, False, True, sys.stdin.isatty(),
-                       lambda message: print(message, flush=True), retry=retry)
-    except oac_cli.OacError as error:
-        if not selection:
+                       lambda message: print(message, flush=True), retry=f"rerun ./install.sh --install-dir {root}")
+    except oac_cli.ApplyFailed as error:
+        if not fresh:
             raise
-        raise oac_cli.OacError(f"{str(error).rstrip('.')}. The sandbox backend was not chosen; after the "
-                              f"repair, choose it {choose_where(state['mode'])}") from None
+        # The installer removes what it created and says how to retry.
+        raise InstallError(f"The services did not start: {error.cause}") from None
+    if fresh:
+        # The first start finished: from now on the installation is kept whatever fails.
+        oac_cli.save_state(root, dict(oac_cli.load_state(root), complete=True))
     config = oac_cli.load_config(root)
     mode = config["mode"]
     if mode == "web-only":
@@ -646,10 +673,11 @@ def main(argv=None):
     check_release(root, manifest)
     if root.parent == Path.home() / ".oac":
         root.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    created = not root.exists()
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     with oac_cli.locked(root):
         check_release(root, manifest)
-        install_locked(args, root, bundle, manifest, prepared)
+        install_locked(args, root, bundle, manifest, prepared, created)
 
 
 def check_release(root, manifest):
@@ -682,7 +710,7 @@ def prepare_fresh(args):
     return config, choice, e2b, moved
 
 
-def install_locked(args, root, bundle, manifest, prepared):
+def install_locked(args, root, bundle, manifest, prepared, created):
     kind = layout(root)
     if kind == "config":
         if args.given:
@@ -705,11 +733,33 @@ def install_locked(args, root, bundle, manifest, prepared):
         raise InstallError(f"{root / 'config.json'} is missing. Restore it from a backup; "
                            f"{root / 'generated/settings.json'} lists the last applied values. The secrets and "
                            "database belong to this installation, so keep the directory. Nothing was changed")
-    if kind == "incomplete":
-        raise InstallError(f"An earlier installation into {root} stopped before writing config.json and started no "
-                           "service. Preserve the directory and reinstall into a new empty directory")
     if kind == "other":
         raise InstallError("Installation directory is not empty; refusing to overwrite existing state")
+    if kind == "incomplete":
+        # A first installation stopped without its cleanup, such as by kill -9 or power loss.
+        step("Removing an incomplete earlier installation")
+        oac_cli.remove(root, written_state(root), keep_root=True)
+    if prepared is None:
+        # Checked only now that the earlier installation is gone, so the ports it held count as free.
+        step("Checking installation settings")
+        prepared = prepare_fresh(args)
+    try:
+        install_fresh(args, root, bundle, manifest, prepared)
+    except (Exception, KeyboardInterrupt) as error:
+        state = written_state(root)
+        if state and state.get("complete"):
+            raise
+        # A first installation that did not start removes what it created, so the same command can run again.
+        step("Removing what this installation created")
+        try:
+            oac_cli.remove(root, state, keep_root=not created)
+        except oac_cli.OacError as left:
+            raise InstallError(f"{error_text(error)}\n{left}") from error
+        raise InstallError(f"{error_text(error)}\n{NOTHING_KEPT}") from error
+
+
+def install_fresh(args, root, bundle, manifest, prepared):
+    """Check the host, load images, create the installation and start it for the first time."""
     config, choice, e2b, moved = prepared
     step("Checking host requirements")
     check_host()
@@ -724,14 +774,15 @@ def install_locked(args, root, bundle, manifest, prepared):
     finish(root, bundle, manifest, fresh=True, selection=selection, moved=moved)
 
 
+def interrupted(signum, frame):
+    raise KeyboardInterrupt
+
+
 if __name__ == "__main__":
+    # SIGTERM stops the installer as Ctrl-C does, so a new installation still removes what it created.
+    signal.signal(signal.SIGTERM, interrupted)
     try:
         main()
-    except (InstallError, oac_cli.OacError, config_model.ConfigError,
-            sandbox_setup.SandboxSetupError, DistributionError, RuntimeError) as error:
-        install_display.error(str(error))
-        sys.exit(1)
-    except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
-        # Errors never include generated configuration or external process output.
-        install_display.error("inspect prerequisites and private deployment files")
-        sys.exit(1)
+    except (*REPORTED, OSError, ValueError, KeyError, subprocess.CalledProcessError, KeyboardInterrupt) as error:
+        install_display.error(error_text(error))
+        sys.exit(130 if isinstance(error, KeyboardInterrupt) else 1)
