@@ -72,10 +72,8 @@ func validateSkills(requested []Skill, installed bool) error {
 			if m.SkillID == "" || len(m.SkillID) > 256 || m.Name != "" || m.Description != "" || len(skill.Archive) != 0 {
 				return ErrInvalid
 			}
-			if m.Version != "" && m.Version != "latest" {
-				if _, err := skills.ParseVersion(m.Version); err != nil {
-					return ErrInvalid
-				}
+			if skills.ValidateSelector(m.Version) != nil {
+				return ErrInvalid
 			}
 			continue
 		}

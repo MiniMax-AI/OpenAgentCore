@@ -23,6 +23,7 @@ type testFakes struct {
 	files                  *fakeFiles
 	filesReader            *fakeFilesReader
 	skills                 *fakeSkills
+	skillsReader           *fakeSkillsReader
 	environmentTemplates   *fakeEnvironmentTemplates
 	agents                 *fakeAgents
 	agentsReader           *fakeAgentsReader
@@ -62,9 +63,9 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		projects:       &fakeProjects{t: t},
 		modelProviders: &fakeModelProviders{t: t}, modelProvidersReader: &fakeModelProvidersReader{t: t},
 		vaults: &fakeVaults{t: t}, vaultsReader: &fakeVaultsReader{t: t},
-		skills:               &fakeSkills{t: t},
 		environmentTemplates: &fakeEnvironmentTemplates{t: t}, environmentTemplatesReader: &fakeEnvironmentTemplatesReader{t: t},
 		files: &fakeFiles{t: t}, filesReader: &fakeFilesReader{t: t},
+		skills: &fakeSkills{t: t}, skillsReader: &fakeSkillsReader{t: t},
 		agents: &fakeAgents{t: t}, agentsReader: &fakeAgentsReader{t: t},
 		sessions: &fakeSessions{t: t}, sessionEvents: &fakeSessionEvents{t: t},
 		sessionHistory: &fakeSessionHistory{t: t}, subagents: &fakeSubagents{t: t}, artifacts: &fakeArtifacts{t: t},
@@ -76,11 +77,12 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	}
 	return Dependencies{
 		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
-		Projects: f.projects, Skills: f.skills,
+		Projects:       f.projects,
 		ModelProviders: f.modelProviders, ModelProvidersReader: f.modelProvidersReader,
 		Vaults: f.vaults, VaultsReader: f.vaultsReader,
 		Files: f.files, FilesReader: f.filesReader,
 		EnvironmentTemplates: f.environmentTemplates, EnvironmentTemplatesReader: f.environmentTemplatesReader,
+		Skills: f.skills, SkillsReader: f.skillsReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
 		Sessions: f.sessions, SessionEvents: f.sessionEvents,
 		SessionHistory: f.sessionHistory, Subagents: f.subagents, Artifacts: f.artifacts, SessionAdmin: f.sessionAdmin,

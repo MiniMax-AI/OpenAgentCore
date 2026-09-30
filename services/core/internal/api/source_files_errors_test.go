@@ -48,7 +48,6 @@ func TestStoreErrorOptionalParameterPreservesOtherErrors(t *testing.T) {
 		code   any
 		param  []string
 	}{
-		{"/v1/skills/skill_missing", store.ErrNotFound, 404, nil, nil},
 		{"/v1/agents/agent_missing", store.ErrNotFound, 404, "not_found_error", nil},
 	} {
 		w := httptest.NewRecorder()

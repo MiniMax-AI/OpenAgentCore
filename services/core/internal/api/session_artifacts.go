@@ -102,11 +102,14 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
-	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
+	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
 		return h.Artifacts.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a store.SessionArtifact, body io.Reader) error {
 			return consume(path.Base(a.Path), a.SizeBytes, body)
 		})
 	})
+	if err != nil {
+		writeStoreError(w, r, err)
+	}
 }
 
 func artifactResponse(a store.SessionArtifact) v1.SessionArtifact {

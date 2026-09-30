@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -56,11 +57,14 @@ func TestSkillVersionDeletionHTTPPostgres(t *testing.T) {
 	}
 	missing := expect(owner, http.MethodDelete, "/v1/skills/skill_"+uuid.NewString()+"/versions/1", http.StatusNotFound)
 
-	sole, err := s.CreateSkill(t.Context(), ownerTenant, store.SkillArchive(t, "sole-http"))
+	skillService := store.SkillService(t, pool, cipher)
+	sole, err := skillService.CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: store.SkillArchive(t, "sole-http")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.DeleteSkill(t.Context(), ownerTenant, sole.ID) })
+	t.Cleanup(func() {
+		_ = skillService.DeleteSkill(t.Context(), skills.DeleteSkill{TenantID: ownerTenant, SkillID: skills.PathID(sole.ID)})
+	})
 	version := object(expect(owner, http.MethodGet, "/v1/skills/"+sole.ID+"/versions/1", http.StatusOK))
 	path := "/v1/skills/" + sole.ID
 	// V4: a foreign tenant receives the missing-Skill response and changes nothing.
@@ -85,12 +89,14 @@ func TestSkillVersionDeletionHTTPPostgres(t *testing.T) {
 	expect(owner, http.MethodDelete, path, http.StatusNotFound)
 
 	// V2 and V3 on a Skill with two versions, then V1 on the reduced Skill.
-	pair, err := s.CreateSkill(t.Context(), ownerTenant, store.SkillArchive(t, "pair-one"))
+	pair, err := skillService.CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: store.SkillArchive(t, "pair-one")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.DeleteSkill(t.Context(), ownerTenant, pair.ID) })
-	if _, err = s.CreateSkillVersion(t.Context(), ownerTenant, pair.ID, store.SkillArchive(t, "pair-two"), false); err != nil {
+	t.Cleanup(func() {
+		_ = skillService.DeleteSkill(t.Context(), skills.DeleteSkill{TenantID: ownerTenant, SkillID: skills.PathID(pair.ID)})
+	})
+	if _, err = skillService.CreateVersion(t.Context(), skills.CreateVersion{TenantID: ownerTenant, SkillID: skills.PathID(pair.ID), Archive: store.SkillArchive(t, "pair-two")}); err != nil {
 		t.Fatal(err)
 	}
 	path = "/v1/skills/" + pair.ID

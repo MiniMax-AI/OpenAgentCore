@@ -12,18 +12,18 @@ import (
 	"unicode/utf8"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 )
 
 // readSkillUpload preserves directory paths from Content-Disposition. The
 // multipart Part.FileName helper would discard their parent components.
 func readSkillUpload(r *http.Request, versionUpload bool) ([]byte, bool, error) {
 	if r.Header.Get("Content-Encoding") != "" {
-		return nil, false, store.ErrInvalidInput
+		return nil, false, skills.ErrInvalidInput
 	}
 	reader, err := r.MultipartReader()
 	if err != nil {
-		return nil, false, store.ErrInvalidInput
+		return nil, false, skills.ErrInvalidInput
 	}
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
@@ -42,41 +42,41 @@ func readSkillUpload(r *http.Request, versionUpload bool) ([]byte, bool, error) 
 		kind, attrs, err := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
 		field := attrs["name"]
 		if err != nil || kind != "form-data" || part.Header.Get("Content-Transfer-Encoding") != "" {
-			return nil, false, store.ErrInvalidInput
+			return nil, false, skills.ErrInvalidInput
 		}
 		if field == "default" {
 			if !versionUpload || seenDefault {
-				return nil, false, store.ErrInvalidInput
+				return nil, false, skills.ErrInvalidInput
 			}
 			if _, ok := attrs["filename"]; ok {
-				return nil, false, store.ErrInvalidInput
+				return nil, false, skills.ErrInvalidInput
 			}
 			value, err := io.ReadAll(io.LimitReader(part, 6))
 			if err != nil || (string(value) != "true" && string(value) != "false") {
-				return nil, false, store.ErrInvalidInput
+				return nil, false, skills.ErrInvalidInput
 			}
 			seenDefault = true
 			makeDefault = string(value) == "true"
 		} else {
 			name := attrs["filename"]
 			if (field != "files" && field != "files[]") || name == "" || files >= 500 || zipUpload {
-				return nil, false, store.ErrInvalidInput
+				return nil, false, skills.ErrInvalidInput
 			}
 			if field == "files" {
 				if files != 0 {
-					return nil, false, store.ErrInvalidInput
+					return nil, false, skills.ErrInvalidInput
 				}
 				uploaded, err = io.ReadAll(io.LimitReader(part, agentskill.MaxArchiveBytes+1))
 				if err != nil {
 					return nil, false, err
 				}
 				if len(uploaded) > agentskill.MaxArchiveBytes {
-					return nil, false, store.ErrInvalidInput
+					return nil, false, skills.ErrInvalidInput
 				}
 				zipUpload = true
 			} else {
 				if !utf8.ValidString(name) || len(name) > 4096 || path.IsAbs(name) || path.Clean(name) != name || strings.ContainsAny(name, "\\\x00\r\n") || !strings.Contains(name, "/") || paths[name] {
-					return nil, false, store.ErrInvalidInput
+					return nil, false, skills.ErrInvalidInput
 				}
 				paths[name] = true
 				body, err := io.ReadAll(io.LimitReader(part, int64(agentskill.MaxExpandedBytes-expanded)+1))
@@ -85,7 +85,7 @@ func readSkillUpload(r *http.Request, versionUpload bool) ([]byte, bool, error) 
 				}
 				expanded += len(body)
 				if expanded > agentskill.MaxExpandedBytes {
-					return nil, false, store.ErrInvalidInput
+					return nil, false, skills.ErrInvalidInput
 				}
 				header := &zip.FileHeader{Name: name, Method: zip.Deflate}
 				header.SetMode(0644)
@@ -110,13 +110,13 @@ func readSkillUpload(r *http.Request, versionUpload bool) ([]byte, bool, error) 
 		return nil, false, err
 	}
 	if files == 0 {
-		return nil, false, store.ErrInvalidInput
+		return nil, false, skills.ErrInvalidInput
 	}
 	if !zipUpload {
 		uploaded = archive.Bytes()
 	}
 	if _, err := agentskill.Inspect(uploaded); err != nil {
-		return nil, false, store.ErrInvalidInput
+		return nil, false, skills.ErrInvalidInput
 	}
 	return uploaded, makeDefault, nil
 }

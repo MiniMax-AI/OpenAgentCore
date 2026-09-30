@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/google/uuid"
 )
 
@@ -19,13 +20,15 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewWithCredentialCipher(pool, cipher)
+	skillService := SkillService(t, pool, cipher)
 	tenant := uuid.NewString()
 	first, second := skillArchive(t, "frozen-first"), skillArchive(t, "frozen-second")
-	skill, err := s.CreateSkill(t.Context(), tenant, first)
+	skill, err := skillService.CreateSkill(t.Context(), skills.CreateSkill{TenantID: tenant, Archive: first})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.CreateSkillVersion(t.Context(), tenant, skill.ID, second, false); err != nil {
+	skillID := skills.PathID(skill.ID)
+	if _, err = skillService.CreateVersion(t.Context(), skills.CreateVersion{TenantID: tenant, SkillID: skillID, Archive: second}); err != nil {
 		t.Fatal(err)
 	}
 	intent := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
@@ -90,7 +93,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 	if input.Initialization.Skills[0].Metadata.Version != "" || len(input.Initialization.Skills[0].Archive) != 0 {
 		t.Fatal("creation mutated caller intent")
 	}
-	if _, err = s.UpdateSkillDefault(t.Context(), tenant, skill.ID, "2"); err != nil {
+	if _, err = skillService.SetDefaultVersion(t.Context(), skills.SetDefaultVersion{TenantID: tenant, SkillID: skillID, Version: "2"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, selector := range []string{"", "latest", "1"} {
@@ -107,7 +110,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 			assertFrozen(created.ID, "2", second)
 		}
 	}
-	if err = s.DeleteSkill(t.Context(), tenant, skill.ID); err != nil {
+	if err = skillService.DeleteSkill(t.Context(), skills.DeleteSkill{TenantID: tenant, SkillID: skillID}); err != nil {
 		t.Fatal(err)
 	}
 	retry, err := s.CreateSession(t.Context(), tenant, input)
@@ -128,7 +131,7 @@ func TestSkillReferenceAuthorizationRollsBackSession(t *testing.T) {
 	}
 	s := NewWithCredentialCipher(pool, cipher)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	skill, err := s.CreateSkill(t.Context(), tenant, skillArchive(t, "private-owner"))
+	skill, err := SkillService(t, pool, cipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: tenant, Archive: skillArchive(t, "private-owner")})
 	if err != nil {
 		t.Fatal(err)
 	}

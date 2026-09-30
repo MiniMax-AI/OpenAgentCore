@@ -23,7 +23,7 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 	for _, path := range []string{
 		"/v1/agents/missing", "/v1/vaults/missing",
 		"/v1/agents/sessions/missing/items", "/v1/agents/environments/missing/files",
-		"/v1/files", "/v1/files/missing/content", "/v1/skills", "/v1/skills/missing/versions/1",
+		"/v1/files", "/v1/files/missing/content",
 	} {
 		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()
@@ -56,14 +56,12 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 	}
 }
 
-// An unresolved list cursor keeps its store message; Skill versions use the
-// observed invalid_value code on after, Beta lists invalid_request_error with a
-// null param.
+// An unresolved Beta list cursor keeps its store message with the observed
+// invalid_request_error code and a null param.
 func TestInvalidCursorErrorFields(t *testing.T) {
 	for path, want := range map[string]string{
 		"/v1/agents/sessions/session/items":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
 		"/v1/agents/sessions/session/subagents":     `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
-		"/v1/skills/skill_missing/versions":         `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_value","param":"after"}}`,
 		"/v1/agents/sessions/session/artifacts?x=1": `{"error":{"message":"Invalid session item ID in ` + "`after`" + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}`,
 	} {
 		response := httptest.NewRecorder()

@@ -19,9 +19,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
+	"github.com/google/uuid"
 )
 
 // Strict fakes: one per Dependencies area, with a func field per method. A
@@ -877,95 +879,99 @@ func (f *fakeSessions) AuditSessionOperation(a0 context.Context, a1 string, a2 s
 }
 
 type fakeSkills struct {
-	t                       testing.TB
-	createSkill             func(context.Context, string, []byte) (store.Skill, error)
-	getSkill                func(context.Context, string, string) (store.Skill, error)
-	updateSkillDefault      func(context.Context, string, string, string) (store.Skill, error)
-	deleteSkill             func(context.Context, string, string) error
-	listSkills              func(context.Context, string, string, int, bool) (store.SkillPage, error)
-	createSkillVersion      func(context.Context, string, string, []byte, bool) (store.SkillVersion, error)
-	getSkillVersion         func(context.Context, string, string, string) (store.SkillVersion, error)
-	readSkillVersion        func(context.Context, string, string, string) (store.SkillVersion, []byte, error)
-	readDefaultSkillVersion func(context.Context, string, string) (store.SkillVersion, []byte, error)
-	deleteSkillVersion      func(context.Context, string, string, string) (store.SkillVersion, error)
-	listSkillVersions       func(context.Context, string, string, string, int, bool) (store.SkillVersionPage, error)
+	t                  testing.TB
+	createSkill        func(context.Context, skills.CreateSkill) (skills.Skill, error)
+	createVersion      func(context.Context, skills.CreateVersion) (skills.Version, error)
+	setDefaultVersion  func(context.Context, skills.SetDefaultVersion) (skills.Skill, error)
+	deleteSkill        func(context.Context, skills.DeleteSkill) error
+	deleteVersion      func(context.Context, skills.DeleteVersion) (skills.Version, error)
+	listSkills         func(context.Context, skills.ListSkills) (skills.Page, error)
+	listVersions       func(context.Context, skills.ListVersions) (skills.VersionPage, error)
+	readVersion        func(context.Context, skills.ReadVersion) (skills.Content, error)
+	readDefaultVersion func(context.Context, skills.ReadDefaultVersion) (skills.Content, error)
 }
 
-func (f *fakeSkills) CreateSkill(a0 context.Context, a1 string, a2 []byte) (store.Skill, error) {
+func (f *fakeSkills) CreateSkill(a0 context.Context, a1 skills.CreateSkill) (skills.Skill, error) {
 	if f.createSkill == nil {
 		unexpectedCall(f.t, "CreateSkill")
 	}
-	return f.createSkill(a0, a1, a2)
+	return f.createSkill(a0, a1)
 }
 
-func (f *fakeSkills) GetSkill(a0 context.Context, a1 string, a2 string) (store.Skill, error) {
-	if f.getSkill == nil {
-		unexpectedCall(f.t, "GetSkill")
+func (f *fakeSkills) CreateVersion(a0 context.Context, a1 skills.CreateVersion) (skills.Version, error) {
+	if f.createVersion == nil {
+		unexpectedCall(f.t, "CreateVersion")
 	}
-	return f.getSkill(a0, a1, a2)
+	return f.createVersion(a0, a1)
 }
 
-func (f *fakeSkills) UpdateSkillDefault(a0 context.Context, a1 string, a2 string, a3 string) (store.Skill, error) {
-	if f.updateSkillDefault == nil {
-		unexpectedCall(f.t, "UpdateSkillDefault")
+func (f *fakeSkills) SetDefaultVersion(a0 context.Context, a1 skills.SetDefaultVersion) (skills.Skill, error) {
+	if f.setDefaultVersion == nil {
+		unexpectedCall(f.t, "SetDefaultVersion")
 	}
-	return f.updateSkillDefault(a0, a1, a2, a3)
+	return f.setDefaultVersion(a0, a1)
 }
 
-func (f *fakeSkills) DeleteSkill(a0 context.Context, a1 string, a2 string) error {
+func (f *fakeSkills) DeleteSkill(a0 context.Context, a1 skills.DeleteSkill) error {
 	if f.deleteSkill == nil {
 		unexpectedCall(f.t, "DeleteSkill")
 	}
-	return f.deleteSkill(a0, a1, a2)
+	return f.deleteSkill(a0, a1)
 }
 
-func (f *fakeSkills) ListSkills(a0 context.Context, a1 string, a2 string, a3 int, a4 bool) (store.SkillPage, error) {
+func (f *fakeSkills) DeleteVersion(a0 context.Context, a1 skills.DeleteVersion) (skills.Version, error) {
+	if f.deleteVersion == nil {
+		unexpectedCall(f.t, "DeleteVersion")
+	}
+	return f.deleteVersion(a0, a1)
+}
+
+func (f *fakeSkills) ListSkills(a0 context.Context, a1 skills.ListSkills) (skills.Page, error) {
 	if f.listSkills == nil {
 		unexpectedCall(f.t, "ListSkills")
 	}
-	return f.listSkills(a0, a1, a2, a3, a4)
+	return f.listSkills(a0, a1)
 }
 
-func (f *fakeSkills) CreateSkillVersion(a0 context.Context, a1 string, a2 string, a3 []byte, a4 bool) (store.SkillVersion, error) {
-	if f.createSkillVersion == nil {
-		unexpectedCall(f.t, "CreateSkillVersion")
+func (f *fakeSkills) ListVersions(a0 context.Context, a1 skills.ListVersions) (skills.VersionPage, error) {
+	if f.listVersions == nil {
+		unexpectedCall(f.t, "ListVersions")
 	}
-	return f.createSkillVersion(a0, a1, a2, a3, a4)
+	return f.listVersions(a0, a1)
 }
 
-func (f *fakeSkills) GetSkillVersion(a0 context.Context, a1 string, a2 string, a3 string) (store.SkillVersion, error) {
-	if f.getSkillVersion == nil {
-		unexpectedCall(f.t, "GetSkillVersion")
+func (f *fakeSkills) ReadVersion(a0 context.Context, a1 skills.ReadVersion) (skills.Content, error) {
+	if f.readVersion == nil {
+		unexpectedCall(f.t, "ReadVersion")
 	}
-	return f.getSkillVersion(a0, a1, a2, a3)
+	return f.readVersion(a0, a1)
 }
 
-func (f *fakeSkills) ReadSkillVersion(a0 context.Context, a1 string, a2 string, a3 string) (store.SkillVersion, []byte, error) {
-	if f.readSkillVersion == nil {
-		unexpectedCall(f.t, "ReadSkillVersion")
+func (f *fakeSkills) ReadDefaultVersion(a0 context.Context, a1 skills.ReadDefaultVersion) (skills.Content, error) {
+	if f.readDefaultVersion == nil {
+		unexpectedCall(f.t, "ReadDefaultVersion")
 	}
-	return f.readSkillVersion(a0, a1, a2, a3)
+	return f.readDefaultVersion(a0, a1)
 }
 
-func (f *fakeSkills) ReadDefaultSkillVersion(a0 context.Context, a1 string, a2 string) (store.SkillVersion, []byte, error) {
-	if f.readDefaultSkillVersion == nil {
-		unexpectedCall(f.t, "ReadDefaultSkillVersion")
-	}
-	return f.readDefaultSkillVersion(a0, a1, a2)
+type fakeSkillsReader struct {
+	t       testing.TB
+	skill   func(context.Context, string, uuid.UUID) (skills.Skill, error)
+	version func(context.Context, string, uuid.UUID, int64) (skills.Version, error)
 }
 
-func (f *fakeSkills) DeleteSkillVersion(a0 context.Context, a1 string, a2 string, a3 string) (store.SkillVersion, error) {
-	if f.deleteSkillVersion == nil {
-		unexpectedCall(f.t, "DeleteSkillVersion")
+func (f *fakeSkillsReader) Skill(a0 context.Context, a1 string, a2 uuid.UUID) (skills.Skill, error) {
+	if f.skill == nil {
+		unexpectedCall(f.t, "Skill")
 	}
-	return f.deleteSkillVersion(a0, a1, a2, a3)
+	return f.skill(a0, a1, a2)
 }
 
-func (f *fakeSkills) ListSkillVersions(a0 context.Context, a1 string, a2 string, a3 string, a4 int, a5 bool) (store.SkillVersionPage, error) {
-	if f.listSkillVersions == nil {
-		unexpectedCall(f.t, "ListSkillVersions")
+func (f *fakeSkillsReader) Version(a0 context.Context, a1 string, a2 uuid.UUID, a3 int64) (skills.Version, error) {
+	if f.version == nil {
+		unexpectedCall(f.t, "Version")
 	}
-	return f.listSkillVersions(a0, a1, a2, a3, a4, a5)
+	return f.version(a0, a1, a2, a3)
 }
 
 type fakeSubagents struct {

@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -47,10 +48,19 @@ func requireAdminAuditFailure(t *testing.T, s *Store, err error, before int64) {
 	}
 }
 
+type resourceAuditMutation struct {
+	action, kind, parent string
+	run                  func(context.Context) (string, error)
+}
+
 func adminDeleteContext(ctx context.Context, tenant, request string) context.Context {
 	// Even an inherited public provenance context must not turn an administrator
 	// operation into a user-key operation.
-	return adminaudit.WithSource(resourceAuditContext(ctx, tenant, request), adminaudit.Source{
+	public := writeaudit.WithSource(ctx, writeaudit.Source{
+		KeyID: "static:" + strings.Repeat("a", 64), Name: "resource audit fixture", Prefix: "aaaaaaaa",
+		Kind: "static", TenantID: tenant, RequestID: request, TraceID: "resource-audit-trace",
+	})
+	return adminaudit.WithSource(public, adminaudit.Source{
 		CredentialID: "87654321", ActorLabel: "administrator fixture", ProjectID: tenant, RequestID: request, TraceID: "admin-mutation-trace",
 	})
 }
@@ -81,7 +91,7 @@ func assertAdminMutationAudit(t *testing.T, s *Store, tenant, request, action, k
 	if credential != "87654321" || actor != "administrator fixture" || key != expectedKey || trace != "admin-mutation-trace" || gotAction != action || gotKind != kind || gotID != id || mappings != "[]" {
 		t.Fatal("administrator audit identity differs")
 	}
-	for _, secret := range []string{"admin-private-archive", "admin-private-body", "private-agent-canary", "audit-private-token"} {
+	for _, secret := range []string{"admin-private-body", "private-agent-canary", "audit-private-token"} {
 		if strings.Contains(raw, secret) {
 			t.Fatal("private content entered administrator audit")
 		}
@@ -103,19 +113,10 @@ func TestAdminDeleteResourceAuditTransactions(t *testing.T) {
 	}
 	s := NewWithCredentialCipher(pool, cipher)
 	rejectAdminAuditInsert(t, s)
-	archive := skillArchive(t, "admin-private-archive")
-	tables := []string{"agents", "agent_model_execution", "skills", "skill_versions", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
-	for _, name := range []string{"skill_delete", "version_delete", "version_delete_last", "session_delete", "artifact_delete"} {
+	tables := []string{"agents", "agent_model_execution", "sessions", "turns", "environments", "session_artifacts", "admin_audit_log", "write_audit_operations", "write_audit_owners", "pg_largeobject_metadata", "pg_largeobject"}
+	for _, name := range []string{"session_delete", "artifact_delete"} {
 		t.Run(name, func(t *testing.T) {
-			tenant := uuid.NewString()
-			var mutation resourceAuditMutation
-			var verifyRestored func()
-			removedObjects := 0
-			if name == "session_delete" || name == "artifact_delete" {
-				tenant, mutation, verifyRestored, removedObjects = prepareAdminHistoryDelete(t, s, name)
-			} else {
-				mutation = prepareResourceAuditMutation(t, s, tenant, name, archive)
-			}
+			tenant, mutation, verifyRestored, removedObjects := prepareAdminHistoryDelete(t, s, name)
 			if _, err := pool.Exec(t.Context(), "INSERT INTO execution_project_scopes(tenant_id,organization_id,project_id) VALUES($1,'admin-delete',$2)", tenant, tenant); err != nil {
 				t.Fatal(err)
 			}
@@ -192,18 +193,6 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 	t.Helper()
 	var err error
 	switch mutation.kind {
-	case "skill":
-		_, err = s.GetSkill(t.Context(), tenant, id)
-	case "skill_version":
-		versionID, parseErr := skillResourceID(id, "skillver_")
-		if parseErr != nil {
-			t.Fatal(parseErr)
-		}
-		var count int
-		if queryErr := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM skill_versions WHERE tenant_id=$1 AND id=$2", tenant, versionID).Scan(&count); queryErr != nil || count != 0 {
-			t.Fatal("skill version survived deletion", queryErr)
-		}
-		return
 	case "session":
 		_, err = s.GetSession(t.Context(), tenant, id)
 	case "artifact":

@@ -6,23 +6,29 @@ import (
 	"strconv"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
-// Skills manages Skills and their immutable versions.
+// Skills runs the Skill use cases: uploads, the default pointer, deletion,
+// lists and content reads.
 type Skills interface {
-	CreateSkill(context.Context, string, []byte) (store.Skill, error)
-	GetSkill(context.Context, string, string) (store.Skill, error)
-	UpdateSkillDefault(context.Context, string, string, string) (store.Skill, error)
-	DeleteSkill(context.Context, string, string) error
-	ListSkills(context.Context, string, string, int, bool) (store.SkillPage, error)
-	CreateSkillVersion(context.Context, string, string, []byte, bool) (store.SkillVersion, error)
-	GetSkillVersion(context.Context, string, string, string) (store.SkillVersion, error)
-	ReadSkillVersion(context.Context, string, string, string) (store.SkillVersion, []byte, error)
-	ReadDefaultSkillVersion(context.Context, string, string) (store.SkillVersion, []byte, error)
-	DeleteSkillVersion(context.Context, string, string, string) (store.SkillVersion, error)
-	ListSkillVersions(context.Context, string, string, string, int, bool) (store.SkillVersionPage, error)
+	CreateSkill(context.Context, skills.CreateSkill) (skills.Skill, error)
+	CreateVersion(context.Context, skills.CreateVersion) (skills.Version, error)
+	SetDefaultVersion(context.Context, skills.SetDefaultVersion) (skills.Skill, error)
+	DeleteSkill(context.Context, skills.DeleteSkill) error
+	DeleteVersion(context.Context, skills.DeleteVersion) (skills.Version, error)
+	ListSkills(context.Context, skills.ListSkills) (skills.Page, error)
+	ListVersions(context.Context, skills.ListVersions) (skills.VersionPage, error)
+	ReadVersion(context.Context, skills.ReadVersion) (skills.Content, error)
+	ReadDefaultVersion(context.Context, skills.ReadDefaultVersion) (skills.Content, error)
+}
+
+// SkillsReader reads Skill and version metadata.
+type SkillsReader interface {
+	Skill(ctx context.Context, tenantID string, id uuid.UUID) (skills.Skill, error)
+	Version(ctx context.Context, tenantID string, skillID uuid.UUID, version int64) (skills.Version, error)
 }
 
 func (h *Handler) registerSkillRoutes(r chi.Router) {
@@ -50,9 +56,9 @@ func (h *Handler) registerSkillRoutes(r chi.Router) {
 // @Success 200 {object} v1.Skill
 // @Router /skills/{skill_id} [get]
 func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
-	value, err := h.Skills.GetSkill(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"))
+	value, err := h.SkillsReader.Skill(r.Context(), tenantID(r), skills.PathID(chi.URLParam(r, "skill_id")))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSkillsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, skillResponseResource(value))
@@ -75,12 +81,12 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 	}
 	var input v1.SkillUpdateRequest
 	if decodeInputObject(body, &input, "default_version") != nil || input.DefaultVersion == "" {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeSkillsError(w, r, skills.ErrInvalidInput)
 		return
 	}
-	value, err := h.Skills.UpdateSkillDefault(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), input.DefaultVersion)
+	value, err := h.Skills.SetDefaultVersion(r.Context(), skills.SetDefaultVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Version: input.DefaultVersion})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSkillsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, skillResponseResource(value))
@@ -96,8 +102,8 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 // @Router /skills/{skill_id} [delete]
 func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "skill_id")
-	if err := h.Skills.DeleteSkill(r.Context(), tenantID(r), id); err != nil {
-		writeStoreError(w, r, err)
+	if err := h.Skills.DeleteSkill(r.Context(), skills.DeleteSkill{TenantID: tenantID(r), SkillID: skills.PathID(id)}); err != nil {
+		writeSkillsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.SkillDeleted{ID: id, Object: "skill.deleted", Deleted: true})
@@ -112,9 +118,9 @@ func (h *Handler) deleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersion
 // @Router /skills/{skill_id}/versions/{version} [get]
 func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
-	value, err := h.Skills.GetSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))
+	value, err := h.SkillsReader.Version(r.Context(), tenantID(r), skills.PathID(chi.URLParam(r, "skill_id")), skills.PathVersion(chi.URLParam(r, "version")))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSkillsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, skillVersionResponse(value))
@@ -130,17 +136,17 @@ func (h *Handler) getSkillVersion(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} v1.SkillVersionDeleted
 // @Router /skills/{skill_id}/versions/{version} [delete]
 func (h *Handler) deleteSkillVersion(w http.ResponseWriter, r *http.Request) {
-	value, err := h.Skills.DeleteSkillVersion(r.Context(), tenantID(r), chi.URLParam(r, "skill_id"), chi.URLParam(r, "version"))
+	value, err := h.Skills.DeleteVersion(r.Context(), skills.DeleteVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Version: skills.PathVersion(chi.URLParam(r, "version"))})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSkillsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.SkillVersionDeleted{ID: value.ID, Object: "skill.version.deleted", Version: strconv.FormatInt(value.Version, 10), Deleted: true})
 }
 
-func skillResponseResource(s store.Skill) v1.Skill {
+func skillResponseResource(s skills.Skill) v1.Skill {
 	return v1.Skill{ID: s.ID, Object: "skill", CreatedAt: s.CreatedAt.Unix(), Name: s.Name, Description: s.Description, DefaultVersion: strconv.FormatInt(s.DefaultVersion, 10), LatestVersion: strconv.FormatInt(s.LatestVersion, 10)}
 }
-func skillVersionResponse(s store.SkillVersion) v1.SkillVersion {
+func skillVersionResponse(s skills.Version) v1.SkillVersion {
 	return v1.SkillVersion{ID: s.ID, Object: "skill.version", SkillID: s.SkillID, CreatedAt: s.CreatedAt.Unix(), Name: s.Name, Description: s.Description, Version: strconv.FormatInt(s.Version, 10)}
 }

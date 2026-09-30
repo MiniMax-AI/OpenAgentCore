@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -33,7 +34,7 @@ type cursorFixture struct {
 	file                                                            string
 }
 
-func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client pathIDClient, token, tenant, label string) cursorFixture {
+func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillService *skills.Service, client pathIDClient, token, tenant, label string) cursorFixture {
 	t.Helper()
 	ctx := t.Context()
 	var f cursorFixture
@@ -149,34 +150,35 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	f.otherSubagent = subagent(otherSubSession, "child")
 	f.otherChildTurn = first("/v1/agents/sessions/" + otherSubSession + "/subagents/" + f.otherSubagent + "/turns")
 
-	skill, err := s.CreateSkill(ctx, tenant, store.SkillArchive(t, label+"-cursor-skill"))
+	skill, err := skillService.CreateSkill(ctx, skills.CreateSkill{TenantID: tenant, Archive: store.SkillArchive(t, label+"-cursor-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.skill = skill.ID
-	versions, err := s.ListSkillVersions(ctx, tenant, skill.ID, "", 10, true)
+	skillID := skills.PathID(skill.ID)
+	versions, err := skillService.ListVersions(ctx, skills.ListVersions{TenantID: tenant, SkillID: skillID, Limit: 10, Ascending: true})
 	if err != nil || len(versions.Versions) != 1 {
 		t.Fatal("fixture Skill version", versions, err)
 	}
 	f.version = versions.Versions[0].ID
-	later, err := s.CreateSkillVersion(ctx, tenant, skill.ID, store.SkillArchive(t, label+"-cursor-skill-v2"), false)
+	later, err := skillService.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: skillID, Archive: store.SkillArchive(t, label+"-cursor-skill-v2")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.laterVersion = later.ID
-	deleted, err := s.CreateSkillVersion(ctx, tenant, skill.ID, store.SkillArchive(t, label+"-cursor-skill-v3"), false)
+	deleted, err := skillService.CreateVersion(ctx, skills.CreateVersion{TenantID: tenant, SkillID: skillID, Archive: store.SkillArchive(t, label+"-cursor-skill-v3")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.DeleteSkillVersion(ctx, tenant, skill.ID, "3"); err != nil {
+	if _, err = skillService.DeleteVersion(ctx, skills.DeleteVersion{TenantID: tenant, SkillID: skillID, Version: 3}); err != nil {
 		t.Fatal(err)
 	}
 	f.deletedVersion = deleted.ID
-	otherSkill, err := s.CreateSkill(ctx, tenant, store.SkillArchive(t, label+"-cursor-other-skill"))
+	otherSkill, err := skillService.CreateSkill(ctx, skills.CreateSkill{TenantID: tenant, Archive: store.SkillArchive(t, label+"-cursor-other-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherVersions, err := s.ListSkillVersions(ctx, tenant, otherSkill.ID, "", 10, true)
+	otherVersions, err := skillService.ListVersions(ctx, skills.ListVersions{TenantID: tenant, SkillID: skills.PathID(otherSkill.ID), Limit: 10, Ascending: true})
 	if err != nil || len(otherVersions.Versions) != 1 {
 		t.Fatal("fixture other Skill version", otherVersions, err)
 	}
@@ -237,8 +239,9 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
 	writer := executionOwner(t, db, s).Store
-	a := seedCursorFixture(t, s, writer, client, owner, ownerTenant, "a")
-	b := seedCursorFixture(t, s, writer, client, foreign, foreignTenant, "b")
+	skillService := store.SkillService(t, db.pool, db.cipher)
+	a := seedCursorFixture(t, s, writer, skillService, client, owner, ownerTenant, "a")
+	b := seedCursorFixture(t, s, writer, skillService, client, foreign, foreignTenant, "b")
 
 	text := func(value string) *string { return &value }
 	var (

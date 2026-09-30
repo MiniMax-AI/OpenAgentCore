@@ -45,6 +45,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
@@ -54,6 +55,7 @@ import (
 	historystoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -136,6 +138,11 @@ func run() error {
 	}
 	modelConfigurationStore := modelconfigurationpg.New(units)
 	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore, credentialKey)
+	if err != nil {
+		return err
+	}
+	skillStore := skillpg.New(units, credentialKey)
+	skillService, err := skills.NewService(skillStore, skillStore)
 	if err != nil {
 		return err
 	}
@@ -334,7 +341,7 @@ func run() error {
 		Projects:       executionStore,
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
-		Skills:               executionStore,
+		Skills: skillService, SkillsReader: skillStore,
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templateStore,
 		Files: fileService, FilesReader: fileStore,
 		Agents: agentService, AgentsReader: agentStore,

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
@@ -188,8 +187,6 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	case errors.Is(err, store.ErrRuntimeNodeUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "runtime_node_unavailable", "The selected sandbox node is unavailable or has no capacity.")
 
-	case errors.Is(err, store.ErrDefaultSkillVersion):
-		writeError(w, http.StatusBadRequest, "invalid_value", "Cannot delete the default skill version.", "version")
 	case errors.Is(err, execution.ErrModelProviderRequired):
 		writeError(w, http.StatusBadRequest, "model_provider_required", "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved.")
 	case errors.Is(err, store.ErrHostedEnvironmentFailed):
@@ -206,20 +203,10 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	case errors.Is(err, execution.ErrExecutionUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
 	case errors.As(err, &cursor):
-		// Observed official fields for an unresolved list cursor: Skill versions
-		// use invalid_value on after, Beta lists invalid_request_error with a null param.
-		if listFamilyOf(r) == skillsList {
-			writeError(w, http.StatusBadRequest, "invalid_value", cursor.Message, "after")
-		} else {
-			writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
-		}
+		// Observed official fields for an unresolved Beta list cursor, with a null param.
+		writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
 	case errors.Is(err, store.ErrNotFound):
-		code := "not_found_error"
-		// Skills retain their non-beta error envelope.
-		if strings.HasPrefix(r.URL.Path, "/v1/skills/") || r.URL.Path == "/v1/skills" {
-			code = ""
-		}
-		writeError(w, http.StatusNotFound, code, "Resource not found.", notFoundParam...)
+		writeError(w, http.StatusNotFound, "not_found_error", "Resource not found.", notFoundParam...)
 	case errors.Is(err, store.ErrSessionNotIdle):
 		// Observed official status, type, code, null param and message.
 		writeError(w, http.StatusConflict, "conflict_error", "session must be durably idle or failed without required actions before deletion")

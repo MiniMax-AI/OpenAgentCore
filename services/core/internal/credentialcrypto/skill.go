@@ -2,7 +2,10 @@ package credentialcrypto
 
 import (
 	"encoding/json"
+	"strconv"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 )
 
 // SkillBinding prevents encrypted bundles from being moved across owners or versions.
@@ -11,6 +14,12 @@ type SkillBinding struct {
 	SkillID   string `json:"skill_id"`
 	VersionID string `json:"version_id"`
 	Version   string `json:"version"`
+}
+
+// NewSkillBinding binds a version's archive to its tenant, Skill, version ID
+// and version number.
+func NewSkillBinding(tenant, skill, versionID uuid.UUID, version int64) SkillBinding {
+	return SkillBinding{TenantID: tenant.String(), SkillID: skill.String(), VersionID: versionID.String(), Version: strconv.FormatInt(version, 10)}
 }
 
 func (c *Cipher) SealSkill(body []byte, binding SkillBinding) ([]byte, error) {

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -54,21 +54,21 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 		if errors.As(err, &limit) {
 			writeContentTooLarge(w)
 		} else {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeSkillsError(w, r, skills.ErrInvalidInput)
 		}
 		return
 	}
 	if version {
-		result, err := h.Skills.CreateSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"), archive, makeDefault)
+		result, err := h.Skills.CreateVersion(ctx, skills.CreateVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Archive: archive, MakeDefault: makeDefault})
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSkillsError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, skillVersionResponse(result))
 	} else {
-		result, err := h.Skills.CreateSkill(ctx, tenantID(r), archive)
+		result, err := h.Skills.CreateSkill(ctx, skills.CreateSkill{TenantID: tenantID(r), Archive: archive})
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSkillsError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, skillResponseResource(result))
@@ -84,20 +84,23 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 // @Success 200 {file} binary
 // @Router /skills/{skill_id}/content [get]
 func (h *Handler) skillContent(w http.ResponseWriter, r *http.Request) {
-	serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
-		var value store.SkillVersion
-		var body []byte
+	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
+		skill := skills.PathID(chi.URLParam(r, "skill_id"))
+		var content skills.Content
 		var err error
 		if version := chi.URLParam(r, "version"); version != "" {
-			value, body, err = h.Skills.ReadSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"), version)
+			content, err = h.Skills.ReadVersion(ctx, skills.ReadVersion{TenantID: tenantID(r), SkillID: skill, Version: skills.PathVersion(version)})
 		} else {
-			value, body, err = h.Skills.ReadDefaultSkillVersion(ctx, tenantID(r), chi.URLParam(r, "skill_id"))
+			content, err = h.Skills.ReadDefaultVersion(ctx, skills.ReadDefaultVersion{TenantID: tenantID(r), SkillID: skill})
 		}
 		if err != nil {
 			return err
 		}
-		return consume(value.Name+".zip", int64(len(body)), bytes.NewReader(body))
+		return consume(content.Version.Name+".zip", int64(len(content.Archive)), bytes.NewReader(content.Archive))
 	})
+	if err != nil {
+		writeSkillsError(w, r, err)
+	}
 }
 
 // @Summary Download immutable Skill version content

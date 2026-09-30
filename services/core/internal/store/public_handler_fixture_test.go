@@ -19,11 +19,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -61,13 +63,19 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 	if err != nil {
 		return nil, err
 	}
+	skillStore := skillpg.New(pgunit.NewPool(db.pool), db.cipher)
+	skillService, err := skills.NewService(skillStore, skillStore)
+	if err != nil {
+		return nil, err
+	}
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: s,
-		Projects: fixtureProjects{Store: s, keys: keys}, Skills: s,
+		Projects:       fixtureProjects{Store: s, keys: keys},
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
 		Files: fileService, FilesReader: fileStore,
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templates,
+		Skills: skillService, SkillsReader: skillStore,
 		Agents: agentService, AgentsReader: agentStore,
 		Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,
 		Artifacts: s, SessionAdmin: s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,

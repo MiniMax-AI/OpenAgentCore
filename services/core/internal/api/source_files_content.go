@@ -30,11 +30,13 @@ func (h *Handler) sourceFileContent(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusBadRequest, "", "Not allowed to download files of purpose: user_data")
 }
 
-func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(context.Context, func(string, int64, io.Reader) error) error, notFoundParam ...string) {
+// serveStoredContent streams the body read supplies. It returns read's error
+// while no response has started; after that, a failure aborts the response.
+func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(context.Context, func(string, int64, io.Reader) error) error) error {
 	deadline := time.Now().Add(sourceTransferTimeout)
 	if http.NewResponseController(w).SetWriteDeadline(deadline) != nil {
 		writeError(w, http.StatusServiceUnavailable, "file_transfer_unavailable", "Bounded file transfer is unavailable.")
-		return
+		return nil
 	}
 	ctx, cancel := context.WithDeadline(r.Context(), deadline)
 	defer cancel()
@@ -53,10 +55,8 @@ func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(contex
 		}
 		return err
 	})
-	if err != nil {
-		if started {
-			panic(http.ErrAbortHandler)
-		}
-		writeStoreError(w, r, err, notFoundParam...)
+	if err != nil && started {
+		panic(http.ErrAbortHandler)
 	}
+	return err
 }

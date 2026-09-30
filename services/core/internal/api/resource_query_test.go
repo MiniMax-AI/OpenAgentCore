@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -141,43 +142,36 @@ func TestSingleResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 	}
 }
 
-// missingSkillStore reports every Skill as missing and records list parameters.
-type missingSkillStore struct {
+// missingSkills reports every Skill as missing and records list parameters.
+type missingSkills struct {
 	tenants []string
 	limit   int
 	hasMore bool
 }
 
-func (s *missingSkillStore) GetSkill(_ context.Context, tenant, _ string) (store.Skill, error) {
-	s.tenants = append(s.tenants, tenant)
-	return store.Skill{}, store.ErrNotFound
-}
-
-func (s *missingSkillStore) DeleteSkill(_ context.Context, tenant, _ string) error {
-	s.tenants = append(s.tenants, tenant)
-	return store.ErrNotFound
-}
-
-func (s *missingSkillStore) GetSkillVersion(_ context.Context, tenant, _, _ string) (store.SkillVersion, error) {
-	s.tenants = append(s.tenants, tenant)
-	return store.SkillVersion{}, store.ErrNotFound
-}
-
-func (s *missingSkillStore) ListSkills(_ context.Context, tenant, _ string, limit int, _ bool) (store.SkillPage, error) {
-	s.tenants, s.limit = append(s.tenants, tenant), limit
-	return store.SkillPage{HasMore: s.hasMore}, nil
-}
-
-func (s *missingSkillStore) ListSkillVersions(_ context.Context, tenant, _, _ string, limit int, _ bool) (store.SkillVersionPage, error) {
-	s.tenants, s.limit = append(s.tenants, tenant), limit
-	return store.SkillVersionPage{HasMore: s.hasMore}, nil
-}
-
-func skillQueryHandler(t *testing.T, s *missingSkillStore) (http.Handler, string) {
+func skillQueryHandler(t *testing.T, s *missingSkills) (http.Handler, string) {
 	t.Helper()
 	h, tenant, _ := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) {
-		f.skills.getSkill, f.skills.deleteSkill, f.skills.getSkillVersion = s.GetSkill, s.DeleteSkill, s.GetSkillVersion
-		f.skills.listSkills, f.skills.listSkillVersions = s.ListSkills, s.ListSkillVersions
+		f.skillsReader.skill = func(_ context.Context, tenant string, _ uuid.UUID) (skills.Skill, error) {
+			s.tenants = append(s.tenants, tenant)
+			return skills.Skill{}, skills.ErrNotFound
+		}
+		f.skillsReader.version = func(_ context.Context, tenant string, _ uuid.UUID, _ int64) (skills.Version, error) {
+			s.tenants = append(s.tenants, tenant)
+			return skills.Version{}, skills.ErrNotFound
+		}
+		f.skills.deleteSkill = func(_ context.Context, c skills.DeleteSkill) error {
+			s.tenants = append(s.tenants, c.TenantID)
+			return skills.ErrNotFound
+		}
+		f.skills.listSkills = func(_ context.Context, c skills.ListSkills) (skills.Page, error) {
+			s.tenants, s.limit = append(s.tenants, c.TenantID), c.Limit
+			return skills.Page{HasMore: s.hasMore}, nil
+		}
+		f.skills.listVersions = func(_ context.Context, c skills.ListVersions) (skills.VersionPage, error) {
+			s.tenants, s.limit = append(s.tenants, c.TenantID), c.Limit
+			return skills.VersionPage{HasMore: s.hasMore}, nil
+		}
 	})
 	return h, tenant
 }
@@ -197,7 +191,7 @@ func TestSkillResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 		{http.MethodGet, "/v1/skills/skill_missing/versions/1"},
 	} {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
-			s := &missingSkillStore{}
+			s := &missingSkills{}
 			h, tenant := skillQueryHandler(t, s)
 			plain := skillQueryRequest(h, route.method, route.path)
 			query := skillQueryRequest(h, route.method, route.path+"?tenant_id=foreign&limit=5&unknown=1")
@@ -211,7 +205,7 @@ func TestSkillResourceRoutesIgnoreUnknownQueryKeys(t *testing.T) {
 func TestSkillListLimitZeroReturnsEmptyPage(t *testing.T) {
 	for _, path := range []string{"/v1/skills", "/v1/skills/skill_example/versions"} {
 		for _, hasMore := range []bool{true, false} {
-			s := &missingSkillStore{hasMore: hasMore}
+			s := &missingSkills{hasMore: hasMore}
 			h, tenant := skillQueryHandler(t, s)
 			w := skillQueryRequest(h, http.MethodGet, path+"?limit=0&unknown=1")
 			want := fmt.Sprintf(`{"object":"list","data":[],"first_id":null,"last_id":null,"has_more":%t}`, hasMore)
@@ -317,26 +311,27 @@ func TestSourceFileUploadIgnoresUnknownQueryKeys(t *testing.T) {
 	}
 }
 
-// ownedSkillStore accepts uploads and knows one owned Skill.
-type ownedSkillStore struct {
+// ownedSkills accepts uploads and knows one owned Skill.
+type ownedSkills struct {
 	owner    string
+	ownedID  uuid.UUID
 	tenants  []string
 	defaults []bool
 	created  int
 }
 
-func (s *ownedSkillStore) CreateSkill(_ context.Context, tenant string, _ []byte) (store.Skill, error) {
-	s.tenants, s.created = append(s.tenants, tenant), s.created+1
-	return store.Skill{ID: "skill_created", Name: "proof", DefaultVersion: 1, LatestVersion: 1}, nil
+func (s *ownedSkills) CreateSkill(_ context.Context, c skills.CreateSkill) (skills.Skill, error) {
+	s.tenants, s.created = append(s.tenants, c.TenantID), s.created+1
+	return skills.Skill{ID: "skill_created", Name: "proof", DefaultVersion: 1, LatestVersion: 1}, nil
 }
 
-func (s *ownedSkillStore) CreateSkillVersion(_ context.Context, tenant, skill string, _ []byte, makeDefault bool) (store.SkillVersion, error) {
-	s.tenants, s.defaults = append(s.tenants, tenant), append(s.defaults, makeDefault)
-	if tenant != s.owner || skill != "skill_owned" {
-		return store.SkillVersion{}, store.ErrNotFound
+func (s *ownedSkills) CreateVersion(_ context.Context, c skills.CreateVersion) (skills.Version, error) {
+	s.tenants, s.defaults = append(s.tenants, c.TenantID), append(s.defaults, c.MakeDefault)
+	if c.TenantID != s.owner || c.SkillID != s.ownedID {
+		return skills.Version{}, skills.ErrNotFound
 	}
 	s.created++
-	return store.SkillVersion{ID: "skillver_created", SkillID: skill, Name: "proof", Version: 2}, nil
+	return skills.Version{ID: "skillver_created", SkillID: skills.FormatID(c.SkillID), Name: "proof", Version: 2}, nil
 }
 
 func skillUpload(t *testing.T, include bool) ([]byte, string) {
@@ -359,9 +354,9 @@ func skillUpload(t *testing.T, include bool) ([]byte, string) {
 }
 
 func TestSkillUploadsIgnoreUnknownQueryKeys(t *testing.T) {
-	s := &ownedSkillStore{}
+	s := &ownedSkills{ownedID: uuid.New()}
 	h, owner, foreign := twoTenantHandler(t, func(_ *Dependencies, f *testFakes) {
-		f.skills.createSkill, f.skills.createSkillVersion = s.CreateSkill, s.CreateSkillVersion
+		f.skills.createSkill, f.skills.createVersion = s.CreateSkill, s.CreateVersion
 	})
 	s.owner = owner
 	server := newSourceFileServer(t, h)
@@ -376,12 +371,12 @@ func TestSkillUploadsIgnoreUnknownQueryKeys(t *testing.T) {
 		t.Fatalf("create: %d %s %v", status, raw, s.tenants)
 	}
 	// Version creation: a foreign Skill equals a missing one and writes nothing.
-	_, denied := sourceRequest(t, server, http.MethodPost, "/v1/skills/skill_owned/versions"+query, "foreign-key", contentType, body)
+	_, denied := sourceRequest(t, server, http.MethodPost, "/v1/skills/"+skills.FormatID(s.ownedID)+"/versions"+query, "foreign-key", contentType, body)
 	_, missing := sourceRequest(t, server, http.MethodPost, "/v1/skills/skill_missing/versions"+query, "test-api-key", contentType, body)
 	if string(denied) != string(missing) || !strings.Contains(string(denied), "Resource not found.") || s.created != 1 || s.tenants[1] != foreign {
 		t.Fatalf("foreign version: %s / %s tenants=%v", denied, missing, s.tenants)
 	}
-	status, raw = sourceRequest(t, server, http.MethodPost, "/v1/skills/skill_owned/versions"+query, "test-api-key", contentType, body)
+	status, raw = sourceRequest(t, server, http.MethodPost, "/v1/skills/"+skills.FormatID(s.ownedID)+"/versions"+query, "test-api-key", contentType, body)
 	// The default query key is not the multipart default field.
 	if status != http.StatusOK || !strings.Contains(string(raw), `"version":"2"`) || s.created != 2 || s.defaults[len(s.defaults)-1] {
 		t.Fatalf("version: %d %s defaults=%v", status, raw, s.defaults)

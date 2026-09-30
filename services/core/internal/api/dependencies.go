@@ -37,6 +37,7 @@ type Dependencies struct {
 	Files                Files
 	FilesReader          FilesReader
 	Skills               Skills
+	SkillsReader         SkillsReader
 	EnvironmentTemplates EnvironmentTemplates
 	Agents               Agents
 	AgentsReader         AgentsReader
@@ -118,9 +119,9 @@ func (d Dependencies) validate() error {
 		field{"InstallationBindings", d.InstallationBindings}, field{"Projects", d.Projects},
 		field{"Vaults", d.Vaults}, field{"VaultsReader", d.VaultsReader},
 		field{"ModelProviders", d.ModelProviders}, field{"ModelProvidersReader", d.ModelProvidersReader},
-		field{"Skills", d.Skills},
 		field{"Files", d.Files}, field{"FilesReader", d.FilesReader},
 		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"EnvironmentTemplatesReader", d.EnvironmentTemplatesReader},
+		field{"Skills", d.Skills}, field{"SkillsReader", d.SkillsReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
 		field{"Sessions", d.Sessions},
 		field{"SessionEvents", d.SessionEvents}, field{"SessionHistory", d.SessionHistory}, field{"Subagents", d.Subagents},

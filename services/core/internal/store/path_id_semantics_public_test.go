@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -122,7 +123,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 		t.Fatal("fixture Environment", err)
 	}
 	environment := hosted.Environment.ID
-	skill, err := s.CreateSkill(t.Context(), ownerTenant, store.SkillArchive(t, "path-skill"))
+	skill, err := store.SkillService(t, pool, cipher).CreateSkill(t.Context(), skills.CreateSkill{TenantID: ownerTenant, Archive: store.SkillArchive(t, "path-skill")})
 	if err != nil {
 		t.Fatal(err)
 	}
