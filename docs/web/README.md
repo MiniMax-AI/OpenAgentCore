@@ -30,8 +30,8 @@ Missing data is shown as missing (—), never as zero. [Console API usage](conso
 
 | Task | Where |
 | --- | --- |
-| Give the installation an HTTPS address | **System → Domain and HTTPS**, on an installation with managed ingress; see [Make Core reachable](../getting-started/install.md#make-core-reachable) |
-| Choose the sandbox backend (Docker, microsandbox or E2B), the sandbox size and Runtime, or reset the backend | **System → Sandbox configuration**; see [configuration](../configuration.md#sandbox-deployment) |
+| Give the installation an HTTPS address | **System → Domain and HTTPS**, on an installation with managed ingress; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
+| Choose the sandbox backend (Docker, microsandbox or E2B), the sandbox size and Runtime, or reset the backend | **System → Sandbox configuration**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | Add or remove execution nodes | **Nodes**; see the [nodes guide](../getting-started/nodes.md) |
 | Set the default model of a harness | **System → Default model configuration**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |

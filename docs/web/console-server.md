@@ -22,7 +22,7 @@ flowchart LR
   core <--> database
 ```
 
-The deployment's reverse proxy routes `/v1` and `/api/v1` to Core and every other path to the console; the [installation guide](../getting-started/install.md#https-and-the-reverse-proxy) gives the routes. The console handles each path as follows:
+The deployment's reverse proxy routes `/v1` and `/api/v1` to Core and every other path to the console; the [installation options](../getting-started/install-options.md#https-and-the-reverse-proxy) gives the routes. The console handles each path as follows:
 
 | Path | Sign-in | Handling |
 | --- | --- | --- |
