@@ -689,7 +689,7 @@ silently expanding it. Codex and Claude preserve native allowlists and initializ
 required servers before releasing native input, including cold recovery.
 Public MCP with native Subagents remains unqualified. Nonempty literal HTTP
 headers, request metadata and public stdio declarations remain unsupported.
-See [public MCP qualification](public-mcp-qualification.md) for actual model,
+See [public MCP qualification](https://github.com/MiniMax-AI/parsar-core/blob/e974a7f880a2eb799f0dd39e6ba0870462854a53/contracts/agents-api/public-mcp-qualification.md) for actual model,
 platform and infrastructure coverage; admission support is not a claim of
 complete cross-platform/provider qualification.
 
