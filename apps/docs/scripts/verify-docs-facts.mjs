@@ -18,10 +18,10 @@ const source = slug => fs.readFileSync(path.join(app, 'content/docs', slug + '.m
 for (const token of ['/v1', '/core/v1', '/api/v1', 'Project API key', 'Core key', 'executor']) assert.ok(source('public-api').includes(token), 'Credential matrix omits ' + token)
 for (const token of ['config.json', 'oac apply']) assert.ok(source('configure').includes(token), 'Configuration guide omits ' + token)
 for (const token of ['oac-node', '/var/lib/oac-node/.oac/nodes', 'Node installation and removal require root.']) assert.ok(source('hosted-providers').includes(token), 'Node guide omits ' + token)
-// Keep the installation policy visible in the operator guides.
+// Keep the installation policy visible in its operator guide; the node guide links to it.
 for (const [slug, tokens] of [
   ['troubleshooting', ['In-place version upgrades, downgrades and historical conversions are not supported.', '.oac.lock']],
-  ['hosted-providers', ['Node program version updates are not supported.', '`--update` refuses']],
+  ['hosted-providers', ['/troubleshooting#installation-version-policy']],
 ]) for (const token of tokens) assert.ok(source(slug).includes(token), 'Installation policy drift in ' + slug + ': ' + token)
 for (const file of fs.readdirSync(path.join(app, 'content/docs')).filter(n => n.endsWith('.mdx'))) {
   const text = fs.readFileSync(path.join(app, 'content/docs', file), 'utf8')

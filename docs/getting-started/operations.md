@@ -15,7 +15,7 @@ the bundle nor root:
 
 | Command | What it does |
 | --- | --- |
-| `oac status` | Shows each service and its health, Core and Web health, the public URL, API base URL, console address and source commit, the reverse-proxy routes to configure, `config.json` changes not applied yet and generated files edited by hand. A Web-only installation also checks that its Core accepts its Core key. Exits non-zero when a service is unavailable. It never calls a model |
+| `oac status` | Shows each service and its health, Core and Web health, the public URL, API base URL, console address and source commit, the routes a reverse proxy needs, `config.json` changes not applied yet and generated files edited by hand. A Web-only installation also checks that its Core accepts its Core key. Exits non-zero when a service is unavailable. It never calls a model |
 | `oac start` | Starts every service with the files last written by `apply`; warns about unapplied changes |
 | `oac stop` | Stops PostgreSQL, Core and Web. Data, nodes and sandboxes are kept, and running sandbox work may continue |
 | `oac apply` | Applies `config.json` and restarts what changed; see [how apply works](../configuration.md#how-oac-apply-works) |
@@ -23,11 +23,10 @@ the bundle nor root:
 | `oac apply --discard-edits` | Overwrites generated files edited by hand, keeping each as `generated/<file>.edited-<time>` |
 | `oac apply --confirm-public-url-change URL` | Confirms a public URL change without a prompt; must equal the new URL |
 | `oac apply --yes` | Web-only: pairs Web with a different Core without asking |
+| `oac domain HOSTNAME [--confirm-public-url-change URL]` | Managed ingress: sets the public URL to `https://HOSTNAME`, as **Configure domain and HTTPS** in Web does; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | `oac rotate-core-key [--yes]` | Replaces the Core key; see [Rotate the Core key](#rotate-the-core-key) |
 
-`install.sh --status` and `--stop` are retired; they name the `oac` command instead.
-For a second installation, use its own command, such as
-`~/.oac/web/oac status`.
+For a second installation, use its own command, such as `~/.oac/web/oac status`.
 
 ## Service health
 
@@ -41,8 +40,8 @@ Use these observations for different questions:
 | Environment connection | The Runtime transport is connected |
 | A finished Turn and its results | The task's recorded outcome |
 
-Service health does not prove that a native harness or a model works. Use Session,
-Turn, Items and Usage reads for execution, and Web's **Nodes** page for node connection,
+Service health does not show that a harness or a model works. Use Session, Turn,
+Items and Usage reads for execution, and Web's **Nodes** page for node connection,
 readiness and placement. For local diagnosis, use the installation's own Compose file:
 
 ```sh
@@ -70,7 +69,7 @@ the same Session; don't create a new Session to replay uncertain work. Session e
 streams are live only; recover through Session, Turn and Items reads.
 
 A Web restart, including one caused by `oac apply`, signs everyone out of the
-console.
+console. Web sign-ins otherwise last 12 hours.
 
 ## Core key
 
@@ -80,21 +79,40 @@ generates a 64-character random key in `<install dir>/secrets/core.key`, by defa
 
 - signs in to Web. The browser gets an HttpOnly session cookie, never the key;
 - authorizes Core API (`/core/v1`) requests sent as `Authorization: Bearer <Core key>`;
-- never authorizes the Agent API (`/v1`). Applications use Project API keys, which in
-  turn can't call `/core/v1`.
+- never authorizes the Agents API (`/v1`). Applications use Project API keys, which
+  in turn can't call `/core/v1`.
 
-Keep it private: `secrets/` is mode `0700` and its files `0600`. Of the services, only
-Web reads `core.key`; Core reads its SHA-256 from `generated/core-key-digests.json`,
-which `oac apply` derives from the key. Both read them only at startup. A Core key
+Keep it private: `secrets/` is mode `0700` and its files `0600`. Web and, with managed
+ingress, the `installation` service read `core.key`; Core reads only its SHA-256 from
+`generated/core-key-digests.json`, which `oac apply` derives from the key. A Core key
 has at least 32 characters and no whitespace. Web limits failed sign-ins.
 
-Scripts run on the Core host, call Core's loopback port and read the key from its file,
-which keeps it off the command line:
+### Script the Core API
+
+Run scripts on the Core host against Core's loopback port. This helper reads the key
+from its file, keeping it off the command line:
 
 ```sh
-curl -fsS -H @<(printf 'Authorization: Bearer %s\n' "$(cat "$HOME/.oac/core/secrets/core.key")") \
-  http://127.0.0.1:8091/core/v1/projects
+core() {  # core METHOD PATH [JSON body]
+  curl -fsS -X "$1" "http://127.0.0.1:8091/core/v1$2" \
+    -H @<(printf 'Authorization: Bearer %s\n' "$(cat ~/.oac/core/secrets/core.key)") \
+    -H 'Content-Type: application/json' ${3:+-d "$3"}
+}
 ```
+
+| Task | Command |
+| --- | --- |
+| List Projects | `core GET /projects` |
+| Create a Project | `core POST /projects '{"name": "billing-bot"}'` |
+| Issue an API key (shown once, as `key`) | `core POST /projects/$PROJECT_ID/keys '{"name": "prod"}'` |
+| Revoke a key | `core DELETE /projects/$PROJECT_ID/keys/$KEY_ID` |
+| Archive a Project (revokes all keys) | `core POST /projects/$PROJECT_ID/archive` |
+| See harnesses and their default models | `core GET /harnesses` |
+| Set Codex's default model | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
+| Installation facts, including the API base URL | `core GET /installation` |
+
+The [API index](../api/README.md#core-api) lists every route; errors use the
+[Core error envelope](../../contracts/agents-api/core-errors.md).
 
 ### Rotate the Core key
 
@@ -120,8 +138,8 @@ refuses. `rotate-core-key` refuses to run on a Web-only installation.
 ## Projects and API keys
 
 Create Projects and issue keys in Web, on **Projects and keys**, or through the
-[Core API](../../contracts/agents-api/admin-api.md) under `/core/v1/projects`. How
-Projects and keys behave is in [Projects own assets](../design-principles.md#projects-own-assets).
+[Core API](#script-the-core-api). How Projects and keys behave is in
+[Projects own assets](../design-principles.md#projects-own-assets).
 
 To rotate an application key:
 
@@ -131,9 +149,10 @@ To rotate an application key:
 
 **Archive** disables every key of a Project and keeps its assets.
 
-## Data and current-release repair
+Core records which key made each public resource write; the retention of that
+history is [`core.write_audit_retention`](../configuration.md#settings).
 
-### Back up
+## Back up
 
 Back up these together; a restore needs all of them:
 
@@ -151,95 +170,81 @@ Back up these together; a restore needs all of them:
   be decrypted; never regenerate it to get past an error.
 - `state/e2b/`, when E2B is used: receipts Core needs to clean up E2B sandboxes.
 - each node's state directory on its host,
-  `/var/lib/oac-node/.oac/nodes/<installation-id>/`,
-  with its provider storage: Docker
-  volumes or microsandbox's store.
-- the bundle you installed from, to repair or recover the same release.
+  `/var/lib/oac-node/.oac/nodes/<installation-id>/`, with its provider storage:
+  Docker volumes or microsandbox's store.
+- the bundle you installed from, to repair the same release.
 
 A missing node state directory is a recovery incident: restore it with the database
 and provider storage rather than registering over existing resources. Never prune
-Docker volumes or delete native history to make a retry pass. A deleted Session does
+Docker volumes or delete native harness history to make a retry pass. A deleted Session does
 not prove that all provider resources were reclaimed.
 
-### Installation version policy
+## Installation version policy
 
-In-place version upgrades, downgrades and historical conversions are not supported.
-Keep existing data and installations intact; install the new release into a new,
-empty directory. There is no automatic data migration or history conversion.
+An installation runs one release for its whole life. In-place version upgrades, downgrades and historical conversions are not supported. Nothing migrates data between releases.
 
-Repair the current release with `./install.sh --install-dir DIR` from the exact
-same bundle. Repair preserves identity, settings, secrets and history. The installer
-and mutating `oac` commands use the same installation lock, including during repair
-and interrupted apply recovery. If another command owns it, retry after it finishes.
-Never remove or replace `.oac.lock` to bypass a busy installation.
+To move to a new release, install it into a new, empty directory, with its own
+database, Core key and nodes, and add nodes from its Web. Keep the old installation,
+its data and its nodes until their work is finished. Nodes run the program of the
+console that added them and are never upgraded in place; Core accepts only nodes that
+speak its own node protocol.
 
-Reinstallation never deletes another installation's files, database, Runtime
-resources or Session history.
+Repair the current release by rerunning `./install.sh --install-dir DIR` from the exact
+same bundle; the downloader keeps it under `~/.oac/releases/`. Repair reloads missing
+images, restores the `oac` command, applies `config.json` and starts the services. It
+preserves identity, settings, secrets and history, accepts only `--install-dir`, and
+refuses a bundle from another release.
 
-### Machine connections
-
-Core and its nodes must come from the same distribution; the node installer refuses
-a mismatched release. Route `/api/v1/*`, including WebSocket upgrades, to Core;
-Web returns 404 there. This applies to Docker and microsandbox nodes, E2B and
-self-hosted executors. See
-[HTTPS and the reverse proxy](install.md#https-and-the-reverse-proxy).
+The installer and mutating `oac` commands hold the same installation lock,
+`.oac.lock`, including during repair and interrupted apply recovery. If another
+command holds it, retry after that command finishes; never remove or replace
+`.oac.lock` to get past a busy installation. Reinstallation never deletes another
+installation's files, database, Runtime resources or Session history.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
 | `Core installation requires Linux amd64 with Docker access` | Use Linux amd64 and an account with Docker access; root and ordinary users are supported |
-| `Installation failed; inspect prerequisites and private deployment files` | A prerequisite failed without its own message, most often Docker: check that `docker info` and `docker compose version` work for this user |
+| `Installation failed: inspect prerequisites and private deployment files` | A prerequisite failed without its own message, most often Docker: check that `docker info` and `docker compose version` work for this user |
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
 | `Port N is already in use; select another port` | Free the port, or install with `--core-port`/`--port` |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
 | `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
-| `This installation version or historical conversion is not supported …` | Preserve the installation and data; [install separately](#installation-version-policy) |
+| `This installation version or historical conversion is not supported …` | The target directory holds an installation of another release, or a default install found one at `~/.parsar/core`. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
 | `generated/<file> was edited by hand` | Put the change in `config.json`, then `oac apply --discard-edits` |
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
 | `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
-| Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; the reverse proxy must pass the original Host |
-| `/v1` or `/api/v1` answers 404 | Those paths reach Web; route them to Core ([reverse proxy](install.md#https-and-the-reverse-proxy)) |
+| `HTTPS verification failed …` during domain setup | Point the hostname's A/AAAA records at the host and allow inbound ports 80 and 443. The previous address is kept; retry |
+| Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; a reverse proxy must pass the original Host |
+| `/v1` or `/api/v1` answers 404 | Those paths reach Web; route them to Core ([reverse proxy](install-options.md#https-and-the-reverse-proxy)) |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `oac status`, then Core's log |
 | Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the harness, or pass one; self-hosted Sessions always pass their own |
-| Add node says nodes need an HTTPS public URL | Set `public_url` and run `oac apply` |
-| Add node says the console has no node files | Install from the offline bundle, or add the node files and rerun `./install.sh` |
+| Add node says *Configure a domain and HTTPS in System before adding nodes* | [Configure the domain](install.md#configure-the-domain-and-https), or with external ingress set `public_url` and run `oac apply` |
+| Add node says *This console has no node files for …* | Install from the offline bundle, or add the node files and rerun `./install.sh` |
 | A node is not ready | See [node troubleshooting](nodes.md#troubleshooting) |
 
 ## Exposure and network policy
 
-Core and Web listen on host loopback; PostgreSQL has no published port unless Core is
-native. Your TLS reverse proxy routes `/v1` and `/api/v1` to Core and everything else to
-Web. Web signs administrators in with the Core key, checks the origin of every request,
-and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on
-the server. It answers 404 on `/v1` and `/api/v1` whatever credential a request carries,
+| Listener | Managed ingress (default) | External ingress |
+| --- | --- | --- |
+| Web | Reached only through the `gateway` service, which publishes `ports.web` (8080), 80 and 443 on `host` (all IPv4 interfaces by default) | `host:ports.web` (loopback by default), behind your reverse proxy |
+| Core | `127.0.0.1:ports.core` (8091); the gateway routes `/v1` and `/api/v1` to it | `host:ports.core`, behind your reverse proxy |
+| PostgreSQL | No published port | No published port, or a loopback port with native Core |
+
+Web signs administrators in with the Core key, checks the origin of every request, and
+forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the
+server. It answers 404 on `/v1` and `/api/v1` whatever credential a request carries,
 serves only the non-secret node payload at `/node-install/`, and has no Docker or KVM
-access. Machine routes keep their own enrollment and connection credentials. Web
-sign-in sessions live in Web's memory and last 12 hours.
+access. Machine routes under `/api/v1` use their own enrollment and connection
+credentials. With managed ingress, the `installation` service applies domain changes
+through the Docker socket; Web reaches it only over a private Unix socket, and it
+checks the Core key on every request.
 
-microsandbox uses an explicit network policy: public egress, the Core and DNS ports the
-Runtime needs, and no inbound or private-network access. Private model or MCP endpoints
-need an explicit policy change. The daemon does not enforce Session-level
-`disabled` or `restricted` networking. Combinations without the required outer
-network enforcement are unsupported; a requested mode is not an isolation guarantee.
-
-Docker isolates the Runtime at the outer container boundary. The daemon does not
-add an inner filesystem, permission or network sandbox. The node's service account
-needs the host's Docker daemon, and Core has no Docker socket. Install nodes on
-trusted hosts and do not share their Docker access with untrusted users.
-
-A Core restart leaves node services and resident microVMs running. A host reboot, the
-end of a user manager or the loss of a running microVM is not a Core restart and is not
-a qualified recovery workflow. Idle snapshots keep their recovery contract.
-
-### API-key write history
-
-Core records which key made each public resource write, for the console. Set
-`core.write_audit_retention` in `config.json` (Go duration, at least `1h`, default
-`2160h`) to control how long non-creation history is kept; creation ownership is kept
-for good. Removing keys or resources does not delete these records. See the
-[query contract](../../contracts/agents-api/write-audit.md); administrator mutations
-have a separate
-[audit log](../../contracts/agents-api/admin-api.md#monitoring-and-audit). Neither
-logs bodies or secrets.
+Sandboxes are the isolation boundary
+([Runtime and outer isolation](../design-principles.md#runtime-and-outer-isolation)).
+Docker sandboxes share the node's kernel, and the node's service account is
+root-equivalent on its host; microsandbox gives each sandbox a microVM with an
+explicit [network policy](nodes.md#what-the-installer-sets-up). Core itself has no
+Docker socket or KVM access.

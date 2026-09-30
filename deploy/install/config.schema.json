@@ -229,17 +229,17 @@
           "properties": {
             "transport": {
               "type": "string",
-              "description": "OTLP export transport.",
+              "description": "OTLP export transport: `otlp_http`. Required with endpoint.",
               "x-oac": {"restarts": ["core"]}
             },
             "endpoint": {
               "type": "string",
-              "description": "OTLP collector endpoint. Omit it to keep history local.",
+              "description": "OTLP/HTTP metrics URL: HTTPS, or HTTP with insecure. Omit it to keep history local.",
               "x-oac": {"restarts": ["core"]}
             },
             "insecure": {
               "type": "boolean",
-              "description": "Export without TLS.",
+              "description": "Export without TLS. Required for an HTTP endpoint and refused for HTTPS.",
               "x-oac": {"restarts": ["core"]}
             },
             "headers": {
@@ -250,17 +250,17 @@
             },
             "queue_capacity": {
               "type": "integer",
-              "description": "Export queue capacity.",
+              "description": "Capacity of the history write queue and of the export queue, up to 4096. Omitted or 0 selects 256.",
               "x-oac": {"restarts": ["core"]}
             },
             "timeout_seconds": {
               "type": "integer",
-              "description": "Export and query timeout in seconds.",
+              "description": "History write, export and query timeout in seconds, up to 30. Omitted or 0 selects 2.",
               "x-oac": {"restarts": ["core"]}
             },
             "sample_interval_seconds": {
               "type": "integer",
-              "description": "Periodic sampling interval in seconds.",
+              "description": "Periodic sampling interval in seconds, 5 to 300. Omitted or 0 selects 30.",
               "x-oac": {"restarts": ["core"]}
             }
           }

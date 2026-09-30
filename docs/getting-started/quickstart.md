@@ -4,16 +4,15 @@ This walkthrough takes you from a Project API key to an agent that has created a
 and reported back. You need:
 
 - a Project API key and the API base URL, from your administrator
-  ([Sign in to Web](install.md#sign-in-to-web));
+  ([Issue a Project API key](install.md#issue-a-project-api-key));
 - a ready node or E2B backend, so Core has somewhere to run the agent
   ([Nodes](nodes.md));
 - Python 3.9 or newer;
-- a model: either the installation's default model, set by your administrator, or
-  your own provider's model ID, base URL and API key.
+- a model: the installation's default model, or your own provider's model ID, base
+  URL and API key. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence)
+  says which one a Session uses and which protocols each harness speaks.
 
-The example uses Codex, which needs a provider that speaks the OpenAI Responses API.
-Other harnesses and protocols are in the
-[user guide](../user-guide.md#choose-a-harness-and-a-model).
+The example uses Codex, whose model provider must speak the OpenAI Responses API.
 
 ## 1. Connect
 
