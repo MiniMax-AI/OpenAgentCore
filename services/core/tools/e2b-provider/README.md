@@ -18,7 +18,7 @@ The account key is stored encrypted in Core's database and is write-only. It rea
 | `kill` | `Kill` | Destroys every matching sandbox and confirms that none remains |
 | `command` | `RunCommand` | Runs one bounded command as the Runtime user on a running sandbox whose bootstrap completed; output is limited to 1 MiB per stream |
 | `validate_deployment` | Deployment setup | Reads the template's builds and requires the exact build to be ready with the configured CPU and memory. Without configured resources the selection adopts the build's CPU and memory. Returns the build's status, CPU, memory and reported disk for Core to record; bounded to 30 seconds |
-| `list_templates`, `list_builds` | Web's setup wizard | Pages the key's visible templates (`GET /v2/templates`) or one template's ready builds, with a transient key. Results are capped at 200 and write no receipt |
+| `list_templates`, `list_builds` | [Configuration discovery](../../../../contracts/agents-api/sandbox-deployment.md#configuration-discovery) | Pages the key's visible templates (`GET /v2/templates`) or one template's ready builds, with a transient key. Results are capped at 200 and write no receipt |
 | `observe` | Runtime observations | Up to 100 allocations; see [Observations](#observations) |
 | `verify_credential` | E2B key replacement | Up to 32 allocation references; see [Credential verification](#credential-verification) |
 
