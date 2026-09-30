@@ -12,6 +12,9 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -60,13 +63,13 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	}
 
 	// A Project and its API key, issued with the Core key.
-	var project store.Project
+	var project projects.Project
 	created("POST", "/core/v1/projects", coreKey, `{"name":"Matrix"}`, &project)
-	var projectKey store.IssuedProjectAPIKey
+	var projectKey projects.IssuedAPIKey
 	created("POST", "/core/v1/projects/"+project.ID+"/keys", coreKey, `{"name":"application"}`, &projectKey)
 
 	// An executor credential for a self_hosted Session of that Project.
-	binding, err := s.GetProject(ctx, project.ID)
+	binding, err := projectpg.New(pgunit.NewPool(db.pool)).GetProject(ctx, project.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

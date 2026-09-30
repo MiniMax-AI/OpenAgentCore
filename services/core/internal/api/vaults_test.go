@@ -48,7 +48,7 @@ func vaultResourceHandler(t *testing.T) (http.Handler, *vaultResourceFixture) {
 	f := &vaultResourceFixture{vault: vaults.Vault{ID: uuid.NewString(), TenantID: uuid.NewString(), Metadata: map[string]string{}, CreatedAt: time.Unix(1700000000, 0)}}
 	deps, fakes := testDependencies(t)
 	deps.Engine = "fake_alpha"
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: runtimedevice.HashCredential("vault-key"), TenantID: f.vault.TenantID}).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "vault-org", ProjectID: "vault-project", SubjectKind: "user", SubjectID: "vault-owner", TokenSHA256: runtimedevice.HashCredential("vault-key"), TenantID: f.vault.TenantID}).ResolveAPIKey
 	fakes.vaults.createVault, fakes.vaults.deleteVault = f.CreateVault, f.DeleteVault
 	fakes.vaultsReader.getVault, fakes.vaultsReader.listVaults = f.GetVault, f.ListVaults
 	fakes.agents.update = f.UpdateAgent

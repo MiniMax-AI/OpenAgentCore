@@ -8,23 +8,17 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/google/uuid"
 )
 
 func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := t.Context()
-	project := createTestProject(t, s)
-	binding, err := s.GetProject(ctx, project.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := binding.Principal
-	foreignProject := createTestProject(t, s)
-	foreign, err := s.GetProject(ctx, foreignProject.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	binding := createTestProject(t, pool)
+	project, p := binding.Project, binding.Principal
+	foreign := createTestProject(t, pool)
+	foreignProject := foreign.Project
 	// Each administrator request has its own request ID.
 	admin := func() context.Context { return keyAdminContext(ctx, project.ID) }
 	create := func(kind string) (Session, Environment) {
@@ -148,14 +142,10 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 
 // An archived Project gets no new or rotated credential; listing and revoking still work.
 func TestArchivedProjectExecutorCredentials(t *testing.T) {
-	s, _ := testStore(t)
+	s, pool := testStore(t)
 	ctx := t.Context()
-	project := createTestProject(t, s)
-	binding, err := s.GetProject(ctx, project.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := binding.Principal
+	binding := createTestProject(t, pool)
+	project, p := binding.Project, binding.Principal
 	input := environmentInput(uuid.NewString(), "self_hosted", "/workspace")
 	input.Creator = p.Subject()
 	session, err := s.CreateSession(ctx, p.TenantID, input)
@@ -170,7 +160,7 @@ func TestArchivedProjectExecutorCredentials(t *testing.T) {
 	if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, environment.ID, keyID, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ArchiveProject(keyAdminContext(ctx, project.ID), project.ID); err != nil {
+	if _, err := testProjects(t, pool).ArchiveProject(keyAdminContext(ctx, project.ID), projects.ArchiveProject{ID: project.ID}); err != nil {
 		t.Fatal(err)
 	}
 	// Order: the target (404) first, then the archived Project (409), before
@@ -181,10 +171,10 @@ func TestArchivedProjectExecutorCredentials(t *testing.T) {
 		want             error
 	}{
 		{uuid.NewString(), uuid.NewString(), false, ErrNotFound},
-		{environment.ID, uuid.NewString(), false, ErrProjectArchived},
-		{environment.ID, keyID, false, ErrProjectArchived},
-		{environment.ID, keyID, true, ErrProjectArchived},
-		{environment.ID, uuid.NewString(), true, ErrProjectArchived},
+		{environment.ID, uuid.NewString(), false, projects.ErrArchived},
+		{environment.ID, keyID, false, projects.ErrArchived},
+		{environment.ID, keyID, true, projects.ErrArchived},
+		{environment.ID, uuid.NewString(), true, projects.ErrArchived},
 	} {
 		if _, err := s.IssueProjectExecutorCredential(keyAdminContext(ctx, project.ID), p, test.environment, test.key, test.rotate); !errors.Is(err, test.want) {
 			t.Fatal("archived write", test, err)
@@ -204,11 +194,8 @@ func TestArchivedProjectExecutorCredentials(t *testing.T) {
 func TestProjectExecutorConnectionState(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := t.Context()
-	project := createTestProject(t, s)
-	binding, err := s.GetProject(ctx, project.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	binding := createTestProject(t, pool)
+	project := binding.Project
 	session, env, key := runtimeEnrollmentFixture(t, s, binding.Principal)
 	state, err := s.ProjectExecutorCredentialState(ctx, binding.Principal, env.ID)
 	if err != nil || state.Connection.DeviceID != "" || state.Connection.EnrolledAt != nil || state.Connection.BoundKeyID != nil || state.Connection.LastSeenAt != nil {
@@ -292,11 +279,7 @@ func TestProjectExecutorConnectionState(t *testing.T) {
 	if state.Connection.EnvironmentStatus != "expired" || state.Connection.CredentialHash != "" {
 		t.Fatal("expired authority")
 	}
-	foreignProject := createTestProject(t, s)
-	foreign, err := s.GetProject(ctx, foreignProject.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
+	foreign := createTestProject(t, pool)
 	for _, id := range []string{uuid.NewString(), "malformed"} {
 		if _, err = s.ProjectExecutorCredentialState(ctx, binding.Principal, id); !errors.Is(err, ErrNotFound) {
 			t.Fatal("missing target", err)

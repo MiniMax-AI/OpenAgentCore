@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -22,17 +23,18 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			s, db := newTestStoreDB(t)
+			_, management := fixtureProjects(t, db)
 			projectID := uuid.NewString()
 			ctx := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "12345678", ActorLabel: "test", RequestID: uuid.NewString(), TraceID: uuid.NewString(), ProjectID: projectID})
-			project, err := s.CreateProject(ctx, projectID, "Stream authority")
+			project, err := management.CreateProject(ctx, projects.CreateProject{ID: projectID, Name: "Stream authority"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			reader, err := s.CreateProjectAPIKey(ctx, project.ID, uuid.NewString(), "reader")
+			reader, err := management.CreateAPIKey(ctx, projects.CreateAPIKey{ProjectID: project.ID, ID: uuid.NewString(), Name: "reader"})
 			if err != nil {
 				t.Fatal(err)
 			}
-			peer, err := s.CreateProjectAPIKey(ctx, project.ID, uuid.NewString(), "peer")
+			peer, err := management.CreateAPIKey(ctx, projects.CreateAPIKey{ProjectID: project.ID, ID: uuid.NewString(), Name: "peer"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,9 +71,9 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 			// Keep an idle stream open across a successful authority recheck.
 			time.Sleep(1100 * time.Millisecond)
 			if archive {
-				_, err = s.ArchiveProject(ctx, project.ID)
+				_, err = management.ArchiveProject(ctx, projects.ArchiveProject{ID: project.ID})
 			} else {
-				err = s.RevokeProjectAPIKey(ctx, project.ID, reader.ID)
+				err = management.RevokeAPIKey(ctx, projects.RevokeAPIKey{ProjectID: project.ID, ID: reader.ID})
 			}
 			if err != nil {
 				t.Fatal(err)

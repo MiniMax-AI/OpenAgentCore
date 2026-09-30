@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 )
 
@@ -57,17 +58,17 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 	projectByTenant := map[string]string{}
 	cursor := ""
 	for {
-		projects, err := h.Projects.ListProjects(ctx, cursor, 100, true)
+		page, err := h.ProjectsReader.ListProjects(ctx, projects.ListQuery{After: cursor, Limit: projects.MaxListLimit, Ascending: true})
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeProjectsError(w, r, err)
 			return
 		}
-		for _, project := range projects.Data {
+		for _, project := range page.Data {
 			tenants = append(tenants, project.TenantID)
 			projectByTenant[project.TenantID] = project.ID
 			cursor = project.ID
 		}
-		if !projects.HasMore {
+		if !page.HasMore {
 			break
 		}
 	}

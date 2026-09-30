@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -162,12 +163,10 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusConflict, "sandbox_node_address_mismatch", "This node uses a different Core address than the installation public URL. Generate a new command on the Nodes page and run it on the host.")
 	case errors.Is(err, store.ErrRuntimeSpecificationMismatch):
 		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits or Runtime release do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
-	case errors.Is(err, store.ErrProjectArchived):
-		writeError(w, http.StatusConflict, "project_archived", "The target Project is archived.")
-	case errors.Is(err, store.ErrProjectExists):
-		writeError(w, http.StatusConflict, "project_exists", "This Project ID already exists.")
-	case errors.Is(err, store.ErrProjectAPIKeyExists):
-		writeError(w, http.StatusConflict, "project_api_key_exists", "This API key ID already exists. List its metadata and revoke it explicitly if the secret was not saved.")
+	case errors.Is(err, projects.ErrArchived):
+		// Executor credential management checks the Project in its own
+		// transaction.
+		writeProjectsError(w, r, err)
 	case errors.Is(err, store.ErrInstallationAuthorization):
 		writeError(w, http.StatusUnauthorized, "installation_authorization_invalid", store.ErrInstallationAuthorization.Error())
 	case errors.Is(err, store.ErrExecutorCredentialExists):

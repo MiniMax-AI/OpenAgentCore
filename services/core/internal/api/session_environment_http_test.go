@@ -44,10 +44,10 @@ func TestSelfHostedSessionHTTPReadListMetadataAndLiveStream(t *testing.T) {
 		EnvironmentInputActivity: session.EnvironmentInputActivity,
 	}}}}
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: session.TenantID,
-	}).ResolveProjectAPIKey
+	}).ResolveAPIKey
 	fixture.serve(fakes)
 	fakes.sessions.listSessions, fakes.sessions.updateSessionMetadata = fixture.ListSessions, fixture.UpdateSessionMetadata
 	// Self-hosted Sessions report the executor URL of the enabled Execution.

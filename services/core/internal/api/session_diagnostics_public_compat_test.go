@@ -21,7 +21,7 @@ func TestDiagnosticPublicCompatibility(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
 	key := callerBinding()
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, key).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
 	databaseSessionReads(s)(&deps, fakes)
 	h := newTestHandler(t, deps)
 	session, err := s.CreateSession(t.Context(), key.TenantID, store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})

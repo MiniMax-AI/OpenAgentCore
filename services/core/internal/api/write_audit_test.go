@@ -11,7 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 )
@@ -45,9 +45,9 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 	deps, fakes := testDependencies(t)
 	queries := &auditQueryFixture{}
 	fakes.writeAudit.getResourceOwners, fakes.writeAudit.listWriteOperations = queries.GetResourceOwners, queries.ListWriteOperations
-	projects := &projectKeyStoreFixture{project: store.ProjectBinding{Project: store.Project{ID: key.ProjectID}, Principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID}}}}
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, key).ResolveProjectAPIKey
-	fakes.projects.getProject = projects.GetProject
+	project := &projectKeyStoreFixture{project: projects.Binding{Project: projects.Project{ID: key.ProjectID}, Principal: identity.Principal{ProjectScope: identity.ProjectScope{TenantID: key.TenantID}}}}
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
+	fakes.projectsReader.getProject = project.GetProject
 	h := newTestHandler(t, deps)
 	owners := "/core/v1/projects/" + key.ProjectID + "/resource-owners?resource_type=agent&resource_ids=first,second"
 	for _, token := range []string{"", "caller", "foreign"} {
@@ -93,11 +93,11 @@ func TestWriteAuditQueriesDeploymentScopeAndValidation(t *testing.T) {
 
 func TestAuthenticatedWriteProvenance(t *testing.T) {
 	key := callerBinding()
-	binding, _ := projectKeys(t, key).ResolveProjectAPIKey(t.Context(), key.TokenSHA256)
-	binding.Key = store.ProjectAPIKey{ID: uuid.NewString(), Name: "SDK", Prefix: "pc_12345678"}
+	binding := projectKeyBinding(t, key)
+	binding.Key = projects.APIKey{ID: uuid.NewString(), Name: "SDK", Prefix: "pc_12345678"}
 	keys := &projectKeyStoreFixture{binding: binding}
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = keys.ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = keys.ResolveAPIKey
 	h := &Handler{Dependencies: deps}
 	var source writeaudit.Source
 	var got bool
@@ -122,7 +122,7 @@ func TestAuthenticatedWriteProvenance(t *testing.T) {
 			t.Fatalf("source %+v", source)
 		}
 	}
-	keys.resolve = store.ErrNotFound
+	keys.resolve = projects.ErrNotFound
 	if w := projectKeyHTTP(handler, "POST", "/v1/agents", "issued-project-key", ""); w.Code != 401 {
 		t.Fatalf("revoked key %d", w.Code)
 	}

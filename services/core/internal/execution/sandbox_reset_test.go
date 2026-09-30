@@ -29,13 +29,21 @@ func resetManagerStore(t *testing.T) (*store.Store, Owner) {
 
 func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner) {
 	t.Helper()
+	s, owner, _ := resetManagerStoreDB(t, configure)
+	return s, owner
+}
+
+// resetManagerStoreDB also returns the test database, for tests that build
+// adapters on it.
+func resetManagerStoreDB(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *pgxpool.Pool) {
+	t.Helper()
 	pool := pgtest.OpenIsolated(t, configure)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
 	s := store.NewWithCredentialCipher(pool, cipher)
-	return s, testOwner(t, pool, s)
+	return s, testOwner(t, pool, s), pool
 }
 
 // testOwner acquires the execution lease on pool and builds s's execution

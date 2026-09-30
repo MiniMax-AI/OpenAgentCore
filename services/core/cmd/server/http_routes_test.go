@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"net"
@@ -15,8 +16,8 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -65,14 +66,14 @@ func TestServerHandlerRoutesCanonicalPaths(t *testing.T) {
 	}
 }
 
-// trapProjects resolves the fixture Project keys; every other call panics.
-type trapProjects struct {
-	api.Projects
+// trapProjectsReader resolves the fixture Project keys; every other call panics.
+type trapProjectsReader struct {
+	api.ProjectsReader
 	keys fixtureKeyResolver
 }
 
-func (p trapProjects) ResolveProjectAPIKey(ctx context.Context, digest string) (store.ProjectAPIKeyBinding, error) {
-	return p.keys.ResolveProjectAPIKey(ctx, digest)
+func (p trapProjectsReader) ResolveAPIKey(ctx context.Context, digest [sha256.Size]byte) (projects.KeyBinding, error) {
+	return p.keys.ResolveAPIKey(ctx, digest)
 }
 
 // daemonComposition serves the real API handler beside sentinel daemon routes.
@@ -87,7 +88,7 @@ func daemonComposition(t testing.TB) http.Handler {
 	}
 	apiHandler, err := api.NewHandler(api.Dependencies{
 		Engine: "codex", CoreKeys: admin, InstallationBindings: struct{ api.InstallationBindings }{},
-		Projects:       trapProjects{keys: keys},
+		Projects: struct{ api.Projects }{}, ProjectsReader: trapProjectsReader{keys: keys},
 		ModelProviders: struct{ api.ModelProviders }{}, ModelProvidersReader: struct{ api.ModelProvidersReader }{},
 		Vaults: struct{ api.Vaults }{}, VaultsReader: struct{ api.VaultsReader }{},
 		Files: struct{ api.Files }{}, FilesReader: struct{ api.FilesReader }{},

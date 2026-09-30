@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -113,7 +114,7 @@ func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project iden
 
 // IssueProjectExecutorCredential issues a new key or, with rotate, replaces the
 // secret of an existing key restricted to the Environment. An archived Project
-// gets neither (ErrProjectArchived). The administrator audit entry commits in
+// gets neither (projects.ErrArchived). The administrator audit entry commits in
 // the same transaction and never contains the secret.
 func (s *Store) IssueProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string, rotate bool) (IssuedExecutorCredential, error) {
 	// The target is checked first, then the archived Project, then the key.
@@ -178,7 +179,7 @@ func activeProjectAudit(project identity.Principal, action, keyID string) func(c
 	}
 }
 
-// activeProject returns ErrProjectArchived for an archived Project.
+// activeProject returns projects.ErrArchived for an archived Project.
 func activeProject(ctx context.Context, q *sqlc.Queries, project identity.Principal) error {
 	tenant, err := parseID(project.TenantID)
 	if err != nil {
@@ -192,7 +193,7 @@ func activeProject(ctx context.Context, q *sqlc.Queries, project identity.Princi
 		return err
 	}
 	if row.ArchivedAt.Valid {
-		return ErrProjectArchived
+		return projects.ErrArchived
 	}
 	return nil
 }

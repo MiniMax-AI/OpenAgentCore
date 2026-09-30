@@ -36,10 +36,10 @@ func environmentResourceHandler(t *testing.T) (http.Handler, *environmentResourc
 	}}
 	deps, fakes := testDependencies(t)
 	deps.Engine = "fake_alpha"
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{
 		OrganizationID: "resource-org", ProjectID: "resource-project", SubjectKind: "user", SubjectID: "resource-reader",
 		TokenSHA256: runtimedevice.HashCredential("resource-key"), TenantID: f.environment.TenantID,
-	}).ResolveProjectAPIKey
+	}).ResolveAPIKey
 	fakes.environments.getEnvironment = f.GetEnvironment
 	return newTestHandler(t, deps), f
 }

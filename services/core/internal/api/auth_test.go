@@ -21,7 +21,7 @@ func TestCallerPrincipalHeadersAndKeyRotation(t *testing.T) {
 	rotated.TokenSHA256 = runtimedevice.HashCredential("rotated")
 	peer.TokenSHA256 = runtimedevice.HashCredential("peer")
 	deps, fakes := testDependencies(t)
-	fakes.projects.resolveProjectAPIKey = projectKeys(t, key, rotated, peer).ResolveProjectAPIKey
+	fakes.projectsReader.resolveAPIKey = projectKeys(t, key, rotated, peer).ResolveAPIKey
 	for _, test := range []struct {
 		name, token, subject string
 		headers              http.Header

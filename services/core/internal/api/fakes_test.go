@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"io"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -591,79 +593,83 @@ func (f *fakeModelProvidersReader) List(a0 context.Context) ([]modelconfiguratio
 }
 
 type fakeProjects struct {
-	t                    testing.TB
-	createProject        func(context.Context, string, string) (store.Project, error)
-	getProject           func(context.Context, string) (store.ProjectBinding, error)
-	listProjects         func(context.Context, string, int, bool) (store.ProjectPage, error)
-	renameProject        func(context.Context, string, string) (store.Project, error)
-	archiveProject       func(context.Context, string) (store.Project, error)
-	createProjectAPIKey  func(context.Context, string, string, string) (store.IssuedProjectAPIKey, error)
-	listProjectAPIKeys   func(context.Context, string, string, int, bool) (store.ProjectAPIKeyPage, error)
-	revokeProjectAPIKey  func(context.Context, string, string) error
-	resolveProjectAPIKey func(context.Context, string) (store.ProjectAPIKeyBinding, error)
+	t              testing.TB
+	createProject  func(context.Context, projects.CreateProject) (projects.Project, error)
+	renameProject  func(context.Context, projects.RenameProject) (projects.Project, error)
+	archiveProject func(context.Context, projects.ArchiveProject) (projects.Project, error)
+	createAPIKey   func(context.Context, projects.CreateAPIKey) (projects.IssuedAPIKey, error)
+	revokeAPIKey   func(context.Context, projects.RevokeAPIKey) error
 }
 
-func (f *fakeProjects) CreateProject(a0 context.Context, a1 string, a2 string) (store.Project, error) {
+func (f *fakeProjects) CreateProject(a0 context.Context, a1 projects.CreateProject) (projects.Project, error) {
 	if f.createProject == nil {
 		unexpectedCall(f.t, "CreateProject")
 	}
-	return f.createProject(a0, a1, a2)
+	return f.createProject(a0, a1)
 }
 
-func (f *fakeProjects) GetProject(a0 context.Context, a1 string) (store.ProjectBinding, error) {
-	if f.getProject == nil {
-		unexpectedCall(f.t, "GetProject")
-	}
-	return f.getProject(a0, a1)
-}
-
-func (f *fakeProjects) ListProjects(a0 context.Context, a1 string, a2 int, a3 bool) (store.ProjectPage, error) {
-	if f.listProjects == nil {
-		unexpectedCall(f.t, "ListProjects")
-	}
-	return f.listProjects(a0, a1, a2, a3)
-}
-
-func (f *fakeProjects) RenameProject(a0 context.Context, a1 string, a2 string) (store.Project, error) {
+func (f *fakeProjects) RenameProject(a0 context.Context, a1 projects.RenameProject) (projects.Project, error) {
 	if f.renameProject == nil {
 		unexpectedCall(f.t, "RenameProject")
 	}
-	return f.renameProject(a0, a1, a2)
+	return f.renameProject(a0, a1)
 }
 
-func (f *fakeProjects) ArchiveProject(a0 context.Context, a1 string) (store.Project, error) {
+func (f *fakeProjects) ArchiveProject(a0 context.Context, a1 projects.ArchiveProject) (projects.Project, error) {
 	if f.archiveProject == nil {
 		unexpectedCall(f.t, "ArchiveProject")
 	}
 	return f.archiveProject(a0, a1)
 }
 
-func (f *fakeProjects) CreateProjectAPIKey(a0 context.Context, a1 string, a2 string, a3 string) (store.IssuedProjectAPIKey, error) {
-	if f.createProjectAPIKey == nil {
-		unexpectedCall(f.t, "CreateProjectAPIKey")
+func (f *fakeProjects) CreateAPIKey(a0 context.Context, a1 projects.CreateAPIKey) (projects.IssuedAPIKey, error) {
+	if f.createAPIKey == nil {
+		unexpectedCall(f.t, "CreateAPIKey")
 	}
-	return f.createProjectAPIKey(a0, a1, a2, a3)
+	return f.createAPIKey(a0, a1)
 }
 
-func (f *fakeProjects) ListProjectAPIKeys(a0 context.Context, a1 string, a2 string, a3 int, a4 bool) (store.ProjectAPIKeyPage, error) {
-	if f.listProjectAPIKeys == nil {
-		unexpectedCall(f.t, "ListProjectAPIKeys")
+func (f *fakeProjects) RevokeAPIKey(a0 context.Context, a1 projects.RevokeAPIKey) error {
+	if f.revokeAPIKey == nil {
+		unexpectedCall(f.t, "RevokeAPIKey")
 	}
-	return f.listProjectAPIKeys(a0, a1, a2, a3, a4)
+	return f.revokeAPIKey(a0, a1)
 }
 
-func (f *fakeProjects) RevokeProjectAPIKey(a0 context.Context, a1 string, a2 string) error {
-	if f.revokeProjectAPIKey == nil {
-		unexpectedCall(f.t, "RevokeProjectAPIKey")
-	}
-	return f.revokeProjectAPIKey(a0, a1, a2)
+type fakeProjectsReader struct {
+	t             testing.TB
+	getProject    func(context.Context, string) (projects.Binding, error)
+	listProjects  func(context.Context, projects.ListQuery) (projects.Page, error)
+	listAPIKeys   func(context.Context, string, projects.ListQuery) (projects.KeyPage, error)
+	resolveAPIKey func(context.Context, [sha256.Size]byte) (projects.KeyBinding, error)
 }
 
-func (f *fakeProjects) ResolveProjectAPIKey(a0 context.Context, a1 string) (store.ProjectAPIKeyBinding, error) {
-	if f.resolveProjectAPIKey == nil {
-		unexpectedCall(f.t, "ResolveProjectAPIKey")
+func (f *fakeProjectsReader) GetProject(a0 context.Context, a1 string) (projects.Binding, error) {
+	if f.getProject == nil {
+		unexpectedCall(f.t, "GetProject")
 	}
-	return f.resolveProjectAPIKey(a0, a1)
+	return f.getProject(a0, a1)
+}
+
+func (f *fakeProjectsReader) ListProjects(a0 context.Context, a1 projects.ListQuery) (projects.Page, error) {
+	if f.listProjects == nil {
+		unexpectedCall(f.t, "ListProjects")
+	}
+	return f.listProjects(a0, a1)
+}
+
+func (f *fakeProjectsReader) ListAPIKeys(a0 context.Context, a1 string, a2 projects.ListQuery) (projects.KeyPage, error) {
+	if f.listAPIKeys == nil {
+		unexpectedCall(f.t, "ListAPIKeys")
+	}
+	return f.listAPIKeys(a0, a1, a2)
+}
+
+func (f *fakeProjectsReader) ResolveAPIKey(a0 context.Context, a1 [sha256.Size]byte) (projects.KeyBinding, error) {
+	if f.resolveAPIKey == nil {
+		unexpectedCall(f.t, "ResolveAPIKey")
+	}
+	return f.resolveAPIKey(a0, a1)
 }
 
 type fakeRuntimeHistory struct {

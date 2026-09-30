@@ -902,6 +902,69 @@ definitions:
       service:
         $ref: '#/definitions/coremetrics.ServiceState'
     type: object
+  projects.APIKey:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      project_id:
+        type: string
+      revoked_at:
+        type: string
+    type: object
+  projects.IssuedAPIKey:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      name:
+        type: string
+      prefix:
+        type: string
+      project_id:
+        type: string
+      revoked_at:
+        type: string
+    type: object
+  projects.KeyPage:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/projects.APIKey'
+        type: array
+      has_more:
+        type: boolean
+    type: object
+  projects.Page:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/projects.Project'
+        type: array
+      has_more:
+        type: boolean
+    type: object
+  projects.Project:
+    properties:
+      active_key_count:
+        type: integer
+      archived_at:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   sandbox.ConfigurationDiscoveryInput:
     properties:
       configuration:
@@ -990,23 +1053,6 @@ definitions:
       key_id:
         type: string
     type: object
-  store.IssuedProjectAPIKey:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: string
-      key:
-        type: string
-      name:
-        type: string
-      prefix:
-        type: string
-      project_id:
-        type: string
-      revoked_at:
-        type: string
-    type: object
   store.ManagedSessionArchive:
     properties:
       environment_id:
@@ -1038,52 +1084,6 @@ definitions:
         x-nullable: true
       start:
         type: string
-    type: object
-  store.Project:
-    properties:
-      active_key_count:
-        type: integer
-      archived_at:
-        type: string
-      created_at:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-    type: object
-  store.ProjectAPIKey:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-      prefix:
-        type: string
-      project_id:
-        type: string
-      revoked_at:
-        type: string
-    type: object
-  store.ProjectAPIKeyPage:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/store.ProjectAPIKey'
-        type: array
-      has_more:
-        type: boolean
-    type: object
-  store.ProjectPage:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/store.Project'
-        type: array
-      has_more:
-        type: boolean
     type: object
   store.RuntimeDeploymentView:
     properties:
@@ -3673,7 +3673,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.ProjectPage'
+            $ref: '#/definitions/projects.Page'
         "400":
           description: Bad Request
           schema:
@@ -3711,7 +3711,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/store.Project'
+            $ref: '#/definitions/projects.Project'
         "400":
           description: Bad Request
           schema:
@@ -3755,7 +3755,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.Project'
+            $ref: '#/definitions/projects.Project'
         "400":
           description: Bad Request
           schema:
@@ -3937,7 +3937,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.Project'
+            $ref: '#/definitions/projects.Project'
         "401":
           description: Unauthorized
           schema:
@@ -4444,7 +4444,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.ProjectAPIKeyPage'
+            $ref: '#/definitions/projects.KeyPage'
         "400":
           description: Bad Request
           schema:
@@ -4487,7 +4487,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/store.IssuedProjectAPIKey'
+            $ref: '#/definitions/projects.IssuedAPIKey'
         "400":
           description: Bad Request
           schema:

@@ -16,6 +16,7 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 // testFakes holds one strict fake per Dependencies area.
 type testFakes struct {
 	projects               *fakeProjects
+	projectsReader         *fakeProjectsReader
 	vaults                 *fakeVaults
 	vaultsReader           *fakeVaultsReader
 	modelProviders         *fakeModelProviders
@@ -60,7 +61,7 @@ type testFakes struct {
 func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	t.Helper()
 	f := &testFakes{
-		projects:       &fakeProjects{t: t},
+		projects: &fakeProjects{t: t}, projectsReader: &fakeProjectsReader{t: t},
 		modelProviders: &fakeModelProviders{t: t}, modelProvidersReader: &fakeModelProvidersReader{t: t},
 		vaults: &fakeVaults{t: t}, vaultsReader: &fakeVaultsReader{t: t},
 		environmentTemplates: &fakeEnvironmentTemplates{t: t}, environmentTemplatesReader: &fakeEnvironmentTemplatesReader{t: t},
@@ -77,7 +78,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	}
 	return Dependencies{
 		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
-		Projects:       f.projects,
+		Projects: f.projects, ProjectsReader: f.projectsReader,
 		ModelProviders: f.modelProviders, ModelProvidersReader: f.modelProvidersReader,
 		Vaults: f.vaults, VaultsReader: f.vaultsReader,
 		Files: f.files, FilesReader: f.filesReader,

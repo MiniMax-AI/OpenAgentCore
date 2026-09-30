@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -101,24 +102,24 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, store.ErrInvalidInput)
 		return
 	}
-	var projects store.ProjectPage
+	var page projects.Page
 	if projectID := r.URL.Query().Get("project_id"); projectID != "" {
 		if options.after != "" {
 			writeStoreError(w, r, store.ErrInvalidInput)
 			return
 		}
-		var binding store.ProjectBinding
-		binding, err = h.Projects.GetProject(ctx, projectID)
-		projects = store.ProjectPage{Data: []store.Project{binding.Project}}
+		var binding projects.Binding
+		binding, err = h.ProjectsReader.GetProject(ctx, projectID)
+		page = projects.Page{Data: []projects.Project{binding.Project}}
 	} else {
-		projects, err = h.Projects.ListProjects(ctx, options.after, options.limit, options.ascending)
+		page, err = h.ProjectsReader.ListProjects(ctx, projects.ListQuery{After: options.after, Limit: options.limit, Ascending: options.ascending})
 	}
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeProjectsError(w, r, err)
 		return
 	}
-	response := AdminSummaryResponse{Data: []AdminSummaryRow{}, HasMore: projects.HasMore}
-	for _, project := range projects.Data {
+	response := AdminSummaryResponse{Data: []AdminSummaryRow{}, HasMore: page.HasMore}
+	for _, project := range page.Data {
 		groups := map[string]*AdminSummaryRow{}
 		if group == "project" {
 			groups[""] = &AdminSummaryRow{ProjectID: project.ID}
@@ -192,8 +193,8 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 			response.Data = append(response.Data, *row)
 		}
 	}
-	if projects.HasMore && len(projects.Data) > 0 {
-		response.NextCursor = projects.Data[len(projects.Data)-1].ID
+	if page.HasMore && len(page.Data) > 0 {
+		response.NextCursor = page.Data[len(page.Data)-1].ID
 	}
 	writeJSON(w, http.StatusOK, response)
 }
