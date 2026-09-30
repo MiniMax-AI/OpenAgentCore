@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { SessionEvent, SessionItem } from "@agents-core-web/agents-client";
+import type { SessionEvent, SessionItem } from "@oac/agents-client";
 import { firstTextArrived } from "./session-timing";
 import { api, readHistory } from "./api";
 

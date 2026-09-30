@@ -4,7 +4,7 @@ import {
   AgentCoreError,
   createIdempotencyKey,
   type AgentSession,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 import { ArrowUp, Square } from "lucide-react";
 import { beginTiming, requestReturned } from "./lib/session-timing";
 import { api } from "./lib/api";

@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@agents-core-web/agents-client': workspace:@oac/agents-client@*
-
 importers:
 
   .:
@@ -160,8 +157,8 @@ importers:
 
   example/parsar:
     dependencies:
-      '@agents-core-web/agents-client':
-        specifier: workspace:@oac/agents-client@*
+      '@oac/agents-client':
+        specifier: workspace:*
         version: link:../../packages/agents-client
       '@radix-ui/react-dialog':
         specifier: ^1.1.18
