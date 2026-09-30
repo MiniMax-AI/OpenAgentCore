@@ -13,8 +13,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -143,7 +141,7 @@ func prepareAuditMutation(t *testing.T, service *vaults.Service, tenant, name st
 // table snapshots prove the rollback of ciphertext, timestamps and cascades.
 func TestVaultMutationsRollBackWithTheirAudit(t *testing.T) {
 	pool := pgtest.OpenIsolated(t, nil)
-	service := newService(t, vaultpg.New(pgunit.NewPool(pool)), newCipher(t, bytes.Repeat([]byte{91}, 32)), nil)
+	service := newService(t, pool, newCipher(t, bytes.Repeat([]byte{91}, 32)), nil)
 	rejectAudits(t, pool)
 	secrets := []string{"audit-private-token", "audit-private-replacement"}
 	for _, provenance := range []string{"public", "admin"} {

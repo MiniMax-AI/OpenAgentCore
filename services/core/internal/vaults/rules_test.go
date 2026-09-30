@@ -185,7 +185,7 @@ func TestOAuthCreationRules(t *testing.T) {
 
 func TestOAuthUpdateRules(t *testing.T) {
 	expiry := "2030-01-02T03:04:05Z"
-	stored := oauthSecret{Version: 1, AccessToken: "access", RefreshToken: "refresh", ClientSecret: "secret",
+	stored := OAuthGrant{AccessToken: "access", RefreshToken: "refresh", ClientSecret: "secret",
 		Metadata: OAuthMetadata{ExpiresAt: &expiry, Refresh: &OAuthRefreshMetadata{ClientID: "client", TokenEndpoint: "https://issuer.example/token", TokenEndpointAuth: "client_secret_basic", Scope: ptr("read write")}}}
 	got, err := applyOAuthUpdate(stored, UpdateOAuthCredential{})
 	if err != nil || !reflect.DeepEqual(got, stored) {
@@ -208,7 +208,7 @@ func TestOAuthUpdateRules(t *testing.T) {
 	withoutRefresh := stored
 	withoutRefresh.Metadata.Refresh = nil
 	for _, tc := range []struct {
-		secret oauthSecret
+		secret OAuthGrant
 		patch  OAuthRefreshUpdate
 	}{
 		{withoutRefresh, OAuthRefreshUpdate{RefreshToken: ptr("cannot-add")}},
@@ -238,19 +238,19 @@ func TestOAuthAccessTokenAndRefreshRules(t *testing.T) {
 		{nil, "", "", false, true},
 		{ptr("not-a-date"), "access", "", false, true},
 	} {
-		token, expired, err := currentAccessToken(oauthSecret{AccessToken: tc.access, Metadata: OAuthMetadata{ExpiresAt: tc.expiresAt}}, now)
+		token, expired, err := currentAccessToken(OAuthGrant{AccessToken: tc.access, Metadata: OAuthMetadata{ExpiresAt: tc.expiresAt}}, now)
 		if token != tc.token || expired != tc.expired || (err != nil) != tc.failed {
 			t.Fatalf("currentAccessToken(%v, %q) = %q, %t, %v", tc.expiresAt, tc.access, token, expired, err)
 		}
 	}
-	secret := oauthSecret{RefreshToken: "refresh", ClientSecret: "secret", Metadata: OAuthMetadata{Refresh: &OAuthRefreshMetadata{
+	secret := OAuthGrant{RefreshToken: "refresh", ClientSecret: "secret", Metadata: OAuthMetadata{Refresh: &OAuthRefreshMetadata{
 		ClientID: "client", TokenEndpoint: "https://issuer.example/token", TokenEndpointAuth: "client_secret_post", Resource: ptr("https://mcp.example/tools"), Scope: ptr("read")}}}
 	request, err := refreshRequest(secret)
 	want := oauthrefresh.Request{TokenEndpoint: "https://issuer.example/token", ClientID: "client", AuthMethod: "client_secret_post", ClientSecret: "secret", RefreshToken: "refresh", Resource: ptr("https://mcp.example/tools"), Scope: ptr("read")}
 	if err != nil || !reflect.DeepEqual(request, want) {
 		t.Fatal("refresh request lost grant fields", err)
 	}
-	for _, unusable := range []oauthSecret{{RefreshToken: "refresh"}, {Metadata: secret.Metadata}} {
+	for _, unusable := range []OAuthGrant{{RefreshToken: "refresh"}, {Metadata: secret.Metadata}} {
 		if _, err := refreshRequest(unusable); err == nil {
 			t.Fatal("a grant without refresh configuration or token was refreshed")
 		}

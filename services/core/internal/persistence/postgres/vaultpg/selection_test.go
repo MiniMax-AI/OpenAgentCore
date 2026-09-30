@@ -21,8 +21,8 @@ func TestMCPCredentialSelectionAndScopedDecryption(t *testing.T) {
 	if _, err := rand.Read(key); err != nil {
 		t.Fatal(err)
 	}
-	service := newService(t, store, newCipher(t, key), nil)
-	keyless := newService(t, store, nil, nil)
+	service := newService(t, pool, newCipher(t, key), nil)
+	keyless := newService(t, pool, nil, nil)
 	var owned []vaults.Vault
 	for _, owner := range []string{tenant, tenant, foreign} {
 		owned = append(owned, createVault(t, service, owner))
@@ -82,8 +82,8 @@ func TestMCPCredentialSelectionAndScopedDecryption(t *testing.T) {
 	}
 	pool.Close()
 	store, pool = openStore(t)
-	service = newService(t, store, newCipher(t, bytes.Clone(key)), nil)
-	keyless = newService(t, store, nil, nil)
+	service = newService(t, pool, newCipher(t, bytes.Clone(key)), nil)
+	keyless = newService(t, pool, nil, nil)
 	got, err := bearerToken(t.Context(), service, tenant, attached, bindings[0])
 	if err != nil || got != token {
 		t.Fatal("frozen selection or opaque bytes changed across restart", err)
@@ -92,7 +92,7 @@ func TestMCPCredentialSelectionAndScopedDecryption(t *testing.T) {
 		t.Fatal("missing key did not fail execution closed")
 	}
 	key[0] ^= 1
-	if got, err := bearerToken(t.Context(), newService(t, store, newCipher(t, key), nil), tenant, attached, bindings[0]); err == nil || got != "" || strings.Contains(err.Error(), token) {
+	if got, err := bearerToken(t.Context(), newService(t, pool, newCipher(t, key), nil), tenant, attached, bindings[0]); err == nil || got != "" || strings.Contains(err.Error(), token) {
 		t.Fatal("wrong key leaked or decrypted a credential")
 	}
 	for _, mutate := range []func(*vaults.MCPCredentialBinding){

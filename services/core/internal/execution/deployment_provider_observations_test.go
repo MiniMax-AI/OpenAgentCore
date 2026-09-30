@@ -51,8 +51,8 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaults := modelconfigurationpg.New(pgunit.NewPool(pool))
-	service, err := modelconfiguration.NewService(defaults, cipher)
+	defaults := modelconfigurationpg.New(pgunit.NewPool(pool), cipher)
+	service, err := modelconfiguration.NewService(defaults)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				d := Dispatcher{Observer: modelconfigurationpg.New(pgunit.NewPool(pool))}
+				d := Dispatcher{Observer: modelconfigurationpg.New(pgunit.NewPool(pool), nil)}
 				started := time.Now()
 				d.observeDeploymentProvider(f.tenant, f.session.ID, turn)
 				if elapsed := time.Since(started); elapsed < 900*time.Millisecond || elapsed > 2*time.Second {

@@ -14,13 +14,12 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 func TestVaultsPersistAndStayTenantScoped(t *testing.T) {
 	store, pool := openStore(t)
-	service := newService(t, store, nil, nil)
+	service := newService(t, pool, nil, nil)
 	ctx := t.Context()
 	tenantA, tenantB := uuid.NewString(), uuid.NewString()
 	before := time.Now().Add(-time.Second)
@@ -68,7 +67,7 @@ func TestVaultsPersistAndStayTenantScoped(t *testing.T) {
 
 func TestVaultsRejectInvalidInputWithoutWrites(t *testing.T) {
 	store, pool := openStore(t)
-	service := newService(t, store, nil, nil)
+	service := newService(t, pool, nil, nil)
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	for _, name := range []string{"", strings.Repeat("x", 257), strings.Repeat("é", 129), string([]byte{0xff})} {
@@ -98,7 +97,7 @@ func TestVaultsRejectInvalidInputWithoutWrites(t *testing.T) {
 
 func TestVaultListFilteringPaginationAndReconnect(t *testing.T) {
 	store, pool := openStore(t)
-	service := newService(t, store, nil, nil)
+	service := newService(t, pool, nil, nil)
 	ctx := t.Context()
 	tenant, other := uuid.NewString(), uuid.NewString()
 	empty, err := store.ListVaults(ctx, tenant, vaults.PageQuery{Limit: 20})
@@ -206,8 +205,8 @@ func TestVaultDeletionCascadeBindingAndRestart(t *testing.T) {
 	store, pool := openStore(t)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	key := bytes.Repeat([]byte{43}, 32)
-	service := newService(t, store, newCipher(t, key), nil)
-	keyless := newService(t, store, nil, nil)
+	service := newService(t, pool, newCipher(t, key), nil)
+	keyless := newService(t, pool, nil, nil)
 	vault, retained, empty := createVault(t, service, tenant), createVault(t, service, tenant), createVault(t, service, tenant)
 	original := createStatic(t, service, tenant, vault.ID, "original", "https://mcp.example/tools", "original-secret")
 	attached := []string{vault.ID, retained.ID}
@@ -225,7 +224,7 @@ func TestVaultDeletionCascadeBindingAndRestart(t *testing.T) {
 			t.Fatal("foreign or invalid deletion was accepted", err)
 		}
 	}
-	_, deletionErr := newService(t, readOnlyStore(t, pool), nil, nil).DeleteVault(t.Context(), vaults.DeleteVault{TenantID: tenant, VaultID: vault.ID})
+	_, deletionErr := newService(t, readOnlyPool(t, pool), nil, nil).DeleteVault(t.Context(), vaults.DeleteVault{TenantID: tenant, VaultID: vault.ID})
 	if !isReadOnlyFailure(deletionErr) {
 		t.Fatal("failed mutation was accepted or translated", deletionErr)
 	}
@@ -268,8 +267,8 @@ func TestVaultDeletionCascadeBindingAndRestart(t *testing.T) {
 		t.Fatal("committed parent or encrypted children remain", err)
 	}
 	pool.Close()
-	store, _ = openStore(t)
-	service = newService(t, store, newCipher(t, bytes.Clone(key)), nil)
+	store, pool = openStore(t)
+	service = newService(t, pool, newCipher(t, bytes.Clone(key)), nil)
 	for _, target := range []vaults.Vault{empty, vault} {
 		if _, err := store.GetVault(t.Context(), tenant, target.ID); !errors.Is(err, vaults.ErrNotFound) {
 			t.Fatal("deleted Vault reappeared after restart")
@@ -304,12 +303,12 @@ func TestVaultDeletionCascadeBindingAndRestart(t *testing.T) {
 }
 
 func TestVaultDeletionConcurrentChildMutations(t *testing.T) {
-	store, pool := openStore(t)
+	_, pool := openStore(t)
 	tenant := uuid.NewString()
-	service := newService(t, store, newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
+	service := newService(t, pool, newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
 	// Each operation runs on its own Store, so only PostgreSQL orders them.
 	other := func() *vaults.Service {
-		return newService(t, vaultpg.New(pgunit.NewPool(pool)), newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
+		return newService(t, pool, newCipher(t, bytes.Repeat([]byte{44}, 32)), nil)
 	}
 	for range 8 {
 		vault := createVault(t, service, tenant)

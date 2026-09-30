@@ -29,7 +29,8 @@ type Store struct {
 
 // New returns the Agent store. cipher is nil when Core has no credential key;
 // saving or opening a model provider bundle then fails with
-// credentialcrypto.ErrUnavailable, as does opening a bundle the key cannot open.
+// credentialcrypto.ErrUnavailable. A bundle the key cannot open is an internal
+// error.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -246,13 +247,16 @@ func (s *Store) GetAgentWithModelProvider(ctx context.Context, tenantID, agentID
 	if row.EncryptedConfig == nil {
 		return agent, nil, nil
 	}
+	if s.cipher == nil {
+		return agents.Agent{}, nil, credentialcrypto.ErrUnavailable
+	}
 	raw, err := s.cipher.OpenAgentModelExecution(row.EncryptedConfig, agent.TenantID, agent.ID)
 	if err != nil {
-		return agents.Agent{}, nil, credentialcrypto.ErrUnavailable
+		return agents.Agent{}, nil, errors.New("agent model provider decryption failed")
 	}
 	var provider v1.ModelProviderInput
 	if json.Unmarshal(raw, &provider) != nil || provider.Validate() != nil {
-		return agents.Agent{}, nil, credentialcrypto.ErrUnavailable
+		return agents.Agent{}, nil, errors.New("invalid stored agent model provider")
 	}
 	return agent, &provider, nil
 }

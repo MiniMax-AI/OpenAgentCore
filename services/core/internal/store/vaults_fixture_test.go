@@ -14,7 +14,7 @@ func fixtureVaults(db fixtureDB) (*vaultpg.Store, *vaults.Service, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	vaultStore := vaultpg.New(pgunit.NewPool(db.pool))
-	vaultService, err := vaults.NewService(vaultStore, db.cipher, refresher)
+	vaultStore := vaultpg.New(pgunit.NewPool(db.pool), db.cipher)
+	vaultService, err := vaults.NewService(vaultStore, refresher)
 	return vaultStore, vaultService, err
 }

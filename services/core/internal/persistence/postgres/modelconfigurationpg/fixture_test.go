@@ -37,8 +37,8 @@ func newFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	adapter := modelconfigurationpg.New(pgunit.NewPool(pool))
-	service, err := modelconfiguration.NewService(adapter, cipher)
+	adapter := modelconfigurationpg.New(pgunit.NewPool(pool), cipher)
+	service, err := modelconfiguration.NewService(adapter)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -18,14 +19,23 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
-// Store runs on pooled connections. Credential operations never need the
-// execution lease: an OAuth refresh holds its Credential's row lock for up to
-// the refresh bound and must not hold up execution-owner work.
-type Store struct{ pool *pgunit.Pool }
+// Store runs on pooled connections and seals and opens the Credential
+// secrets it stores. Credential operations never need the execution lease: an
+// OAuth refresh holds its Credential's row lock for up to the refresh bound
+// and must not hold up execution-owner work.
+type Store struct {
+	pool   *pgunit.Pool
+	cipher *credentialcrypto.Cipher
+}
 
 var _ vaults.Storage = (*Store)(nil)
 
-func New(pool *pgunit.Pool) *Store { return &Store{pool: pool} }
+// New returns a Store. Without a credential key (cipher nil), operations that
+// seal or open a secret fail with credentialcrypto.ErrUnavailable; Vaults,
+// Credential metadata, selection and deletion keep working.
+func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
+	return &Store{pool: pool, cipher: cipher}
+}
 
 // write runs apply in one pooled transaction and translates its outcome.
 func (s *Store) write(ctx context.Context, apply func(context.Context, *sqlc.Queries) error) error {

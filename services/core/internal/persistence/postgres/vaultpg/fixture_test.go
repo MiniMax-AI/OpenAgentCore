@@ -17,15 +17,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-// openStore opens the shared test database, as a restarted Core would.
+// openStore opens the shared test database, as a restarted Core would. The
+// Store has no credential key, which reads never need.
 func openStore(t *testing.T) (*vaultpg.Store, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.Open(t)
-	return vaultpg.New(pgunit.NewPool(pool)), pool
+	return vaultpg.New(pgunit.NewPool(pool), nil), pool
 }
 
-// readOnlyStore fails every write with a real PostgreSQL error.
-func readOnlyStore(t *testing.T, pool *pgxpool.Pool) *vaultpg.Store {
+// readOnlyPool fails every write with a real PostgreSQL error.
+func readOnlyPool(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
 	t.Helper()
 	config := pool.Config().Copy()
 	config.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
@@ -34,11 +35,11 @@ func readOnlyStore(t *testing.T, pool *pgxpool.Pool) *vaultpg.Store {
 		t.Fatal(err)
 	}
 	t.Cleanup(readOnly.Close)
-	return vaultpg.New(pgunit.NewPool(readOnly))
+	return readOnly
 }
 
 // isReadOnlyFailure reports the unexpected failure of a write on a
-// readOnlyStore, which the Store returns as is.
+// readOnlyPool, which the Store returns as is.
 func isReadOnlyFailure(err error) bool {
 	var failure *pgconn.PgError
 	return errors.As(err, &failure) && failure.Code == "25006"
@@ -53,13 +54,19 @@ func newCipher(t *testing.T, key []byte) *credentialcrypto.Cipher {
 	return cipher
 }
 
-// newService serves storage; a nil cipher is a Core without a credential key.
-func newService(t *testing.T, storage vaults.Storage, cipher *credentialcrypto.Cipher, refresher oauthrefresh.Refresher) *vaults.Service {
+// keyedStore is a new Store on pool; a nil cipher is a Core without a
+// credential key.
+func keyedStore(pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) *vaultpg.Store {
+	return vaultpg.New(pgunit.NewPool(pool), cipher)
+}
+
+// newService serves a keyedStore, as cmd/server wires it.
+func newService(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, refresher oauthrefresh.Refresher) *vaults.Service {
 	t.Helper()
 	if refresher == nil {
 		refresher = noRefresh(t)
 	}
-	service, err := vaults.NewService(storage, cipher, refresher)
+	service, err := vaults.NewService(keyedStore(pool, cipher), refresher)
 	if err != nil {
 		t.Fatal(err)
 	}

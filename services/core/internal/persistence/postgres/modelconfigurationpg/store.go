@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
@@ -29,9 +30,12 @@ const auditResource = "deployment_model_provider"
 // connection and for the default's row lock.
 const observationBudget = time.Second
 
-// Store keeps deployment defaults on pooled connections. It never uses the
-// execution lease.
-type Store struct{ pool *pgunit.Pool }
+// Store keeps deployment defaults on pooled connections and seals and opens
+// their bundles. It never uses the execution lease.
+type Store struct {
+	pool   *pgunit.Pool
+	cipher *credentialcrypto.Cipher
+}
 
 var (
 	_ modelconfiguration.Storage  = (*Store)(nil)
@@ -39,7 +43,12 @@ var (
 	_ modelconfiguration.Observer = (*Store)(nil)
 )
 
-func New(pool *pgunit.Pool) *Store { return &Store{pool: pool} }
+// New returns a Store. Without a credential key (cipher nil), Replace and
+// LoadBundle fail with credentialcrypto.ErrUnavailable; List, Delete and
+// observations keep working.
+func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
+	return &Store{pool: pool, cipher: cipher}
+}
 
 // List reads every default in Harness order without its sealed bundle.
 func (s *Store) List(ctx context.Context) ([]modelconfiguration.Configuration, error) {
@@ -54,16 +63,28 @@ func (s *Store) List(ctx context.Context) ([]modelconfiguration.Configuration, e
 	return result, nil
 }
 
-// Replace upserts the record under a new revision, which clears the replaced
-// revision's observations, and audits the write in the same transaction.
+// Replace seals the complete bundle to its Harness, upserts the record under a
+// new revision, which clears the replaced revision's observations, and audits
+// the write in the same transaction.
 func (s *Store) Replace(ctx context.Context, record modelconfiguration.Record) (modelconfiguration.Configuration, error) {
+	if s.cipher == nil {
+		return modelconfiguration.Configuration{}, credentialcrypto.ErrUnavailable
+	}
+	raw, err := json.Marshal(record.Configuration)
+	if err != nil {
+		return modelconfiguration.Configuration{}, err
+	}
+	sealed, err := s.cipher.SealDeploymentModelProvider(raw, record.Harness)
+	if err != nil {
+		return modelconfiguration.Configuration{}, credentialcrypto.ErrUnavailable
+	}
 	var result modelconfiguration.Configuration
-	err := s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
+	err = s.pool.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
 		row, err := q.UpsertDeploymentModelProvider(ctx, sqlc.UpsertDeploymentModelProviderParams{
 			Harness: record.Harness, Protocol: record.Provider.Protocol, BaseUrl: record.Provider.BaseURL,
 			ContextWindow: record.Provider.ContextWindow, MaxOutputTokens: record.Provider.MaxOutputTokens,
-			Model: record.Model, HarnessConfig: record.HarnessConfig, EncryptedConfig: record.Sealed,
+			Model: record.Model, HarnessConfig: record.HarnessConfig, EncryptedConfig: sealed,
 			Revision: pgtype.UUID{Bytes: uuid.New(), Valid: true},
 		})
 		if err != nil {
@@ -90,17 +111,28 @@ func (s *Store) Delete(ctx context.Context, harness string) error {
 	}))
 }
 
-// LoadSealed reads the sealed bundle and its revision in one statement, so the
-// pair always belongs to the same replacement.
-func (s *Store) LoadSealed(ctx context.Context, harness string) (modelconfiguration.Sealed, error) {
+// LoadBundle reads the sealed bundle and its revision in one statement, so the
+// pair always belongs to the same replacement, and opens the bundle.
+func (s *Store) LoadBundle(ctx context.Context, harness string) (modelconfiguration.Bundle, error) {
 	row, err := s.pool.Queries().GetDeploymentModelProviderSecret(ctx, harness)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return modelconfiguration.Sealed{}, modelconfiguration.ErrNotFound
+		return modelconfiguration.Bundle{}, modelconfiguration.ErrNotFound
 	}
 	if err != nil {
-		return modelconfiguration.Sealed{}, translate(err)
+		return modelconfiguration.Bundle{}, translate(err)
 	}
-	return modelconfiguration.Sealed{Bundle: row.EncryptedConfig, Revision: uuid.UUID(row.Revision.Bytes)}, nil
+	if s.cipher == nil {
+		return modelconfiguration.Bundle{}, credentialcrypto.ErrUnavailable
+	}
+	raw, err := s.cipher.OpenDeploymentModelProvider(row.EncryptedConfig, harness)
+	if err != nil {
+		return modelconfiguration.Bundle{}, errors.New("deployment model configuration decryption failed")
+	}
+	var configuration v1.ModelConfigurationInput
+	if json.Unmarshal(raw, &configuration) != nil {
+		return modelconfiguration.Bundle{}, errors.New("invalid stored deployment model configuration")
+	}
+	return modelconfiguration.Bundle{Configuration: configuration, Revision: uuid.UUID(row.Revision.Bytes)}, nil
 }
 
 // ObserveDeploymentModelProvider runs one metadata UPDATE in its own pooled

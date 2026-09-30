@@ -17,7 +17,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
@@ -39,7 +38,7 @@ func newOAuthFixture(t *testing.T, refresher oauthrefresh.Refresher) *oauthFixtu
 	t.Helper()
 	store, pool := openStore(t)
 	cipher := newCipher(t, bytes.Repeat([]byte{17}, 32))
-	service := newService(t, store, cipher, refresher)
+	service := newService(t, pool, cipher, refresher)
 	tenant := uuid.NewString()
 	vault := createVault(t, service, tenant)
 	return &oauthFixture{store: store, pool: pool, cipher: cipher, service: service, tenant: tenant, vault: vault,
@@ -54,7 +53,7 @@ func newOAuthFixture(t *testing.T, refresher oauthrefresh.Refresher) *oauthFixtu
 // competing callers meet only in PostgreSQL.
 func (f *oauthFixture) otherService(t *testing.T, cipher *credentialcrypto.Cipher, refresher oauthrefresh.Refresher) *vaults.Service {
 	t.Helper()
-	return newService(t, vaultpg.New(pgunit.NewPool(f.pool)), cipher, refresher)
+	return newService(t, f.pool, cipher, refresher)
 }
 
 func (f *oauthFixture) create(t *testing.T, command vaults.CreateOAuthCredential) vaults.Credential {
@@ -318,7 +317,7 @@ func TestOAuthRefreshPersistsRotatedGrantAndRequest(t *testing.T) {
 			if after.AccessToken != "renewed-access" || after.RefreshToken != "rotated-refresh" || after.Metadata.ExpiresAt == nil || *after.Metadata.ExpiresAt != expiry.Format(time.RFC3339Nano) {
 				t.Fatal("refreshed grant not durable")
 			}
-			restarted := newService(t, restartedStore, f.cipher, nil)
+			restarted := newService(t, restartedPool, f.cipher, nil)
 			got, err = f.token(t.Context(), restarted, credential)
 			if err != nil || got != "renewed-access" {
 				t.Fatal("fresh grant needed another refresh after restart", err)

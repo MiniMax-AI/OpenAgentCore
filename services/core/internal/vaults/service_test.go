@@ -1,9 +1,7 @@
 package vaults
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -18,20 +16,20 @@ import (
 
 // fakeStorage fails the test on any call whose func the test did not set.
 type fakeStorage struct {
-	t                    testing.TB
-	getVault             func(context.Context, string, string) (Vault, error)
-	listVaults           func(context.Context, string, PageQuery) (VaultPage, error)
-	getCredential        func(context.Context, string, string, string) (Credential, error)
-	listCredentials      func(context.Context, string, string, PageQuery) (CredentialPage, error)
-	createVault          func(context.Context, NewVault) (Vault, error)
-	deleteVault          func(context.Context, string, string) (string, error)
-	createCredential     func(context.Context, NewCredential) (Credential, error)
-	replaceStaticToken   func(context.Context, StaticTokenReplacement) (Credential, error)
-	deleteCredential     func(context.Context, CredentialKey) (string, error)
-	withOAuthCredential  func(context.Context, CredentialKey, func(OAuthTx) error) error
-	countOwnedVaults     func(context.Context, string, []string) (int, error)
-	findMCPCredentials   func(context.Context, MCPCredentialQuery) ([]MCPCredentialMatch, error)
-	staticTokenCiphertxt func(context.Context, StaticTokenQuery) ([]byte, error)
+	t                   testing.TB
+	getVault            func(context.Context, string, string) (Vault, error)
+	listVaults          func(context.Context, string, PageQuery) (VaultPage, error)
+	getCredential       func(context.Context, string, string, string) (Credential, error)
+	listCredentials     func(context.Context, string, string, PageQuery) (CredentialPage, error)
+	createVault         func(context.Context, NewVault) (Vault, error)
+	deleteVault         func(context.Context, string, string) (string, error)
+	createCredential    func(context.Context, NewCredential) (Credential, error)
+	replaceStaticToken  func(context.Context, StaticTokenReplacement) (Credential, error)
+	deleteCredential    func(context.Context, CredentialKey) (string, error)
+	withOAuthCredential func(context.Context, CredentialKey, func(OAuthTx) error) error
+	countOwnedVaults    func(context.Context, string, []string) (int, error)
+	findMCPCredentials  func(context.Context, MCPCredentialQuery) ([]MCPCredentialMatch, error)
+	staticToken         func(context.Context, StaticTokenQuery) (string, error)
 }
 
 func (f *fakeStorage) unexpected(method string) {
@@ -123,40 +121,40 @@ func (f *fakeStorage) FindMCPCredentials(ctx context.Context, query MCPCredentia
 	return f.findMCPCredentials(ctx, query)
 }
 
-func (f *fakeStorage) StaticTokenCiphertext(ctx context.Context, query StaticTokenQuery) ([]byte, error) {
-	if f.staticTokenCiphertxt == nil {
-		f.unexpected("StaticTokenCiphertext")
+func (f *fakeStorage) StaticToken(ctx context.Context, query StaticTokenQuery) (string, error) {
+	if f.staticToken == nil {
+		f.unexpected("StaticToken")
 	}
-	return f.staticTokenCiphertxt(ctx, query)
+	return f.staticToken(ctx, query)
 }
 
 // fakeOAuthTx fails the test on any call whose func the test did not set.
 type fakeOAuthTx struct {
 	t           testing.TB
-	load        func(context.Context) (Credential, []byte, error)
-	refresh     func(context.Context, SealedOAuth) error
-	replacement func(context.Context, SealedOAuth) (Credential, error)
+	load        func(context.Context, string) (OAuthGrant, error)
+	refresh     func(context.Context, OAuthGrant) error
+	replacement func(context.Context, OAuthGrant) (Credential, error)
 }
 
-func (f *fakeOAuthTx) LoadOAuthCredential(ctx context.Context) (Credential, []byte, error) {
+func (f *fakeOAuthTx) LoadOAuthGrant(ctx context.Context, destination string) (OAuthGrant, error) {
 	if f.load == nil {
-		f.t.Fatal("unexpected call to LoadOAuthCredential")
+		f.t.Fatal("unexpected call to LoadOAuthGrant")
 	}
-	return f.load(ctx)
+	return f.load(ctx, destination)
 }
 
-func (f *fakeOAuthTx) ApplyOAuthRefresh(ctx context.Context, sealed SealedOAuth) error {
+func (f *fakeOAuthTx) ApplyOAuthRefresh(ctx context.Context, grant OAuthGrant) error {
 	if f.refresh == nil {
 		f.t.Fatal("unexpected call to ApplyOAuthRefresh")
 	}
-	return f.refresh(ctx, sealed)
+	return f.refresh(ctx, grant)
 }
 
-func (f *fakeOAuthTx) ApplyOAuthReplacement(ctx context.Context, sealed SealedOAuth) (Credential, error) {
+func (f *fakeOAuthTx) ApplyOAuthReplacement(ctx context.Context, grant OAuthGrant) (Credential, error) {
 	if f.replacement == nil {
 		f.t.Fatal("unexpected call to ApplyOAuthReplacement")
 	}
-	return f.replacement(ctx, sealed)
+	return f.replacement(ctx, grant)
 }
 
 type refreshFunc func(context.Context, oauthrefresh.Request) (oauthrefresh.Token, error)
@@ -172,19 +170,10 @@ func unexpectedRefresh(t testing.TB) refreshFunc {
 	}
 }
 
-func testCipher(t testing.TB) *credentialcrypto.Cipher {
-	t.Helper()
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return cipher
-}
-
-func testService(t testing.TB, storage *fakeStorage, cipher *credentialcrypto.Cipher, refresher oauthrefresh.Refresher) *Service {
+func testService(t testing.TB, storage *fakeStorage, refresher oauthrefresh.Refresher) *Service {
 	t.Helper()
 	storage.t = t
-	service, err := NewService(storage, cipher, refresher)
+	service, err := NewService(storage, refresher)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,19 +181,16 @@ func testService(t testing.TB, storage *fakeStorage, cipher *credentialcrypto.Ci
 }
 
 func TestNewServiceRequiresStorageAndRefresher(t *testing.T) {
-	if _, err := NewService(nil, nil, unexpectedRefresh(t)); err == nil {
+	if _, err := NewService(nil, unexpectedRefresh(t)); err == nil {
 		t.Fatal("missing storage accepted")
 	}
-	if _, err := NewService(&fakeStorage{t: t}, nil, nil); err == nil {
+	if _, err := NewService(&fakeStorage{t: t}, nil); err == nil {
 		t.Fatal("missing refresher accepted")
-	}
-	if _, err := NewService(&fakeStorage{t: t}, nil, unexpectedRefresh(t)); err != nil {
-		t.Fatal("a keyless service was rejected", err)
 	}
 }
 
 func TestCreateVaultValidatesBeforeStorage(t *testing.T) {
-	service := testService(t, &fakeStorage{}, nil, unexpectedRefresh(t))
+	service := testService(t, &fakeStorage{}, unexpectedRefresh(t))
 	long := strings.Repeat("x", 257)
 	for _, command := range []CreateVault{
 		{TenantID: uuid.NewString(), Name: &long},
@@ -221,14 +207,15 @@ func TestCreateVaultValidatesBeforeStorage(t *testing.T) {
 			t.Fatalf("unexpected new Vault %+v", vault)
 		}
 		return stored, nil
-	}}, nil, unexpectedRefresh(t))
+	}}, unexpectedRefresh(t))
 	if got, err := service.CreateVault(t.Context(), CreateVault{TenantID: tenant, Name: &name}); err != nil || !reflect.DeepEqual(got, stored) {
 		t.Fatal("Vault creation did not return the stored Vault", err)
 	}
 }
 
-// Credential creation checks the body, then the credential key, then the
-// Vault ID, and never reaches storage when one fails.
+// Credential creation checks the body before storage, and passes the Vault ID
+// through, so storage reports a missing credential key before a malformed or
+// missing Vault.
 func TestCredentialCreationValidationOrder(t *testing.T) {
 	tenant, url := uuid.NewString(), "https://mcp.example/tools"
 	create := map[string]func(*Service, string, string) error{
@@ -242,41 +229,49 @@ func TestCredentialCreationValidationOrder(t *testing.T) {
 		},
 	}
 	for kind, run := range create {
-		for _, tc := range []struct {
-			name   string
-			cipher *credentialcrypto.Cipher
-			want   error
-		}{
-			{"", nil, ErrInvalidInput},
-			{"valid", nil, credentialcrypto.ErrUnavailable},
-			{"valid", testCipher(t), ErrNotFound},
-		} {
-			service := testService(t, &fakeStorage{}, tc.cipher, unexpectedRefresh(t))
-			if err := run(service, tc.name, "not-a-vault"); !errors.Is(err, tc.want) {
-				t.Fatalf("%s creation: got %v, want %v", kind, err, tc.want)
+		if err := run(testService(t, &fakeStorage{}, unexpectedRefresh(t)), "", "not-a-vault"); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("%s creation: an invalid body reached storage: %v", kind, err)
+		}
+		service := testService(t, &fakeStorage{createCredential: func(_ context.Context, credential NewCredential) (Credential, error) {
+			if credential.VaultID != "not-a-vault" {
+				t.Fatalf("%s creation changed the Vault ID %q", kind, credential.VaultID)
 			}
+			return Credential{}, credentialcrypto.ErrUnavailable
+		}}, unexpectedRefresh(t))
+		if err := run(service, "valid", "not-a-vault"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+			t.Fatalf("%s creation: got %v", kind, err)
 		}
 	}
 }
 
-func TestCreateStaticCredentialSealsToCanonicalIDs(t *testing.T) {
+func TestCreateCredentialsPassPlaintextUnderANewID(t *testing.T) {
 	tenant, vault, url := uuid.New(), uuid.New(), "https://mcp.example/tools"
-	cipher := testCipher(t)
-	var stored NewCredential
+	var stored []NewCredential
 	service := testService(t, &fakeStorage{createCredential: func(_ context.Context, credential NewCredential) (Credential, error) {
-		stored = credential
+		stored = append(stored, credential)
 		return Credential{ID: credential.CredentialID}, nil
-	}}, cipher, unexpectedRefresh(t))
-	created, err := service.CreateStaticCredential(t.Context(), CreateStaticCredential{TenantID: strings.ToUpper(tenant.String()), VaultID: strings.ToUpper(vault.String()), Name: "static", MCPServerURL: url, Token: "private-token"})
-	if err != nil || created.ID != stored.CredentialID {
+	}}, unexpectedRefresh(t))
+	created, err := service.CreateStaticCredential(t.Context(), CreateStaticCredential{TenantID: strings.ToUpper(tenant.String()), VaultID: vault.String(), Name: "static", MCPServerURL: url, Token: "private-token"})
+	if err != nil || created.ID != stored[0].CredentialID {
 		t.Fatal(err)
 	}
-	if stored.TenantID != tenant.String() || stored.VaultID != vault.String() || stored.AuthType != AuthStaticBearer || stored.OAuthMetadata != nil || bytes.Contains(stored.Ciphertext, []byte("private-token")) {
-		t.Fatalf("unexpected stored Credential %+v", stored)
+	metadata := OAuthMetadata{Refresh: &OAuthRefreshMetadata{ClientID: "client", TokenEndpoint: "https://issuer.example/token", TokenEndpointAuth: "client_secret_post"}}
+	if _, err := service.CreateOAuthCredential(t.Context(), CreateOAuthCredential{TenantID: tenant.String(), VaultID: vault.String(), Name: "oauth", MCPServerURL: url,
+		AccessToken: "access", OAuth: metadata, RefreshToken: "refresh", ClientSecret: "client-secret"}); err != nil {
+		t.Fatal(err)
 	}
-	plaintext, err := cipher.Open(stored.Ciphertext, credentialcrypto.Binding{TenantID: tenant.String(), VaultID: vault.String(), CredentialID: stored.CredentialID, AuthType: AuthStaticBearer, Destination: url})
-	if err != nil || string(plaintext) != "private-token" {
-		t.Fatal("token was not sealed to its canonical scope", err)
+	want := []NewCredential{
+		{CredentialKey: CredentialKey{tenant.String(), vault.String(), stored[0].CredentialID}, Name: "static", AuthType: AuthStaticBearer, MCPServerURL: url, Token: "private-token"},
+		{CredentialKey: CredentialKey{tenant.String(), vault.String(), stored[1].CredentialID}, Name: "oauth", AuthType: AuthMCPOAuth, MCPServerURL: url,
+			OAuth: OAuthGrant{Metadata: metadata, AccessToken: "access", RefreshToken: "refresh", ClientSecret: "client-secret"}},
+	}
+	if !reflect.DeepEqual(stored, want) || stored[0].CredentialID == stored[1].CredentialID {
+		t.Fatalf("unexpected stored Credentials %+v", stored)
+	}
+	for _, credential := range stored {
+		if id, ok := canonicalID(credential.CredentialID); !ok || id != credential.CredentialID {
+			t.Fatal("the new Credential ID is not a canonical UUID", credential.CredentialID)
+		}
 	}
 }
 
@@ -284,7 +279,7 @@ func TestUpdateStaticCredential(t *testing.T) {
 	tenant, vault, id, url := uuid.NewString(), uuid.NewString(), uuid.NewString(), "https://mcp.example/tools"
 	command := UpdateStaticCredential{TenantID: tenant, VaultID: vault, CredentialID: id, Token: "replacement"}
 	for _, malformed := range []UpdateStaticCredential{{TenantID: "x", VaultID: vault, CredentialID: id}, {TenantID: tenant, VaultID: "x", CredentialID: id}, {TenantID: tenant, VaultID: vault, CredentialID: "x"}} {
-		if _, err := testService(t, &fakeStorage{}, testCipher(t), unexpectedRefresh(t)).UpdateStaticCredential(t.Context(), malformed); !errors.Is(err, ErrNotFound) {
+		if _, err := testService(t, &fakeStorage{}, unexpectedRefresh(t)).UpdateStaticCredential(t.Context(), malformed); !errors.Is(err, ErrNotFound) {
 			t.Fatal("a malformed ID named a Credential", err)
 		}
 	}
@@ -293,22 +288,17 @@ func TestUpdateStaticCredential(t *testing.T) {
 			return Credential{ID: id, VaultID: vault, AuthType: authType, MCPServerURL: url}, nil
 		}
 	}
-	if _, err := testService(t, &fakeStorage{getCredential: current(AuthMCPOAuth)}, testCipher(t), unexpectedRefresh(t)).UpdateStaticCredential(t.Context(), command); !errors.Is(err, ErrInvalidInput) {
+	if _, err := testService(t, &fakeStorage{getCredential: current(AuthMCPOAuth)}, unexpectedRefresh(t)).UpdateStaticCredential(t.Context(), command); !errors.Is(err, ErrInvalidInput) {
 		t.Fatal("an OAuth Credential took a static token", err)
 	}
-	if _, err := testService(t, &fakeStorage{getCredential: current(AuthStaticBearer)}, nil, unexpectedRefresh(t)).UpdateStaticCredential(t.Context(), command); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("a keyless service replaced a token", err)
-	}
-	cipher := testCipher(t)
 	service := testService(t, &fakeStorage{getCredential: current(AuthStaticBearer), replaceStaticToken: func(_ context.Context, replacement StaticTokenReplacement) (Credential, error) {
-		plaintext, err := cipher.Open(replacement.Ciphertext, credentialcrypto.Binding{TenantID: tenant, VaultID: vault, CredentialID: id, AuthType: AuthStaticBearer, Destination: url})
-		if replacement.CredentialKey != (CredentialKey{tenant, vault, id}) || replacement.MCPServerURL != url || err != nil || string(plaintext) != "replacement" {
-			t.Fatalf("unexpected replacement %+v: %v", replacement, err)
+		if replacement != (StaticTokenReplacement{CredentialKey: CredentialKey{tenant, vault, id}, MCPServerURL: url, Token: "replacement"}) {
+			t.Fatalf("unexpected replacement %+v", replacement)
 		}
-		return Credential{ID: id}, nil
-	}}, cipher, unexpectedRefresh(t))
-	if _, err := service.UpdateStaticCredential(t.Context(), command); err != nil {
-		t.Fatal(err)
+		return Credential{}, credentialcrypto.ErrUnavailable
+	}}, unexpectedRefresh(t))
+	if _, err := service.UpdateStaticCredential(t.Context(), command); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+		t.Fatal("the storage result was not returned", err)
 	}
 }
 
@@ -325,7 +315,7 @@ func TestResolveMCPCredentials(t *testing.T) {
 			return count, nil
 		}
 	}
-	if _, err := testService(t, &fakeStorage{countOwnedVaults: owned(0)}, nil, unexpectedRefresh(t)).ResolveMCPCredentials(t.Context(), command); !errors.Is(err, ErrNotFound) {
+	if _, err := testService(t, &fakeStorage{countOwnedVaults: owned(0)}, unexpectedRefresh(t)).ResolveMCPCredentials(t.Context(), command); !errors.Is(err, ErrNotFound) {
 		t.Fatal("an unowned attached Vault was accepted", err)
 	}
 	service := testService(t, &fakeStorage{countOwnedVaults: owned(1), findMCPCredentials: func(_ context.Context, query MCPCredentialQuery) ([]MCPCredentialMatch, error) {
@@ -336,7 +326,7 @@ func TestResolveMCPCredentials(t *testing.T) {
 			return nil, nil
 		}
 		return []MCPCredentialMatch{{VaultID: vault, CredentialID: id, AuthType: AuthStaticBearer, MCPServerURL: url}}, nil
-	}}, nil, unexpectedRefresh(t))
+	}}, unexpectedRefresh(t))
 	bindings, err := service.ResolveMCPCredentials(t.Context(), command)
 	want := []MCPCredentialBinding{{ServerLabel: "tools", ServerURL: url, VaultID: vault, CredentialID: id, AuthType: AuthStaticBearer}, {ServerLabel: "anonymous", ServerURL: "https://anonymous.example/mcp"}}
 	if err != nil || !reflect.DeepEqual(bindings, want) {
@@ -346,42 +336,38 @@ func TestResolveMCPCredentials(t *testing.T) {
 
 func TestStaticBearerToken(t *testing.T) {
 	tenant, vault, id, url := uuid.NewString(), uuid.NewString(), uuid.NewString(), "https://mcp.example/tools"
-	cipher := testCipher(t)
-	sealed, err := cipher.Seal([]byte("private-token"), credentialcrypto.Binding{TenantID: tenant, VaultID: vault, CredentialID: id, AuthType: AuthStaticBearer, Destination: url})
-	if err != nil {
-		t.Fatal(err)
-	}
 	command := MCPBearerToken{TenantID: tenant, VaultIDs: []string{vault}, Binding: MCPCredentialBinding{ServerLabel: "tools", ServerURL: url, VaultID: vault, CredentialID: id, AuthType: AuthStaticBearer}}
-	lookup := func(ciphertext []byte) func(context.Context, StaticTokenQuery) ([]byte, error) {
-		return func(_ context.Context, query StaticTokenQuery) ([]byte, error) {
+	lookup := func(token string, err error) func(context.Context, StaticTokenQuery) (string, error) {
+		return func(_ context.Context, query StaticTokenQuery) (string, error) {
 			if !reflect.DeepEqual(query, StaticTokenQuery{TenantID: tenant, VaultIDs: []string{vault}, VaultID: vault, CredentialID: id, MCPServerURL: url}) {
 				t.Fatalf("unexpected scope %+v", query)
 			}
-			return ciphertext, nil
+			return token, err
 		}
 	}
-	if token, err := testService(t, &fakeStorage{staticTokenCiphertxt: lookup(sealed)}, cipher, unexpectedRefresh(t)).MCPBearerToken(t.Context(), command); err != nil || token != "private-token" {
-		t.Fatal("static token was not opened", err)
+	if token, err := testService(t, &fakeStorage{staticToken: lookup("private-token", nil)}, unexpectedRefresh(t)).MCPBearerToken(t.Context(), command); err != nil || token != "private-token" {
+		t.Fatal("static token was not returned", err)
 	}
-	if token, err := testService(t, &fakeStorage{staticTokenCiphertxt: lookup(sealed)}, nil, unexpectedRefresh(t)).MCPBearerToken(t.Context(), command); !errors.Is(err, credentialcrypto.ErrUnavailable) || token != "" {
-		t.Fatal("a keyless service opened a token", err)
+	if token, err := testService(t, &fakeStorage{staticToken: lookup("", credentialcrypto.ErrUnavailable)}, unexpectedRefresh(t)).MCPBearerToken(t.Context(), command); !errors.Is(err, credentialcrypto.ErrUnavailable) || token != "" {
+		t.Fatal("a keyless lookup returned a token", err)
 	}
-	other := command
-	other.Binding.ServerURL += "/other"
-	if token, err := testService(t, &fakeStorage{staticTokenCiphertxt: func(context.Context, StaticTokenQuery) ([]byte, error) { return sealed, nil }}, cipher, unexpectedRefresh(t)).MCPBearerToken(t.Context(), other); err == nil || token != "" || strings.Contains(err.Error(), "private-token") {
-		t.Fatal("a token opened outside its sealed destination", err)
+	unscoped := command
+	unscoped.Binding.CredentialID = "not-a-credential"
+	if token, err := testService(t, &fakeStorage{}, unexpectedRefresh(t)).MCPBearerToken(t.Context(), unscoped); !errors.Is(err, ErrNotFound) || token != "" {
+		t.Fatal("a malformed frozen binding reached storage", err)
 	}
 }
 
-// oauthScenario is one mcp_oauth Credential sealed by service, served by a
-// fake transaction.
+// oauthScenario is one mcp_oauth Credential's grant, served by a fake
+// transaction that emulates the destination check.
 type oauthScenario struct {
-	service    *Service
-	credential Credential
-	command    MCPBearerToken
-	ciphertext []byte
-	refreshes  []SealedOAuth
-	committed  error
+	service      *Service
+	credential   Credential
+	command      MCPBearerToken
+	grant        OAuthGrant
+	destinations []string
+	refreshes    []OAuthGrant
+	committed    error
 }
 
 func newOAuthScenario(t *testing.T, expiresAt time.Time, refresher oauthrefresh.Refresher) *oauthScenario {
@@ -389,17 +375,24 @@ func newOAuthScenario(t *testing.T, expiresAt time.Time, refresher oauthrefresh.
 	tenant, url := uuid.NewString(), "https://mcp.example/tools"
 	expiry := expiresAt.UTC().Format(time.RFC3339Nano)
 	metadata := OAuthMetadata{ExpiresAt: &expiry, Refresh: &OAuthRefreshMetadata{ClientID: "client", TokenEndpoint: "https://issuer.example/token", TokenEndpointAuth: "client_secret_basic"}}
-	scenario := &oauthScenario{credential: Credential{ID: uuid.NewString(), VaultID: uuid.NewString(), Name: "OAuth", AuthType: AuthMCPOAuth, MCPServerURL: url, OAuth: &metadata}}
+	scenario := &oauthScenario{
+		credential: Credential{ID: uuid.NewString(), VaultID: uuid.NewString(), Name: "OAuth", AuthType: AuthMCPOAuth, MCPServerURL: url, OAuth: &metadata},
+		grant:      OAuthGrant{Metadata: metadata, AccessToken: "stored-access", RefreshToken: "stored-refresh", ClientSecret: "private-client"},
+	}
 	storage := &fakeStorage{withOAuthCredential: func(ctx context.Context, key CredentialKey, apply func(OAuthTx) error) error {
 		if key != (CredentialKey{tenant, scenario.credential.VaultID, scenario.credential.ID}) {
 			t.Fatalf("unexpected key %+v", key)
 		}
 		err := apply(&fakeOAuthTx{t: t,
-			load: func(context.Context) (Credential, []byte, error) {
-				return scenario.credential, scenario.ciphertext, nil
+			load: func(_ context.Context, destination string) (OAuthGrant, error) {
+				scenario.destinations = append(scenario.destinations, destination)
+				if destination != "" && destination != scenario.credential.MCPServerURL {
+					return OAuthGrant{}, ErrNotFound
+				}
+				return scenario.grant, nil
 			},
-			refresh: func(_ context.Context, sealed SealedOAuth) error {
-				scenario.refreshes = append(scenario.refreshes, sealed)
+			refresh: func(_ context.Context, grant OAuthGrant) error {
+				scenario.refreshes = append(scenario.refreshes, grant)
 				return nil
 			},
 		})
@@ -408,12 +401,7 @@ func newOAuthScenario(t *testing.T, expiresAt time.Time, refresher oauthrefresh.
 		}
 		return scenario.committed
 	}}
-	scenario.service = testService(t, storage, testCipher(t), refresher)
-	sealed, err := scenario.service.sealOAuth(tenant, scenario.credential, oauthSecret{Version: 1, Metadata: metadata, AccessToken: "stored-access", RefreshToken: "stored-refresh", ClientSecret: "private-client"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	scenario.ciphertext = sealed.Ciphertext
+	scenario.service = testService(t, storage, refresher)
 	scenario.command = MCPBearerToken{TenantID: tenant, VaultIDs: []string{scenario.credential.VaultID}, Binding: MCPCredentialBinding{ServerLabel: "tools", ServerURL: url,
 		VaultID: scenario.credential.VaultID, CredentialID: scenario.credential.ID, AuthType: AuthMCPOAuth}}
 	return scenario
@@ -430,12 +418,16 @@ func TestOAuthBearerTokenRefreshesExpiredGrantUnderLock(t *testing.T) {
 	if err != nil || token != "renewed-access" || len(requests) != 1 || requests[0].RefreshToken != "stored-refresh" || requests[0].ClientSecret != "private-client" || len(scenario.refreshes) != 1 {
 		t.Fatal("expired grant was not refreshed once", token, err)
 	}
-	sealed := scenario.refreshes[0]
-	var metadata OAuthMetadata
-	if sealed.MCPServerURL != scenario.credential.MCPServerURL || json.Unmarshal(sealed.Metadata, &metadata) != nil || *metadata.ExpiresAt != later.UTC().Format(time.RFC3339Nano) {
-		t.Fatal("refreshed metadata was not stored with the grant", string(sealed.Metadata))
+	if scenario.destinations[0] != scenario.credential.MCPServerURL {
+		t.Fatal("the grant was loaded without its frozen destination", scenario.destinations)
 	}
-	scenario.credential.OAuth, scenario.ciphertext = &metadata, sealed.Ciphertext
+	refreshed := scenario.refreshes[0]
+	expiry := later.UTC().Format(time.RFC3339Nano)
+	want := OAuthGrant{Metadata: OAuthMetadata{ExpiresAt: &expiry, Refresh: scenario.grant.Metadata.Refresh}, AccessToken: "renewed-access", RefreshToken: "stored-refresh", ClientSecret: "private-client"}
+	if !reflect.DeepEqual(refreshed, want) {
+		t.Fatalf("refreshed grant was not stored with its metadata: %+v", refreshed)
+	}
+	scenario.grant = refreshed
 	if token, err := scenario.service.MCPBearerToken(t.Context(), scenario.command); err != nil || token != "renewed-access" || len(requests) != 1 {
 		t.Fatal("the refreshed grant was not used", token, err)
 	}
@@ -464,11 +456,23 @@ func TestOAuthBearerTokenFailuresReturnNoToken(t *testing.T) {
 			t.Fatal("a grant was used for another destination", err)
 		}
 	})
-	t.Run("substituted metadata", func(t *testing.T) {
+	t.Run("invalid metadata", func(t *testing.T) {
 		scenario := newOAuthScenario(t, past, unexpectedRefresh(t))
-		scenario.credential.OAuth = &OAuthMetadata{ExpiresAt: scenario.credential.OAuth.ExpiresAt, Refresh: &OAuthRefreshMetadata{ClientID: "client", TokenEndpoint: "https://attacker.example/token", TokenEndpointAuth: "client_secret_basic"}}
-		if token, err := scenario.service.MCPBearerToken(t.Context(), scenario.command); err == nil || token != "" {
-			t.Fatal("substituted stored metadata was authenticated", err)
+		scenario.grant.Metadata.Refresh = &OAuthRefreshMetadata{TokenEndpoint: "https://issuer.example/token", TokenEndpointAuth: "client_secret_basic"}
+		if token, err := scenario.service.MCPBearerToken(t.Context(), scenario.command); err == nil || err.Error() != "OAuth credential authentication failed" || token != "" {
+			t.Fatal("invalid opened metadata reached the provider", err)
+		}
+	})
+	t.Run("load failure", func(t *testing.T) {
+		scenario := newOAuthScenario(t, past, unexpectedRefresh(t))
+		storage := scenario.service.storage.(*fakeStorage)
+		storage.withOAuthCredential = func(ctx context.Context, _ CredentialKey, apply func(OAuthTx) error) error {
+			return apply(&fakeOAuthTx{t: t, load: func(context.Context, string) (OAuthGrant, error) {
+				return OAuthGrant{}, credentialcrypto.ErrUnavailable
+			}})
+		}
+		if token, err := scenario.service.MCPBearerToken(t.Context(), scenario.command); !errors.Is(err, credentialcrypto.ErrUnavailable) || token != "" {
+			t.Fatal("a failed load was not returned unchanged", err)
 		}
 	})
 	t.Run("provider error", func(t *testing.T) {
@@ -496,11 +500,11 @@ func TestUpdateOAuthCredentialReplacesLockedGrant(t *testing.T) {
 	storage := scenario.service.storage.(*fakeStorage)
 	storage.getCredential = func(context.Context, string, string, string) (Credential, error) { return scenario.credential, nil }
 	lock := storage.withOAuthCredential
-	var replaced SealedOAuth
+	var replaced []OAuthGrant
 	storage.withOAuthCredential = func(ctx context.Context, key CredentialKey, apply func(OAuthTx) error) error {
 		return lock(ctx, key, func(tx OAuthTx) error {
-			return apply(&fakeOAuthTx{t: t, load: tx.LoadOAuthCredential, replacement: func(_ context.Context, sealed SealedOAuth) (Credential, error) {
-				replaced = sealed
+			return apply(&fakeOAuthTx{t: t, load: tx.LoadOAuthGrant, replacement: func(_ context.Context, grant OAuthGrant) (Credential, error) {
+				replaced = append(replaced, grant)
 				return scenario.credential, nil
 			}})
 		})
@@ -509,13 +513,12 @@ func TestUpdateOAuthCredentialReplacesLockedGrant(t *testing.T) {
 	if _, err := scenario.service.UpdateOAuthCredential(t.Context(), command); err != nil {
 		t.Fatal(err)
 	}
-	secret, err := scenario.service.openOAuth(command.TenantID, Credential{ID: scenario.credential.ID, VaultID: scenario.credential.VaultID, MCPServerURL: scenario.credential.MCPServerURL, OAuth: &OAuthMetadata{Refresh: scenario.credential.OAuth.Refresh}}, replaced.Ciphertext)
-	if err != nil || secret.AccessToken != "manual-access" || secret.RefreshToken != "stored-refresh" || secret.Metadata.ExpiresAt != nil || !strings.Contains(string(replaced.Metadata), `"expires_at":null`) {
-		t.Fatal("replacement was not sealed with its patched metadata", err)
+	want := OAuthGrant{Metadata: OAuthMetadata{Refresh: scenario.grant.Metadata.Refresh}, AccessToken: "manual-access", RefreshToken: "stored-refresh", ClientSecret: "private-client"}
+	if len(replaced) != 1 || !reflect.DeepEqual(replaced[0], want) || !reflect.DeepEqual(scenario.destinations, []string{""}) {
+		t.Fatalf("replacement was not the patched locked grant: %+v", replaced)
 	}
 	command.ExpiresAtSet, command.ExpiresAt = true, ptr("not-a-date")
-	replaced = SealedOAuth{}
-	if _, err := scenario.service.UpdateOAuthCredential(t.Context(), command); !errors.Is(err, ErrInvalidInput) || replaced.Ciphertext != nil {
+	if _, err := scenario.service.UpdateOAuthCredential(t.Context(), command); !errors.Is(err, ErrInvalidInput) || len(replaced) != 1 {
 		t.Fatal("an invalid expiry was stored", err)
 	}
 }

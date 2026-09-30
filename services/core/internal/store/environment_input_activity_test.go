@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -216,9 +217,11 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 		t.Fatal(err)
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, old.pool)
 	if err := old.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease()
 	next := executionWriter(t, s)
 	if err := next.ReconcileEnvironmentConnections(t.Context()); err != nil {
 		t.Fatal(err)

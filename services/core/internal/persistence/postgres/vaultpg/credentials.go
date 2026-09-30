@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -16,17 +17,24 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
-// CreateCredential admits the owning Vault in the insert itself, so a missing
-// or foreign Vault stores nothing and is ErrNotFound, as is a Vault deleted
-// while the insert waits on it. A malformed new Credential ID is
+// CreateCredential admits the owning Vault in the insert itself, so a missing,
+// foreign or malformed Vault stores nothing and is ErrNotFound, as is a Vault
+// deleted while the insert waits on it. A malformed new Credential ID is
 // ErrInvalidInput.
 func (s *Store) CreateCredential(ctx context.Context, credential vaults.NewCredential) (vaults.Credential, error) {
-	if _, err := pgunit.ParseID(credential.CredentialID); err != nil {
+	id, err := pgunit.ParseID(credential.CredentialID)
+	if err != nil {
 		return vaults.Credential{}, vaults.ErrInvalidInput
 	}
+	// A malformed Vault ID names none, so the insert finds no Vault.
+	scope := binding(pgunit.PathID(credential.TenantID), pgunit.PathID(credential.VaultID), id, credential.AuthType, credential.MCPServerURL)
+	metadata, ciphertext, err := s.sealSecret(scope, credential)
+	if err != nil {
+		return vaults.Credential{}, err
+	}
 	var created vaults.Credential
-	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
-		row, err := insertCredential(ctx, q, credential)
+	err = s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
+		row, err := insertCredential(ctx, q, credential, metadata, ciphertext)
 		// A foreign-key violation means the Vault was deleted after the insert read it.
 		var constraint *pgconn.PgError
 		if errors.As(err, &constraint) && constraint.Code == "23503" {
@@ -47,16 +55,29 @@ func (s *Store) CreateCredential(ctx context.Context, credential vaults.NewCrede
 	return created, nil
 }
 
-func insertCredential(ctx context.Context, q *sqlc.Queries, credential vaults.NewCredential) (sqlc.GetCredentialRow, error) {
+// sealSecret seals a new Credential's secret. An mcp_oauth Credential also
+// gets the encoded metadata the seal authenticates.
+func (s *Store) sealSecret(scope credentialcrypto.Binding, credential vaults.NewCredential) (metadata, ciphertext []byte, err error) {
+	switch credential.AuthType {
+	case vaults.AuthStaticBearer:
+		ciphertext, err = s.sealStatic(scope, credential.Token)
+		return nil, ciphertext, err
+	case vaults.AuthMCPOAuth:
+		return s.sealOAuth(scope, credential.OAuth)
+	}
+	return nil, nil, errors.New("unknown credential authentication type")
+}
+
+func insertCredential(ctx context.Context, q *sqlc.Queries, credential vaults.NewCredential, metadata, ciphertext []byte) (sqlc.GetCredentialRow, error) {
 	id, tenant, vault := pgunit.PathID(credential.CredentialID), pgunit.PathID(credential.TenantID), pgunit.PathID(credential.VaultID)
 	switch credential.AuthType {
 	case vaults.AuthStaticBearer:
 		row, err := q.CreateStaticCredential(ctx, sqlc.CreateStaticCredentialParams{ID: id, TenantID: tenant, VaultID: vault,
-			Name: credential.Name, McpServerUrl: credential.MCPServerURL, TokenCiphertext: credential.Ciphertext})
+			Name: credential.Name, McpServerUrl: credential.MCPServerURL, TokenCiphertext: ciphertext})
 		return sqlc.GetCredentialRow(row), err
 	case vaults.AuthMCPOAuth:
 		row, err := q.CreateOAuthCredential(ctx, sqlc.CreateOAuthCredentialParams{ID: id, TenantID: tenant, VaultID: vault,
-			Name: credential.Name, McpServerUrl: credential.MCPServerURL, OauthMetadata: credential.OAuthMetadata, TokenCiphertext: credential.Ciphertext})
+			Name: credential.Name, McpServerUrl: credential.MCPServerURL, OauthMetadata: metadata, TokenCiphertext: ciphertext})
 		return sqlc.GetCredentialRow(row), err
 	}
 	return sqlc.GetCredentialRow{}, errors.New("unknown credential authentication type")
@@ -142,11 +163,15 @@ func (s *Store) ListCredentials(ctx context.Context, tenantID, vaultID string, q
 // ReplaceStaticToken matches the destination the token is sealed to, so a
 // concurrent change of scope stores nothing.
 func (s *Store) ReplaceStaticToken(ctx context.Context, replacement vaults.StaticTokenReplacement) (vaults.Credential, error) {
+	tenant, vault, id := pgunit.PathID(replacement.TenantID), pgunit.PathID(replacement.VaultID), pgunit.PathID(replacement.CredentialID)
+	ciphertext, err := s.sealStatic(binding(tenant, vault, id, vaults.AuthStaticBearer, replacement.MCPServerURL), replacement.Token)
+	if err != nil {
+		return vaults.Credential{}, err
+	}
 	var updated vaults.Credential
-	err := s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
+	err = s.write(ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		row, err := q.UpdateStaticCredential(ctx, sqlc.UpdateStaticCredentialParams{
-			TenantID: pgunit.PathID(replacement.TenantID), VaultID: pgunit.PathID(replacement.VaultID), ID: pgunit.PathID(replacement.CredentialID),
-			McpServerUrl: replacement.MCPServerURL, TokenCiphertext: replacement.Ciphertext,
+			TenantID: tenant, VaultID: vault, ID: id, McpServerUrl: replacement.MCPServerURL, TokenCiphertext: ciphertext,
 		})
 		if err != nil {
 			return err

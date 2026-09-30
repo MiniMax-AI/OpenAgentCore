@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -110,9 +111,11 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if _, err = w.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, w.pool)
 	if err = w.lease.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease()
 	reopened, _ := testStore(t)
 	nextOwner := executionWriter(t, reopened)
 	again, err := reopened.GetSubagentIdentity(ctx, tenant, session.ID, "child-a")

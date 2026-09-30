@@ -64,7 +64,7 @@ func startWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dis
 	}
 	owned := *dispatcher
 	owned.Credentials = credentials
-	owned.Observer = modelconfigurationpg.New(pgunit.NewPool(db.pool))
+	owned.Observer = modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher)
 	return execution.StartWorker(ctx, &owned, execution.Owner{Lease: lease, Store: store.NewExecution(dispatcher.Store, lease)})
 }
 

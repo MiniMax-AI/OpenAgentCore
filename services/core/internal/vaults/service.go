@@ -2,15 +2,12 @@ package vaults
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 )
@@ -20,24 +17,23 @@ import (
 // has its own tighter bound.
 const oauthRefreshTimeout = 20 * time.Second
 
-// Service runs the Vault and Credential operations.
+// Service runs the Vault and Credential operations. Storage seals and opens
+// the secrets; without a credential key, operations that need a secret return
+// credentialcrypto.ErrUnavailable and the others keep working.
 type Service struct {
 	storage   Storage
-	cipher    *credentialcrypto.Cipher
 	refresher oauthrefresh.Refresher
 }
 
-// NewService requires storage and the OAuth refresher. A nil cipher means this
-// Core has no credential key: operations that seal or open a secret then
-// return credentialcrypto.ErrUnavailable, and the others keep working.
-func NewService(storage Storage, cipher *credentialcrypto.Cipher, refresher oauthrefresh.Refresher) (*Service, error) {
+// NewService requires storage and the OAuth refresher.
+func NewService(storage Storage, refresher oauthrefresh.Refresher) (*Service, error) {
 	if storage == nil {
 		return nil, errors.New("vaults: storage is required")
 	}
 	if refresher == nil {
 		return nil, errors.New("vaults: OAuth refresher is required")
 	}
-	return &Service{storage: storage, cipher: cipher, refresher: refresher}, nil
+	return &Service{storage: storage, refresher: refresher}, nil
 }
 
 type CreateVault struct {
@@ -72,8 +68,8 @@ type CreateStaticCredential struct {
 	Name, MCPServerURL, Token string
 }
 
-// CreateStaticCredential seals a bearer token to its tenant, Vault, new
-// Credential ID and destination, and stores it.
+// CreateStaticCredential stores a bearer token under a new Credential ID.
+// Storage seals it to its tenant, Vault, that ID and destination.
 func (s *Service) CreateStaticCredential(ctx context.Context, command CreateStaticCredential) (Credential, error) {
 	tenant, ok := canonicalID(command.TenantID)
 	if !ok {
@@ -82,22 +78,11 @@ func (s *Service) CreateStaticCredential(ctx context.Context, command CreateStat
 	if !validName(command.Name) || command.MCPServerURL == "" {
 		return Credential{}, ErrInvalidInput
 	}
-	if s.cipher == nil {
-		return Credential{}, credentialcrypto.ErrUnavailable
-	}
-	// A malformed Vault ID follows the missing-Vault path, after validation.
-	vault, ok := canonicalID(command.VaultID)
-	if !ok {
-		return Credential{}, ErrNotFound
-	}
-	key := CredentialKey{TenantID: tenant, VaultID: vault, CredentialID: uuid.NewString()}
-	ciphertext, err := s.cipher.Seal([]byte(command.Token), credentialcrypto.Binding{TenantID: tenant, VaultID: vault,
-		CredentialID: key.CredentialID, AuthType: AuthStaticBearer, Destination: command.MCPServerURL})
-	if err != nil {
-		return Credential{}, errors.New("credential encryption failed")
-	}
+	// Storage reports a missing credential key before a malformed or missing
+	// Vault.
+	key := CredentialKey{TenantID: tenant, VaultID: command.VaultID, CredentialID: uuid.NewString()}
 	return s.storage.CreateCredential(ctx, NewCredential{CredentialKey: key, Name: command.Name,
-		AuthType: AuthStaticBearer, MCPServerURL: command.MCPServerURL, Ciphertext: ciphertext})
+		AuthType: AuthStaticBearer, MCPServerURL: command.MCPServerURL, Token: command.Token})
 }
 
 type UpdateStaticCredential struct {
@@ -106,7 +91,7 @@ type UpdateStaticCredential struct {
 }
 
 // UpdateStaticCredential replaces only the token and the update time. The
-// stored metadata supplies the seal's scope, which the write checks again, so
+// stored destination is the seal's scope, which the write checks again, so
 // the existing frozen bindings read the replacement.
 func (s *Service) UpdateStaticCredential(ctx context.Context, command UpdateStaticCredential) (Credential, error) {
 	key, ok := credentialKey(command.TenantID, command.VaultID, command.CredentialID)
@@ -120,15 +105,7 @@ func (s *Service) UpdateStaticCredential(ctx context.Context, command UpdateStat
 	if current.AuthType != AuthStaticBearer {
 		return Credential{}, ErrInvalidInput
 	}
-	if s.cipher == nil {
-		return Credential{}, credentialcrypto.ErrUnavailable
-	}
-	ciphertext, err := s.cipher.Seal([]byte(command.Token), credentialcrypto.Binding{TenantID: key.TenantID, VaultID: current.VaultID,
-		CredentialID: current.ID, AuthType: current.AuthType, Destination: current.MCPServerURL})
-	if err != nil {
-		return Credential{}, errors.New("credential encryption failed")
-	}
-	return s.storage.ReplaceStaticToken(ctx, StaticTokenReplacement{CredentialKey: key, MCPServerURL: current.MCPServerURL, Ciphertext: ciphertext})
+	return s.storage.ReplaceStaticToken(ctx, StaticTokenReplacement{CredentialKey: key, MCPServerURL: current.MCPServerURL, Token: command.Token})
 }
 
 // CreateOAuthCredential keeps the write-only secrets apart from the metadata.
@@ -139,8 +116,9 @@ type CreateOAuthCredential struct {
 	RefreshToken, ClientSecret      string
 }
 
-// CreateOAuthCredential seals a grant, with the metadata it is refreshed by,
-// to its tenant, Vault, new Credential ID and destination, and stores it.
+// CreateOAuthCredential stores a grant, with the metadata it is refreshed by,
+// under a new Credential ID. Storage seals it to its tenant, Vault, that ID
+// and destination.
 func (s *Service) CreateOAuthCredential(ctx context.Context, command CreateOAuthCredential) (Credential, error) {
 	tenant, ok := canonicalID(command.TenantID)
 	if !ok {
@@ -149,22 +127,11 @@ func (s *Service) CreateOAuthCredential(ctx context.Context, command CreateOAuth
 	if !validOAuthCreation(command) {
 		return Credential{}, ErrInvalidInput
 	}
-	if s.cipher == nil {
-		return Credential{}, credentialcrypto.ErrUnavailable
-	}
-	// A malformed Vault ID follows the missing-Vault path, after validation.
-	vault, ok := canonicalID(command.VaultID)
-	if !ok {
-		return Credential{}, ErrNotFound
-	}
-	credential := Credential{ID: uuid.NewString(), VaultID: vault, Name: command.Name, AuthType: AuthMCPOAuth, MCPServerURL: command.MCPServerURL}
-	sealed, err := s.sealOAuth(tenant, credential, oauthSecret{Version: 1, Metadata: command.OAuth, AccessToken: command.AccessToken,
-		RefreshToken: command.RefreshToken, ClientSecret: command.ClientSecret})
-	if err != nil {
-		return Credential{}, err
-	}
-	return s.storage.CreateCredential(ctx, NewCredential{CredentialKey: CredentialKey{TenantID: tenant, VaultID: vault, CredentialID: credential.ID},
-		Name: command.Name, AuthType: AuthMCPOAuth, MCPServerURL: command.MCPServerURL, OAuthMetadata: sealed.Metadata, Ciphertext: sealed.Ciphertext})
+	// Storage reports a missing credential key before a malformed or missing
+	// Vault.
+	key := CredentialKey{TenantID: tenant, VaultID: command.VaultID, CredentialID: uuid.NewString()}
+	return s.storage.CreateCredential(ctx, NewCredential{CredentialKey: key, Name: command.Name, AuthType: AuthMCPOAuth, MCPServerURL: command.MCPServerURL,
+		OAuth: OAuthGrant{Metadata: command.OAuth, AccessToken: command.AccessToken, RefreshToken: command.RefreshToken, ClientSecret: command.ClientSecret}})
 }
 
 // UpdateOAuthCredential patches an OAuth grant. ExpiresAtSet keeps omitted
@@ -192,16 +159,15 @@ func (s *Service) UpdateOAuthCredential(ctx context.Context, command UpdateOAuth
 		return Credential{}, ErrInvalidInput
 	}
 	var updated Credential
-	err = s.withOAuth(ctx, key, "", "credential update failed", func(tx OAuthTx, credential Credential, secret oauthSecret) error {
-		secret, err := applyOAuthUpdate(secret, command)
+	err = s.withOAuth(ctx, key, "", "credential update failed", func(tx OAuthTx, grant OAuthGrant) error {
+		grant, err := applyOAuthUpdate(grant, command)
 		if err != nil {
 			return err
 		}
-		sealed, err := s.sealOAuth(key.TenantID, credential, secret)
-		if err != nil {
-			return err
+		if !validOAuthMetadata(grant.Metadata) {
+			return ErrInvalidInput
 		}
-		updated, err = tx.ApplyOAuthReplacement(ctx, sealed)
+		updated, err = tx.ApplyOAuthReplacement(ctx, grant)
 		return err
 	})
 	if err != nil {
@@ -283,33 +249,21 @@ func (s *Service) MCPBearerToken(ctx context.Context, command MCPBearerToken) (s
 		}
 		return s.oauthBearerToken(ctx, CredentialKey{TenantID: scope.tenantID, VaultID: scope.vaultID, CredentialID: scope.credentialID}, command.Binding.ServerURL)
 	}
-	ciphertext, err := s.storage.StaticTokenCiphertext(ctx, StaticTokenQuery{TenantID: scope.tenantID, VaultIDs: scope.attached,
+	return s.storage.StaticToken(ctx, StaticTokenQuery{TenantID: scope.tenantID, VaultIDs: scope.attached,
 		VaultID: scope.vaultID, CredentialID: scope.credentialID, MCPServerURL: command.Binding.ServerURL})
-	if err != nil {
-		return "", err
-	}
-	if s.cipher == nil {
-		return "", credentialcrypto.ErrUnavailable
-	}
-	plaintext, err := s.cipher.Open(ciphertext, credentialcrypto.Binding{TenantID: scope.tenantID, VaultID: scope.vaultID,
-		CredentialID: scope.credentialID, AuthType: AuthStaticBearer, Destination: command.Binding.ServerURL})
-	if err != nil {
-		return "", errors.New("MCP credential decryption failed")
-	}
-	return string(plaintext), nil
 }
 
 func (s *Service) oauthBearerToken(ctx context.Context, key CredentialKey, destination string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, oauthRefreshTimeout)
 	defer cancel()
 	var bearer string
-	err := s.withOAuth(ctx, key, destination, "OAuth credential refresh commit failed", func(tx OAuthTx, credential Credential, secret oauthSecret) error {
-		token, expired, err := currentAccessToken(secret, time.Now())
+	err := s.withOAuth(ctx, key, destination, "OAuth credential refresh commit failed", func(tx OAuthTx, grant OAuthGrant) error {
+		token, expired, err := currentAccessToken(grant, time.Now())
 		if err != nil || !expired {
 			bearer = token
 			return err
 		}
-		request, err := refreshRequest(secret)
+		request, err := refreshRequest(grant)
 		if err != nil {
 			return err
 		}
@@ -317,18 +271,17 @@ func (s *Service) oauthBearerToken(ctx context.Context, key CredentialKey, desti
 		if err != nil {
 			return errors.New("OAuth credential refresh failed")
 		}
-		secret, err = applyRefreshedToken(secret, refreshed, time.Now())
+		grant, err = applyRefreshedToken(grant, refreshed, time.Now())
 		if err != nil {
 			return err
 		}
-		sealed, err := s.sealOAuth(key.TenantID, credential, secret)
-		if err != nil {
+		if !validOAuthMetadata(grant.Metadata) {
+			return ErrInvalidInput
+		}
+		if err := tx.ApplyOAuthRefresh(ctx, grant); err != nil {
 			return err
 		}
-		if err := tx.ApplyOAuthRefresh(ctx, sealed); err != nil {
-			return err
-		}
-		bearer = secret.AccessToken
+		bearer = grant.AccessToken
 		return nil
 	})
 	if err != nil {
@@ -340,21 +293,19 @@ func (s *Service) oauthBearerToken(ctx context.Context, key CredentialKey, desti
 // withOAuth locks the Credential for the whole of apply, including an
 // external refresh, and commits only when apply succeeds. PostgreSQL
 // serializes competing updates and deletions, including the parent Vault's
-// cascade. A non-empty destination must match the stored one. A failure to
-// begin or commit is reported as failure, never with database error text.
-func (s *Service) withOAuth(ctx context.Context, key CredentialKey, destination, failure string, apply func(OAuthTx, Credential, oauthSecret) error) error {
+// cascade. A non-empty destination must match the stored one. The opened
+// grant's metadata must still be valid, so a changed stored setting never
+// reaches a provider. A failure to begin or commit is reported as failure,
+// never with database error text.
+func (s *Service) withOAuth(ctx context.Context, key CredentialKey, destination, failure string, apply func(OAuthTx, OAuthGrant) error) error {
 	var applied error
 	err := s.storage.WithOAuthCredential(ctx, key, func(tx OAuthTx) error {
-		credential, ciphertext, err := tx.LoadOAuthCredential(ctx)
-		if err == nil && destination != "" && credential.MCPServerURL != destination {
-			err = ErrNotFound
-		}
-		var secret oauthSecret
-		if err == nil {
-			secret, err = s.openOAuth(key.TenantID, credential, ciphertext)
+		grant, err := tx.LoadOAuthGrant(ctx, destination)
+		if err == nil && !validOAuthMetadata(grant.Metadata) {
+			err = errors.New("OAuth credential authentication failed")
 		}
 		if err == nil {
-			err = apply(tx, credential, secret)
+			err = apply(tx, grant)
 		}
 		applied = err
 		return err
@@ -363,46 +314,6 @@ func (s *Service) withOAuth(ctx context.Context, key CredentialKey, destination,
 		return errors.New(failure)
 	}
 	return err
-}
-
-func (s *Service) sealOAuth(tenantID string, credential Credential, secret oauthSecret) (SealedOAuth, error) {
-	if s.cipher == nil {
-		return SealedOAuth{}, credentialcrypto.ErrUnavailable
-	}
-	if !validOAuthMetadata(secret.Metadata) {
-		return SealedOAuth{}, ErrInvalidInput
-	}
-	encoded, err := json.Marshal(secret.Metadata)
-	if err != nil {
-		return SealedOAuth{}, errors.New("credential encoding failed")
-	}
-	plaintext, err := json.Marshal(secret)
-	if err != nil {
-		return SealedOAuth{}, errors.New("credential encoding failed")
-	}
-	ciphertext, err := s.cipher.Seal(plaintext, oauthBinding(tenantID, credential))
-	if err != nil {
-		return SealedOAuth{}, errors.New("credential encryption failed")
-	}
-	return SealedOAuth{MCPServerURL: credential.MCPServerURL, Metadata: encoded, Ciphertext: ciphertext}, nil
-}
-
-// openOAuth authenticates the stored metadata against the sealed copy, so a
-// changed stored setting never reaches a provider.
-func (s *Service) openOAuth(tenantID string, credential Credential, ciphertext []byte) (oauthSecret, error) {
-	if s.cipher == nil {
-		return oauthSecret{}, credentialcrypto.ErrUnavailable
-	}
-	plaintext, err := s.cipher.Open(ciphertext, oauthBinding(tenantID, credential))
-	if err != nil {
-		return oauthSecret{}, errors.New("OAuth credential decryption failed")
-	}
-	var secret oauthSecret
-	if json.Unmarshal(plaintext, &secret) != nil || secret.Version != 1 || credential.OAuth == nil ||
-		!reflect.DeepEqual(secret.Metadata, *credential.OAuth) || !validOAuthMetadata(secret.Metadata) {
-		return oauthSecret{}, errors.New("OAuth credential authentication failed")
-	}
-	return secret, nil
 }
 
 // credentialKey canonicalizes a Credential's IDs.

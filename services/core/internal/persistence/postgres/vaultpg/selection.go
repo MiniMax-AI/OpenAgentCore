@@ -37,17 +37,17 @@ func (s *Store) FindMCPCredentials(ctx context.Context, query vaults.MCPCredenti
 	return matches, nil
 }
 
-// StaticTokenCiphertext is the only read of a static token. Resource reads
-// never select ciphertext.
-func (s *Store) StaticTokenCiphertext(ctx context.Context, query vaults.StaticTokenQuery) ([]byte, error) {
+// StaticToken is the only read of a static token. Resource reads never select
+// ciphertext.
+func (s *Store) StaticToken(ctx context.Context, query vaults.StaticTokenQuery) (string, error) {
+	tenant, vault, id := pgunit.PathID(query.TenantID), pgunit.PathID(query.VaultID), pgunit.PathID(query.CredentialID)
 	ciphertext, err := s.pool.Queries().GetMCPStaticCredentialCiphertext(ctx, sqlc.GetMCPStaticCredentialCiphertextParams{
-		TenantID: pgunit.PathID(query.TenantID), VaultIds: pathIDs(query.VaultIDs), VaultID: pgunit.PathID(query.VaultID),
-		CredentialID: pgunit.PathID(query.CredentialID), McpServerUrl: query.MCPServerURL,
+		TenantID: tenant, VaultIds: pathIDs(query.VaultIDs), VaultID: vault, CredentialID: id, McpServerUrl: query.MCPServerURL,
 	})
 	if err != nil {
-		return nil, translate(err)
+		return "", translate(err)
 	}
-	return ciphertext, nil
+	return s.openStatic(binding(tenant, vault, id, vaults.AuthStaticBearer, query.MCPServerURL), ciphertext)
 }
 
 func pathIDs(ids []string) []pgtype.UUID {

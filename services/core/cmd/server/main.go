@@ -128,8 +128,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	vaultStore := vaultpg.New(units)
-	vaultService, err := vaults.NewService(vaultStore, credentialKey, oauthClient)
+	vaultStore := vaultpg.New(units, credentialKey)
+	vaultService, err := vaults.NewService(vaultStore, oauthClient)
 	if err != nil {
 		return err
 	}
@@ -138,8 +138,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	modelConfigurationStore := modelconfigurationpg.New(units)
-	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore, credentialKey)
+	modelConfigurationStore := modelconfigurationpg.New(units, credentialKey)
+	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore)
 	if err != nil {
 		return err
 	}

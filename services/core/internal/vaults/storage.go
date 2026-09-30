@@ -27,9 +27,13 @@ type Storage interface {
 	CreateVault(ctx context.Context, vault NewVault) (Vault, error)
 	// DeleteVault deletes a Vault with all of its Credentials and returns its ID.
 	DeleteVault(ctx context.Context, tenantID, vaultID string) (string, error)
-	// CreateCredential stores a sealed Credential in a Vault of the tenant.
+	// CreateCredential seals the Credential's secret and stores it in a Vault
+	// of the tenant. A missing credential key is
+	// credentialcrypto.ErrUnavailable, checked after the new Credential ID and
+	// before the Vault.
 	CreateCredential(ctx context.Context, credential NewCredential) (Credential, error)
-	// ReplaceStaticToken replaces a static_bearer Credential's sealed token.
+	// ReplaceStaticToken seals and replaces a static_bearer Credential's
+	// token. Without a credential key it is credentialcrypto.ErrUnavailable.
 	ReplaceStaticToken(ctx context.Context, replacement StaticTokenReplacement) (Credential, error)
 	// DeleteCredential deletes a Credential and its sealed secret and returns its ID.
 	DeleteCredential(ctx context.Context, key CredentialKey) (string, error)
@@ -43,23 +47,29 @@ type Storage interface {
 	// FindMCPCredentials returns at most two Credentials of the attached
 	// Vaults that the query selects, ordered by ID.
 	FindMCPCredentials(ctx context.Context, query MCPCredentialQuery) ([]MCPCredentialMatch, error)
-	// StaticTokenCiphertext returns a static_bearer Credential's sealed token
-	// when the complete frozen scope still names it.
-	StaticTokenCiphertext(ctx context.Context, query StaticTokenQuery) ([]byte, error)
+	// StaticToken opens a static_bearer Credential's token when the complete
+	// frozen scope still names it. A scope that names none is ErrNotFound,
+	// then a missing credential key is credentialcrypto.ErrUnavailable.
+	StaticToken(ctx context.Context, query StaticTokenQuery) (string, error)
 }
 
 // OAuthTx is one mcp_oauth Credential inside a WithOAuthCredential
 // transaction.
 type OAuthTx interface {
-	// LoadOAuthCredential locks the Credential until the transaction ends, so
+	// LoadOAuthGrant locks the Credential until the transaction ends, so
 	// competing refreshes, replacements and deletions, including the parent
-	// Vault's, wait. It returns the metadata and the sealed secret.
-	LoadOAuthCredential(ctx context.Context) (Credential, []byte, error)
-	// ApplyOAuthRefresh stores a refreshed grant. Execution refreshes are not
-	// caller writes and record no audit row.
-	ApplyOAuthRefresh(ctx context.Context, sealed SealedOAuth) error
-	// ApplyOAuthReplacement stores a caller's replacement and audits it.
-	ApplyOAuthReplacement(ctx context.Context, sealed SealedOAuth) (Credential, error)
+	// Vault's, wait. A non-empty destination must match the stored one, or
+	// the Credential is ErrNotFound. Only then is the grant opened: a missing
+	// credential key is credentialcrypto.ErrUnavailable, and stored metadata
+	// that differs from the sealed copy fails authentication.
+	LoadOAuthGrant(ctx context.Context, destination string) (OAuthGrant, error)
+	// ApplyOAuthRefresh seals and stores a refreshed grant for the loaded
+	// Credential. Execution refreshes are not caller writes and record no
+	// audit row.
+	ApplyOAuthRefresh(ctx context.Context, grant OAuthGrant) error
+	// ApplyOAuthReplacement seals and stores a caller's replacement for the
+	// loaded Credential and audits it.
+	ApplyOAuthReplacement(ctx context.Context, grant OAuthGrant) (Credential, error)
 }
 
 // CredentialKey names one Credential of one Vault of one tenant.
@@ -74,28 +84,22 @@ type NewVault struct {
 	Metadata []byte
 }
 
-// NewCredential is a Credential with its ID, sealed to that ID, ready to store.
+// NewCredential is a Credential with its new ID, ready to store. Storage
+// seals its secret to the tenant, the Vault, that ID, the authentication type
+// and the destination: Token for static_bearer, OAuth for mcp_oauth.
 type NewCredential struct {
 	CredentialKey
 	Name, AuthType, MCPServerURL string
-	// OAuthMetadata is the encoded OAuthMetadata of an mcp_oauth Credential.
-	OAuthMetadata []byte
-	Ciphertext    []byte
+	Token                        string
+	OAuth                        OAuthGrant
 }
 
-// StaticTokenReplacement is a static_bearer token sealed to the destination
-// the write matches.
+// StaticTokenReplacement is a new static_bearer token. The write matches the
+// destination the token is sealed to.
 type StaticTokenReplacement struct {
 	CredentialKey
 	MCPServerURL string
-	Ciphertext   []byte
-}
-
-// SealedOAuth is an OAuth grant sealed to the destination the write matches,
-// with the metadata the seal authenticates.
-type SealedOAuth struct {
-	MCPServerURL         string
-	Metadata, Ciphertext []byte
+	Token        string
 }
 
 // MCPCredentialQuery selects a named Credential by ID alone, so its

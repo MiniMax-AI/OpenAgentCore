@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -228,9 +229,11 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err != nil || len(events) != expectedEvents || events[len(events)-1].Event.Type != "agent.session.failed" || events[len(events)-1].Turn != nil || events[len(events)-1].EnvironmentInputActivity.Status != "failed" {
 				t.Fatal("missing pre-Turn failure snapshot", events, err)
 			}
+			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, writer.pool)
 			if err := writer.lease.Close(t.Context()); err != nil {
 				t.Fatal(err)
 			}
+			awaitRelease()
 			pool.Close()
 			reopened, reopenedPool := testStore(t)
 			writer = executionWriter(t, reopened)
