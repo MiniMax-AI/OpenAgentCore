@@ -32,3 +32,5 @@ export function ThemeMenu() {
     </div>
   );
 }
+
+// CI impact validation only.
