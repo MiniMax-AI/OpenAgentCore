@@ -16,11 +16,11 @@ func TestNoEnvironmentRejectsOtherEngineBeforeFactory(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	called := false
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		called = true
 		return nil, nil
 	})
-	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "none", proto.PromptRequestPayload{AgentKind: "claude_code", DisableExecutionEnvironment: true}))
+	err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "none", proto.PromptRequestPayload{AgentKind: "fake_alpha", DisableExecutionEnvironment: true}))
 	if err == nil || called {
 		t.Fatal("unsupported engine was started", err)
 	}

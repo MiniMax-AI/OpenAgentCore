@@ -154,8 +154,6 @@ Provider bootstrap, Runtime images and Harness adapters must agree on these name
 
 Historical Runtime and project-version upgrades are not supported. Do not ship retired installer conversion implementations; preserve rejection guards under the [installer lifecycle contract](deploy/install/README.md#versions-and-the-lock). Preserve older installations, Runtime files, provider resources and Session history; install the current release separately. Startup never verifies and rebinds historical allocations or accepts node deployments without a valid specification. Keep the original Core responsible for unresolved resources; see the [installation version policy](docs/getting-started/operations.md#installation-version-policy). Use this release's template builder for new E2B templates. Ordinary current-version database initialization uses the migration runner.
 
-The dormant Pi adapter keeps its `parsar` provider slug because the separate Parsar product pins model selections to that identity. This is a product boundary exception for the name guard, like the skill-upload integration.
-
 Build the MiniMax companion from this revision's pinned patched native sources.
 
 ## Branding

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/claudecode"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/managedskills"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -30,7 +30,7 @@ func prepareManagedSkills(ctx context.Context, logger *slog.Logger, req proto.Pr
 	if err != nil {
 		return "", fmt.Errorf("codex: resolve managed skills root: %w", err)
 	}
-	result, err := claudecode.InstallManagedSkills(ctx, logger, root, rawSkills)
+	result, err := managedskills.InstallManagedSkills(ctx, logger, root, rawSkills)
 	if err != nil {
 		return "", fmt.Errorf("codex: install skills: %w", err)
 	}

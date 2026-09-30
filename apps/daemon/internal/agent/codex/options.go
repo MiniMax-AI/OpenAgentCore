@@ -69,15 +69,14 @@ type SessionPlan struct {
 }
 
 // BuildSessionPlan derives a SessionPlan from PromptRequestPayload's
-// fields. The work_dir / opts shape mirrors how claudecode + opencode
-// consume their own opts: a string-keyed map of any.
+// fields. Options use a string-keyed map.
 //
 // The agent_options keys this function reads:
 //
 //	model                 string          codex model slug, e.g. "gpt-5.5"
 //	system_prompt         string          forwarded as developerInstructions
 //	override_system_prompt string         replaces system_prompt entirely when
-//	                                      non-empty (mirrors claudecode/opencode)
+//	                                      non-empty
 //	env                   map[string]any  extra env vars (KEY=string-value)
 //	mcp_servers           map[string]any  rendered MCP server config — written
 //	                                      to <CODEX_HOME>/config.toml [mcp_servers]
@@ -231,7 +230,7 @@ func resolveWorkDirCodex(input string) (string, error) {
 	default:
 		return "", fmt.Errorf("codex: work_dir must be absolute or start with ~/, got %q", trimmed)
 	}
-	// Match claudecode's resolveSessionWorkDir: mkdir -p so a user
+	// Create the working directory so a user
 	// naming a fresh project root in the agent wizard works on first
 	// run instead of erroring with "does not exist".
 	if err := os.MkdirAll(abs, 0o755); err != nil {

@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/claudecode"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/managedskills"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -75,7 +75,7 @@ func TestCapabilityDownloadsInstallZIPThroughPairedServer(t *testing.T) {
 		if plugin["download_url"] != skill["download_url"] {
 			t.Fatal("plugin and skill routing differs")
 		}
-		result, err := claudecode.InstallManagedSkills(ctx, nil, root, req.AgentOptions["skills"])
+		result, err := managedskills.InstallManagedSkills(ctx, nil, root, req.AgentOptions["skills"])
 		if err == nil && len(result.Warnings) > 0 {
 			err = fmt.Errorf("installation warnings: %v", result.Warnings)
 		}

@@ -160,21 +160,6 @@
     "reason": "Historical migration commentary records the environment name used when this migration was written."
   },
   {
-    "path": "apps/daemon/internal/agent/pi/provider_config.go",
-    "regex": "parsar(?:/[A-Za-z0-9<>_-]+)?|Parsar Anthropic",
-    "reason": "The dormant Pi adapter consumes the separate product model-provider slug and catalog display name; Core does not rename that external protocol."
-  },
-  {
-    "path": "apps/daemon/internal/agent/pi/provider_config_test.go",
-    "regex": "parsar(?:/[A-Za-z0-9<>_-]+)?|Parsar Anthropic",
-    "reason": "The dormant Pi adapter consumes the separate product model-provider slug and catalog display name; Core does not rename that external protocol."
-  },
-  {
-    "path": "apps/daemon/internal/agent/pi/session_provider_test.go",
-    "regex": "parsar(?:/[A-Za-z0-9<>_-]+)?|Parsar Anthropic",
-    "reason": "The dormant Pi adapter consumes the separate product model-provider slug and catalog display name; Core does not rename that external protocol."
-  },
-  {
     "path": "apps/daemon/internal/cli/skill_upload.go",
     "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
     "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."

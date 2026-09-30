@@ -11,13 +11,11 @@
 // images, structured output and Subagent observations use protocol messages
 // rather than additional Go interfaces; qualify and advertise them separately.
 //
-// Registration: RegisterKind takes the existing proto.SupportedAgentKind
-// descriptor (kind, availability, native version and AgentKindCapabilities),
-// the mandatory shared Configuration and the direct-call Factory. RegisterExecutor supplies the Session-owned lifecycle.
-// RegisterPreparation optionally adds workspace access without model input.
-// RegisterKind resets the other factories, so register it first. Preparation
-// flags are derived by these methods; other advertised capabilities must reflect
-// verified native behavior. Built-in registration lives in internal/cli.
+// Registration: each adapter exports one Declaration. The Runtime discovers the
+// static declaration list and installs each resulting Runtime through Register.
+// Availability and factory selection belong to the adapter. RegisterKind resets
+// the other factories, so Register installs it first. Preparation capabilities
+// are derived from the declared factories.
 //
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising
@@ -27,10 +25,55 @@ package agent
 
 import (
 	"context"
+	"io"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
+
+// Declaration is the complete startup contract for a Harness implementation.
+// Discover returns nil when the adapter is not configured. An unavailable
+// configured adapter returns a Runtime with Available=false and a session factory.
+// Discovery owns runtime-specific configuration, readiness and feature gates.
+type Declaration struct {
+	Info          proto.SupportedAgentKind
+	Configuration harnessconfig.Configuration
+	Discover      func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
+}
+
+// DiscoveryOptions provides process context without naming an implementation.
+type DiscoveryOptions struct {
+	Profile        string
+	Stdout, Stderr io.Writer
+}
+
+// Runtime binds one discovered descriptor to its native factories.
+// SessionCapabilityContext and ExecutorCapabilityContext request the Runtime's
+// capability-download URL and scoped product-upload context for those factories.
+// Preparation never receives those execution-only effects.
+type Runtime struct {
+	Info                      proto.SupportedAgentKind
+	Session                   Factory
+	Preparation               PreparationFactory
+	Executor                  ExecutorFactory
+	WorkspaceReadPreparation  bool
+	SessionCapabilityContext  bool
+	ExecutorCapabilityContext bool
+}
+
+// Register installs a discovered Runtime with its declaration's configuration.
+func (r *Registry) Register(declaration Declaration, runtime Runtime) {
+	if runtime.Info.Kind != declaration.Info.Kind {
+		panic("agent.Registry.Register: discovery kind differs from declaration")
+	}
+	r.RegisterKind(runtime.Info, declaration.Configuration, runtime.Session)
+	if runtime.Executor != nil {
+		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
+	}
+	if runtime.Preparation != nil {
+		r.RegisterPreparation(runtime.Info.Kind, runtime.WorkspaceReadPreparation, runtime.Preparation)
+	}
+}
 
 // Model configuration has one shared contract, authored in
 // internal/harnessconfig/harness.go. RegisterKind requires that declaration;

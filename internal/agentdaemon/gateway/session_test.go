@@ -321,7 +321,7 @@ func TestSession_CloseReportsUnknownWithoutExecutionEvents(t *testing.T) {
 func TestSession_NoCapabilitiesBeforeHeartbeat(t *testing.T) {
 	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
 	defer sess.Close("test done")
-	for _, kind := range []string{"claude_code", "codex", "contract"} {
+	for _, kind := range []string{"fake_alpha", "codex", "contract"} {
 		if info, found, known := sess.AgentKindStatus(kind); found || known || info.Available {
 			t.Fatalf("unadvertised engine was available: %+v", info)
 		}
@@ -347,7 +347,7 @@ func TestSession_SendWritesToWire(t *testing.T) {
 	defer sess.Close("test done")
 
 	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{
-		AgentKind: "claude_code",
+		AgentKind: "fake_alpha",
 		RunID:     "run-1",
 		Input:     proto.TextInput("hello"),
 	})
@@ -381,7 +381,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 		DaemonVersion:  "0.2.0-test",
 		SupportedAgentKinds: []proto.SupportedAgentKind{
 			{
-				Kind:      "opencode",
+				Kind:      "fake_beta",
 				Available: false,
 				Version:   "missing",
 				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
@@ -389,7 +389,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 				}),
 			},
 			{
-				Kind:      "claude_code",
+				Kind:      "fake_alpha",
 				Available: true,
 				Version:   "1.2.3",
 				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
@@ -420,18 +420,18 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	for _, info := range got.SupportedAgentKinds {
 		byKind[info.Kind] = info
 	}
-	claude := byKind["claude_code"]
+	claude := byKind["fake_alpha"]
 	if !claude.Available || claude.Version != "1.2.3" || !claude.Capabilities.Permissions || !claude.Capabilities.Usage || !claude.Capabilities.Resume {
-		t.Fatalf("claude_code descriptor not converted: %#v", claude)
+		t.Fatalf("fake_alpha descriptor not converted: %#v", claude)
 	}
-	opencode := byKind["opencode"]
-	if opencode.Available || opencode.Version != "missing" || !opencode.Capabilities.Streaming {
-		t.Fatalf("opencode descriptor not converted: %#v", opencode)
+	fake_beta := byKind["fake_beta"]
+	if fake_beta.Available || fake_beta.Version != "missing" || !fake_beta.Capabilities.Streaming {
+		t.Fatalf("fake_beta descriptor not converted: %#v", fake_beta)
 	}
-	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || opencode.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || opencode.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || opencode.Capabilities.SubagentControl || !byKind["codex"].Capabilities.TextVerbosity || claude.Capabilities.TextVerbosity || opencode.Capabilities.TextVerbosity || !byKind["codex"].Capabilities.WebSearchControl || claude.Capabilities.WebSearchControl || opencode.Capabilities.WebSearchControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || opencode.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems || !byKind["codex"].Capabilities.Steering || claude.Capabilities.Steering || opencode.Capabilities.Steering {
+	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || fake_beta.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || fake_beta.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || fake_beta.Capabilities.SubagentControl || !byKind["codex"].Capabilities.TextVerbosity || claude.Capabilities.TextVerbosity || fake_beta.Capabilities.TextVerbosity || !byKind["codex"].Capabilities.WebSearchControl || claude.Capabilities.WebSearchControl || fake_beta.Capabilities.WebSearchControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || fake_beta.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems || !byKind["codex"].Capabilities.Steering || claude.Capabilities.Steering || fake_beta.Capabilities.Steering {
 		t.Fatalf("steering capability not preserved: %#v", byKind)
 	}
-	if !byKind["codex"].Capabilities.MCPHTTPTools || claude.Capabilities.MCPHTTPTools || opencode.Capabilities.MCPHTTPTools {
+	if !byKind["codex"].Capabilities.MCPHTTPTools || claude.Capabilities.MCPHTTPTools || fake_beta.Capabilities.MCPHTTPTools {
 		t.Fatalf("HTTP MCP capability not preserved: %#v", byKind)
 	}
 	codex, found, known := sess.AgentKindStatus("codex")

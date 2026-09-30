@@ -16,7 +16,16 @@ import (
 func TestPreparationRegistrationBypassesProductWrappers(t *testing.T) {
 	for _, supported := range []bool{false, true} {
 		reg := agent.NewRegistry()
-		registerAgentKinds(reg, agentCLIDiscovery{Codex: proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(supported)})}, ClaudeCode: proto.SupportedAgentKind{Kind: "claude_code", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, OpenCode: proto.SupportedAgentKind{Kind: "opencode", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, Pi: proto.SupportedAgentKind{Kind: "pi", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, MCode: proto.SupportedAgentKind{Kind: "mcode", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}, "http://unreachable.invalid")
+		info := proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilityFromBool(supported)})}
+		runtime := agent.Runtime{Info: info, Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+			return nil, nil
+		}}
+		if supported {
+			runtime.Preparation = func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return nil, nil }
+			runtime.WorkspaceReadPreparation = true
+		}
+		registerAgentKinds(reg, agentCLIDiscovery{{declaration: agent.Declaration{Info: info}, runtime: runtime}}, "http://unreachable.invalid")
+
 		_, err := reg.ResolvePreparation("codex")
 		if (err == nil) != supported {
 			t.Fatal("unverified native version advertised preparation")

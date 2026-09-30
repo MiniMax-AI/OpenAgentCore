@@ -1,4 +1,4 @@
-package claudecode
+package managedskills
 
 import (
 	"archive/zip"
@@ -96,20 +96,20 @@ func TestInstallPlugins_HappyPath_ExtractsAndStampsCacheKey(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "my-plugin", Version: "1.0.0", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	})
 	if err != nil {
 		t.Fatalf("installPlugins: %v", err)
 	}
-	if len(res.PluginDirs) != 1 {
-		t.Fatalf("PluginDirs = %v, want 1 entry", res.PluginDirs)
+	if len(res.SkillDirs) != 1 {
+		t.Fatalf("SkillDirs = %v, want 1 entry", res.SkillDirs)
 	}
 	if len(res.Warnings) != 0 {
 		t.Fatalf("unexpected warnings: %v", res.Warnings)
 	}
 
-	dir := res.PluginDirs[0]
+	dir := res.SkillDirs[0]
 	if filepath.Base(dir) != "my-plugin" {
 		t.Fatalf("dir basename = %q, want my-plugin", filepath.Base(dir))
 	}
@@ -135,10 +135,10 @@ func TestInstallPlugins_CacheHitSkipsDownload(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	desc := []pluginDescriptor{
+	desc := []skillDescriptor{
 		{Name: "my-plugin", Version: "1.0.0", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	}
-	if _, err := installPlugins(context.Background(), discardLogger(), workDir, desc); err != nil {
+	if _, err := installSkillsForTest(context.Background(), discardLogger(), workDir, desc); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
 	hitsAfterFirst := srv.Hits()
@@ -148,7 +148,7 @@ func TestInstallPlugins_CacheHitSkipsDownload(t *testing.T) {
 
 	// Second install with the same descriptor — cache-key match
 	// short-circuits BEFORE any HTTP call.
-	if _, err := installPlugins(context.Background(), discardLogger(), workDir, desc); err != nil {
+	if _, err := installSkillsForTest(context.Background(), discardLogger(), workDir, desc); err != nil {
 		t.Fatalf("second install: %v", err)
 	}
 	if got := srv.Hits(); got != hitsAfterFirst {
@@ -163,10 +163,10 @@ func TestInstallPlugins_CacheInvalidatedBySHA256Change(t *testing.T) {
 	workDir := t.TempDir()
 	logger := discardLogger()
 
-	first := []pluginDescriptor{
+	first := []skillDescriptor{
 		{Name: "my-plugin", Version: "1.0.0", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	}
-	if _, err := installPlugins(context.Background(), logger, workDir, first); err != nil {
+	if _, err := installSkillsForTest(context.Background(), logger, workDir, first); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
 
@@ -178,13 +178,13 @@ func TestInstallPlugins_CacheInvalidatedBySHA256Change(t *testing.T) {
 	})
 	srv.body = newBody
 
-	second := []pluginDescriptor{
+	second := []skillDescriptor{
 		{Name: "my-plugin", Version: "1.0.0", DownloadURL: srv.URL, SHA256: sha256Hex(newBody)},
 	}
-	if _, err := installPlugins(context.Background(), logger, workDir, second); err != nil {
+	if _, err := installSkillsForTest(context.Background(), logger, workDir, second); err != nil {
 		t.Fatalf("second install: %v", err)
 	}
-	dir := filepath.Join(workDir, ".claude", "plugins", "my-plugin")
+	dir := filepath.Join(workDir, "my-plugin")
 	if _, err := os.Stat(filepath.Join(dir, "commands", "different.md")); err != nil {
 		t.Fatalf("new content not extracted: %v", err)
 	}
@@ -201,14 +201,14 @@ func TestInstallPlugins_SHA256MismatchDemotesToWarning(t *testing.T) {
 
 	// Wrong sha → no install, no hard error; rest of the prompt
 	// continues without this plugin.
-	res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "my-plugin", Version: "1.0.0", DownloadURL: srv.URL, SHA256: strings.Repeat("0", 64)},
 	})
 	if err != nil {
 		t.Fatalf("installPlugins: %v", err)
 	}
-	if len(res.PluginDirs) != 0 {
-		t.Fatalf("PluginDirs = %v, want empty after sha mismatch", res.PluginDirs)
+	if len(res.SkillDirs) != 0 {
+		t.Fatalf("SkillDirs = %v, want empty after sha mismatch", res.SkillDirs)
 	}
 	if len(res.Warnings) == 0 {
 		t.Fatal("expected warning on sha mismatch")
@@ -218,7 +218,7 @@ func TestInstallPlugins_SHA256MismatchDemotesToWarning(t *testing.T) {
 	}
 	// No .cache-key file must be stamped — would short-circuit future
 	// retries with the same bad sha.
-	if _, err := os.Stat(filepath.Join(workDir, ".claude", "plugins", "my-plugin", ".cache-key")); err == nil {
+	if _, err := os.Stat(filepath.Join(workDir, "my-plugin", ".cache-key")); err == nil {
 		t.Fatal("cache-key stamped despite sha mismatch")
 	}
 }
@@ -229,10 +229,10 @@ func TestInstallPlugins_HTTPErrorDemotesToWarning(t *testing.T) {
 	srv := startPluginServer(t, nil)
 	srv.stat = http.StatusForbidden
 
-	res, _ := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, _ := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "p", Version: "1", DownloadURL: srv.URL, SHA256: strings.Repeat("a", 64)},
 	})
-	if len(res.PluginDirs) != 0 {
+	if len(res.SkillDirs) != 0 {
 		t.Fatal("expected no installed dirs on 403")
 	}
 	if len(res.Warnings) == 0 {
@@ -249,16 +249,16 @@ func TestInstallPlugins_StripWrappingRoot(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "x", Version: "1", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	})
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if len(res.PluginDirs) != 1 {
-		t.Fatalf("PluginDirs = %v", res.PluginDirs)
+	if len(res.SkillDirs) != 1 {
+		t.Fatalf("SkillDirs = %v", res.SkillDirs)
 	}
-	dir := res.PluginDirs[0]
+	dir := res.SkillDirs[0]
 	if _, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json")); err != nil {
 		t.Fatalf("manifest at expected path missing (wrapper not stripped?): %v", err)
 	}
@@ -283,16 +283,16 @@ func TestInstallPlugins_StripWrappingRootWithBareDirEntry(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "x", Version: "1", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	})
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if len(res.PluginDirs) != 1 {
-		t.Fatalf("PluginDirs = %v", res.PluginDirs)
+	if len(res.SkillDirs) != 1 {
+		t.Fatalf("SkillDirs = %v", res.SkillDirs)
 	}
-	dir := res.PluginDirs[0]
+	dir := res.SkillDirs[0]
 	if _, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json")); err != nil {
 		t.Fatalf("manifest at expected path missing (bare dir entry confused wrapper detection?): %v", err)
 	}
@@ -309,13 +309,13 @@ func TestInstallPlugins_MacOSXMetadataIgnored(t *testing.T) {
 	})
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
-	res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "x", Version: "1", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	})
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	dir := res.PluginDirs[0]
+	dir := res.SkillDirs[0]
 	if _, err := os.Stat(filepath.Join(dir, "__MACOSX")); err == nil {
 		t.Fatal("__MACOSX dir was extracted despite filter")
 	}
@@ -334,11 +334,11 @@ func TestInstallPlugins_PathTraversalRejected(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	res, _ := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, _ := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "x", Version: "1", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	})
-	if len(res.PluginDirs) != 0 {
-		t.Fatalf("PluginDirs = %v, want empty on path-traversal", res.PluginDirs)
+	if len(res.SkillDirs) != 0 {
+		t.Fatalf("SkillDirs = %v, want empty on path-traversal", res.SkillDirs)
 	}
 	if len(res.Warnings) == 0 {
 		t.Fatal("expected warning on path-traversal")
@@ -387,16 +387,16 @@ func TestInstallPlugins_SymlinkEntrySkipped(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "x", Version: "1", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	})
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if len(res.PluginDirs) != 1 {
-		t.Fatalf("PluginDirs = %v, want 1", res.PluginDirs)
+	if len(res.SkillDirs) != 1 {
+		t.Fatalf("SkillDirs = %v, want 1", res.SkillDirs)
 	}
-	dir := res.PluginDirs[0]
+	dir := res.SkillDirs[0]
 	if _, err := os.Stat(filepath.Join(dir, ".claude-plugin", "plugin.json")); err != nil {
 		t.Fatalf("manifest missing: %v", err)
 	}
@@ -417,15 +417,15 @@ func TestInstallPlugins_ConcurrentSamePluginNoTruncation(t *testing.T) {
 	done := make(chan error, 2)
 	for i := 0; i < 2; i++ {
 		go func() {
-			res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+			res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 				{Name: "my-plugin", Version: "1.0.0", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 			})
 			if err != nil {
 				done <- err
 				return
 			}
-			if len(res.PluginDirs) != 1 {
-				done <- fmt.Errorf("PluginDirs = %v", res.PluginDirs)
+			if len(res.SkillDirs) != 1 {
+				done <- fmt.Errorf("SkillDirs = %v", res.SkillDirs)
 				return
 			}
 			done <- nil
@@ -448,18 +448,18 @@ func TestInstallPlugins_PartialInstall(t *testing.T) {
 	srvBAD := startPluginServer(t, bodyOK)
 	workDir := t.TempDir()
 
-	res, err := installPlugins(context.Background(), discardLogger(), workDir, []pluginDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "good", Version: "1", DownloadURL: srvOK.URL, SHA256: sha256Hex(bodyOK)},
 		{Name: "bad", Version: "1", DownloadURL: srvBAD.URL, SHA256: strings.Repeat("0", 64)},
 	})
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if len(res.PluginDirs) != 1 {
-		t.Fatalf("PluginDirs = %v, want 1 (only the good one)", res.PluginDirs)
+	if len(res.SkillDirs) != 1 {
+		t.Fatalf("SkillDirs = %v, want 1 (only the good one)", res.SkillDirs)
 	}
-	if !strings.HasSuffix(res.PluginDirs[0], "/good") {
-		t.Fatalf("PluginDirs[0] = %q, want trailing /good", res.PluginDirs[0])
+	if !strings.HasSuffix(res.SkillDirs[0], "/good") {
+		t.Fatalf("SkillDirs[0] = %q, want trailing /good", res.SkillDirs[0])
 	}
 	if len(res.Warnings) == 0 {
 		t.Fatal("expected warning for the bad plugin")
@@ -468,241 +468,19 @@ func TestInstallPlugins_PartialInstall(t *testing.T) {
 
 func TestInstallPlugins_EmptyListIsNoop(t *testing.T) {
 	t.Parallel()
-	res, err := installPlugins(context.Background(), discardLogger(), t.TempDir(), nil)
+	res, err := installSkillsForTest(context.Background(), discardLogger(), t.TempDir(), nil)
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if len(res.PluginDirs) != 0 || len(res.Warnings) != 0 {
+	if len(res.SkillDirs) != 0 || len(res.Warnings) != 0 {
 		t.Fatalf("expected empty result; got %+v", res)
 	}
 }
 
-func TestInstallPlugins_DescriptorValidatorRejectsBadNames(t *testing.T) {
-	t.Parallel()
-	body := validPluginZipBytes(t)
-	srv := startPluginServer(t, body)
-	res, _ := installPlugins(context.Background(), discardLogger(), t.TempDir(), []pluginDescriptor{
-		{Name: "../escape", Version: "1", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
-	})
-	if len(res.PluginDirs) != 0 {
-		t.Fatalf("PluginDirs = %v; bad name should be rejected", res.PluginDirs)
+func installSkillsForTest(ctx context.Context, logger *slog.Logger, root string, descriptors []skillDescriptor) (SkillInstallResult, error) {
+	raw := make([]any, 0, len(descriptors))
+	for _, d := range descriptors {
+		raw = append(raw, map[string]any{"name": d.Name, "version": d.Version, "download_url": d.DownloadURL, "sha256": d.SHA256})
 	}
-	if len(res.Warnings) == 0 {
-		t.Fatal("expected warning")
-	}
-}
-
-func TestDecodePluginDescriptors_ArrayShape(t *testing.T) {
-	t.Parallel()
-	raw := []any{
-		map[string]any{"name": "a", "version": "1", "download_url": "https://x/a.zip", "sha256": strings.Repeat("a", 64)},
-		map[string]any{"name": "", "version": "1", "download_url": "https://x/b.zip", "sha256": strings.Repeat("b", 64)},
-		"not an object",
-	}
-	got, warns := decodePluginDescriptors(raw)
-	if len(got) != 1 || got[0].Name != "a" {
-		t.Fatalf("got = %v, want 1 valid entry", got)
-	}
-	if len(warns) != 2 {
-		t.Fatalf("warns = %v, want 2", warns)
-	}
-}
-
-func TestDecodePluginDescriptors_NilAndWrongType(t *testing.T) {
-	t.Parallel()
-	got, warns := decodePluginDescriptors(nil)
-	if got != nil || warns != nil {
-		t.Fatalf("nil input should produce nil output; got=%v warns=%v", got, warns)
-	}
-	_, warns = decodePluginDescriptors("not an array")
-	if len(warns) != 1 {
-		t.Fatalf("expected 1 warning on wrong type, got %v", warns)
-	}
-}
-
-func TestMergePluginDirs_OverrideWinsAndDedupes(t *testing.T) {
-	t.Parallel()
-	got := mergePluginDirs([]any{"/a", "/b"}, []string{"/b", "/c"})
-	want := []string{"/a", "/b", "/c"}
-	if !equalStrings(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-}
-
-func TestMergePluginDirs_AcceptsTypedStringSlice(t *testing.T) {
-	t.Parallel()
-	got := mergePluginDirs([]string{"/x"}, []string{"/y"})
-	want := []string{"/x", "/y"}
-	if !equalStrings(got, want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-}
-
-func TestMergePluginDirs_NilExisting(t *testing.T) {
-	t.Parallel()
-	got := mergePluginDirs(nil, []string{"/x"})
-	if !equalStrings(got, []string{"/x"}) {
-		t.Fatalf("got %v", got)
-	}
-}
-
-func equalStrings(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// TestResolveSessionWorkDir_RespectsExplicitDir locks in "caller wins":
-// when req.WorkDir is set we must use exactly that path (mkdir -p if it
-// doesn't exist yet) and never fall back to the conversation scratch
-// dir.
-func TestResolveSessionWorkDir_RespectsExplicitDir(t *testing.T) {
-	t.Parallel()
-	explicit := filepath.Join(t.TempDir(), "some-explicit-dir")
-	got, err := resolveSessionWorkDir(explicit, "conv-ignored")
-	if err != nil {
-		t.Fatalf("resolveSessionWorkDir: %v", err)
-	}
-	if got != explicit {
-		t.Fatalf("got %q, want explicit dir verbatim", got)
-	}
-	info, err := os.Stat(got)
-	if err != nil {
-		t.Fatalf("stat explicit dir: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("explicit dir %q is not a directory", got)
-	}
-}
-
-func TestResolveSessionWorkDir_ExpandsHomeRelativeDir(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	got, err := resolveSessionWorkDir("~/projects/demo", "conv-ignored")
-	if err != nil {
-		t.Fatalf("resolveSessionWorkDir: %v", err)
-	}
-	want := filepath.Join(home, "projects", "demo")
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
-	info, err := os.Stat(got)
-	if err != nil {
-		t.Fatalf("stat home-relative dir: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("home-relative dir %q is not a directory", got)
-	}
-}
-
-// TestResolveSessionWorkDir_RejectsRelativeDir: relative paths are
-// ambiguous (resolved against daemon cwd, which is not a stable anchor
-// for user-facing config). The user gets a clear error instead of a
-// chdir failure later.
-func TestResolveSessionWorkDir_RejectsRelativeDir(t *testing.T) {
-	t.Parallel()
-	for _, rel := range []string{"foo", "./bar", "../baz", "a/b/c"} {
-		if _, err := resolveSessionWorkDir(rel, "conv-x"); err == nil {
-			t.Fatalf("relative path %q: expected error, got nil", rel)
-		}
-	}
-}
-
-// TestResolveSessionWorkDir_ExplicitDirCreated: an absolute path whose
-// parents don't exist yet still works — daemon mkdir -p's it. This is
-// the "user named a fresh project root" case.
-func TestResolveSessionWorkDir_ExplicitDirCreated(t *testing.T) {
-	t.Parallel()
-	target := filepath.Join(t.TempDir(), "missing", "parents", "leaf")
-	got, err := resolveSessionWorkDir(target, "conv-ignored")
-	if err != nil {
-		t.Fatalf("resolveSessionWorkDir: %v", err)
-	}
-	if got != target {
-		t.Fatalf("got %q, want %q", got, target)
-	}
-	info, err := os.Stat(target)
-	if err != nil {
-		t.Fatalf("stat target: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("target %q is not a directory", target)
-	}
-}
-
-// TestResolveSessionWorkDir_FallbackCreatesDir: empty req.WorkDir with
-// conversation_id must yield a real on-disk per-conversation directory
-// under daemon HOME used for BOTH plugin install AND claude cwd.
-// Overrides HOME to keep test inside t.TempDir().
-func TestResolveSessionWorkDir_FallbackCreatesDir(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-
-	got, err := resolveSessionWorkDir("", "conv-abc-123")
-	if err != nil {
-		t.Fatalf("resolveSessionWorkDir: %v", err)
-	}
-	want := filepath.Join(tmp, ".oac", "runtime", "claudecode", "conv-conv-abc-123")
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
-	info, err := os.Stat(got)
-	if err != nil {
-		t.Fatalf("stat fallback dir: %v", err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("fallback %q is not a directory", got)
-	}
-}
-
-// TestResolveSessionWorkDir_BothEmptyFallsBackToCwd: when neither
-// req.WorkDir nor conversation_id is provided, degrade to daemon cwd
-// rather than refuse.
-func TestResolveSessionWorkDir_BothEmptyFallsBackToCwd(t *testing.T) {
-	t.Parallel()
-	got, err := resolveSessionWorkDir("", "")
-	if err != nil {
-		t.Fatalf("resolveSessionWorkDir: %v", err)
-	}
-	wantCwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("os.Getwd: %v", err)
-	}
-	if got != wantCwd {
-		t.Fatalf("got %q, want daemon cwd %q", got, wantCwd)
-	}
-	// Whitespace-only inputs must be treated as empty.
-	got, err = resolveSessionWorkDir("  ", "  ")
-	if err != nil {
-		t.Fatalf("whitespace inputs: %v", err)
-	}
-	if got != wantCwd {
-		t.Fatalf("whitespace inputs: got %q, want %q", got, wantCwd)
-	}
-}
-
-// TestResolveSessionWorkDir_FallbackIsIdempotent: a second call with
-// the same conversation_id must succeed (MkdirAll on existing dir).
-func TestResolveSessionWorkDir_FallbackIsIdempotent(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)
-
-	first, err := resolveSessionWorkDir("", "conv-x")
-	if err != nil {
-		t.Fatalf("first call: %v", err)
-	}
-	second, err := resolveSessionWorkDir("", "conv-x")
-	if err != nil {
-		t.Fatalf("second call: %v", err)
-	}
-	if first != second {
-		t.Fatalf("non-deterministic fallback: %q vs %q", first, second)
-	}
+	return InstallManagedSkills(ctx, logger, root, raw)
 }

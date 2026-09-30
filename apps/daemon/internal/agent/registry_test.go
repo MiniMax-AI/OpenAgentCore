@@ -32,13 +32,13 @@ func (stubSession) SubmitPromptForUserChoice(context.Context, string, proto.Prom
 
 func TestRegistryResolveReturnsRegisteredFactory(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
 
-	f, err := reg.Resolve("claude_code")
+	f, err := reg.Resolve("fake_alpha")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	sess, err := f(context.Background(), proto.PromptRequestPayload{AgentKind: "claude_code"}, nil)
+	sess, err := f(context.Background(), proto.PromptRequestPayload{AgentKind: "fake_alpha"}, nil)
 	if err != nil {
 		t.Fatalf("factory: %v", err)
 	}
@@ -50,9 +50,9 @@ func TestRegistryResolveReturnsRegisteredFactory(t *testing.T) {
 
 func TestRegistryResolveUnknownKindReturnsTypedError(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
 
-	_, err := reg.Resolve("opencode")
+	_, err := reg.Resolve("fake_beta")
 	if !errors.Is(err, agent.ErrUnsupportedKind) {
 		t.Errorf("Resolve unknown = %v, want ErrUnsupportedKind chain", err)
 	}
@@ -75,12 +75,12 @@ func TestRegistryRegisterOverwrites(t *testing.T) {
 
 func TestRegistryKindsReportsRegistered(t *testing.T) {
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "claude_code", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "opencode", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("oc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("cc"))
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "fake_beta", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, stubFactory("oc"))
 
 	got := reg.Kinds()
 	slices.Sort(got)
-	want := []string{"claude_code", "opencode"}
+	want := []string{"fake_alpha", "fake_beta"}
 	if !slices.Equal(got, want) {
 		t.Errorf("Kinds = %v, want %v", got, want)
 	}
@@ -107,7 +107,7 @@ func TestRegistryRegisterPanicsOnNilFactory(t *testing.T) {
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{
-		Kind:      "opencode",
+		Kind:      "fake_beta",
 		Available: false,
 		Version:   "missing",
 		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
@@ -115,7 +115,7 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 		}),
 	}, harnessconfig.Configuration{}, stubFactory("oc"))
 	reg.RegisterKind(proto.SupportedAgentKind{
-		Kind:      "claude_code",
+		Kind:      "fake_alpha",
 		Available: true,
 		Version:   "1.2.3",
 		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
@@ -130,14 +130,14 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("SupportedAgentKinds len = %d, want 2: %#v", len(got), got)
 	}
-	if got[0].Kind != "claude_code" || got[1].Kind != "opencode" {
-		t.Fatalf("SupportedAgentKinds sort = %#v, want claude_code then opencode", got)
+	if got[0].Kind != "fake_alpha" || got[1].Kind != "fake_beta" {
+		t.Fatalf("SupportedAgentKinds sort = %#v, want fake_alpha then fake_beta", got)
 	}
 	if !got[0].Available || got[0].Version != "1.2.3" || !got[0].Capabilities.Permissions.IsSupported() || !got[0].Capabilities.Resume.IsSupported() {
-		t.Fatalf("claude_code descriptor not preserved: %#v", got[0])
+		t.Fatalf("fake_alpha descriptor not preserved: %#v", got[0])
 	}
 	if got[1].Available || got[1].Version != "missing" || !got[1].Capabilities.Streaming.IsSupported() {
-		t.Fatalf("opencode descriptor not preserved: %#v", got[1])
+		t.Fatalf("fake_beta descriptor not preserved: %#v", got[1])
 	}
 }
 

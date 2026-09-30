@@ -43,7 +43,7 @@ func TestInitialSessionInputOfficialClient(t *testing.T) {
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	unsupported, err := api.NewHandler(s, auth, "claude_code", api.WithExecution(worker))
+	unsupported, err := api.NewHandler(s, auth, "fake_alpha", api.WithExecution(worker))
 	if err != nil {
 		t.Fatal(err)
 	}

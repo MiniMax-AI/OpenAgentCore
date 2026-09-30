@@ -31,7 +31,7 @@ func (s registeredSDKSender) Send(ctx context.Context, env proto.Envelope) error
 }
 
 func TestLiveRegisteredClaudeSDK(t *testing.T) {
-	entrypoint, keyFile := os.Getenv(claudeSDKEntrypointEnv), os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
+	entrypoint, keyFile := os.Getenv("OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT"), os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
 	if entrypoint == "" || keyFile == "" {
 		t.Skip("requires explicit SDK runtime and real provider key file")
 	}
@@ -57,8 +57,8 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		t.Setenv(name, value)
 	}
 	stdout, stderr := &strings.Builder{}, &strings.Builder{}
-	discovery, err := discoverAgentCLIs(t.Context(), &runContext{stdout: stdout, stderr: stderr}, "acceptance", unavailableCLIChecks())
-	if err != nil || discovery.ClaudeSDK == nil || !discovery.ClaudeSDK.Info.Available {
+	discovery, err := discoverAgentCLIs(t.Context(), &runContext{stdout: stdout, stderr: stderr, installedKinds: map[string]bool{"claude_sdk": true}}, "acceptance", harnessDeclarations)
+	if err != nil || len(discovery) != 1 || !discovery[0].runtime.Info.Available {
 		t.Fatal("SDK-only discovery failed", err)
 	}
 	type execution struct {
@@ -182,7 +182,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 	if third.Outcome.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(third.Outcome.Content, nonce) {
 		t.Fatal("registered cold continuation lost identity or history")
 	}
-	data, _ := json.MarshalIndent(map[string]any{"scope": "SDK-only readiness and production registration/authoring registry -> daemon router -> pinned SDK/native -> real MiniMax; function receipt, cancellation and cold continuation; public API admission remains separate", "descriptor": discovery.ClaudeSDK.Info, "node": discovery.ClaudeSDK.Config.Node, "entrypoint": discovery.ClaudeSDK.Config.Entrypoint, "state_dir": discovery.ClaudeSDK.Config.StateDir, "verification_value": nonce, "executions": []execution{first, second, third}}, "", "  ")
+	data, _ := json.MarshalIndent(map[string]any{"scope": "SDK-only readiness and production registration/authoring registry -> daemon router -> pinned SDK/native -> real MiniMax; function receipt, cancellation and cold continuation; public API admission remains separate", "descriptor": discovery[0].runtime.Info, "entrypoint": entrypoint, "verification_value": nonce, "executions": []execution{first, second, third}}, "", "  ")
 	if err := os.WriteFile(filepath.Join(root, "proof.json"), data, 0o600); err != nil {
 		t.Fatal(err)
 	}

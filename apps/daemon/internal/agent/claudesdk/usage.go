@@ -17,7 +17,7 @@ func nativeUsage(raw json.RawMessage) (proto.Usage, error) {
 	}
 	// The SDK owns native counter scopes and cost estimates. Do not expose an
 	// incomplete public token breakdown or a model selected from an unordered map.
-	return proto.Usage{Provider: "claude_code", Raw: map[string]any{"claude_sdk_result": snapshot}}, nil
+	return proto.Usage{Provider: "claude_sdk", Raw: map[string]any{"claude_sdk_result": snapshot}}, nil
 }
 
 // Keep every native measurement when a query spans multiple native turns. Each

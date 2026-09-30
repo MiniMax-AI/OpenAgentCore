@@ -1,4 +1,4 @@
-package cli
+package mcode
 
 import (
 	"context"
@@ -7,34 +7,34 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/mcode"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func discoverMCodeWorkspace(parent context.Context, rc *runContext, discovery *agentCLIDiscovery) {
+func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, runtime *agent.Runtime) *WorkspaceConfig {
 	fail := func(err error) {
-		discovery.MCode.Available = false
-		fmt.Fprintf(rc.stderr, "oac-daemon: mcode workspace unavailable: %v\n", err)
+		runtime.Info.Available = false
+		fmt.Fprintf(options.Stderr, "oac-daemon: mcode workspace unavailable: %v\n", err)
 	}
 	binding, err := localworkspace.Load()
 	if err != nil {
 		fail(err)
-		return
+		return nil
 	}
 	if binding == nil {
-		return
+		return nil
 	}
-	if !discovery.MCode.Available || !mcode.SupportsExecution(discovery.MCode.Version) {
+	if !runtime.Info.Available || !SupportsExecution(runtime.Info.Version) {
 		fail(fmt.Errorf("local execution requires the qualified native version"))
-		return
+		return nil
 	}
 	root, err := paths.Root()
 	if err != nil {
 		fail(err)
-		return
+		return nil
 	}
 	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
 	if node == "" {
@@ -43,34 +43,35 @@ func discoverMCodeWorkspace(parent context.Context, rc *runContext, discovery *a
 	node, err = exec.LookPath(node)
 	if err != nil {
 		fail(err)
-		return
+		return nil
 	}
 	node, err = filepath.Abs(node)
 	if err != nil {
 		fail(err)
-		return
+		return nil
 	}
 	binary, err := exec.LookPath(binpath.MCode())
 	if err != nil {
 		fail(err)
-		return
+		return nil
 	}
 	binary, err = filepath.Abs(binary)
 	if err != nil {
 		fail(err)
-		return
+		return nil
 	}
-	c, err := mcode.ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
 	if err == nil {
-		err = mcode.CheckWorkspace(parent, c)
+		err = CheckWorkspace(parent, c)
 	}
 	if err != nil {
 		fail(err)
-		return
+		return nil
 	}
-	discovery.MCodeWorkspace = &c
-	caps := &discovery.MCode.Capabilities
+
+	caps := &runtime.Info.Capabilities
 	caps.EnvironmentNone = proto.CapabilityUnsupported
 	caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
 	caps.WorkspaceReadPreparation = proto.CapabilitySupported
+	return &c
 }

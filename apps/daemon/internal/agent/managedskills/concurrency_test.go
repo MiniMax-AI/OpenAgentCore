@@ -1,4 +1,4 @@
-package claudecode
+package managedskills
 
 import (
 	"context"
@@ -13,27 +13,9 @@ import (
 )
 
 func installConcurrentFixture(ctx context.Context, kind, root, url string, body []byte) error {
-	var dirs, warnings []string
-	var err error
-	if kind == "plugin" {
-		var result PluginInstallResult
-		result, err = installPlugins(ctx, discardLogger(), root, []pluginDescriptor{
-			{Name: "fixture", Version: "1.0.0", DownloadURL: url, SHA256: sha256Hex(body)},
-		})
-		dirs, warnings = result.PluginDirs, result.Warnings
-	} else {
-		var result SkillInstallResult
-		if kind == "managed" {
-			result, err = InstallManagedSkills(ctx, discardLogger(), root, []any{map[string]any{
-				"name": "fixture", "version": "1.0.0", "download_url": url, "sha256": sha256Hex(body),
-			}})
-		} else {
-			result, err = installSkillsAtRoot(ctx, discardLogger(), root, []skillDescriptor{
-				{Name: "fixture", Version: "1.0.0", DownloadURL: url, SHA256: sha256Hex(body)},
-			}, "skills")
-		}
-		dirs, warnings = result.SkillDirs, result.Warnings
-	}
+	result, err := InstallManagedSkills(ctx, discardLogger(), root, []any{map[string]any{"name": "fixture", "version": "1.0.0", "download_url": url, "sha256": sha256Hex(body)}})
+	dirs, warnings := result.SkillDirs, result.Warnings
+
 	if err != nil {
 		return err
 	}
@@ -51,7 +33,7 @@ func installConcurrentFixture(ctx context.Context, kind, root, url string, body 
 }
 
 func TestInstallsConcurrentSameRoot(t *testing.T) {
-	for _, kind := range []string{"plugin", "skill", "managed"} {
+	for _, kind := range []string{"managed"} {
 		t.Run(kind, func(t *testing.T) {
 			body := buildPluginZipBytes(t, []pluginZipFile{{Name: "SKILL.md", Body: "Complete fixture contents.\n"}})
 			var calls atomic.Int32
@@ -86,7 +68,7 @@ func TestInstallsConcurrentSameRoot(t *testing.T) {
 }
 
 func TestInstallWaitCancellation(t *testing.T) {
-	for _, kind := range []string{"plugin", "skill", "managed"} {
+	for _, kind := range []string{"managed"} {
 		t.Run(kind, func(t *testing.T) {
 			body := buildPluginZipBytes(t, []pluginZipFile{{Name: "SKILL.md", Body: "Complete fixture contents.\n"}})
 			started, release := make(chan struct{}, 2), make(chan struct{})
@@ -144,7 +126,7 @@ func TestInstallsIndependentRootsRemainConcurrent(t *testing.T) {
 	defer cancel()
 	results := make(chan error, 2)
 	for _, root := range []string{t.TempDir(), t.TempDir()} {
-		go func() { results <- installConcurrentFixture(ctx, "plugin", root, srv.URL, body) }()
+		go func() { results <- installConcurrentFixture(ctx, "managed", root, srv.URL, body) }()
 	}
 	for range 2 {
 		select {

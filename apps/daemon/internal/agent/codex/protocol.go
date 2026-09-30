@@ -3,7 +3,7 @@
 // speaking the JSON-RPC 2.0 protocol that the app-server exposes over
 // stdio.
 //
-// Codex differs from the claudecode and opencode adapters in two ways:
+// Codex uses an app-server transport:
 //
 //  1. The wire protocol is JSON-RPC (request / response / notification /
 //     server-request) rather than NDJSON event-stream. See rpc.go.

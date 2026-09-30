@@ -79,7 +79,7 @@ func environmentFilesHandler(t *testing.T, enabled bool) (http.Handler, *environ
 	if enabled {
 		options = append(options, WithEnvironmentDirectoryReader(f))
 	}
-	h, err := NewHandler(f, auth, "claude_code", options...)
+	h, err := NewHandler(f, auth, "fake_alpha", options...)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package claudecode
+package managedskills
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 )
 
 // skillDescriptor is the daemon-side view of one server-sent skill entry
-// under agent_options["skills"]. Wire-identical to pluginDescriptor.
+// under agent_options["skills"].
 type skillDescriptor struct {
 	Name        string
 	Version     string
@@ -24,30 +24,10 @@ type skillDescriptor struct {
 	SHA256      string
 }
 
-// SkillInstallResult carries installed directories and warnings. Claude Code
-// auto-scans its project root; other adapters register the returned root.
+// SkillInstallResult carries installed directories and warnings.
 type SkillInstallResult struct {
 	SkillDirs []string
 	Warnings  []string
-}
-
-// installSkills materialises every skill under
-// <workDir>/.claude/skills/<name>/. Pipeline mirrors installPlugins;
-// only the target subdir differs (Claude Code auto-registers skills
-// from that path).
-func installSkills(
-	ctx context.Context,
-	logger *slog.Logger,
-	workDir string,
-	skills []skillDescriptor,
-) (SkillInstallResult, error) {
-	if len(skills) == 0 {
-		return SkillInstallResult{}, nil
-	}
-	if strings.TrimSpace(workDir) == "" {
-		return SkillInstallResult{}, errors.New("claudecode skills: workDir is required")
-	}
-	return installSkillsAtRoot(ctx, logger, filepath.Join(workDir, ".claude", "skills"), skills, "claudecode skills")
 }
 
 // InstallManagedSkills decodes the portable agent_options["skills"] payload,
@@ -71,21 +51,6 @@ func InstallManagedSkills(ctx context.Context, logger *slog.Logger, root string,
 		return result, err
 	}
 	return result, nil
-}
-
-func installSkillsAtRoot(
-	ctx context.Context,
-	logger *slog.Logger,
-	root string,
-	skills []skillDescriptor,
-	logLabel string,
-) (SkillInstallResult, error) {
-	unlock, err := installroot.Lock(ctx, root)
-	if err != nil {
-		return SkillInstallResult{}, err
-	}
-	defer unlock()
-	return installSkillsAtRootLocked(ctx, logger, root, skills, logLabel)
 }
 
 func installSkillsAtRootLocked(
@@ -121,7 +86,7 @@ func installSkillsAtRootLocked(
 			continue
 		}
 
-		// Same timeout / cap as plugins — they share the install pipeline.
+		// Bound each archive download and extraction.
 		perCtx, cancel := context.WithTimeout(ctx, pluginInstallTimeout)
 		err := installOneSkill(perCtx, logger, root, dir, cacheKey, expectedKey, s, logLabel)
 		cancel()
@@ -166,10 +131,7 @@ func pruneManagedSkills(root string, activeDirs []string) error {
 	return nil
 }
 
-// installOneSkill: same shape as installOnePlugin, only target dir differs.
-// Reuses fetchPluginZip / verifyPluginSHA256FromFD / extractPluginZipFromFD
-// — the helpers are skill-agnostic and applying them to skill zips keeps
-// the path-traversal / TOCTOU / SHA256 defences identical.
+// installOneSkill downloads, verifies and extracts one skill archive.
 func installOneSkill(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -222,8 +184,7 @@ func installOneSkill(
 	return nil
 }
 
-// decodeSkillDescriptors converts agent_options["skills"] into typed
-// descriptors. Mirrors decodePluginDescriptors.
+// decodeSkillDescriptors converts agent_options["skills"] into typed descriptors.
 func decodeSkillDescriptors(raw any) ([]skillDescriptor, []string) {
 	if raw == nil {
 		return nil, nil

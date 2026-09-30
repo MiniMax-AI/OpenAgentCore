@@ -111,7 +111,7 @@ func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
 func TestLegacyCancellationDoesNotEmitNewFrames(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "legacy", proto.PromptRequestPayload{AgentKind: "claude_code"})); err != nil {
+	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "legacy", proto.PromptRequestPayload{AgentKind: "fake_alpha"})); err != nil {
 		t.Fatal(err)
 	}
 	sess := <-h.gotSess

@@ -1,4 +1,4 @@
-package claudecode
+package managedskills
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func TestInstallSkills_HappyPath_ExtractsAndStampsCacheKey(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	res, err := installSkills(context.Background(), discardLogger(), workDir, []skillDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		{Name: "code-review", Version: "1.0.0", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	})
 	if err != nil {
@@ -30,7 +30,7 @@ func TestInstallSkills_HappyPath_ExtractsAndStampsCacheKey(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", res.Warnings)
 	}
 
-	dir := filepath.Join(workDir, ".claude", "skills", "code-review")
+	dir := filepath.Join(workDir, "code-review")
 	if len(res.SkillDirs) != 1 || res.SkillDirs[0] != dir {
 		t.Fatalf("skill dirs = %v, want [%s]", res.SkillDirs, dir)
 	}
@@ -56,14 +56,14 @@ func TestInstallSkills_CacheHitSkipsDownload(t *testing.T) {
 	desc := []skillDescriptor{
 		{Name: "code-review", Version: "1.0.0", DownloadURL: srv.URL, SHA256: sha256Hex(body)},
 	}
-	if _, err := installSkills(context.Background(), discardLogger(), workDir, desc); err != nil {
+	if _, err := installSkillsForTest(context.Background(), discardLogger(), workDir, desc); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
 	hitsAfterFirst := srv.Hits()
 	if hitsAfterFirst != 1 {
 		t.Fatalf("first install hits = %d, want 1", hitsAfterFirst)
 	}
-	second, err := installSkills(context.Background(), discardLogger(), workDir, desc)
+	second, err := installSkillsForTest(context.Background(), discardLogger(), workDir, desc)
 	if err != nil {
 		t.Fatalf("second install: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestInstallSkills_SHA256MismatchDemotesToWarning(t *testing.T) {
 	srv := startPluginServer(t, body)
 	workDir := t.TempDir()
 
-	res, err := installSkills(context.Background(), discardLogger(), workDir, []skillDescriptor{
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, []skillDescriptor{
 		// Wrong sha256 (all-zero pattern is 64 hex chars, never matches body)
 		{Name: "code-review", Version: "1.0.0", DownloadURL: srv.URL, SHA256: "0000000000000000000000000000000000000000000000000000000000000000"},
 	})
@@ -123,7 +123,7 @@ func TestInstallSkills_SHA256MismatchDemotesToWarning(t *testing.T) {
 	if len(res.Warnings) != 1 {
 		t.Fatalf("want 1 warning, got %d: %v", len(res.Warnings), res.Warnings)
 	}
-	if _, err := os.Stat(filepath.Join(workDir, ".claude", "skills", "code-review", "SKILL.md")); err == nil {
+	if _, err := os.Stat(filepath.Join(workDir, "code-review", "SKILL.md")); err == nil {
 		t.Fatal("SKILL.md should not exist after sha mismatch")
 	}
 }
@@ -131,7 +131,7 @@ func TestInstallSkills_SHA256MismatchDemotesToWarning(t *testing.T) {
 func TestInstallSkills_EmptyListIsNoop(t *testing.T) {
 	t.Parallel()
 	workDir := t.TempDir()
-	res, err := installSkills(context.Background(), discardLogger(), workDir, nil)
+	res, err := installSkillsForTest(context.Background(), discardLogger(), workDir, nil)
 	if err != nil {
 		t.Fatalf("empty install: %v", err)
 	}

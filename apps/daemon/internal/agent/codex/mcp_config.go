@@ -10,7 +10,7 @@ import (
 
 // mcpServerConfig is the daemon-internal MCP server config flattened
 // from agent_options["mcp_servers"] (rendered by render.TargetCodex /
-// claudecode's mcpServers JSON shape). Written into <CODEX_HOME>/config.toml
+// the mcpServers JSON shape). Written into <CODEX_HOME>/config.toml
 // before spawning the app-server child.
 type mcpServerConfig struct {
 	Name              string

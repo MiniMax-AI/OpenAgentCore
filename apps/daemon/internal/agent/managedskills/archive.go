@@ -1,4 +1,4 @@
-package claudecode
+package managedskills
 
 import (
 	"archive/zip"
@@ -11,31 +11,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
 )
-
-// pluginDescriptor is the daemon-side view of one server-sent plugin
-// entry under agent_options["plugins"]:
-//
-//	{ "name": "...", "version": "...", "download_url": "...", "sha256": "..." }
-type pluginDescriptor struct {
-	Name        string
-	Version     string
-	DownloadURL string
-	SHA256      string
-}
-
-// PluginInstallResult is what installPlugins returns: local directory
-// paths to feed into `--plugin-dir`, plus warnings the session should
-// surface. Errors that abort install bubble up through the error
-// return; warnings cover the "N-1 of N installed" case.
-type PluginInstallResult struct {
-	PluginDirs []string
-	Warnings   []string
-}
 
 // pluginInstallTimeout caps a single plugin's download + extract step.
 const pluginInstallTimeout = 60 * time.Second
@@ -307,131 +286,4 @@ func normaliseZipPath(name string) string {
 	return strings.TrimSuffix(p, "/")
 }
 
-// decodePluginDescriptors converts the raw agent_options["plugins"]
-// value into a typed slice. Entries that fail to decode are dropped
-// with a warning string returned alongside — the rest of the plugins
-// might still be installable.
-func decodePluginDescriptors(raw any) ([]pluginDescriptor, []string) {
-	if raw == nil {
-		return nil, nil
-	}
-	items, ok := raw.([]any)
-	if !ok {
-		return nil, []string{fmt.Sprintf("agent_options[plugins] must be array, got %T", raw)}
-	}
-	out := make([]pluginDescriptor, 0, len(items))
-	warnings := make([]string, 0)
-	for i, item := range items {
-		obj, ok := item.(map[string]any)
-		if !ok {
-			warnings = append(warnings, fmt.Sprintf("plugins[%d]: not an object", i))
-			continue
-		}
-		p := pluginDescriptor{
-			Name:        stringField(obj, "name"),
-			Version:     stringField(obj, "version"),
-			DownloadURL: stringField(obj, "download_url"),
-			SHA256:      stringField(obj, "sha256"),
-		}
-		if err := p.validate(); err != nil {
-			warnings = append(warnings, fmt.Sprintf("plugins[%d] (%s): %v", i, p.Name, err))
-			continue
-		}
-		out = append(out, p)
-	}
-	return out, warnings
-}
-
-func stringField(m map[string]any, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-// validate is the daemon-side analogue of canonical.PluginSpec.Validate
-// with a narrower contract — defense in depth, server-side validator
-// is authoritative.
-func (p pluginDescriptor) validate() error {
-	if strings.TrimSpace(p.Name) == "" {
-		return errors.New("name is required")
-	}
-	// Block path-traversal-ish names before they hit filepath.Join.
-	if strings.ContainsAny(p.Name, "/\\") || p.Name == "." || p.Name == ".." {
-		return fmt.Errorf("name %q contains path separator or dot-ref", p.Name)
-	}
-	if strings.TrimSpace(p.DownloadURL) == "" {
-		return errors.New("download_url is required")
-	}
-	if len(p.SHA256) != 64 {
-		return fmt.Errorf("sha256 must be 64 hex chars (got %d)", len(p.SHA256))
-	}
-	return nil
-}
-
-// cacheKey is what we stamp into <dir>/.cache-key. Including the
-// sha256 means a re-published version with the same name+version (but
-// rebuilt zip content) invalidates the cache.
-func (p pluginDescriptor) cacheKey() string {
-	return fmt.Sprintf("%s@%s", path.Clean(p.Name), strings.ToLower(p.SHA256))
-}
-
-// cloneAgentOptions returns a shallow copy of agent_options. Shallow
-// is fine — we only overwrite the top-level "plugin_dirs" key.
-func cloneAgentOptions(opts map[string]any) map[string]any {
-	if opts == nil {
-		return map[string]any{}
-	}
-	out := make(map[string]any, len(opts))
-	for k, v := range opts {
-		out[k] = v
-	}
-	return out
-}
-
-// mergePluginDirs combines a caller-supplied plugin_dirs override
-// (accepted as []string OR []any) with the capability-resolved list,
-// preserving order and deduplicating. Override wins on collision.
-func mergePluginDirs(existing any, resolved []string) []string {
-	preset := coerceStringSlice(existing)
-	seen := make(map[string]bool, len(preset)+len(resolved))
-	out := make([]string, 0, len(preset)+len(resolved))
-	for _, d := range preset {
-		if d == "" || seen[d] {
-			continue
-		}
-		seen[d] = true
-		out = append(out, d)
-	}
-	for _, d := range resolved {
-		if d == "" || seen[d] {
-			continue
-		}
-		seen[d] = true
-		out = append(out, d)
-	}
-	return out
-}
-
-// coerceStringSlice accepts the two wire shapes opts["plugin_dirs"]
-// can take: a pre-typed []string or a JSON-decoded []any of strings.
-// BuildArgs' stringSlice errors on bad shapes downstream, so a clean
-// degradation here is fine.
-func coerceStringSlice(v any) []string {
-	switch t := v.(type) {
-	case nil:
-		return nil
-	case []string:
-		return t
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, item := range t {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
+func stringField(m map[string]any, key string) string { s, _ := m[key].(string); return s }

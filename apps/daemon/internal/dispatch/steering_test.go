@@ -139,7 +139,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	if ack := lastSteeringAck(t, h.sender, "run-1", "input-1"); ack.ErrorCode != "run_inactive" {
 		t.Fatalf("inactive: %+v", ack)
 	}
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-2", proto.PromptRequestPayload{AgentKind: "claude_code"})); err != nil {
+	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-2", proto.PromptRequestPayload{AgentKind: "fake_alpha"})); err != nil {
 		t.Fatal(err)
 	}
 	session := <-h.gotSess
@@ -183,7 +183,7 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 		}, nil
 	})
 	ctx := context.Background()
-	for _, run := range []struct{ id, engine string }{{"run-1", "codex"}, {"run-2", "claude_code"}} {
+	for _, run := range []struct{ id, engine string }{{"run-1", "codex"}, {"run-2", "fake_alpha"}} {
 		if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, run.id, proto.PromptRequestPayload{AgentKind: run.engine})); err != nil {
 			t.Fatal(err)
 		}

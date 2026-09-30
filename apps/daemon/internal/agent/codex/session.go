@@ -17,7 +17,7 @@ import (
 
 // terminalSendTimeout caps how long the session waits to deliver the
 // final done / error envelope on the upstream channel. Matches the
-// claudecode + opencode safety net.
+// adapter safety net.
 const terminalSendTimeout = 2 * time.Second
 
 // sessionConfig is the cross-cutting knob bag — production callers go
