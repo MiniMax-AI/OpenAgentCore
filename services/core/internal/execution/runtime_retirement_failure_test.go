@@ -11,6 +11,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
+// retirementFenceLease bounds only the cancellation attempt. The concurrent
+// owner query retains the production lease deadline and must remain usable.
+type retirementFenceLease struct{ Ownership }
+
+func (l retirementFenceLease) CancelOperations(ctx context.Context, cancel context.CancelFunc) error {
+	ctx, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer stop()
+	return l.Ownership.CancelOperations(ctx, cancel)
+}
+
 func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 	for _, mode := range []string{"gate_timeout", "lease_loss"} {
 		t.Run(mode, func(t *testing.T) {
@@ -43,13 +53,12 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 			go func() { defer m.active.Done(); defer finish(); <-operation.Done(); <-releaseProvider }()
 			var queryDone chan error
 			if mode == "gate_timeout" {
-				// This independent owner caller has its own bounded query context. Unlike
-				// a lifecycle scan, it is not canceled by the manager's shutdown context.
-				queryCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-				defer cancel()
+				// Both lease operations have the same production deadline. Give only
+				// the later fence a shorter caller deadline so it expires first.
+				m.lease = retirementFenceLease{Ownership: owner.Lease}
 				queryDone = make(chan error, 1)
 				armed.Store(true)
-				go func() { queryDone <- owner.Lease.CheckOwnership(queryCtx) }()
+				go func() { queryDone <- owner.Lease.CheckOwnership(t.Context()) }()
 				select {
 				case <-reading:
 				case <-time.After(2 * time.Second):
@@ -114,13 +123,16 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 				unblockRead()
 				select {
 				case err := <-queryDone:
+					queryDone = nil
 					if err != nil {
 						t.Fatal("fence timeout damaged unrelated owner read", err)
 					}
 				case <-time.After(2 * time.Second):
 					t.Fatal("owner read did not settle")
 				}
-				queryDone = nil
+				if err := owner.Lease.CheckOwnership(t.Context()); err != nil {
+					t.Fatal("fence timeout lost the execution lease", err)
+				}
 			}
 			// Shutdown can now cancel the original work, but cannot call it settled
 			// merely because cancellation was requested or a serial gate became free.
