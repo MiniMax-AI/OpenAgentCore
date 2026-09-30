@@ -160,3 +160,7 @@ func sampleFromObservation(observation Observation, now time.Time) (runtimeobs.S
 }
 
 func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
+
+func (p *Provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
+	return p, nil
+}

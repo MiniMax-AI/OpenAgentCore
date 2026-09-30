@@ -134,18 +134,10 @@ func (s *managedSetup) configuration(setup store.SandboxSetup) (execution.Prepar
 }
 
 func (*managedSetup) ProviderOperations() providercontract.Operations {
-	return providercontract.Operations{"Observe": {State: providercontract.Supported}, "ObserveBatch": {State: providercontract.Supported}}
-}
-func (s *managedSetup) ObservationProviderType() string {
-	if selected := s.selected.Load(); selected != nil && selected.Config != nil {
-		return selected.Config.ProviderKind
-	}
-	return ""
+	return providercontract.Operations{"ResolveObservationSource": {State: providercontract.Supported}}
 }
 
-// ObserveBatch preserves the selected provider's explicit Unsupported or failure.
-// Only Unsupported permits the observation service to read targets individually.
-func (s *managedSetup) ObserveBatch(ctx context.Context, targets []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
+func (s *managedSetup) ResolveObservationSource(ctx context.Context) (runtimeobs.Source, error) {
 	selected, err := s.load(ctx)
 	if err != nil {
 		return nil, err
@@ -153,32 +145,11 @@ func (s *managedSetup) ObserveBatch(ctx context.Context, targets []runtimeobs.Ta
 	if selected == nil {
 		return nil, runtimeobs.ErrUnavailable
 	}
-	if err := providercontract.Require(selected.Provider, "ObserveBatch"); err != nil {
-		return nil, err
-	}
-	source, ok := selected.Provider.(runtimeobs.BatchSource)
+	source, ok := selected.Provider.(runtimeobs.Source)
 	if !ok {
 		return nil, providercontract.ErrContract
 	}
-	return source.ObserveBatch(ctx, targets)
-}
-
-func (s *managedSetup) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
-	selected, err := s.load(ctx)
-	if err != nil {
-		return runtimeobs.Sample{}, err
-	}
-	if selected == nil {
-		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
-	}
-	if err := providercontract.Require(selected.Provider, "Observe"); err != nil {
-		return runtimeobs.Sample{}, err
-	}
-	source, ok := selected.Provider.(runtimeobs.Source)
-	if !ok {
-		return runtimeobs.Sample{}, providercontract.ErrContract
-	}
-	return source.Observe(ctx, target)
+	return source, nil
 }
 
 func (s *managedSetup) provider(setup store.SandboxSetup) (sandbox.SandboxProvider, error) {

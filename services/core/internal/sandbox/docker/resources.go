@@ -91,3 +91,7 @@ func sampleFromDocker(inspected container.InspectResponse, stats dockerStatsResp
 	}
 	return sample, nil
 }
+
+func (p *Provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
+	return p, nil
+}

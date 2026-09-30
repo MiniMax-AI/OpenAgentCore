@@ -28,6 +28,12 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 		name   string
 		change func(providercontract.Operations)
 	}{
+		{"identity unsupported", func(o providercontract.Operations) {
+			o["ObservationProviderType"] = providercontract.Support{State: providercontract.Unsupported, Reason: "no_identity"}
+		}},
+		{"resolver unsupported", func(o providercontract.Operations) {
+			o["ResolveObservationSource"] = providercontract.Support{State: providercontract.Unsupported, Reason: "no_resolver"}
+		}},
 		{"omitted", func(o providercontract.Operations) { delete(o, "DeleteSnapshot") }},
 		{"zero", func(o providercontract.Operations) { o["ObserveBatch"] = providercontract.Support{} }},
 		{"unknown", func(o providercontract.Operations) {
@@ -108,5 +114,14 @@ func TestNewContractRequiresAnAuthoredDecision(t *testing.T) {
 		if err := providercontract.Validate(p, reflect.TypeFor[nextContract]()); !errors.Is(err, providercontract.ErrContract) {
 			t.Fatal("new operation inherited a default", err)
 		}
+	}
+}
+
+type invalidObservationIdentity struct{ *docker.Provider }
+
+func (*invalidObservationIdentity) ObservationProviderType() string { return "" }
+func TestProviderRegistrationRequiresObservationIdentity(t *testing.T) {
+	if err := sandbox.ValidateProvider(&invalidObservationIdentity{&docker.Provider{}}); !errors.Is(err, providercontract.ErrContract) {
+		t.Fatal("provider registration accepted empty observation identity", err)
 	}
 }

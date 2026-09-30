@@ -9,24 +9,26 @@ import (
 
 func (*lifecycleProvider) ProviderOperations() providercontract.Operations {
 	return providercontract.Operations{
-		"Create":            {State: providercontract.Supported},
-		"GetInfo":           {State: providercontract.Supported},
-		"Renew":             {State: providercontract.Supported},
-		"Kill":              {State: providercontract.Supported},
-		"RunCommand":        {State: providercontract.Supported},
-		"Initial":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"NewCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"GetCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"Suspend":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"Resume":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"KillCompute":       {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DeleteSnapshot":    {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"RunCommandCompute": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ResumeCompute":     {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"Observe":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ObserveBatch":      {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DiscoverSelection": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"VerifyCredential":  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Create":                   {State: providercontract.Supported},
+		"GetInfo":                  {State: providercontract.Supported},
+		"Renew":                    {State: providercontract.Supported},
+		"Kill":                     {State: providercontract.Supported},
+		"RunCommand":               {State: providercontract.Supported},
+		"Initial":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"NewCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"GetCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Suspend":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Resume":                   {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"KillCompute":              {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"DeleteSnapshot":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"RunCommandCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"ResumeCompute":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"ObservationProviderType":  {State: providercontract.Supported},
+		"ResolveObservationSource": {State: providercontract.Supported},
+		"Observe":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"ObserveBatch":             {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"DiscoverSelection":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"VerifyCredential":         {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 	}
 }
 func (*lifecycleProvider) Initial(context.Context, sandbox.Reference) (sandbox.Compute, error) {
@@ -70,23 +72,35 @@ func (*lifecycleProvider) VerifyCredential(context.Context, []sandbox.Reference)
 }
 func (*fakeCheckpointProvider) ProviderOperations() providercontract.Operations {
 	return providercontract.Operations{
-		"Create":            {State: providercontract.Supported},
-		"GetInfo":           {State: providercontract.Supported},
-		"Renew":             {State: providercontract.Supported},
-		"Kill":              {State: providercontract.Supported},
-		"RunCommand":        {State: providercontract.Supported},
-		"Initial":           {State: providercontract.Supported},
-		"NewCompute":        {State: providercontract.Supported},
-		"GetCompute":        {State: providercontract.Supported},
-		"Suspend":           {State: providercontract.Supported},
-		"Resume":            {State: providercontract.Supported},
-		"KillCompute":       {State: providercontract.Supported},
-		"DeleteSnapshot":    {State: providercontract.Supported},
-		"RunCommandCompute": {State: providercontract.Supported},
-		"ResumeCompute":     {State: providercontract.Supported},
-		"Observe":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"ObserveBatch":      {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DiscoverSelection": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"VerifyCredential":  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"Create":                   {State: providercontract.Supported},
+		"GetInfo":                  {State: providercontract.Supported},
+		"Renew":                    {State: providercontract.Supported},
+		"Kill":                     {State: providercontract.Supported},
+		"RunCommand":               {State: providercontract.Supported},
+		"Initial":                  {State: providercontract.Supported},
+		"NewCompute":               {State: providercontract.Supported},
+		"GetCompute":               {State: providercontract.Supported},
+		"Suspend":                  {State: providercontract.Supported},
+		"Resume":                   {State: providercontract.Supported},
+		"KillCompute":              {State: providercontract.Supported},
+		"DeleteSnapshot":           {State: providercontract.Supported},
+		"RunCommandCompute":        {State: providercontract.Supported},
+		"ResumeCompute":            {State: providercontract.Supported},
+		"ObservationProviderType":  {State: providercontract.Supported},
+		"ResolveObservationSource": {State: providercontract.Supported},
+		"Observe":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"ObserveBatch":             {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"DiscoverSelection":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"VerifyCredential":         {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 	}
+}
+
+func (*lifecycleProvider) ObservationProviderType() string { return "fixture" }
+func (p *lifecycleProvider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
+	return p, nil
+}
+
+func (*fakeCheckpointProvider) ObservationProviderType() string { return "fixture" }
+func (p *fakeCheckpointProvider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
+	return p, nil
 }

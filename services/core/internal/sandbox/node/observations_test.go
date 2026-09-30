@@ -93,7 +93,7 @@ func TestObservationsRouteThroughAssignedNodeWithoutLifecycleCalls(t *testing.T)
 		}
 		return "", 0, sandbox.ErrOwnership
 	}).(runtimeobs.Source)
-	if typed := source.(interface{ ObservationProviderType() string }).ObservationProviderType(); typed != "docker" {
+	if typed := source.ObservationProviderType(); typed != "docker" {
 		t.Fatal("provider type lost", typed)
 	}
 	for _, test := range []struct {

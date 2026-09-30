@@ -10,7 +10,7 @@ func TestExporterOutageDoesNotDelayOtherDestinations(t *testing.T) {
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	blocked := &gatedExporter{started: make(chan struct{}, 1), release: make(chan struct{})}
 	records := make(chan ExportRecord, 1)
-	service, err := NewService(fixedResolver{target: target}, map[string]Source{"provider": &fixedSource{sample: Sample{ObservedAt: now}}},
+	service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": &fixedSource{sample: Sample{ObservedAt: now}}},
 		WithExporter(blocked, ExportOptions{QueueCapacity: 1, Timeout: time.Second}),
 		WithExporter(channelExporter{records: records}, ExportOptions{QueueCapacity: 1, Timeout: time.Second}))
 	if err != nil {

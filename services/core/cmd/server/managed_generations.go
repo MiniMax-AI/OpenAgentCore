@@ -26,9 +26,10 @@ type generationStore interface {
 // immutable specification and current credential. There is no mutable provider
 // map to unload and no current-generation fallback for a missing historical row.
 type generationRouter struct {
-	setup      *managedSetup
-	store      generationStore
-	operations providercontract.Operations
+	setup        *managedSetup
+	store        generationStore
+	operations   providercontract.Operations
+	providerType string
 }
 
 func (p *generationRouter) route(ctx context.Context, r sandbox.Reference) (sandbox.SandboxProvider, func(), error) {
@@ -91,6 +92,11 @@ func (p *generationRouter) RunCommand(ctx context.Context, r sandbox.Reference, 
 
 type observedGenerationRouter struct{ *generationRouter }
 
+func (p *observedGenerationRouter) ObservationProviderType() string { return p.providerType }
+func (p *observedGenerationRouter) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
+	return p, nil
+}
+
 func (p *generationRouter) ProviderOperations() providercontract.Operations {
 	return maps.Clone(p.operations)
 }
@@ -106,6 +112,9 @@ func (p *observedGenerationRouter) Observe(ctx context.Context, t runtimeobs.Tar
 	}
 	source, ok := v.(runtimeobs.Source)
 	if !ok {
+		return runtimeobs.Sample{}, providercontract.ErrContract
+	}
+	if source.ObservationProviderType() != p.providerType {
 		return runtimeobs.Sample{}, providercontract.ErrContract
 	}
 	return source.Observe(ctx, t)
@@ -127,7 +136,7 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 	if !ok {
 		return execution.PreparedRuntimeDeployment{}, errors.New("sandbox generation store is unavailable")
 	}
-	router := &generationRouter{setup: s, store: db, operations: candidate.Config.Provider.ProviderOperations()}
+	router := &generationRouter{setup: s, store: db, providerType: candidate.Config.Provider.(runtimeobs.Source).ObservationProviderType(), operations: candidate.Config.Provider.ProviderOperations()}
 	router.operations["ObserveBatch"] = providercontract.Support{State: providercontract.Unsupported, Reason: "allocations_require_individual_generation_routing"}
 	router.operations["DiscoverSelection"] = providercontract.Support{State: providercontract.Unsupported, Reason: "generation_router_does_not_discover_configuration"}
 	router.operations["VerifyCredential"] = providercontract.Support{State: providercontract.Unsupported, Reason: "generation_router_does_not_verify_configuration"}

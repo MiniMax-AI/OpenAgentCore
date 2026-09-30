@@ -13,11 +13,14 @@ import (
 var providerInterfaces = []reflect.Type{
 	reflect.TypeFor[SandboxProvider](), reflect.TypeFor[CheckpointProvider](),
 	reflect.TypeFor[SelectionDiscoverer](), reflect.TypeFor[CredentialVerifier](),
-	reflect.TypeFor[runtimeobs.Source](), reflect.TypeFor[runtimeobs.BatchSource](),
+	reflect.TypeFor[runtimeobs.SourceResolver](), reflect.TypeFor[runtimeobs.Source](), reflect.TypeFor[runtimeobs.BatchSource](),
 }
 
 func ValidateProvider(p SandboxProvider) error {
 	if err := providercontract.Validate(p, providerInterfaces...); err != nil {
+		return err
+	}
+	if err := runtimeobs.ValidateSource(p.(runtimeobs.Source)); err != nil {
 		return err
 	}
 	return ValidateOperations(p.ProviderOperations())
@@ -46,6 +49,11 @@ func ValidateOperations(operations providercontract.Operations) error {
 	for i := 0; i < required.NumMethod(); i++ {
 		name := required.Method(i).Name
 		if name != "ProviderOperations" && operations[name].State != providercontract.Supported {
+			return fmt.Errorf("%w: required operation %s", providercontract.ErrContract, name)
+		}
+	}
+	for _, name := range []string{"ObservationProviderType", "ResolveObservationSource"} {
+		if operations[name].State != providercontract.Supported {
 			return fmt.Errorf("%w: required operation %s", providercontract.ErrContract, name)
 		}
 	}

@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"reflect"
-	"regexp"
 	"sync"
 	"time"
-)
 
-var providerTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
+)
 
 type Observation struct {
 	Target         Target
@@ -32,12 +30,12 @@ const (
 
 type Service struct {
 	resolver TargetResolver
-	sources  map[string]Source
+	sources  map[string]SourceResolver
 	now      func() time.Time
 	exports  []*exportDispatcher
 }
 
-func NewService(resolver TargetResolver, sources map[string]Source, options ...ServiceOption) (*Service, error) {
+func NewService(resolver TargetResolver, sources map[string]SourceResolver, options ...ServiceOption) (*Service, error) {
 	if resolver == nil {
 		return nil, errors.New("Runtime observation resolver is required")
 	}
@@ -50,13 +48,16 @@ func NewService(resolver TargetResolver, sources map[string]Source, options ...S
 			return nil, err
 		}
 	}
-	copySources := make(map[string]Source, len(sources))
+	copySources := make(map[string]SourceResolver, len(sources))
 	for key, source := range sources {
 		if key == "" || source == nil {
 			return nil, errors.New("invalid Runtime observation source")
 		}
-		if err := providercontract.Validate(source, reflect.TypeFor[Source](), reflect.TypeFor[BatchSource]()); err != nil {
+		if err := providercontract.Validate(source, reflect.TypeFor[SourceResolver]()); err != nil {
 			return nil, err
+		}
+		if err := providercontract.Require(source, "ResolveObservationSource"); err != nil {
+			return nil, fmt.Errorf("%w: observation source resolution must be supported", providercontract.ErrContract)
 		}
 		copySources[key] = source
 	}
@@ -175,6 +176,22 @@ func (s *Service) observeSessions(ctx context.Context, sessions []SessionIdentit
 	}
 	for _, key := range keys {
 		group := groups[key]
+		sourceCtx, stop := sourceContext(ctx, options.SourceTimeout)
+		source, err := s.sources[key].ResolveObservationSource(sourceCtx)
+		stop()
+		if err == nil {
+			err = ValidateSource(source)
+		}
+		if err != nil {
+			for _, read := range group {
+				observations[read.index], errs[read.index] = s.complete(ctx, read, Sample{}, err, 0, collectionSource, owner)
+			}
+			continue
+		}
+		providerType := source.ObservationProviderType()
+		for _, read := range group {
+			read.source, read.providerType = source, providerType
+		}
 		for start := 0; start < len(group); start += MaxBatchTargets {
 			chunk := group[start:min(start+MaxBatchTargets, len(group))]
 			if s.readBatch(ctx, chunk, observations, errs, collectionSource, owner, options.SourceTimeout) {
@@ -300,18 +317,11 @@ func (s *Service) resolve(ctx context.Context, tenantID, sessionID string, owner
 	default:
 		return Observation{}, nil, errors.New("invalid managed Runtime allocation state")
 	}
-	source, ok := s.sources[target.Instance.ProviderKey]
+	_, ok := s.sources[target.Instance.ProviderKey]
 	if !ok {
 		return Observation{Target: target, Status: StatusUnavailable, Reason: "source_not_configured", ResolvedAt: resolvedAt}, nil, nil
 	}
-	providerType := ""
-	if typed, ok := source.(interface{ ObservationProviderType() string }); ok {
-		providerType = typed.ObservationProviderType()
-		if providerType != "" && !providerTypePattern.MatchString(providerType) {
-			return Observation{}, nil, errors.New("invalid Runtime observation provider type")
-		}
-	}
-	return Observation{}, &sourceRead{key: target.Instance.ProviderKey, source: source, target: target, providerType: providerType}, nil
+	return Observation{}, &sourceRead{key: target.Instance.ProviderKey, target: target}, nil
 }
 
 // complete classifies one provider result and hands it to history export.

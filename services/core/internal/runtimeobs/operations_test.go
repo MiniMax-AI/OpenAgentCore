@@ -15,7 +15,7 @@ type failingBatchSource struct {
 }
 
 func (*failingBatchSource) ProviderOperations() providercontract.Operations {
-	return providercontract.Operations{"Observe": {State: providercontract.Supported}, "ObserveBatch": {State: providercontract.Supported}}
+	return providercontract.Operations{"ResolveObservationSource": {State: providercontract.Supported}, "ObservationProviderType": {State: providercontract.Supported}, "Observe": {State: providercontract.Supported}, "ObserveBatch": {State: providercontract.Supported}}
 }
 func (s *failingBatchSource) ObserveBatch(context.Context, []Target) ([]BatchResult, error) {
 	s.batches++
@@ -40,7 +40,7 @@ func TestBatchFallbackRequiresExplicitSafeUnsupported(t *testing.T) {
 			ratio := 0.5
 			source := &failingBatchSource{fixedSource: &fixedSource{sample: Sample{ObservedAt: now, CPUUtilizationRatio: &ratio}}, batchErr: test.err}
 			target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
-			service, err := NewService(fixedResolver{target: target}, map[string]Source{"provider": source})
+			service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,12 +58,12 @@ func TestBatchFallbackRequiresExplicitSafeUnsupported(t *testing.T) {
 type unsupportedObservation struct{ *fixedSource }
 
 func (*unsupportedObservation) ProviderOperations() providercontract.Operations {
-	return providercontract.Operations{"Observe": {State: providercontract.Unsupported, Reason: "native_metrics_not_supported"}, "ObserveBatch": {State: providercontract.Unsupported, Reason: "native_metrics_not_supported"}}
+	return providercontract.Operations{"ResolveObservationSource": {State: providercontract.Supported}, "ObservationProviderType": {State: providercontract.Supported}, "Observe": {State: providercontract.Unsupported, Reason: "native_metrics_not_supported"}, "ObserveBatch": {State: providercontract.Unsupported, Reason: "native_metrics_not_supported"}}
 }
 func TestUnsupportedObservationIsNotUnavailable(t *testing.T) {
 	source := &unsupportedObservation{&fixedSource{}}
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
-	service, err := NewService(fixedResolver{target: target}, map[string]Source{"provider": source})
+	service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
 	if err != nil {
 		t.Fatal(err)
 	}
