@@ -26,11 +26,11 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	journal := sessionExecution(t, w.lease)
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
-	host, err := s.CreateDevice(ctx, tenant, "identity test", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := sessionService(t, s).CreateDevice(ctx, tenant, "identity test", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = w.BindSessionDevice(ctx, tenant, session.ID, host.ID); err != nil {
+	if err = sessionExecution(t, w.lease).BindSessionDevice(ctx, tenant, session.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "first")
@@ -89,7 +89,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = w.BindSessionDevice(ctx, tenant, foreign.ID, host.ID); err != nil {
+	if err = sessionExecution(t, w.lease).BindSessionDevice(ctx, tenant, foreign.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	foreignInput := submitMessage(t, s, tenant, foreign.ID, "first")

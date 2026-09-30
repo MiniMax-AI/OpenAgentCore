@@ -32,7 +32,7 @@ func TestManagedRuntimeScanWrapServicesNextPage(t *testing.T) {
 			w, _ := managedWorker(t, s, db, key, p)
 			var ids []string
 			for range count {
-				tenant, _, env := managedSession(t, s)
+				tenant, _, env := managedSession(t, s, db)
 				owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 				if err != nil {
 					t.Fatal(err)
@@ -69,7 +69,7 @@ func TestManagedRuntimeScanEmptyAfterCleanupAndCanceledCall(t *testing.T) {
 	p := &scanProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
 	key := uuid.NewString()
 	w, _ := managedWorker(t, s, db, key, p)
-	tenant, session, env := managedSession(t, s)
+	tenant, session, env := managedSession(t, s, db)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestManagedRuntimeScanEmptyAfterCleanupAndCanceledCall(t *testing.T) {
 		}
 	}
 	// A new allocation remains discoverable after the store becomes empty.
-	tenant, _, env = managedSession(t, s)
+	tenant, _, env = managedSession(t, s, db)
 	next, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil {
 		t.Fatal(err)

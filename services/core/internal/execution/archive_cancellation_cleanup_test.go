@@ -113,7 +113,8 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if scenario.delivery {
 				server := httptest.NewUnstartedServer(nil)
 				wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-				handler, liveRegistry, err := runtime.NewGateway(s, wsURL)
+				credentials, heartbeat := testSessions(t, pool, testCredentialCipher(t))
+				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, s, wsURL)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -165,7 +166,8 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal("Kill bypassed durable cleanup ownership", allocation, err)
 				}
 			}}
-			lifecycle := &runtimeLifecycle{store: writer, lease: leased.Lease, registry: registry, config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
+			reader, _ := testSessions(t, pool, testCredentialCipher(t))
+			lifecycle := &runtimeLifecycle{store: writer, sessions: reader, sessionExecution: leased.Sessions, lease: leased.Lease, registry: registry, config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
 			if checkpoint {
 				lifecycle.config.Provider = waitingCleanupCheckpoint{beforeKill: provider.beforeKill}
 			}

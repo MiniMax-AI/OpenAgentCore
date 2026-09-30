@@ -67,7 +67,7 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 func databaseSessionReads(s *store.Store, pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 	return func(d *Dependencies, _ *testFakes) {
 		d.Sessions, d.Turns, d.SessionAdmin = s, s, s
-		d.Items = sessionpg.New(pgunit.NewPool(pool))
+		d.Items = sessionpg.New(pgunit.NewPool(pool), nil)
 	}
 }
 

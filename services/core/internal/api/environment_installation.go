@@ -113,7 +113,7 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	environment, err := h.Environments.GetEnvironment(r.Context(), claim.Principal.TenantID, claim.Environment)
+	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), claim.Principal.TenantID, claim.Environment)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

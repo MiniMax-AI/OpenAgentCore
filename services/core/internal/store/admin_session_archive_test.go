@@ -154,7 +154,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if !reflect.DeepEqual(history, adminMutationSnapshot(t, s, "sessions", "turns", "session_items", "session_artifacts", "source_files", "pg_largeobject", "pg_largeobject_metadata")) {
 		t.Fatal("archive changed persisted history or artifacts")
 	}
-	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("archive retained runtime authority", err)
 	}
 	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
@@ -235,7 +235,7 @@ func TestManagedSessionArchivePreservesFailuresAndRejectsSelfHosted(t *testing.T
 	if _, err := s.pool.Exec(t.Context(), "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.FailEnvironmentInitialization(t.Context(), sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}, sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
+	if err := sessionExecution(t, w.lease).FailEnvironmentInitialization(t.Context(), sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}, sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
 		t.Fatal(err)
 	}
 	failed, err := s.GetSession(t.Context(), tenant, session.ID)

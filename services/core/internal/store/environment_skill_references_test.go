@@ -65,7 +65,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 	}
 	assertFrozen := func(id, version string, archive []byte) {
 		t.Helper()
-		setup, err := s.ReadEnvironmentSetup(t.Context(), tenant, id)
+		setup, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, id)
 		if err != nil || len(setup.Skills) != 1 || setup.Skills[0].Metadata.Type != "skill_reference" || setup.Skills[0].Metadata.SkillID != skill.ID || setup.Skills[0].Metadata.Version != version || !bytes.Equal(setup.Skills[0].Archive, archive) {
 			t.Fatal("incorrect frozen installation", err)
 		}
@@ -119,7 +119,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		t.Fatal("committed retry read deleted sources", err)
 	}
 	assertFrozen(sessionID, "1", first)
-	if _, err = s.ReadEnvironmentSetup(t.Context(), uuid.NewString(), sessionID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).ReadEnvironmentSetup(t.Context(), uuid.NewString(), sessionID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant read frozen Skill", err)
 	}
 }

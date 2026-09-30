@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -73,7 +74,7 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 		return false, sessions.ErrInvalidInput
 	}
 	if snapshot.Environment != nil && (snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted") {
-		environment, err := w.dispatcher.Store.GetSessionEnvironment(ctx, session.TenantID, session.ID)
+		environment, err := w.dispatcher.SessionsReader.GetSessionEnvironment(ctx, session.TenantID, session.ID)
 		if err != nil {
 			return false, err
 		}
@@ -92,13 +93,13 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 			// resumes. Its first control frame must remain the lifecycle's Resume.
 			return false, nil
 		}
-		bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
+		bound, err := w.dispatcher.SessionsReader.GetSessionDevice(ctx, session.TenantID, session.ID)
 		if errors.Is(err, sessions.ErrNotFound) {
 			return false, nil
 		}
 		return err == nil && environmentDeviceMatches(session, environment, bound) && ready(bound.ID), err
 	}
-	bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
+	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(ctx, session.TenantID, session.ID)
 	if err == nil {
 		return bound.EnvironmentID == "" && ready(bound.ID), nil
 	}
@@ -113,7 +114,7 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 		if !ready(device.ID) {
 			continue
 		}
-		err := w.dispatcher.Store.BindSessionDevice(ctx, session.TenantID, session.ID, device.ID)
+		err := w.dispatcher.sessionExecution.BindSessionDevice(ctx, session.TenantID, session.ID, device.ID)
 		return err == nil, err
 	}
 	return false, nil

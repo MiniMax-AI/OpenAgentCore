@@ -21,11 +21,11 @@ type fileWriteFixture struct {
 
 func newFileWriteFixture(t *testing.T) fileWriteFixture {
 	t.Helper()
-	s, _ := testStore(t)
+	s, pool := testStore(t)
 	writer := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, env := localEnvironment(t, s, tenant)
-	host, err := s.CreateEnvironmentDevice(t.Context(), tenant, env.ID, "file owner", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := FixtureEnvironmentDevice(t.Context(), pool, tenant, env.ID, "file owner", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 	if _, err := reopened.SubmitMessage(ctx, f.tenant, f.session.ID, "direct", messageInput("new").Payload); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("direct admission bypassed write", err)
 	}
-	if _, err := reopened.GetEnvironment(ctx, f.tenant, f.env.ID); err != nil {
+	if _, err := sessionAdapter(reopened).GetEnvironment(ctx, f.tenant, f.env.ID); err != nil {
 		t.Fatal("write gate prevented metadata read", err)
 	}
 	if _, err := reopened.GetSession(ctx, f.tenant, f.session.ID); err != nil {

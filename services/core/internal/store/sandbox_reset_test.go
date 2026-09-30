@@ -307,7 +307,7 @@ func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 	if err := deploymentService(t, s).RemoveNode(t.Context(), process.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("removed node with reset resources", err)
 	}
-	if row, err := s.GetEnvironment(t.Context(), pending.TenantID, pending.Environment.ID); err == nil && row.Status == "expired" {
+	if row, err := sessionAdapter(s).GetEnvironment(t.Context(), pending.TenantID, pending.Environment.ID); err == nil && row.Status == "expired" {
 		t.Fatal("projection mutated pending resource")
 	}
 }

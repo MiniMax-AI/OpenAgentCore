@@ -76,11 +76,11 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	tenant, active := newTurnSession(t, s)
 	input := submitMessage(t, s, tenant, active.ID, "active")
 	transition(t, writer, tenant, active.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	host, err := s.CreateDevice(t.Context(), tenant, "owner test", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "owner test", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = writer.BindSessionDevice(t.Context(), tenant, active.ID, host.ID); err != nil {
+	if err = sessionExecution(t, writer.lease).BindSessionDevice(t.Context(), tenant, active.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	queued, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "queued"})
@@ -121,7 +121,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 			t.Fatalf("stale %s committed while successor owned lease", name)
 		}
 	}
-	mustReject("binding", writer.BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
+	mustReject("binding", sessionExecution(t, writer.lease).BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
 	_, err = writer.TransitionTurn(t.Context(), tenant, queued.ID, pending.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	mustReject("claim", err)
 	mustReject("journal", operations.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"stale"}`)}}))
@@ -150,7 +150,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if err != nil || saved.Applied {
 		t.Fatal("stale receipt persisted", saved, err)
 	}
-	if _, err = s.GetSessionDevice(t.Context(), tenant, queued.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).GetSessionDevice(t.Context(), tenant, queued.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("stale binding persisted", err)
 	}
 	queuedTurn, err := s.GetTurn(t.Context(), tenant, queued.ID, pending.TurnID)
@@ -176,7 +176,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if err = successor.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	mustReject("closed writer", successor.BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
+	mustReject("closed writer", sessionExecution(t, successor.lease).BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
 }
 
 func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
@@ -262,11 +262,9 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	_, archiveErr := s.ArchiveManagedSession(t.Context(), tenant, session.ID, 0)
 	_, expiryErr := s.ExpireEnvironmentInputs(t.Context())
 	for name, err := range map[string]error{
-		"ownership check":   s.checkExecutionOwnership(t.Context()),
-		"archive":           archiveErr,
-		"input expiry":      expiryErr,
-		"reconciliation":    s.ReconcileEnvironmentConnections(t.Context()),
-		"connection change": s.ReplaceEnvironmentConnection(t.Context(), tenant, uuid.NewString(), uuid.NewString()),
+		"ownership check": s.checkExecutionOwnership(t.Context()),
+		"archive":         archiveErr,
+		"input expiry":    expiryErr,
 	} {
 		if !errors.Is(err, ErrExecutionAuthority) {
 			t.Fatalf("pooled Store ran %s: %v", name, err)

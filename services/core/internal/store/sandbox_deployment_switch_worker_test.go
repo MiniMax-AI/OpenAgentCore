@@ -145,7 +145,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), cloud); err != nil {
 		t.Fatal("setup after unconfigured publication", err)
 	}
-	tenant, session, environment := managedSession(t, s)
+	tenant, session, environment := managedSession(t, s, db)
 	allocation, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, id)
 	if err != nil || allocation.NodeID != "" || allocation.State != "running" {
 		t.Fatal("direct provider not available after resume", allocation, err)

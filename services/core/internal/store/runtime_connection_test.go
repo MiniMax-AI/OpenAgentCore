@@ -21,10 +21,10 @@ import (
 
 func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, session, environment := managedSession(t, s)
+	tenant, session, environment := managedSession(t, s, db)
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(s, wsURL)
+	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 			if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			got, err := s.GetEnvironment(t.Context(), tenant, environment.ID)
+			got, err := fixtureSessionStore(db).GetEnvironment(t.Context(), tenant, environment.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -90,7 +90,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	if err != nil || got.LastTurn != nil || got.EnvironmentInputActivity != nil {
 		t.Fatal("connection fabricated native execution", err)
 	}
-	if _, err := s.GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := fixtureSessionStore(db).GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment access", err)
 	}
 	p.unavailable = true

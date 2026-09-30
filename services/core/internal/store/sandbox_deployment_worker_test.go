@@ -73,7 +73,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		}
 	}
 	connect()
-	tenant, _, environment := managedSession(t, s)
+	tenant, _, environment := managedSession(t, s, db)
 	allocation, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, id)
 	if err != nil || allocation.NodeID != nodeID || p.creates != 1 {
 		t.Fatal("activation failed", allocation, err)

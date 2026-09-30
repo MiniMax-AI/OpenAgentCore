@@ -38,7 +38,7 @@ type EnvironmentWorkspaces interface {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id}/files [get]
 func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
-	environment, err := h.Environments.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
+	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

@@ -221,7 +221,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	failure := sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 2, ExitCode: 7}
 	runtimeSuspensionSQL(t, pool, "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID)
 	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
-	if err = writer.FailEnvironmentInitialization(t.Context(), preparation, failure); err == nil {
+	if err = sessionExecution(t, writer.lease).FailEnvironmentInitialization(t.Context(), preparation, failure); err == nil {
 		t.Fatal("failure committed without events")
 	}
 	var detail []byte
@@ -229,7 +229,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 		t.Fatal("partial failure detail", string(detail), err)
 	}
 	runtimeSuspensionSQL(t, pool, "ALTER TABLE session_events DROP CONSTRAINT "+constraint)
-	if err = writer.FailEnvironmentInitialization(t.Context(), preparation, failure); err != nil {
+	if err = sessionExecution(t, writer.lease).FailEnvironmentInitialization(t.Context(), preparation, failure); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID)

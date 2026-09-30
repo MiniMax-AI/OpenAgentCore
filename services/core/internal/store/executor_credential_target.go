@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -50,7 +51,7 @@ func (s *Store) withExecutorCredentialTarget(ctx context.Context, principal iden
 	if !environment.Valid {
 		return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error { return apply(ctx, s.queries.WithTx(tx)) })
 	}
-	owned, err := s.GetEnvironment(ctx, principal.TenantID, uuid.UUID(environment.Bytes).String())
+	owned, err := sessionpg.LoadEnvironment(ctx, s.queries, principal.TenantID, uuid.UUID(environment.Bytes).String())
 	if err != nil {
 		return err
 	}

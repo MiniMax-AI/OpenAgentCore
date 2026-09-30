@@ -46,17 +46,25 @@ func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*st
 func resetManagerStoreDB(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *deployment.Service, deployment.Reader, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.OpenIsolated(t, configure)
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
+	cipher := testCredentialCipher(t)
 	s := store.NewWithCredentialCipher(pool, cipher)
 	owner, deployments, reader := testOwner(t, pool, cipher, s)
 	return s, owner, deployments, reader, pool
 }
 
+// testCredentialCipher is the credential key of the Store resetManagerStoreDB
+// builds, for adapters built beside it.
+func testCredentialCipher(t *testing.T) *credentialcrypto.Cipher {
+	t.Helper()
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cipher
+}
+
 // testOwner acquires the execution lease on pool and builds s's execution
-// writer and the deployment execution operations on it, and the pooled
+// writer and the deployment and Session execution operations on it, and the pooled
 // deployment service and reader, as cmd/server does. The lease closes when the
 // test ends.
 func testOwner(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, s *store.Store) (Owner, *deployment.Service, deployment.Reader) {
@@ -98,7 +106,7 @@ func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
 	})
-	m, err := newRuntimeManager(owner, deployments, reader, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +227,7 @@ func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
 		}
 		published = append(published, generation)
 	}
-	m, err := newRuntimeManager(owner, deployments, adapter, runtimegateway.NewRegistry(), config)
+	m, err := newRuntimeManager(owner, deployments, adapter, nil, runtimegateway.NewRegistry(), config)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +262,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 		return deployment.Snapshot{Record: deployment.Record{InstallationID: id, WebManaged: true, Generation: 1}}, nil
 	}}
 	deployments, operations := deploymentOperations(t, &strictDeploymentStorage{t: t}, reader, &strictExecutionStorage{t: t})
-	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(Owner{Lease: lostLease{}, Deployment: operations}, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +284,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 func TestSandboxResetChangesReturnViewReadAfterCommit(t *testing.T) {
 	_, owner, deployments, reader := resetManagerStore(t)
 	id := initializeE2BDeployment(t, owner)
-	m, err := newRuntimeManager(owner, deployments, reader, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {
 		t.Fatal(err)
 	}

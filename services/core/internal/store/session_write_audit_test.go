@@ -53,7 +53,7 @@ func TestSessionWriteAuditCreationReplayNoopAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env, err := s.GetSessionEnvironment(t.Context(), tenant, created.ID)
+	env, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

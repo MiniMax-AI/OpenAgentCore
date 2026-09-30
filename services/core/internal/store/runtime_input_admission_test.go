@@ -14,7 +14,7 @@ import (
 
 func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, session, _ := managedSession(t, s)
+	tenant, session, _ := managedSession(t, s, db)
 	inputs := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"accepted work"}`)}}
 	accepted, err := s.SubmitInputs(t.Context(), tenant, session.ID, "work", inputs)
 	if err != nil {

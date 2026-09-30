@@ -56,7 +56,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
-	owned, err := s.GetEnvironment(ctx, tenant, environment)
+	owned, err := sessionpg.LoadEnvironment(ctx, s.queries, tenant, environment)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
@@ -70,10 +70,11 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
-	device, err := newDeviceParams(lookup.TenantID, "managed-runtime", credentialHash)
+	registration, err := sessions.NewDeviceRegistration("managed-runtime", credentialHash)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
+	deviceID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	var result RuntimeAllocation
 	err = s.withPublicSession(ctx, tenant, owned.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		previous, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
@@ -115,13 +116,13 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 			nodeID = placement.NodeID
 			generation = placement.DeploymentGeneration
 		}
-		dedicated := sessions.ExecutionDevice{ID: uuid.UUID(device.ID.Bytes).String(), Name: device.Name, EnvironmentID: owned.ID}
-		if err := sessions.CreateEnvironmentDevice(ctx, sessionpg.BindSession(q, lookup.TenantID, session), dedicated, device.CredentialHash.String); err != nil {
+		dedicated := sessions.ExecutionDevice{ID: uuid.UUID(deviceID.Bytes).String(), Name: registration.Name, EnvironmentID: owned.ID}
+		if err := sessions.CreateEnvironmentDevice(ctx, sessionpg.BindSession(q, lookup.TenantID, session), dedicated, registration.CredentialHash); err != nil {
 			return err
 		}
 		row, err := q.CreateRuntimeAllocation(ctx, sqlc.CreateRuntimeAllocationParams{
 			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, EnvironmentID: lookup.ID,
-			DeviceID: device.ID, ProviderKey: provider, NodeID: nodeID, DeploymentGeneration: generation,
+			DeviceID: deviceID, ProviderKey: provider, NodeID: nodeID, DeploymentGeneration: generation,
 		})
 		if err == nil {
 			result = runtimeAllocationFromRow(row, session, lookup.TenantID, pgtype.Timestamptz{}, false)

@@ -105,7 +105,7 @@ func TestExecutorPrincipalMigrationRetiresUnknownAuthority(t *testing.T) {
 	t.Cleanup(migrated.Close)
 	s := New(migrated)
 	p := FixtureExecutorPrincipal(t, s, tenant)
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment, digest); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment, digest); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("legacy credential accepted", err)
 	}
 	if _, err := s.IssueExecutorCredential(ctx, p, environment, ""); !errors.Is(err, sessions.ErrExecutorCredentialExists) {

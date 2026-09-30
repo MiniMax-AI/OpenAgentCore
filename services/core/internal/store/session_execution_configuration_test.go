@@ -256,7 +256,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

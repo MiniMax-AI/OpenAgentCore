@@ -6,12 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -62,7 +63,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			env, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+			env, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -73,7 +74,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			}
 			p := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, initializationPeer: initializationPeer{deferred: true}}
 			p.apply = func(_ proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
-				if _, err := s.GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+				if _, err := fixtureSessionStore(db).GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Error("premature file access", err)
 				}
 				if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
@@ -87,7 +88,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			key := uuid.NewString()
 			w, stop := managedWorkerMode(t, s, db, key, p, false, true)
 			if mode == "restart" {
-				awaitInitialization(t, s, tenant, env.ID, "failed")
+				awaitInitialization(t, db.pool, tenant, env.ID, "failed")
 				if p.writes.Load() != 0 {
 					t.Fatal("recovered unknown operation replayed")
 				}
@@ -97,11 +98,11 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
+			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
 				t.Fatal("preparation blocked authentication", err)
 			}
 			time.Sleep(350 * time.Millisecond)
-			if initializationState(t, s, tenant, env.ID) != "pending" || p.writes.Load() != 0 {
+			if initializationState(t, db.pool, tenant, env.ID) != "pending" || p.writes.Load() != 0 {
 				t.Fatal("missing socket consumed initialization")
 			}
 			p.deferred = false
@@ -112,7 +113,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 			if mode == "uncertain" {
 				want = "failed"
 			}
-			awaitInitialization(t, s, tenant, env.ID, want)
+			awaitInitialization(t, db.pool, tenant, env.ID, want)
 			if mode == "complete" {
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("missing operations", p.writes.Load())
@@ -157,7 +158,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	}
 	tenant := uuid.NewString()
 	fileBody := bytes.Repeat([]byte("bounded bytes"), 12000)
-	session, environment := hostedFailureSession(t, s, tenant, sessions.CreateSession{
+	session, environment := hostedFailureSession(t, s, db, tenant, sessions.CreateSession{
 		InitialFiles:   []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/first", Data: fileBody}},
 		Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Plugins: []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "A plugin."}, Archive: archive.Bytes()}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}, Python: []string{"packaging==24.2"}}, Commands: []environmentconfig.SetupCommand{{Command: "read installed bundles and create directory"}}, CapabilityDirectories: []string{"/workspace/generated"}},
 	})
@@ -185,7 +186,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	if _, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
-	awaitInitialization(t, s, tenant, environment.ID, "complete")
+	awaitInitialization(t, db.pool, tenant, environment.ID, "complete")
 	actionsMu.Lock()
 	defer actionsMu.Unlock()
 	expected := []string{"file", "configure", "skill", "plugin", "npm", "python", "setup", "finalize"}
@@ -193,7 +194,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 		t.Fatal("typed ordering or provider isolation", actions, provider.commandCalls.Load())
 	}
 	allocation, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
-	if err != nil || initializationState(t, s, allocation.TenantID, allocation.EnvironmentID) != "complete" {
+	if err != nil || initializationState(t, db.pool, allocation.TenantID, allocation.EnvironmentID) != "complete" {
 		t.Fatal("initialization incomplete", allocation, err)
 	}
 }

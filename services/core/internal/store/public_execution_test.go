@@ -64,7 +64,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	if inputTextForTest(t, prompt.Input) != "First\n\nSecond" || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) || prompt.AgentOptions["web_search"] != nil || prompt.AgentOptions["model_verbosity"] != nil {
 		t.Fatal(prompt)
 	}
-	bound, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID)
+	bound, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.ID != h.device.ID {
 		t.Fatal(bound, err)
 	}

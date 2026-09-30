@@ -77,7 +77,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	}
 	owned.notifications = &executionNotifications{}
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
-	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.Registry, owned.ManagedRuntimes)
+	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.ManagedRuntimes)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if err != nil {
 		return nil, err
 	}
-	if err = owned.Store.ReconcileEnvironmentConnections(ctx); err != nil {
+	if err = owned.sessionExecution.ReconcileEnvironmentConnections(ctx); err != nil {
 		return nil, err
 	}
 	if err = worker.reconcile(ctx); err != nil {

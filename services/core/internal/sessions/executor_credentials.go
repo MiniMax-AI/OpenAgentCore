@@ -1,10 +1,20 @@
 package sessions
 
 import (
+	"context"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 )
+
+// ExecutorCredentialReader authenticates Environment executor credentials.
+type ExecutorCredentialReader interface {
+	// AuthenticateEnvironmentExecutor checks, in one database snapshot, that
+	// the credential whose SHA-256 digest is given is current for the
+	// Environment and belongs to its Session's creator, and returns the
+	// Session's tenant. Any other credential is ErrNotFound.
+	AuthenticateEnvironmentExecutor(ctx context.Context, environment, digest string) (string, error)
+}
 
 type IssuedExecutorCredential struct {
 	KeyID         string `json:"key_id"`

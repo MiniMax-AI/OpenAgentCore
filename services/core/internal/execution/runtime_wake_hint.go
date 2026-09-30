@@ -23,7 +23,7 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session sessions.Session) 
 	}
 	lookup, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	environment, err := w.admission.GetSessionEnvironment(lookup, session.TenantID, session.ID)
+	environment, err := w.dispatcher.SessionsReader.GetSessionEnvironment(lookup, session.TenantID, session.ID)
 	if err != nil || environment.Initialization != "complete" {
 		return
 	}

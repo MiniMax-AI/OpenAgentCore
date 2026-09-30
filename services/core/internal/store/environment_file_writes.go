@@ -25,7 +25,7 @@ func (s *Store) ReserveEnvironmentFileWrite(ctx context.Context, tenant, environ
 	if !key.Valid() {
 		return sessions.EnvironmentFileWrite{}, sessions.ErrInvalidInput
 	}
-	owned, err := s.GetEnvironment(ctx, tenant, environment)
+	owned, err := sessionpg.LoadEnvironment(ctx, s.queries, tenant, environment)
 	if err != nil {
 		return sessions.EnvironmentFileWrite{}, err
 	}

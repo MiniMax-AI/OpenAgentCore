@@ -11,11 +11,21 @@ import (
 )
 
 // fakeExecutionStorage is strict lease-bound Session storage: a method whose
-// func is unset fails the test.
+// func is unset fails the test. The Environment family's With methods record
+// their call on tx, then run apply with tx and locked; without tx they fail
+// the test.
 type fakeExecutionStorage struct {
 	t                *testing.T
 	withFunctionTurn func(ctx context.Context, tenant, session, turn string, apply func(context.Context, FunctionTx, Turn) error) error
 	withTurnJournal  func(ctx context.Context, tenant, session string, apply func(context.Context, TurnJournalTx) error) error
+
+	tx     *fakeTx
+	locked LockedSession
+	// pages are the pages ListEnvironmentConnections reads, one per call.
+	pages [][]EnvironmentKey
+	// connections is the error each WithConnection call returns in place of
+	// applying, by Environment.
+	connections map[string]error
 }
 
 var _ ExecutionStorage = (*fakeExecutionStorage)(nil)

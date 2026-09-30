@@ -109,7 +109,7 @@ func hostedFailureStore(t *testing.T) (*store.Store, fixtureDB) {
 	return store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 }
 
-func hostedFailureSession(t *testing.T, s *store.Store, tenant string, input sessions.CreateSession) (sessions.Session, sessions.Environment) {
+func hostedFailureSession(t *testing.T, s *store.Store, db fixtureDB, tenant string, input sessions.CreateSession) (sessions.Session, sessions.Environment) {
 	t.Helper()
 	input.Creator, input.Engine, input.IdempotencyKey = store.FixtureCreator(), "codex", uuid.NewString()
 	input.Configuration = json.RawMessage(`{"agent":{"id":"agent_test","model":"test-model","tools":[]},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)
@@ -120,7 +120,7 @@ func hostedFailureSession(t *testing.T, s *store.Store, tenant string, input ses
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+	environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func failHostedInitialization(t *testing.T, s *store.Store, db fixtureDB, tenant
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
-	awaitInitialization(t, s, tenant, environment.ID, "failed")
+	awaitInitialization(t, db.pool, tenant, environment.ID, "failed")
 }
 
 // H1/H2/H3/H4: one transaction records the Environment failure, an error event
@@ -183,7 +183,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			s, db := hostedFailureStore(t)
 			tenant := uuid.NewString()
-			session, environment := hostedFailureSession(t, s, tenant, test.input)
+			session, environment := hostedFailureSession(t, s, db, tenant, test.input)
 			p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}},
 				fail: test.p.fail, skip: test.p.skip, result: test.p.result, err: test.p.err}
 			failHostedInitialization(t, s, db, tenant, environment, p)
@@ -248,7 +248,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 	s, db := hostedFailureStore(t)
 	tenant := uuid.NewString()
-	session, environment := hostedFailureSession(t, s, tenant, sessions.CreateSession{
+	session, environment := hostedFailureSession(t, s, db, tenant, sessions.CreateSession{
 		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "exit 3"}}},
 		InitialInputs:  []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"initial"}`)}},
 	})
@@ -282,7 +282,7 @@ func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	s, db := hostedFailureStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	session, environment := hostedFailureSession(t, s, tenant, sessions.CreateSession{
+	session, environment := hostedFailureSession(t, s, db, tenant, sessions.CreateSession{
 		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "echo " + hostedFailureCanary + "; exit 3"}}},
 		Metadata:       map[string]string{"case": "setup-exit3"},
 	})
@@ -336,7 +336,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err != nil {
 		t.Fatal(err)
 	}
-	awaitInitialization(t, s, tenant, environment.ID, "failed")
+	awaitInitialization(t, db.pool, tenant, environment.ID, "failed")
 
 	reason := `Failed to provision environment: script "setup_commands[0]" failed with exit code 3`
 	read, err := s.GetSession(t.Context(), tenant, session.ID)

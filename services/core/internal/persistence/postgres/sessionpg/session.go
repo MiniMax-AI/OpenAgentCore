@@ -36,14 +36,21 @@ func LockSession(ctx context.Context, q *sqlc.Queries, tenant, session pgtype.UU
 // with LockSession.
 func WithSession(ctx context.Context, runner pgunit.Transactor, tenant, session pgtype.UUID, apply func(context.Context, *sqlc.Queries, sessions.LockedSession) error) error {
 	return runner.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		locked, err := LockSession(ctx, q, tenant, session)
-		if err != nil {
-			return err
-		}
-		if err := apply(ctx, q, locked); err != nil {
-			return err
-		}
-		return PruneChanges(ctx, q, session)
+		return inSession(ctx, sqlc.New(tx), tenant, session, apply)
 	})
+}
+
+// inSession runs the body of a Session transaction on its queries: it locks
+// the tenant's Session, runs apply with what the lock shows, then prunes the
+// Session's journal. Session transactions that must read before they know the
+// Session, such as one keyed by its Environment, run it after that read.
+func inSession(ctx context.Context, q *sqlc.Queries, tenant, session pgtype.UUID, apply func(context.Context, *sqlc.Queries, sessions.LockedSession) error) error {
+	locked, err := LockSession(ctx, q, tenant, session)
+	if err != nil {
+		return err
+	}
+	if err := apply(ctx, q, locked); err != nil {
+		return err
+	}
+	return PruneChanges(ctx, q, session)
 }

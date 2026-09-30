@@ -393,22 +393,26 @@ func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 
 	return f.writeEnvironmentFile(a0, a1, a2, a3)
 }
 
+type fakeEnvironmentsReader struct {
+	t              testing.TB
+	getEnvironment func(context.Context, string, string) (sessions.Environment, error)
+}
+
+func (f *fakeEnvironmentsReader) GetEnvironment(a0 context.Context, a1 string, a2 string) (sessions.Environment, error) {
+	if f.getEnvironment == nil {
+		unexpectedCall(f.t, "GetEnvironment")
+	}
+	return f.getEnvironment(a0, a1, a2)
+}
+
 type fakeEnvironments struct {
 	t                                testing.TB
-	getEnvironment                   func(context.Context, string, string) (sessions.Environment, error)
 	authorizeEnvironmentInstallation func(context.Context, identity.Principal, string, string) (string, int64, error)
 	validateEnvironmentInstallation  func(context.Context, string, string) (sessions.InstallationAuthorization, error)
 	claimEnvironmentInstallation     func(context.Context, string, string, string) error
 	projectExecutorCredentialState   func(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
 	issueProjectExecutorCredential   func(context.Context, identity.Principal, string, string, bool) (sessions.IssuedExecutorCredential, error)
 	revokeProjectExecutorCredential  func(context.Context, identity.Principal, string, string) error
-}
-
-func (f *fakeEnvironments) GetEnvironment(a0 context.Context, a1 string, a2 string) (sessions.Environment, error) {
-	if f.getEnvironment == nil {
-		unexpectedCall(f.t, "GetEnvironment")
-	}
-	return f.getEnvironment(a0, a1, a2)
 }
 
 func (f *fakeEnvironments) AuthorizeEnvironmentInstallation(a0 context.Context, a1 identity.Principal, a2 string, a3 string) (string, int64, error) {

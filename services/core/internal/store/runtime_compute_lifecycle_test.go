@@ -272,7 +272,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 	s, db := newManagedTestStoreDB(t)
 	registry := runtimegateway.NewRegistry()
 	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {
@@ -307,7 +307,7 @@ func (f *computeLifecycleFixture) sql(query string, args ...any) {
 func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.Environment, store.RuntimeAllocation) {
 	t := f.t
 	t.Helper()
-	tenant, session, environment := managedSession(t, f.store)
+	tenant, session, environment := managedSession(t, f.store, f.db)
 	owner, err := f.worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, f.key)
 	if err != nil {
 		t.Fatal(err)
@@ -503,7 +503,7 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 			if len(f.provider.computes) != 0 || len(f.provider.snapshots) != 0 || f.provider.snapshotDeletes != 1 {
 				t.Fatal("retained snapshot survived cleanup")
 			}
-			if _, ok, err := f.store.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := fixtureSessionStore(f.db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("cleanup retained daemon authority", err)
 			}
 		})
@@ -513,7 +513,7 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	f := newComputeLifecycleFixture(t, 1, 2)
 	tenant, _, env, owner := f.create()
-	tenant2, _, env2 := managedSession(t, f.store)
+	tenant2, _, env2 := managedSession(t, f.store, f.db)
 	if _, err := f.worker.ProvisionEnvironment(t.Context(), tenant2, env2.ID, f.key); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatalf("active capacity ignored: %v", err)
 	}
@@ -545,7 +545,7 @@ func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	f.complete(second)
 	f.phase(tenant2, env2.ID, "suspended")
 	// Both retained allocations count even when their source VMs are gone.
-	tenant3, _, env3 := managedSession(t, f.store)
+	tenant3, _, env3 := managedSession(t, f.store, f.db)
 	if _, err := f.worker.ProvisionEnvironment(t.Context(), tenant3, env3.ID, f.key); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatalf("retained capacity ignored: %v", err)
 	}

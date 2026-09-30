@@ -26,7 +26,7 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(ctx, tenant, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	}
 	check := func(st *Store, token string, allowed bool) {
 		t.Helper()
-		owner, err := st.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(token))
+		owner, err := sessionAdapter(st).AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(token))
 		if allowed {
 			if err != nil || owner != tenant {
 				t.Fatal("credential not accepted for owner", err)
@@ -54,7 +54,7 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	}
 	check(s, token, true)
 	check(s, "caller/device/harness/grant", false)
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, uuid.NewString(), executorDigest(token)); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, uuid.NewString(), executorDigest(token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment accepted", err)
 	}
 	if _, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
@@ -119,7 +119,7 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(ctx, tenant, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,11 +167,11 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 	wg.Wait()
 	close(rotated)
 	for token := range rotated {
-		if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(token)); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(token)); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("racing rotation authorized deleted Environment", err)
 		}
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(original)); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(original)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("original key survived deletion", err)
 	}
 }

@@ -114,7 +114,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		p.writes.Add(1)
 		return completedInitialization(request, data)
 	}}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	cp.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {
@@ -210,7 +210,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	env, err := f.store.GetSessionEnvironment(f.t.Context(), tenant, session.ID)
+	env, err := sessionReads(f.pool).GetSessionEnvironment(f.t.Context(), tenant, session.ID)
 	if err != nil {
 		f.t.Fatal(err)
 	}

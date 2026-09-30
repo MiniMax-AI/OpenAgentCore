@@ -74,7 +74,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		}
 	})
 	frames := workerFrames(t, h)
-	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

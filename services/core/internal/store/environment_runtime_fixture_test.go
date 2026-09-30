@@ -14,9 +14,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session sessions.Session) (sessions.ExecutionDevice, string) {
+func enrollFixtureSession(t *testing.T, s *store.Store, db fixtureDB, tenant string, session sessions.Session) (sessions.ExecutionDevice, string) {
 	t.Helper()
-	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+	environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,11 +25,11 @@ func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session s
 	if err != nil {
 		t.Fatal(err)
 	}
-	enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
+	enrolled, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 	if err != nil || enrolled.EnvironmentID != environment.ID || enrolled.SessionID != session.ID || enrolled.WorkspaceDirectory != "/workspace" {
 		t.Fatalf("Runtime enrollment: %+v %v", enrolled, err)
 	}
-	bound, err := s.GetSessionDevice(t.Context(), tenant, session.ID)
+	bound, err := fixtureSessionStore(db).GetSessionDevice(t.Context(), tenant, session.ID)
 	if err != nil || bound.ID != enrolled.DeviceID || bound.EnvironmentID != environment.ID {
 		t.Fatalf("Runtime binding: %+v %v", bound, err)
 	}
@@ -41,7 +41,7 @@ func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session sessions.Se
 	// The Runtime shares the harness's Core, not its connection or write lock.
 	other := &dispatchHarness{t: h.t, s: h.s, db: h.db, lease: h.lease, owned: h.owned, d: h.d, tenant: h.tenant, session: session, registry: h.registry, url: h.url,
 		admissions: h.admissions, environments: h.environments}
-	other.device, other.credential = enrollFixtureSession(t, h.s, h.tenant, session)
+	other.device, other.credential = enrollFixtureSession(t, h.s, h.db, h.tenant, session)
 	u, err := url.Parse(h.url)
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func completeEmptyArtifactExport(t *testing.T, h *dispatchHarness, frames ...<-c
 	}
 	frame := read(proto.TypeExecutionPrepare)
 	var prepare proto.ExecutionPreparePayload
-	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil || frame.DecodePayload(&prepare) != nil || !proto.ValidWorkspaceReadPreparation(prepare.Configuration) || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {
 		t.Fatal("artifact preparation lost exact local authority", err)
 	}

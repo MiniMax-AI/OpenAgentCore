@@ -130,7 +130,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			if !reflect.DeepEqual(texts, item.Texts) {
 				t.Fatal("public initial text order changed")
 			}
-			environment, err := s.GetSessionEnvironment(t.Context(), tenant, item.ID)
+			environment, err := sessionReads(pool).GetSessionEnvironment(t.Context(), tenant, item.ID)
 			if err != nil || environment.ID != item.EnvironmentID || environment.Status != "pending" {
 				t.Fatal("public initial Environment identity changed", err)
 			}

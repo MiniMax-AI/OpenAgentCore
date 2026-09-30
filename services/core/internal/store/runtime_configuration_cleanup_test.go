@@ -90,7 +90,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				inspectionError: test.inspectionError, killError: test.killError,
 			}
 			w, _ := managedWorker(t, s, db, key, p)
-			tenant, session, environment := managedSession(t, s)
+			tenant, session, environment := managedSession(t, s, db)
 			owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 			if (err != nil) != (test.rejectCreate || test.loseCreate) || owner.ID == "" {
 				t.Fatal("unexpected creation outcome", owner, err)
@@ -137,7 +137,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 			if err != nil || got.ID != owner.ID || got.State != wantState || got.CreateSettled != test.wantSettled {
 				t.Fatal("cleanup lost ownership or settlement", got, err)
 			}
-			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("cleanup retained execution authority", err)
 			}
 			p.mu.Lock()

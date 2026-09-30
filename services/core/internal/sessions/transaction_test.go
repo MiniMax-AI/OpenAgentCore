@@ -38,6 +38,19 @@ type fakeTx struct {
 	loadPendingFileWrite     func() (bool, error)
 	loadBoundDevice          func() (bool, error)
 	insertEnvironmentDevice  func() error
+	loadSessionDevice        func() (ExecutionDevice, bool, error)
+	claimInitialization      func() (bool, error)
+	completeInitialization   func() (bool, error)
+	failInitialization       func() error
+	loadConnection           func() (EnvironmentConnection, bool, error)
+	replaceConnection        func() error
+	advanceConnection        func() error
+	deleteConnection         func() error
+	setConnectionStatus      func() error
+	loadDevice               func() (bool, error)
+	bindDevice               func() error
+	authorizeEnrollment      func() (EnrollmentAuthority, error)
+	enrollDevice             func() (string, error)
 
 	loadJournalTurn        func() (JournalTurn, bool, error)
 	matchEvents            func() (bool, error)
@@ -71,6 +84,10 @@ var (
 	_ TurnJournalTx            = (*fakeTx)(nil)
 	_ TurnEventTx              = (*fakeTx)(nil)
 	_ InputProjectionTx        = (*fakeTx)(nil)
+	_ InitializationTx         = (*fakeTx)(nil)
+	_ ConnectionTx             = (*fakeTx)(nil)
+	_ DeviceBindingTx          = (*fakeTx)(nil)
+	_ EnrollmentTx             = (*fakeTx)(nil)
 )
 
 func (f *fakeTx) record(name string, set bool, detail ...string) {

@@ -49,7 +49,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if failure := ended.EnvironmentFailure; expired != (failure == nil) || !expired && (failure.Reason != sessions.ProvisioningFailureReason || failure.FailedAt.IsZero()) {
 				t.Fatal("terminal failure projection", failure)
 			}
-			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("terminal credential remained usable", err)
 			}
 			failed, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
@@ -99,7 +99,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if next, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
 				t.Fatal("cleanup repeated terminal events", next, err)
 			}
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, uuid.NewString()); !errors.Is(err, sessions.ErrInvalidInput) {
+			if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, uuid.NewString()); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("late connection revived terminal environment", err)
 			}
 			if _, err := writer.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
@@ -145,7 +145,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	if err != nil || allocation.State != "creating" {
 		t.Fatal("partial allocation transition", err)
 	}
-	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
+	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
 		t.Fatal("partial credential revocation", err)
 	}
 }

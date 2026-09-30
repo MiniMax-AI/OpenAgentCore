@@ -118,7 +118,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || owner.NodeID != "" {
 		t.Fatal(owner, err)
 	}
-	credential, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID)
+	credential, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID)
 	if err != nil || !ok || credential.RuntimeAllocationID != owner.ID || credential.RuntimeNodeID != "" {
 		t.Fatal("direct bootstrap lost managed identity", err)
 	}

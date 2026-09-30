@@ -42,23 +42,25 @@ type RuntimeProvider struct {
 }
 
 type runtimeLifecycle struct {
-	store           *store.Store
-	lease           Ownership
-	registry        *runtimegateway.Registry
-	config          RuntimeProvider
-	nodeID          string
-	gate            chan struct{}
-	ctx             context.Context
-	stop            context.CancelFunc
-	cancelMu        sync.Mutex
-	reconcileCancel context.CancelFunc
-	cursor          string
-	pendingCursor   string
-	connections     map[string]*runtimeConnection
-	wakeHints       chan struct{}
+	store            *store.Store
+	sessions         sessions.Reader
+	sessionExecution *sessions.ExecutionOperations
+	lease            Ownership
+	registry         *runtimegateway.Registry
+	config           RuntimeProvider
+	nodeID           string
+	gate             chan struct{}
+	ctx              context.Context
+	stop             context.CancelFunc
+	cancelMu         sync.Mutex
+	reconcileCancel  context.CancelFunc
+	cursor           string
+	pendingCursor    string
+	connections      map[string]*runtimeConnection
+	wakeHints        chan struct{}
 }
 
-func newRuntimeManager(owner Owner, deployments *deployment.Service, reader deployment.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
+func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -76,7 +78,7 @@ func newRuntimeManager(owner Owner, deployments *deployment.Service, reader depl
 		}
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{store: owner.Store, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: reader, lease: owner.Lease, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{store: owner.Store, sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -173,7 +175,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if providerKey != r.config.InstallationID {
 		return store.RuntimeAllocation{}, sandbox.ErrInvalid
 	}
-	environmentValue, err := r.store.GetEnvironment(ctx, tenant, environment)
+	environmentValue, err := r.sessions.GetEnvironment(ctx, tenant, environment)
 	if err != nil {
 		return store.RuntimeAllocation{}, err
 	}
@@ -396,7 +398,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if err != nil {
 		return err
 	}
-	environment, err := r.store.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
+	environment, err := r.sessions.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
 	if err != nil {
 		return err
 	}

@@ -31,7 +31,7 @@ func TestWebSocketRequiresAuthorizationBearer(t *testing.T) {
 			handler := NewHandler(HandlerConfig{
 				Registry: registry,
 				Authenticator: NewAuthenticator(&stubRuntimeStore{ok: true, row: runtimedevice.Credential{
-					ID: "device", WorkspaceID: "tenant", Type: RuntimeTypeAgentDaemon,
+					ID: "device", WorkspaceID: "tenant", Type: runtimedevice.RuntimeTypeAgentDaemon,
 					CredentialHash: runtimedevice.HashCredential(credential),
 				}}),
 			})

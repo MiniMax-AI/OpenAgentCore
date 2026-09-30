@@ -25,7 +25,7 @@ func newFunctionHarness(t *testing.T) *dispatchHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})}}})
@@ -195,7 +195,7 @@ func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.session = session
-	if err := h.s.BindSessionDevice(t.Context(), h.tenant, session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.db, h.tenant, session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := h.message("start", "Run")

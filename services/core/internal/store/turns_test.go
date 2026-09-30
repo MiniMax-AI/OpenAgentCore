@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"reflect"
 	"sync"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestCancellationStaysBoundToItsOriginalTurn(t *testing.T) {

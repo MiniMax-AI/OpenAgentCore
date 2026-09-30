@@ -23,7 +23,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if err != nil || owner.Replayed || owner.State != "creating" || owner.CreateSettled {
 		t.Fatalf("reservation: %+v %v", owner, err)
 	}
-	bound, err := s.GetSessionDevice(t.Context(), tenant, session.ID)
+	bound, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID)
 	if err != nil || bound.ID != owner.DeviceID || bound.EnvironmentID != environment.ID {
 		t.Fatalf("binding not committed with allocation: %+v %v", bound, err)
 	}
@@ -47,7 +47,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if err != nil || !retry.Replayed || retry.ID != owner.ID || retry.DeviceID != owner.DeviceID {
 		t.Fatalf("restart replaced unknown allocation: %+v %v", retry, err)
 	}
-	credential, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID)
+	credential, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID)
 	if err != nil || !ok || credential.CredentialHash != runtimedevice.HashCredential(secret) {
 		t.Fatal("retry rewrote bootstrap credential")
 	}
@@ -179,7 +179,7 @@ func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
 	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("cleanup credential still authenticates")
 	}
 	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {

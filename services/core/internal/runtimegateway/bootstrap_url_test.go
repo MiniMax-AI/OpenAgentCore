@@ -13,7 +13,7 @@ func TestBootstrapPublishesURLOnlyAfterAuthentication(t *testing.T) {
 	const publicURL = "wss://core.example/api/v1/agent-daemon/ws"
 	for _, valid := range []bool{true, false} {
 		h := NewHandler(HandlerConfig{Registry: NewRegistry(), PublicWSURL: publicURL,
-			Authenticator: NewAuthenticator(&stubRuntimeStore{ok: true, row: runtimedevice.Credential{ID: "device", WorkspaceID: "tenant", Type: RuntimeTypeAgentDaemon, CredentialHash: runtimedevice.HashCredential(token)}})})
+			Authenticator: NewAuthenticator(&stubRuntimeStore{ok: true, row: runtimedevice.Credential{ID: "device", WorkspaceID: "tenant", Type: runtimedevice.RuntimeTypeAgentDaemon, CredentialHash: runtimedevice.HashCredential(token)}})})
 		r := httptest.NewRequest(http.MethodPost, "/agent-daemon/bootstrap", strings.NewReader(`{"device_id":"device"}`))
 		bearer, status := "wrong", http.StatusUnauthorized
 		if valid {

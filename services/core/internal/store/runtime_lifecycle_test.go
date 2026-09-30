@@ -83,7 +83,7 @@ func managedWorkerMode(t *testing.T, s *store.Store, db fixtureDB, key string, p
 	if peer, ok := p.(interface {
 		setRuntimeGateway(*testing.T, string, *runtimegateway.Registry)
 	}); ok {
-		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
+		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 		server := httptest.NewServer(http.HandlerFunc(handler.WS))
 		t.Cleanup(server.Close)
 		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
@@ -113,14 +113,14 @@ func managedWorkerMode(t *testing.T, s *store.Store, db fixtureDB, key string, p
 	return w, stop
 }
 
-func managedSession(t *testing.T, s *store.Store) (string, sessions.Session, sessions.Environment) {
+func managedSession(t *testing.T, s *store.Store, db fixtureDB) (string, sessions.Session, sessions.Environment) {
 	t.Helper()
 	tenant := uuid.NewString()
 	v, e := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)}))
 	if e != nil {
 		t.Fatal(e)
 	}
-	env, e := s.GetSessionEnvironment(t.Context(), tenant, v.ID)
+	env, e := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, v.ID)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -146,7 +146,7 @@ func reconcileManagedState(t *testing.T, w *execution.Worker, s *store.Store, te
 
 func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, session, env := managedSession(t, s)
+	tenant, session, env := managedSession(t, s, db)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true}
 	w, stop := managedWorker(t, s, db, key, p)
@@ -154,7 +154,7 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	if err == nil || owner.ID == "" {
 		t.Fatal("fault did not retain allocation")
 	}
-	credential, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID)
+	credential, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID)
 	if err != nil || !ok || credential.CredentialHash != p.credentialHash {
 		t.Fatal("provider received unbound credential")
 	}
@@ -178,14 +178,14 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	if err != nil || clean.State != "released" || p.kills != 1 {
 		t.Fatalf("deleted cleanup: %+v %v", clean, err)
 	}
-	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("cleanup did not revoke authority")
 	}
 }
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, session, env := managedSession(t, s)
+	tenant, session, env := managedSession(t, s, db)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true, absent: true}
 	w, _ := managedWorker(t, s, db, key, p)
@@ -201,7 +201,7 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	if err != nil || got.State != "cleanup_pending" || got.CreateSettled || p.creates != 1 {
 		t.Fatalf("unknown creation forgotten: %+v %v", got, err)
 	}
-	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("unknown allocation retains execution authority")
 	}
 	// A late completion is still owned and reclaimed on the next scan.
@@ -215,7 +215,7 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 
 func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, _, env := managedSession(t, s)
+	tenant, _, env := managedSession(t, s, db)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w, _ := managedWorker(t, s, db, key, p)
@@ -232,7 +232,7 @@ func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
 	if err != nil || got.State != "cleanup_pending" {
 		t.Fatalf("expiry lost on provider failure: %+v %v", got, err)
 	}
-	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("expired credential still authenticates")
 	}
 	if p.kills != 0 {
@@ -242,7 +242,7 @@ func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
 
 func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, _, env := managedSession(t, s)
+	tenant, _, env := managedSession(t, s, db)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w, _ := managedWorker(t, s, db, key, p)

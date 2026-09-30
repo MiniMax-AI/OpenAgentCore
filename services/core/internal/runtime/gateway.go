@@ -11,22 +11,20 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 )
 
-type DeviceStore interface {
-	runtimegateway.RuntimeStore
-	runtimegateway.HeartbeatTouch
-}
-
 // NewGateway serves the V1 daemon executor transport for both managed and
-// user-managed Runtime. Its credentials never grant public Session API access.
-func NewGateway(s DeviceStore, publicWSURL string) (http.Handler, *runtimegateway.Registry, error) {
+// user-managed Runtime. It authenticates devices with credentials, records
+// their heartbeats with heartbeat and drains an archived Session's cancellation
+// receipts through cancellations. Its credentials never grant public Session
+// API access.
+func NewGateway(credentials runtimegateway.RuntimeStore, heartbeat runtimegateway.HeartbeatTouch, cancellations runtimegateway.ArchivedCancellationStore, publicWSURL string) (http.Handler, *runtimegateway.Registry, error) {
 	u, err := url.Parse(publicWSURL)
-	if err != nil || s == nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/api/v1/agent-daemon/ws" {
+	if err != nil || credentials == nil || heartbeat == nil || cancellations == nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "/api/v1/agent-daemon/ws" {
 		return nil, nil, errors.New("daemon URL must be an absolute ws(s) URL ending in /api/v1/agent-daemon/ws")
 	}
 	registry := runtimegateway.NewRegistry()
 	h := runtimegateway.NewHandler(runtimegateway.HandlerConfig{
-		Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry,
-		Heartbeat: s, PublicWSURL: publicWSURL,
+		Authenticator: runtimegateway.NewAuthenticator(credentials), Registry: registry,
+		Heartbeat: heartbeat, ArchivedCancellations: cancellations, PublicWSURL: publicWSURL,
 	})
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { runtimegateway.RegisterRoutes(r, h) })

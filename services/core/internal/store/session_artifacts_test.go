@@ -55,7 +55,7 @@ func artifactTurn(t *testing.T, s *Store, kind string) (tenant, session, environ
 	if err != nil {
 		t.Fatal(err)
 	}
-	env, err := s.GetSessionEnvironment(t.Context(), tenant, created.ID)
+	env, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +409,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	otherEnvironment, err := s.GetSessionEnvironment(t.Context(), tenant, other.ID)
+	otherEnvironment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, other.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +439,7 @@ func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	session := created.ID
-	env, err := s.GetSessionEnvironment(t.Context(), tenant, session)
+	env, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, session)
 	if err != nil {
 		t.Fatal(err)
 	}

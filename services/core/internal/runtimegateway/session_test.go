@@ -132,10 +132,6 @@ func (f *fakeHeartbeatStore) TouchAgentDaemonHeartbeat(_ context.Context, input 
 	return runtimedevice.HeartbeatStatus{Liveness: "online"}, nil
 }
 
-func (f *fakeHeartbeatStore) MarkRuntimeOffline(_ context.Context, _ string) error {
-	return nil
-}
-
 func (f *fakeHeartbeatStore) waitDaemonHeartbeat(t *testing.T) runtimedevice.Heartbeat {
 	t.Helper()
 	select {

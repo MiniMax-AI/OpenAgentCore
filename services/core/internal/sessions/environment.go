@@ -1,12 +1,65 @@
 package sessions
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 )
+
+// EnvironmentReader reads Environments, their preparation and the Session
+// data frozen for it.
+type EnvironmentReader interface {
+	// GetEnvironment reads the tenant's Environment of a Session that was not
+	// publicly deleted; otherwise it is ErrNotFound.
+	GetEnvironment(ctx context.Context, tenant, environment string) (Environment, error)
+	// GetSessionEnvironment reads the Environment of the tenant's Session
+	// that was not publicly deleted; otherwise it is ErrNotFound.
+	GetSessionEnvironment(ctx context.Context, tenant, session string) (Environment, error)
+	// ListEnvironmentInitializations lists, in Environment order after the
+	// given Environment, a page of the live Environments whose preparation is
+	// pending or running.
+	ListEnvironmentInitializations(ctx context.Context, after string) ([]EnvironmentInitialization, error)
+	// ReadEnvironmentSetup opens the setup frozen for the Session's
+	// Environment. A missing Session is ErrNotFound and a missing credential
+	// key credentialcrypto.ErrUnavailable; frozen data that does not open or
+	// validate is an internal error.
+	ReadEnvironmentSetup(ctx context.Context, tenant, session string) (environmentconfig.Setup, error)
+	// ReadInitialEnvironmentFile opens the initial file frozen at position for
+	// the Session's Environment, so an installation holds one file at a time.
+	// A missing file is ErrNotFound and a missing credential key
+	// credentialcrypto.ErrUnavailable; a file that does not open or match its
+	// recorded size is an internal error.
+	ReadInitialEnvironmentFile(ctx context.Context, tenant, session string, position int) (environmentconfig.InitialFileMetadata, []byte, error)
+}
+
+// CreatesEnvironment reports whether a Session created with the configuration
+// snapshot has an Environment: a self_hosted or openai_hosted one does, and
+// none or no Environment does not. Any other snapshot is ErrInvalidInput.
+func CreatesEnvironment(configuration json.RawMessage) (bool, error) {
+	var snapshot struct {
+		Environment *struct {
+			Type string `json:"type"`
+		} `json:"environment"`
+	}
+	if err := json.Unmarshal(configuration, &snapshot); err != nil {
+		return false, fmt.Errorf("%w: invalid environment configuration", ErrInvalidInput)
+	}
+	if snapshot.Environment == nil || snapshot.Environment.Type == "none" {
+		return false, nil
+	}
+	switch snapshot.Environment.Type {
+	case "self_hosted", "openai_hosted":
+		return true, nil
+	default:
+		return false, fmt.Errorf("%w: unsupported environment type", ErrInvalidInput)
+	}
+}
 
 // Environment retains execution ownership; its configuration is an internal snapshot, not a public response.
 type Environment struct {

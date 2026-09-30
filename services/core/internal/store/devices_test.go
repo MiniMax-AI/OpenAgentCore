@@ -16,6 +16,8 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -25,7 +27,7 @@ import (
 func registerTestDevice(t *testing.T, s *Store, tenant string) (sessions.ExecutionDevice, string) {
 	t.Helper()
 	secret := uuid.NewString() + uuid.NewString()
-	d, err := s.CreateDevice(context.Background(), tenant, "isolated executor", runtimedevice.HashCredential(secret))
+	d, err := sessionService(t, s).CreateDevice(context.Background(), tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,15 +36,25 @@ func registerTestDevice(t *testing.T, s *Store, tenant string) (sessions.Executi
 
 func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	s, pool := testStore(t)
-	other, _ := testStore(t)
 	ctx := context.Background()
 	tenant, session := newTurnSession(t, s)
 	otherTenant, otherSession := newTurnSession(t, s)
 	a, _ := registerTestDevice(t, s, tenant)
 	b, _ := registerTestDevice(t, s, tenant)
 	foreign, _ := registerTestDevice(t, s, otherTenant)
+	// The binds run on an execution lease of their own, which closes before
+	// the pool does.
+	lease, err := pgunit.AcquireLease(ctx, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = lease.Close(context.Background()) })
+	execution, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, args := range [][3]string{{tenant, session.ID, foreign.ID}, {otherTenant, session.ID, foreign.ID}, {tenant, otherSession.ID, a.ID}} {
-		if err := s.BindSessionDevice(ctx, args[0], args[1], args[2]); !errors.Is(err, sessions.ErrNotFound) {
+		if err := execution.BindSessionDevice(ctx, args[0], args[1], args[2]); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign binding: %v", err)
 		}
 	}
@@ -52,11 +64,11 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			st, id := s, a.ID
+			id := a.ID
 			if i%2 == 0 {
-				st, id = other, b.ID
+				id = b.ID
 			}
-			errs <- st.BindSessionDevice(ctx, tenant, session.ID, id)
+			errs <- execution.BindSessionDevice(ctx, tenant, session.ID, id)
 		}()
 	}
 	wg.Wait()
@@ -75,28 +87,31 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	if success != 4 || conflicts != 4 {
 		t.Fatalf("unstable binding: success=%d conflicts=%d", success, conflicts)
 	}
-	winner, err := s.GetSessionDevice(ctx, tenant, session.ID)
+	winner, err := sessionAdapter(s).GetSessionDevice(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSessionDevice(ctx, otherTenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSessionDevice(ctx, otherTenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign lookup: %v", err)
+	}
+	if err := lease.Close(ctx); err != nil {
+		t.Fatal(err)
 	}
 	pool.Close()
 	restarted, _ := testStore(t)
-	got, err := restarted.GetSessionDevice(ctx, tenant, session.ID)
+	got, err := sessionAdapter(restarted).GetSessionDevice(ctx, tenant, session.ID)
 	if err != nil || got != winner {
 		t.Fatalf("binding after restart: %+v %v", got, err)
 	}
-	if err := restarted.RevokeDevice(ctx, otherTenant, winner.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if err := sessionService(t, restarted).RevokeDevice(ctx, otherTenant, winner.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign revocation: %v", err)
 	}
 	for range 2 {
-		if err := restarted.RevokeDevice(ctx, tenant, winner.ID); err != nil {
+		if err := sessionService(t, restarted).RevokeDevice(ctx, tenant, winner.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := restarted.GetSessionDevice(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(restarted).GetSessionDevice(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("revoked device remains dispatchable: %v", err)
 	}
 }
@@ -109,7 +124,7 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	_, foreignSecret := registerTestDevice(t, s, uuid.NewString())
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(s, wsURL)
+	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +184,7 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	if err != nil || current == previous || current.IsClosed() {
 		t.Fatalf("replacement connection missing: %v", err)
 	}
-	if err := s.RevokeDevice(ctx, tenant, a.ID); err != nil {
+	if err := sessionService(t, s).RevokeDevice(ctx, tenant, a.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := second.WriteJSON(map[string]any{"type": proto.TypeHeartbeat, "payload": map[string]any{"version": "test"}}); err != nil {
@@ -184,7 +199,7 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 			break
 		}
 	}
-	if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(ctx, a.ID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
+	if _, err := runtimegateway.NewAuthenticator(sessionAdapter(s)).AuthenticateBearer(ctx, a.ID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
 		t.Fatalf("revoked credential survived: %v", err)
 	}
 }

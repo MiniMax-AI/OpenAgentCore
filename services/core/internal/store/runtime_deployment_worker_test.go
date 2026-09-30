@@ -15,7 +15,7 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	key := uuid.NewString()
 	old := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	worker, stop := managedWorker(t, s, db, key, old)
-	tenant, _, environment := managedSession(t, s)
+	tenant, _, environment := managedSession(t, s, db)
 	owner, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil {
 		t.Fatal(err)

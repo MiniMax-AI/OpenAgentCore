@@ -30,7 +30,7 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		environment, err := s.GetSessionEnvironment(ctx, p.TenantID, session.ID)
+		environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, p.TenantID, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -49,7 +49,7 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 	if err != nil || issued.KeyID != keyID || issued.EnvironmentID != one.ID || issued.Token == "" {
 		t.Fatal("issue", err)
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(issued.Token)); err != nil {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(issued.Token)); err != nil {
 		t.Fatal("issued credential does not authenticate", err)
 	}
 	// A lost issuance response must not cause a new key or replace the old secret.
@@ -90,7 +90,7 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 	if err != nil || rotated.Token == issued.Token {
 		t.Fatal("rotation", err)
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(issued.Token)); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(issued.Token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("old secret", err)
 	}
 	for range 2 {
@@ -98,7 +98,7 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(rotated.Token)); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, one.ID, executorDigest(rotated.Token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("revoked secret", err)
 	}
 	if listed, err := s.ListProjectExecutorCredentials(ctx, p, one.ID); err != nil || len(listed) != 1 || listed[0].RevokedAt == nil {
@@ -153,7 +153,7 @@ func TestArchivedProjectExecutorCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(ctx, p.TenantID, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, p.TenantID, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestProjectExecutorConnectionState(t *testing.T) {
 	if err != nil || state.Connection.DeviceID != "" || state.Connection.EnrolledAt != nil || state.Connection.BoundKeyID != nil || state.Connection.LastSeenAt != nil {
 		t.Fatal("never enrolled", state, err)
 	}
-	enrolled, err := s.EnrollRuntime(ctx, env.ID, executorDigest(key.Token))
+	enrolled, err := sessionService(t, s).EnrollRuntime(ctx, env.ID, executorDigest(key.Token))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestProjectExecutorConnectionState(t *testing.T) {
 	if _, err = pool.Exec(ctx, "UPDATE environments SET status='expired' WHERE id=$1", env.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.AuthenticateEnvironmentExecutor(ctx, env.ID, executorDigest(rotated.Token)); err != nil {
+	if _, err = sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, env.ID, executorDigest(rotated.Token)); err != nil {
 		t.Fatal("fixture executor key should still authenticate", err)
 	}
 	state = check()

@@ -93,44 +93,44 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing expectation for %s", label)
 		}
-		for _, current := range []*store.Store{s, reopenedStore} {
-			setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
-			if err != nil {
-				t.Fatalf("%s frozen setup: %v", label, err)
-			}
-			if !reflect.DeepEqual(setup.Env, map[string]string{"PRIVATE_SELECTION": marker}) ||
-				!reflect.DeepEqual(setup.SkillMetadata(), want.Skills) || !reflect.DeepEqual(setup.PluginMetadata(), want.Plugins) ||
-				!reflect.DeepEqual(append([]string{}, setup.CapabilityDirectories...), want.CapabilityDirectories) {
-				t.Fatalf("%s frozen selection changed", label)
-			}
-			if len(setup.Skills) != len(want.SkillDigests) || len(setup.Plugins) != len(want.PluginDigests) {
-				t.Fatalf("%s frozen archive count differs", label)
-			}
-			for i, skill := range setup.Skills {
-				digest := sha256.Sum256(skill.Archive)
-				if hex.EncodeToString(digest[:]) != want.SkillDigests[i] {
-					t.Fatalf("%s frozen Skill bytes changed", label)
-				}
-			}
-			for i, plugin := range setup.Plugins {
-				digest := sha256.Sum256(plugin.Archive)
-				if hex.EncodeToString(digest[:]) != want.PluginDigests[i] {
-					t.Fatalf("%s frozen Plugin bytes changed", label)
-				}
-			}
-			if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
-				t.Fatalf("%s foreign setup read: %v", label, err)
-			}
-			file, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, 0)
-			if err != nil || string(body) != marker+"-source" || file.Path != "/workspace/source.txt" {
-				t.Fatalf("%s frozen source file changed: %v", label, err)
-			}
-			if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, 0); err == nil {
-				t.Fatalf("%s foreign initial file read: %v", label, err)
+		// A reader built after the requests reads the frozen setup and files.
+		current := fixtureSessionStore(db)
+		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
+		if err != nil {
+			t.Fatalf("%s frozen setup: %v", label, err)
+		}
+		if !reflect.DeepEqual(setup.Env, map[string]string{"PRIVATE_SELECTION": marker}) ||
+			!reflect.DeepEqual(setup.SkillMetadata(), want.Skills) || !reflect.DeepEqual(setup.PluginMetadata(), want.Plugins) ||
+			!reflect.DeepEqual(append([]string{}, setup.CapabilityDirectories...), want.CapabilityDirectories) {
+			t.Fatalf("%s frozen selection changed", label)
+		}
+		if len(setup.Skills) != len(want.SkillDigests) || len(setup.Plugins) != len(want.PluginDigests) {
+			t.Fatalf("%s frozen archive count differs", label)
+		}
+		for i, skill := range setup.Skills {
+			digest := sha256.Sum256(skill.Archive)
+			if hex.EncodeToString(digest[:]) != want.SkillDigests[i] {
+				t.Fatalf("%s frozen Skill bytes changed", label)
 			}
 		}
+		for i, plugin := range setup.Plugins {
+			digest := sha256.Sum256(plugin.Archive)
+			if hex.EncodeToString(digest[:]) != want.PluginDigests[i] {
+				t.Fatalf("%s frozen Plugin bytes changed", label)
+			}
+		}
+		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
+			t.Fatalf("%s foreign setup read: %v", label, err)
+		}
+		file, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, 0)
+		if err != nil || string(body) != marker+"-source" || file.Path != "/workspace/source.txt" {
+			t.Fatalf("%s frozen source file changed: %v", label, err)
+		}
+		if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, 0); err == nil {
+			t.Fatalf("%s foreign initial file read: %v", label, err)
+		}
 		var encryptedSetup, encryptedFile, configuration []byte
-		err := pool.QueryRow(t.Context(), "SELECT e.contents,f.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.id=e.session_id JOIN initial_environment_files f ON f.session_id=s.id WHERE s.id=$1", id).Scan(&encryptedSetup, &encryptedFile, &configuration)
+		err = pool.QueryRow(t.Context(), "SELECT e.contents,f.contents,s.configuration FROM environment_setups e JOIN sessions s ON s.id=e.session_id JOIN initial_environment_files f ON f.session_id=s.id WHERE s.id=$1", id).Scan(&encryptedSetup, &encryptedFile, &configuration)
 		if err != nil || len(encryptedSetup) == 0 || len(encryptedFile) == 0 ||
 			bytes.Contains(encryptedSetup, []byte(marker)) || bytes.Contains(encryptedFile, []byte(marker)) || bytes.Contains(configuration, []byte(marker)) {
 			t.Fatalf("%s confidential initialization storage: %v", label, err)

@@ -30,7 +30,7 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		environment, err := s.GetSessionEnvironment(ctx, principal.TenantID, session.ID)
+		environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, principal.TenantID, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -38,7 +38,7 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	}
 	check := func(st *Store, environment string, key sessions.IssuedExecutorCredential, allowed bool) {
 		t.Helper()
-		owner, err := st.AuthenticateEnvironmentExecutor(ctx, environment, executorDigest(key.Token))
+		owner, err := sessionAdapter(st).AuthenticateEnvironmentExecutor(ctx, environment, executorDigest(key.Token))
 		if allowed && (err != nil || owner != p.TenantID) || !allowed && !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unexpected principal authorization", allowed, err)
 		}
@@ -145,7 +145,7 @@ func TestExecutorPrincipalRequiresVerifiedScopeAndRecordedCreator(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	target, err := s.GetSessionEnvironment(ctx, p.TenantID, session.ID)
+	target, err := sessionAdapter(s).GetSessionEnvironment(ctx, p.TenantID, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,13 +153,13 @@ func TestExecutorPrincipalRequiresVerifiedScopeAndRecordedCreator(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if owner, err := s.AuthenticateEnvironmentExecutor(ctx, target.ID, executorDigest(key.Token)); err != nil || owner != p.TenantID {
+	if owner, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, target.ID, executorDigest(key.Token)); err != nil || owner != p.TenantID {
 		t.Fatal("user principal failed", err)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE sessions SET creator_kind=NULL,creator_id=NULL WHERE id=$1", session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, target.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, target.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("unknown creator accepted", err)
 	}
 	if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, sessions.ErrNotFound) {

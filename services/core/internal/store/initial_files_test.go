@@ -67,11 +67,11 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 		t.Fatal("retry re-resolved deleted resources", err)
 	}
 	for position := range initial {
-		metadata, body, err := s.ReadInitialEnvironmentFile(t.Context(), strings.ToUpper(tenant), strings.ToUpper(session.ID), position)
+		metadata, body, err := sessionAdapter(s).ReadInitialEnvironmentFile(t.Context(), strings.ToUpper(tenant), strings.ToUpper(session.ID), position)
 		if err != nil || !bytes.Equal(body, canary) || metadata.ID == "" {
 			t.Fatal("frozen initial content", err)
 		}
-		if _, _, err := s.ReadInitialEnvironmentFile(t.Context(), foreign, session.ID, position); err == nil {
+		if _, _, err := sessionAdapter(s).ReadInitialEnvironmentFile(t.Context(), foreign, session.ID, position); err == nil {
 			t.Fatal("foreign bytes disclosed")
 		}
 		var encrypted []byte
@@ -85,7 +85,7 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed bytes retried", err)
 	}
-	if _, err := s.GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("uninitialized environment exposed", err)
 	}
 }

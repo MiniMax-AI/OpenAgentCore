@@ -164,7 +164,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	sessionStore := sessionpg.New(units)
+	sessionStore := sessionpg.New(units, credentialKey)
 	sessionService, err := sessions.NewService(sessionStore)
 	if err != nil {
 		return err
@@ -248,7 +248,7 @@ func run() error {
 	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, projectStore); err != nil {
 		return err
 	}
-	historyResolver, err := historystoreresolver.NewResolver(executionStore)
+	historyResolver, err := historystoreresolver.NewResolver(sessionStore)
 	if err != nil {
 		return err
 	}
@@ -265,7 +265,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		daemonHandler, registry, err = runtime.NewGateway(executionStore, executorURL)
+		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, executionStore, executorURL)
 		if err != nil {
 			return err
 		}
@@ -392,7 +392,7 @@ func run() error {
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    executionStore,
-		Environments:    executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},
+		Environments:    executionStore, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
 		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 	}
@@ -421,8 +421,8 @@ func run() error {
 	}
 	if daemonHandler != nil {
 		routes := daemonRoutes{gateway: daemonHandler,
-			enrollment: runtimeenrollment.EnrollmentHandler(executionStore),
-			connection: runtimeenrollment.ConnectionHandler(executionStore, registry)}
+			enrollment: runtimeenrollment.EnrollmentHandler(sessionService),
+			connection: runtimeenrollment.ConnectionHandler(sessionStore, registry)}
 		if managedNodes != nil {
 			routes.nodeConnect = managedNodes.hub
 		}

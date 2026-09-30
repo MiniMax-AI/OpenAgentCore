@@ -49,8 +49,7 @@ func (s *Session) TrackExecutionDelivery(runID string) (func(), error) {
 // DrainArchivedCancellation checks both durable archive identity and this exact
 // connection's unfinished delivery. It performs no liveness or credential write.
 func (s *Session) DrainArchivedCancellation(ctx context.Context) (bool, error) {
-	store, ok := s.heartbeat.(ArchivedCancellationStore)
-	if !ok || s.IsClosed() {
+	if s.archivedCancellations == nil || s.IsClosed() {
 		return false, nil
 	}
 	s.receiptMu.Lock()
@@ -62,7 +61,7 @@ func (s *Session) DrainArchivedCancellation(ctx context.Context) (bool, error) {
 	if len(ids) == 0 {
 		return false, nil
 	}
-	receipt, err := store.ArchivedCancellationReceipt(ctx, s.DeviceID, s.credentialHash, ids)
+	receipt, err := s.archivedCancellations.ArchivedCancellationReceipt(ctx, s.DeviceID, s.credentialHash, ids)
 	if err != nil || receipt.RunID == "" {
 		return false, err
 	}

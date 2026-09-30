@@ -43,7 +43,7 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 			key := uuid.NewString()
 			p := &absentCreationProvider{}
 			w, _ := managedWorker(t, s, db, key, p)
-			tenant, session, environment := managedSession(t, s)
+			tenant, session, environment := managedSession(t, s, db)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			if cancelled {
@@ -60,7 +60,7 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 			if err != nil || stored.State != "released" || !stored.CreateSettled {
 				t.Fatal("release not durable", err)
 			}
-			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("released credential retained authority", err)
 			}
 			value, err := s.GetSession(t.Context(), tenant, session.ID)
@@ -81,7 +81,7 @@ func TestManagedRuntimeForeignAbsenceCannotReleaseCreation(t *testing.T) {
 	key := uuid.NewString()
 	p := &absentCreationProvider{foreign: true}
 	w, _ := managedWorker(t, s, db, key, p)
-	tenant, _, environment := managedSession(t, s)
+	tenant, _, environment := managedSession(t, s, db)
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err == nil {
 		t.Fatal("foreign absence accepted")
 	}
@@ -95,7 +95,7 @@ func TestManagedRuntimeObservedSettlementAllowsOwnedCleanup(t *testing.T) {
 	key := uuid.NewString()
 	p := &absentCreationProvider{observeSettled: true}
 	w, _ := managedWorker(t, s, db, key, p)
-	tenant, session, environment := managedSession(t, s)
+	tenant, session, environment := managedSession(t, s, db)
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err == nil {
 		t.Fatal("uncertain Create succeeded")
 	}

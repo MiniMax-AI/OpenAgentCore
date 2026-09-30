@@ -121,7 +121,7 @@ func (s *Store) TouchRuntimeActivity(ctx context.Context, tenant, environment st
 	if err != nil {
 		return err
 	}
-	owned, err := s.GetEnvironment(ctx, tenant, environment)
+	owned, err := sessionpg.LoadEnvironment(ctx, s.queries, tenant, environment)
 	if err != nil {
 		return err
 	}

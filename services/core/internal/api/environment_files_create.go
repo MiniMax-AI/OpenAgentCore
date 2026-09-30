@@ -40,7 +40,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	environment, err := h.Environments.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
+	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

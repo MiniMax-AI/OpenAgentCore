@@ -14,6 +14,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
@@ -34,7 +35,7 @@ type cursorFixture struct {
 	file                                                            string
 }
 
-func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, journal *sessions.ExecutionOperations, skillService *skills.Service, artifacts *sessions.Service, client pathIDClient, token, tenant, label string) cursorFixture {
+func seedCursorFixture(t *testing.T, s *store.Store, leased execution.Owner, skillService *skills.Service, sessionService *sessions.Service, client pathIDClient, token, tenant, label string) cursorFixture {
 	t.Helper()
 	ctx := t.Context()
 	var f cursorFixture
@@ -76,10 +77,10 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, journa
 
 	artifactSession, environment := hostedArtifactSession(t, s, tenant, label+"-artifacts")
 	f.artifactSession = artifactSession
-	f.artifactTurn = completeArtifactTurn(t, s, artifacts, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha", "c.txt": "charlie"})
+	f.artifactTurn = completeArtifactTurn(t, s, sessionService, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha", "c.txt": "charlie"})
 	f.artifact = first("/v1/agents/sessions/" + artifactSession + "/artifacts")
 	otherArtifactSession, otherEnvironment := hostedArtifactSession(t, s, tenant, label+"-other-artifacts")
-	completeArtifactTurn(t, s, artifacts, tenant, otherArtifactSession, otherEnvironment, label+"-other-artifact-turn", map[string]string{"b.txt": "bravo"})
+	completeArtifactTurn(t, s, sessionService, tenant, otherArtifactSession, otherEnvironment, label+"-other-artifact-turn", map[string]string{"b.txt": "bravo"})
 	f.otherArtifact = first("/v1/agents/sessions/" + otherArtifactSession + "/artifacts")
 
 	// Subagent history is seeded through the execution lease, as a daemon would.
@@ -94,14 +95,14 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, journa
 		if err != nil {
 			t.Fatal(err)
 		}
-		host, err := s.CreateDevice(ctx, tenant, "cursor "+key, runtimedevice.HashCredential(uuid.NewString()))
+		host, err := sessionService.CreateDevice(ctx, tenant, "cursor "+key, runtimedevice.HashCredential(uuid.NewString()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err = writer.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
+		if err = leased.Sessions.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err = leased.Store.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		opened := int64(1700000001000)
@@ -121,7 +122,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, journa
 			turn("child", "child-turn", opened), message("child", "child-turn", "child-item", 0), message("child", "child-turn", "child-item-2", 1),
 			turn("child", "later-child-turn", opened+1000), message("child", "later-child-turn", "later-child-item", 0),
 			turn("sibling", "sibling-turn", opened), message("sibling", "sibling-turn", "sibling-item", 0)}
-		if err = journal.AppendTurnEvents(ctx, tenant, created.ID, receipt.TurnID, 1, facts); err != nil {
+		if err = leased.Sessions.AppendTurnEvents(ctx, tenant, created.ID, receipt.TurnID, 1, facts); err != nil {
 			t.Fatal(err)
 		}
 		return created.ID, receipt.TurnID
@@ -240,14 +241,13 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
 	leased := executionOwner(t, db, s)
-	writer := leased.Store
 	skillService := store.SkillService(t, db.pool, db.cipher)
 	_, sessionService, err := fixtureSessions(db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := seedCursorFixture(t, s, writer, leased.Sessions, skillService, sessionService, client, owner, ownerTenant, "a")
-	b := seedCursorFixture(t, s, writer, leased.Sessions, skillService, sessionService, client, foreign, foreignTenant, "b")
+	a := seedCursorFixture(t, s, leased, skillService, sessionService, client, owner, ownerTenant, "a")
+	b := seedCursorFixture(t, s, leased, skillService, sessionService, client, foreign, foreignTenant, "b")
 
 	text := func(value string) *string { return &value }
 	var (

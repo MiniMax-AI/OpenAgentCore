@@ -98,8 +98,14 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 					return err
 				}
 			}
-			if err := createSessionEnvironment(ctx, q, row); err != nil {
+			creates, err := sessions.CreatesEnvironment(row.Configuration)
+			if err != nil {
 				return err
+			}
+			if creates {
+				if err := sessionpg.CreateSessionEnvironment(ctx, q, row.ID); err != nil {
+					return err
+				}
 			}
 			if placement.Environment.Type == "openai_hosted" {
 				if err := reserveRuntimePlacement(ctx, q, row.ID, s.publicURL); err != nil {

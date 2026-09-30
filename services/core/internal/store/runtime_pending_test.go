@@ -15,12 +15,12 @@ import (
 
 func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, idle, idleEnvironment := managedSession(t, s)
+	tenant, idle, idleEnvironment := managedSession(t, s, db)
 	initial, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"hello"}`)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, deleted, deletedEnvironment := managedSession(t, s)
+	_, deleted, deletedEnvironment := managedSession(t, s, db)
 	if err := s.DeleteSession(t.Context(), deleted.TenantID, deleted.ID); err != nil {
 		t.Fatal(err)
 	}

@@ -18,6 +18,7 @@ func NewExecutionOperations(storage ExecutionStorage) (*ExecutionOperations, err
 
 // ExecutionStorage is the lease-bound Session storage, one family per line.
 type ExecutionStorage interface {
+	EnvironmentExecution
 	FunctionExecution
 	JournalExecution
 }

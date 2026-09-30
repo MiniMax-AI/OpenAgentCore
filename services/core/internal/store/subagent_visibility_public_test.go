@@ -120,11 +120,11 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 		t.Fatal(page, err)
 	}
 	root := page.Turns[0].ID
-	host, err := s.CreateDevice(ctx, tenant, "subagent visibility", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := fixtureSessionService(t, db).CreateDevice(ctx, tenant, "subagent visibility", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = writer.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
+	if err = leased.Sessions.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = writer.TransitionTurn(ctx, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {

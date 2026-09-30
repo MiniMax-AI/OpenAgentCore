@@ -21,7 +21,7 @@ type directoryResult struct {
 func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
-	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,11 +31,11 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	if bytes.Contains(session.Configuration, []byte("canary")) {
 		t.Fatal("plaintext Session metadata")
 	}
-	frozen, err := s.ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(frozen, setup) {
 		t.Fatal("Session did not freeze setup", err)
 	}
-	if _, err := s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Session initialization", err)
 	}
 	retry, err := s.CreateSession(t.Context(), tenant, input)

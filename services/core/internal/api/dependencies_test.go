@@ -38,6 +38,7 @@ type testFakes struct {
 	artifactsReader        *fakeArtifactsReader
 	sessionAdmin           *fakeSessionAdmin
 	environments           *fakeEnvironments
+	environmentsReader     *fakeEnvironmentsReader
 	executorConnections    *fakeExecutorConnections
 	admin                  *fakeAdmin
 	adminAudit             *fakeAdminAudit
@@ -82,7 +83,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		subagents:       &fakeSubagents{t: t},
 		artifacts:       &fakeArtifacts{t: t},
 		artifactsReader: &fakeArtifactsReader{t: t},
-		sessionAdmin:    &fakeSessionAdmin{t: t}, environments: &fakeEnvironments{t: t}, executorConnections: &fakeExecutorConnections{t: t},
+		sessionAdmin:    &fakeSessionAdmin{t: t}, environments: &fakeEnvironments{t: t}, environmentsReader: &fakeEnvironmentsReader{t: t}, executorConnections: &fakeExecutorConnections{t: t},
 		admin: &fakeAdmin{t: t}, adminAudit: &fakeAdminAudit{t: t}, writeAudit: &fakeWriteAudit{t: t}, metrics: &fakeMetrics{t: t},
 		runtimeObservations: &fakeRuntimeObservations{t: t}, runtimeHistory: &fakeRuntimeHistory{t: t}, installationBindings: &fakeInstallationBindings{t: t},
 		sessionAdmission: &fakeSessionAdmission{t: t},
@@ -110,7 +111,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		Artifacts:       f.artifacts,
 		ArtifactsReader: f.artifactsReader,
 		SessionAdmin:    f.sessionAdmin,
-		Environments:    f.environments, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
+		Environments:    f.environments, EnvironmentsReader: f.environmentsReader, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
 		Metrics: f.metrics, RuntimeObservations: f.runtimeObservations, RuntimeHistory: f.runtimeHistory,
 	}, f
 }

@@ -30,7 +30,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(ctx, p.TenantID, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, p.TenantID, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if err := s.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); err != nil {
 		t.Fatal("lost-response retry", err)
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(secrets[winner])); err != nil {
+	if _, err := sessionAdapter(s).AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(secrets[winner])); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RevokeExecutorCredential(ctx, p, environment.ID); err != nil {

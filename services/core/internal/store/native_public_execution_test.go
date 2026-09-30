@@ -23,7 +23,9 @@ func verifyNativePublicExecution(t *testing.T, h *dispatchHarness, parent contex
 	}
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	worker := startWorker(t, ctx, h.db, h.d)
+	// The Turns before this proof ran on the harness's execution Owner, so the
+	// Worker takes that lease rather than a second one.
+	worker := startOwnedWorker(t, ctx, h.db, h.d, h.owner())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {

@@ -90,6 +90,9 @@ type Session struct {
 	// heartbeat persists daemon-advertised capability snapshots.
 	heartbeat      HeartbeatTouch
 	credentialHash string
+	// archivedCancellations reads the receipt an archived Session's
+	// cancellation owes this connection's delivery.
+	archivedCancellations ArchivedCancellationStore
 
 	hbMu       sync.Mutex
 	lastSeenAt time.Time
@@ -258,7 +261,6 @@ func (s *Session) Close(reason string) {
 		s.closeWorkspaceWrites()
 		s.closeCapabilities()
 		s.closeWorkspaceExports()
-		s.markOfflineOnClose()
 		s.releaseOwnerLease()
 	})
 }
@@ -448,17 +450,6 @@ func (s *Session) releaseOwnerLease() {
 		Generation: s.owner.generation,
 	}); err != nil {
 		s.log("agentdaemon gateway: owner lease release failed device=%s generation=%d: %v", s.DeviceID, s.owner.generation, err)
-	}
-}
-
-func (s *Session) markOfflineOnClose() {
-	if s.heartbeat == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if err := s.heartbeat.MarkRuntimeOffline(ctx, s.DeviceID); err != nil {
-		s.log("agentdaemon gateway: mark offline on close failed device=%s: %v", s.DeviceID, err)
 	}
 }
 

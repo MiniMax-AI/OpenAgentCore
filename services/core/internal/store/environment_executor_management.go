@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -177,7 +178,7 @@ func (s *Store) selfHostedExecutorTarget(ctx context.Context, principal identity
 	if err := principal.Validate(); err != nil {
 		return sessions.ErrInvalidInput
 	}
-	owned, err := s.GetEnvironment(ctx, principal.TenantID, environment)
+	owned, err := sessionpg.LoadEnvironment(ctx, s.queries, principal.TenantID, environment)
 	if err != nil {
 		return err
 	}

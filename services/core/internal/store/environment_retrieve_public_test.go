@@ -76,7 +76,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		return result
 	}
 	result := run()
-	before, err := s.GetEnvironment(t.Context(), tenant, result["environment_id"])
+	before, err := fixtureSessionStore(db).GetEnvironment(t.Context(), tenant, result["environment_id"])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		settings[key] = value
 	}
 	run()
-	after, err := reopened.GetEnvironment(t.Context(), tenant, before.ID)
+	after, err := fixtureSessionStore(reopenedDB).GetEnvironment(t.Context(), tenant, before.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("public retrieval changed durable Environment state", err)
 	}

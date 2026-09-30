@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// RuntimeTypeAgentDaemon is the type of every device credential: the device
+// runs the agent daemon. The gateway authenticates only this type.
+const RuntimeTypeAgentDaemon = "agent_daemon"
+
 // Credential is the minimal device identity needed for gateway authentication.
 // CredentialHash is never sent over the daemon protocol.
 type Credential struct {

@@ -12,12 +12,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Environments reads Environments, grants and claims native installations, and
-// manages the executor credentials of a Project's self_hosted Environments. The
-// Project's principal is an executor credential's execution principal; the
-// Core key that authorizes the request is not.
-type Environments interface {
+// EnvironmentsReader reads Environments.
+type EnvironmentsReader interface {
 	GetEnvironment(context.Context, string, string) (sessions.Environment, error)
+}
+
+// Environments grants and claims native installations, and manages the
+// executor credentials of a Project's self_hosted Environments. The Project's
+// principal is an executor credential's execution principal; the Core key that
+// authorizes the request is not.
+type Environments interface {
 	AuthorizeEnvironmentInstallation(context.Context, identity.Principal, string, string) (string, int64, error)
 	ValidateEnvironmentInstallation(context.Context, string, string) (sessions.InstallationAuthorization, error)
 	ClaimEnvironmentInstallation(context.Context, string, string, string) error
@@ -37,14 +41,14 @@ type Environments interface {
 // @Failure 400,401,404,500 {object} v1.ErrorResponse
 // @Router /agents/environments/{environment_id} [get]
 func (h *Handler) getEnvironment(w http.ResponseWriter, r *http.Request) {
-	environment, err := h.Environments.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
+	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response, err := environmentResponse(environment)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)

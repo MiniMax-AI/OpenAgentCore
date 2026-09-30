@@ -18,7 +18,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 			return err
 		}
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
+	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	if err != nil {
 		if !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
 			return err
@@ -35,7 +35,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 		timer := time.NewTicker(100 * time.Millisecond)
 		defer timer.Stop()
 		for {
-			peer, err = authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
+			peer, err = authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 			if err == nil {
 				break
 			}

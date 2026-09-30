@@ -69,26 +69,26 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	_ = json.Unmarshal(configuration, &snapshot)
 	if snapshot.Environment.Type == "self_hosted" {
-		h.device, h.credential = enrollFixtureSession(t, s, h.tenant, h.session)
+		h.device, h.credential = enrollFixtureSession(t, s, db, h.tenant, h.session)
 		secret = h.credential
 	} else if local {
-		environment, getErr := s.GetSessionEnvironment(ctx, h.tenant, h.session.ID)
+		environment, getErr := fixtureSessionStore(db).GetSessionEnvironment(ctx, h.tenant, h.session.ID)
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		h.device, err = s.CreateEnvironmentDevice(ctx, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
+		h.device, err = store.FixtureEnvironmentDevice(ctx, db.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
 	} else {
-		h.device, err = s.CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
+		h.device, err = fixtureSessionService(t, db).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(s, wsURL)
+	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}

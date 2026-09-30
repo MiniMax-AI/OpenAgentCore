@@ -74,19 +74,19 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err := writer.BindSessionDevice(t.Context(), project.TenantID, session.ID, owner.DeviceID); err != nil {
+			if err := leased.Sessions.BindSessionDevice(t.Context(), project.TenantID, session.ID, owner.DeviceID); err != nil {
 				t.Fatal(err)
 			}
 			generation := uuid.NewString()
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation); err != nil {
+			if err := leased.Sessions.ReplaceEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation); err != nil {
 				t.Fatal(err)
 			}
-			if err := writer.ObserveEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation, 1, true); err != nil {
+			if err := leased.Sessions.ObserveEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation, 1, true); err != nil {
 				t.Fatal(err)
 			}
 			server := httptest.NewUnstartedServer(nil)
 			wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(s, wsURL)
+			handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -147,14 +147,14 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 			}
 			if scenario == "revoke_before_archive" || scenario == "cancel_revoke_archive" {
-				if err := s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
+				if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var revokeDone chan error
 			if scenario == "revoke_concurrent_archive" {
 				revokeDone = make(chan error, 1)
-				go func() { revokeDone <- s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
+				go func() { revokeDone <- fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
 			}
 
 			archived, err := writer.ArchiveManagedSession(auditCtx, h.tenant, session.ID, 1)
@@ -167,7 +167,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 			}
 			if scenario == "revoke_after_archive" {
-				if err := s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
+				if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -185,7 +185,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err != nil || current.Status != sessions.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}
-			if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
+			if _, err := runtimegateway.NewAuthenticator(fixtureSessionStore(db)).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
 				t.Fatal("archive allowed renewed authority", err)
 			}
 			rejected, response, dialErr := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})

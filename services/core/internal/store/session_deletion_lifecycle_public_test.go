@@ -95,10 +95,10 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	connect := func(session sessions.Session) {
 		t.Helper()
 		generation := uuid.NewString()
-		if err := writer.ReplaceEnvironmentConnection(ctx, tenant, session.Environment.ID, generation); err != nil {
+		if err := leased.Sessions.ReplaceEnvironmentConnection(ctx, tenant, session.Environment.ID, generation); err != nil {
 			t.Fatal(err)
 		}
-		if err := writer.ObserveEnvironmentConnection(ctx, tenant, session.Environment.ID, generation, 1, true); err != nil {
+		if err := leased.Sessions.ObserveEnvironmentConnection(ctx, tenant, session.Environment.ID, generation, 1, true); err != nil {
 			t.Fatal(err)
 		}
 	}

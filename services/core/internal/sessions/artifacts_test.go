@@ -190,6 +190,31 @@ func (s *fakeArtifactStorage) DeleteSessionArtifact(context.Context, string, str
 	return nil
 }
 
+func (s *fakeArtifactStorage) CreateDevice(context.Context, string, DeviceRegistration) (ExecutionDevice, error) {
+	s.t.Fatal("unexpected call to CreateDevice")
+	return ExecutionDevice{}, nil
+}
+
+func (s *fakeArtifactStorage) RevokeDevice(context.Context, string, string) error {
+	s.t.Fatal("unexpected call to RevokeDevice")
+	return nil
+}
+
+func (s *fakeArtifactStorage) TouchDevice(context.Context, string) (bool, error) {
+	s.t.Fatal("unexpected call to TouchDevice")
+	return false, nil
+}
+
+func (s *fakeArtifactStorage) TouchAuthenticatedDevice(context.Context, string, string) (bool, error) {
+	s.t.Fatal("unexpected call to TouchAuthenticatedDevice")
+	return false, nil
+}
+
+func (s *fakeArtifactStorage) WithEnrollment(context.Context, string, string, func(context.Context, EnrollmentTx, Environment, LockedSession) error) error {
+	s.t.Fatal("unexpected call to WithEnrollment")
+	return nil
+}
+
 func discard(content io.Reader, size int64) error {
 	_, err := io.CopyN(io.Discard, content, size)
 	return err

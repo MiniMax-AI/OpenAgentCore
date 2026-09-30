@@ -22,9 +22,20 @@ func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	return New(pool), pool
 }
 
-// sessionAdapter is the Session adapter on s's database. It serves the Item,
-// Subagent and Artifact reads and deletes Artifacts.
-func sessionAdapter(s *Store) *sessionpg.Store { return sessionpg.New(s.pooled) }
+// sessionAdapter is the Session adapter on s's database with s's credential
+// key. It serves the Session reads and pooled Session storage.
+func sessionAdapter(s *Store) *sessionpg.Store { return sessionpg.New(s.pooled, s.credentialCipher) }
+
+// sessionService is the Session service on s's Session adapter. It runs the
+// device, heartbeat and enrollment use cases.
+func sessionService(t testing.TB, s *Store) *sessions.Service {
+	t.Helper()
+	service, err := sessions.NewService(sessionAdapter(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
+}
 
 // stageTurnArtifacts stages export as the Turn's Artifacts through the Session
 // service on s's database, as the execution Worker does.

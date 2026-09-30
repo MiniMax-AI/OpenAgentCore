@@ -74,7 +74,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if w.CheckOwnership(ctx) != nil {
 		return unavailable
 	}
-	environment, err := w.dispatcher.Store.GetEnvironment(ctx, request.environment.TenantID, request.environment.ID)
+	environment, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, request.environment.TenantID, request.environment.ID)
 	if err != nil {
 		return fileWriteResult{err: err}
 	}
@@ -89,7 +89,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if err != nil {
 		return fileWriteResult{err: err}
 	}
-	bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
+	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(ctx, session.TenantID, session.ID)
 	if err != nil || !environmentDeviceMatches(session, environment, bound) || w.dispatcher.Registry == nil {
 		return unavailable
 	}

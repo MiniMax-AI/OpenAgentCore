@@ -131,7 +131,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	if compute.Status != "running" || !compute.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
+	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	if err != nil {
 		return err
 	}
@@ -170,7 +170,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 		return err
 	}
 	// Publish disconnected only after receiving the daemon's receipt barrier.
-	if err := observeRuntimeConnection(ctx, r.store, r.connections, owner.TenantID, owner.EnvironmentID, nil, false); err != nil {
+	if err := observeRuntimeConnection(ctx, r.sessionExecution, r.connections, owner.TenantID, owner.EnvironmentID, nil, false); err != nil {
 		return err
 	}
 	// The Session-locked phase commit checks pending work and wake requests.

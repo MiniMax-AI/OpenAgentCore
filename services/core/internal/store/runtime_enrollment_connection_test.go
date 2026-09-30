@@ -32,7 +32,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+	environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,17 +41,17 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte(key.Token))
-	bound, err := s.EnrollRuntime(t.Context(), environment.ID, hex.EncodeToString(digest[:]))
+	bound, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, hex.EncodeToString(digest[:]))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(s, wsURL)
+	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	connection := runtimeenrollment.ConnectionHandler(s, registry)
+	connection := runtimeenrollment.ConnectionHandler(fixtureSessionStore(db), registry)
 	assertConnection := func(target, token, status string, code int) {
 		t.Helper()
 		request := httptest.NewRequest("GET", "/api/v1/agent-daemon/connection?environment_id="+target, nil)
@@ -121,7 +121,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
-			current, err := s.GetEnvironment(t.Context(), principal.TenantID, environment.ID)
+			current, err := fixtureSessionStore(db).GetEnvironment(t.Context(), principal.TenantID, environment.ID)
 			if err == nil && current.Status == status {
 				return
 			}

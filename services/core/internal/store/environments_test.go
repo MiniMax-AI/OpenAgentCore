@@ -34,17 +34,17 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			first, err := s.GetSessionEnvironment(ctx, tenant, session.ID)
+			first, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID)
 			if err != nil || first.ID == "" || first.ID == session.ID || first.SessionID != session.ID || first.TenantID != tenant || first.Status != "pending" || first.CreatedAt.IsZero() {
 				t.Fatal(first, err)
 			}
-			got, err := s.GetEnvironment(ctx, tenant, first.ID)
+			got, err := sessionAdapter(s).GetEnvironment(ctx, tenant, first.ID)
 			if err != nil || !reflect.DeepEqual(got, first) {
 				t.Fatal(got, err)
 			}
 			for _, lookup := range []func() error{
-				func() error { _, err := s.GetEnvironment(ctx, foreign, first.ID); return err },
-				func() error { _, err := s.GetSessionEnvironment(ctx, foreign, session.ID); return err },
+				func() error { _, err := sessionAdapter(s).GetEnvironment(ctx, foreign, first.ID); return err },
+				func() error { _, err := sessionAdapter(s).GetSessionEnvironment(ctx, foreign, session.ID); return err },
 			} {
 				if err := lookup(); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("foreign access", err)
@@ -54,7 +54,7 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			otherEnvironment, err := s.GetSessionEnvironment(ctx, foreign, other.ID)
+			otherEnvironment, err := sessionAdapter(s).GetSessionEnvironment(ctx, foreign, other.ID)
 			if err != nil || otherEnvironment.ID == first.ID {
 				t.Fatal(otherEnvironment, err)
 			}
@@ -71,7 +71,7 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 			if err != nil || retry.ID != session.ID || retry.Metadata["updated"] != "yes" {
 				t.Fatal(retry, err)
 			}
-			retained, err := restarted.GetSessionEnvironment(ctx, tenant, retry.ID)
+			retained, err := sessionAdapter(restarted).GetSessionEnvironment(ctx, tenant, retry.ID)
 			if err != nil || !reflect.DeepEqual(retained, first) {
 				t.Fatal(retained, err)
 			}
@@ -108,7 +108,7 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			environment, err := st.GetSessionEnvironment(ctx, tenant, creation.Session.ID)
+			environment, err := sessionAdapter(st).GetSessionEnvironment(ctx, tenant, creation.Session.ID)
 			if err != nil {
 				t.Error(err)
 				return
@@ -170,7 +170,7 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 	if err != nil || found.Created || found.Session.ID != first.creation.Session.ID {
 		t.Fatal(found, err)
 	}
-	environment, err := restarted.GetSessionEnvironment(ctx, tenant, found.Session.ID)
+	environment, err := sessionAdapter(restarted).GetSessionEnvironment(ctx, tenant, found.Session.ID)
 	if err != nil || !reflect.DeepEqual(environment, first.environment) {
 		t.Fatal(environment, err)
 	}
@@ -222,7 +222,7 @@ func TestEnvironmentCreationFailureRollsBackAllResources(t *testing.T) {
 				t.Fatal("retry remained reserved", session, err)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
-			if environment, err := s.GetSessionEnvironment(ctx, tenant, session.ID); err != nil || environment.ID == "" {
+			if environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID); err != nil || environment.ID == "" {
 				t.Fatal(environment, err)
 			}
 		})
@@ -238,17 +238,17 @@ func TestEnvironmentDeletionHidesWithoutDestroyingOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(ctx, tenant, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetEnvironment(ctx, tenant, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetEnvironment(ctx, tenant, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSessionEnvironment(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
@@ -270,7 +270,7 @@ func TestEnvironmentAbsentForNoneAndLegacySnapshots(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.GetSessionEnvironment(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(s).GetSessionEnvironment(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unexpected Environment", err)
 		}
 		retry, err := s.CreateSession(ctx, tenant, input)

@@ -16,11 +16,11 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	s, pool := testStore(t)
 	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
-	host, err := s.CreateDevice(t.Context(), tenant, "child outputs", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "child outputs", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = owner.BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
+	if err = sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "start")
@@ -90,11 +90,11 @@ func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 	s, _ := testStore(t)
 	owner := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
-	host, err := s.CreateDevice(t.Context(), tenant, "cancelled child", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := sessionService(t, s).CreateDevice(t.Context(), tenant, "cancelled child", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = owner.BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
+	if err = sessionExecution(t, owner.lease).BindSessionDevice(t.Context(), tenant, session.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "start")

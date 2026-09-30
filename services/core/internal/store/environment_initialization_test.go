@@ -5,13 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,25 +12,34 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func initializationState(t *testing.T, s *store.Store, tenant, environment string) string {
+func initializationState(t *testing.T, pool *pgxpool.Pool, tenant, environment string) string {
 	t.Helper()
-	value, err := s.GetEnvironment(t.Context(), tenant, environment)
+	value, err := sessionReads(pool).GetEnvironment(t.Context(), tenant, environment)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return value.Initialization
 }
 
-func awaitInitialization(t *testing.T, s *store.Store, tenant, environment, state string) {
+func awaitInitialization(t *testing.T, pool *pgxpool.Pool, tenant, environment, state string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if initializationState(t, s, tenant, environment) == state {
+		if initializationState(t, pool, tenant, environment) == state {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -64,7 +66,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			environment, err := s.GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+			environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -72,12 +74,12 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
+			enrolled, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 			if err != nil {
 				t.Fatal(err)
 			}
 			registry := runtimegateway.NewRegistry()
-			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
+			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
 			worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry})
@@ -109,7 +111,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				actions = append(actions, action)
 				mu.Unlock()
 				if outcome == "revoked" {
-					if err := s.RevokeDevice(t.Context(), principal.TenantID, enrolled.DeviceID); err != nil {
+					if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), principal.TenantID, enrolled.DeviceID); err != nil {
 						t.Error(err)
 					}
 					return completedInitialization(request, data)
@@ -120,7 +122,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				return completedInitialization(request, data)
 			}
 			time.Sleep(350 * time.Millisecond)
-			if initializationState(t, s, principal.TenantID, environment.ID) != "pending" {
+			if initializationState(t, db.pool, principal.TenantID, environment.ID) != "pending" {
 				t.Fatal("unconnected preparation was consumed")
 			}
 			bootstrap := sandbox.Bootstrap{DeviceID: enrolled.DeviceID, Credential: key.Token}
@@ -131,7 +133,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if outcome != "completed" {
 				want = "failed"
 			}
-			awaitInitialization(t, s, principal.TenantID, environment.ID, want)
+			awaitInitialization(t, db.pool, principal.TenantID, environment.ID, want)
 			if _, err := s.GetRuntimeAllocation(t.Context(), principal.TenantID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("self-hosted preparation fabricated allocation", err)
 			}
@@ -181,7 +183,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		environment, err := s.GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+		environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -189,15 +191,15 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		enrolled, err := s.EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
+		enrolled, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 		if err != nil {
 			t.Fatal(err)
 		}
 		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
-	owned := executionOwner(t, db, s).Store
-	if err := s.RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
+	owned := executionOwner(t, db, s).Sessions
+	if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), revoked); !errors.Is(err, sessions.ErrNotFound) {
@@ -208,7 +210,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), stale); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("stale binding escaped normal admission handling: %v", err)
 	}
-	if initializationState(t, s, other.TenantID, other.EnvironmentID) != "pending" {
+	if initializationState(t, db.pool, other.TenantID, other.EnvironmentID) != "pending" {
 		t.Fatal("stale claim changed preparation state")
 	}
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), other); err != nil {
