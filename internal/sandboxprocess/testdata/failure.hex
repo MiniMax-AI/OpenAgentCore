@@ -1,0 +1,9 @@
+# A failed response to Start. Hex bytes; text after # is a comment.
+00000028                                                               # PayloadLength 40
+8002                                                                   # MessageType: response to Start
+0000                                                                   # Flags
+0000000000000001                                                       # RequestID 1
+0002                                                                   # Result failure
+0007                                                                   # Code OperationConflict
+0001                                                                   # Effect EffectNone
+0000001e 6f7065726174696f6e20686173206120646966666572656e742073706563  # Message "operation has a different spec"

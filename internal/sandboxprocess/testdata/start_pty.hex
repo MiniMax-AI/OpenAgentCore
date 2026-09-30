@@ -1,0 +1,30 @@
+# A Start request for a process on a PTY. Hex bytes; text after # is a comment.
+0000008d                               # PayloadLength 141
+0002                                   # MessageType: Start
+0000                                   # Flags
+0000000000000002                       # RequestID 2
+101112131415161718191a1b1c1d1e1f       # ServerInstanceID
+202122232425262728292a2b2c2d2e2f       # OperationID
+00000009 2f62696e2f62617368            # Executable "/bin/bash"
+00000001                               # Argv count 1
+00000005 2d62617368                    # Argv "-bash"
+00000001                               # Env count 1
+00000004 484f4d45                      # Env name "HOME"
+00000005 2f726f6f74                    # Env value "/root"
+00000001 2f                            # Cwd "/"
+0000003f                               # Umask 0o077
+0002                                   # IOMode IOPTY
+01                                     # PTY present
+0018                                   # Rows 24
+0050                                   # Cols 80
+0280                                   # XPixels 640
+01e0                                   # YPixels 480
+0000000e 787465726d2d323536636f6c6f72  # Term "xterm-256color"
+00000003                               # Modes count 3
+0001                                   # Mode VINTR
+00000003                               # Value 3 (^C)
+002a                                   # Mode IUTF8
+00000001                               # Value 1
+0035                                   # Mode ECHO
+00000000                               # Value 0
+0001                                   # Scope ScopePOSIXSession
