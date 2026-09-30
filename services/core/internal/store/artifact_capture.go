@@ -3,7 +3,6 @@ package store
 import (
 	"archive/tar"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -82,7 +82,6 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 
 func captureArtifactArchive(ctx context.Context, tx pgx.Tx, input io.Reader) ([]sqlc.StageSessionArtifactParams, error) {
 	archive := tar.NewReader(input)
-	objects := tx.LargeObjects()
 	rows := make([]sqlc.StageSessionArtifactParams, 0)
 	seen := make(map[string]bool)
 	var total int64
@@ -99,22 +98,18 @@ func captureArtifactArchive(ctx context.Context, tx pgx.Tx, input io.Reader) ([]
 		}
 		seen[header.Name] = true
 		total += header.Size
-		oid, err := objects.Create(ctx, 0)
+		writer, err := pgunit.CreateLargeObject(ctx, tx)
 		if err != nil {
 			return nil, err
 		}
-		body, err := objects.Open(ctx, oid, pgx.LargeObjectModeWrite)
-		if err != nil {
-			return nil, err
-		}
-		writer := newSourceFileWriter(body)
 		if _, err := io.CopyN(writer, archive, header.Size); err != nil {
 			return nil, err
 		}
-		if err := body.Close(); err != nil {
+		body, err := writer.Close()
+		if err != nil {
 			return nil, err
 		}
-		rows = append(rows, sqlc.StageSessionArtifactParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, Path: "/workspace/" + header.Name, SizeBytes: writer.size, BodyOid: pgtype.Uint32{Uint32: oid, Valid: true}, Sha256: hex.EncodeToString(writer.hash.Sum(nil))})
+		rows = append(rows, sqlc.StageSessionArtifactParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, Path: "/workspace/" + header.Name, SizeBytes: body.Size, BodyOid: pgtype.Uint32{Uint32: body.OID, Valid: true}, Sha256: body.SHA256})
 	}
 	// Require transport EOF after the archive trailer, including confirmed helper exit.
 	padding, err := io.ReadAll(io.LimitReader(input, 32769))
