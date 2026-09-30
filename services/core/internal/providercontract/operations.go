@@ -93,3 +93,5 @@ func Validate(p Declared, contracts ...reflect.Type) error {
 	}
 	return nil
 }
+
+// CI impact validation only.
