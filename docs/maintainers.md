@@ -138,6 +138,10 @@ and confirms that the remote lightweight or annotated tag still resolves to the
 built commit after uploading the draft assets. Publication sends one request for
 that fixed Release ID. An upload failure cannot expose an incomplete public Release;
 an ambiguous publication response leaves the Release intact for inspection.
+The publisher resolves GitHub's current repository name before any writes, so
+renaming a repository does not leave asset uploads using an old Actions context.
+Uploads remain on `uploads.github.com` and bound to the created Release ID;
+publication does not replay failed uploads or follow arbitrary upload hosts.
 
 Do not move release tags or overwrite published assets. A rerun refuses an
 existing Release, including a partial draft, rather than replacing files. If the
