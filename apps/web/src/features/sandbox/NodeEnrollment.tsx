@@ -103,7 +103,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : installation.data === undefined
     ? installation.isError ? { text: t("The installation couldn't be read, so no command can be issued."), failed: true } : { text: t("Checking this installation's public URL…") }
     : !publicUrl
-      ? { text: t("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run oac apply") }
+      ? { text: t("Configure a domain and HTTPS in System before adding nodes.") }
       : !nodeFilesAvailable(consoleConfig, deployment.provider)
         ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
         : null;

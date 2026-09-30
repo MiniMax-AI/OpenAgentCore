@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/identity"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ type eventStore interface {
 
 // @Summary Stream live Session events
 // @Description Live-only events, including command output fragments from capable Codex peers as agent.output.command_execution_output.delta with stable Item/output indexes. Native text conversion and output quotas apply; completion snapshots remain authoritative. Reconnect through Session, Turn and Items reads; missed events are not replayed. A lagging stream closes with an error when its bounded buffer is exceeded. When a hosted Environment fails to provision, the stream sends agent.session.environment.failed, an error event (environment_error/sandbox_error with the safe step and exit-status reason, never command output) and agent.session.failed, then ends. Session activity includes immutable pending-input connection actions before Turn creation; self_hosted environments use the same safe output as Session retrieval.
+// @Description Active streams revalidate the original Project key every second before output; revocation, Project archival or authentication unavailability closes the stream. Authentication checks use a five-second timeout.
 // @Tags Events
 // @Produce text/event-stream
 // @Security BearerAuth
@@ -76,6 +78,25 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, eve
 	if write == nil {
 		return
 	}
+	principal := r.Context().Value(principalContextKey{}).(identity.Principal)
+	var checkedAuthority time.Time
+	authorized := func() bool {
+		if time.Since(checkedAuthority) < time.Second {
+			return true
+		}
+		current, ok, err := h.resolvePrincipal(r)
+		checkedAuthority = time.Now()
+		return err == nil && ok && current == principal
+	}
+	// Recheck on idle polls and before output, including a continuously busy drain.
+	// The existing resolver bounds authentication calls and fails closed.
+	streamWrite := write
+	write = func(data []byte) error {
+		if !authorized() {
+			return errors.New("stream authority is no longer available")
+		}
+		return streamWrite(data)
+	}
 	emit := func(event v1.SessionEvent) error { return emitSessionEvent(write, id, event) }
 	if initial != nil {
 		if err := emit(*initial); err != nil {
@@ -90,6 +111,9 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, eve
 	recheck, limit := true, int64(-1)
 	var checked time.Time
 	for {
+		if !authorized() {
+			return
+		}
 		changes, err := events.ListSessionEvents(r.Context(), tenant, id, cursor)
 		if errors.Is(err, store.ErrNotFound) {
 			return

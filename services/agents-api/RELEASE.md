@@ -161,8 +161,7 @@ Reuse the database, caller identities, daemon profile and native history. Do not
 resubmit uncertain execution as new work. Graceful shutdown or connection closure
 does not by itself prove all native descendants have exited.
 
-For key rotation, executor-key revocation, existing-database upgrades and other supported
-profiles, use the [versioned service guide](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/services/agents-api/README.md).
+For key rotation, executor-key revocation and supported execution profiles, use the [versioned service guide](https://github.com/MiniMax-AI/parsar-core/blob/@SOURCE_REVISION@/services/agents-api/README.md).
 This package does not install PostgreSQL, daemons, harnesses, TLS or a supervisor,
 and it does not switch Parsar's product execution path.
 

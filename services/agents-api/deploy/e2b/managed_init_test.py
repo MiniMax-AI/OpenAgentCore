@@ -13,15 +13,15 @@ import managed_init
 def payload():
     value = {key: str(uuid4()) for key in ['InstallationID', 'TenantID', 'EnvironmentID',
                                           'AllocationID', 'SessionID', 'DeviceID']}
-    return dict(value, CoreURL='https://core.example/api/v1', Credential='private-managed-token',
+    return dict(value, RuntimeBootstrap={'version': 1, 'core_url': 'https://core.example/api/v1',
+                'device_id': value['DeviceID'], 'credential': 'private-managed-token'},
                 NetworkAccess='restricted', AllowedDomains=['example.com'])
 
 
 class ManagedStartupTest(unittest.TestCase):
     def test_invalid_binding_rejected(self):
         source = payload()
-        for key, value in [('DeviceID', 'other'), ('CoreURL', 'https://secret@host/api/v1'),
-                           ('Credential', 'x\n'), ('NetworkAccess', 'unknown')]:
+        for key, value in [('DeviceID', 'other'), ('NetworkAccess', 'unknown')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 managed_init.identity(dict(source, **{key: value}))
 
@@ -37,7 +37,7 @@ class ManagedStartupTest(unittest.TestCase):
             process = Mock(return_value=Mock(pid=456))
             if failed:
                 process.side_effect = RuntimeError('private process diagnostic')
-            image_env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'OAC_RUNTIME_HOME': '/home/runtime/.oac',
+            image_env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'OAC_RUNTIME_HOME': str(Path(temporary) / '.oac'),
                          'OAC_RUNTIME_WORKSPACE': '/environment/workspace'}
             with patch.object(managed_init.shared, 'ROOT', root), patch.object(managed_init.shared, 'PROFILE', profile), \
                     patch.object(managed_init.shared, 'prepare_runtime', return_value=image_env), \
@@ -48,13 +48,14 @@ class ManagedStartupTest(unittest.TestCase):
                 else:
                     managed_init.initialize()
                 self.assertTrue((root / 'managed-launch.json').exists())
-                auth = json.loads((profile / 'auth.json').read_text())
-                self.assertEqual(auth['runner_credential'], data['Credential'])
-                self.assertEqual(auth['runtime_id'], data['DeviceID'])
-                self.assertEqual((profile / 'auth.json').stat().st_mode & 0o777, 0o600)
+                connection_file = Path(temporary) / 'runtime-bootstrap.json'
+                self.assertEqual(json.loads(connection_file.read_text()), data['RuntimeBootstrap'])
+                self.assertEqual(connection_file.stat().st_mode & 0o777, 0o600)
+                self.assertFalse((profile / 'auth.json').exists())
+                self.assertEqual(process.call_args.args[0][-2:], ['--bootstrap-file', str(connection_file)])
                 self.assertFalse(source.exists())
-                self.assertNotIn(data['Credential'], json.dumps(process.call_args.args))
-                self.assertNotIn(data['Credential'], json.dumps(process.call_args.kwargs['env']))
+                self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(process.call_args.args))
+                self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(process.call_args.kwargs['env']))
                 self.assertEqual(process.call_args.kwargs['env']['OAC_RUNTIME_ENVIRONMENT_ID'], data['EnvironmentID'])
                 self.assertEqual(process.call_args.kwargs['user'], 1000)
                 if failed:
@@ -62,7 +63,7 @@ class ManagedStartupTest(unittest.TestCase):
                 else:
                     receipt = json.loads((root / 'managed-ready.json').read_text())
                     self.assertEqual(receipt['identity'], managed_init.identity(data))
-                    self.assertNotIn(data['Credential'], json.dumps(receipt))
+                    self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(receipt))
                 source.write_text(json.dumps(data))
                 with self.assertRaises(RuntimeError):
                     managed_init.initialize()

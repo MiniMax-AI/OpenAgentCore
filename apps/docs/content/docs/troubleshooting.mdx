@@ -176,12 +176,8 @@ and mutating `oac` commands use the same installation lock, including during rep
 and interrupted apply recovery. If another command owns it, retry after it finishes.
 Never remove or replace `.oac.lock` to bypass a busy installation.
 
-Historical installations and removed CLI or machine-protocol variants have no
-migration procedure. Preserve their files, database, Runtime resources and Session
-history; use a fresh installation and separately provision its nodes. Reinstallation
-does not authorize deleting the previous installation's data. Retired process
-settings remain rejected; use the current
-[configuration reference](/configure).
+Reinstallation never deletes another installation's files, database, Runtime
+resources or Session history.
 
 ### Machine connections
 

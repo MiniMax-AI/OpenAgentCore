@@ -104,7 +104,7 @@ class DistributionTests(unittest.TestCase):
             if logical.startswith("native/"):
                 path.chmod(0o555)
         self.identities = {}
-        for name in ("core", "web", "runtime", "database"):
+        for name in ("core", "web", "runtime", "database", "ingress"):
             self.identities[name] = image_archive(self.bundle / "images" / (name + ".tar"), name)
             (self.stage / (name + ".id")).write_text(self.identities[name][0] + "\n")
         self.runtime_bytes = (self.bundle / "images/runtime.tar").read_bytes()

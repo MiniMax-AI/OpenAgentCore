@@ -54,6 +54,10 @@ BUNDLED_FILES = (
     "docs/assets/openagentcore-banner.jpeg",
     "docs/assets/architecture.png",
     "docs/assets/development-architecture.png",
+    "docs/assets/console-overview-en.webp",
+    "docs/assets/console-overview-zh.webp",
+    "docs/assets/console-agent-metrics-en.webp",
+    "docs/assets/console-agent-metrics-zh.webp",
 )
 REPOSITORY_URL = "https://github.com/MiniMax-AI/parsar-core"
 MARKDOWN_LINK = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
@@ -275,7 +279,7 @@ def package_artifacts(bundle, stage, revision):
 
 # The installation's management command; it runs without the bundle directory.
 OAC_CLI_MODULES = ("oac_cli.py", "config_model.py", "config.schema.json", "configuration.py",
-                  "native_service.py", "distribution.py", "node_spec.py")
+                  "native_service.py", "distribution.py", "node_spec.py", "ingress.py", "ingress_config.py")
 
 
 def bootstraps(bundle, epoch, revision):
@@ -314,7 +318,7 @@ def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline
         raise ValueError("msb imported an unexpected Runtime platform")
     identities = {name: image_identities(bundle / "images" / (name + ".tar"),
                                         (stage / (name + ".id")).read_text().strip())
-                  for name in ("core", "web", "runtime", "database")}
+                  for name in ("core", "web", "runtime", "database", "ingress")}
     metadata = {
         "source_commit": revision,
         "source_tree": source_tree,

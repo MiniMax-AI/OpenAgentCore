@@ -171,7 +171,9 @@ or release are refused without rewriting state.
 
 ### Manual registration
 
-Manual registration remains available for operator-managed payloads. Build or install
+Manual registration remains available for operator-managed payloads. These nodes use
+the same current wire version and exact generation routing as installer-managed
+nodes; they do not advertise automatic generation preparation. Build or install
 `oac-node` from the same Core release. On the host, first read
 `GET /api/v1/sandbox-node/configuration` with the enrollment Bearer token. Build the
 private provider JSON from its `provider`, `installation_id`, `core_url` (the
@@ -280,9 +282,10 @@ selections without this anchor and revoked committed keys require reset
 (`sandbox_reset_required`); transport or unsettled ownership remains unconfirmed (503).
 Keep the old key valid until PUT returns 200, then revoke it. A rejected change keeps
 the current key, generation and resource owners. Docker/microsandbox
-resource/Runtime edits still require zero unreleased allocations and pending hosted
-Environments, no reset and the observed generation. Their multi-generation preparation
-protocol remains future work. Submit once and read back after uncertain responses.
+resource/Runtime edits use the observed generation and the current node generation
+protocol. Installer-managed nodes advertise automatic generation preparation; manual
+fixed-configuration nodes retain their enrolled generation and require explicit
+operator preparation for a new target. Submit once and read back after uncertain responses.
 
 Deployment rollout reports old-generation resource counts separately from preparation.
 Poll frequently only while reset is active or rollout.state is preparing. E2B updates
@@ -396,3 +399,24 @@ reset its idle timer. An offline node or a provider without an observation sourc
 returns unavailable telemetry. Provider timestamps retain their existing
 validation, so excessive node/Core clock skew can also make a sample unavailable;
 suspension eligibility continues to use database time.
+
+## Historical installations
+
+Historical upgrades and resource adoption are unsupported. Core does not verify
+old allocation receipts to bind them to a new node, manufacture placements for
+pending Sessions, or reconnect nodes whose deployment has no valid specification.
+Startup rejects an incompatible saved selection before claiming its owner epoch.
+New installations use a separate database and state directory, select a deployment
+specification, and enroll nodes through the current configuration protocol.
+
+Keep the previous Core, its database, credentials, node identities and provider
+resources together until its work and cleanup are settled. Running compute,
+retained snapshots, uncertain create/restore operations and unconfirmed cleanup
+remain that installation's responsibility. Do not point a new installation at
+those resources, erase their receipts, or treat a refused startup as cleanup.
+Operators must explicitly settle them using the original installation before
+retiring it. This release does not perform that operation during startup.
+
+Current-version reconnect, immutable placement, maintenance fencing, idempotent
+receipts, cancellation and cleanup confirmation still apply. Released allocation
+history remains stored; it is never rebound to another node.

@@ -125,7 +125,7 @@ test("issues no command before the installation is read, for a loopback public U
   await page.unroute("**/core/v1/installation");
   await add.getByRole("button", { name: "Try again" }).click();
   // Nodes on other machines can't reach a loopback public_url.
-  await expect(add.getByRole("status")).toHaveText("Nodes need an HTTPS public URL that other machines and their sandboxes can reach: set public_url in config.json and run oac apply");
+  await expect(add.getByRole("status")).toHaveText("Configure a domain and HTTPS in System before adding nodes.");
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   await add.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeDisabled();

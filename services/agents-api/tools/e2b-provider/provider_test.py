@@ -29,6 +29,10 @@ class ProviderTest(unittest.TestCase):
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret',
                                           NetworkAccess='enabled', AllowedDomains=[])}
+        self.request['RuntimeBootstrap'] = {
+            'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
+            'device_id': self.request['Bootstrap']['DeviceID'],
+            'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',
                           _envd_access_token='private-envd-secret', traffic_access_token=None, state='running')
         self.cloud.metadata = Provider(self.request).metadata
@@ -62,6 +66,10 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(result['ErrorCode'], '')
         self.assertTrue(result['Info']['BootstrapComplete'])
         self.assertTrue(result['Info']['CreateSettled'])
+        startup = json.loads(self.cloud.files.write.call_args.args[1])
+        self.assertEqual(startup['RuntimeBootstrap'], self.request['RuntimeBootstrap'])
+        self.assertNotIn('CoreURL', startup)
+        self.assertNotIn('Credential', startup)
         self.assertEqual(self.call('create')['ErrorCode'], 'exists')
         self.assertTrue(self.call('inspect')['Info']['BootstrapComplete'])
         self.api.create.assert_called_once()
@@ -136,10 +144,10 @@ class ProviderTest(unittest.TestCase):
         self.cloud.files.write.assert_not_called()
         self.cloud.commands.run.assert_not_called()
 
-    def test_legacy_template_refuses_before_credentials_and_retains_owned_cleanup(self):
+    def test_template_invalid_refuses_before_credentials_and_retains_owned_cleanup(self):
         with patch('provider.run', return_value={'ExitCode': 78, 'Stdout': '', 'Stderr': ''}):
             result = self.call('create')
-        self.assertEqual(result['ErrorCode'], 'legacy_template')
+        self.assertEqual(result['ErrorCode'], 'template_invalid')
         self.assertTrue(result['Info']['CreateSettled'])
         self.assertFalse(result['Info']['BootstrapComplete'])
         self.assertEqual(self.record()['ids'], ['owned-id'])

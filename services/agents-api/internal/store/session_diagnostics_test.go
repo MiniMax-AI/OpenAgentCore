@@ -217,7 +217,9 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 		_, _ = pool.Exec(context.Background(), "ALTER TABLE session_events DROP CONSTRAINT IF EXISTS "+constraint)
 	})
 	failure := ProvisioningFailure{Step: ProvisioningSetupCommand, Index: 2, ExitCode: 7}
-	if _, err = writer.FailRuntimeInitialization(t.Context(), owner, failure); err == nil {
+	runtimeSuspensionSQL(t, pool, "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID)
+	preparation := EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
+	if err = writer.FailEnvironmentInitialization(t.Context(), preparation, failure); err == nil {
 		t.Fatal("failure committed without events")
 	}
 	var detail []byte
@@ -225,7 +227,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 		t.Fatal("partial failure detail", string(detail), err)
 	}
 	runtimeSuspensionSQL(t, pool, "ALTER TABLE session_events DROP CONSTRAINT "+constraint)
-	if _, err = writer.FailRuntimeInitialization(t.Context(), owner, failure); err != nil {
+	if err = writer.FailEnvironmentInitialization(t.Context(), preparation, failure); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID)

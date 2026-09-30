@@ -83,7 +83,7 @@ func (h *Handler) resolveSessionExecution(ctx context.Context, input sessionRequ
 	var revision uuid.UUID
 	provider, source := inherited, v1.ModelProviderSourceAgent
 	if extension := input.XAgentsCore; extension != nil {
-		if extension.ModelProvider == nil && !input.modelProviderNull && len(extension.HarnessConfig) == 0 {
+		if extension.ModelProvider == nil && !input.modelProviderNull && len(extension.HarnessConfig) == 0 && len(extension.Environment) == 0 {
 			return "", nil, "", uuid.Nil, errors.New("x_agents_core requires an execution option")
 		}
 		if extension.ModelProvider != nil {

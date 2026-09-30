@@ -1,3 +1,5 @@
+import { coreHarnessNames } from "@agents-core-web/agents-client";
+
 /**
  * Session log and one Session's read-only history (Monitor › Session log).
  * `validation` and `actions.errors` serve the retired Session-creation and
@@ -15,7 +17,7 @@ export const sessions = {
   },
   sessionStatus: { all: "All", in_progress: "Running", requires_action: "Waiting for caller", failed: "Failed", idle: "Idle", other: "Other" },
   environment: { none: "No environment", self_hosted: "Self-hosted", openai_hosted: "Hosted sandbox", other: "Other" },
-  harness: { claude_sdk: "Claude Code", codex: "Codex", mcode: "MiniMax Code" },
+  harness: coreHarnessNames,
   usage: { input: "Input", output: "Output", total: "Total", cached: "Cached", reasoning: "Reasoning" },
   log: {
     title: "Session log",

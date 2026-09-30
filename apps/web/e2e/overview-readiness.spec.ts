@@ -75,21 +75,19 @@ test("successful empty reads preserve true zero counts and empty states", async 
   await expect(failed(page)).toHaveCount(0);
 });
 
-test("local-only address has actionable Core instructions on all three pages and blocks Add node", async ({ page, request }) => {
+test("local-only address has a domain setup link on all three pages and blocks Add node", async ({ page, request }) => {
   await openConsole(page, request, "overview", { installation: "local" });
   const notice = page.getByRole("status", { name: "Public address needs attention" });
-  await expect(notice).toContainText("/opt/oac/config.json");
-  await expect(notice).toContainText("sudo oac apply");
+  await expect(notice.getByRole("button", { name: "Configure domain and HTTPS" })).toBeVisible();
   await expect(page.locator(".getting-started-step").first()).toContainText("To do");
-  await expect(page.locator(".getting-started-step").first()).toContainText("Fix the public address");
+  await expect(page.locator(".getting-started-step").first()).toContainText("Configure HTTPS");
   await page.getByRole("button", { name: "Nodes", exact: true }).click();
   await expect(notice).toBeVisible();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeDisabled();
   await expect(page.getByText("Add node is unavailable while the public address is local only.")).toBeVisible();
   await page.getByRole("button", { name: "System", exact: true }).click();
   await expect(notice).toBeVisible();
-  await expect(notice.getByRole("button", { name: "Copy configuration path" })).toBeVisible();
-  await expect(notice.getByRole("button", { name: "Copy apply command" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Configure domain and HTTPS" })).toHaveCount(1);
   expect(await writes(request)).toEqual([]);
 });
 
@@ -102,7 +100,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await page.getByRole("menuitemradio", { name: "简体中文" }).click();
     }
     await expect(page.locator(".overview-activity .error-state")).toContainText(language === "en" ? "Could not read the data" : "无法读取数据");
-    await expect(page.locator(".installation-notice")).toContainText(language === "en" ? "Applications, nodes and executors" : "应用、节点和 executor");
+    await expect(page.locator(".installation-notice")).toContainText(language === "en" ? "Configure HTTPS before connecting" : "连接外部应用和节点前");
     if (language === "zh-CN") await expect(page.locator("body")).not.toContainText("Core request failed");
     await expect(page.getByRole("article").first()).toContainText(language === "en" ? "Down" : "不可用");
     for (const width of [1280, 1440]) {
@@ -174,6 +172,6 @@ test("installation failure cannot complete onboarding and its retry reveals loca
   await page.unroute("**/core/v1/installation");
   await step.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(step).toContainText("To do");
-  await expect(step).toContainText("Fix the public address");
+  await expect(step).toContainText("Configure HTTPS");
   await expect(page.locator(".installation-notice")).toBeVisible();
 });

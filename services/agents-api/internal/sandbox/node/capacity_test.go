@@ -14,7 +14,7 @@ import (
 func TestCapacityRefreshUsesAuthenticatedCoreIdentity(t *testing.T) {
 	id := identity()
 	var stored StoredIdentity
-	approved := EnrollmentResponse{NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8}
+	approved := EnrollmentResponse{SpecificationDigest: id.SpecificationDigest, DeploymentGeneration: id.DeploymentGeneration, NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/sandbox-node/identity" || r.URL.Query().Get("node_id") != id.NodeID || r.Header.Get("Authorization") != "Bearer "+stored.Credential {
 			t.Error("identity refresh lacked retained authority")
@@ -74,7 +74,7 @@ func TestHubCapacityCacheCannotOverrideAdminChangesOrBlockReconnect(t *testing.T
 	mu.Lock()
 	approved.MaxActive, approved.MaxRetained = 2, 8
 	mu.Unlock()
-	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: peer.id, Health: &Health{ProviderReady: true}}); err != nil {
+	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: peer.id, OwnerEpoch: peer.epoch, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(time.Second))

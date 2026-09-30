@@ -75,10 +75,6 @@ func (s *Store) heartbeatRuntimeNode(ctx context.Context, nodeID, connectionID s
 			return ErrRuntimeNodeCredential
 		}
 		if protocol == 1 {
-			// Unspecified legacy nodes keep cleanup connectivity without inventing a generation.
-			if n.DeploymentGeneration == 0 {
-				return nil
-			}
 			state := "failed"
 			if health.ProviderReady {
 				state = "ready"

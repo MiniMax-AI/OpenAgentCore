@@ -39,6 +39,10 @@ class InstallerTests(unittest.TestCase):
         self.output = io.StringIO()
 
     def install(self, *flags):
+        # These lifecycle tests exercise operator-managed reverse proxies. The
+        # managed gateway has end-to-end setup/rollback coverage in test_ingress.
+        if not (self.root / "state.json").exists() and "--config" not in flags:
+            flags = (*flags, "--ingress", "external")
         with contextlib.redirect_stdout(self.output), contextlib.redirect_stderr(self.output):
             run_installer(install, self.bundle, ["--install-dir", self.root, *flags])
 
@@ -241,7 +245,7 @@ class InstallerTests(unittest.TestCase):
             "default": ([], ["Console: http://127.0.0.1:8080 (local only)",
                              "API base URL: http://127.0.0.1:8091/v1 (local only)",
                              "Use this key to sign in to Web.",
-                             "Before adding nodes, set public_url to a reachable HTTPS address",
+                             "Before adding nodes, configure a reachable HTTPS address",
                              "Add nodes: in Web, open Nodes and choose Add node"]),
             "core-only": (["--core-only"], ["API base URL: http://127.0.0.1:8091/v1 (local only)",
                                             "Create a Project and its API key through the Core management API:",

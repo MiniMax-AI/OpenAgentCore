@@ -70,12 +70,14 @@ func generationRecords(raw []byte, required, optional string) error {
 }
 
 func validateGenerationJSON(raw []byte, kind string) error {
-	var fields string
+	var fields, optional string
 	switch kind {
 	case "hello":
 		fields = "identity health"
+		optional = "generation_management"
 	case "welcome", "heartbeat_ack":
-		fields = "deployment connection_id owner_epoch"
+		fields = "connection_id owner_epoch"
+		optional = "deployment"
 	case "heartbeat":
 		fields = "health connection_id owner_epoch"
 	case "retention":
@@ -89,7 +91,7 @@ func validateGenerationJSON(raw []byte, kind string) error {
 	default:
 		return sandbox.ErrInvalid
 	}
-	values, err := generationObject(raw, "version type "+fields, "", "")
+	values, err := generationObject(raw, "version type "+fields, optional, "")
 	if err != nil {
 		return err
 	}

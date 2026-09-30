@@ -17,6 +17,7 @@ import { SandboxManagerView } from "./features/sandbox/SandboxManagerView";
 import { SessionLogPage } from "./features/sessions/SessionLogPage";
 import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
+import { DomainPage } from "./features/system/DomainPage";
 import { SystemPage } from "./features/system/SystemPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
 import { consoleDepth, ConsoleNavigationContext, useConsoleNavigation, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
@@ -56,7 +57,7 @@ function ConsolePage({ view }: { view: ConsoleView }) {
     case "vaults": return <VaultsPage />;
     case "projects": return <ProjectsPage />;
     case "nodes": return <SandboxManagerView />;
-    case "system": return params.id === "sandbox" ? <SandboxDeploymentPage /> : <SystemPage />;
+    case "system": return params.id === "sandbox" ? <SandboxDeploymentPage /> : params.id === "domain" ? <DomainPage /> : <SystemPage />;
   }
 }
 

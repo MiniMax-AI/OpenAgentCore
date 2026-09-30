@@ -62,6 +62,11 @@ error/remote result directly on an outstanding call before accepting a valid
 image on that same call; no mixed-message rejection substitutes for this check.
 
 Run evidence is retained outside the repository. This
-coverage does not qualify self-hosted/user-managed image results, all native image limits, provider
+coverage does not qualify all native image limits, provider
 parity, arbitrary managed output rewrites, crash recovery or full Agents API
 compatibility. No downloader, image converter or second tool loop belongs in Core.
+
+User-managed Linux image execution follows the same native workspace path. See
+[current qualification](environment-capabilities-qualification.md) for the tested
+Harnesses, formats, continuation and remaining boundaries. Historical evidence
+above retains its original deployment scope.

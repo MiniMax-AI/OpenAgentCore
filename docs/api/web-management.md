@@ -34,6 +34,31 @@ usernames, passwords, account setup or Basic authentication.
 Use same-origin browser requests and cookies. Mutations require the same-origin
 request checks; never put the Core key in JavaScript or browser storage.
 
+### Managed domain setup
+
+This console-local surface uses the signed-in session and the same-origin checks
+above. It forwards to the installation controller, not Core.
+
+| Method and route | Request | Result |
+| --- | --- | --- |
+| `GET /console/installation/domain` | No body | Domain setup status |
+| `POST /console/installation/domain` | `{"hostname":"core.example.com"}`; optional `confirm_public_url_change` equal to `https://core.example.com` | `202` and the current status; one asynchronous installer operation |
+
+Status contains `supported`, `state` (`unconfigured`, `checking`, `applying`,
+`ready`, `failed`), nullable `public_url`, `target_url` and `message`. External
+proxy installations report `supported: false`. A POST with existing address
+bindings requires explicit confirmation and otherwise returns `409` with code
+`public_url_confirmation_required`. Other rejections include invalid hostnames,
+pending configuration edits and another installation operation holding the lock.
+Action errors use `{"error":{"code":"…","message":"…"}}`; console authentication
+failures retain the sign-in error shape above.
+
+Poll the same-origin GET while preparing. Applying the change restarts Web and
+ends its sign-in sessions; provide a link to the submitted HTTPS origin for a
+fresh login. A dropped request or cross-origin browser probe does not prove
+success. The [installer contract](../maintainers.md#managed-https-ownership) owns
+certificate verification, locking, retry and rollback.
+
 ## Console to Core
 
 After sign-in and the same-origin checks, the console server forwards every

@@ -69,11 +69,9 @@ TLS reverse proxy routes `/v1` (applications) and `/api/v1` (nodes and Runtime
 daemons, with their own credentials) directly to Core and everything else,
 including `/core/v1`, to Web. Operator scripts call `/core/v1` on Core's loopback
 port.
-Nodes and Core come from one distribution. Older nodes using the removed
-`/core/v1/sandbox` paths are unsupported; preserve their installation and data and
-use a separate fresh installation. There is no drained in-place upgrade or
-historical re-enrollment procedure. Current-version Runtime generation rollout
-retains its separate resource lifecycle.
+Nodes and Core come from one distribution. Runtime generation rollout has a
+separate resource lifecycle; see the
+[installation version policy](../../docs/getting-started/operations.md#installation-version-policy).
 
 The Web manager offers no manual Core key entry outside sign-in, and Web refuses
 to start without its Core key file. It holds no Project API key and never calls
@@ -104,6 +102,9 @@ on standard input.
 The `/core/v1` proxy retains fixed-origin, cross-site, safe-path, redirect and Upgrade
 restrictions through the standard Go reverse proxy with streaming/cancellation;
 literal or encoded dot segments can never move a request out of `/core/v1`.
+During managed HTTP bootstrap, the console accepts a literal IP host and requires
+writes to match that request's origin; domain hosts still require the configured
+origin.
 The console implements no product identity, resource semantics, Runtime discovery
 or execution loop. Signing in with the Core key grants the complete console
 surface; do not introduce Web accounts, roles, invitations or per-project Web
@@ -140,9 +141,15 @@ confirmed resources through the management API; do not infer Agent-to-node owner
 or execution readiness from a host connection. Preserve keyboard focus, reduced
 motion and the existing node enrollment/topology contract.
 The console has neither KVM nor Docker authority; its static root contains no
-secrets. Installation exposes only loopback API/console ports. Remote exposure
-requires an operator-configured HTTPS/access boundary. Web-only mode can connect
-to a loopback existing Core on the same Linux host or a remote HTTPS Core.
+secrets. A default container installation uses a managed gateway with its Web
+bootstrap port bound to `0.0.0.0`, so operators can sign in through the server's
+IP address and configure a domain under System → Domain and HTTPS. Core's direct
+host port remains on loopback and PostgreSQL stays on the private container
+network. After HTTPS setup, the gateway routes application and node traffic to
+Core and redirects the bootstrap Web entry to the configured HTTPS address.
+Native, Core-only, Web-only and explicit external-ingress installations keep an
+operator-managed HTTPS boundary. Web-only mode can connect to a loopback existing
+Core on the same Linux host or a remote HTTPS Core.
 
 ## Local checks
 
@@ -157,3 +164,42 @@ pnpm --filter @agents-core-web/web build
 These checks cover the application source. Browser acceptance through
 `services/core-console` is tracked in the [frontend roadmap](../../docs/web/roadmap.md).
 Required repository checks are documented in [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+### Domain setup
+
+System → Domain and HTTPS uses the authenticated, same-origin
+`/console/installation/domain` installation manager. It is not a Core API route.
+The form accepts one hostname, submits once, and polls backend-reported status.
+A changed public address requires explicit confirmation when requested by the
+manager. Failed or interrupted writes are not retried automatically; refresh
+status before retrying. During a console restart the new HTTPS address remains
+available as a sign-in link, including when the old session ends. Only the
+manager's `ready` state confirms HTTPS; the browser does not probe another origin.
+
+The Web bootstrap listener and Core's machine-facing public address are separate.
+A `local_only` Core address requires HTTPS setup for external clients; it does
+not mean the Web console is restricted to the local machine. Domain settings
+belong to their System subpage, not the read-only startup settings table.
+
+### README screenshots
+
+The browser fixture has an opt-in scene for Overview and Agent metrics, including
+five available nodes. From the repository root, start these in separate terminals:
+
+```sh
+OAC_WEB_SCREENSHOT_DEMO=1 AGENTS_FIXTURE_PORT=18394 node apps/web/e2e/fixture-console.mjs
+```
+
+```sh
+OAC_WEB_DEV_PROXY_TARGET=http://127.0.0.1:18394 pnpm --filter @agents-core-web/web exec vite --host 127.0.0.1 --mode test --port 4394
+```
+
+Open `http://127.0.0.1:4394` in Chrome and sign in with the fixture-only key
+`fixture-core-key-3f9a2c71`. Capture Overview and Agent metrics in light mode,
+once in English and once in Chinese using the console language menu. Check that
+all five nodes load and metrics have no partial-data warning before capturing.
+For a remote preview, forward port 4394 over SSH and capture in local Chrome.
+Keep the original resolution, crop browser chrome and add a plain macOS-style
+window bar. The four WebP images in `docs/assets/console-*.webp` are linked by the matching
+README and included in the distribution manifest. Normal acceptance data and
+production builds do not enable this scene.

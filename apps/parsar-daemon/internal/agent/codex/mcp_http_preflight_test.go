@@ -141,7 +141,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, "unknown-status"), []byte("unknown"), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			declarations, err := publicMCPHTTPServers(req)
+			declarations, _, err := runtimeMCPServers(req)
 			if err != nil {
 				t.Fatal(err)
 			}

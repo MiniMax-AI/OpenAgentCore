@@ -11,7 +11,7 @@ For hosted compute, the deployment selects E2B, Docker or microsandbox through
 [Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
 For the separate caller-managed E2B path, the user owns allocation, renewal and
 cleanup through the official SDK and [Runtime packaging](../../services/agents-api/deploy/e2b/README.md).
-[Templates](environment-templates.md) remain a hosted-only resource path;
+[Templates](environment-templates.md) provide reusable preparation; the Core extension also applies their execution configuration to user-managed machines;
 [Files](environment-files.md) reuse the exact authorized local workspace.
 
 The internal Store now owns a durable Environment association for newly created
@@ -47,10 +47,10 @@ A committed creation interrupted before bootstrap is recovered without replaying
 an existing allocation's Create.
 
 Omitted/null network defaults to enabled. The daemon does not enforce disabled
-or restricted networking. An execution combination must reject unless its outer
-Environment implements and qualifies the requested behavior.
+or restricted networking. Current execution profiles reject both before Session
+creation and resource allocation.
 Templates and inline configuration share initial files, env, packages, ordered setup
-and inline or tenant-owned referenced Skills through ordered managed initialization.
+and inline or tenant-owned referenced Skills through ordered Environment initialization.
 The same authenticated daemon handles initial files, tool configuration, packages,
 setup, Skill/Plugin import and directory snapshot finalization through
 `runtime_prepare`. Providers place, create, bootstrap, inspect, renew and reclaim
@@ -139,10 +139,9 @@ bypass pending input. Function callbacks do not populate Environment installatio
 Mixed events and non-text input remain unsupported. Local capability directories
 use the same Runtime parser and installed snapshot as managed Skills and Plugins;
 preparation must finish before native execution. Reconnect reuses installed bytes,
-while new Sessions capture their own sources. Directory aliases and protected Runtime
-state are rejected. The current implementation uses the packaged Linux Runtime
-layout; cross-platform installation and isolation are not part of this profile.
-The public field types are unchanged. Enrollment must match either the `/workspace`
+while new Sessions capture their own sources. Recursive references to the installed snapshot and escaping directory
+entries are rejected. Platform support and isolation follow
+[Platforms and isolation](#platforms-and-isolation). Enrollment must match either the `/workspace`
 logical alias or the exact canonical directory bound by the Runtime; selecting an
 arbitrary path does not grant access. `remote_url` is the configured daemon WebSocket URL,
 returned unchanged. This is our private connection contract and does not claim
@@ -186,7 +185,7 @@ compute replacement; never silently move a bound Session or replay unknown work.
 Self-hosted compute/files remain caller-owned, with explicit cleanup separate from
 Session deletion. The full Environment implementation remains pending; follow the
 [pinned contract and acceptance sequence](environments.md)
-and the [two-engine placement prerequisites](workspace-placement.md).
+and the [workspace placement map](workspace-placement.md).
 For co-location, qualify the outer deployment boundary and the shared Runtime
 lifecycle. Native tools use the starting account's permissions; do not claim a
 daemon or harness sandbox. Host operators choose their own outer isolation.
@@ -235,6 +234,13 @@ cancellation retain the terminal identity. Session deletion
 is rejected while input is pending and changes nothing. A terminal reservation retry must not
 affect a later reservation or Turn. Evaluate deadlines after acquiring the Session
 lock, and return terminal storage outcomes without rolling their transaction back.
+
+A validated Runtime `failed` response with `preparation_failed` and no Run settles
+the pending input immediately with `runtime_preparation_failed`. It records a
+safe Session failure before any Turn exists and releases the input gate; fixing
+the local cause allows new input. Transport loss, capacity rejection and
+unconfirmed cleanup remain retryable within the original deadline. Core uses
+these common control states, never Harness-specific error text.
 
 Initial messages for a newly created Environment-bearing Session use that same
 reservation in the creation transaction, including its connection-action event.
@@ -359,7 +365,7 @@ effects have stopped. See
 
 ### Preparation order
 
-Core freezes resource versions, metadata and source selections. Managed
+Core freezes resource versions, metadata and source selections. Environment
 initialization runs in this order, every step over the common `runtime_prepare`
 exchange with the same daemon:
 
@@ -373,15 +379,56 @@ they never execute Core initialization commands. The common runner uses only
 neutral Environment/Session identity and a Runtime peer, with no Provider,
 deployment or OS branch. Harness differences belong to native adapters.
 
-A missing authenticated Runtime connection waits before capability
-initialization is claimed; an operation whose effect is unknown is not replayed.
-Self-hosted capability directories stay in immutable Environment configuration
-and never create a managed initialization row or allocation.
+A missing authenticated Runtime connection waits before initialization is claimed.
+The Environment owns durable `pending`, `running`, `complete` or `failed`
+initialization state. The leased Worker processes both locations with the same
+bounded initializer, independently of Provider maintenance. A running operation
+whose process-local owner is lost is failed as unconfirmed; setup is never replayed.
+A confirmed failure records only the safe step and exit status. Both failure paths
+settle pending input through the common Environment failure transaction. Failure
+alone does not destroy compute or remove a workspace.
 
-Self-hosted input accepts only `workspace_directory` and optional local
-`capability_directories`, not managed Skill/Plugin archive fields or a hosted
-Template. Local directory discovery does not populate the public API-managed
-`skills` or `plugins` installation arrays; those describe API-managed uploads.
+The pinned self-hosted input retains `workspace_directory` and optional local
+`capability_directories`. For portable preparation, applications may supply
+`x_agents_core.environment` at Session creation in either location. This is a Core
+extension, not an upstream self-hosted field. It accepts `environment_template_id`,
+`files`, `env`, `packages`, `setup_commands`, `skills`, `plugins` and
+`capability_directories`, with the same parsers and inheritance rules as hosted
+input. A field supplied in both places rejects, including explicit null; there is
+no hidden precedence. Machine location, sizing and network policy are not extension
+preparation fields. A self-hosted selection cannot use a template requiring a
+managed network restriction.
+
+```json
+{
+  "agent_id": "agent_example",
+  "environment": {
+    "type": "self_hosted",
+    "workspace_directory": "/home/user/project"
+  },
+  "x_agents_core": {
+    "environment": {
+      "environment_template_id": "env_template_example"
+    }
+  }
+}
+```
+
+Switching `environment` to `{"type":"openai_hosted"}` reuses that same
+preparation input. Resource resolution, Project authorization, concrete Skill
+versions, encrypted file contents and confidential tool variables are frozen at
+Session creation. Same-intent retries and reconnects reuse those snapshots;
+new Sessions resolve new versions. User-managed Environments never require an
+allocation record. Local directory discovery does not populate API-managed
+installation arrays; managed Skills, Plugins and initial files do, in either
+location. Session self-hosted responses retain their pinned connection shape;
+the Environment resource exposes the safe installation metadata.
+
+Transport `connected` is still a connection observation, not readiness. Execution
+and live file access wait for initialization, then the common native preparation
+owner validates the installed snapshot and Harness before admitting a Turn. The
+model-provider authority rule is unchanged: deployment credentials are not
+implicitly sent to user-owned machines.
 
 ### Transfer and paths
 
@@ -473,22 +520,19 @@ tools, files or network access. Outer Environments own managed isolation, and
 unsupported network restrictions reject instead of silently running unrestricted.
 
 Native installation and validation limits are in the
-[native guide](../../docs/self-hosted-native.md). No project-version upgrade or
-historical manifest compatibility is introduced. These rules do not establish
-new real-deployment acceptance; historical evidence stays limited to its
-recorded binaries and inputs.
+[native guide](../../docs/self-hosted-native.md). Historical acceptance evidence
+stays limited to its recorded binaries and inputs.
 
-### Allocation initialization lifecycle
+### Environment initialization and compute wake
 
-The allocation lifecycle owns pending/running/complete initialization. Authentication
-may connect the daemon during initialization; execution bindings, native preparation,
-live Files and connected publication wait for completion. Keep Provider bootstrap
-settlement distinct. Advance at most one bounded initialization operation per full
-maintenance scan. At allocation EOF, begin the next page in the same call rather
-than consume an observation interval on an empty page. Refill at most once, retain
-the 32-allocation per-call bound and the five-second ticker, and never loop on an
-empty store. For managed nodes these bounds apply independently to each node.
-Use process-local progress and the same node lifecycle gate as direct provisioning.
+Environment initialization has pending, running, complete and failed states.
+Authentication and connection publication are independent of preparation. Execution
+bindings and live Files wait for initialization. The leased Worker's common
+scheduler scans 32 Environments at a time, wraps at EOF and bounds concurrent
+preparations by execution concurrency. Missing sockets do not consume a pending
+attempt; unavailable Harnesses fail before installation. Each operation rechecks
+current authority and the original socket. Completion rechecks the exact binding.
+Provider bootstrap and resource cleanup retain their own owners and settlement.
 
 After a next-Turn input is durably pending, a completed managed allocation in a
 suspension/recovery phase may hint this loop. Initial inputs, cold creation,
@@ -503,8 +547,9 @@ ownership checks. Never close the hint channel while handlers may still send.
 This bounds extra maintenance work but does not bypass capacity, a busy lifecycle
 gate or multi-page scheduling, and does not guarantee a resume deadline.
 
-A recovered or uncertain running installation fails and uses existing cleanup, without replaying writes.
-A hosted provisioning failure is terminal for its Session. The allocation's cleanup
+A recovered or uncertain running installation fails without replaying writes.
+Preparation failure is terminal for its Session. It does not destroy compute or
+user files; explicit resource cleanup retains its existing owner. The Environment
 transaction stores a safe reason with the failed Environment and records
 `environment.failed`, `error` and one `agent.session.failed`; Session reads derive
 `failed`, that reason and the failure time from the same record, and live streams end
@@ -593,17 +638,32 @@ initialized values override the selected declaration's variables. There is no
 Python sandbox launcher, mount policy, shell prefix or separate credential sandbox.
 Process groups and Windows Jobs own cancellation and descendant cleanup only.
 Claude composes MCP identity and observation with the same workspace profile;
-MiniMax keeps its existing supported transport qualification. A public capability
+MiniMax uses the same effective bindings for stdio and HTTP. A public capability
 advertisement must still match the installed engine's actual supported transport.
 
+Runtime resolves public HTTP declarations and installed Plugin MCP through
+`agent.ResolveMCPBindings` before adapter projection. Each transient binding
+retains its connection origin, transport, nullable tool allowlist, required flag,
+credential authority and installed stdio identity. Bindings are never persisted
+or logged. Duplicate identities and unavailable selected credentials reject.
+A service-origin request cannot silently become an Environment-origin connection;
+the existing public HTTP MCP profile remains service-origin `environment:none`.
+This internal consolidation does not qualify public `connection_origin=environment`.
+
 Environment-origin literal HTTP headers remain rejected for the pinned Claude
-client because its interpolation and cross-origin forwarding change their meaning.
-MiniMax accepts environment stdio only. Its adapter reads the existing Session-private
-native runtime-name registry for exact first-frame identities and cross-checks
-completed native results. Reuse existing observation and cancellation settlement;
-never fabricate a delayed start event, guess normalized identities or add a registry
-of our own. Its unqualified HTTP transport remains rejected.
-These mechanisms alone do not establish public MCP support or full compatibility.
+and MiniMax clients because their cross-origin forwarding cannot preserve header
+authority. MiniMax supports installed stdio and HTTP servers with anonymous or
+explicit user-selected HTTPS bearer authentication. ACP HTTP declarations remain
+Session-local native memory; tokens do not enter native configuration files or
+process arguments. Required initialization and tool allowlists are not exposed
+through the Plugin manifest, and public MiniMax MCP remains unqualified.
+MiniMax reads the existing Session-private native runtime-name registry for exact
+first-frame identities and cross-checks completed native results for both transports.
+Reuse existing observation and cancellation settlement; never fabricate a delayed
+start event, guess normalized identities or add a registry of our own.
+
+See [capability qualification](environment-capabilities-qualification.md) for
+real model evidence and the remaining public-origin and image gaps.
 
 ## Contract inventory
 
@@ -727,3 +787,15 @@ forwarding. The explicit daemon-executor decision supersedes the previous native
 executor interoperability requirement. The superseded execution route is removed;
 retain reusable filesystem helpers,
 necessary regressions and historical evidence without a compatibility layer.
+
+### Explicit local tool environment
+
+`--tool-env-file` supplies the Runtime operator's base tool variables. Common
+preparation copies these explicit values into its private initialization snapshot;
+explicit Session `env` keys override the base. Runtime does not rewrite the source
+file or inherit unrelated ambient credentials. Setup, capability resolution and
+Harness execution read the same prepared snapshot. Reconnect preserves that
+snapshot even if the operator edits the source; a new installation for a new
+Session reads the current source. Harness profiles may reference the Runtime-owned
+environment file, but must not persist copies of its values. A missing or invalid explicitly configured file
+fails preparation.

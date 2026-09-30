@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
-	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/config"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/node"
+	providerconfig "github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 )
 
 func runGenerations(ctx context.Context, configFile, stateDir string) error {

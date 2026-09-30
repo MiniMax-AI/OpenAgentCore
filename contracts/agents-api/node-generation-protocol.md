@@ -1,13 +1,18 @@
 # Node generation protocol
 
-This is the internal, authenticated Core-to-node provider protocol. It does not
-change the pinned public Agent API. Version 1 retains its existing envelope;
-version 2 carries exact deployment-generation routing and sparse local provider
-observations. A version 1 connection never receives version 2 fields.
+This is the internal, authenticated Core-to-node Provider protocol. It does not
+change the pinned public Agents API. `sandbox/node.ProtocolVersion` is the only
+accepted wire version; both peers reject historical versions. The current hello
+explicitly advertises `generation_management` when the node can prepare and retain
+multiple deployment generations. Fixed-configuration manual nodes omit that
+capability and serve only their enrolled generation using the same wire protocol.
+Every Provider request carries its exact allocation-owned deployment generation;
+Core never strips it for an older peer. Automatic preparation and retention frames
+are sent only to nodes advertising generation management.
 
 ## Bounded control
 
-A version 2 hello or heartbeat contains at most eight generation observations.
+A generation-managing node's hello or heartbeat contains at most eight generation observations.
 Each names a positive signed-64-bit generation, its lowercase SHA-256 specification
 digest, a `ready`, `preparing` or `failed` state, and an optional fixed diagnostic.
 The target and serving generation take priority; other records rotate fairly.
@@ -66,7 +71,7 @@ Neither opener adopts a missing identity, replaces its inode, or erases
 it after GC. Initialization interrupted before the identity is durable refuses
 re-adoption; preserve the installation for inspection. A removed identity or an
 owned replacement 0600 lease still refuses, even when its current fstat/lstat agree.
-Historical v1 installations and their `legacy-unfenced` records are retained
+Historical installations and their `legacy-unfenced` records are retained
 for inspection; the current installer does not adopt or upgrade them. Do not
 create a new fence to bypass a missing historical lease identity.
 

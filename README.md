@@ -25,6 +25,12 @@ OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents
 - **Every part is replaceable.** Sandboxes, harnesses and model providers plug in
   through defined protocols.
 
+## Screenshots
+
+| Overview | Agent metrics |
+| --- | --- |
+| ![Deployment overview](docs/assets/console-overview-en.webp) | ![Agent metrics](docs/assets/console-agent-metrics-en.webp) |
+
 ## Install
 
 On a Linux amd64 host with Docker and Python 3.9+:
@@ -66,6 +72,7 @@ the [architecture guide](docs/architecture.md).
 | Build an application on the API | [Quickstart](docs/getting-started/quickstart.md), then the [Agents API guide](docs/api/public-agent-api.md) |
 | See a complete application | [Examples](docs/examples.md) |
 | Run agents on my own machine | [Self-hosted execution](docs/getting-started/self-hosted.md) |
+| Check verified Runtime capabilities and limits | [Capability qualification](contracts/agents-api/environment-capabilities-qualification.md) |
 | Understand the design | [Architecture](docs/architecture.md) |
 | Add a sandbox, harness or other component | [Developer guide](docs/development.md) |
 

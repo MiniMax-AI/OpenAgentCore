@@ -23,6 +23,12 @@ OpenAgentCore 在你自己的基础设施上运行 AI Agent，对外提供 OpenA
   也可以在你自己的 Linux、macOS 或 Windows 机器上工作。
 - **每个部件都可替换。** 沙箱、Harness 和模型供应商都通过既定协议接入。
 
+## 界面预览
+
+| 概览 | Agent 监控 |
+| --- | --- |
+| ![部署概览](docs/assets/console-overview-zh.webp) | ![Agent 监控](docs/assets/console-agent-metrics-zh.webp) |
+
 ## 安装
 
 在已准备 Docker 和 Python 3.9+ 的 Linux amd64 主机上：
@@ -62,6 +68,7 @@ Core 对外提供两组 API：
 | 基于 API 开发应用 | [快速开始](docs/getting-started/quickstart.md)，然后看 [Agents API 指南](docs/api/public-agent-api.md) |
 | 看一个完整的应用 | [示例](docs/examples.md) |
 | 在自己的机器上运行 Agent | [自托管执行](docs/getting-started/self-hosted.md) |
+| 查看 Runtime 能力和验收范围 | [能力验收记录](contracts/agents-api/environment-capabilities-qualification.md) |
 | 了解设计 | [架构说明](docs/architecture.md) |
 | 接入新的沙箱、Harness 或其他组件 | [开发指南](docs/development.md) |
 

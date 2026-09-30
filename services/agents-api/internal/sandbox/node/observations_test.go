@@ -86,11 +86,11 @@ func TestObservationsRouteThroughAssignedNodeWithoutLifecycleCalls(t *testing.T)
 	stopSecond := runObservationNode(t, hub, server.URL, second, b)
 	ra, rb := reference(), reference()
 	assignments := map[sandbox.Reference]string{ra: first.NodeID, rb: second.NodeID}
-	source := hub.Provider("docker", func(_ context.Context, r sandbox.Reference) (string, error) {
+	source := hub.GenerationProvider("docker", func(_ context.Context, r sandbox.Reference) (string, uint64, error) {
 		if id, ok := assignments[r]; ok {
-			return id, nil
+			return id, 1, nil
 		}
-		return "", sandbox.ErrOwnership
+		return "", 0, sandbox.ErrOwnership
 	}).(runtimeobs.Source)
 	if typed := source.(interface{ ObservationProviderType() string }).ObservationProviderType(); typed != "docker" {
 		t.Fatal("provider type lost", typed)

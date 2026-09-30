@@ -79,23 +79,22 @@ Core initializes both paths through the authenticated daemon's typed `runtime_pr
 file operation. The Runtime resolves the logical workspace path and owns the trusted
 file installer. Daemon authentication remains available, but native preparation and live
 Files wait for all writes. Each file gets a two-minute transfer budget; the batch has
-a thirty-minute local budget and shares maintenance scans with other allocations.
+a thirty-minute local budget in the common Environment preparation scheduler.
 These are local operational limits, not verified upstream timing. Initial input
 retains its existing five-minute admission deadline; large installations can use an
-idle Session and wait for connected status before submitting input.
+idle Session; connection status alone does not establish preparation readiness.
 
-Uncertain writes and Core restart during initialization fail the new Environment and
-reclaim it; they do not replay partial installation. After completion, reconnect and
+Uncertain writes and Core restart during initialization fail the new Environment while retaining compute ownership and files; they do not replay partial installation. After completion, reconnect and
 native-history recovery preserve user modifications instead of reinstalling files.
-Current Core-hosted Docker and all three harnesses use this lifecycle. The Provider
+Managed and user-owned Runtime connections use this lifecycle. The Provider
 API remains five operations; public Templates are never E2B image templates and
-remain hosted-only. E2B now uses user-managed Runtime enrollment through the official
+are also available to self-hosted Sessions through `x_agents_core.environment`. E2B now uses user-managed Runtime enrollment through the official
 SDK. Historical Core-managed E2B evidence below retains its original scope and does
 not qualify that new chain.
 
 ## Skills and versioned references
 
-Both templates and standalone hosted configuration accept project-owned Skill
+Both templates and standalone preparation configuration accept project-owned Skill
 references and inline Skill ZIPs. Upload a directory through the pinned SDK, then
 reference its default version from a template:
 

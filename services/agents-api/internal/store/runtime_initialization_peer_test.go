@@ -26,6 +26,7 @@ type initializationPeer struct {
 	writes       atomic.Int32
 	commandCalls atomic.Int32
 	deferred     bool
+	unavailable  bool
 	bootstrap    sandbox.Bootstrap
 }
 
@@ -42,6 +43,11 @@ func (p *initializationPeer) connect(b sandbox.Bootstrap) error {
 		return err
 	}
 	p.t.Cleanup(func() { _ = c.Close() })
+	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: !p.unavailable}}})
+	if err := c.WriteJSON(heartbeat); err != nil {
+		return err
+	}
+
 	go func() {
 		transfer := initializationTransfer{peer: p}
 		for {

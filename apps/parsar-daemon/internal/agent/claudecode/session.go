@@ -385,7 +385,10 @@ func (s *Session) SubmitPromptForUserChoice(_ context.Context, askID string, dec
 	// delivered answer can both reach here, but only one wins. The
 	// loser sees ok=false and returns ErrUnknownAsk — the router logs
 	// and moves on.
-	entry, ok := s.askPending.Take(askID)
+	entry, ok, err := s.askPending.Take(askID, decision)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		return agent.ErrUnknownAsk
 	}

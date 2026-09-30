@@ -3,6 +3,7 @@ import shlex
 
 import sandbox_setup
 import configuration
+import ingress_config
 from install_display import color, heading, paragraph
 
 
@@ -29,7 +30,9 @@ def sandbox_lines(config, selection, deployment, reachable):
     if selection["provider"] == "microsandbox":
         lines.append("Execution nodes need KVM (/dev/kvm). This host needs KVM only if you add it as a node.")
     if not reachable:
-        lines.append("Before adding nodes, set public_url to a reachable HTTPS address in config.json, then run the Apply command below.")
+        lines.append("Before adding nodes, configure a reachable HTTPS address" +
+                     (" in Web under System → Domain and HTTPS." if ingress_config.enabled(config) else
+                      " with your reverse proxy, set public_url in config.json, then run the Apply command below."))
     add = "in Web, open Nodes and choose Add node" if config["mode"] == "all" else "in a Web console paired with this Core, open Nodes and choose Add node"
     lines.append(f"Add nodes: {add}, then run the command on each execution host.")
     return lines
@@ -50,6 +53,8 @@ def summary(root, config, addresses, fresh, selection, deployment, reachable, in
     else:
         paragraph("Use this key for the Core management API. Keep it private.")
     heading("Next")
+    if ingress_config.enabled(config) and not config["public_url"]:
+        paragraph("Open Web at the server IP and sign in. In System → Domain and HTTPS, enter your DNS hostname; the installation requests and renews its certificate. DNS must point to this server and ports 80 and 443 must be reachable.")
     if mode != "core-only":
         paragraph("Create a Project and its API key on the Projects and keys page.")
     else:

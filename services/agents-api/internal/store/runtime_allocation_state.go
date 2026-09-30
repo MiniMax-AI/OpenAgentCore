@@ -44,13 +44,6 @@ func (s *Store) RequestRuntimeCleanup(ctx context.Context, owner RuntimeAllocati
 	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, nil, false)
 }
 
-// FailRuntimeInitialization is RequestRuntimeCleanup after a confirmed failed
-// initialization step: the step's safe reason becomes the Session error. Deleted
-// Sessions, expired and already terminal Environments keep their existing outcome.
-func (s *Store) FailRuntimeInitialization(ctx context.Context, owner RuntimeAllocation, failure ProvisioningFailure) (RuntimeAllocation, error) {
-	return s.requestRuntimeCleanup(ctx, owner, failure.reason(), failure.detail(), false)
-}
-
 // ReleaseAbsentRuntimeCreation consumes provider proof that the original attempt
 // is settled and owns no resources. Authority revocation and release commit together.
 func (s *Store) ReleaseAbsentRuntimeCreation(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {

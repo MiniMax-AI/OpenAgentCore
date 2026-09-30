@@ -1621,8 +1621,8 @@ definitions:
     properties:
       harness:
         enum:
-          - codex
           - claude_sdk
+          - codex
           - mcode
         type: string
       harness_config:
@@ -2702,8 +2702,8 @@ definitions:
     properties:
       harness:
         enum:
-          - codex
           - claude_sdk
+          - codex
           - mcode
         type: string
       harness_config:
@@ -3607,7 +3607,7 @@ paths:
     put:
       consumes:
         - application/json
-      description: 'Core key only. The body is the complete x_agents_core.model_configuration bundle, including the write-only api_key; there is no partial update and bundles are never merged. The provider is validated for this harness: an HTTPS base_url without credentials, query or fragment, an upstream protocol (responses, anthropic or chat_completions), automatically adapted by Runtime to the selected harness and, for mcode, positive context_window and max_output_tokens. New openai_hosted and none Sessions resolve omitted model settings from this default and freeze the resolved configuration into their encrypted snapshot; existing Sessions never change. self_hosted Sessions never use it. The key is encrypted and never returned. Each write records an administrator audit entry without the key and resets last_used_at, last_error_code and last_error_at to null, including identical writes.'
+      description: Core key only. Replaces one complete deployment model configuration, including its write-only provider key. Validates through the selected Harness declaration and freezes the resolved configuration for new Sessions; existing Sessions are unchanged. See contracts/agents-api/model-execution.md#deployment-defaults for fields, source precedence and observation rules.
       parameters:
         - description: Harness
           enum:

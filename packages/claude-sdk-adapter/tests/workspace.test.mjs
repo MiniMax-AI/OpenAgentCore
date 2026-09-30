@@ -79,11 +79,11 @@ test("workspace native options bypass isolation and preserve selected tool inven
   assert.deepEqual(options.settingSources, []);
   assert.deepEqual(options.mcpServers, {});
   assert.equal(options.strictMcpConfig, true);
-  assert.equal(options.permissionMode, "bypassPermissions");
+  assert.equal(options.permissionMode, "default");
   assert.equal(options.persistSession, true);
   assert.equal(options.sandbox.enabled, false);
   assert.deepEqual(options.sandbox, { enabled: false });
-  assert.equal(options.allowDangerouslySkipPermissions, true);
+  assert.equal(options.allowDangerouslySkipPermissions, undefined);
   assert.deepEqual(options.settings, {});
   profile.verify(["Read", "Edit", "Bash"], []);
   for (const tools of [[], ["Bash", "Read", "Read"], ["Bash", "Read", "Write"], ["Bash", "Read", "Edit", "Agent"]]) {
@@ -199,4 +199,25 @@ test("host tools can access paths outside the workspace", async t => {
  for(const file_path of ["../protected/value",join(dirs.home,"credentials")]) {
   assert.equal((await profile.canUseTool("Read",{file_path},{signal:new AbortController().signal})).behavior,"allow");
  }
+});
+
+
+test("workspace discovery preserves native file tools and the function boundary", async t => {
+  const { dirs, config, request } = fixture(t);
+  const functions = [{name:"lookup", description:"Lookup", parameters:{type:"object"}, defer_loading:true}];
+  const configured = {...request, tool_search:true, functions};
+  assert.deepEqual(parseStart(JSON.stringify(configured)), configured);
+  const profile = new WorkspaceProfile(dirs.workspace, config, ["mcp__functions__lookup"], undefined, undefined, false, true);
+  assert.deepEqual(profile.options.tools, ["Bash", "Read", "Edit", "ToolSearch"]);
+  assert.deepEqual(profile.options.allowedTools, ["mcp__functions__lookup", "ToolSearch"]);
+  const tools = [...profile.options.tools, "mcp__functions__lookup"];
+  profile.verify(tools, [{name:"functions",status:"connected"}]);
+  assert.throws(() => profile.verify(tools.filter(name => name !== "ToolSearch"), [{name:"functions",status:"connected"}]));
+  const ordinary = new WorkspaceProfile(dirs.workspace, config);
+  const context = {signal:new AbortController().signal, toolUseID:"search", requestId:"request"};
+  assert.equal((await profile.canUseTool("ToolSearch", {query:"lookup"}, context)).behavior,"allow");
+  assert.equal((await ordinary.canUseTool("ToolSearch", {query:"lookup"}, context)).behavior,"deny");
+  assert.equal((await profile.canUseTool("mcp__functions__undeclared", {}, context)).behavior,"deny");
+  assert.equal((await profile.canUseTool("ToolSearch", {}, {...context, agentID:"child"})).behavior,"deny");
+  assert.equal((await profile.canUseTool("ToolSearch", {}, {...context, signal:AbortSignal.abort()})).behavior,"deny");
 });

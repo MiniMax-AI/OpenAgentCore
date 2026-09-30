@@ -69,6 +69,9 @@ platforms; there is no inner sandbox, protected-root deny policy or managed shel
 wrapper. Managed isolation belongs to the outer Environment, which must exclude
 other tenants' and broader application credentials. An ordinary native install
 provides no such boundary. Directory selection is not tenant authorization.
+The adapter's existing tool callback authorizes unattended execution in native
+`default` permission mode. It does not use the CLI permission-bypass flag, which
+Claude rejects for root accounts.
 
 `Config.Env` selects readiness and native process variables. Explicit tool env is
 applied to tool execution, but this is not a guarantee that same-user tools cannot
@@ -440,3 +443,8 @@ or filesystem isolation. The native installer reuses this readiness check after
 copying its release components.
 
 
+Workspace deferred-function discovery uses native ToolSearch alongside the normal
+workspace tool profile. Its readiness feature is `workspace_tool_search`, in
+addition to `tool_search` and the existing workspace/function features. Qualification,
+combination limits and model-policy limitations are owned by
+[Deferred function discovery](../../contracts/agents-api/tool-search.md).

@@ -85,7 +85,7 @@ The current packaged profile uses public `/workspace`, backed by
 `/environment/workspace`. The remote endpoint must be reachable from the VM;
 use the returned `wss://.../api/v1/agent-daemon/ws` unchanged. The native profile
 comes from the image, and model credentials arrive through authenticated Core
-execution. Do not supply the old Core allocation/Bootstrap JSON or `auth.json`.
+execution. Managed startup uses the separate [Runtime bootstrap contract](../../../../docs/runtime-bootstrap.md).
 
 Generate and retain an application launch UUID once. `launch.py` is a thin SDK
 example, not a service or a replacement lifecycle owner:

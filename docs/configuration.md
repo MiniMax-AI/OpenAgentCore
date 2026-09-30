@@ -4,11 +4,11 @@ Every setting of a Core installation has exactly one home. There are two kinds:
 
 | Kind | Examples | Home | Change it with | Takes effect |
 | --- | --- | --- | --- | --- |
-| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.oac/core`) | Edit the file, then run `oac apply` | `oac apply` restarts the services that read the changed settings |
+| [Process settings](#process-settings-configjson) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, database pool, Runtime history export | `config.json` in the installation directory (default `~/.oac/core`) | Web domain setup or `oac domain` for managed HTTPS; otherwise edit the file, then run `oac apply` | `oac apply` restarts the services that read the changed settings |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | Saved without a Core restart; node Runtime changes prepare asynchronously |
 
 Web's **System** page shows both: the installation's addresses, the process settings
-read-only under **Startup settings** with the path of `config.json` and the apply
+read-only under **Startup settings**, and managed HTTPS under **Domain and HTTPS** with the path of `config.json` and the apply
 command, the default models, and the sandbox configuration. Secrets live in
 [`secrets/`](#secrets-and-identity), one copy each. Each setting is set in one place;
 the files in `generated/` are only derived from `config.json`. No configuration file
@@ -29,11 +29,11 @@ setting, edit the file and apply it:
 ### How oac apply works
 
 1. It validates `config.json` and changes nothing if a value is invalid. `mode` and
-   `native_core` are fixed after installation; to change them, install into a new
+   `native_core` and `ingress` are fixed after installation; to change them, install into a new
    directory.
 2. It writes the files Core, Web and Compose read into `generated/`: `compose.json`,
    `core.env`, `core-key-digests.json`, `settings.json` and, when used,
-   `runtime-history.json` and the native Core unit. Don't edit them. A generated file
+   `runtime-history.json`, the managed `Caddyfile` and the native Core unit. Don't edit them. A generated file
    edited by hand stops `apply` until you move the change into `config.json` and run
    `oac apply --discard-edits`, which keeps the edited copy as
    `generated/<file>.edited-<time>`.
@@ -57,9 +57,13 @@ generated files edited by hand.
 `public_url` is the one origin that applications, nodes, sandboxes and self-hosted
 executors use; Core derives the daemon WebSocket URL, the self-hosted `remote_url` and
 each sandbox's connection address from it. With `null`, Core uses
-the configured loopback listener origin and only this host can reach it.
+the configured loopback Core origin. The default managed installation still exposes
+Web by IP for setup; that initial HTTP endpoint does not expose the machine API.
 
-You can set or change it at any time with `oac apply`. When nodes, hosted
+For managed ingress, use **System → Domain and HTTPS** or `oac domain HOSTNAME`.
+Both use the installation lock and the same `config.json`/`oac apply` operation.
+The installer verifies the certificate before switching addresses. External ingress
+uses a separately configured proxy and `oac apply`. When nodes, hosted
 sandboxes or self-hosted executors are bound to the current address, `apply` lists
 them and asks you to type the new URL (`--confirm-public-url-change URL` when not
 interactive). Afterwards, nodes on the old address get no new sandboxes: remove them
@@ -68,7 +72,8 @@ the old address still reaches this Core, and `apply` warns that self-hosted exec
 must restart with the new `remote_url`. Their installer refuses to reuse an
 installation made for the old address, and moving an executor isn't supported yet:
 create new self-hosted Sessions and connect their hosts again. Update your reverse
-proxy first.
+proxy first when using external ingress. A managed domain change replaces the
+previous domain route; reconnect clients and executors that still use it.
 
 ### Settings
 
@@ -84,8 +89,8 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | `format` | `1` | none | all | fixed | none | Configuration format for this release. Fixed after installation. |
 | `mode` | `"all"` \| `"core-only"` \| `"web-only"` | `"all"` | all | fixed | none | Which services this installation runs. |
 | `native_core` | boolean | `false` | `all`, `core-only` | fixed | none | Run Core as a systemd user service instead of a container. |
-| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null uses the loopback listener origins. |
-| `host` | string (IPv4 or IPv6 address) | `"127.0.0.1"` | all | `oac apply` | core, web | IP address on which Core and Web listen. PostgreSQL stays on loopback. Non-loopback listeners require an HTTPS public_url. |
+| `public_url` | string or null (canonical origin; HTTP only on loopback) | `null` | all | `oac apply` | core, web | Canonical public origin of Core and Web. With managed ingress, set the DNS hostname in Web or run oac domain; certificates are automatic. With external ingress, configure your TLS reverse proxy before applying this value. |
+| `host` | string (IPv4 or IPv6 address) | `"127.0.0.1"` | all | `oac apply` | core, web | Listener IP. With managed ingress only the gateway is public; Core stays on loopback. The default combined installer listens on all IPv4 interfaces. |
 | `ports.core` | integer 1024–65535 | `8091` | `all`, `core-only` | `oac apply` | core (core, web with native Core) | Host port of the Core API. With native Core, Web follows it. |
 | `ports.web` | integer 1024–65535 | `8080` | `all`, `web-only` | `oac apply` | web | Host port of Web. |
 | `ports.database` | integer 1024–65535 | none | `all`, `core-only` | `oac apply` | database, core | Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port. |
@@ -111,6 +116,7 @@ output or in Core's settings snapshot. Model providers are not process settings;
 | `core.runtime_history.queue_capacity` | integer | none | `all`, `core-only` | `oac apply` | core | Export queue capacity. |
 | `core.runtime_history.timeout_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Export and query timeout in seconds. |
 | `core.runtime_history.sample_interval_seconds` | integer | none | `all`, `core-only` | `oac apply` | core | Periodic sampling interval in seconds. |
+| `ingress` | `"managed"` \| `"external"` | `"external"` | all | fixed | none | managed provides automatic HTTPS and Web domain setup for a combined Docker installation; install.sh selects it by default. external uses your existing proxy. Fixed after installation. |
 <!-- END config-reference -->
 
 The schema is
@@ -140,53 +146,20 @@ Which harnesses are enabled, and the default one, are process settings
 
 ### Sandbox deployment
 
-Exactly one provider serves the deployment: Docker, microsandbox or E2B. The
-deployment specification holds the per-sandbox resources and, for Docker and
-microsandbox, the Runtime release. Web's setup proposes the Standard size from
-[`standard-sizes.json`](../apps/web/src/features/sandbox/standard-sizes.json) and
-derives Small and Large from it; the installer applies the bundle's copy of the same
-file. The database owns the saved values.
+Configure the backend and sandbox size in **System** → **Sandbox backend**.
+**Change resources** edits the deployment target; **Nodes** manages enrolled
+machines and their readiness.
 
-| Setting | Standard | Meaning |
-| --- | --- | --- |
-| `resources.cpus` | 2 | Whole vCPUs per sandbox, 1 through 255 |
-| `resources.memory_mib` | Docker 2048, microsandbox 4096 | MiB per sandbox, 512 through 1048576 |
-| `resources.root_disk_mib`, `environment_disk_mib` | microsandbox 8192 each | At least 1024 MiB; microsandbox only |
-| `runtime` | The bundle's Runtime release | Source revision, exact image ID and manifest, and Runtime and firmware hashes; never a mutable tag |
-| Idle suspension, snapshot retention | 300 and 86400 seconds | microsandbox only; fixed |
+The [deployment contract](../contracts/agents-api/sandbox-deployment.md) owns
+provider-specific fields, limits, Runtime identity and online change/reset rules.
+The [node protocol](../contracts/agents-api/node-generation-protocol.md) owns
+generation preparation and wire compatibility. This page does not maintain
+another version table or set of provider rules.
 
-E2B takes no `runtime`, and Web sends no resources for it: Core adopts the CPU and
-memory of the ready template build `template-id:build-uuid`, and supplied values must
-match it. For an E2B-compatible service, enter both its HTTPS API origin and
-sandbox data-plane domain in the setup wizard. Leaving both blank uses official
-E2B. The API host must be the data-plane domain or one of its subdomains.
-Changing either address requires draining the deployment in maintenance.
-Docker has no separate disk quota.
-
-Changing backend type or E2B team requires an explicit reset and a new setup.
-Same-team E2B template, resource and key changes apply online through the Core API:
-new allocations use the new generation, while existing sandboxes retain their
-original specification. Omit the key to preserve it; explicitly submitting a key,
-even the same value, verifies the replacement and advances the generation. Keep the
-old key valid until the update succeeds. Initial setup requires a team-owned template;
-a legacy public-template configuration or an already revoked old key requires reset
-when Core cannot verify the committed ownership anchor.
-
-Docker and microsandbox size/Runtime edits advance the target generation online.
-They require neither zero held resources nor node retirement or reenrollment.
-Version 2 nodes prepare the target independently, while existing allocations and
-suspended VMs retain their original generation. A qualified older serving generation
-can still accept new Sessions when it has capacity, including while the target is
-preparing or has failed. Target rollout and serving readiness are separate facts.
-Use **System** → **Sandbox backend** → **Change resources** to edit the target;
-**Nodes** owns node management and readiness.
-
-Current Runtime generation coexistence and ownership-scoped garbage collection
-remain supported. They do not upgrade the installed node program or convert an old
-installation. History stays, and existing Sessions never move between providers.
-See the [nodes guide](getting-started/nodes.md#change-the-sandbox-backend-or-size),
-[operator reference](../services/agents-api/HOSTED-SANDBOX-MANAGER.md#removal-and-reset)
-and [deployment contract](../contracts/agents-api/sandbox-deployment.md).
+Web proposes sizes from
+[`standard-sizes.json`](../apps/web/src/features/sandbox/standard-sizes.json);
+the installer uses the bundle's copy of that source. For operator steps, see
+[changing the sandbox backend or size](getting-started/nodes.md#change-the-sandbox-backend-or-size).
 
 ### Node capacity
 
@@ -202,23 +175,14 @@ node's own files can't change its capacity, size or Runtime.
 
 ### Default models
 
-Each harness has at most one default model configuration:
+Set a default in **System** → **Default model**, or use
+`PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys
+with `secrets/credential.key` and does not return them.
 
-- `model`: the provider's model ID;
-- `model_provider`: the same bundle as `x_agents_core.model_provider` (`protocol`,
-  HTTPS `base_url`, write-only `api_key`, and for MiniMax Code `context_window` and
-  `max_output_tokens`);
-- `harness_config`: optional native model parameters, `{}` by default.
-
-Core encrypts the key with `secrets/credential.key` and never returns it. Set it in
-Web or with `PUT /core/v1/harnesses/{harness}/model-configuration`.
-
-Which Sessions use the default, and in what order it applies, is in
-[Which model provider a Session uses](user-guide.md#which-model-provider-a-session-uses).
-Full rules: [model execution](../contracts/agents-api/model-execution.md#deployment-defaults).
-
-The operator file `AGENTS_API_EXECUTION_OPTIONS_FILE` is retired; see
-[installation version policy](getting-started/operations.md#installation-version-policy).
+[Model execution](../contracts/agents-api/model-execution.md#deployment-defaults)
+owns the request fields, replacement rules and applicable sources. The
+[user guide](user-guide.md#which-model-provider-a-session-uses) explains how to
+choose a source for a Session.
 
 ## Secrets and identity
 

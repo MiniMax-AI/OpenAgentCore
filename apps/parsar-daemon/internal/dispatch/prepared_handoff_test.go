@@ -178,7 +178,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	for _, mutation := range []proto.Envelope{
 		mustEnv(t, proto.TypeFunctionResult, "run", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: "publication-function"}),
 		mustEnv(t, proto.TypePermissionDecision, "publication-permission", proto.PermissionDecisionPayload{DeliveryID: "publication-permission", Approved: true}),
-		mustEnv(t, proto.TypePromptForUserChoiceDecision, "publication-choice", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "publication-choice", Answers: []string{"yes"}}),
+		mustEnv(t, proto.TypePromptForUserChoiceDecision, "publication-choice", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "publication-choice", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}}),
 	} {
 		if err := r.Handle(t.Context(), mutation); err != nil {
 			t.Fatal(err)

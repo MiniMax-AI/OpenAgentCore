@@ -70,7 +70,7 @@ contracts.
 | V1 `self_hosted` daemon enrollment at `/workspace` | [Qualified deployment scope](user-managed-runtime-v1.md) | [Qualified deployment scope](user-managed-runtime-v1.md) | [Qualified deployment scope](user-managed-runtime-v1.md) |
 | Deferred function discovery | Unqualified; explicit rejection | [Single-agent text/function profile](tool-search.md) | Gap; see [tool search](tool-search.md) |
 | Structured output | Unqualified; explicit rejection | [Qualified single-agent function profile](structured-output.md) | Gap; see [structured output](structured-output.md) |
-| Message images | Inline PNG/JPEG on `none` and Docker `openai_hosted` | Inline PNG/JPEG on `none` and Docker `openai_hosted` | Unsupported; see [message input](message-input.md) |
+| Message images | Inline PNG/JPEG on `none`, Docker `openai_hosted` and `self_hosted` | Inline PNG/JPEG on `none`, Docker `openai_hosted` and `self_hosted` | Unsupported; see [message input](message-input.md) |
 | Explicit reasoning | Shared service gap | Shared service gap | Shared service gap |
 | Six Subagent reads | [Qualified scope](subagents.md) | [Qualified scope](subagents.md) | [Qualified scope](subagents.md) |
 
@@ -90,7 +90,9 @@ stopping conditions. A batch ends when its declared operations pass; it does not
 expand to match another Harness's feature list. A small adapter does not remove
 the need for native qualification.
 
-- Adapter tests: two ordinary Turns share one native process/connection and history;
+- Adapter tests: reuse `agent/contracttest.TextLifecycle` with a controlled native
+  fixture or real provider. Record which one was used. Two ordinary Turns share
+  one native process/connection and history;
   cancellation followed by another Turn; stale cancellation and late events; native
   exit, cleanup failure, input write/application receipts and unknown outcomes.
   Verify fresh per-Turn usage, function, input and child-observation state.

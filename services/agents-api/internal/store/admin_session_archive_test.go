@@ -227,7 +227,10 @@ func TestManagedSessionArchivePreservesFailuresAndRejectsSelfHosted(t *testing.T
 	s, w, installation := managedArchiveFixture(t)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	owner := archiveAllocation(t, w, tenant, session, installation)
-	if _, err := w.FailRuntimeInitialization(t.Context(), owner, ProvisioningFailure{Step: ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.FailEnvironmentInitialization(t.Context(), EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}, ProvisioningFailure{Step: ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
 		t.Fatal(err)
 	}
 	failed, err := s.GetSession(t.Context(), tenant, session.ID)

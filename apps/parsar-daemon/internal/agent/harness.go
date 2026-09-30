@@ -89,6 +89,7 @@ type Session interface {
 // Turn capabilities. Public profiles determine which operations are required.
 
 // DurableSteerer reports one complete write synchronously, then waits for the native receipt.
+// It is independent of Steerer; the public text path requires only this interface.
 type DurableSteerer interface {
 	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
 }

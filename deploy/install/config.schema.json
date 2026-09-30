@@ -31,7 +31,7 @@
     "public_url": {
       "type": ["string", "null"],
       "default": null,
-      "description": "Public origin of Core and Web behind your TLS reverse proxy, such as https://core.example. Nodes, sandboxes and self-hosted executors use it. null uses the loopback listener origins.",
+      "description": "Canonical public origin of Core and Web. With managed ingress, set the DNS hostname in Web or run oac domain; certificates are automatic. With external ingress, configure your TLS reverse proxy before applying this value.",
       "x-oac": {
         "check": "origin",
         "restarts": ["core", "web"],
@@ -42,7 +42,7 @@
     "host": {
       "type": "string",
       "default": "127.0.0.1",
-      "description": "IP address on which Core and Web listen. PostgreSQL stays on loopback. Non-loopback listeners require an HTTPS public_url.",
+      "description": "Listener IP. With managed ingress only the gateway is public; Core stays on loopback. The default combined installer listens on all IPv4 interfaces.",
       "x-oac": {
         "check": "listen_host",
         "restarts": [
@@ -266,6 +266,12 @@
           }
         }
       }
+    },
+    "ingress": {
+      "enum": ["managed", "external"],
+      "default": "external",
+      "description": "managed provides automatic HTTPS and Web domain setup for a combined Docker installation; install.sh selects it by default. external uses your existing proxy. Fixed after installation.",
+      "x-oac": {"changeable": false, "install_flag": "--ingress"}
     }
   }
 }

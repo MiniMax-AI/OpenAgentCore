@@ -5,8 +5,8 @@ SET compute_phase_changed_at = CASE WHEN compute_phase = sqlc.arg(phase)::text T
     compute_revision = compute_revision + 1,
     compute_retained_until = sqlc.narg(retained_until),
     kept_at = CASE WHEN sqlc.arg(phase)::text = 'running' THEN clock_timestamp() ELSE kept_at END
-WHERE id = sqlc.arg(id) AND compute_revision = sqlc.arg(revision)
-    AND state = 'running' AND initialization = 'complete'
+WHERE runtime_allocations.id = sqlc.arg(id) AND compute_revision = sqlc.arg(revision)
+    AND state = 'running' AND EXISTS (SELECT 1 FROM environments e WHERE e.id = runtime_allocations.environment_id AND e.initialization = 'complete')
     AND ((compute_phase IN ('disabled','running') AND (node_id IS NOT NULL OR (SELECT mode FROM runtime_deployment) = 'direct' OR kept_at > clock_timestamp() - interval '1 hour'))
       OR (compute_phase NOT IN ('disabled','running') AND compute_retained_until > clock_timestamp()))
 RETURNING *;

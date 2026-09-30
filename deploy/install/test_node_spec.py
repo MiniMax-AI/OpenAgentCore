@@ -3,6 +3,7 @@ import argparse
 import copy
 import io
 import json
+from pathlib import Path
 import unittest
 import urllib.error
 from unittest import mock
@@ -108,6 +109,20 @@ class SpecificationTests(unittest.TestCase):
         reordered["runtime"] = dict(reversed(list(reordered["runtime"].items())))
         reordered["resources"] = dict(reversed(list(reordered["resources"].items())))
         self.assertEqual(node_spec.digest("docker", reordered), node_spec.digest("docker", self.spec))
+
+
+class SharedDeploymentContractTests(unittest.TestCase):
+    def test_shared_acceptance_and_canonical_bytes(self):
+        path = Path(__file__).resolve().parents[2] / "services/agents-api/internal/sandbox/testdata/deployment-contract.json"
+        for fixture in json.loads(path.read_text()):
+            with self.subTest(name=fixture["name"]):
+                if not fixture["valid"]:
+                    with self.assertRaises((KeyError, ValueError, TypeError)):
+                        node_spec.canonical_spec(fixture["provider"], fixture["specification"])
+                    continue
+                canonical = json.dumps(node_spec.canonical_spec(fixture["provider"], fixture["specification"]), separators=(",", ":"), ensure_ascii=False)
+                self.assertEqual(canonical, fixture["canonical"])
+                self.assertEqual(node_spec.digest(fixture["provider"], fixture["specification"]), fixture["digest"])
 
 
 if __name__ == "__main__":

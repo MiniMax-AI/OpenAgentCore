@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/adminaudit"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/execution"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtime"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -44,7 +45,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err := writer.ClaimWebSandboxDeployment(t.Context(), installation); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &store.SandboxE2BConfiguration{APIKey: "fixture", Template: "runtime:" + uuid.NewString()}}); err != nil {
+			if _, err := writer.InitializeSandboxDeployment(t.Context(), installation, store.SandboxDeploymentSetupRequest{DeploymentSpec: store.SandboxDeploymentTestSpec("e2b"), Provider: "e2b", E2B: &sandbox.E2BConfiguration{APIKey: "fixture", Template: "runtime:" + uuid.NewString()}}); err != nil {
 				t.Fatal(err)
 			}
 			projectID := uuid.NewString()

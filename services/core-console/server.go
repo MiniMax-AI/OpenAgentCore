@@ -118,7 +118,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.nodePayload != nil && strings.HasPrefix(r.URL.Path, "/node-install/") {
-		if r.Host != h.host || !safePath(r.URL.Path) || r.URL.IsAbs() {
+		if h.requestOrigin(r) == "" || !safePath(r.URL.Path) || r.URL.IsAbs() {
 			http.NotFound(w, r)
 			return
 		}
@@ -157,6 +157,10 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if r.URL.Path == "/console/installation/domain" {
+		h.serveInstallationDomain(w, r)
+		return
+	}
 	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {
 		h.serveConsoleConfiguration(w, r)
 		return
@@ -174,7 +178,7 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *console) sameOrigin(r *http.Request) bool {
-	if r.Host != h.host || !h.validOriginHeaders(r) {
+	if h.requestOrigin(r) == "" || !h.validOriginHeaders(r) {
 		return false
 	}
 	// Modern browsers provide Fetch Metadata; older same-origin requests carry
@@ -182,7 +186,7 @@ func (h *console) sameOrigin(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead &&
 		r.Header.Get("Origin") == "" && r.Header.Get("Sec-Fetch-Site") != "same-origin" {
 		referrer, err := url.Parse(r.Referer())
-		if err != nil || referrer.Scheme+"://"+referrer.Host != h.origin {
+		if err != nil || referrer.Scheme+"://"+referrer.Host != h.requestOrigin(r) {
 			return false
 		}
 	}
@@ -190,7 +194,7 @@ func (h *console) sameOrigin(r *http.Request) bool {
 }
 
 func (h *console) validOriginHeaders(r *http.Request) bool {
-	if origins := r.Header.Values("Origin"); len(origins) > 1 || (len(origins) == 1 && origins[0] != h.origin) {
+	if origins := r.Header.Values("Origin"); len(origins) > 1 || (len(origins) == 1 && origins[0] != h.requestOrigin(r)) {
 		return false
 	}
 	sites := r.Header.Values("Sec-Fetch-Site")

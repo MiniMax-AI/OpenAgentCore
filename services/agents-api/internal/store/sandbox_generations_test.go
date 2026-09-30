@@ -30,7 +30,7 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 	assertSandboxSnapshotEquivalent(t, s.pool)
 	ref := sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID}
 	retained, err := s.GetSandboxAllocationSetup(t.Context(), ref)
-	if err != nil || retained.Generation != 1 || retained.E2B.Template != oldTemplate || retained.E2B.APIURL != "" || retained.Specification.Resources.CPUs == input.Resources.CPUs {
+	if err != nil || retained.Generation != 1 || retained.E2B.Template != oldTemplate || retained.E2B.APIURL != "https://api.e2b.app" || retained.Specification.Resources.CPUs == input.Resources.CPUs {
 		t.Fatal(retained, err)
 	}
 	input.E2B.APIKey = "replacement-secret"
@@ -40,7 +40,7 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 		t.Fatal(changed, err)
 	}
 	retained, err = s.GetSandboxAllocationSetup(t.Context(), ref)
-	if err != nil || retained.Generation != 1 || retained.E2B.APIKey != input.E2B.APIKey || retained.E2B.Template != oldTemplate || retained.E2B.APIURL != "" {
+	if err != nil || retained.Generation != 1 || retained.E2B.APIKey != input.E2B.APIKey || retained.E2B.Template != oldTemplate || retained.E2B.APIURL != "https://api.e2b.app" {
 		t.Fatal("old generation did not use committed key", err)
 	}
 	if _, err = s.pool.Exec(t.Context(), `UPDATE runtime_allocations SET deployment_generation=3 WHERE id=$1`, owner.ID); err == nil {
@@ -50,7 +50,7 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	generations, err := s.SandboxGenerationPage(t.Context(), -1)
-	if err != nil || len(generations) != 1 || generations[0].Generation != 1 || generations[0].E2B.APIURL != "" {
+	if err != nil || len(generations) != 1 || generations[0].Generation != 1 || generations[0].E2B.APIURL != "https://api.e2b.app" {
 		t.Fatal(generations, err)
 	}
 	if _, err = w.RequestRuntimeCleanup(t.Context(), owner); err != nil {

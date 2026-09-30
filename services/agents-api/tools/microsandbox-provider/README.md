@@ -78,10 +78,10 @@ external volume lifecycle is introduced. Creation starts in `/` until bootstrap
 creates the workspace directories.
 
 VM creation does not implicitly run the OCI ENTRYPOINT. Before admitting native
-work, the helper uses confidential stdin to install the existing private
-`auth.json` format, create Runtime directories, bind the same workspace at
-`/workspace`, and invoke the existing daemon's `connect --profile default -b`
-mode as uid/gid 1000. The final provider-owned bootstrap label confirms only
+work, the helper delivers the [Runtime bootstrap input](../../../../docs/runtime-bootstrap.md)
+through confidential stdin to a protected file, creates Runtime directories, binds
+the workspace at `/workspace`, and launches `connect --bootstrap-file` in
+background mode as uid/gid 1000. The final provider-owned bootstrap label confirms only
 completion of these writes and launch, not authentication or native readiness.
 The receipt label uses the supported next-start modification policy to update
 persisted metadata without restarting the guest. v0.7.2 cannot update active labels.

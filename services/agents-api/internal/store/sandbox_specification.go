@@ -1,13 +1,12 @@
 package store
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 )
 
 // SandboxConfigurationError contains only validated, non-secret configuration diagnostics.
@@ -35,32 +34,21 @@ func SandboxSetupForSelection(installationID string, input SandboxDeploymentSetu
 	if err := validateSandboxSelection(input); err != nil {
 		return SandboxSetup{}, err
 	}
-	result := SandboxSetup{InstallationID: installationID, Provider: input.Provider,
-		Mode: "nodes", Specification: input.DeploymentSpec, E2B: input.E2B}
-	namespace := "nodes:" + installationID
-	if input.Provider == "e2b" {
-		result.Mode = "direct"
-		namespace = "e2b:" + installationID
+	normalized, err := providers.Normalize(input)
+	if err != nil {
+		return SandboxSetup{}, sandboxConfigurationError(err)
 	}
-	if input.Provider == "microsandbox" {
-		result.IdleSeconds, result.RetentionSeconds = 300, 86400
+	description, err := providers.Describe(input.Provider, installationID)
+	if err != nil {
+		return SandboxSetup{}, sandboxConfigurationError(err)
 	}
-	digest := sha256.Sum256([]byte(input.Provider + "\x00" + namespace))
-	result.BackendFingerprint = hex.EncodeToString(digest[:])
+	result := SandboxSetup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, E2B: normalized.E2B, BackendFingerprint: description.BackendFingerprint, IdleSeconds: description.IdleSeconds, RetentionSeconds: description.RetentionSeconds}
 	return result, nil
-}
-
-// unspecifiedNodeDeployment identifies a node-backed selection saved before
-// deployments carried a specification; migration left the empty default. Its
-// retained nodes may reconnect to drain resources, but it cannot create
-// sandboxes or enroll nodes until an administrator replaces the selection.
-func unspecifiedNodeDeployment(d sqlc.RuntimeDeployment) bool {
-	return d.WebManaged && d.Mode == "nodes" && (d.ProviderKind == "docker" || d.ProviderKind == "microsandbox") && string(d.Specification) == "{}"
 }
 
 func deploymentSpecification(d sqlc.RuntimeDeployment) (sandbox.DeploymentSpec, error) {
 	var spec sandbox.DeploymentSpec
-	if json.Unmarshal(d.Specification, &spec) != nil || spec.Validate(d.ProviderKind) != nil {
+	if json.Unmarshal(d.Specification, &spec) != nil || providers.ValidateSpecification(d.ProviderKind, spec) != nil {
 		return spec, ErrRuntimeSpecificationMismatch
 	}
 	return spec, nil

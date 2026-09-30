@@ -51,18 +51,21 @@ func (p *pendingAskTable) RecordControl(askID, ccRequestID string, questions []p
 // re-doing the write. The double-fire risk is the bigger hazard here
 // (timer + server can both reach Submit; stdin flakes are rare and the
 // session is going to die anyway when stdin errors), so we accept it.
-func (p *pendingAskTable) Take(askID string) (pendingAskEntry, bool) {
+func (p *pendingAskTable) Take(askID string, decision proto.PromptForUserChoiceDecisionPayload) (pendingAskEntry, bool, error) {
 	if askID == "" {
-		return pendingAskEntry{}, false
+		return pendingAskEntry{}, false, nil
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	e, ok := p.byAskID[askID]
 	if !ok {
-		return pendingAskEntry{}, false
+		return pendingAskEntry{}, false, nil
+	}
+	if _, err := decision.AnswersFor(askQuestionIDs(e)); err != nil {
+		return pendingAskEntry{}, false, err
 	}
 	delete(p.byAskID, askID)
-	return e, true
+	return e, true, nil
 }
 
 // interceptAskUserQuestionFromControlRequest handles the can_use_tool check
@@ -167,7 +170,11 @@ func parseAskUserQuestionInput(input map[string]any) ([]proto.PromptForUserChoic
 // execution skips Claude's local AskUserQuestion handler; the SDK supplies the
 // message to the model as the tool result, including cancellation instructions.
 func buildAskUserControlResponse(entry pendingAskEntry, decision proto.PromptForUserChoiceDecisionPayload) ([]byte, error) {
-	text := formatAskUserResultText(entry, decision)
+	answers, err := decision.AnswersFor(askQuestionIDs(entry))
+	if err != nil {
+		return nil, err
+	}
+	text := formatAskUserResultText(entry, decision, answers)
 	body, err := json.Marshal(map[string]any{
 		"type": "control_response",
 		"response": map[string]any{
@@ -186,7 +193,7 @@ func buildAskUserControlResponse(entry pendingAskEntry, decision proto.PromptFor
 }
 
 // formatAskUserResultText formats answers or cancellation instructions for Claude.
-func formatAskUserResultText(entry pendingAskEntry, decision proto.PromptForUserChoiceDecisionPayload) string {
+func formatAskUserResultText(entry pendingAskEntry, decision proto.PromptForUserChoiceDecisionPayload, answers map[string][]string) string {
 	if decision.Cancelled {
 		reason := strings.TrimSpace(decision.Reason)
 		switch reason {
@@ -199,45 +206,10 @@ func formatAskUserResultText(entry pendingAskEntry, decision proto.PromptForUser
 		}
 	}
 
-	// Multi-question path: stable QuestionID is authoritative. Positional
-	// pairing remains only as a compatibility fallback for older peers;
-	// Header is never a key because duplicate or blank headers are valid.
 	out := make([]map[string]any, 0, len(entry.Questions))
 	anyAnswer := false
-	// Single-question + legacy Answers slice with multiple entries
-	// = the multi-select case the old callback shape used. Join
-	// them with the same "、" we render to the human so the model
-	// sees one merged answer string for that question.
-	if len(entry.Questions) == 1 && len(decision.QuestionAnswers) == 0 && len(decision.Answers) > 1 {
-		merged := strings.Join(decision.Answers, "、")
-		return mustMarshalAskQuestions([]map[string]any{{
-			"header": entry.Questions[0].Header,
-			"answer": merged,
-		}})
-	}
-	for i, q := range entry.Questions {
-		answer := ""
-		if i < len(decision.QuestionAnswers) {
-			answer = decision.QuestionAnswers[i].Answer
-			if len(decision.QuestionAnswers[i].Answers) > 0 {
-				answer = strings.Join(decision.QuestionAnswers[i].Answers, "、")
-			}
-		}
-		for _, candidate := range decision.QuestionAnswers {
-			if q.ID != "" && candidate.QuestionID == q.ID {
-				answer = candidate.Answer
-				if len(candidate.Answers) > 0 {
-					answer = strings.Join(candidate.Answers, "、")
-				}
-				break
-			}
-		}
-		// Legacy callback path: a single-question slot answered via
-		// the flat Answers slice. Multi-question slots always populate
-		// QuestionAnswers, so this branch is no-op for them.
-		if answer == "" && len(decision.Answers) > i {
-			answer = decision.Answers[i]
-		}
+	for _, q := range entry.Questions {
+		answer := strings.Join(answers[q.ID], "、")
 		if answer != "" {
 			anyAnswer = true
 		}
@@ -256,4 +228,12 @@ func formatAskUserResultText(entry pendingAskEntry, decision proto.PromptForUser
 func mustMarshalAskQuestions(qs []map[string]any) string {
 	payload, _ := json.Marshal(map[string]any{"questions": qs})
 	return string(payload)
+}
+
+func askQuestionIDs(entry pendingAskEntry) []string {
+	ids := make([]string, len(entry.Questions))
+	for i, question := range entry.Questions {
+		ids[i] = question.ID
+	}
+	return ids
 }

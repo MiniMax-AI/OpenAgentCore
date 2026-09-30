@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 )
 
 func TestProcessWireRejectsUnknownAndTrailingOutput(t *testing.T) {
@@ -69,7 +71,7 @@ func TestCredentialFenceWaitsForActualHelperExitAfterCancellation(t *testing.T) 
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	fence := &CallFence{}
+	fence := &sandbox.CallFence{}
 	ctx, cancel := context.WithCancel(t.Context())
 	entered, err := fence.Enter(ctx)
 	if err != nil {

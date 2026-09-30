@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentnetwork"
+	"github.com/MiniMax-AI-Dev/parsar/internal/runtimebootstrap"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -36,10 +36,11 @@ type Request struct {
 	Config    Config
 	Reference sandbox.Reference
 	// References lists the allocations of one read-only observe request.
-	References []sandbox.Reference `json:",omitempty"`
-	Bootstrap  *sandbox.Bootstrap  `json:",omitempty"`
-	Command    *sandbox.Command    `json:",omitempty"`
-	Deadline   time.Time
+	References       []sandbox.Reference          `json:",omitempty"`
+	Bootstrap        *sandbox.Bootstrap           `json:",omitempty"`
+	RuntimeBootstrap *runtimebootstrap.Connection `json:",omitempty"`
+	Command          *sandbox.Command             `json:",omitempty"`
+	Deadline         time.Time
 }
 type Response struct {
 	Version         int
@@ -156,20 +157,14 @@ func validReference(r sandbox.Reference) bool {
 	return validID(r.TenantID) && validID(r.EnvironmentID) && validID(r.AllocationID)
 }
 func (c Config) Validate() error {
-	if c.Resources != nil && c.Resources.Validate("e2b") != nil {
+	if c.Resources != nil && ValidateResources(*c.Resources) != nil {
 		return sandbox.ErrInvalid
 	}
-	template, build, ok := strings.Cut(c.Template, ":")
-	if !ok || template == "" || !validID(build) || !validID(c.InstallationID) || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 86400 || c.APIKey == "" || len(c.APIKey) > 4096 || strings.ContainsFunc(c.APIKey, func(r rune) bool { return unicode.IsSpace(r) || r == 0 }) {
+	if !validID(c.InstallationID) || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 86400 {
 		return sandbox.ErrInvalid
 	}
-	if _, _, err := NormalizeEndpoint(c.APIURL, c.Domain); err != nil {
-		return sandbox.ErrInvalid
-	}
-	for _, r := range template {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_') {
-			return sandbox.ErrInvalid
-		}
+	if err := ValidateConfiguration(&sandbox.E2BConfiguration{APIKey: c.APIKey, Template: c.Template, APIURL: c.APIURL, Domain: c.Domain}); err != nil {
+		return err
 	}
 	for _, path := range []string{c.Binary, c.StateDir} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path {
@@ -205,7 +200,15 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	if err := ctx.Err(); err != nil {
 		return unstarted(operation, r), err
 	}
-	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, Command: command, Deadline: deadline})
+	var connection *runtimebootstrap.Connection
+	if b != nil {
+		value := b.RuntimeConnection()
+		if value.Validate() != nil {
+			return unstarted(operation, r), sandbox.ErrInvalid
+		}
+		connection = &value
+	}
+	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
 	if errors.Is(err, errHelperNotStarted) {
 		return unstarted(operation, r), sandbox.ErrComputeUnconfirmed
 	}
@@ -221,8 +224,8 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	switch out.ErrorCode {
 	case "":
 		return out, nil
-	case "legacy_template":
-		return out, fmt.Errorf("%w: This E2B template was built before OpenAgentCore renamed its paths. Build a template with this release's build-template.py and replace it in the sandbox deployment.", sandbox.ErrInvalid)
+	case "template_invalid":
+		return out, fmt.Errorf("%w: This E2B template lacks the current Runtime startup entry point. Build a template with this release's build-template.py and select it in the sandbox deployment.", sandbox.ErrInvalid)
 	case "team_mismatch":
 		return out, ErrTeamMismatch
 	case "unauthorized":
@@ -272,9 +275,8 @@ func (p *Provider) info(ctx context.Context, operation string, r sandbox.Referen
 	return sandbox.Info{Reference: r}, err
 }
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	u, err := url.Parse(b.CoreURL)
 	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
-	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || policy.Validate() != nil || err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.TrimSpace(b.Credential) == "" {
+	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || policy.Validate() != nil || b.RuntimeConnection().Validate() != nil {
 		info := sandbox.Info{Reference: b.Reference}
 		if validReference(b.Reference) {
 			info.State, info.CreateSettled = "absent", true

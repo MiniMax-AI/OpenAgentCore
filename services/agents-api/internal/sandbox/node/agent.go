@@ -209,17 +209,14 @@ func (a *agent) connect(ctx context.Context) error {
 	health, _ := a.health(ctx, host)
 	_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	version := ProtocolVersion
-	if a.config.Generations != nil {
-		version = GenerationProtocolVersion
-	}
-	if err = writeFrame(conn, frame{Version: version, Type: "hello", Identity: &a.config.Identity, Health: &health}); err != nil {
+	if err = writeFrame(conn, frame{Version: version, Type: "hello", GenerationManagement: a.config.Generations != nil, Identity: &a.config.Identity, Health: &health}); err != nil {
 		return err
 	}
 	welcome, err := readFrame(conn)
 	if err != nil {
 		return err
 	}
-	if welcome.Version != version || welcome.Type != "welcome" || !validID(welcome.ConnectionID) || welcome.OwnerEpoch == 0 {
+	if (a.config.Generations == nil && welcome.Deployment != nil) || welcome.Version != version || welcome.Type != "welcome" || !validID(welcome.ConnectionID) || welcome.OwnerEpoch == 0 {
 		return sandbox.ErrInvalid
 	}
 	a.mu.Lock()
@@ -246,6 +243,9 @@ func (a *agent) connect(ctx context.Context) error {
 	var controlDone chan struct{}
 	controlWork := make(chan []sandbox.GenerationRetention, 1)
 	if a.config.Generations != nil {
+		if welcome.Deployment == nil {
+			return sandbox.ErrInvalid
+		}
 		if err := a.config.Generations.Deployment(*welcome.Deployment); err != nil {
 			return err
 		}
@@ -264,9 +264,12 @@ func (a *agent) connect(ctx context.Context) error {
 			return sandbox.ErrInvalid
 		}
 		if f.Type == "heartbeat_ack" && f.ConnectionID == current.id {
-			if version == GenerationProtocolVersion {
-				if f.OwnerEpoch != current.epoch {
-					return sandbox.ErrOwnership
+			if f.OwnerEpoch != current.epoch || (a.config.Generations == nil && f.Deployment != nil) {
+				return sandbox.ErrOwnership
+			}
+			if a.config.Generations != nil {
+				if f.Deployment == nil {
+					return sandbox.ErrInvalid
 				}
 				if err := a.config.Generations.Deployment(*f.Deployment); err != nil {
 					return err
@@ -274,7 +277,7 @@ func (a *agent) connect(ctx context.Context) error {
 			}
 			continue
 		}
-		if f.Type == "retention_ack" && version == GenerationProtocolVersion {
+		if f.Type == "retention_ack" && a.config.Generations != nil {
 			if err := a.acceptRetention(current, f, controlWork); err != nil {
 				return err
 			}
@@ -284,6 +287,9 @@ func (a *agent) connect(ctx context.Context) error {
 			return sandbox.ErrInvalid
 		}
 		q := *f.Request
+		if a.config.Generations == nil && q.DeploymentGeneration != a.config.Identity.DeploymentGeneration {
+			return sandbox.ErrOwnership
+		}
 		if q.ConnectionID != current.id || q.OwnerEpoch != current.epoch || q.Sequence != sequence+1 {
 			return sandbox.ErrOwnership
 		}

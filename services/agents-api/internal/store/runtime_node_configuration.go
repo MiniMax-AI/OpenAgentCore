@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/db/sqlc"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -96,7 +97,7 @@ func (s *Store) RuntimeNodeGenerationConfiguration(ctx context.Context, nodeID, 
 		if node == nil && d.AdmissionPaused {
 			return ErrSandboxDeploymentConflict
 		}
-		result = RuntimeNodeConfiguration{MaxActive: int(active), MaxRetained: retainedLimit(d.ProviderKind, int(active), int(retained)), InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: s.publicURL, Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.ProviderKind)}
+		result = RuntimeNodeConfiguration{MaxActive: int(active), MaxRetained: providers.RetainedLimit(d.ProviderKind, int(active), int(retained)), InstallationID: runtimeUUID(d.InstallationID), Provider: d.ProviderKind, CoreURL: s.publicURL, Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.ProviderKind)}
 		return nil
 	})
 	return result, err

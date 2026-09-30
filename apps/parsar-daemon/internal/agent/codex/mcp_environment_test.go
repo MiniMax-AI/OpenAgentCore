@@ -17,7 +17,7 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "must-not-be-native-command", Args: []string{"private-argument"}}},
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/1", BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.com/mcp", HTTPHeaders: map[string]string{"X-Key": "literal-${DO_NOT_EXPAND}"}}},
 	}}
-	servers, env, err := mergeEnvironmentMCP(nil, local)
+	servers, env, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local})
 	if err != nil || len(servers) != 2 || len(env) != 2 {
 		t.Fatal("environment declarations were not projected", err)
 	}
@@ -52,17 +52,17 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 func TestEnvironmentMCPRejectsUnqualifiedNetworkAndCredentialChanges(t *testing.T) {
 	for _, access := range []string{"", "restricted", "disabled"} {
 		local := &proto.LocalEnvironment{NetworkAccess: access, MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "local", Type: "stdio"}}}}
-		if _, _, err := mergeEnvironmentMCP(nil, local); err == nil {
+		if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local}); err == nil {
 			t.Errorf("unqualified MCP network accepted: %s", access)
 		}
 	}
 	token := "user-token"
 	local := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{{BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "http://example.com/mcp"}}}}
-	if _, _, err := mergeEnvironmentMCP(nil, local); err == nil {
+	if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local}); err == nil {
 		t.Fatal("plaintext bearer accepted")
 	}
 	local.MCP[0].Server.URL = "https://example.com/mcp"
-	if _, _, err := mergeEnvironmentMCP(map[string]mcpServerConfig{"remote": {}}, local); err == nil {
+	if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local, MCPHTTPServers: &[]proto.MCPHTTPServer{{ServerLabel: "remote", ServerURL: "https://example.com/mcp"}}}); err == nil {
 		t.Fatal("service and environment identity collision accepted")
 	}
 }

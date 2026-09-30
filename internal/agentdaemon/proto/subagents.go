@@ -50,7 +50,7 @@ type SubagentTurnPayload struct {
 
 // SubagentItemPayload reuses ordinary message/tool observations. Payload is a
 // complete snapshot, not a delta. Position is the native order within its Turn.
-// NativeItem and engine-specific payloads are not admitted by this contract.
+// Engine-specific payloads are not admitted by this contract.
 type SubagentItemPayload struct {
 	NativeID string          `json:"native_id"`
 	TurnID   string          `json:"turn_id"`

@@ -51,7 +51,7 @@ operating system or provider name. See
 | Part | Responsibility | Connects through | Current implementations | Add one |
 | --- | --- | --- | --- | --- |
 | Sandbox Provider | Creates, bootstraps, renews and reclaims the outer Environment | `SandboxProvider` interface | Docker, microsandbox, E2B, sandbox nodes | [Sandbox Provider guide](sandbox-provider.md) |
-| Runtime | Prepares Skills, MCP and files, runs executors, owns local cleanup | Core–Runtime protocol over `/api/v1` | `oac-daemon`, managed or self-hosted on Linux, macOS and Windows | [Core–Runtime protocol](runtime-protocol.md) |
+| Runtime | Prepares Skills, MCP and files, runs executors, owns local cleanup | Core–Runtime protocol over `/api/v1` | `oac-daemon`: managed Linux; self-hosted Linux, macOS and Windows | [Core–Runtime protocol](runtime-protocol.md) |
 | Harness | Runs the native model and tool loop | Harness adapter (`Executor` and `Turn`) | Codex, Claude Code, MiniMax Code | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
 | Model Provider | Serves inference for the harness | Responses, Anthropic or Chat Completions protocol | Any endpoint speaking one of those protocols | [Model execution](../contracts/agents-api/model-execution.md) |
 
@@ -68,9 +68,10 @@ For a Core-managed (`openai_hosted`) Session:
 
 1. The application creates a Session through the Agents API.
 2. Core asks the Sandbox Provider for an Environment.
-3. The provider boots the Runtime daemon inside it.
+3. The provider starts the Runtime using the [bootstrap contract](runtime-bootstrap.md).
 4. The daemon dials into Core and advertises its capabilities.
-5. Core prepares the Environment: Skills, MCP declarations and initial files.
+5. Core sends the preparation request; Runtime prepares Skills, MCP declarations
+   and initial files inside the Environment.
 6. The application sends input.
 7. Core prepares and starts execution on the daemon.
 8. The daemon's harness adapter starts a native Turn.

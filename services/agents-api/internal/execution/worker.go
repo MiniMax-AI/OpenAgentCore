@@ -48,10 +48,8 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 		return nil, err
 	}
 	var deployment *store.RuntimeDeployment
-	var verify store.RuntimeOwnershipVerifier
 	if worker.runtimes != nil && worker.runtimes.loadDeployment == nil {
 		config := worker.runtimes.config
-		verify = config.VerifyLegacyOwnership
 		deployment = &store.RuntimeDeployment{ProviderKind: config.ProviderKind, LocalNodeID: config.LocalNodeID, LocalCredentialSHA256: config.LocalCredentialSHA256, LocalMaxActive: config.LocalMaxActive, LocalMaxRetained: config.LocalMaxRetained, InstallationID: config.InstallationID, BackendFingerprint: config.BackendFingerprint, AdmissionPaused: config.AdmissionPaused}
 	}
 	if worker.runtimes != nil && worker.runtimes.loadDeployment != nil {
@@ -60,7 +58,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher) (*Worker, error) {
 			_, err = worker.runtimes.ensureDeployment(ctx)
 		}
 	} else {
-		err = owned.Store.ConfigureRuntimeDeployment(ctx, deployment, verify)
+		err = owned.Store.ConfigureRuntimeDeployment(ctx, deployment)
 	}
 	if err != nil {
 		if worker.runtimes != nil {
@@ -162,6 +160,9 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		err error
 	}
 	completed := make(chan completion, w.executionConcurrency())
+	preparationDone := make(chan error, 1)
+	running.Add(1)
+	go func() { defer running.Done(); preparationDone <- w.runEnvironmentInitializations(ctx) }()
 	lifecycleDone := make(chan error, 1)
 	if w.runtimes != nil {
 		running.Add(1)
@@ -194,6 +195,8 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-preparationDone:
+			return err
 		case err := <-lifecycleDone:
 			return err
 		case request := <-w.fileWrites:

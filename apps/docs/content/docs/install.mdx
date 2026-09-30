@@ -11,9 +11,8 @@ The default path has five steps:
 
 1. [Check the prerequisites](#prerequisites).
 2. [Run the installer](#install).
-3. [Make Core reachable](#make-core-reachable) over HTTPS, or through a quick tunnel
-   for a trial.
-4. [Sign in to Web](#sign-in-to-web), set a default model and issue a key.
+3. Open the printed `http://SERVER_IP:8080` address and [sign in to Web](#sign-in-to-web).
+4. [Configure HTTPS in Web](#make-core-reachable), set a default model and issue a key.
 5. [Add execution capacity](#next-steps): a node, E2B or your own machine.
 
 Every flag, listener addresses and ports are in
@@ -28,15 +27,16 @@ and split deployments are in [Advanced installation](#advanced-installation).
 - Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
 - An account that can run `docker` and write to its home directory. Ordinary users
   and root both work; the installer never calls sudo.
-- Free loopback ports 8091 (Core) and 8080 (Web), or
-  [custom listeners](/install-options#listeners-and-access).
+- Free ports 8080 (initial Web access), 80 and 443 (HTTPS gateway), and loopback
+  port 8091 (Core). Docker must be able to publish these ports; the installer
+  does not elevate privileges or change host policy.
 - curl. No GitHub CLI or login is needed.
 
 The Core host needs no KVM.
 
-**A public HTTPS address**, such as `https://core.example`, with a DNS name and a
-TLS certificate. Nodes, E2B sandboxes and self-hosted machines reach Core there. A
-local trial can skip it and [set it later](#make-core-reachable).
+A DNS hostname is needed when you connect applications, nodes, E2B or self-hosted
+machines. You can install and open Web before configuring it; the managed gateway
+obtains and renews the certificate automatically.
 
 ## Install
 
@@ -44,7 +44,7 @@ local trial can skip it and [set it later](#make-core-reachable).
 curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash
 ```
 
-For an HTTPS deployment, pass the public address:
+For noninteractive setup with DNS already pointing at the server, pass the public address:
 
 ```sh
 curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash -s -- --public-url https://core.example
@@ -53,38 +53,51 @@ curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/in
 The script picks the latest stable release, verifies its checksum and runs the
 bundled installer, which:
 
-1. checks the host and loads the Core, Web and PostgreSQL images;
+1. checks the host and loads the Core, Web, PostgreSQL and installation gateway images;
 2. creates `~/.oac/core` (mode `0700`) with the Core key, `config.json` and the
    `oac` management command;
-3. starts PostgreSQL, Core and Web with Docker Compose, on their configured listeners
-   (loopback by default);
+3. starts the services with Docker Compose. Web is reachable through the gateway
+   on `0.0.0.0:8080`; Core stays on loopback and PostgreSQL stays private;
 4. selects the microsandbox backend at the Standard size. It adds no node.
 
 It creates no Project or key and makes no model request. It ends by printing the
 console address, the API base URL and the next steps.
 
-Without `--public-url`, only this host can reach the installation: by default Web at
-`http://127.0.0.1:8080` and the API at `http://127.0.0.1:8091/v1`. To listen on other
-addresses or ports, see [installation options](/install-options#listeners-and-access).
+Open the printed Web address. If the server is behind NAT, use the IP address
+reachable from your browser. The initial HTTP endpoint serves Web; machine API
+connections require the HTTPS address configured next.
 
 ## Make Core reachable
 
-Nodes, E2B and self-hosted machines need a public HTTPS address. Choose one:
+In Web, open **System → Domain and HTTPS** and enter a DNS hostname, such as
+`core.example.com`. Its A/AAAA records must point to this server, and ports 80 and
+443 must be reachable from the internet. Choose **Configure HTTPS**.
 
-| Option | Use it for |
-| --- | --- |
-| [HTTPS and the reverse proxy](#https-and-the-reverse-proxy) | Any lasting installation |
-| [A quick tunnel](#try-it-locally-with-a-quick-tunnel) | A trial without DNS or certificates |
+The installer requests a certificate and verifies that the trusted HTTPS endpoint
+reaches this installation before switching Core and Web. On success, open the
+HTTPS address and sign in again; the initial HTTP Web address redirects there.
+Certificate renewal is automatic. DNS or certificate failures leave the previous
+address available; correct the reported problem and retry. An interrupted switch
+can be retried with the same hostname, or inspected with `oac status` and completed
+with `oac apply`. Installation data and execution workspaces are retained.
 
-Then set the address, if you didn't pass `--public-url`:
+The equivalent terminal operation uses the same preparation and apply flow:
 
 ```sh
-# in ~/.oac/core/config.json: "public_url": "https://core.example"
-~/.oac/core/oac apply
+~/.oac/core/oac domain core.example.com
 ```
 
-Core derives every address it hands out from `public_url`. To change it later, see
-[Changing the public URL](/configure#changing-the-public-url).
+Core derives every machine connection address from the resulting `public_url`.
+[Changing the public URL](/configure#changing-the-public-url) explains
+existing connection bindings and confirmation.
+
+### External proxy deployments
+
+Select `--ingress external` to use an existing proxy or a quick tunnel instead.
+Core-only, Web-only and native Core installations select external ingress by
+default. Their listeners remain loopback by default. Configure the proxy below,
+then set `public_url` in `config.json` and run `oac apply`; automatic domain setup in
+Web is unavailable for these installations.
 
 ### HTTPS and the reverse proxy
 

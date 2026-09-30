@@ -1,7 +1,5 @@
 package proto
 
-import "encoding/json"
-
 // This package lives at the repo-root module so both the server-side
 // gateway/connector AND apps/parsar-daemon can import it. That rules out
 // importing server/internal/... (Go's internal-package rule), so wire
@@ -94,8 +92,6 @@ type ThinkingPayload struct {
 // when the agent is about to call the tool, "after" when the result
 // is back.
 type ToolCallPayload struct {
-	// NativeItem is an opt-in engine snapshot for execution-service projection, not a public Item.
-	NativeItem  json.RawMessage  `json:"native_item,omitempty"`
 	Observation *ToolObservation `json:"observation,omitempty"`
 	ID          string           `json:"id"`
 	Name        string           `json:"name"`
@@ -224,16 +220,16 @@ const (
 // cancellation belong to the daemon connector itself; these bits are
 // the engine-specific surface the UI uses for filtering and copy.
 type AgentKindCapabilities struct {
-	SubagentObservations           bool `json:"subagent_observations,omitempty"`
-	Streaming                      bool `json:"streaming,omitempty"`
-	Permissions                    bool `json:"permissions,omitempty"`
-	Usage                          bool `json:"usage,omitempty"`
-	Resume                         bool `json:"resume,omitempty"`
-	NativeSessionRecovery          bool `json:"native_session_recovery,omitempty"`
-	WorkspaceAuthoring             bool `json:"workspace_authoring,omitempty"`
-	Steering                       bool `json:"steering,omitempty"`
-	MessageItems                   bool `json:"message_items,omitempty"`
-	ToolItems                      bool `json:"tool_items,omitempty"`
+	SubagentObservations  bool `json:"subagent_observations,omitempty"`
+	Streaming             bool `json:"streaming,omitempty"`
+	Permissions           bool `json:"permissions,omitempty"`
+	Usage                 bool `json:"usage,omitempty"`
+	Resume                bool `json:"resume,omitempty"`
+	NativeSessionRecovery bool `json:"native_session_recovery,omitempty"`
+	WorkspaceAuthoring    bool `json:"workspace_authoring,omitempty"`
+	Steering              bool `json:"steering,omitempty"`
+	MessageItems          bool `json:"message_items,omitempty"`
+
 	ToolObservations               bool `json:"tool_observations,omitempty"`
 	EnvironmentNone                bool `json:"environment_none,omitempty"`
 	LocalEnvironment               bool `json:"local_environment,omitempty"`

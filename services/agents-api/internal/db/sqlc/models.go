@@ -84,13 +84,14 @@ type Device struct {
 }
 
 type Environment struct {
-	ID            pgtype.UUID        `json:"id"`
-	SessionID     pgtype.UUID        `json:"session_id"`
-	Status        string             `json:"status"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	FailureReason pgtype.Text        `json:"failure_reason"`
-	FailedAt      pgtype.Timestamptz `json:"failed_at"`
-	FailureDetail []byte             `json:"failure_detail"`
+	ID             pgtype.UUID        `json:"id"`
+	SessionID      pgtype.UUID        `json:"session_id"`
+	Status         string             `json:"status"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	FailureReason  pgtype.Text        `json:"failure_reason"`
+	FailedAt       pgtype.Timestamptz `json:"failed_at"`
+	FailureDetail  []byte             `json:"failure_detail"`
+	Initialization string             `json:"initialization"`
 }
 
 type EnvironmentConnection struct {
@@ -239,7 +240,6 @@ type RuntimeAllocation struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 	KeptAt                pgtype.Timestamptz `json:"kept_at"`
 	ReleasedAt            pgtype.Timestamptz `json:"released_at"`
-	Initialization        string             `json:"initialization"`
 	ComputePhase          string             `json:"compute_phase"`
 	ComputeRevision       int64              `json:"compute_revision"`
 	ComputeState          []byte             `json:"compute_state"`

@@ -206,15 +206,16 @@ the Core distribution and its installer, whose manifest carries the complete rel
 [Installation options](getting-started/install-options.md) owns installer usage;
 README Quick start and the installation guide link there instead of copying option
 lists. Generate its flag-to-key table and the configuration reference from the schema.
-`host` is the single Core/Web listener address; `ports.web` uses only `--port`, and
+`host` selects the gateway listener for managed ingress and Core/Web listeners for external ingress; `ports.web` uses only `--port`, and
 `ports.core` uses `--core-port`. Defaults, validation and flag mappings live in the
 schema. Flags seed config.json; health checks, setup, apply and generated service
 files derive their addresses from that same config. Apply uses the last applied
-address to contact running services before changing listeners. Non-loopback binds
-require the existing HTTPS public origin; PostgreSQL remains loopback/private.
+address to contact running services before changing listeners. External non-loopback
+binds require an HTTPS public origin. Managed ingress initially exposes Web by IP
+over HTTP; Core stays loopback and PostgreSQL remains private.
 Every process setting has one home: the installation's private `config.json`,
-described by `deploy/install/config.schema.json`. The operator edits only that
-file; `oac apply` validates it, derives `generated/` (Compose file, `core.env`,
+described by `deploy/install/config.schema.json`. The operator edits that
+file, or uses the installer-owned managed-domain action through Web/`oac domain`; `oac apply` validates it, derives `generated/` (Compose file, `core.env`,
 native unit, Core key digest file, settings snapshot) and converges on what actually
 runs: each service carries the digest of its inputs (Compose label
 `io.oac.inputs`, native `OAC_INPUTS`), and exactly the services whose running
@@ -256,6 +257,42 @@ Administrator-issued enrollment approves capacity (default two active/eight
 retained); a node cannot supply or overwrite those limits. Downloaded specification
 copies remain validated against the existing database-owned resources/Runtime
 contract.
+
+### Managed HTTPS ownership
+
+A default combined Docker installation adds two Compose services from one pinned
+installer image: `gateway` runs Caddy, and `installation` runs the packaged
+`oac domain-server`. The latter uses the installing account's UID and existing
+local Docker socket access to invoke the same locked apply implementation. Its
+only request surface is the private `ingress/api/api.sock`, with Core-key
+authentication and a typed domain action. Core and Web get no Docker socket,
+host process authority or writable installation configuration. Web gets only the
+private API socket directory. Caddy's separate admin socket is never mounted in Web.
+
+The managed gateway owns ports 80/443 and the initial Web port. Caddy owns
+certificate issuance and renewal; its private data persists in `ingress/data`.
+`generated/Caddyfile` is derived from `config.json`, and apply reloads it through
+the private Caddy socket even when container inputs already match. A successful
+apply reconciles domain operation status after verifying the running services.
+Domain preparation retains the old entry point while
+verifying a trusted certificate and installation-specific response over HTTPS.
+The existing operation record retains the last successfully applied public address.
+Apply and start update it after gateway verification and service health checks;
+generated files alone do not establish that a new address is active. Failed retries
+restore through common apply even when a previous attempt partially changed services.
+Only then does it update `public_url` and call the common apply path. Failure
+restores the previous desired configuration and reports incomplete recovery.
+Interrupted operations retain desired files and a visible failure/retry state;
+they never create another service project or delete execution data.
+
+The domain operation refuses unrelated pending config edits and shares `.oac.lock`
+with CLI mutations. Its status file is operation bookkeeping and the public-address
+recovery receipt; `config.json` remains the source of desired process settings.
+A Web restart ends console sessions; the UI provides the new
+HTTPS login address instead of treating a dropped request as proof of success.
+Split/native installations use external ingress and explicitly report automatic
+Web setup unavailable. Ingress is an installation concern, independent of Runtime
+and Sandbox Provider selection.
 
 The E2B template builder assigns traversable modes only to synthetic public archive
 ancestors. Runtime file and directory permissions, private build contexts, key inputs

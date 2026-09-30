@@ -40,8 +40,8 @@ class PromotionTests(unittest.TestCase):
         self.metadata = {
             "source_commit": promotion.SOURCE, "source_tree": self.tree,
             "artifact_base_url": promotion.BASE, "platform": "linux/amd64",
-            "images": {name: "sha256:" + "a" * 64 for name in ("core", "web", "runtime", "database")},
-            "image_manifest_digests": {name: "sha256:" + "b" * 64 for name in ("core", "web", "runtime", "database")},
+            "images": {name: "sha256:" + "a" * 64 for name in ("core", "web", "runtime", "database", "ingress")},
+            "image_manifest_digests": {name: "sha256:" + "b" * 64 for name in ("core", "web", "runtime", "database", "ingress")},
             "runtime_ref": "oac-runtime@sha256:" + "c" * 64, "artifacts": {},
         }
         for logical, suffix in promotion.distribution.ARTIFACTS.items():

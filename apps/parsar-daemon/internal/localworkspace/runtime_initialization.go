@@ -105,7 +105,7 @@ func configureRuntime(values map[string]string) error {
 	if !validToolEnvironment(values) {
 		return agentcapabilities.ErrInvalid
 	}
-	path, err := toolEnvironmentPath()
+	path, err := initializedToolEnvironmentPath()
 	if err != nil {
 		return &InitializationFailure{}
 	}
@@ -130,6 +130,22 @@ func configureRuntime(values map[string]string) error {
 		return &InitializationFailure{}
 	}
 	configured := make(map[string]string, len(values)+2)
+	if source := os.Getenv("OAC_RUNTIME_TOOL_ENV_FILE"); source != "" {
+		if runtimefs.ValidateLocalPath(source) != nil {
+			return &InitializationFailure{}
+		}
+		local, err := readToolEnvironmentFile(source)
+		if err != nil {
+			return &InitializationFailure{}
+		}
+		for key, value := range local {
+			if runtime.GOOS == "windows" {
+				key = strings.ToUpper(key)
+			}
+			configured[key] = value
+		}
+	}
+	// Explicit Session values override the operator's base tool configuration.
 	for key, value := range values {
 		if runtime.GOOS == "windows" {
 			key = strings.ToUpper(key)

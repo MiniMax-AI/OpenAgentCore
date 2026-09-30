@@ -149,3 +149,17 @@ func runReadinessHelper() {
 		os.Exit(3)
 	}
 }
+
+func TestWorkspaceToolSearchRequiresNativeWorkspaceFeature(t *testing.T) {
+	features := []string{"tool_search", "workspace_tool_search", "workspace_functions", "workspace_tools", "workspace_prepare", "workspace_command_observations", "local_runtime_v2"}
+	if !(RuntimeInfo{Features: features}).SupportsWorkspaceToolSearch() {
+		t.Fatal("complete workspace discovery contract rejected")
+	}
+	for omitted := range features {
+		candidate := append([]string{}, features[:omitted]...)
+		candidate = append(candidate, features[omitted+1:]...)
+		if (RuntimeInfo{Features: candidate}).SupportsWorkspaceToolSearch() {
+			t.Fatal("incomplete native discovery contract advertised")
+		}
+	}
+}

@@ -76,7 +76,7 @@ func managedWorker(t *testing.T, s *store.Store, key string, p sandbox.SandboxPr
 	return managedWorkerMode(t, s, key, p, false)
 }
 
-func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.SandboxProvider, maintenance bool) (*execution.Worker, func()) {
+func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.SandboxProvider, maintenance bool, run ...bool) (*execution.Worker, func()) {
 	t.Helper()
 	registry := gateway.NewRegistry()
 	if peer, ok := p.(interface {
@@ -91,6 +91,22 @@ func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.Sandb
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(run) > 0 && run[0] {
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() { done <- w.Run(ctx) }()
+		var once sync.Once
+		stop := func() {
+			once.Do(func() {
+				cancel()
+				if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+					t.Error(err)
+				}
+			})
+		}
+		t.Cleanup(stop)
+		return w, stop
+	}
 	var once sync.Once
 	stop := func() {
 		once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
@@ -102,7 +118,7 @@ func managedWorkerMode(t *testing.T, s *store.Store, key string, p sandbox.Sandb
 func managedSession(t *testing.T, s *store.Store) (string, store.Session, store.Environment) {
 	t.Helper()
 	tenant := uuid.NewString()
-	v, e := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)}))
+	v, e := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)}))
 	if e != nil {
 		t.Fatal(e)
 	}

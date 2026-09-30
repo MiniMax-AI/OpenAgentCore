@@ -183,15 +183,48 @@ func TestRuntimeInitializationConfigurationAndDirectories(t *testing.T) {
 }
 
 func TestRuntimeInitializationExplicitToolEnvironment(t *testing.T) {
-	initializationFixture(t)
+	b := initializationFixture(t)
 	file := filepath.Join(t.TempDir(), "explicit.json")
-	if err := os.WriteFile(file, []byte(`{"DECLARED":"value"}`), 0600); err != nil {
+	original := []byte(`{"DECLARED":"value","OVERRIDE":"local"}`)
+	if err := os.WriteFile(file, original, 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", file)
 	env, err := ReadOptionalToolEnvironment()
 	if err != nil || env["DECLARED"] != "value" {
 		t.Fatal("explicit tool environment", err)
+	}
+	if err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "configure", Env: map[string]string{"OVERRIDE": "session"}}); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(file); err != nil || string(raw) != string(original) {
+		t.Fatal("operator source was modified", err)
+	}
+	// Reconnect reads the frozen result even after the operator edits its source.
+	if err := os.WriteFile(file, []byte(`{"DECLARED":"changed"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	env, err = ReadOptionalToolEnvironment()
+	if err != nil || env["DECLARED"] != "value" || env["OVERRIDE"] != "session" {
+		t.Fatal("tool snapshot was not frozen", err)
+	}
+	if b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "configure"}) == nil {
+		t.Fatal("configuration replay succeeded")
+	}
+}
+
+func TestRuntimeInitializationRejectsMissingExplicitToolEnvironment(t *testing.T) {
+	b := initializationFixture(t)
+	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", filepath.Join(t.TempDir(), "missing.json"))
+	if b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "configure"}) == nil {
+		t.Fatal("missing explicit environment was ignored")
+	}
+	path, err := initializedToolEnvironmentPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("failed configuration left a prepared snapshot")
 	}
 }
 

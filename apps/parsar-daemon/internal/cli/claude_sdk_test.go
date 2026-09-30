@@ -93,7 +93,7 @@ func TestClaudeSDKDiscoveryAndRegistration(t *testing.T) {
 				}
 			}
 			caps := info.Capabilities
-			if caps.WorkspaceAuthoring || caps.Permissions || caps.ToolItems || caps.WebSearchControl || caps.TextVerbosity || !caps.DurableTurns || !caps.DurableInputReceipts || !caps.FunctionTools || !caps.EnvironmentNone {
+			if caps.WorkspaceAuthoring || caps.Permissions || caps.WebSearchControl || caps.TextVerbosity || !caps.DurableTurns || !caps.DurableInputReceipts || !caps.FunctionTools || !caps.EnvironmentNone {
 				t.Fatalf("incorrect SDK capability scope: %+v", caps)
 			}
 			// Even a ready SDK must not acquire product write access through the wrapper.

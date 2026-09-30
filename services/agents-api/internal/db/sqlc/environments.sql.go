@@ -12,7 +12,9 @@ import (
 )
 
 const createEnvironment = `-- name: CreateEnvironment :exec
-INSERT INTO environments (id, session_id) VALUES ($1, $2)
+INSERT INTO environments (id, session_id, initialization)
+VALUES ($1, $2, CASE WHEN EXISTS (SELECT 1 FROM initial_environment_files WHERE session_id = $2)
+ OR EXISTS (SELECT 1 FROM environment_setups WHERE session_id = $2) THEN 'pending' ELSE 'complete' END)
 `
 
 type CreateEnvironmentParams struct {
@@ -26,7 +28,7 @@ func (q *Queries) CreateEnvironment(ctx context.Context, arg CreateEnvironmentPa
 }
 
 const getEnvironment = `-- name: GetEnvironment :one
-SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration
+SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE s.tenant_id = $1 AND e.id = $2 AND s.deleted_at IS NULL
 `
@@ -53,6 +55,7 @@ func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) 
 		&i.Environment.FailureReason,
 		&i.Environment.FailedAt,
 		&i.Environment.FailureDetail,
+		&i.Environment.Initialization,
 		&i.TenantID,
 		&i.Configuration,
 	)
@@ -60,7 +63,7 @@ func (q *Queries) GetEnvironment(ctx context.Context, arg GetEnvironmentParams) 
 }
 
 const getSessionEnvironment = `-- name: GetSessionEnvironment :one
-SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration
+SELECT e.id, e.session_id, e.status, e.created_at, e.failure_reason, e.failed_at, e.failure_detail, e.initialization, s.tenant_id, (s.configuration->'environment')::jsonb AS configuration
 FROM environments e JOIN sessions s ON s.id = e.session_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND s.deleted_at IS NULL
 `
@@ -87,6 +90,7 @@ func (q *Queries) GetSessionEnvironment(ctx context.Context, arg GetSessionEnvir
 		&i.Environment.FailureReason,
 		&i.Environment.FailedAt,
 		&i.Environment.FailureDetail,
+		&i.Environment.Initialization,
 		&i.TenantID,
 		&i.Configuration,
 	)

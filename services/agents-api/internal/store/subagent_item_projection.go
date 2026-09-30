@@ -103,7 +103,7 @@ func childItems(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, turn 
 		}
 	case proto.TypeToolCall:
 		var call proto.ToolCallPayload
-		if json.Unmarshal(p.Payload, &call) != nil || call.ID != p.ItemID || len(call.NativeItem) > 0 || call.Observation == nil {
+		if json.Unmarshal(p.Payload, &call) != nil || call.ID != p.ItemID || call.Observation == nil {
 			return result, ErrInvalidInput
 		}
 	case "message":

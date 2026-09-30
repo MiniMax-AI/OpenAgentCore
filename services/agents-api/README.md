@@ -545,13 +545,11 @@ idle input returns 202 after preparation/admission, not after model completion;
 use client/proxy timeouts above five minutes and recover progress through events
 and reads. Exact upstream failure/error timing remains unverified.
 
-The former registry/Noise relay, temporary harness credentials, separate native
-executor launcher, private Codex harness package and old remote native probes are
-retired. The Rust package retains only directory, write and workspace-export
-helpers. Historical acceptance remains evidence for its original topology, not
-proof of this new enrollment chain. The [current qualification record](../../contracts/agents-api/user-managed-runtime-v1.md)
-identifies the separate fixed-SDK/raw HTTP, real-model, Files/Artifacts,
-cancellation, restart/history and credential lifecycle evidence.
+The Runtime's shared Go workspace implementation owns directory reads, writes and
+output export; Harness adapters use the same authorized workspace binding.
+The [qualification record](../../contracts/agents-api/user-managed-runtime-v1.md)
+identifies fixed-SDK/raw HTTP, real-model, Files/Artifacts, cancellation,
+restart/history and credential lifecycle evidence, with its recorded revision limits.
 
 
 ### HTTP MCP execution

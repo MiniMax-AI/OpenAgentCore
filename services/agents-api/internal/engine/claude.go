@@ -16,13 +16,13 @@ func claudeProfile() Profile {
 		ProgrammaticToolCallingDisable: true,
 		StructuredOutput:               true,
 		ToolSearch:                     true,
-		MessageImagePlacements:         []string{"none", "openai_hosted"},
+		MessageImages:                  true,
 		Placements:                     []string{"none", "openai_hosted", "self_hosted"}, MCPBearer: true,
 		ValidateConfiguration: validateClaudeConfiguration,
 		ValidateTools:         validateClaudeTools,
-		ValidateFunctionResult: func(placement string, result proto.FunctionResultPayload) error {
+		ValidateFunctionResult: func(_ string, result proto.FunctionResultPayload) error {
 			for _, part := range result.Content {
-				if part.Type == "input_image" && (!result.Success || (placement != "none" && placement != "openai_hosted")) {
+				if part.Type == "input_image" && !result.Success {
 					return ErrInvalidInput
 				}
 			}
@@ -48,8 +48,8 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 		if err := proto.ValidateBinary64Schema(agent.Text.Format.Schema); err != nil {
 			return err
 		}
-		if (environment.Type != "none" && environment.Type != "openai_hosted") || agent.MultiAgent.Enabled {
-			return errors.New("Structured output requires a qualified single-agent placement.")
+		if agent.MultiAgent.Enabled {
+			return errors.New("Structured output requires a single Agent.")
 		}
 		if len(environment.Skills) != 0 || len(environment.Plugins) != 0 || len(environment.CapabilityDirectories) != 0 {
 			return errors.New("Structured output with environment Skills or Plugins is not qualified.")
@@ -76,8 +76,8 @@ func validateClaudeConfiguration(agent v1.Agent, environment *v1.Environment, ha
 		search = search || tool.Type == "tool_search"
 		otherTools = otherTools || (tool.Type != "function" && tool.Type != "tool_search" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling")
 	}
-	if search && (environment.Type != "none" || agent.MultiAgent.Enabled || otherTools || agent.Text.Format.Type == "json_schema") {
-		return errors.New("Tool discovery currently requires a single-agent environment:none function profile.")
+	if search && (agent.MultiAgent.Enabled || otherTools || len(environment.Skills) != 0 || len(environment.Plugins) != 0 || len(environment.CapabilityDirectories) != 0 || agent.Text.Format.Type == "json_schema") {
+		return errors.New("Tool discovery requires a single-agent function profile without Skills or Plugins.")
 	}
 	return rejectSubagentTools(agent, "function", "mcp")
 }

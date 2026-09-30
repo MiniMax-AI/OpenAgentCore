@@ -98,7 +98,7 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   printf 'Distribution build requires %s\n' "$required_go" >&2
   exit 1
 fi
-for file in install.sh install.py install_output.py install_display.py node_output.py configuration.py config_model.py config.schema.json oac_cli.py convert.py rename.py \
+for file in install.sh install.py install_output.py install_display.py node_output.py configuration.py config_model.py config.schema.json ingress.py ingress_config.py oac_cli.py convert.py rename.py \
     native_service.py native_installers.py node_install.py node_spec.py node_generations.py sandbox_setup.py distribution.py \
     model_provider_sessions.py; do
   cp "deploy/install/$file" "$bundle/$file"
@@ -159,6 +159,8 @@ cp -R apps/web/dist "$stage/web/dist"
 cp services/core-console/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"
 
+build_image ingress -f deploy/distribution/Ingress.Dockerfile deploy/distribution
+
 CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/parsar-daemon/cmd/parsar-daemon
 cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
 codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
@@ -210,7 +212,7 @@ fi
 docker image inspect --format '{{.Id}}' "$database_image" > "$stage/database.id"
 docker run --rm --network none --entrypoint postgres "$(cat "$stage/database.id")" --version \
   | python3 -c 'import sys; value=sys.stdin.read(); assert value.startswith("postgres (PostgreSQL) 16."), "Distribution requires PostgreSQL 16"'
-for name in core web runtime database; do
+for name in core web runtime database ingress; do
   image="$(cat "$stage/$name.id")"
   python3 scripts/core-distribution-manifest.py verify-image "$image"
   docker image save --output "$bundle/images/$name.tar" "$image"
