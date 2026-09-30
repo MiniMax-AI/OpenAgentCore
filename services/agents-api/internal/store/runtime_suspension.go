@@ -23,6 +23,13 @@ func (a RuntimeActivity) ReadyToSuspend(idleTimeout time.Duration) bool {
 		a.ObservedAt.Sub(a.LastActivity) >= idleTimeout
 }
 
+// A resident provider may also pause a Session that was initialized but never
+// received a Turn. Its idle clock starts when the Runtime first becomes ready.
+func (a RuntimeActivity) ReadyToPauseResident(idleTimeout time.Duration) bool {
+	return idleTimeout > 0 && !a.Busy && !a.WakeRequested &&
+		a.ObservedAt.Sub(a.LastActivity) >= idleTimeout
+}
+
 func runtimeActivity(row sqlc.GetRuntimeActivityRow) RuntimeActivity {
 	return RuntimeActivity{LastActivity: row.LastActivity.Time, ObservedAt: row.ObservedAt.Time, Busy: row.Busy, WakeRequested: row.ComputeWakeRequested, HasCompletedTurn: row.HasCompletedTurn}
 }
@@ -30,6 +37,16 @@ func runtimeActivity(row sqlc.GetRuntimeActivityRow) RuntimeActivity {
 // SetRuntimeCompute commits an operation phase before its external effects.
 // Revision and the existing Session lock fence a stale lifecycle observation.
 func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (RuntimeAllocation, error) {
+	return s.setRuntimeCompute(ctx, owner, phase, state, retainedUntil, idleTimeout, false)
+}
+
+// SetRuntimeResidentCompute uses the same Session lock and phase checks while
+// allowing an initialized Session without a completed Turn to become idle.
+func (s *Store) SetRuntimeResidentCompute(ctx context.Context, owner RuntimeAllocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (RuntimeAllocation, error) {
+	return s.setRuntimeCompute(ctx, owner, phase, state, retainedUntil, idleTimeout, true)
+}
+
+func (s *Store) setRuntimeCompute(ctx context.Context, owner RuntimeAllocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration, allowUnstarted bool) (RuntimeAllocation, error) {
 	if !runtimeComputeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
 		return RuntimeAllocation{}, ErrInvalidInput
 	}
@@ -52,7 +69,11 @@ func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, 
 			if activity.Busy || activity.ComputeWakeRequested {
 				return sqlc.RuntimeAllocation{}, ErrTurnConflict
 			}
-			if phase == "quiescing" && (!runtimeActivity(activity).ReadyToSuspend(idleTimeout) || row.ComputeActivityAt.Time.After(owner.ComputeActivityAt)) {
+			ready := runtimeActivity(activity).ReadyToSuspend(idleTimeout)
+			if allowUnstarted {
+				ready = runtimeActivity(activity).ReadyToPauseResident(idleTimeout)
+			}
+			if phase == "quiescing" && (!ready || row.ComputeActivityAt.Time.After(owner.ComputeActivityAt)) {
 				return sqlc.RuntimeAllocation{}, ErrTurnConflict
 			}
 		}

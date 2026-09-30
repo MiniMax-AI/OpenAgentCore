@@ -68,7 +68,7 @@ class Provider:
         self.reference = request['Reference']
         self.references = request.get('References') or []
         if (request['Version'] != 1 or request['Operation'] not in
-                ('create', 'inspect', 'renew', 'kill', 'command', 'validate_deployment', 'observe', 'list_templates', 'list_builds', 'verify_credential') or
+                ('create', 'inspect', 'renew', 'pause', 'resume', 'kill', 'command', 'validate_deployment', 'observe', 'list_templates', 'list_builds', 'verify_credential') or
                 (request['Operation'] not in ('validate_deployment', 'observe', 'list_templates', 'list_builds', 'verify_credential') and
                  not valid_reference(self.reference)) or
                 (request['Operation'] == 'observe' and
@@ -247,6 +247,51 @@ class Provider:
         Sandbox.set_timeout(cloud.sandbox_id, self.config['TimeoutSeconds'], **self.options())
         return self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
 
+    def pause(self):
+        cloud = self.inspect()
+        if cloud is None or not self.receipt.data.get('bootstrap_complete'):
+            raise Failure('unconfirmed')
+        # A pending native call may still complete after the caller loses its
+        # response. Never issue a second pause that could race a later resume.
+        if self.receipt.data.get('pause_status') == 'pending':
+            if cloud.state != 'paused':
+                raise Failure('unconfirmed')
+        elif cloud.state == 'paused':
+            if self.receipt.data.get('pause_status') != 'settled':
+                raise Failure('unconfirmed')
+        elif cloud.state == 'running':
+            self.receipt.save(pause_status='pending')
+            Sandbox.pause(cloud.sandbox_id, keep_memory=True, **self.options())
+            cloud = self.inspect()
+        else:
+            raise Failure('unconfirmed')
+        if cloud.state != 'paused':
+            raise Failure('unconfirmed')
+        self.receipt.save(pause_status='settled')
+        return cloud
+
+    def resume(self):
+        cloud = self.inspect()
+        status = (self.receipt.data or {}).get('pause_status')
+        if cloud is None or cloud.state not in ('paused', 'running') or not self.receipt.data.get('bootstrap_complete') or status not in ('settled', 'resumed'):
+            raise Failure('unconfirmed')
+        if status == 'resumed':
+            if cloud.state != 'running':
+                raise Failure('unconfirmed')
+            return cloud
+        # Connect is idempotent for a running instance. It also returns fresh
+        # envd connection material after a paused instance is restored.
+        connected = Sandbox.connect(cloud.sandbox_id, timeout=self.config['TimeoutSeconds'],
+                                    on_resume='restore', **self.options())
+        if connected.sandbox_id != cloud.sandbox_id:
+            raise Failure('ownership')
+        self.check_domain(connected)
+        detail = self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
+        if detail.state != 'running':
+            raise Failure('unconfirmed')
+        self.receipt.save(connection=connection_material(connected), pause_status='resumed')
+        return detail
+
     def kill(self):
         if self.rejected_absence():
             return
@@ -405,7 +450,8 @@ class Provider:
                         raise Failure('unconfirmed')
                     result = run(self.client(cloud), self.q['Command'], self.remaining)
                     return {'Version': 1, 'Command': result, 'ErrorCode': ''}
-                cloud = {'create': self.create, 'inspect': self.inspect, 'renew': self.renew}[operation]()
+                cloud = {'create': self.create, 'inspect': self.inspect, 'renew': self.renew,
+                         'pause': self.pause, 'resume': self.resume}[operation]()
                 return {'Version': 1, 'Info': self.info(cloud, absent=cloud is None), 'ErrorCode': ''}
             except Failure as error:
                 info = self.info()

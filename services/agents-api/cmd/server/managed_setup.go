@@ -121,7 +121,9 @@ func (s *managedSetup) configuration(setup store.SandboxSetup) (execution.Prepar
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused,
 		CoreURL: s.publicURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
-	if _, supportsCheckpoint := provider.(sandbox.CheckpointProvider); supportsCheckpoint {
+	_, supportsCheckpoint := provider.(sandbox.CheckpointProvider)
+	_, supportsResidentPause := provider.(sandbox.ResidentPauseProvider)
+	if (supportsCheckpoint || supportsResidentPause) && setup.IdleSeconds > 0 && setup.RetentionSeconds > 0 {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.IdleSeconds) * time.Second,
 			Retention: time.Duration(setup.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}
 	}

@@ -260,6 +260,7 @@ type computeLifecycleFixture struct {
 	store    *store.Store
 	pool     *pgxpool.Pool
 	provider *fakeCheckpointProvider
+	managed  sandbox.SandboxProvider
 	worker   *execution.Worker
 	stop     func()
 	key      string
@@ -267,6 +268,10 @@ type computeLifecycleFixture struct {
 }
 
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
+	return newComputeLifecycleFixtureWithProvider(t, maxActive, maxRetained, nil)
+}
+
+func newComputeLifecycleFixtureWithProvider(t *testing.T, maxActive, maxRetained int, wrap func(*fakeCheckpointProvider) sandbox.SandboxProvider) *computeLifecycleFixture {
 	t.Helper()
 	s, pool := store.NewManagedTestStore(t)
 	registry := gateway.NewRegistry()
@@ -282,14 +287,22 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 		}
 		server.Close()
 	})
-	f := &computeLifecycleFixture{t: t, store: s, pool: pool, provider: p, key: uuid.NewString(), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour, MaxActive: maxActive, MaxRetained: maxRetained}}
+	managed := sandbox.SandboxProvider(p)
+	if wrap != nil {
+		managed = wrap(p)
+	}
+	f := &computeLifecycleFixture{t: t, store: s, pool: pool, provider: p, managed: managed, key: uuid.NewString(), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour, MaxActive: maxActive, MaxRetained: maxRetained}}
 	f.start()
 	return f
 }
 func (f *computeLifecycleFixture) start() {
 	t := f.t
 	t.Helper()
-	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}})
+	config := &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.managed, Suspension: &f.policy}
+	if _, resident := f.managed.(sandbox.ResidentPauseProvider); resident {
+		config.Mode, config.ProviderKind = "direct", "e2b"
+	}
+	w, err := execution.StartWorker(t.Context(), &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: config})
 	if err != nil {
 		t.Fatal(err)
 	}

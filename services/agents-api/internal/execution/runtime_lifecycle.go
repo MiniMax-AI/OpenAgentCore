@@ -93,12 +93,14 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *gateway.Registr
 	if copied.Mode != "" && copied.Mode != "nodes" && copied.Mode != "direct" {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
-	if copied.Mode == "direct" && (copied.ProviderKind == "" || copied.LocalNodeID != "" || copied.Suspension != nil) {
+	if copied.Mode == "direct" && (copied.ProviderKind == "" || copied.LocalNodeID != "") {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if _, ok := config.Provider.(sandbox.CheckpointProvider); !ok || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+		_, checkpoint := config.Provider.(sandbox.CheckpointProvider)
+		_, resident := config.Provider.(sandbox.ResidentPauseProvider)
+		if (!checkpoint && !resident) || (resident && copied.Mode != "direct") || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy

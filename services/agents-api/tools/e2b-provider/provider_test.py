@@ -83,6 +83,38 @@ class ProviderTest(unittest.TestCase):
         self.assertEqual(self.record()['connection']['envd_access_token'], 'private-envd-secret')
         self.api.connect.assert_not_called()
 
+    def test_memory_pause_and_same_instance_resume(self):
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        def pause(sandbox_id, **kwargs):
+            self.assertEqual(sandbox_id, self.cloud.sandbox_id)
+            self.assertTrue(kwargs['keep_memory'])
+            self.cloud.state = 'paused'
+            return True
+        def connect(sandbox_id, **kwargs):
+            self.assertEqual(sandbox_id, self.cloud.sandbox_id)
+            self.assertEqual(kwargs['on_resume'], 'restore')
+            self.cloud.state = 'running'
+            return self.cloud
+        self.api.pause.side_effect = pause
+        self.api.connect.side_effect = connect
+        self.assertEqual(self.call('pause')['Info']['State'], 'paused')
+        self.assertEqual(self.call('pause')['Info']['State'], 'paused')
+        self.api.pause.assert_called_once()
+        self.assertEqual(self.call('resume')['Info']['State'], 'running')
+        self.assertEqual(self.call('resume')['Info']['State'], 'running')
+        self.api.connect.assert_called_once()
+        self.assertEqual(self.record()['ids'], [self.cloud.sandbox_id])
+
+    def test_unknown_pause_is_observed_without_replay(self):
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.api.pause.side_effect = TimeoutError('unknown pause result')
+        self.assertEqual(self.call('pause')['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.call('pause')['ErrorCode'], 'unconfirmed')
+        self.api.pause.assert_called_once()
+        self.cloud.state = 'paused'
+        self.assertEqual(self.call('pause')['Info']['State'], 'paused')
+        self.assertEqual(self.record()['pause_status'], 'settled')
+
     def test_create_response_without_metadata_reads_exact_id_before_bootstrap(self):
         created = SimpleNamespace(sandbox_id=self.cloud.sandbox_id,
                                   sandbox_domain=self.cloud.sandbox_domain,

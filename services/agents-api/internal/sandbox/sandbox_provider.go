@@ -89,6 +89,16 @@ type SandboxProvider interface {
 	RunCommand(context.Context, Reference, Command) (CommandResult, error)
 }
 
+// ResidentPauseProvider keeps the same owned compute incarnation across a
+// memory-preserving pause. Pause must never create compute, and Resume must
+// reconnect only the existing allocation. Both operations must reconcile an
+// unknown result against provider state before reporting success.
+type ResidentPauseProvider interface {
+	SandboxProvider
+	Pause(context.Context, Reference) (Info, error)
+	Resume(context.Context, Reference) (Info, error)
+}
+
 // CheckpointProvider is optional. It supplements the existing provider with
 // exact-incarnation operations; Worker and Store remain the lifecycle owner.
 type CheckpointProvider interface {

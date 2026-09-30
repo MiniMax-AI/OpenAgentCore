@@ -180,7 +180,7 @@ func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) RuntimeDe
 			result.E2B.TemplateBuild.Status = &status
 		}
 	}
-	if providers.SupportsCheckpoint(d.ProviderKind) {
+	if d.IdleSeconds > 0 && d.RetentionSeconds > 0 {
 		result.Suspension = &SandboxSuspensionView{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 	}
 	return result

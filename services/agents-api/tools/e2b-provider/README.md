@@ -132,7 +132,13 @@ cleanup. Initializer and three-harness qualification remain deployment checks.
 Core-managed E2B is a separate hosted deployment choice, using the official pinned
 Python SDK through a packaged private helper. Do not restore the retired custom
 HTTP/Connect or envd implementation. The adapter implements the same five operations;
-cloud allocations use direct placement with no synthetic node, while Runtime execution
+it also implements resident memory pause/resume for Core's five-minute idle policy
+when the deployment has that policy enabled.
+The helper persists an outstanding pause before calling the SDK, observes an
+unknown result without replaying Pause, and reconnects only the same sandbox ID
+with `on_resume="restore"`. The Core allocation retains the sandbox for up to
+24 hours while paused; provider snapshot storage may still be billed.
+Cloud allocations use direct placement with no synthetic node, while Runtime execution
 and file access keep the shared daemon contract. Its immutable Runtime template build
 is deployment configuration, not a public Environment Template. Keep the account API
 key encrypted in the database, write-only through admin input and absent from helper

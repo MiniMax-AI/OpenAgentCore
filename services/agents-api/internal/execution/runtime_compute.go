@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// RuntimeSuspensionPolicy applies only to an explicitly qualified single-host
-// provider. Fixed guest sizing plus MaxActive bounds reserved CPU and memory.
+// RuntimeSuspensionPolicy applies only to a qualified pause-capable provider.
+// Node-backed checkpoint providers also use MaxActive to bound reserved capacity.
 type RuntimeSuspensionPolicy struct {
 	IdleTimeout time.Duration
 	Retention   time.Duration
@@ -35,7 +35,7 @@ func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) erro
 	if key != r.config.InstallationID {
 		return sandbox.ErrOwnership
 	}
-	if policy == nil {
+	if policy == nil || r.config.Mode == "direct" {
 		return nil
 	}
 	count, err := r.store.CountRuntimeComputeReservations(ctx, key)
@@ -60,9 +60,26 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner store.RuntimeA
 		}
 		idleTimeout = policy.IdleTimeout
 	}
+	_, resident := r.config.Provider.(sandbox.ResidentPauseProvider)
+	if resident {
+		return r.store.SetRuntimeResidentCompute(ctx, owner, phase, raw, until, idleTimeout)
+	}
 	return r.store.SetRuntimeCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.RuntimeAllocation) error {
+	if p, ok := r.config.Provider.(sandbox.ResidentPauseProvider); ok {
+		info, err := p.GetInfo(ctx, runtimeReference(owner))
+		if err != nil {
+			return err
+		}
+		if info.Reference != runtimeReference(owner) || info.State != "running" || !info.BootstrapComplete || info.ProviderID == "" {
+			return sandbox.ErrComputeUnconfirmed
+		}
+		if _, err = r.saveCompute(ctx, owner, "running", runtimeCompute{Current: sandbox.Compute{ID: info.ProviderID}}, nil); err != nil {
+			return err
+		}
+		return r.store.TouchRuntimeActivity(ctx, owner.TenantID, owner.EnvironmentID)
+	}
 	p, ok := r.config.Provider.(sandbox.CheckpointProvider)
 	if !ok {
 		return sandbox.ErrInvalid
@@ -83,6 +100,9 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner store.Runtim
 }
 
 func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner store.RuntimeAllocation) error {
+	if p, ok := r.config.Provider.(sandbox.ResidentPauseProvider); ok {
+		return r.observeResidentCompute(ctx, p, owner)
+	}
 	p, ok := r.config.Provider.(sandbox.CheckpointProvider)
 	if !ok {
 		return sandbox.ErrInvalid

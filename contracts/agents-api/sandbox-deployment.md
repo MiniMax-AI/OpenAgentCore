@@ -207,9 +207,20 @@ enforce separately. Unknown values are null, including every value of a selectio
 saved before Core recorded them; a verified write records them. An omitted-key
 identical PUT is a no-op and does not refresh provider metadata.
 
-`suspension` is `{idle_seconds, retention_seconds}` for microsandbox, the only
-provider Core suspends (currently 300 and 86400). Docker, E2B and unconfigured
-deployments return null.
+`suspension` is `{idle_seconds, retention_seconds}` for microsandbox and new E2B
+selections (currently 300 and 86400). Docker and unconfigured deployments return
+null. E2B deployments saved before this policy retain `null` until an operator
+submits the same E2B selection with an updated `expected_generation` through
+`PUT /core/v1/sandbox/deployment`; that explicit update enables the policy and
+increments the deployment generation.
+After initialization, Core pauses an idle E2B sandbox with its memory retained,
+including a Session that has not yet received a Turn.
+The next input resumes the same sandbox ID and waits for the Runtime daemon to
+reconnect before admission. The 86400-second retention bounds the paused
+allocation; cleanup after expiry removes the sandbox, so a later request cannot
+resume that original compute. Paused provider storage may still incur charges.
+An uncertain pause result is observed under the allocation's private receipt,
+never replayed against a potentially late native request.
 
 Two similarly named fields have different purposes:
 
@@ -456,7 +467,7 @@ fields from the administrator node routes; runtime fields from the
 | Deployment `specification.resources` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` |
 | Deployment `specification.runtime` | Absent; the build is selected by `e2b.template` | The full [release](#runtime-release); nodes match `image_id` or `image_manifest_digest` | The full [release](#runtime-release); nodes match `microsandbox_ref`, `runtime_sha256` and `firmware_sha256` |
 | Deployment `e2b.template_build` | The build as Core read it when the selection was saved | Absent, with the whole `e2b` object | Absent, with the whole `e2b` object |
-| Deployment `suspension` | `null`; Core does not suspend E2B sandboxes | `null` | `{idle_seconds, retention_seconds}` |
+| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `null` | `{idle_seconds, retention_seconds}` |
 | Deployment `resources.allocations`, `resources.pending` | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes | Totals across all nodes |
 | Enrollment-token `max_active`, `max_retained` | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` | Both limits apply |
 | Node list and detail | Empty list; detail returns 404 | Enrolled nodes | Enrolled nodes |
@@ -466,7 +477,7 @@ fields from the administrator node routes; runtime fields from the
 | Allocation `compute_phase`, `compute_phase_changed_at` | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation | Includes `suspended`; its time plus `suspension.retention_seconds` tells roughly when Core reclaims the snapshot |
 | Runtime observation `cpu`, `memory` | From E2B metrics: `cpu.utilization_ratio` and `capacity_cores`, memory usage and limit; no cumulative CPU time | From Docker stats: `cpu.usage_seconds_total`, CPU and memory limits, memory usage | From the VM: `cpu.usage_seconds_total`, CPU and memory limits, memory usage |
 | Runtime observation `disk` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota | `null` for now |
-| Runtime observation `lifecycle_state: sleeping` | Never | Never | While suspended |
+| Runtime observation `lifecycle_state: sleeping` | Not yet reported by E2B metrics; paused compute has no running sample | Never | While suspended |
 | Runtime history CPU | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time | Derived from cumulative CPU time |
 
 ## Failure and version boundaries

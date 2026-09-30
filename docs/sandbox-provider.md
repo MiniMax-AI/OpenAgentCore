@@ -72,6 +72,7 @@ vendor-specific execution path. A backend without a native renewable lease
 | --- | --- | --- |
 | `sandbox.SandboxProvider` | Required | `Create`, `GetInfo`, `Renew`, `Kill`, and bounded bootstrap/diagnostic `RunCommand` |
 | `sandbox.CheckpointProvider` | Optional, separate interface | Exact compute incarnations, snapshot capture/restore, retained-source resume and cleanup |
+| `sandbox.ResidentPauseProvider` | Optional, separate interface | Memory-preserving pause and resume of the same owned compute ID |
 | `runtimeobs.Source` | Optional, separate interface | Read-only, ownership-checked resource observations |
 | `runtimeobs.BatchSource` | Optional, separate interface | Bounded observations in input order, with per-target errors; `ok=false` means no batch read occurred |
 
@@ -151,6 +152,12 @@ and snapshot, not whichever instance currently has the same display name. See
 [the lifecycle implementation](../services/agents-api/internal/execution/runtime_compute.go)
 and its failure tests before advertising this capability.
 
+Resident pause retains the original provider ID and has no separate snapshot
+identity. Core quiesces the Runtime before calling `Pause`, persists the phase
+before the native call, and admits work only after `Resume` and Runtime
+reconnection. An unknown pause result must be observed without replaying a
+late mutation. See [the resident lifecycle](../services/agents-api/internal/execution/runtime_compute_resident.go).
+
 ### Four distinct readiness facts
 
 | Fact | Evidence | Does not establish |
@@ -227,8 +234,9 @@ proxy exposes checkpoint operations only for its registered checkpoint-capable
 backend. A new node backend must register both construction and the corresponding
 proxy capability; otherwise that capability is unavailable. Provider names belong
 in this adapter/configuration wiring, not Session scheduling, capability
-preparation or Turn execution. Common lifecycle code uses `CheckpointProvider`
-to admit suspension, independently of a provider name.
+preparation or Turn execution. Common lifecycle code uses either
+`CheckpointProvider` or `ResidentPauseProvider` to admit suspension,
+independently of a provider name.
 
 The backend fingerprint identifies a native resource namespace, not mutable
 capacity. Core retains deployment generations so old owned allocations continue

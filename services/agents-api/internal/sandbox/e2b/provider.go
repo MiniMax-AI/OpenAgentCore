@@ -148,6 +148,7 @@ type Provider struct {
 }
 
 var _ sandbox.SandboxProvider = (*Provider)(nil)
+var _ sandbox.ResidentPauseProvider = (*Provider)(nil)
 
 func validID(value string) bool {
 	id, err := uuid.Parse(value)
@@ -291,6 +292,20 @@ func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.In
 }
 func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	return p.info(ctx, "renew", r, nil)
+}
+func (p *Provider) Pause(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
+	info, err := p.info(ctx, "pause", r, nil)
+	if err == nil && (info.Reference != r || info.ProviderID == "" || info.State != "paused" || !info.BootstrapComplete) {
+		return info, sandbox.ErrComputeUnconfirmed
+	}
+	return info, err
+}
+func (p *Provider) Resume(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
+	info, err := p.info(ctx, "resume", r, nil)
+	if err == nil && (info.Reference != r || info.ProviderID == "" || info.State != "running" || !info.BootstrapComplete) {
+		return info, sandbox.ErrComputeUnconfirmed
+	}
+	return info, err
 }
 func (p *Provider) Kill(ctx context.Context, r sandbox.Reference) error {
 	out, err := p.call(ctx, "kill", r, nil, nil)

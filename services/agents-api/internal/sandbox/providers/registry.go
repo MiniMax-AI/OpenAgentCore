@@ -48,6 +48,7 @@ var adapters = map[string]Adapter{
 	},
 	"e2b": {
 		Policy: e2b.Policy(), Mode: "direct", BuildDirect: buildE2B,
+		IdleSeconds: 300, RetentionSeconds: 86400,
 		Credential: true, PublicOrigin: true,
 		ReplaceCredential: e2b.ReplaceCredential, CredentialRequiresReset: e2b.CredentialRequiresReset,
 		CredentialUnconfirmed: e2b.ErrRequestUnconfirmed, Restore: e2b.RestoreSelection,

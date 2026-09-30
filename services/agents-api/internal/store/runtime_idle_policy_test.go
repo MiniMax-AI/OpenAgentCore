@@ -37,3 +37,15 @@ func TestRuntimeIdleAdmissionUsesDatabaseClock(t *testing.T) {
 		})
 	}
 }
+
+func TestResidentIdleAdmissionIncludesNeverUsedSessions(t *testing.T) {
+	now := time.Now()
+	activity := RuntimeActivity{ObservedAt: now, LastActivity: now.Add(-6 * time.Minute)}
+	if activity.ReadyToSuspend(5*time.Minute) || !activity.ReadyToPauseResident(5*time.Minute) {
+		t.Fatal("resident policy did not distinguish never-used Session")
+	}
+	activity.Busy = true
+	if activity.ReadyToPauseResident(5 * time.Minute) {
+		t.Fatal("resident policy paused pending work")
+	}
+}

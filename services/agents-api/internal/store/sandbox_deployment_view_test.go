@@ -40,7 +40,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	for _, want := range []string{
 		`"specification":{"resources":{"cpus":2,"memory_mib":2048}}`,
 		`"template_build":{"status":"ready","resources":{"cpus":2,"memory_mib":2048,"root_disk_mib":24063}}`,
-		`"suspension":null`,
+		`"suspension":{"idle_seconds":300,"retention_seconds":86400}`,
 	} {
 		if !bytes.Contains(raw, []byte(want)) {
 			t.Fatalf("E2B view lacks %s: %s", want, raw)
@@ -73,8 +73,21 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	if err != nil || view.Generation != 1 || !bytes.Contains(raw, recorded) {
 		t.Fatalf("identical PUT did not record the build: %s %v", raw, err)
 	}
+	// A deployment saved by an older release keeps its zero policy until the
+	// administrator explicitly resubmits the same E2B selection.
+	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET idle_seconds=0,retention_seconds=0 WHERE provider_kind='e2b'"); err != nil {
+		t.Fatal(err)
+	}
+	view, err = s.GetRuntimeDeployment(t.Context())
+	if err != nil || view.Suspension != nil {
+		t.Fatal("older deployment policy changed without a write", err)
+	}
+	view, err = w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), id, SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: input, ExpectedGeneration: 1})
+	if err != nil || view.Generation != 2 || view.Suspension == nil || view.Suspension.IdleSeconds != 300 {
+		t.Fatal("explicit PUT did not enable E2B idle pause", view, err)
+	}
 	update := SandboxDeploymentUpdateRequest{SandboxDeploymentSetupRequest: SandboxDeploymentSetupRequest{
-		DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}, ExpectedGeneration: 1}
+		DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}, ExpectedGeneration: 2}
 	view, err = resetAndSelect(t, w, id, update.ExpectedGeneration, update.SandboxDeploymentSetupRequest)
 	if err != nil || view.E2B != nil || view.Suspension == nil || view.Suspension.IdleSeconds != 300 || view.Suspension.RetentionSeconds != 86400 {
 		t.Fatalf("microsandbox suspension view = %+v %v", view, err)
