@@ -99,3 +99,34 @@ func TestNativeStagingCleanupDoesNotFollowLinks(t *testing.T) {
 		t.Fatal("removed link target")
 	}
 }
+
+func TestNativeVerificationCancellationPreservesInstallation(t *testing.T) {
+	rc, args, root, bundle := nativeInstallFixture(t)
+	if err := runInstall(rc, args); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(root, "daemon", "installation.json")
+	before, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err = verifyNativeComponents(ctx, root, []string{"codex"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled verification reported damage: %v", err)
+	}
+	b, err := readNativeBundle(bundle, []string{"codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = installNativeComponent(ctx, bundle, root, "codex", b.Components["codex"]); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled reuse reported damage: %v", err)
+	}
+	after, err := os.ReadFile(config)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("cancellation changed installation")
+	}
+	if err = verifyNativeComponents(context.Background(), root, []string{"codex"}); err != nil {
+		t.Fatal(err)
+	}
+}

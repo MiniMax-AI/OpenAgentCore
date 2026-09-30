@@ -127,7 +127,7 @@ func (c *Catalog) Commands(origin, authorization string) map[string]string {
 	base := origin + "/api/v1/agent-daemon/install/" + c.Version
 	// Hold the small bootstrap in memory so an interrupted fetch leaves no file.
 	// Only execute a complete successful response; preserve interactive stdin.
-	posix := "set -e; script=$(curl -fsS --retry 2 --connect-timeout 15 --max-time 60 --max-filesize 1048576 " + shellQuote(base+"/bootstrap.sh") + "); bash -c \"$script\" -- \"$@\""
+	posix := `set -e; script=; for attempt in 1 2 3; do if script=$(curl -fsS --connect-timeout 15 --max-time 60 --max-filesize 1048576 ` + shellQuote(base+"/bootstrap.sh") + `); then break; fi; [ "$attempt" -lt 3 ] || exit 1; sleep "$attempt"; done; bash -c "$script" -- "$@"`
 	return map[string]string{
 		"posix":      "bash -c " + shellQuote(posix) + " -- " + shellQuote(base) + " " + shellQuote(authorization),
 		"powershell": "& { $source=$null; for ($attempt=1; $attempt -le 3; $attempt++) { try { $source=(Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -TimeoutSec 60 -ErrorAction Stop).Content; break } catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds $attempt } }; & ([scriptblock]::Create($source)) -Base " + psQuote(base) + " -Authorization " + psQuote(authorization) + " @args }",

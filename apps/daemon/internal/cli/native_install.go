@@ -211,8 +211,14 @@ func verifyNativeComponents(ctx context.Context, root string, selected []string)
 			return errors.New("installation contains an unsupported Harness")
 		}
 		c, err := componentReceipt(nativeComponentRoot(root, name))
-		if err != nil || c.Version != nativePins[name] || len(c.Files) == 0 || checkComponentFiles(ctx, nativeComponentRoot(root, name), c) != nil {
+		if err != nil || c.Version != nativePins[name] || len(c.Files) == 0 {
 			return fmt.Errorf("installed %s is missing, modified or incompatible; reinstall separately (no automatic repair or upgrade)", name)
+		}
+		if err = checkComponentFiles(ctx, nativeComponentRoot(root, name), c); err != nil {
+			if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("installed %s is missing or modified; reinstall separately", name)
+			}
+			return fmt.Errorf("install: cannot verify installed %s: %w", name, err)
 		}
 	}
 	return nil

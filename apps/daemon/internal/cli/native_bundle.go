@@ -92,6 +92,8 @@ func componentReceipt(root string) (nativeComponent, error) {
 	return c, err
 }
 
+var errNativeComponentMismatch = errors.New("installed files do not match the verified release")
+
 func checkComponentFiles(ctx context.Context, directory string, c nativeComponent) error {
 	root, err := os.OpenRoot(directory)
 	if err != nil {
@@ -106,12 +108,23 @@ func checkComponentFiles(ctx context.Context, directory string, c nativeComponen
 		if err != nil {
 			return err
 		}
-		info, e := f.Stat()
+		info, statErr := f.Stat()
+		if statErr != nil {
+			f.Close()
+			return statErr
+		}
+		if !info.Mode().IsRegular() {
+			f.Close()
+			return errNativeComponentMismatch
+		}
 		h := sha256.New()
 		_, copyErr := nativeCopy(ctx, h, f)
 		f.Close()
-		if e != nil || !info.Mode().IsRegular() || copyErr != nil || hex.EncodeToString(h.Sum(nil)) != expected.SHA256 || (runtime.GOOS != "windows" && expected.Executable && info.Mode().Perm()&0100 == 0) {
-			return errors.New("installed files do not match the verified release")
+		if copyErr != nil {
+			return copyErr
+		}
+		if hex.EncodeToString(h.Sum(nil)) != expected.SHA256 || (runtime.GOOS != "windows" && expected.Executable && info.Mode().Perm()&0100 == 0) {
+			return errNativeComponentMismatch
 		}
 	}
 	return nil
@@ -126,8 +139,11 @@ func installNativeComponent(ctx context.Context, source, root, name string, expe
 		if e != nil || !reflect.DeepEqual(got, expected) {
 			return fmt.Errorf("install: existing %s is incompatible; preserve it and use a separate installation directory", name)
 		}
-		if checkComponentFiles(ctx, dest, got) != nil {
-			return fmt.Errorf("install: existing %s is incomplete or modified; reinstall separately", name)
+		if err := checkComponentFiles(ctx, dest, got); err != nil {
+			if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("install: existing %s is incomplete or modified; reinstall separately", name)
+			}
+			return fmt.Errorf("install: cannot verify existing %s: %w", name, err)
 		}
 		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
