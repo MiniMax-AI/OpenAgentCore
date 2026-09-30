@@ -25,7 +25,7 @@
     "docs/user-guide.md": "190bea5bfe23b71db3d9437065ee270e07226a89a6e98c668853e5c7f7555529",
     "docs/assets/development-architecture.png": "24e6d0145d4f16ad70b07b6bc643808a6455aaf6398434d199cf74def200fca6",
     "docs/development.md": "f5c340253036a2cabc43e22aecdf70522d90280d6511e7649278ae93712ab8b6",
-    "contracts/agents-api/harness-onboarding.md": "e8fceb236e7fb0794eade26639d86b0622ec7dbb1fad90c30f41742c9d029232",
+    "contracts/agents-api/harness-onboarding.md": "acbc9bf8c1365e1242d4c9a934b068a19ef3450a4aef2fc08356624380222266",
     "docs/runtime-bootstrap.md": "0d49aed73b298039e04453e6f465b0e925fb2227fa35d4206820bb3acbd8df39",
     "docs/runtime-protocol.md": "1d48186fa84140403358d2d01ddaca56d7122e1b3606cb6855ddefffeb3b8ed6",
     "docs/sandbox-provider.md": "4d47b234a457f874f3ff7e61a7f5da6fc8b75b0c6df0ce0ce9ead1c07afdfb3e",
@@ -56,7 +56,7 @@
     "content/docs/user-guide.mdx": "7c099b2d787ce3d7876889c7cefd621840ec083f267eadf278214a83f11ba274",
     "public/images/source/docs/assets/development-architecture.png": "24e6d0145d4f16ad70b07b6bc643808a6455aaf6398434d199cf74def200fca6",
     "content/docs/development.mdx": "2e5249ddfca571d264e93fd1e0e390a4bd5b0b623bda100cd02f2982929850bb",
-    "content/docs/harness-onboarding.mdx": "8959febf77b2e9e4b16d301eabd8027f09ebd635f2c2713a40d22884afe95d12",
+    "content/docs/harness-onboarding.mdx": "f0d91fd8f4cbaaa9475a25e24b08d9bfb0c25a8549af47b81073886444e5ac44",
     "content/docs/runtime-bootstrap.mdx": "58982955811c9ad46a9fc04d8d2aef5a762fc9d25d5833f88aa75ee3fc46523f",
     "content/docs/runtime-protocol.mdx": "caa7700e442b0666340c091f3ec0bff32e6217b3be4bc845c3b9c23ee0c8d0f6",
     "content/docs/sandbox-provider.mdx": "9db833fe9ff3f30a65451f80d7251348695a08e7830f9e95871739a710529818"
