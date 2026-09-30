@@ -16,6 +16,8 @@ spec = importlib.util.spec_from_file_location(
 distribution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(distribution)
 
+REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+
 
 def api(repository, endpoint, *args):
     url = endpoint if endpoint.startswith("https://") else "repos/" + repository + "/" + endpoint
@@ -56,7 +58,7 @@ def verify_draft(release, tag, revision):
 
 
 def publish(assets, repository, revision, tag, mode):
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+    if not REPOSITORY.fullmatch(repository):
         raise ValueError("Expected an owner/repository")
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Expected a full source commit SHA")
@@ -96,6 +98,12 @@ def publish(assets, repository, revision, tag, mode):
                 or path.with_name(path.name + ".sha256").read_text() != entry["sha256"] + "  " + path.name + "\n"):
             raise ValueError("Native installer checksum mismatch")
 
+    # Actions can retain the old repository name after a rename. Resolve it
+    # before any writes; binary uploads must not depend on POST redirects.
+    canonical = api(repository, "https://api.github.com/repos/" + repository).get("full_name")
+    if not isinstance(canonical, str) or not REPOSITORY.fullmatch(canonical):
+        raise ValueError("GitHub returned an invalid repository identity")
+    repository = canonical
     refuse_existing(repository, tag)
     if mode == "publish":
         verify_tag(repository, tag, revision)
