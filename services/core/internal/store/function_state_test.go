@@ -37,7 +37,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	pool.Close()
 	s, _ = testStore(t)
 	assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 2)
-	if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, turn, sessions.TurnCompleted, nil, "", 1); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, turn, sessions.TurnCompleted, nil, "", 1); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("waiting execution completed", err)
 	}
 	for i, id := range []string{"first", "second"} {
@@ -75,10 +75,10 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 			}
 		}
 	}
-	if _, err := s.GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := s.ListSessionEvents(t.Context(), uuid.NewString(), session.ID, before); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ListSessionEvents(t.Context(), uuid.NewString(), session.ID, before); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 }

@@ -19,10 +19,10 @@ import (
 func coordinationItem(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, turn string, p proto.SubagentCoordinationPayload) (v1.Item, error) {
 	value := v1.Item{ID: items.Identity(turn, "coordination:"+p.ID), TurnID: turn, Type: p.Kind, Status: p.Status, Model: p.Model, ReasoningEffort: p.ReasoningEffort}
 	if !validNativeIdentity(p.ID) {
-		return value, ErrInvalidInput
+		return value, sessions.ErrInvalidInput
 	}
 	if p.Status != "in_progress" && p.Status != "completed" && p.Status != "failed" && p.Status != "incomplete" && p.Kind != "agent_message" {
-		return value, ErrInvalidInput
+		return value, sessions.ErrInvalidInput
 	}
 	resolve := func(native string, failedReference bool) (string, error) {
 		if native == "" {
@@ -36,7 +36,7 @@ func coordinationItem(ctx context.Context, q *sqlc.Queries, session pgtype.UUID,
 			return "", err
 		}
 		if !row.PublicVisible {
-			return "", ErrNotFound
+			return "", sessions.ErrNotFound
 		}
 		return uuid.UUID(row.ID.Bytes).String(), nil
 	}
@@ -45,7 +45,7 @@ func coordinationItem(ctx context.Context, q *sqlc.Queries, session pgtype.UUID,
 		return value, err
 	}
 	if actor == "" {
-		return value, ErrInvalidInput
+		return value, sessions.ErrInvalidInput
 	}
 	value.SenderAgentID = actor
 	if p.Text != nil {
@@ -65,21 +65,21 @@ func coordinationItem(ctx context.Context, q *sqlc.Queries, session pgtype.UUID,
 		}
 	case "send_subagent_input_call", "resume_subagent_call", "interrupt_subagent_call", "close_subagent_call", "agent_message":
 		if len(p.Recipients) != 1 {
-			return value, ErrInvalidInput
+			return value, sessions.ErrInvalidInput
 		}
 		value.RecipientAgentID, err = resolve(p.Recipients[0], p.Status == "failed")
 		if err != nil {
 			return value, err
 		}
 	default:
-		return value, ErrInvalidInput
+		return value, sessions.ErrInvalidInput
 	}
 	return value, nil
 }
 func projectRootCoordination(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, raw json.RawMessage, created pgtype.Timestamptz) error {
 	var p proto.SubagentCoordinationPayload
 	if json.Unmarshal(raw, &p) != nil || p.ActorID != "" {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	value, err := coordinationItem(ctx, q, session, uuid.UUID(turn.Bytes).String(), p)
 	if err != nil {

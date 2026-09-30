@@ -18,7 +18,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	s, pool := store.NewTestStore(t)
 	defer pool.Close()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "command-output"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "command-output"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,13 +26,13 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	event := func(kind, raw string) store.ExecutionEvent {
-		return store.ExecutionEvent{Kind: kind, Payload: json.RawMessage(raw)}
+	event := func(kind, raw string) sessions.ExecutionEvent {
+		return sessions.ExecutionEvent{Kind: kind, Payload: json.RawMessage(raw)}
 	}
-	batch := []store.ExecutionEvent{
+	batch := []sessions.ExecutionEvent{
 		event("tool_call", `{"id":"cmd","stage":"before","observation":{"kind":"command","command":"run","status":"in_progress"}}`),
 		event("command_output", `{"id":"cmd","delta":"same\n"}`),
 		event("command_output", `{"id":"cmd","delta":"same\n"}`),
@@ -44,7 +44,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	}
 	before, _ := s.SessionEventCursor(ctx, tenant, session.ID)
 	// A bad command reference rolls back preceding valid fragments and their events.
-	if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, []store.ExecutionEvent{
+	if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, []sessions.ExecutionEvent{
 		event("command_output", `{"id":"cmd","delta":"rollback"}`),
 		event("command_output", `{"id":"unknown","delta":"orphan"}`),
 	}); err == nil {
@@ -61,7 +61,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if page.Items[1].Output != "same\nsame\n" {
 		t.Fatal("draft output lost", page.Items[1])
 	}
-	final := []store.ExecutionEvent{
+	final := []sessions.ExecutionEvent{
 		event("tool_call", `{"id":"cmd","stage":"after","observation":{"kind":"command","command":"run","status":"completed","output":"authoritative","exit_code":0}}`),
 		event("command_output", `{"id":"cmd","delta":"late"}`),
 		event("tool_call", `{"id":"partial","stage":"before","observation":{"kind":"command","command":"wait","status":"in_progress"}}`),
@@ -87,7 +87,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if before != after {
 		t.Fatal("query replayed events")
 	}
-	if _, err := reopened.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, store.ErrNotFound) {
+	if _, err := reopened.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign event access", err)
 	}
 	var fragments []string

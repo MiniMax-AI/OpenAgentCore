@@ -139,7 +139,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("unsettled create released", err)
 	}
 	if _, err := w.SettleRuntimeCreation(t.Context(), owner); err != nil {
@@ -306,7 +306,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A separate completed Session supplies public Items without calling a model.
-	history, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
+	history, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,13 +314,13 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.AppendTurnEvents(t.Context(), tenant, history.ID, input.TurnID, 1, []ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained answer"}`)}}); err != nil {
+	if err := w.AppendTurnEvents(t.Context(), tenant, history.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained answer"}`)}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
+	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
 	items, err := s.ListItems(t.Context(), tenant, history.ID, "", 100, true)
@@ -404,7 +404,7 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	if _, err := nodes.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 0); !errors.Is(err, deployment.ErrSpecificationMismatch) {
 		t.Fatal("node configuration served without a specification", err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
 	}
 	if _, err := nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, deployment.ErrConflict) {

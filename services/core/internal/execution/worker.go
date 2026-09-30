@@ -113,7 +113,7 @@ func (w *Worker) CheckOwnership(ctx context.Context) error {
 	return err
 }
 
-func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []store.Input) ([]store.InputReceipt, error) {
+func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
 	value, err := w.admission.GetSession(ctx, tenant, session)
 	if err != nil {
 		return nil, err
@@ -125,15 +125,15 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 		return w.submitEnvironmentInputs(ctx, value, key, inputs)
 	}
 	if !w.dispatcher.canAdmitInputs(value.Engine, value.Configuration) {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	return w.admitInputs(ctx, tenant, session, key, inputs)
 }
 
 // CreateSession validates execution support before reserving or admitting initial work.
-func (w *Worker) CreateSession(ctx context.Context, tenant string, input store.CreateSessionInput) (store.Session, error) {
+func (w *Worker) CreateSession(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	if err := w.validateCreation(ctx, input); err != nil {
-		return store.Session{}, err
+		return sessions.Session{}, err
 	}
 	session, err := w.admission.CreateSession(ctx, tenant, input)
 	if err == nil && len(input.InitialInputs) > 0 {
@@ -143,9 +143,9 @@ func (w *Worker) CreateSession(ctx context.Context, tenant string, input store.C
 }
 
 // CreateSessionStream applies the same execution admission before creating a stream.
-func (w *Worker) CreateSessionStream(ctx context.Context, tenant string, input store.CreateSessionInput) (store.SessionCreation, error) {
+func (w *Worker) CreateSessionStream(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	if err := w.validateCreation(ctx, input); err != nil {
-		return store.SessionCreation{}, err
+		return sessions.Creation{}, err
 	}
 	creation, err := w.admission.CreateSessionStream(ctx, tenant, input)
 	if err == nil && len(input.InitialInputs) > 0 {
@@ -352,8 +352,8 @@ func (w *Worker) reconcile(ctx context.Context) error {
 			return nil
 		}
 		for _, item := range work {
-			_, err := w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: item.Status, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
-			if err != nil && !errors.Is(err, store.ErrTurnConflict) {
+			_, err := w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: item.Status, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
+			if err != nil && !errors.Is(err, sessions.ErrTurnConflict) {
 				return err
 			}
 			cursor = item.TurnID
@@ -361,9 +361,9 @@ func (w *Worker) reconcile(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
+func (w *Worker) runClaim(ctx context.Context, item sessions.ExecutionWork) error {
 	_, err := w.dispatcher.Run(ctx, item.TenantID, item.SessionID, item.TurnID)
-	if err == nil || errors.Is(err, store.ErrTurnConflict) {
+	if err == nil || errors.Is(err, sessions.ErrTurnConflict) {
 		return nil
 	}
 	var rejection *preparationRejection
@@ -387,8 +387,8 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 		return nil
 	}
 	log.Ctx(ctx).Error("oac-core dispatch did not complete", "turn_id", item.TurnID)
-	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: turn.Status, Status: sessions.TurnFailed, Outcome: outcome})
-	if errors.Is(err, store.ErrTurnConflict) {
+	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: turn.Status, Status: sessions.TurnFailed, Outcome: outcome})
+	if errors.Is(err, sessions.ErrTurnConflict) {
 		return nil
 	}
 	return err

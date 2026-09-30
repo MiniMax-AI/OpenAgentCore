@@ -12,8 +12,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrStreamGap = errors.New("live event buffer exceeded; recover through Session and Items reads")
-
 func (s *Store) SessionEventCursor(ctx context.Context, tenantID, sessionID string) (int64, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
@@ -22,14 +20,14 @@ func (s *Store) SessionEventCursor(ctx context.Context, tenantID, sessionID stri
 	id := pgunit.PathID(sessionID)
 	cursor, err := s.queries.SessionEventCursor(ctx, sqlc.SessionEventCursorParams{TenantID: tenant, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return 0, ErrNotFound
+		return 0, sessions.ErrNotFound
 	}
 	return cursor, err
 }
 
 func (s *Store) ListSessionEvents(ctx context.Context, tenantID, sessionID string, after int64) ([]sessions.SessionChange, error) {
 	if after < 0 {
-		return nil, ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	latest, err := s.SessionEventCursor(ctx, tenantID, sessionID)
 	if err != nil {
@@ -49,11 +47,11 @@ func (s *Store) ListSessionEvents(ctx context.Context, tenantID, sessionID strin
 	}
 	changes := make([]sessions.SessionChange, 0, len(rows))
 	if len(rows) == 0 && latest > after {
-		return nil, ErrStreamGap
+		return nil, sessions.ErrStreamGap
 	}
 	for _, row := range rows {
 		if row.Sequence != after+1 {
-			return nil, ErrStreamGap
+			return nil, sessions.ErrStreamGap
 		}
 		var change sessions.SessionChange
 		decoder := json.NewDecoder(bytes.NewReader(row.Payload))

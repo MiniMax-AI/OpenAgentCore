@@ -24,7 +24,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -78,7 +77,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			session, err := s.CreateSession(t.Context(), project.TenantID, store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ModelProviderSourceSession})
+			session, err := s.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.fixture.example/v1", APIKey: "fixture-key"}, ModelProviderSource: v1.ModelProviderSourceSession})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -97,7 +96,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			}
 			// This fixture isolates lifecycle ordering. Protocol-driven waiting is
 			// independently exercised in TestArchiveWaitingCancellationReceipts.
-			for _, transition := range []store.TurnTransition{{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}, {ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnWaiting}} {
+			for _, transition := range []sessions.TurnTransition{{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}, {ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnWaiting}} {
 				if _, err := writer.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, transition); err != nil {
 					t.Fatal(err)
 				}
@@ -182,7 +181,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal(pending, err)
 				}
 				// Controlled terminal receipt fixture; no native cancellation claim.
-				if _, err := writer.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnCancelled}); err != nil {
+				if _, err := writer.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnCancelled}); err != nil {
 					t.Fatal(err)
 				}
 				expectedStatus = sessions.TurnCancelled

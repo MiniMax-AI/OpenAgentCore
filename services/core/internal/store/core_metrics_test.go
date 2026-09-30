@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func coreMetricsSession(t *testing.T, pool *pgxpool.Pool, deleted bool) string {
@@ -169,7 +171,7 @@ func TestCoreMetricsHistoryBounds(t *testing.T) {
 		{start, start.Add(time.Hour + time.Second), time.Minute},
 		{start.Add(time.Nanosecond), start.Add(time.Hour + time.Nanosecond), time.Minute},
 	} {
-		if _, err := s.ReadCoreExecutionHistory(t.Context(), tc.start, tc.end, tc.step); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.ReadCoreExecutionHistory(t.Context(), tc.start, tc.end, tc.step); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("unbounded or unaligned range accepted: %+v, %v", tc, err)
 		}
 	}

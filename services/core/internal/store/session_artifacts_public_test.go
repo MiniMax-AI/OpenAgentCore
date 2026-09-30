@@ -25,7 +25,7 @@ import (
 // hostedArtifactSession creates an openai_hosted Session without Turns.
 func hostedArtifactSession(t *testing.T, s *store.Store, tenant, key string) (session, environment string) {
 	t.Helper()
-	created, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
+	created, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
 		Configuration: json.RawMessage(`{"agent":{"model":"artifact-model"},"environment":{"type":"openai_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil || created.Environment == nil {
 		t.Fatal("fixture Session", err)
@@ -43,7 +43,7 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 	}
 	transition := func(from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(t.Context(), tenant, session, receipt.TurnID, store.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := s.TransitionTurn(t.Context(), tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}

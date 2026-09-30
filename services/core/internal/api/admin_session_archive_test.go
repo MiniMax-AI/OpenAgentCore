@@ -8,7 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type archiveManagementFixture struct {
@@ -19,19 +19,19 @@ type archiveManagementFixture struct {
 	err                   error
 }
 
-func (s *archiveManagementFixture) ArchiveManagedSession(ctx context.Context, tenant, session string, generation uint64) (store.ManagedSessionArchive, error) {
+func (s *archiveManagementFixture) ArchiveManagedSession(ctx context.Context, tenant, session string, generation uint64) (sessions.ManagedArchive, error) {
 	s.calls++
 	s.tenant, s.session, s.generation = tenant, session, generation
 	source, ok := adminaudit.FromContext(ctx)
 	s.audited = ok && source.ProjectID == managementProjectID && source.CredentialID != "" && source.RequestID != ""
 	s.impersonated = ctx.Value(principalContextKey{}) != nil
-	return store.ManagedSessionArchive{SessionID: session, EnvironmentID: "environment", State: "cleanup_pending"}, s.err
+	return sessions.ManagedArchive{SessionID: session, EnvironmentID: "environment", State: "cleanup_pending"}, s.err
 }
 
-func (s *archiveManagementFixture) GetManagedSessionArchive(_ context.Context, tenant, session string) (store.ManagedSessionArchive, error) {
+func (s *archiveManagementFixture) GetManagedSessionArchive(_ context.Context, tenant, session string) (sessions.ManagedArchive, error) {
 	s.calls++
 	s.tenant, s.session = tenant, session
-	return store.ManagedSessionArchive{SessionID: session, EnvironmentID: "environment", State: "released"}, s.err
+	return sessions.ManagedArchive{SessionID: session, EnvironmentID: "environment", State: "released"}, s.err
 }
 
 func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
@@ -59,7 +59,7 @@ func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 		t.Fatal("invalid request reached store")
 	}
 	w := projectKeyHTTP(h, http.MethodPost, path, "admin", `{"expected_generation":2}`)
-	var result store.ManagedSessionArchive
+	var result sessions.ManagedArchive
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &result) != nil || result.State != "cleanup_pending" {
 		t.Fatalf("archive: %d %s", w.Code, w.Body)
 	}
@@ -73,7 +73,7 @@ func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	for _, failure := range []struct {
 		err    error
 		status int
-	}{{deployment.ErrConflict, 409}, {store.ErrNotFound, 404}, {store.ErrInvalidInput, 400}} {
+	}{{deployment.ErrConflict, 409}, {sessions.ErrNotFound, 404}, {sessions.ErrInvalidInput, 400}} {
 		fixture.err = failure.err
 		if w := projectKeyHTTP(h, http.MethodPost, path, "admin", `{"expected_generation":2}`); w.Code != failure.status {
 			t.Fatalf("archive error: %d %s", w.Code, w.Body)

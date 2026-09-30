@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,14 +25,14 @@ type AdminAssetCounts struct {
 // ReadAdminSummary visits one space's Sessions from one read-only snapshot. The
 // visitor reuses the API's Session projection instead of creating another status
 // or usage model. Paging keeps the stored configurations out of an unbounded slice.
-func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter AdminSummaryFilter, visit func(Session, *string) error) (AdminAssetCounts, error) {
+func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter AdminSummaryFilter, visit func(sessions.Session, *string) error) (AdminAssetCounts, error) {
 	var counts AdminAssetCounts
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return counts, err
 	}
 	if visit == nil || filter.CreatedAfter != nil && filter.CreatedBefore != nil && !filter.CreatedAfter.Before(*filter.CreatedBefore) {
-		return counts, ErrInvalidInput
+		return counts, sessions.ErrInvalidInput
 	}
 	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
@@ -82,7 +83,7 @@ type AdminRuntimeTargetPage struct {
 func (s *Store) ListAdminRuntimeTargets(ctx context.Context, tenantIDs []string, after string, limit int, ascending bool) (AdminRuntimeTargetPage, error) {
 	page := AdminRuntimeTargetPage{Data: []AdminRuntimeTarget{}}
 	if limit < 1 || limit > 100 {
-		return page, ErrInvalidInput
+		return page, sessions.ErrInvalidInput
 	}
 	tenants := make([]pgtype.UUID, 0, len(tenantIDs))
 	for _, value := range tenantIDs {
@@ -97,11 +98,11 @@ func (s *Store) ListAdminRuntimeTargets(ctx context.Context, tenantIDs []string,
 		var err error
 		params.AfterID, err = parseID(after)
 		if err != nil {
-			return page, ErrNotFound
+			return page, sessions.ErrNotFound
 		}
 		params.AfterTime, err = s.queries.AdminRuntimeCursor(ctx, sqlc.AdminRuntimeCursorParams{ID: params.AfterID, TenantIds: tenants})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return page, ErrNotFound
+			return page, sessions.ErrNotFound
 		}
 		if err != nil {
 			return page, err

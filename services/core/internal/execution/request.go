@@ -8,7 +8,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
@@ -16,7 +16,7 @@ import (
 // frozen model provider and therefore cannot run.
 var ErrModelProviderRequired = errors.New("the Session has no model provider")
 
-func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session, snapshot Snapshot, caps runtimedevice.KindCapabilities, bound store.SessionExecutionBinding) (proto.PromptRequestPayload, error) {
+func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, caps runtimedevice.KindCapabilities, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
 	recoverNativeSession := bound.HasStartedTurn && bound.NativeSessionID == ""
 	if recoverNativeSession && !caps.NativeSessionRecovery {
 		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")

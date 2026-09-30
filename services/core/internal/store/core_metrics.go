@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -66,7 +67,7 @@ func (s *Store) ReadCoreExecutionHistory(ctx context.Context, start, end time.Ti
 	if resolution < time.Second || resolution%time.Second != 0 || span <= 0 || span > 7*24*time.Hour ||
 		span%resolution != 0 || span/resolution > 1008 || start.Nanosecond() != 0 || end.Nanosecond() != 0 ||
 		start.Unix()%int64(resolution/time.Second) != 0 || end.Unix()%int64(resolution/time.Second) != 0 {
-		return CoreExecutionHistory{}, ErrInvalidInput
+		return CoreExecutionHistory{}, sessions.ErrInvalidInput
 	}
 	result := CoreExecutionHistory{Buckets: make([]CoreQueueWaitBucket, int(span/resolution))}
 	for i := range result.Buckets {

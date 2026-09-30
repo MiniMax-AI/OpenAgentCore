@@ -16,32 +16,32 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type environmentFilesFixture struct {
-	environment           store.Environment
+	environment           sessions.Environment
 	result                proto.WorkspaceDirectoryResult
 	storeError, readError error
 	lookups, reads        int
 	directory             string
-	readEnvironment       store.Environment
+	readEnvironment       sessions.Environment
 	readDelay             time.Duration
 }
 
-func (f *environmentFilesFixture) GetEnvironment(_ context.Context, tenant, id string) (store.Environment, error) {
+func (f *environmentFilesFixture) GetEnvironment(_ context.Context, tenant, id string) (sessions.Environment, error) {
 	f.lookups++
 	if f.storeError != nil {
-		return store.Environment{}, f.storeError
+		return sessions.Environment{}, f.storeError
 	}
 	if tenant != f.environment.TenantID || id != f.environment.ID {
-		return store.Environment{}, store.ErrNotFound
+		return sessions.Environment{}, sessions.ErrNotFound
 	}
 	return f.environment, nil
 }
 
-func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, environment store.Environment, directory string) (proto.WorkspaceDirectoryResult, error) {
+func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, environment sessions.Environment, directory string) (proto.WorkspaceDirectoryResult, error) {
 	f.reads++
 	f.directory, f.readEnvironment = directory, environment
 	if f.readDelay > 0 {
@@ -56,7 +56,7 @@ func (f *environmentFilesFixture) ReadEnvironmentDirectory(ctx context.Context, 
 
 func newEnvironmentFilesFixture() *environmentFilesFixture {
 	return &environmentFilesFixture{
-		environment: store.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "connected",
+		environment: sessions.Environment{ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "connected",
 			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/workspace"}`)},
 		result: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}},
 	}
@@ -232,7 +232,7 @@ func TestEnvironmentFilesSafeStoreAndReaderFailures(t *testing.T) {
 			err    error
 			status int
 		}{
-			{store.ErrNotFound, 404}, {store.ErrInvalidInput, 400}, {execution.ErrExecutionUnavailable, 503}, {errors.New("private-native-secret"), 500},
+			{sessions.ErrNotFound, 404}, {sessions.ErrInvalidInput, 400}, {execution.ErrExecutionUnavailable, 503}, {errors.New("private-native-secret"), 500},
 		} {
 			unavailable := 0
 			h, f := environmentFilesHandler(t, true, countEnvironmentFilesUnavailable(&unavailable))

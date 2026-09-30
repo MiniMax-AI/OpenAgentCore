@@ -99,7 +99,7 @@ func TestArtifactDeleteWriteAuditAndRollback(t *testing.T) {
 				if err == nil {
 					t.Fatal("artifact deletion bypassed audit failure")
 				}
-				if err := s.ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ SessionArtifact, r io.Reader) error {
+				if err := s.ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ sessions.Artifact, r io.Reader) error {
 					body, err := io.ReadAll(r)
 					if string(body) != "secret-file-body" {
 						t.Error("large object did not roll back")

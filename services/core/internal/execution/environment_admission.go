@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 var (
@@ -25,12 +25,12 @@ func preparedEnvironmentConfiguration(configuration json.RawMessage) bool {
 func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string, configuration json.RawMessage) error {
 	var snapshot Snapshot
 	if json.Unmarshal(configuration, &snapshot) != nil || snapshot.Environment == nil {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	switch snapshot.Environment.Type {
 	case "self_hosted":
 		if w.dispatcher.Registry == nil {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 	case "openai_hosted":
 		if w.runtimes == nil {
@@ -44,12 +44,12 @@ func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string
 			return ErrExecutionUnavailable
 		}
 	default:
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return w.dispatcher.ValidateSessionConfiguration(engine, configuration)
 }
 
-func (w *Worker) validateCreation(ctx context.Context, input store.CreateSessionInput) error {
+func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSession) error {
 	if err := w.dispatcher.validateEngineInputs(input.Engine, input.Configuration, input.InitialInputs); err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (w *Worker) validateCreation(ctx context.Context, input store.CreateSession
 		}
 		var snapshot Snapshot
 		if err := json.Unmarshal(input.Configuration, &snapshot); err != nil {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		if len(input.InitialInputs) == 0 && snapshot.Environment.Type == "self_hosted" {
 			return nil
@@ -67,12 +67,12 @@ func (w *Worker) validateCreation(ctx context.Context, input store.CreateSession
 		return w.checkAdmissionOwnership(ctx)
 	}
 	if !w.dispatcher.canAdmitInputs(input.Engine, input.Configuration) {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return nil
 }
 
-func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Session, key string, inputs []store.Input) ([]store.InputReceipt, error) {
+func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.Session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
 	if err := w.validateEnvironmentAdmission(ctx, session.Engine, session.Configuration); err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Sess
 	if len(inputs) > 0 {
 		kind = inputs[0].Kind
 	}
-	if (kind == "cancel" || kind == "tool_result") && !slices.ContainsFunc(inputs, func(input store.Input) bool { return input.Kind != kind }) {
+	if (kind == "cancel" || kind == "tool_result") && !slices.ContainsFunc(inputs, func(input sessions.Input) bool { return input.Kind != kind }) {
 		// Neither kind creates a Turn. The Session lock preserves target and retry identity.
 		return w.admitInputs(ctx, session.TenantID, session.ID, key, inputs)
 	}
@@ -103,20 +103,20 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Sess
 		return nil, err
 	}
 	w.wakeScheduler()
-	if reservation.State == store.EnvironmentInputPending && !reservation.IsInitial {
+	if reservation.State == sessions.EnvironmentInputPending && !reservation.IsInitial {
 		w.hintRuntimeWake(ctx, session)
 	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		switch reservation.State {
-		case store.EnvironmentInputAdmitted:
+		case sessions.EnvironmentInputAdmitted:
 			return reservation.Receipts, nil
-		case store.EnvironmentInputFailed:
-			return nil, store.ErrEnvironmentUnavailable
-		case store.EnvironmentInputExpired:
+		case sessions.EnvironmentInputFailed:
+			return nil, sessions.ErrEnvironmentUnavailable
+		case sessions.EnvironmentInputExpired:
 			return nil, ErrEnvironmentInputExpired
-		case store.EnvironmentInputCancelled:
+		case sessions.EnvironmentInputCancelled:
 			return nil, ErrEnvironmentInputCancelled
 		}
 		select {
@@ -135,7 +135,7 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Sess
 	}
 }
 
-func (w *Worker) environmentInputOutcome(ctx context.Context, session store.Session, reservation store.EnvironmentInputReservation) (store.EnvironmentInputReservation, error) {
+func (w *Worker) environmentInputOutcome(ctx context.Context, session sessions.Session, reservation sessions.EnvironmentInputReservation) (sessions.EnvironmentInputReservation, error) {
 	read, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	// The database rechecks its clock under the Session lock before settlement.

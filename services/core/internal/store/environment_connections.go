@@ -24,7 +24,7 @@ func (s *Store) ReplaceEnvironmentConnection(ctx context.Context, tenant, enviro
 	}
 	return s.withEnvironmentConnection(ctx, tenant, environment, func(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow) error {
 		if row.Environment.Status == "failed" || row.Environment.Status == "expired" {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		old, err := q.GetEnvironmentConnection(ctx, row.Environment.ID)
 		if err == nil && old.Generation == gen {
@@ -48,7 +48,7 @@ func (s *Store) ReplaceEnvironmentConnection(ctx context.Context, tenant, enviro
 func (s *Store) ObserveEnvironmentConnection(ctx context.Context, tenant, environment, generation string, revision int64, connected bool) error {
 	gen, err := parseConnectionGeneration(generation)
 	if err != nil || revision <= 0 {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return s.withEnvironmentConnection(ctx, tenant, environment, func(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow) error {
 		current, err := q.GetEnvironmentConnection(ctx, row.Environment.ID)
@@ -62,7 +62,7 @@ func (s *Store) ObserveEnvironmentConnection(ctx context.Context, tenant, enviro
 			return nil
 		}
 		if row.Environment.Status == "failed" || row.Environment.Status == "expired" {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		if err := q.AdvanceEnvironmentConnection(ctx, sqlc.AdvanceEnvironmentConnectionParams{EnvironmentID: row.Environment.ID, Revision: revision}); err != nil {
 			return err
@@ -95,7 +95,7 @@ func (s *Store) withEnvironmentConnection(ctx context.Context, tenant, environme
 	return s.withPublicSession(ctx, tenant, owned.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		row, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenantID, ID: session})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -109,7 +109,7 @@ func recordEnvironmentConnection(ctx context.Context, q *sqlc.Queries, row sqlc.
 		return err
 	}
 	if status != "connected" && status != "disconnected" {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	if err := q.SetEnvironmentConnectionStatus(ctx, sqlc.SetEnvironmentConnectionStatusParams{ID: row.Environment.ID, Status: status}); err != nil {
 		return err
@@ -148,7 +148,7 @@ func storedEnvironmentType(row sqlc.GetSessionEnvironmentRow) (string, error) {
 func parseConnectionGeneration(value string) (pgtype.UUID, error) {
 	id, err := parseID(value)
 	if err != nil || id.Bytes == [16]byte{} {
-		return pgtype.UUID{}, ErrInvalidInput
+		return pgtype.UUID{}, sessions.ErrInvalidInput
 	}
 	return id, nil
 }

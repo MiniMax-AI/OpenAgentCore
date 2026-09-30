@@ -9,7 +9,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 )
@@ -56,8 +56,8 @@ func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
 				t.Fatal("runtime capabilities widened public admission", err)
 			}
 			credentials := &recordingCredentials{token: "scoped-token"}
-			session := store.Session{TenantID: uuid.NewString(), Engine: engine}
-			request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), session, snapshot, caps, store.SessionExecutionBinding{})
+			session := sessions.Session{TenantID: uuid.NewString(), Engine: engine}
+			request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), session, snapshot, caps, sessions.ExecutionBinding{})
 			if !allowed {
 				if err == nil || err.Error() != "The configured engine does not support this MCP connection origin." || request.MCPHTTPServers != nil || len(credentials.requests) != 0 {
 					t.Fatal("unverified profile bypassed public policy", err)
@@ -111,7 +111,7 @@ func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 				}
 				if !allowed {
 					credentials := &recordingCredentials{token: "scoped-token"}
-					request, requestErr := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, caps, store.SessionExecutionBinding{})
+					request, requestErr := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, caps, sessions.ExecutionBinding{})
 					if requestErr == nil || request.MCPHTTPServers != nil || len(credentials.requests) != 0 {
 						t.Fatal("request bypassed capability checks before credential lookup", requestErr)
 					}
@@ -143,7 +143,7 @@ func TestMCPAnonymousExecutionPreservesFrozenDecision(t *testing.T) {
 					t.Fatal("anonymous binding validation changed", err)
 				}
 				credentials := &recordingCredentials{token: "scoped-token"}
-				request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), store.Session{Engine: engine}, snapshot, caps, store.SessionExecutionBinding{})
+				request, err := (&Dispatcher{Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: engine}, snapshot, caps, sessions.ExecutionBinding{})
 				if len(credentials.requests) != 0 {
 					t.Fatal("anonymous or invalid binding reached credential lookup")
 				}

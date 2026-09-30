@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -48,7 +49,7 @@ func TestEnvironmentExecutorOperatorCommand(t *testing.T) {
 	}
 	command(uuid.NewString(), false)
 	first := command(tenant, true)
-	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "operator-key", Configuration: json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "operator-key", Configuration: json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,14 +65,14 @@ func TestEnvironmentExecutorOperatorCommand(t *testing.T) {
 	if next == first {
 		t.Fatal("rotation returned the same key")
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(first)); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(first)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("old command credential retained authority", err)
 	}
 	if owner, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); err != nil || owner != tenant {
 		t.Fatal("rotated command credential failed", err)
 	}
 	command(tenant, true, "--revoke")
-	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("revoked command credential retained authority", err)
 	}
 	t.Log("built operator command issued before Session creation, rejected duplicate/foreign requests, rotated and revoked durable credentials")

@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -45,11 +46,11 @@ func adminSummaryTime(r *http.Request, name string) (*time.Time, error) {
 		return nil, nil
 	}
 	if len(values) != 1 || values[0] == "" {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	value, err := time.Parse(time.RFC3339Nano, values[0])
 	if err != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	return &value, nil
 }
@@ -79,7 +80,7 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		group = "project"
 	}
 	if group != "project" && group != "agent" && group != "key" {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	after, err := adminSummaryTime(r, "created_after")
@@ -93,19 +94,19 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if after != nil && before != nil && !after.Before(*before) {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	if group == "agent" && r.URL.Query().Get("project_id") == "" {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	var page projects.Page
 	if projectID := r.URL.Query().Get("project_id"); projectID != "" {
 		if options.after != "" {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeStoreError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 		var binding projects.Binding
@@ -124,7 +125,7 @@ func (h *Handler) adminSummary(w http.ResponseWriter, r *http.Request) {
 		if group == "project" {
 			groups[""] = &AdminSummaryRow{ProjectID: project.ID}
 		}
-		counts, err := h.Admin.ReadAdminSummary(ctx, project.TenantID, store.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session store.Session, creationKeyID *string) error {
+		counts, err := h.Admin.ReadAdminSummary(ctx, project.TenantID, store.AdminSummaryFilter{CreatedAfter: after, CreatedBefore: before}, func(session sessions.Session, creationKeyID *string) error {
 			projected, err := sessionResponse(session, h.executorURL())
 			if err != nil {
 				return err

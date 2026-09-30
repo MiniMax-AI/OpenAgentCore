@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func requireEnvironmentInputActivity(t *testing.T, s *Store, tenant, session, status, environment string) Session {
+func requireEnvironmentInputActivity(t *testing.T, s *Store, tenant, session, status, environment string) sessions.Session {
 	t.Helper()
 	value, err := s.GetSession(t.Context(), tenant, session)
 	if err != nil {
@@ -92,22 +92,22 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 	if active.LastTurn == nil || active.LastTurn.Status != sessions.TurnInProgress {
 		t.Fatal("normal Turn did not take ownership")
 	}
-	if _, err := s.GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Session activity visible", err)
 	}
 }
 
 func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
-	for _, state := range []string{EnvironmentInputCancelled, EnvironmentInputExpired} {
+	for _, state := range []string{sessions.EnvironmentInputCancelled, sessions.EnvironmentInputExpired} {
 		t.Run(state, func(t *testing.T) {
 			s, pool := testStore(t)
 			tenant, session := environmentInputSession(t, s)
 			writer := executionWriter(t, s)
-			prior, err := s.SubmitInputs(t.Context(), tenant, session.ID, "prior", []Input{messageInput("prior")})
+			prior, err := s.SubmitInputs(t.Context(), tenant, session.ID, "prior", []sessions.Input{messageInput("prior")})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.TransitionTurn(t.Context(), tenant, session.ID, prior[0].TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: []byte(`{}`)}); err != nil {
+			if _, err := writer.TransitionTurn(t.Context(), tenant, session.ID, prior[0].TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: []byte(`{}`)}); err != nil {
 				t.Fatal(err)
 			}
 			reservation := reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
@@ -119,14 +119,14 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if state == EnvironmentInputCancelled {
+			if state == sessions.EnvironmentInputCancelled {
 				_, err = s.CancelEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
 			} else {
 				if _, err := pool.Exec(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE id=$1", reservation.ID); err != nil {
 					t.Fatal(err)
 				}
 				// Other retained test rows may precede this reservation in bounded batches.
-				for reservation.State == EnvironmentInputPending {
+				for reservation.State == sessions.EnvironmentInputPending {
 					count, sweepErr := writer.ExpireEnvironmentInputs(t.Context())
 					if sweepErr != nil || count < 1 || count > 32 {
 						t.Fatal("expiry made no bounded progress", count, sweepErr)
@@ -155,7 +155,7 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 			if after, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || after != cursor {
 				t.Fatal("settled retry repeated activity", after, cursor, err)
 			}
-			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "newer", []Input{messageInput("newer")}); err != nil {
+			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "newer", []sessions.Input{messageInput("newer")}); err != nil {
 				t.Fatal(err)
 			}
 			requireEnvironmentInputActivity(t, s, tenant, session.ID, "", "")
@@ -173,7 +173,7 @@ func TestEnvironmentInputActivityRollsBackReservationAndConnection(t *testing.T)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), "ALTER TABLE session_events DROP CONSTRAINT IF EXISTS "+constraint)
 	})
-	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "rollback", []Input{messageInput("pending")}); err == nil {
+	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "rollback", []sessions.Input{messageInput("pending")}); err == nil {
 		t.Fatal("activity failure retained reservation")
 	}
 	var count int
@@ -228,7 +228,7 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "requires_action", environment)
 	got, err := s.GetEnvironmentInputReservation(t.Context(), tenant, session.ID, reservation.ID)
-	if err != nil || got.State != EnvironmentInputPending || !got.Deadline.Equal(reservation.Deadline) {
+	if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(reservation.Deadline) {
 		t.Fatal("recovery changed waiting input or its deadline", got, err)
 	}
 	cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
@@ -242,16 +242,16 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 		t.Fatal("retired generation changed activity", after, cursor, err)
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+	if err := s.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("waiting input deleted", err)
 	}
 	if err := s.commitLegacyDeletion(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSession(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted activity remained visible", err)
 	}
-	if _, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted activity events remained visible", err)
 	}
 }
@@ -267,13 +267,13 @@ func TestPreparationFailurePreservesCancelledAndNewerInput(t *testing.T) {
 	if err := s.FailEnvironmentInput(t.Context(), tenant, session.ID, first.ID, "runtime_preparation_failed"); err != nil {
 		t.Fatal(err)
 	}
-	for id, state := range map[string]string{first.ID: EnvironmentInputCancelled, next.ID: EnvironmentInputPending} {
+	for id, state := range map[string]string{first.ID: sessions.EnvironmentInputCancelled, next.ID: sessions.EnvironmentInputPending} {
 		current, err := s.GetEnvironmentInputReservation(t.Context(), tenant, session.ID, id)
 		if err != nil || current.State != state {
 			t.Fatal("late failure changed another outcome", err)
 		}
 	}
-	if err := s.FailEnvironmentInput(t.Context(), tenant, session.ID, next.ID, "secret-canary"); !errors.Is(err, ErrInvalidInput) {
+	if err := s.FailEnvironmentInput(t.Context(), tenant, session.ID, next.ID, "secret-canary"); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("unclassified diagnostic accepted", err)
 	}
 }

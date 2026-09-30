@@ -6,44 +6,45 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // CreateEnvironmentDevice provisions one dedicated Runtime without widening an existing credential.
-func (s *Store) CreateEnvironmentDevice(ctx context.Context, tenantID, environmentID, name, credentialHash string) (ExecutionDevice, error) {
+func (s *Store) CreateEnvironmentDevice(ctx context.Context, tenantID, environmentID, name, credentialHash string) (sessions.ExecutionDevice, error) {
 	environment, err := s.GetEnvironment(ctx, tenantID, environmentID)
 	if err != nil {
-		return ExecutionDevice{}, err
+		return sessions.ExecutionDevice{}, err
 	}
 	var configuration struct {
 		Type string `json:"type"`
 	}
 	if json.Unmarshal(environment.Configuration, &configuration) != nil || configuration.Type != "openai_hosted" {
-		return ExecutionDevice{}, ErrInvalidInput
+		return sessions.ExecutionDevice{}, sessions.ErrInvalidInput
 	}
 	lookup, err := deviceLookup(tenantID, environment.ID)
 	if err != nil {
-		return ExecutionDevice{}, err
+		return sessions.ExecutionDevice{}, err
 	}
 	params, err := newDeviceParams(lookup.TenantID, name, credentialHash)
 	if err != nil {
-		return ExecutionDevice{}, err
+		return sessions.ExecutionDevice{}, err
 	}
 	err = s.withPublicSession(ctx, tenantID, environment.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		return createEnvironmentDevice(ctx, q, lookup, session, params)
 	})
 	if err != nil {
-		return ExecutionDevice{}, err
+		return sessions.ExecutionDevice{}, err
 	}
-	return ExecutionDevice{ID: uuid.UUID(params.ID.Bytes).String(), Name: params.Name, EnvironmentID: environment.ID}, nil
+	return sessions.ExecutionDevice{ID: uuid.UUID(params.ID.Bytes).String(), Name: params.Name, EnvironmentID: environment.ID}, nil
 }
 
 func createEnvironmentDevice(ctx context.Context, q *sqlc.Queries, lookup sqlc.GetDeviceParams, session pgtype.UUID, params sqlc.CreateDeviceParams) error {
 	_, err := q.GetSessionDevice(ctx, sqlc.GetSessionDeviceParams{TenantID: lookup.TenantID, ID: session})
 	if err == nil {
-		return ErrDeviceBindingConflict
+		return sessions.ErrDeviceBindingConflict
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -53,7 +54,7 @@ func createEnvironmentDevice(ctx context.Context, q *sqlc.Queries, lookup sqlc.G
 		CredentialHash: params.CredentialHash, EnvironmentID: lookup.ID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrDeviceBindingConflict
+		return sessions.ErrDeviceBindingConflict
 	}
 	if err != nil {
 		return err

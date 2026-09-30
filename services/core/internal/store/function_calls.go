@@ -12,27 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// FunctionCall retains public identity and its opaque execution-adapter reference.
-type FunctionCall struct {
-	CallID, ExecutorCallID, Name string
-	Arguments                    json.RawMessage
-	Result                       json.RawMessage
-	Applied                      bool
-}
-
 // RecordFunctionCall commits an execution callback and its required-action state together.
-func (s *Store) RecordFunctionCall(ctx context.Context, tenantID, sessionID, turnID string, call FunctionCall) error {
+func (s *Store) RecordFunctionCall(ctx context.Context, tenantID, sessionID, turnID string, call sessions.FunctionCall) error {
 	p, err := turnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return err
 	}
 	if !validFunctionIdentity(call.CallID) || !validFunctionIdentity(call.ExecutorCallID) || !validFunctionIdentity(call.Name) || len(call.Arguments) > 512*1024 || !json.Valid(call.Arguments) || call.Result != nil || call.Applied {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		turn, err := q.GetTurn(ctx, p)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -40,7 +32,7 @@ func (s *Store) RecordFunctionCall(ctx context.Context, tenantID, sessionID, tur
 		matches, err := q.MatchFunctionCall(ctx, sqlc.MatchFunctionCallParams{SessionID: session, TurnID: p.ID, CallID: call.CallID, ExecutorCallID: call.ExecutorCallID, Name: call.Name, Arguments: call.Arguments})
 		if err == nil {
 			if !matches {
-				return ErrIdempotencyConflict
+				return sessions.ErrIdempotencyConflict
 			}
 			return nil
 		}
@@ -48,47 +40,47 @@ func (s *Store) RecordFunctionCall(ctx context.Context, tenantID, sessionID, tur
 			return err
 		}
 		if !acceptsFunctionResult(turn) {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		count, err := q.CreateFunctionCall(ctx, sqlc.CreateFunctionCallParams{SessionID: session, TurnID: p.ID, CallID: call.CallID, ExecutorCallID: call.ExecutorCallID, Name: call.Name, Arguments: call.Arguments})
 		if err != nil {
 			return err
 		}
 		if count != 1 {
-			return ErrIdempotencyConflict
+			return sessions.ErrIdempotencyConflict
 		}
 		return recordFunctionState(ctx, q, turn)
 	})
 }
 
-func (s *Store) GetFunctionCall(ctx context.Context, tenantID, sessionID, turnID, callID string) (FunctionCall, error) {
+func (s *Store) GetFunctionCall(ctx context.Context, tenantID, sessionID, turnID, callID string) (sessions.FunctionCall, error) {
 	p, err := turnLookup(tenantID, sessionID, turnID)
 	if err != nil {
-		return FunctionCall{}, err
+		return sessions.FunctionCall{}, err
 	}
 	if !validFunctionIdentity(callID) {
-		return FunctionCall{}, ErrInvalidInput
+		return sessions.FunctionCall{}, sessions.ErrInvalidInput
 	}
 	row, err := s.queries.GetFunctionCall(ctx, sqlc.GetFunctionCallParams{TenantID: p.TenantID, SessionID: p.SessionID, TurnID: p.ID, CallID: callID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return FunctionCall{}, ErrNotFound
+		return sessions.FunctionCall{}, sessions.ErrNotFound
 	}
 	if err != nil {
-		return FunctionCall{}, err
+		return sessions.FunctionCall{}, err
 	}
 	return functionCallFromRow(row), nil
 }
 
 // PendingFunctionCalls excludes applied results and cancelling or terminal Turns.
-func (s *Store) PendingFunctionCalls(ctx context.Context, tenantID, sessionID, turnID string) ([]FunctionCall, error) {
+func (s *Store) PendingFunctionCalls(ctx context.Context, tenantID, sessionID, turnID string) ([]sessions.FunctionCall, error) {
 	p, err := turnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]FunctionCall, 0)
+	result := make([]sessions.FunctionCall, 0)
 	err = s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		if _, err := q.GetTurn(ctx, p); errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		} else if err != nil {
 			return err
 		}
@@ -104,8 +96,8 @@ func (s *Store) PendingFunctionCalls(ctx context.Context, tenantID, sessionID, t
 	return result, err
 }
 
-func functionCallFromRow(row sqlc.FunctionCall) FunctionCall {
-	return FunctionCall{CallID: row.CallID, ExecutorCallID: row.ExecutorCallID, Name: row.Name, Arguments: row.Arguments, Result: row.Result, Applied: row.Applied}
+func functionCallFromRow(row sqlc.FunctionCall) sessions.FunctionCall {
+	return sessions.FunctionCall{CallID: row.CallID, ExecutorCallID: row.ExecutorCallID, Name: row.Name, Arguments: row.Arguments, Result: row.Result, Applied: row.Applied}
 }
 
 func validFunctionIdentity(id string) bool { return strings.TrimSpace(id) != "" && len(id) <= 512 }

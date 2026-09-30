@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -24,7 +25,7 @@ func authorizedRuntimePeer(ctx context.Context, s *store.Store, registry *runtim
 		if drainErr != nil || !draining {
 			peer.Close("Runtime authorization changed")
 		}
-		return nil, store.ErrNotFound
+		return nil, sessions.ErrNotFound
 	}
 	if peer.IsClosed() {
 		return nil, runtimegateway.ErrSessionClosed

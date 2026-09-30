@@ -30,22 +30,22 @@ func environmentInputState(ctx context.Context, q *sqlc.Queries, session pgtype.
 	if err != nil {
 		return nil, false, err
 	}
-	pending := row.State == EnvironmentInputPending
+	pending := row.State == sessions.EnvironmentInputPending
 	activity := &sessions.EnvironmentInputActivity{Status: "idle", LastActiveAt: row.CreatedAt.Time}
 	if row.SettledAt.Valid {
 		activity.LastActiveAt = row.SettledAt.Time
 	}
-	if row.State == EnvironmentInputFailed {
+	if row.State == sessions.EnvironmentInputFailed {
 		activity.Status, activity.Failure = "failed", "environment_unavailable"
 		if row.FailureCode.Valid {
 			activity.Failure = row.FailureCode.String
 		}
 	}
-	if row.IsInitial && row.State == EnvironmentInputExpired {
+	if row.IsInitial && row.State == sessions.EnvironmentInputExpired {
 		activity.Status = "failed"
 	}
 	if row.EnvironmentType == "openai_hosted" && row.IsInitial &&
-		(row.State == EnvironmentInputPending || row.State == EnvironmentInputCancelled) {
+		(row.State == sessions.EnvironmentInputPending || row.State == sessions.EnvironmentInputCancelled) {
 		// No Turn has started. The pinned Session contract permits idle while a
 		// hosted Environment provisions; neither a caller action nor an invented
 		// in-progress/idle transition is appropriate here.

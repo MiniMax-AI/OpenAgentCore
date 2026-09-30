@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -18,7 +18,7 @@ type directoryResult struct {
 	err   error
 }
 
-func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, store.Environment) {
+func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, sessions.Environment) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"unavailable-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
@@ -49,7 +49,7 @@ func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, store.E
 	return h, w, environment
 }
 
-func startDirectoryRead(ctx context.Context, w *execution.Worker, environment store.Environment) <-chan directoryResult {
+func startDirectoryRead(ctx context.Context, w *execution.Worker, environment sessions.Environment) <-chan directoryResult {
 	ch := make(chan directoryResult, 1)
 	go func() {
 		value, err := w.ReadEnvironmentDirectory(ctx, environment, "reports")
@@ -69,7 +69,7 @@ func awaitDirectoryResult(t *testing.T, ch <-chan directoryResult) directoryResu
 	}
 }
 
-func prepareDirectoryRead(t *testing.T, h *dispatchHarness, environment store.Environment) (string, string) {
+func prepareDirectoryRead(t *testing.T, h *dispatchHarness, environment sessions.Environment) (string, string) {
 	t.Helper()
 	frame := h.read(proto.TypeExecutionPrepare)
 	var request proto.ExecutionPreparePayload
@@ -106,12 +106,12 @@ func TestEnvironmentDirectoryWorkerReadsWithoutExecutionPrerequisites(t *testing
 	h, w, environment := directoryWorker(t)
 	foreign := environment
 	foreign.TenantID = uuid.NewString()
-	if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign reader admitted", err)
 	}
 	wrong := environment
 	wrong.SessionID = uuid.NewString()
-	if _, err := w.ReadEnvironmentDirectory(t.Context(), wrong, "reports"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := w.ReadEnvironmentDirectory(t.Context(), wrong, "reports"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("wrong Session admitted", err)
 	}
 	result := startDirectoryRead(t.Context(), w, environment)
@@ -179,7 +179,7 @@ func TestEnvironmentDirectoryNotDirectoryIsAnEmptyListing(t *testing.T) {
 	}{
 		{proto.WorkspaceReadNotDirectory, false, nil},
 		{proto.WorkspaceReadNotDirectory, true, execution.ErrExecutionUnavailable},
-		{"not_found", false, store.ErrNotFound},
+		{"not_found", false, sessions.ErrNotFound},
 		{"invalid_request", false, execution.ErrExecutionUnavailable},
 		{"permission_denied", false, execution.ErrExecutionUnavailable},
 		{"resource_unavailable", false, execution.ErrExecutionUnavailable},
@@ -188,7 +188,7 @@ func TestEnvironmentDirectoryNotDirectoryIsAnEmptyListing(t *testing.T) {
 			h, w, environment := directoryWorker(t)
 			foreign := environment
 			foreign.TenantID = uuid.NewString()
-			if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, store.ErrNotFound) {
+			if _, err := w.ReadEnvironmentDirectory(t.Context(), foreign, "reports"); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("foreign reader admitted", err)
 			}
 			result := startDirectoryRead(t.Context(), w, environment)

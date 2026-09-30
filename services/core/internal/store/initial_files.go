@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,7 +18,7 @@ import (
 
 func (s *Store) saveInitialFiles(ctx context.Context, q *sqlc.Queries, tx pgx.Tx, tenant string, session pgtype.UUID, initial []environmentconfig.InitialFile) ([]byte, error) {
 	if environmentconfig.ValidateInitialFiles(initial) != nil {
-		return nil, ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	tenantID, err := parseID(tenant)
 	if err != nil {
@@ -30,11 +31,11 @@ func (s *Store) saveInitialFiles(ctx context.Context, q *sqlc.Queries, tx pgx.Tx
 		if f.Type == "file_id" {
 			sourceID, ok := files.ParseID(f.FileID)
 			if !ok {
-				return nil, ErrNotFound
+				return nil, sessions.ErrNotFound
 			}
 			source, err := q.LockInitialSourceFile(ctx, sqlc.LockInitialSourceFileParams{TenantID: tenantID, ID: pgtype.UUID{Bytes: sourceID, Valid: true}})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, ErrNotFound
+				return nil, sessions.ErrNotFound
 			}
 			if err != nil {
 				return nil, err
@@ -64,7 +65,7 @@ func (s *Store) saveInitialFiles(ctx context.Context, q *sqlc.Queries, tx pgx.Tx
 // store.
 func readInitialSourceFile(ctx context.Context, tx pgx.Tx, source sqlc.SourceFile) ([]byte, error) {
 	if source.SizeBytes > environmentconfig.MaxInitialFileBytes {
-		return nil, ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	objects := tx.LargeObjects()
 	reader, err := objects.Open(ctx, source.BodyOid.Uint32, pgx.LargeObjectModeRead)
@@ -76,7 +77,7 @@ func readInitialSourceFile(ctx context.Context, tx pgx.Tx, source sqlc.SourceFil
 		return nil, err
 	}
 	if len(body) > environmentconfig.MaxInitialFileBytes || int64(len(body)) != source.SizeBytes {
-		return nil, ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	return body, reader.Close()
 }
@@ -94,7 +95,7 @@ func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, session 
 	id := uuid.UUID(row.ID.Bytes).String()
 	body, err := s.credentialCipher.OpenEnvironmentFile(row.Contents, credentialcrypto.EnvironmentFileBinding{TenantID: uuid.UUID(lookup.TenantID.Bytes).String(), Resource: "session", OwnerID: uuid.UUID(lookup.ID.Bytes).String(), FileID: id})
 	if err == nil && int64(len(body)) != row.SizeBytes {
-		err = ErrInvalidInput
+		err = sessions.ErrInvalidInput
 	}
 	return environmentconfig.InitialFileMetadata{ID: id, Path: row.Path, SizeBytes: &row.SizeBytes}, body, err
 }

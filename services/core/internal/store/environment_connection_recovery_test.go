@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
@@ -11,8 +13,8 @@ func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
 	old := executionWriter(t, s)
 	type target struct {
 		tenant      string
-		session     Session
-		environment Environment
+		session     sessions.Session
+		environment sessions.Environment
 		generation  string
 	}
 	var targets []target

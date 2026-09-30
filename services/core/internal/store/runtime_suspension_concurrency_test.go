@@ -59,7 +59,7 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)
 			go func() {
-				_, err := w.TransitionTurn(ctx, owner.TenantID, owner.SessionID, turn, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+				_, err := w.TransitionTurn(ctx, owner.TenantID, owner.SessionID, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 				done <- err
 			}()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -72,7 +72,7 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 			}
 			err := <-done
 			blocked := phase != "disabled" && phase != "running"
-			if blocked && !errors.Is(err, ErrTurnConflict) || !blocked && err != nil {
+			if blocked && !errors.Is(err, sessions.ErrTurnConflict) || !blocked && err != nil {
 				t.Fatal("incorrect claim outcome", phase, err)
 			}
 			got, err := s.GetTurn(ctx, owner.TenantID, owner.SessionID, turn)
@@ -97,17 +97,17 @@ func TestRuntimeSuspensionPromotionRetainsPendingInput(t *testing.T) {
 	s, w, pool, owner := runtimeSuspensionFixture(t)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase='waking',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID)
 	pending := reserveEnvironmentInput(t, s, owner.TenantID, owner.SessionID, "during-wake")
-	if _, err := w.PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("waking allocation promoted model input", err)
 	}
 	got, err := s.GetEnvironmentInputReservation(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
-	if err != nil || got.State != EnvironmentInputPending || got.SettledAt != nil || len(got.Receipts) != 0 {
+	if err != nil || got.State != sessions.EnvironmentInputPending || got.SettledAt != nil || len(got.Receipts) != 0 {
 		t.Fatal("blocked promotion partially committed", got, err)
 	}
 	environmentInputHistory(t, pool, owner.SessionID, 0, 0)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase='running',compute_retained_until=NULL WHERE id=$1`, owner.ID)
 	got, err = w.PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
-	if err != nil || got.State != EnvironmentInputAdmitted || len(got.Receipts) != 2 {
+	if err != nil || got.State != sessions.EnvironmentInputAdmitted || len(got.Receipts) != 2 {
 		t.Fatal("pending request could not resume once running", got, err)
 	}
 }
@@ -143,7 +143,7 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			if err := tx.Commit(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-done; !errors.Is(err, ErrTurnConflict) {
+			if err := <-done; !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("capture ignored work admitted after quiesce", err)
 			}
 			got, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
@@ -173,7 +173,7 @@ func TestRuntimeSuspensionWakeUsesSessionLock(t *testing.T) {
 				t.Fatal(err)
 			}
 			err := <-done
-			if deleted && !errors.Is(err, ErrNotFound) || !deleted && err != nil {
+			if deleted && !errors.Is(err, sessions.ErrNotFound) || !deleted && err != nil {
 				t.Fatal("wake did not observe locked state", err)
 			}
 			got, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
@@ -203,13 +203,13 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := transitionTurn(ctx, w.queries.WithTx(tx), params, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{}`)}); err != nil {
+	if _, err := transitionTurn(ctx, w.queries.WithTx(tx), params, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-done; !errors.Is(err, ErrTurnConflict) {
+	if err := <-done; !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("quiesce overtook an admitted Turn", err)
 	}
 	got, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)

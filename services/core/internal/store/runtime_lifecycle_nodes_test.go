@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -26,7 +27,7 @@ func lifecycleTestNode(t *testing.T, s *Store) string {
 	onlineManagerNode(t, s, id)
 	return id
 }
-func lifecycleTestSession(t *testing.T, s *Store, node string) (string, Session) {
+func lifecycleTestSession(t *testing.T, s *Store, node string) (string, sessions.Session) {
 	t.Helper()
 	tenant := uuid.NewString()
 	session, err := createSessionOnNode(t, s, tenant, managerSessionInput(uuid.NewString()), node)
@@ -134,7 +135,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 		}
 	}
 	checkRoute(other, nil) // Pending has no allocation yet.
-	if _, err := w.ResolveRuntimeLifecycleNode(t.Context(), uuid.NewString(), environment); !errors.Is(err, ErrNotFound) {
+	if _, err := w.ResolveRuntimeLifecycleNode(t.Context(), uuid.NewString(), environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("tenant boundary", err)
 	}
 	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment, d.InstallationID, runtimedevice.HashCredential("runtime"))

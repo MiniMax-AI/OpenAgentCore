@@ -6,21 +6,21 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type journal struct {
 	store                 eventWriter
 	tenant, session, turn string
 	next                  int32
-	batch                 []store.ExecutionEvent
+	batch                 []sessions.ExecutionEvent
 	bytes                 int
 	pendingCount          int
 	observeSubagents      bool
 }
 
 type eventWriter interface {
-	AppendTurnEvents(context.Context, string, string, string, int32, []store.ExecutionEvent) error
+	AppendTurnEvents(context.Context, string, string, string, int32, []sessions.ExecutionEvent) error
 }
 
 func recordCancellation(ctx context.Context, journal *journal, reply cancellationResult, result *Result) error {
@@ -55,7 +55,7 @@ func (j *journal) observe(ctx context.Context, env proto.Envelope) error {
 
 func (j *journal) enqueue(env proto.Envelope) error {
 	if (env.Type == proto.TypeSubagentIdentity || env.Type == proto.TypeSubagentLifecycle || env.Type == proto.TypeSubagentTurn || env.Type == proto.TypeSubagentItem || env.Type == proto.TypeSubagentCoordination) && !j.observeSubagents {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	switch env.Type {
 	case proto.TypeDelta, proto.TypeOutputMessage, proto.TypeThinking, proto.TypeToolCall, proto.TypeCommandOutput, proto.TypeUsage,
@@ -64,9 +64,9 @@ func (j *journal) enqueue(env proto.Envelope) error {
 		return nil
 	}
 	if len(env.Payload) > 512*1024 {
-		return store.ErrEventLimit
+		return sessions.ErrEventLimit
 	}
-	j.batch = append(j.batch, store.ExecutionEvent{Kind: env.Type, Payload: env.Payload})
+	j.batch = append(j.batch, sessions.ExecutionEvent{Kind: env.Type, Payload: env.Payload})
 	j.bytes += len(env.Payload)
 	return nil
 }

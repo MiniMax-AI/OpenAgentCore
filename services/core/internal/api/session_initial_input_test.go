@@ -14,7 +14,7 @@ import (
 func admitInto(s *recordingStore) func(*Dependencies, *testFakes) {
 	return func(d *Dependencies, f *testFakes) {
 		d.Execution = f.execution()
-		f.admission.createSession = s.CreateSession
+		f.sessionAdmission.createSession = s.CreateSession
 	}
 }
 

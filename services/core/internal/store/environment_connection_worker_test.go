@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -16,7 +17,7 @@ import (
 func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	s, db := newTestStoreDB(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "connection-worker", Configuration: []byte(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "connection-worker", Configuration: []byte(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}

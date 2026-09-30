@@ -50,24 +50,24 @@ func publishSubagent(ctx context.Context, q *sqlc.Queries, session, id pgtype.UU
 func projectSubagentLifecycle(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, raw json.RawMessage) error {
 	var p proto.SubagentLifecyclePayload
 	if json.Unmarshal(raw, &p) != nil || !validNativeIdentity(p.NativeID) || !validNativeIdentity(p.EffectID) || p.OccurredAtMS <= 0 || (p.Status != "active" && p.Status != "closed") {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	child, err := q.GetNativeSubagent(ctx, sqlc.GetNativeSubagentParams{SessionID: session, NativeID: p.NativeID})
 	if err != nil {
 		return err
 	}
 	if !child.PublicVisible || p.OccurredAtMS < child.NativeCreatedAt*1000 {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	inserted, err := q.PutSubagentEffect(ctx, sqlc.PutSubagentEffectParams{SessionID: session, EffectID: p.EffectID, Payload: raw})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrIdempotencyConflict
+		return sessions.ErrIdempotencyConflict
 	}
 	if err != nil || !inserted {
 		return err
 	}
 	if p.OccurredAtMS < child.LifecycleAtMs {
-		return ErrIdempotencyConflict
+		return sessions.ErrIdempotencyConflict
 	}
 	if p.Status == child.Status {
 		return nil

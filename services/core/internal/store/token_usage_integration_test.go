@@ -17,7 +17,7 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "usage"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "usage"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,18 +36,18 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+		_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 		if err != nil {
 			t.Fatal(err)
 		}
-		batch := []store.ExecutionEvent{{Kind: "usage", Payload: usage(10)}}
+		batch := []sessions.ExecutionEvent{{Kind: "usage", Payload: usage(10)}}
 		for range 2 {
 			if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 1, batch); err != nil {
 				t.Fatal(err)
 			}
 		}
 		// A later snapshot replaces the earlier measurement; it is not a delta.
-		if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 2, []store.ExecutionEvent{{Kind: "usage", Payload: usage(20)}}); err != nil {
+		if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 2, []sessions.ExecutionEvent{{Kind: "usage", Payload: usage(20)}}); err != nil {
 			t.Fatal(err)
 		}
 		measured, err := s.GetTurn(ctx, tenant, session.ID, admission.TurnID)
@@ -55,7 +55,7 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 			t.Fatal(err)
 		}
 		check(measured.Usage, 20)
-		if _, err = s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"usage":`+string(usage(99))+`}}`), "missing-binding", admission.Sequence); !errors.Is(err, store.ErrNotFound) {
+		if _, err = s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"usage":`+string(usage(99))+`}}`), "missing-binding", admission.Sequence); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
 		rolledBack, err := s.GetTurn(ctx, tenant, session.ID, admission.TurnID)
@@ -69,10 +69,10 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 			t.Fatal(err)
 		}
 		check(completed.Usage, 20)
-		if _, err = s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, status, json.RawMessage(`{"done":{"usage":`+string(usage(99))+`}}`), "", admission.Sequence); !errors.Is(err, store.ErrTurnConflict) {
+		if _, err = s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, status, json.RawMessage(`{"done":{"usage":`+string(usage(99))+`}}`), "", admission.Sequence); !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal(err)
 		}
-		if _, err = s.GetTurn(ctx, uuid.NewString(), session.ID, admission.TurnID); !errors.Is(err, store.ErrNotFound) {
+		if _, err = s.GetTurn(ctx, uuid.NewString(), session.ID, admission.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
 	}
@@ -98,7 +98,7 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 	if err != nil || len(page.Sessions) != 1 || string(page.Sessions[0].Usage) != string(got.Usage) {
 		t.Fatalf("list totals: %+v %v", page, err)
 	}
-	if _, err = fresh.GetSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err = fresh.GetSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 }
@@ -107,7 +107,7 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, _ := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "cancel-recovery"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "cancel-recovery"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,16 +115,16 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
 	receipt := json.RawMessage(`{"applied":true,"outcome":{"usage":{"tokens":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":13}}}}`)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 1, []store.ExecutionEvent{{Kind: "cancel_receipt", Payload: receipt}}); err != nil {
+	if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 1, []sessions.ExecutionEvent{{Kind: "cancel_receipt", Payload: receipt}}); err != nil {
 		t.Fatal(err)
 	}
 	// Startup recovery has no in-memory cancellation outcome.
-	recovered, err := s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
+	recovered, err := s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,12 +141,12 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	ctx := context.Background()
 	s, _ := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unknown-usage"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unknown-usage"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	usage := func(input int) []store.ExecutionEvent {
-		return []store.ExecutionEvent{{Kind: "usage", Payload: json.RawMessage(fmt.Sprintf(`{"tokens":{"input_tokens":%d,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":%d}}`, input, input+3))}}
+	usage := func(input int) []sessions.ExecutionEvent {
+		return []sessions.ExecutionEvent{{Kind: "usage", Payload: json.RawMessage(fmt.Sprintf(`{"tokens":{"input_tokens":%d,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":%d}}`, input, input+3))}}
 	}
 	// Runtime telemetry keeps counting every recorded snapshot, active Turns
 	// included, and is scoped to the tenant.
@@ -182,7 +182,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 			t.Fatalf("usage = %s, want total %d", got.Usage, want)
 		}
 	}
-	submit := func(key string) store.InputReceipt {
+	submit := func(key string) sessions.InputReceipt {
 		t.Helper()
 		admission, err := s.SubmitMessage(ctx, tenant, session.ID, key, json.RawMessage(`{"text":"measure"}`))
 		if err != nil {
@@ -192,11 +192,11 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	}
 	move := func(turn, from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, turn, store.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, turn, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	finish := func(admission store.InputReceipt, status string) {
+	finish := func(admission sessions.InputReceipt, status string) {
 		t.Helper()
 		if _, err := s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, status, json.RawMessage(`{"done":{}}`), "", admission.Sequence); err != nil {
 			t.Fatal(err)

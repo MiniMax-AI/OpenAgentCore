@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/google/uuid"
 )
@@ -32,7 +33,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 	intent := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: intent}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: intent}
 	// Concurrent callers share one Session and one frozen installation.
 	var group sync.WaitGroup
 	ids := make(chan string, 6)
@@ -118,7 +119,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		t.Fatal("committed retry read deleted sources", err)
 	}
 	assertFrozen(sessionID, "1", first)
-	if _, err = s.ReadEnvironmentSetup(t.Context(), uuid.NewString(), sessionID); !errors.Is(err, ErrNotFound) {
+	if _, err = s.ReadEnvironmentSetup(t.Context(), uuid.NewString(), sessionID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant read frozen Skill", err)
 	}
 }
@@ -135,8 +136,8 @@ func TestSkillReferenceAuthorizationRollsBackSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}}
-	if _, err := s.CreateSession(t.Context(), foreign, input); !errors.Is(err, ErrNotFound) {
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: skill.ID}}}}}
+	if _, err := s.CreateSession(t.Context(), foreign, input); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign reference accepted", err)
 	}
 	var count int

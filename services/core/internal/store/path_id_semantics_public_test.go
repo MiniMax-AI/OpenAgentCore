@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -117,7 +118,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 		t.Fatalf("fixture Turn: %d %s", status, raw)
 	}
 	turn := turns.Data[0].ID
-	hosted, err := s.CreateSession(t.Context(), ownerTenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "path-environment",
+	hosted, err := s.CreateSession(t.Context(), ownerTenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "path-environment",
 		Configuration: json.RawMessage(`{"agent":{"model":"path-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil || hosted.Environment == nil {
 		t.Fatal("fixture Environment", err)

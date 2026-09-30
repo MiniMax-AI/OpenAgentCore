@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -31,18 +32,18 @@ func runtimeActivity(row sqlc.GetRuntimeActivityRow) RuntimeActivity {
 // Revision and the existing Session lock fence a stale lifecycle observation.
 func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, phase string, state json.RawMessage, retainedUntil *time.Time, idleTimeout time.Duration) (RuntimeAllocation, error) {
 	if !runtimeComputeTransition(owner.ComputePhase, phase) || !json.Valid(state) || (owner.ComputePhase == "running" && phase == "quiescing" && idleTimeout <= 0) {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
 	if phase != "running" && (retainedUntil == nil || retainedUntil.IsZero()) {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
 	var object map[string]json.RawMessage
 	if json.Unmarshal(state, &object) != nil || object == nil {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
 	return s.mutateRuntimeAllocation(ctx, owner, true, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
 		if row.ComputeRevision != owner.ComputeRevision || row.ComputePhase != owner.ComputePhase {
-			return sqlc.RuntimeAllocation{}, ErrTurnConflict
+			return sqlc.RuntimeAllocation{}, sessions.ErrTurnConflict
 		}
 		if (phase == "quiescing" && row.ComputePhase == "running") || (phase == "suspending" && row.ComputePhase == "quiescing") {
 			activity, err := q.GetRuntimeActivity(ctx, row.ID)
@@ -50,10 +51,10 @@ func (s *Store) SetRuntimeCompute(ctx context.Context, owner RuntimeAllocation, 
 				return sqlc.RuntimeAllocation{}, err
 			}
 			if activity.Busy || activity.ComputeWakeRequested {
-				return sqlc.RuntimeAllocation{}, ErrTurnConflict
+				return sqlc.RuntimeAllocation{}, sessions.ErrTurnConflict
 			}
 			if phase == "quiescing" && (!runtimeActivity(activity).ReadyToSuspend(idleTimeout) || row.ComputeActivityAt.Time.After(owner.ComputeActivityAt)) {
-				return sqlc.RuntimeAllocation{}, ErrTurnConflict
+				return sqlc.RuntimeAllocation{}, sessions.ErrTurnConflict
 			}
 		}
 		if row.ComputePhase == "suspended" && phase == "restoring" {
@@ -104,7 +105,7 @@ func (s *Store) RuntimeActivity(ctx context.Context, owner RuntimeAllocation) (R
 	}
 	row, err := s.queries.GetRuntimeActivity(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return RuntimeActivity{}, ErrNotFound
+		return RuntimeActivity{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return RuntimeActivity{}, err
@@ -126,13 +127,13 @@ func (s *Store) TouchRuntimeActivity(ctx context.Context, tenant, environment st
 	return s.withPublicSession(ctx, tenant, owned.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		current, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: lookup.TenantID, ID: lookup.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
 		if current.Environment.SessionID != session {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		return q.TouchRuntimeActivity(ctx, sqlc.TouchRuntimeActivityParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
 	})
@@ -176,7 +177,7 @@ func (s *Store) CountRuntimeRetainedAllocations(ctx context.Context, provider st
 func checkRuntimeComputeAdmission(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 	blocked, err := q.RuntimeComputeBlocksAdmission(ctx, session)
 	if err == nil && blocked {
-		return ErrTurnConflict
+		return sessions.ErrTurnConflict
 	}
 	return err
 }

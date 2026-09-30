@@ -8,7 +8,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
@@ -18,8 +17,8 @@ func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
 	h.read(testExecutionRequest)
 	h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "a", Name: "lookup_ticket", Arguments: json.RawMessage(`{}`)})
 	state := functionState(t, h, 1)
-	raw, _ := json.Marshal(store.FunctionResultInput{TurnID: input.TurnID, CallID: state.RequiredActions[0].CallID, Result: json.RawMessage(`{"success":true,"output":"answer"}`)})
-	batch := []store.Input{{Kind: "tool_result", Payload: raw}, {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}}
+	raw, _ := json.Marshal(sessions.FunctionResultInput{TurnID: input.TurnID, CallID: state.RequiredActions[0].CallID, Result: json.RawMessage(`{"success":true,"output":"answer"}`)})
+	batch := []sessions.Input{{Kind: "tool_result", Payload: raw}, {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}}
 	receipts, err := h.s.SubmitInputs(t.Context(), h.tenant, h.session.ID, "mixed", batch)
 	if err != nil {
 		t.Fatal(err)

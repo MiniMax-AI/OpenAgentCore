@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -16,51 +15,21 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-const (
-	EnvironmentInputPending   = "pending"
-	EnvironmentInputAdmitted  = "admitted"
-	EnvironmentInputExpired   = "expired"
-	EnvironmentInputCancelled = "cancelled"
-	EnvironmentInputFailed    = "failed"
-)
-
-// ErrSessionInputPending rejects a new input batch while earlier Session input
-// still waits for admission. It remains a Turn conflict for internal callers.
-var ErrSessionInputPending = fmt.Errorf("%w: session input is still pending", ErrTurnConflict)
-
-// ErrHostedEnvironmentFailed rejects new input on a Session whose hosted
-// Environment failed to provision. It remains ErrEnvironmentUnavailable for
-// internal callers; an expired Environment keeps that plain error.
-var ErrHostedEnvironmentFailed = fmt.Errorf("%w: the hosted environment failed to provision", ErrEnvironmentUnavailable)
-
-// EnvironmentInputReservation is private admission state, not a public Session projection.
-type EnvironmentInputReservation struct {
-	ID        string
-	SessionID string
-	State     string
-	IsInitial bool
-	Inputs    []Input
-	CreatedAt time.Time
-	Deadline  time.Time
-	SettledAt *time.Time
-	Receipts  []InputReceipt
-}
-
 // ReserveEnvironmentInput appends to active work or reserves an idle message batch.
 // The Session lock decides both paths; only promotion can create a new Turn.
-func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID, key string, inputs []Input) (EnvironmentInputReservation, error) {
-	if err := ValidateInputKey(key); err != nil {
-		return EnvironmentInputReservation{}, err
+func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID, key string, inputs []sessions.Input) (sessions.EnvironmentInputReservation, error) {
+	if err := sessions.ValidateInputKey(key); err != nil {
+		return sessions.EnvironmentInputReservation{}, err
 	}
 	batch, encoded, err := validateInitialInputs(inputs)
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
 	tenant, err := parseID(tenantID)
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
-	var result EnvironmentInputReservation
+	var result sessions.EnvironmentInputReservation
 	err = s.withEnvironmentInputSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		audit := func() error {
 			return auditpg.RecordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
@@ -70,10 +39,10 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 		})
 		if err == nil {
 			if !previous.Matches {
-				return ErrIdempotencyConflict
+				return sessions.ErrIdempotencyConflict
 			}
-			result, err = settleEnvironmentInput(ctx, q, tenantID, previous.EnvironmentInputReservation, EnvironmentInputExpired)
-			if err == nil && (result.State == EnvironmentInputPending || result.State == EnvironmentInputAdmitted) {
+			result, err = settleEnvironmentInput(ctx, q, tenantID, previous.EnvironmentInputReservation, sessions.EnvironmentInputExpired)
+			if err == nil && (result.State == sessions.EnvironmentInputPending || result.State == sessions.EnvironmentInputAdmitted) {
 				return audit()
 			}
 			return err
@@ -87,7 +56,7 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 		}
 		if len(receipts) > 0 {
 			// Earlier direct admission has receipts, but never had a reservation or deadline.
-			result = EnvironmentInputReservation{SessionID: sessionID, State: EnvironmentInputAdmitted, Receipts: receipts}
+			result = sessions.EnvironmentInputReservation{SessionID: sessionID, State: sessions.EnvironmentInputAdmitted, Receipts: receipts}
 			return audit()
 		}
 		if err := checkEnvironmentFileWriteGate(ctx, q, session); err != nil {
@@ -95,23 +64,23 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 		}
 		environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: session})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		} else if err != nil {
 			return err
 		}
 		if environment.Environment.Status == "failed" {
 			if kind, err := storedEnvironmentType(environment); err == nil && kind == "openai_hosted" {
-				return ErrHostedEnvironmentFailed
+				return sessions.ErrHostedEnvironmentFailed
 			}
 		}
 		if environment.Environment.Status == "failed" || environment.Environment.Status == "expired" {
-			return ErrEnvironmentUnavailable
+			return sessions.ErrEnvironmentUnavailable
 		}
 		if err := checkEnvironmentInputGate(ctx, q, session, key, encoded); err != nil {
 			return err
 		}
 		if active, err := q.GetActiveTurn(ctx, session); err == nil && !active.ArtifactCaptureStarted {
-			result = EnvironmentInputReservation{SessionID: sessionID, State: EnvironmentInputAdmitted}
+			result = sessions.EnvironmentInputReservation{SessionID: sessionID, State: sessions.EnvironmentInputAdmitted}
 			for position, input := range batch {
 				receipt, err := admitInput(ctx, q, tenantID, session, key, int32(position), input)
 				if err != nil {
@@ -136,21 +105,21 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 		return audit()
 	})
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
 	return result, nil
 }
 
-func (s *Store) GetEnvironmentInputReservation(ctx context.Context, tenantID, sessionID, reservationID string) (EnvironmentInputReservation, error) {
+func (s *Store) GetEnvironmentInputReservation(ctx context.Context, tenantID, sessionID, reservationID string) (sessions.EnvironmentInputReservation, error) {
 	id, err := parseID(reservationID)
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
-	var result EnvironmentInputReservation
+	var result sessions.EnvironmentInputReservation
 	err = s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		row, err := q.GetEnvironmentInputReservation(ctx, sqlc.GetEnvironmentInputReservationParams{SessionID: session, ID: id})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -159,28 +128,28 @@ func (s *Store) GetEnvironmentInputReservation(ctx context.Context, tenantID, se
 		return err
 	})
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
 	return result, nil
 }
 
 // PromoteEnvironmentInput admits and claims work for the retained native preparation.
-func (s *Store) PromoteEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (EnvironmentInputReservation, error) {
+func (s *Store) PromoteEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (sessions.EnvironmentInputReservation, error) {
 	if err := s.checkExecutionAuthority(); err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
-	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, EnvironmentInputAdmitted)
+	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, sessions.EnvironmentInputAdmitted)
 }
 
-func (s *Store) CancelEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (EnvironmentInputReservation, error) {
-	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, EnvironmentInputCancelled)
+func (s *Store) CancelEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (sessions.EnvironmentInputReservation, error) {
+	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, sessions.EnvironmentInputCancelled)
 }
 
 // FailEnvironmentInput settles a confirmed pre-admission failure. The Session
 // lock and pending-state predicate preserve cancellation and newer input.
 func (s *Store) FailEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID, code string) error {
 	if code != "model_provider_required" && code != "runtime_preparation_failed" {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	id, err := parseID(reservationID)
 	if err != nil {
@@ -195,20 +164,20 @@ func (s *Store) FailEnvironmentInput(ctx context.Context, tenantID, sessionID, r
 	})
 }
 
-func (s *Store) ExpireEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (EnvironmentInputReservation, error) {
-	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, EnvironmentInputExpired)
+func (s *Store) ExpireEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID string) (sessions.EnvironmentInputReservation, error) {
+	return s.settleEnvironmentInput(ctx, tenantID, sessionID, reservationID, sessions.EnvironmentInputExpired)
 }
 
-func (s *Store) settleEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID, state string) (EnvironmentInputReservation, error) {
+func (s *Store) settleEnvironmentInput(ctx context.Context, tenantID, sessionID, reservationID, state string) (sessions.EnvironmentInputReservation, error) {
 	id, err := parseID(reservationID)
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
-	var result EnvironmentInputReservation
+	var result sessions.EnvironmentInputReservation
 	err = s.withEnvironmentInputSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		row, err := q.GetEnvironmentInputReservation(ctx, sqlc.GetEnvironmentInputReservationParams{SessionID: session, ID: id})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -217,55 +186,55 @@ func (s *Store) settleEnvironmentInput(ctx context.Context, tenantID, sessionID,
 		return err
 	})
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
 	return result, nil
 }
 
-func settleEnvironmentInput(ctx context.Context, q *sqlc.Queries, tenantID string, row sqlc.EnvironmentInputReservation, state string) (EnvironmentInputReservation, error) {
-	if row.State != EnvironmentInputPending {
+func settleEnvironmentInput(ctx context.Context, q *sqlc.Queries, tenantID string, row sqlc.EnvironmentInputReservation, state string) (sessions.EnvironmentInputReservation, error) {
+	if row.State != sessions.EnvironmentInputPending {
 		return environmentInputOutcome(ctx, q, row)
 	}
 	if err := q.ExpireEnvironmentInputReservation(ctx, sqlc.ExpireEnvironmentInputReservationParams{SessionID: row.SessionID, ID: row.ID}); err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
 	row, err := q.GetEnvironmentInputReservation(ctx, sqlc.GetEnvironmentInputReservationParams{SessionID: row.SessionID, ID: row.ID})
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
 	// Terminal outcomes are successful storage results so settlement is not rolled back.
-	if row.State != EnvironmentInputPending || state == EnvironmentInputExpired {
+	if row.State != sessions.EnvironmentInputPending || state == sessions.EnvironmentInputExpired {
 		return environmentInputOutcome(ctx, q, row)
 	}
 	result, err := environmentInputFromRow(row)
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
-	if state == EnvironmentInputAdmitted {
+	if state == sessions.EnvironmentInputAdmitted {
 		if err := environmentInputMayStart(ctx, q, row.SessionID); err != nil {
-			return EnvironmentInputReservation{}, err
+			return sessions.EnvironmentInputReservation{}, err
 		}
 		for position, input := range result.Inputs {
 			receipt, err := admitInput(ctx, q, tenantID, row.SessionID, row.IdempotencyKey, int32(position), input)
 			if err != nil {
-				return EnvironmentInputReservation{}, err
+				return sessions.EnvironmentInputReservation{}, err
 			}
 			result.Receipts = append(result.Receipts, receipt)
 		}
 	}
 	row, err = q.SettleEnvironmentInputReservation(ctx, sqlc.SettleEnvironmentInputReservationParams{SessionID: row.SessionID, ID: row.ID, State: state})
 	if err != nil {
-		return EnvironmentInputReservation{}, err
+		return sessions.EnvironmentInputReservation{}, err
 	}
-	if state == EnvironmentInputAdmitted {
+	if state == sessions.EnvironmentInputAdmitted {
 		params, err := turnLookup(tenantID, result.SessionID, result.Receipts[0].TurnID)
 		if err != nil {
-			return EnvironmentInputReservation{}, err
+			return sessions.EnvironmentInputReservation{}, err
 		}
-		if _, err := transitionTurn(ctx, q, params, TurnTransition{
+		if _, err := transitionTurn(ctx, q, params, sessions.TurnTransition{
 			ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{}`),
 		}); err != nil {
-			return EnvironmentInputReservation{}, err
+			return sessions.EnvironmentInputReservation{}, err
 		}
 	}
 	result.State = row.State
@@ -282,14 +251,14 @@ func environmentInputMayStart(ctx context.Context, q *sqlc.Queries, session pgty
 		return nil
 	}
 	if err == nil {
-		return ErrTurnConflict
+		return sessions.ErrTurnConflict
 	}
 	return err
 }
 
-func environmentInputOutcome(ctx context.Context, q *sqlc.Queries, row sqlc.EnvironmentInputReservation) (EnvironmentInputReservation, error) {
+func environmentInputOutcome(ctx context.Context, q *sqlc.Queries, row sqlc.EnvironmentInputReservation) (sessions.EnvironmentInputReservation, error) {
 	result, err := environmentInputFromRow(row)
-	if err != nil || row.State != EnvironmentInputAdmitted {
+	if err != nil || row.State != sessions.EnvironmentInputAdmitted {
 		return result, err
 	}
 	result.Receipts, err = inputBatchReceipts(ctx, q, row.SessionID, row.IdempotencyKey, row.Batch)
@@ -299,8 +268,8 @@ func environmentInputOutcome(ctx context.Context, q *sqlc.Queries, row sqlc.Envi
 	return result, err
 }
 
-func environmentInputFromRow(row sqlc.EnvironmentInputReservation) (EnvironmentInputReservation, error) {
-	result := EnvironmentInputReservation{
+func environmentInputFromRow(row sqlc.EnvironmentInputReservation) (sessions.EnvironmentInputReservation, error) {
+	result := sessions.EnvironmentInputReservation{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),
 		State: row.State, IsInitial: row.IsInitial, CreatedAt: row.CreatedAt.Time, Deadline: row.Deadline.Time,
 	}
@@ -308,7 +277,7 @@ func environmentInputFromRow(row sqlc.EnvironmentInputReservation) (EnvironmentI
 		result.SettledAt = &row.SettledAt.Time
 	}
 	if err := json.Unmarshal(row.Batch, &result.Inputs); err != nil {
-		return EnvironmentInputReservation{}, fmt.Errorf("decode Environment input: %w", err)
+		return sessions.EnvironmentInputReservation{}, fmt.Errorf("decode Environment input: %w", err)
 	}
 	return result, nil
 }
@@ -319,10 +288,10 @@ func checkEnvironmentInputGate(ctx context.Context, q *sqlc.Queries, session pgt
 		return err
 	}
 	if !gate.Matches {
-		return ErrIdempotencyConflict
+		return sessions.ErrIdempotencyConflict
 	}
 	if gate.Blocked {
-		return ErrSessionInputPending
+		return sessions.ErrInputPending
 	}
 	return nil
 }

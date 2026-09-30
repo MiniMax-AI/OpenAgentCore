@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -170,7 +170,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	created.ended(t, 5*time.Second)
 
 	connect(first.Session.Environment.ID)
-	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
+	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	if current, err := s.GetSession(t.Context(), tenant, first.Session.ID); err != nil || !current.PendingInput {
@@ -210,7 +210,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settled, err := s.CancelEnvironmentInput(t.Context(), tenant, session, reservation); err != nil || settled.State != store.EnvironmentInputCancelled {
+	if settled, err := s.CancelEnvironmentInput(t.Context(), tenant, session, reservation); err != nil || settled.State != sessions.EnvironmentInputCancelled {
 		t.Fatal(settled.State, err)
 	}
 	if after, err := s.SessionEventCursor(t.Context(), tenant, session); err != nil || after != cursor {

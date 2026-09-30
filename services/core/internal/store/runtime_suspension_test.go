@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -97,7 +98,7 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-			} else if !errors.Is(err, ErrTurnConflict) {
+			} else if !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatalf("unsafe quiesce admitted: %v", err)
 			}
 		})
@@ -124,7 +125,7 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 	for err := range results {
 		if err == nil {
 			winners++
-		} else if errors.Is(err, ErrTurnConflict) {
+		} else if errors.Is(err, sessions.ErrTurnConflict) {
 			conflicts++
 		} else {
 			t.Fatal(err)
@@ -140,7 +141,7 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 	if current.ComputeRevision != owner.ComputeRevision+1 || current.ComputePhase != "quiescing" {
 		t.Fatal("operation intent not durable", current)
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"stale":true}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{"stale":true}`), &until, time.Nanosecond); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("stale phase overwrite", err)
 	}
 	current = runtimeSuspensionStep(t, w, current, "running", nil)
@@ -156,15 +157,15 @@ func TestRuntimeSuspensionCASAndActivityFence(t *testing.T) {
 	if err := w.ClearRuntimeWake(t.Context(), latest, latest.ComputeActivityAt); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), observed, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), observed, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("newer activity was swallowed", err)
 	}
 	for _, invalid := range []json.RawMessage{json.RawMessage(`[]`), json.RawMessage(`null`), json.RawMessage(`false`), json.RawMessage(`{`)} {
-		if _, err := w.SetRuntimeCompute(t.Context(), latest, "running", invalid, nil, 0); !errors.Is(err, ErrInvalidInput) {
+		if _, err := w.SetRuntimeCompute(t.Context(), latest, "running", invalid, nil, 0); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal("non-object compute state accepted", string(invalid), err)
 		}
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), latest, "suspended", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrInvalidInput) {
+	if _, err := w.SetRuntimeCompute(t.Context(), latest, "suspended", json.RawMessage(`{}`), &until, 0); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("running skipped snapshot protocol", err)
 	}
 }
@@ -186,7 +187,7 @@ func TestRuntimeSuspensionWakeDoesNotLoseNewerWork(t *testing.T) {
 	if err != nil || quiet.WakeRequested || !quiet.LastActivity.Equal(before.LastActivity) {
 		t.Fatal("heartbeat or history read touched compute activity", quiet, err)
 	}
-	if err := s.TouchRuntimeActivity(t.Context(), uuid.NewString(), owner.EnvironmentID); !errors.Is(err, ErrNotFound) {
+	if err := s.TouchRuntimeActivity(t.Context(), uuid.NewString(), owner.EnvironmentID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	foreign, err := w.RuntimeActivity(t.Context(), owner)
@@ -241,20 +242,20 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 		t.Fatal("snapshot retention expiry not observed", expired, err)
 	}
 	// Use the earlier unexpired observation to exercise expiry at the database CAS.
-	if _, err := w.SetRuntimeCompute(t.Context(), retained, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), retained, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("expired snapshot restored from stale observation", err)
 	}
 	if err := s.DeleteSession(t.Context(), owner.TenantID, owner.SessionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.TouchRuntimeActivity(t.Context(), owner.TenantID, owner.EnvironmentID); !errors.Is(err, ErrNotFound) {
+	if err := s.TouchRuntimeActivity(t.Context(), owner.TenantID, owner.EnvironmentID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	deleted, err := s.GetRuntimeAllocation(t.Context(), owner.TenantID, owner.EnvironmentID)
 	if err != nil || !deleted.SessionDeleted || deleted.ComputeWakeRequested {
 		t.Fatal("deleted session was woken", deleted, err)
 	}
-	if _, err := w.SetRuntimeCompute(t.Context(), deleted, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrNotFound) {
+	if _, err := w.SetRuntimeCompute(t.Context(), deleted, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted session restored", err)
 	}
 }
@@ -356,7 +357,7 @@ func TestRuntimeSuspensionExpiredRunningAndLostWriterAreFenced(t *testing.T) {
 	runtimeSuspensionCompleted(t, pool, owner)
 	until := time.Now().Add(time.Hour)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("expired running allocation entered checkpoint", err)
 	}
 	if err := w.lease.Close(t.Context()); err != nil {
@@ -406,14 +407,14 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
 			until := time.Now().Add(time.Hour)
-			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, ErrTurnConflict) {
+			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("completion after idle observation did not fence quiesce", err)
 			}
 			activity, err := w.RuntimeActivity(t.Context(), owner)
 			if err != nil || activity.Busy || activity.WakeRequested || activity.ReadyToSuspend(idleTimeout) {
 				t.Fatal("last completion did not restart idle interval", activity, err)
 			}
-			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0); !errors.Is(err, ErrInvalidInput) {
+			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("missing idle timeout accepted", err)
 			}
 			if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); err != nil {

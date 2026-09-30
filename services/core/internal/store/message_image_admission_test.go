@@ -9,11 +9,12 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func imageAdmissionBatch() []store.Input {
-	return []store.Input{
+func imageAdmissionBatch() []sessions.Input {
+	return []sessions.Input{
 		{Kind: "message", Payload: json.RawMessage(`{"text":"do not partially admit"}`)},
 		{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="}]}]}`)},
 	}
@@ -31,8 +32,8 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			worker := startWorker(t, t.Context(), h.db, h.d)
 			defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 			configuration := json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"` + placement + `","workspace_directory":"/workspace"}}`)
-			create := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "image-create", Configuration: configuration, InitialInputs: imageAdmissionBatch()}
-			if _, err := worker.CreateSession(t.Context(), h.tenant, create); !errors.Is(err, store.ErrInvalidInput) {
+			create := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "image-create", Configuration: configuration, InitialInputs: imageAdmissionBatch()}
+			if _, err := worker.CreateSession(t.Context(), h.tenant, create); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("creation accepted an unqualified image", err)
 			}
 			// Create a Session without starting work to exercise both ordinary and
@@ -42,7 +43,7 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, "image-batch", imageAdmissionBatch()); !errors.Is(err, store.ErrInvalidInput) {
+			if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, "image-batch", imageAdmissionBatch()); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("batch accepted an unqualified image", err)
 			}
 			session, err = h.s.GetSession(t.Context(), h.tenant, session.ID)

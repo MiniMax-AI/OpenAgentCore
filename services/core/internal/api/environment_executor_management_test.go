@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -22,7 +22,7 @@ type executorManagementFixture struct {
 	rotate, audited     bool
 	calls               int
 	err                 error
-	connection          store.ExecutorConnectionState
+	connection          sessions.ExecutorConnectionState
 	resolvedEnvironment string
 }
 
@@ -31,18 +31,18 @@ func (f *executorManagementFixture) record(ctx context.Context, principal identi
 	_, f.audited = adminaudit.FromContext(ctx)
 	f.calls++
 }
-func (f *executorManagementFixture) ProjectExecutorCredentialState(ctx context.Context, principal identity.Principal, environment string) (store.ExecutorCredentialState, error) {
+func (f *executorManagementFixture) ProjectExecutorCredentialState(ctx context.Context, principal identity.Principal, environment string) (sessions.ExecutorCredentialState, error) {
 	f.record(ctx, principal, environment, "")
 	resolved := f.resolvedEnvironment
 	if resolved == "" {
 		resolved = environment
 	}
-	return store.ExecutorCredentialState{EnvironmentID: resolved, Credentials: []store.ExecutorCredential{{KeyID: "listed", CreatedAt: time.Unix(1, 0).UTC()}}, Connection: f.connection}, f.err
+	return sessions.ExecutorCredentialState{EnvironmentID: resolved, Credentials: []sessions.ExecutorCredential{{KeyID: "listed", CreatedAt: time.Unix(1, 0).UTC()}}, Connection: f.connection}, f.err
 }
-func (f *executorManagementFixture) IssueProjectExecutorCredential(ctx context.Context, principal identity.Principal, environment, key string, rotate bool) (store.IssuedExecutorCredential, error) {
+func (f *executorManagementFixture) IssueProjectExecutorCredential(ctx context.Context, principal identity.Principal, environment, key string, rotate bool) (sessions.IssuedExecutorCredential, error) {
 	f.record(ctx, principal, environment, key)
 	f.rotate = rotate
-	return store.IssuedExecutorCredential{KeyID: key, EnvironmentID: environment, Token: "synthetic-connect-only"}, f.err
+	return sessions.IssuedExecutorCredential{KeyID: key, EnvironmentID: environment, Token: "synthetic-connect-only"}, f.err
 }
 func (f *executorManagementFixture) RevokeProjectExecutorCredential(ctx context.Context, principal identity.Principal, environment, key string) error {
 	f.record(ctx, principal, environment, key)
@@ -116,7 +116,7 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 			t.Fatal("invalid request accepted", w.Code, body)
 		}
 	}
-	f.err = store.ErrExecutorCredentialExists
+	f.err = sessions.ErrExecutorCredentialExists
 	if w := projectKeyHTTP(h, "POST", path, "admin", body); w.Code != 409 || !strings.Contains(w.Body.String(), `"code":"executor_credential_exists"`) || strings.Contains(w.Body.String(), "synthetic-connect-only") {
 		t.Fatal("uncertain retry", w.Code, w.Body)
 	}
@@ -124,7 +124,7 @@ func TestProjectExecutorCredentialsHTTP(t *testing.T) {
 	if w := projectKeyHTTP(h, "POST", path, "admin", body); w.Code != 409 || !strings.Contains(w.Body.String(), `"code":"project_archived"`) {
 		t.Fatal("archived Project", w.Code, w.Body)
 	}
-	f.err = store.ErrNotFound
+	f.err = sessions.ErrNotFound
 	// Rotating a key_id that was never issued is not found.
 	if w := projectKeyHTTP(h, "POST", path, "admin", `{"key_id":"`+uuid.NewString()+`","rotate":true}`); w.Code != 404 || !f.rotate {
 		t.Fatal("unknown key rotation", w.Code)
@@ -149,14 +149,14 @@ func TestExecutorConnectionListObservation(t *testing.T) {
 		status    int
 	}{
 		{"live", true, nil, "connected", 200}, {"closed", false, nil, "disconnected", 200},
-		{"rotated", false, store.ErrDeviceBindingConflict, "disconnected", 200},
-		{"revoked", false, store.ErrNotFound, "disconnected", 200}, {"database failure", false, errors.New("private-database"), "", 500},
+		{"rotated", false, sessions.ErrDeviceBindingConflict, "disconnected", 200},
+		{"revoked", false, sessions.ErrNotFound, "disconnected", 200}, {"database failure", false, errors.New("private-database"), "", 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			key := callerBinding()
 			at := time.Unix(1, 0).UTC()
 			bound := "bound-key"
-			f := &executorManagementFixture{connection: store.ExecutorConnectionState{DeviceID: "device", BoundKeyID: &bound, EnrolledAt: &at, CredentialHash: "private-digest", EnvironmentStatus: "connected"}}
+			f := &executorManagementFixture{connection: sessions.ExecutorConnectionState{DeviceID: "device", BoundKeyID: &bound, EnrolledAt: &at, CredentialHash: "private-digest", EnvironmentStatus: "connected"}}
 			h := executorManagementHandler(t, key, f, func(_ context.Context, environment, digest string) (bool, error) {
 				if environment != "environment" || digest != "private-digest" {
 					t.Fatal("wrong binding")
@@ -185,13 +185,13 @@ func TestExecutorConnectionListUsesResolvedEnvironment(t *testing.T) {
 	key := callerBinding()
 	f := &executorManagementFixture{
 		resolvedEnvironment: canonical,
-		connection:          store.ExecutorConnectionState{DeviceID: "device", CredentialHash: "private-digest", EnvironmentStatus: "connected"},
+		connection:          sessions.ExecutorConnectionState{DeviceID: "device", CredentialHash: "private-digest", EnvironmentStatus: "connected"},
 	}
 	observations := 0
 	h := executorManagementHandler(t, key, f, func(_ context.Context, environment, digest string) (bool, error) {
 		observations++
 		if environment != canonical || digest != "private-digest" {
-			return false, store.ErrDeviceBindingConflict
+			return false, sessions.ErrDeviceBindingConflict
 		}
 		return true, nil
 	})

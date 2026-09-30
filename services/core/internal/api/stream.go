@@ -12,7 +12,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -22,7 +21,7 @@ import (
 type SessionEvents interface {
 	SessionEventCursor(context.Context, string, string) (int64, error)
 	ListSessionEvents(context.Context, string, string, int64) ([]sessions.SessionChange, error)
-	SessionStreamSnapshot(context.Context, string, string) (store.Session, int64, error)
+	SessionStreamSnapshot(context.Context, string, string) (sessions.Session, int64, error)
 }
 
 // @Summary Stream live Session events
@@ -71,7 +70,7 @@ type streamSettlement func(context.Context) (settled bool, cursor int64, err err
 // sends only events up to that cursor before ending. Later work drained before
 // that read can still be sent. The projection is re-read after a sent Session
 // status event and otherwise at most once a second.
-func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, session store.Session, cursor int64, initial *v1.SessionEvent, status int, settlement streamSettlement) {
+func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, session sessions.Session, cursor int64, initial *v1.SessionEvent, status int, settlement streamSettlement) {
 	id, tenant := session.ID, tenantID(r)
 	write := openEventStream(w, status)
 	if write == nil {
@@ -114,7 +113,7 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, ses
 			return
 		}
 		changes, err := h.SessionEvents.ListSessionEvents(r.Context(), tenant, id, cursor)
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, sessions.ErrNotFound) {
 			return
 		}
 		if err != nil {
@@ -148,7 +147,7 @@ func (h *Handler) serveSessionEvents(w http.ResponseWriter, r *http.Request, ses
 		if settlement != nil && (recheck || time.Since(checked) >= time.Second) {
 			recheck, checked = false, time.Now()
 			settled, snapshot, err := settlement(r.Context())
-			if errors.Is(err, store.ErrNotFound) || r.Context().Err() != nil {
+			if errors.Is(err, sessions.ErrNotFound) || r.Context().Err() != nil {
 				return
 			}
 			if err != nil {
@@ -235,7 +234,7 @@ func sessionStatusEvent(eventType string) bool {
 	return false
 }
 
-func streamResponse(session store.Session, change sessions.SessionChange, executorURL string) (v1.SessionEvent, error) {
+func streamResponse(session sessions.Session, change sessions.SessionChange, executorURL string) (v1.SessionEvent, error) {
 	event := change.Event
 	if change.Turn == nil && change.EnvironmentInputActivity == nil && change.EnvironmentFailure == nil {
 		return withTurnUsage(event), nil

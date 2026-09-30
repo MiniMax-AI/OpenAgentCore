@@ -11,18 +11,17 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type turnReadStore struct {
 	tenant, sessionID, turnID, cursor string
 	limit                             int
 	ascending                         bool
-	session                           store.Session
+	session                           sessions.Session
 	turn                              sessions.Turn
 }
 
-func (s *turnReadStore) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
+func (s *turnReadStore) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
 	s.tenant, s.sessionID = tenant, id
 	return s.session, nil
 }
@@ -30,15 +29,15 @@ func (s *turnReadStore) GetTurn(_ context.Context, tenant, session, id string) (
 	s.tenant, s.sessionID, s.turnID = tenant, session, id
 	return s.turn, nil
 }
-func (s *turnReadStore) ListTurns(_ context.Context, tenant, session, cursor string, limit int, asc bool) (store.TurnPage, error) {
+func (s *turnReadStore) ListTurns(_ context.Context, tenant, session, cursor string, limit int, asc bool) (sessions.TurnPage, error) {
 	s.tenant, s.sessionID, s.cursor, s.limit, s.ascending = tenant, session, cursor, limit, asc
-	return store.TurnPage{Turns: []sessions.Turn{s.turn}, NextCursor: s.turn.ID}, nil
+	return sessions.TurnPage{Turns: []sessions.Turn{s.turn}, NextCursor: s.turn.ID}, nil
 }
 
 func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
-	s := &turnReadStore{session: store.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}, turn: sessions.Turn{ID: "turn", SessionID: "session", Status: sessions.TurnFailed, CreatedAt: time.Unix(1700000000, 999), Outcome: json.RawMessage(`{"error":"Bearer SECRET","done":{"metadata":{"password":"SECRET"}}}`)}}
+	s := &turnReadStore{session: sessions.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}, turn: sessions.Turn{ID: "turn", SessionID: "session", Status: sessions.TurnFailed, CreatedAt: time.Unix(1700000000, 999), Outcome: json.RawMessage(`{"error":"Bearer SECRET","done":{"metadata":{"password":"SECRET"}}}`)}}
 	h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {
-		f.sessions.getSession, f.sessionHistory.getTurn, f.sessionHistory.listTurns = s.GetSession, s.GetTurn, s.ListTurns
+		f.sessions.getSession, f.turns.getTurn, f.turns.listTurns = s.GetSession, s.GetTurn, s.ListTurns
 	})
 	request := func(path string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodGet, path, nil)
@@ -84,7 +83,7 @@ func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
 }
 
 func TestTurnProjectionPreservesLifecycle(t *testing.T) {
-	session := store.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}
+	session := sessions.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}
 	for _, status := range []string{sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting, sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled} {
 		turn := sessions.Turn{Status: status, CreatedAt: time.Unix(1700000000, 0), StartedAt: time.Unix(1700000001, 0), CompletedAt: time.Unix(1700000002, 0)}
 		got, err := turnResponse(session, turn)

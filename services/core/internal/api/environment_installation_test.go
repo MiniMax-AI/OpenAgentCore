@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -23,20 +23,20 @@ type installationFixture struct {
 
 func (f *installationFixture) AuthorizeEnvironmentInstallation(_ context.Context, p identity.Principal, environment, version string) (string, int64, error) {
 	if p.TenantID != f.session.TenantID || environment != f.session.Environment.ID || version != "build" {
-		return "", 0, store.ErrNotFound
+		return "", 0, sessions.ErrNotFound
 	}
 	f.authorizedEnvironment = environment
 	return "short-lived-install-grant", 2000000000, nil
 }
-func (f *installationFixture) ValidateEnvironmentInstallation(context.Context, string, string) (store.InstallationAuthorization, error) {
-	return store.InstallationAuthorization{}, store.ErrInstallationAuthorization
+func (f *installationFixture) ValidateEnvironmentInstallation(context.Context, string, string) (sessions.InstallationAuthorization, error) {
+	return sessions.InstallationAuthorization{}, sessions.ErrInstallationAuthorization
 }
 
 func TestSelfHostedCreationReturnsInstallationWithoutWebCredential(t *testing.T) {
 	f := &installationFixture{}
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}).ResolveAPIKey
-	fakes.sessions.findSessionCreation, fakes.sessions.createSession = f.FindSessionCreation, f.CreateSession
+	fakes.sessionCreation.findSessionCreation, fakes.sessionCreation.createSession = f.FindSessionCreation, f.CreateSession
 	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	fakes.environments.authorizeEnvironmentInstallation, fakes.environments.validateEnvironmentInstallation = f.AuthorizeEnvironmentInstallation, f.ValidateEnvironmentInstallation
 	deps.Execution = fakes.execution()

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func decodeInitialFiles(raw json.RawMessage) ([]environmentconfig.InitialFile, error) {
@@ -14,7 +14,7 @@ func decodeInitialFiles(raw json.RawMessage) ([]environmentconfig.InitialFile, e
 	}
 	var entries []json.RawMessage
 	if json.Unmarshal(raw, &entries) != nil || len(entries) > 50 {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	files := make([]environmentconfig.InitialFile, 0, len(entries))
 	for _, entry := range entries {
@@ -25,7 +25,7 @@ func decodeInitialFiles(raw json.RawMessage) ([]environmentconfig.InitialFile, e
 			FileID *string `json:"file_id"`
 		}
 		if decodeInputObject(entry, &in, "type", "path", "data", "file_id") != nil {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(entry, &fields)
@@ -33,20 +33,20 @@ func decodeInitialFiles(raw json.RawMessage) ([]environmentconfig.InitialFile, e
 		switch in.Type {
 		case "inline":
 			if _, exists := fields["file_id"]; exists || in.Data == nil || len(*in.Data) > base64.StdEncoding.EncodedLen(5<<20) {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
 			var err error
 			f.Data, err = base64.StdEncoding.Strict().DecodeString(*in.Data)
 			if err != nil {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
 		case "file_id":
 			if _, exists := fields["data"]; exists || in.FileID == nil {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
 			f.FileID = *in.FileID
 		default:
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		files = append(files, f)
 	}

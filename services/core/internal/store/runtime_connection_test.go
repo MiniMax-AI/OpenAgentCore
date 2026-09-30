@@ -16,7 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
@@ -90,7 +90,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	if err != nil || got.LastTurn != nil || got.EnvironmentInputActivity != nil {
 		t.Fatal("connection fabricated native execution", err)
 	}
-	if _, err := s.GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment access", err)
 	}
 	p.unavailable = true

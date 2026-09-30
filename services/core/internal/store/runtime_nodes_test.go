@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -41,13 +42,13 @@ func onlineManagerNode(t *testing.T, s *Store, id string) string {
 	}
 	return connection
 }
-func managerSessionInput(key string) CreateSessionInput {
+func managerSessionInput(key string) sessions.CreateSession {
 	return environmentInput(key, "openai_hosted", "/workspace")
 }
 
 // createSessionOnNode steers automatic placement in multi-node tests: only node
 // stays provider-ready while the Session is created.
-func createSessionOnNode(t *testing.T, s *Store, tenant string, input CreateSessionInput, node string) (Session, error) {
+func createSessionOnNode(t *testing.T, s *Store, tenant string, input sessions.CreateSession, node string) (sessions.Session, error) {
 	t.Helper()
 	// Use the same authenticated readiness observations as the scheduler. The
 	// compatibility provider_ready column alone is not admission authority.
@@ -100,7 +101,7 @@ func sessionRuntimePlacement(ctx context.Context, s *Store, tenant, session stri
 		return sessionPlacement{}, err
 	}
 	if value.Environment == nil {
-		return sessionPlacement{}, ErrNotFound
+		return sessionPlacement{}, sessions.ErrNotFound
 	}
 	id, err := parseID(value.Environment.ID)
 	if err != nil {
@@ -108,7 +109,7 @@ func sessionRuntimePlacement(ctx context.Context, s *Store, tenant, session stri
 	}
 	p, err := s.queries.GetRuntimePlacement(ctx, id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sessionPlacement{}, ErrNotFound
+		return sessionPlacement{}, sessions.ErrNotFound
 	}
 	return sessionPlacement{NodeID: runtimeUUID(p.NodeID), Available: p.Available && !p.ReleasedAt.Valid}, err
 }
@@ -116,7 +117,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	s, _, d := managerFixture(t, 1, 4)
 	tenant := uuid.NewString()
 	var wg sync.WaitGroup
-	results := make(chan Session, 16)
+	results := make(chan sessions.Session, 16)
 	failures := make(chan error, 16)
 	for range 16 {
 		wg.Add(1)
@@ -141,7 +142,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if successes != 1 {
 		t.Fatal("overbooked node", successes)
 	}
-	var retained Session
+	var retained sessions.Session
 	for session := range results {
 		if session.ID != "" {
 			retained = session
@@ -170,7 +171,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if err != nil || replay.ID != first.ID {
 		t.Fatal("offline retry changed Session", replay, err)
 	}
-	if _, err := sessionRuntimePlacement(t.Context(), s, uuid.NewString(), first.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := sessionRuntimePlacement(t.Context(), s, uuid.NewString(), first.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign placement leaked", err)
 	}
 	placement, err := sessionRuntimePlacement(t.Context(), s, tenant, first.ID)

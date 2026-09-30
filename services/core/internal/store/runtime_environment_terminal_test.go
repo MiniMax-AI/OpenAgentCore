@@ -7,6 +7,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -17,7 +18,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			s, pool := testStore(t)
 			tenant := uuid.NewString()
 			input := environmentInput("initial-terminal", "openai_hosted", "/workspace")
-			input.InitialInputs = []Input{messageInput("initial")}
+			input.InitialInputs = []sessions.Input{messageInput("initial")}
 			session, err := s.CreateSession(t.Context(), tenant, input)
 			if err != nil {
 				t.Fatal(err)
@@ -45,17 +46,17 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 				t.Fatal("terminal projection", ended, err)
 			}
 			// Only a hosted failure records a provisioning failure, with the generic reason.
-			if failure := ended.EnvironmentFailure; expired != (failure == nil) || !expired && (failure.Reason != provisioningFailureReason || failure.FailedAt.IsZero()) {
+			if failure := ended.EnvironmentFailure; expired != (failure == nil) || !expired && (failure.Reason != sessions.ProvisioningFailureReason || failure.FailedAt.IsZero()) {
 				t.Fatal("terminal failure projection", failure)
 			}
 			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("terminal credential remained usable", err)
 			}
 			failed, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
-			if err != nil || failed.State != EnvironmentInputFailed || len(failed.Receipts) != 0 || failed.SettledAt == nil || !failed.Deadline.Equal(reservation.Deadline) {
+			if err != nil || failed.State != sessions.EnvironmentInputFailed || len(failed.Receipts) != 0 || failed.SettledAt == nil || !failed.Deadline.Equal(reservation.Deadline) {
 				t.Fatal("late preparation resurrected failed input", failed, err)
 			}
-			if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []Input{messageInput("later")}); !errors.Is(err, ErrEnvironmentUnavailable) || expired == errors.Is(err, ErrHostedEnvironmentFailed) {
+			if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) || expired == errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
 				t.Fatal("terminal environment admitted new input", err)
 			}
 			if _, err := s.CreateSession(t.Context(), tenant, input); err != nil {
@@ -82,7 +83,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 					*environment.Environment.Error != (v1.StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}) {
 					t.Fatal("missing safe environment failure", events)
 				}
-				if events[1].Event.Type != "error" || failure == nil || *failure != (v1.StreamError{Type: "environment_error", Code: "sandbox_error", Message: provisioningFailureReason}) {
+				if events[1].Event.Type != "error" || failure == nil || *failure != (v1.StreamError{Type: "environment_error", Code: "sandbox_error", Message: sessions.ProvisioningFailureReason}) {
 					t.Fatal("missing safe error event", events)
 				}
 				if snapshot := last.EnvironmentFailure; snapshot == nil || snapshot.Reason != ended.EnvironmentFailure.Reason || !snapshot.FailedAt.Equal(ended.EnvironmentFailure.FailedAt) {
@@ -98,10 +99,10 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if next, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
 				t.Fatal("cleanup repeated terminal events", next, err)
 			}
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, uuid.NewString()); !errors.Is(err, ErrInvalidInput) {
+			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, uuid.NewString()); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("late connection revived terminal environment", err)
 			}
-			if _, err := writer.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, ErrTurnConflict) {
+			if _, err := writer.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("unknown creation was forgotten", err)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
@@ -113,7 +114,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	s, pool := testStore(t)
 	tenant := uuid.NewString()
 	input := environmentInput("rollback-terminal", "openai_hosted", "/workspace")
-	input.InitialInputs = []Input{messageInput("initial")}
+	input.InitialInputs = []sessions.Input{messageInput("initial")}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -137,7 +138,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	if err != nil || current.Environment.Status != "pending" || current.EnvironmentInputActivity != nil {
 		t.Fatal("partial public termination", err)
 	}
-	if reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID); reservation.State != EnvironmentInputPending {
+	if reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID); reservation.State != sessions.EnvironmentInputPending {
 		t.Fatal("partial input failure", reservation)
 	}
 	allocation, err := s.GetRuntimeAllocation(t.Context(), tenant, session.Environment.ID)
@@ -146,29 +147,5 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	}
 	if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || !ok {
 		t.Fatal("partial credential revocation", err)
-	}
-}
-
-// Reasons contain only a fixed label and an exit status. Setup and Python labels
-// match official samples; npm, system, file and Skill labels are unverified.
-func TestProvisioningFailureReasons(t *testing.T) {
-	for failure, want := range map[ProvisioningFailure]string{
-		{Step: ProvisioningSetupCommand, Index: 0, ExitCode: 3}:  `Failed to provision environment: script "setup_commands[0]" failed with exit code 3`,
-		{Step: ProvisioningSetupCommand, Index: 12, ExitCode: 1}: `Failed to provision environment: script "setup_commands[12]" failed with exit code 1`,
-		{Step: ProvisioningPythonPackages, ExitCode: 1}:          `Failed to provision environment: script "Python package installation" failed with exit code 1`,
-		{Step: ProvisioningNPMPackages, ExitCode: 1}:             `Failed to provision environment: script "npm package installation" failed with exit code 1`,
-		{Step: ProvisioningInitialFile}:                          "Failed to provision environment: initial file installation failed",
-		{Step: ProvisioningSkill}:                                "Failed to provision environment: Skill installation failed",
-		// Missing or impossible statuses, unknown steps and old receipts stay generic.
-		{Step: ProvisioningSetupCommand, Index: 0}:               provisioningFailureReason,
-		{Step: ProvisioningSetupCommand, Index: -1, ExitCode: 3}: provisioningFailureReason,
-		{Step: ProvisioningPythonPackages, ExitCode: 256}:        provisioningFailureReason,
-		{Step: ProvisioningNPMPackages, ExitCode: -9}:            provisioningFailureReason,
-		{Step: "configure", ExitCode: 1}:                         provisioningFailureReason,
-		{}:                                                       provisioningFailureReason,
-	} {
-		if got := failure.reason(); got != want || len(got) > 256 {
-			t.Errorf("%+v: %q", failure, got)
-		}
 	}
 }

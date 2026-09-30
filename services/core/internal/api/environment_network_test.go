@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestRestrictedNetworkPublicMetadataPreservesInput(t *testing.T) {
@@ -25,7 +25,7 @@ func TestRestrictedNetworkPublicMetadataPreservesInput(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(env.Network.AllowedDomains, domains) {
 		t.Fatal("inline input changed", env, err)
 	}
-	session, err := hostedSessionEnvironment(store.Environment{ID: "environment", Configuration: raw})
+	session, err := hostedSessionEnvironment(sessions.Environment{ID: "environment", Configuration: raw})
 	if err != nil || !reflect.DeepEqual(session.Network.AllowedDomains, domains) {
 		t.Fatal("frozen Session metadata changed", session, err)
 	}

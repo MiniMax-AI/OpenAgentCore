@@ -26,14 +26,14 @@ func TestSessionCreationIdentityConvergesOnFrozenSnapshot(t *testing.T) {
 	tenant := uuid.NewString()
 	request := json.RawMessage(`{"agent_id":"source","agent":{"tools":[{"parameters":{"const":9007199254740993}}]}}`)
 	const count = 8
-	results := make(chan SessionCreation, count)
+	results := make(chan sessions.Creation, count)
 	errs := make(chan error, count)
 	var wg sync.WaitGroup
 	for i := range count {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "same", CreationRequest: request, Configuration: json.RawMessage(fmt.Sprintf(`{"resolved":%d}`, i)), InitialInputs: []Input{messageInput("one")}}
+			input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "same", CreationRequest: request, Configuration: json.RawMessage(fmt.Sprintf(`{"resolved":%d}`, i)), InitialInputs: []sessions.Input{messageInput("one")}}
 			result, err := s.CreateSessionStream(ctx, tenant, input)
 			results <- result
 			errs <- err
@@ -47,7 +47,7 @@ func TestSessionCreationIdentityConvergesOnFrozenSnapshot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var first SessionCreation
+	var first sessions.Creation
 	created := 0
 	for result := range results {
 		if first.Session.ID == "" {
@@ -78,13 +78,13 @@ func TestSessionCreationIdentityConvergesOnFrozenSnapshot(t *testing.T) {
 	if err != nil || retry.Created || retry.Session.ID != first.Session.ID || retry.Cursor == 0 {
 		t.Fatal(retry, err)
 	}
-	if _, err := restarted.FindSessionCreation(ctx, tenant, "same", json.RawMessage(`{"agent_id":"source","agent":{"tools":[{"parameters":{"const":9007199254740992}}]}}`), FixtureCreator()); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := restarted.FindSessionCreation(ctx, tenant, "same", json.RawMessage(`{"agent_id":"source","agent":{"tools":[{"parameters":{"const":9007199254740992}}]}}`), FixtureCreator()); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("numeric identity collapsed", err)
 	}
-	if _, err := restarted.FindSessionCreation(ctx, uuid.NewString(), "same", request, FixtureCreator()); !errors.Is(err, ErrNotFound) {
+	if _, err := restarted.FindSessionCreation(ctx, uuid.NewString(), "same", request, FixtureCreator()); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign lookup", err)
 	}
-	if _, err := restarted.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "same", CreationRequest: json.RawMessage(`{"agent_id":"changed"}`), Configuration: first.Session.Configuration}); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := restarted.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "same", CreationRequest: json.RawMessage(`{"agent_id":"changed"}`), Configuration: first.Session.Configuration}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed caller admitted", err)
 	}
 }
@@ -93,13 +93,13 @@ func TestSessionCreationIdentityDoesNotInventHistoricalIntent(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "historical", Configuration: json.RawMessage(`{"agent":{"id":"source","instructions":"original"}}`)}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "historical", Configuration: json.RawMessage(`{"agent":{"id":"source","instructions":"original"}}`)}
 	first, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	input.CreationRequest = json.RawMessage(`{"agent_id":"source"}`)
-	if _, err := s.FindSessionCreation(ctx, tenant, input.IdempotencyKey, input.CreationRequest, FixtureCreator()); !errors.Is(err, ErrNotFound) {
+	if _, err := s.FindSessionCreation(ctx, tenant, input.IdempotencyKey, input.CreationRequest, FixtureCreator()); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	retry, err := s.CreateSession(ctx, tenant, input)
@@ -111,7 +111,7 @@ func TestSessionCreationIdentityDoesNotInventHistoricalIntent(t *testing.T) {
 		t.Fatal("historical intent was manufactured", hash, err)
 	}
 	input.Configuration = json.RawMessage(`{"agent":{"id":"source","instructions":"changed"}}`)
-	if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("historical retry rules changed", err)
 	}
 }
@@ -126,7 +126,7 @@ func TestProviderKeyEntersRetryHashesOnlyAsKeyedFingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "same-request", ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceSession,
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "same-request", ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceSession,
 		Configuration: []byte(`{"agent":{"model":"m"},"environment":{"type":"openai_hosted"}}`), CreationRequest: intent}
 	var hashes [2][2]string
 	for index, seed := range []byte{71, 72} {
@@ -148,7 +148,7 @@ func TestProviderKeyEntersRetryHashesOnlyAsKeyedFingerprint(t *testing.T) {
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{71}, 32))
 	unreadable := input
 	unreadable.IdempotencyKey, unreadable.CreationRequest = "unreadable", json.RawMessage(`{"x_agents_core":{"model_provider":"hash-key-canary"}}`)
-	if _, err := NewWithCredentialCipher(pool, cipher).CreateSession(t.Context(), uuid.NewString(), unreadable); !errors.Is(err, ErrInvalidInput) {
+	if _, err := NewWithCredentialCipher(pool, cipher).CreateSession(t.Context(), uuid.NewString(), unreadable); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("unreadable provider intent was hashed", err)
 	}
 }

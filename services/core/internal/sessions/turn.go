@@ -36,3 +36,42 @@ type Turn struct {
 func TerminalStatus(status string) bool {
 	return status == TurnCompleted || status == TurnFailed || status == TurnCancelled
 }
+
+type TurnTransition struct {
+	ExpectedStatus string
+	Status         string
+	Outcome        json.RawMessage
+}
+
+type TurnPage struct {
+	Turns      []Turn
+	NextCursor string
+}
+
+type TurnEvent struct {
+	Ordinal   int32
+	Kind      string
+	Payload   json.RawMessage
+	CreatedAt time.Time
+}
+
+type ExecutionEvent struct {
+	Kind    string          `json:"kind"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+type ExecutionWork struct{ TenantID, SessionID, TurnID, Status string }
+
+// ExecutionDevice contains safe identity only, never a device credential.
+type ExecutionDevice struct {
+	ID            string
+	Name          string
+	EnvironmentID string
+}
+
+// ExecutionBinding identifies the Runtime and native history selected for one API Session.
+type ExecutionBinding struct {
+	Device          ExecutionDevice
+	NativeSessionID string
+	HasStartedTurn  bool
+}

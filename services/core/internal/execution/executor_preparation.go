@@ -7,7 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // prepareTurnExecutor reserves one admission on the Runtime-owned Executor.
@@ -42,7 +42,7 @@ func (d *Dispatcher) awaitTurnExecutor(ctx context.Context, tenant, session, tur
 				return err
 			}
 			if current.Status != expectedStatus || !current.CancelRequestedAt.IsZero() {
-				return store.ErrTurnConflict
+				return sessions.ErrTurnConflict
 			}
 		case env, ok := <-prepared.sub.Events:
 			if !ok {

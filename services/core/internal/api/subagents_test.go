@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type subagentReadStore struct {
@@ -233,8 +233,8 @@ func TestSubagentRoutesUseExistingAuthenticationAndErrors(t *testing.T) {
 			err    error
 			status int
 		}{
-			{store.ErrNotFound, 404},
-			{store.ErrInvalidInput, 400},
+			{sessions.ErrNotFound, 404},
+			{sessions.ErrInvalidInput, 400},
 			{errors.New("SECRET native failure"), 500},
 		} {
 			s.err = tc.err

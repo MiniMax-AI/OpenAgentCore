@@ -49,13 +49,13 @@ func TestTurnPaginationRetainsScopeAndOrder(t *testing.T) {
 		}
 	}
 	otherTenant, otherSession := newTurnSession(t, s)
-	sameTenantSession, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
+	sameTenantSession, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, scope := range [][2]string{{otherTenant, session.ID}, {tenant, otherSession.ID}, {tenant, uuid.NewString()}, {tenant, sameTenantSession.ID}} {
 		_, err := s.ListTurns(ctx, scope[0], scope[1], ids[0], 1, true)
-		if !errors.Is(err, ErrNotFound) {
+		if !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign cursor/session accepted: %v", err)
 		}
 	}
@@ -64,7 +64,7 @@ func TestTurnPaginationRetainsScopeAndOrder(t *testing.T) {
 		t.Fatalf("empty session: %+v %v", empty, err)
 	}
 	for _, limit := range []int{0, 101} {
-		if _, err := s.ListTurns(ctx, tenant, session.ID, "", limit, false); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.ListTurns(ctx, tenant, session.ID, "", limit, false); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("limit accepted: %v", err)
 		}
 	}

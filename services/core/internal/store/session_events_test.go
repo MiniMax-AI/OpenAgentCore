@@ -18,7 +18,7 @@ func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "commit"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "commit"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "stream"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "stream"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,10 +71,10 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if before != after {
 		t.Fatal("input retry published duplicate events")
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	batch := []store.ExecutionEvent{
+	batch := []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":"partial"}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":" partial"}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":" partial"}`)},
@@ -86,7 +86,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 		}
 	}
 	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []store.ExecutionEvent{
+	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"discarded","delta":"rollback"}`)},
 		{Kind: "output_message", Payload: json.RawMessage(`{"status":"invalid"}`)},
 	}); err == nil {
@@ -138,7 +138,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if counts["agent.session.turn.output_text.delta"] != 3 || counts["agent.session.turn.item.done"] != 2 {
 		t.Fatal(counts)
 	}
-	if _, err = s.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, store.ErrNotFound) {
+	if _, err = s.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign event access", err)
 	}
 	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
@@ -155,7 +155,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "retention"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "retention"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,9 +164,9 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	inputs := make([]store.Input, 64)
+	inputs := make([]sessions.Input, 64)
 	for i := range inputs {
-		inputs[i] = store.Input{Kind: "message", Payload: json.RawMessage(`{"text":"input"}`)}
+		inputs[i] = sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"input"}`)}
 	}
 	for range 5 {
 		if _, err = s.SubmitInputs(ctx, tenant, session.ID, uuid.NewString(), inputs); err != nil {
@@ -177,7 +177,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	if err = pool.QueryRow(ctx, "SELECT count(*) FROM session_events WHERE session_id=$1", session.ID).Scan(&count); err != nil || count != 256 {
 		t.Fatal(count, err)
 	}
-	if _, err = s.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, store.ErrStreamGap) {
+	if _, err = s.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrStreamGap) {
 		t.Fatal("lagging reader did not detect missing events", err)
 	}
 	cursor, err := s.SessionEventCursor(ctx, tenant, session.ID)

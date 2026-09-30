@@ -20,7 +20,7 @@ func TestSessionExecutionBindingRetainsStartedExecutionRequirement(t *testing.T)
 		if err != nil || bound.HasStartedTurn != want || bound.NativeSessionID != "" {
 			t.Fatalf("binding=%+v err=%v", bound, err)
 		}
-		if _, err := st.GetSessionExecutionBinding(t.Context(), foreign, session.ID); !errors.Is(err, ErrNotFound) {
+		if _, err := st.GetSessionExecutionBinding(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign binding", err)
 		}
 	}

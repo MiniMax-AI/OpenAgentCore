@@ -50,7 +50,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 					mutated <- h.s.CommitLegacyDeletion(t.Context(), h.tenant, candidateSession)
 					return
 				}
-				_, err := h.s.SubmitInputs(t.Context(), h.tenant, candidateSession, "cancel", []store.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
+				_, err := h.s.SubmitInputs(t.Context(), h.tenant, candidateSession, "cancel", []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
 				mutated <- err
 			}}
 			instrumented, err := pgxpool.NewWithConfig(t.Context(), cfg)
@@ -85,7 +85,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 				t.Fatal("candidate was not cancelled", err)
 			}
 			// A later Session must still execute through this same Worker.
-			h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "healthy", Configuration: h.session.Configuration})
+			h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "healthy", Configuration: h.session.Configuration})
 			if err != nil {
 				t.Fatal(err)
 			}

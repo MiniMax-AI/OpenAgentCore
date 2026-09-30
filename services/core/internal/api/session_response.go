@@ -6,10 +6,9 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func sessionResponse(session store.Session, executorURL string) (v1.Session, error) {
+func sessionResponse(session sessions.Session, executorURL string) (v1.Session, error) {
 	var cfg configuration
 	if err := json.Unmarshal(session.Configuration, &cfg); err != nil || cfg.Agent.ID == "" || cfg.Agent.Model == "" {
 		return v1.Session{}, errors.New("unsupported stored session configuration")
@@ -107,7 +106,7 @@ func sessionResponse(session store.Session, executorURL string) (v1.Session, err
 	return response, nil
 }
 
-func sessionEnvironment(session store.Session, kind, executorURL string) (v1.SessionEnvironment, error) {
+func sessionEnvironment(session sessions.Session, kind, executorURL string) (v1.SessionEnvironment, error) {
 	if kind == "none" {
 		return v1.SessionEnvironment{Type: "none"}, nil
 	}

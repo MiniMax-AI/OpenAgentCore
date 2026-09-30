@@ -8,6 +8,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"testing"
 )
@@ -39,7 +40,7 @@ func FixtureModelProvider(harness string) *v1.ModelProviderInput {
 // WithFixtureModelProvider adds the fixture provider, as a Session-supplied
 // bundle, to a hosted or self-hosted creation that has none. The store must
 // have a credential key; other inputs are returned unchanged.
-func WithFixtureModelProvider(input CreateSessionInput) CreateSessionInput {
+func WithFixtureModelProvider(input sessions.CreateSession) sessions.CreateSession {
 	var configuration struct {
 		Environment struct {
 			Type string `json:"type"`

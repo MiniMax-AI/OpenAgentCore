@@ -16,7 +16,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -51,7 +50,7 @@ func TestBusyStreamRechecksAuthorityAndFailsClosed(t *testing.T) {
 	key := callerBinding()
 	key.TokenSHA256 = runtimedevice.HashCredential("stream")
 	resolver := &streamAuthorityResolver{keys: projectKeys(t, key)}
-	f := &busyAuthorityStream{streamFixture: &streamFixture{session: store.Session{ID: uuid.NewString(), TenantID: key.TenantID, CreatedAt: time.Now(), Metadata: map[string]string{}, Configuration: json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[]},"environment":{"type":"none"}}`)}}}
+	f := &busyAuthorityStream{streamFixture: &streamFixture{session: sessions.Session{ID: uuid.NewString(), TenantID: key.TenantID, CreatedAt: time.Now(), Metadata: map[string]string{}, Configuration: json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[]},"environment":{"type":"none"}}`)}}}
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = resolver.ResolveAPIKey
 	f.serve(fakes)

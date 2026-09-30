@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,11 +27,11 @@ type SubagentIdentity struct {
 func projectSubagentIdentity(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, ordinal int32, raw json.RawMessage) error {
 	var identity proto.SubagentIdentityPayload
 	if json.Unmarshal(raw, &identity) != nil || identity.NativeCreatedAt <= 0 || identity.NativeID == identity.ParentNativeID {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	for _, value := range []string{identity.NativeID, identity.ParentNativeID, identity.ParentTurnID, identity.SourceItemID} {
 		if value == "" || len(value) > 512 || strings.TrimSpace(value) != value || strings.ContainsAny(value, "\x00\r\n") {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 	}
 	id, err := q.PutSubagentIdentity(ctx, sqlc.PutSubagentIdentityParams{
@@ -39,7 +40,7 @@ func projectSubagentIdentity(ctx context.Context, q *sqlc.Queries, session, turn
 		NativeCreatedAt: identity.NativeCreatedAt, FirstTurnID: turn, FirstEventOrdinal: ordinal,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrIdempotencyConflict
+		return sessions.ErrIdempotencyConflict
 	}
 	if err != nil {
 		return err
@@ -55,7 +56,7 @@ func (s *Store) GetSubagentIdentity(ctx context.Context, tenantID, sessionID, na
 	}
 	row, err := s.queries.GetSubagentIdentity(ctx, sqlc.GetSubagentIdentityParams{TenantID: p.TenantID, SessionID: p.ID, NativeID: nativeID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SubagentIdentity{}, ErrNotFound
+		return SubagentIdentity{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return SubagentIdentity{}, err

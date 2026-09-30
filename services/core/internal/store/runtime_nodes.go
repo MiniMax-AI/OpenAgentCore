@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type RuntimeNodeAllocation struct {
@@ -39,7 +41,7 @@ func (s *Store) ListNodeRuntimeAllocations(ctx context.Context, nodeID string) (
 		return nil, err
 	}
 	if _, err := s.queries.GetRuntimeNode(ctx, id); errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, sessions.ErrNotFound
 	} else if err != nil {
 		return nil, err
 	}

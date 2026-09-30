@@ -7,7 +7,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -23,16 +23,16 @@ type runtimeStepFailure struct{ exitCode int }
 
 func (*runtimeStepFailure) Error() string { return "environment initialization operation failed" }
 
-func (operation runtimeSetupOperation) provisioningFailure(exitCode int) store.ProvisioningFailure {
+func (operation runtimeSetupOperation) provisioningFailure(exitCode int) sessions.ProvisioningFailure {
 	action := operation.Request.Action
 	if operation.Request.Initialization != nil {
 		action = operation.Request.Initialization.Action
 	}
 	switch action {
 	case "setup", "python", "npm", "skill":
-		return store.ProvisioningFailure{Step: action, Index: operation.Index, ExitCode: exitCode}
+		return sessions.ProvisioningFailure{Step: action, Index: operation.Index, ExitCode: exitCode}
 	}
-	return store.ProvisioningFailure{}
+	return sessions.ProvisioningFailure{}
 }
 
 func setupOperations(setup environmentconfig.Setup) []runtimeSetupOperation {

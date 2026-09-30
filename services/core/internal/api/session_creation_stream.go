@@ -7,23 +7,22 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
-func (h *Handler) createSessionStream(w http.ResponseWriter, r *http.Request, input store.CreateSessionInput) {
+func (h *Handler) createSessionStream(w http.ResponseWriter, r *http.Request, input sessions.CreateSession) {
 	var config configuration
 	if err := json.Unmarshal(input.Configuration, &config); err != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
-	create := h.Sessions.CreateSessionStream
+	create := h.SessionCreation.CreateSessionStream
 	if len(input.InitialInputs) > 0 || config.Environment.Type == "openai_hosted" {
 		if h.Execution == nil {
 			writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution input is not enabled on this service.")
 			return
 		}
-		create = h.Execution.Admission.CreateSessionStream
+		create = h.Execution.SessionAdmission.CreateSessionStream
 	}
 	result, err := create(r.Context(), tenantID(r), input)
 	if err != nil {
@@ -41,7 +40,7 @@ func (h *Handler) createSessionStream(w http.ResponseWriter, r *http.Request, in
 // official same-key requests create distinct Sessions, so there is no retry
 // stream to follow. Recover with stream=false or the GET events stream. Only a
 // fresh creation uses snapshots.
-func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Request, result store.SessionCreation) {
+func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Request, result sessions.Creation) {
 	if !result.Created {
 		openEventStream(w, http.StatusCreated)
 		return
@@ -78,7 +77,7 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 // sessionSettled reports that a committed projection has no admitted work left:
 // the Session is idle or failed, its latest Turn is not queued, running or
 // waiting, and its latest input reservation is not pending.
-func sessionSettled(session store.Session, response v1.Session) bool {
+func sessionSettled(session sessions.Session, response v1.Session) bool {
 	if response.Status != "idle" && response.Status != "failed" {
 		return false
 	}

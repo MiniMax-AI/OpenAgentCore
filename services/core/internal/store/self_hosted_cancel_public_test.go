@@ -13,7 +13,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -74,7 +73,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		t.Fatal("missing public cancellation fixture identities", err)
 	}
 	settings["accepted"] = accepted
-	receipts := func(key, target string) []store.InputReceipt {
+	receipts := func(key, target string) []sessions.InputReceipt {
 		t.Helper()
 		rows, err := db.pool.Query(t.Context(), `SELECT sequence, COALESCE(turn_id::text,'') FROM turn_inputs
 			WHERE session_id=$1 AND idempotency_key=$2 ORDER BY batch_position`, created.ID, key)
@@ -82,9 +81,9 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer rows.Close()
-		var result []store.InputReceipt
+		var result []sessions.InputReceipt
 		for rows.Next() {
-			var receipt store.InputReceipt
+			var receipt sessions.InputReceipt
 			if err := rows.Scan(&receipt.Sequence, &receipt.TurnID); err != nil {
 				t.Fatal(err)
 			}
@@ -114,14 +113,14 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		return value
 	}
 	idleReceipts := receipts(created.IdleKey, "")
-	later, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
-	if err != nil || later.State != store.EnvironmentInputPending || later.IsInitial {
+	later, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
+	if err != nil || later.State != sessions.EnvironmentInputPending || later.IsInitial {
 		t.Fatal("could not establish controlled later reservation", err)
 	}
 	pending := map[string]string{created.InitialID: snapshot(created.InitialID), created.LaterID: snapshot(created.LaterID)}
 	transition := func(id, from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(t.Context(), tenant, created.ID, id, store.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := s.TransitionTurn(t.Context(), tenant, created.ID, id, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -137,7 +136,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		return input.TurnID
 	}
 	first := start()
-	if err := s.AppendTurnEvents(t.Context(), tenant, created.ID, first, 1, []store.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"controlled-partial","delta":"Retained partial output."}`)}}); err != nil {
+	if err := s.AppendTurnEvents(t.Context(), tenant, created.ID, first, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"controlled-partial","delta":"Retained partial output."}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	before := snapshot(created.ID)

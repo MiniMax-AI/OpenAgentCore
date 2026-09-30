@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -21,7 +22,7 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	if err != nil || len(page.Sessions) != 0 {
 		t.Fatal("issuance created a Session", err)
 	}
-	create := func(principal identity.Principal) (Session, Environment) {
+	create := func(principal identity.Principal) (sessions.Session, sessions.Environment) {
 		t.Helper()
 		input := environmentInput(uuid.NewString(), "self_hosted", "/workspace")
 		input.Creator = principal.Subject()
@@ -35,10 +36,10 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 		}
 		return session, environment
 	}
-	check := func(st *Store, environment string, key IssuedExecutorCredential, allowed bool) {
+	check := func(st *Store, environment string, key sessions.IssuedExecutorCredential, allowed bool) {
 		t.Helper()
 		owner, err := st.AuthenticateEnvironmentExecutor(ctx, environment, executorDigest(key.Token))
-		if allowed && (err != nil || owner != p.TenantID) || !allowed && !errors.Is(err, ErrNotFound) {
+		if allowed && (err != nil || owner != p.TenantID) || !allowed && !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unexpected principal authorization", allowed, err)
 		}
 	}
@@ -54,13 +55,13 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	for _, different := range []identity.Principal{otherKind, otherID, foreign} {
 		_, target := create(different)
 		check(s, target.ID, issued, false)
-		if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, ErrNotFound) {
+		if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("restricted key accepted another creator/project", err)
 		}
-		if _, err := s.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, ErrNotFound) {
+		if _, err := s.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign rotation", err)
 		}
-		if err := s.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, ErrNotFound) {
+		if err := s.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign revocation", err)
 		}
 	}
@@ -68,13 +69,13 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 		{ProjectScope: identity.ProjectScope{TenantID: p.TenantID, OrganizationID: "other-org", ProjectID: p.ProjectID}, SubjectKind: p.SubjectKind, SubjectID: p.SubjectID},
 		{ProjectScope: identity.ProjectScope{TenantID: p.TenantID, OrganizationID: p.OrganizationID, ProjectID: "other-project"}, SubjectKind: p.SubjectKind, SubjectID: p.SubjectID},
 	} {
-		if _, err := s.IssueExecutorCredential(ctx, different, uuid.NewString(), ""); !errors.Is(err, ErrNotFound) {
+		if _, err := s.IssueExecutorCredential(ctx, different, uuid.NewString(), ""); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unverified scope issuance", err)
 		}
-		if _, err := s.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, ErrNotFound) {
+		if _, err := s.RotateExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unverified scope rotation", err)
 		}
-		if err := s.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, ErrNotFound) {
+		if err := s.RevokeExecutorCredential(ctx, different, keyID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unverified scope revocation", err)
 		}
 	}
@@ -113,7 +114,7 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(restarted, two.ID, rotated, false)
-	if _, err := restarted.IssueExecutorCredential(ctx, p, keyID, ""); !errors.Is(err, ErrExecutorCredentialExists) {
+	if _, err := restarted.IssueExecutorCredential(ctx, p, keyID, ""); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("issue restored revoked authority", err)
 	}
 	restored, err := restarted.RotateExecutorCredential(ctx, p, keyID)
@@ -127,14 +128,14 @@ func TestExecutorPrincipalRequiresVerifiedScopeAndRecordedCreator(t *testing.T) 
 	s, pool := testStore(t)
 	ctx := t.Context()
 	p := identity.Principal{ProjectScope: identity.ProjectScope{TenantID: uuid.NewString(), OrganizationID: "org", ProjectID: uuid.NewString()}, SubjectKind: "user", SubjectID: "owner"}
-	if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), ""); !errors.Is(err, ErrNotFound) {
+	if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), ""); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("issuer manufactured a project mapping", err)
 	}
 	if err := s.EnsureProjectScopes(ctx, []identity.ProjectScope{p.ProjectScope}); err != nil {
 		t.Fatal(err)
 	}
 	for _, invalid := range []identity.Principal{{}, {ProjectScope: p.ProjectScope}, {ProjectScope: p.ProjectScope, SubjectKind: "workspace", SubjectID: "owner"}} {
-		if _, err := s.IssueExecutorCredential(ctx, invalid, uuid.NewString(), ""); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.IssueExecutorCredential(ctx, invalid, uuid.NewString(), ""); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal("invalid principal", err)
 		}
 	}
@@ -158,10 +159,10 @@ func TestExecutorPrincipalRequiresVerifiedScopeAndRecordedCreator(t *testing.T) 
 	if _, err := pool.Exec(ctx, "UPDATE sessions SET creator_kind=NULL,creator_id=NULL WHERE id=$1", session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, target.ID, executorDigest(key.Token)); !errors.Is(err, ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(ctx, target.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("unknown creator accepted", err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), target.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("unknown creator claimed", err)
 	}
 }

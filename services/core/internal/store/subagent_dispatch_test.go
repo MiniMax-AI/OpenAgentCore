@@ -20,7 +20,7 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 				"environment": map[string]string{"type": "none"},
 			})
 			var err error
-			h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration})
+			h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "identity-dispatch", Configuration: configuration})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -38,7 +38,7 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			h.write(input.TurnID, proto.TypeSubagentIdentity, identity)
 			if !enabled {
 				h.finished(running, sessions.TurnFailed)
-				if _, err = h.s.GetSubagentIdentity(ctx, h.tenant, h.session.ID, "child"); !errors.Is(err, store.ErrNotFound) {
+				if _, err = h.s.GetSubagentIdentity(ctx, h.tenant, h.session.ID, "child"); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("unsolicited identity committed", err)
 				}
 				return

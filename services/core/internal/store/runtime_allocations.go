@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // RuntimeAllocation retains compute ownership, not public readiness. It survives
@@ -62,7 +63,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 		Type string `json:"type"`
 	}
 	if json.Unmarshal(owned.Configuration, &config) != nil || config.Type != "openai_hosted" {
-		return RuntimeAllocation{}, ErrInvalidInput
+		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
 	lookup, err := deviceLookup(tenant, environment)
 	if err != nil {
@@ -77,7 +78,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 		previous, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
 		if err == nil {
 			if previous.RuntimeAllocation.ProviderKey != provider {
-				return ErrIdempotencyConflict
+				return sessions.ErrIdempotencyConflict
 			}
 			result = runtimeAllocationFromRow(previous.RuntimeAllocation, session, lookup.TenantID, previous.DeletedAt, previous.Expired)
 			result.Replayed = true
@@ -94,7 +95,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 			return err
 		}
 		if current.Environment.Status == "failed" || current.Environment.Status == "expired" {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		var nodeID pgtype.UUID
 		active, err := q.GetRuntimeDeployment(ctx)
@@ -139,7 +140,7 @@ func (s *Store) GetRuntimeAllocation(ctx context.Context, tenant, environment st
 	}
 	row, err := s.queries.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return RuntimeAllocation{}, ErrNotFound
+		return RuntimeAllocation{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return RuntimeAllocation{}, err
@@ -176,7 +177,7 @@ func (s *Store) ListRuntimeAllocations(ctx context.Context, after string) ([]Run
 // released allocations; it does not acquire, renew, or mutate Runtime state.
 func (s *Store) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (RuntimeObservationSessionPage, error) {
 	if limit < 1 || limit > 100 {
-		return RuntimeObservationSessionPage{}, ErrInvalidInput
+		return RuntimeObservationSessionPage{}, sessions.ErrInvalidInput
 	}
 	id := pgtype.UUID{Valid: true}
 	if after != "" {

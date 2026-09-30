@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,7 +18,7 @@ import (
 
 func executorCredentialIdentity(principal identity.Principal, keyID string) (pgtype.UUID, pgtype.UUID, error) {
 	if err := principal.Validate(); err != nil {
-		return pgtype.UUID{}, pgtype.UUID{}, fmt.Errorf("%w: %v", ErrInvalidInput, err)
+		return pgtype.UUID{}, pgtype.UUID{}, fmt.Errorf("%w: %v", sessions.ErrInvalidInput, err)
 	}
 	tenant, err := parseID(principal.TenantID)
 	if err != nil {
@@ -37,8 +38,8 @@ func newExecutorSecret() (string, string, error) {
 	return token, hex.EncodeToString(hash[:]), nil
 }
 
-func issuedExecutorCredential(id, environment pgtype.UUID, token string) IssuedExecutorCredential {
-	result := IssuedExecutorCredential{KeyID: uuid.UUID(id.Bytes).String(), Token: token}
+func issuedExecutorCredential(id, environment pgtype.UUID, token string) sessions.IssuedExecutorCredential {
+	result := sessions.IssuedExecutorCredential{KeyID: uuid.UUID(id.Bytes).String(), Token: token}
 	if environment.Valid {
 		result.EnvironmentID = uuid.UUID(environment.Bytes).String()
 	}
@@ -61,7 +62,7 @@ func (s *Store) withExecutorCredentialTarget(ctx context.Context, principal iden
 			return err
 		}
 		if !row.CreatorKind.Valid || !row.CreatorID.Valid || row.CreatorKind.String != principal.SubjectKind || row.CreatorID.String != principal.SubjectID {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		return apply(ctx, q)
 	})

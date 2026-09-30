@@ -8,7 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // errNetworkPolicy reports a network policy outside the qualified forms. The
@@ -25,7 +25,7 @@ func decodeHostedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	setup, err := decodeEnvironmentSetup(fields)
 	if err != nil {
@@ -33,7 +33,7 @@ func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	}
 	var kind string
 	if json.Unmarshal(fields["type"], &kind) != nil || (kind != "openai_hosted" && kind != "self_hosted") {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	env := &v1.Environment{Type: kind, Network: &v1.EnvironmentNetworkInput{Access: "enabled"}}
 	for name, value := range fields {
@@ -41,7 +41,7 @@ func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 		case "type":
 		case "workspace_directory":
 			if kind != "self_hosted" || json.Unmarshal(value, &env.WorkspaceDirectory) != nil {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
 		case "network":
 		case "files":
@@ -62,13 +62,13 @@ func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 			packages := setup.PackageMetadata()
 			env.Packages = &packages
 		default:
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 	}
 	if value, supplied := fields["network"]; supplied && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		var network v1.EnvironmentNetworkInput
 		if decodeInputObject(value, &network, "access", "allowed_domains") != nil {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		if (agentnetwork.Policy{Access: network.Access, AllowedDomains: network.AllowedDomains}).Validate() != nil {
 			return nil, errNetworkPolicy
@@ -76,19 +76,19 @@ func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 		env.Network = &network
 	}
 	if kind == "openai_hosted" && agentcapabilities.ValidateDirectories(env.CapabilityDirectories) != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	if kind == "self_hosted" && agentcapabilities.ValidateSourceDirectories([]string{env.WorkspaceDirectory}) != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	return env, nil
 }
 
 // Hosted metadata describes API-managed initial installations, not workspace inventory.
-func hostedSessionEnvironment(environment store.Environment) (v1.SessionEnvironment, error) {
+func hostedSessionEnvironment(environment sessions.Environment) (v1.SessionEnvironment, error) {
 	cfg, err := storedEnvironment(environment.Configuration)
 	if err != nil || cfg.Type != "openai_hosted" {
-		return v1.SessionEnvironment{}, store.ErrInvalidInput
+		return v1.SessionEnvironment{}, sessions.ErrInvalidInput
 	}
 	files := cfg.Files
 	if files == nil {
@@ -103,11 +103,11 @@ func hostedSessionEnvironment(environment store.Environment) (v1.SessionEnvironm
 func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	var kind string
 	if json.Unmarshal(fields["type"], &kind) != nil {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	if kind != "openai_hosted" && kind != "self_hosted" {
 		return decodeSessionEnvironment(raw)
@@ -115,28 +115,28 @@ func storedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	// Confidential fields must never appear in the persisted public snapshot.
 	for _, field := range []string{"env", "setup_commands"} {
 		if _, exists := fields[field]; exists {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 	}
 	var files []json.RawMessage
 	if value, exists := fields["files"]; exists {
 		if json.Unmarshal(value, &files) != nil || len(files) > 50 {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		for _, entry := range files {
 			var metadata environmentconfig.InitialFileMetadata
 			if decodeInputObject(entry, &metadata, "id", "type", "path", "file_id", "size_bytes") != nil || metadata.ID == "" || metadata.SizeBytes == nil || *metadata.SizeBytes < 0 || *metadata.SizeBytes > environmentconfig.MaxInitialFileBytes {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
 			if metadata.Type != "inline" && metadata.Type != "file_id" {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
 		}
 	}
 	if value, ok := fields["initialization"]; ok {
 		var initialized bool
 		if json.Unmarshal(value, &initialized) != nil || !initialized {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		delete(fields, "initialization")
 	}

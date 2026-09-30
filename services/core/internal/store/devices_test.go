@@ -19,9 +19,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func registerTestDevice(t *testing.T, s *Store, tenant string) (ExecutionDevice, string) {
+func registerTestDevice(t *testing.T, s *Store, tenant string) (sessions.ExecutionDevice, string) {
 	t.Helper()
 	secret := uuid.NewString() + uuid.NewString()
 	d, err := s.CreateDevice(context.Background(), tenant, "isolated executor", runtimedevice.HashCredential(secret))
@@ -41,7 +42,7 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	b, _ := registerTestDevice(t, s, tenant)
 	foreign, _ := registerTestDevice(t, s, otherTenant)
 	for _, args := range [][3]string{{tenant, session.ID, foreign.ID}, {otherTenant, session.ID, foreign.ID}, {tenant, otherSession.ID, a.ID}} {
-		if err := s.BindSessionDevice(ctx, args[0], args[1], args[2]); !errors.Is(err, ErrNotFound) {
+		if err := s.BindSessionDevice(ctx, args[0], args[1], args[2]); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign binding: %v", err)
 		}
 	}
@@ -65,7 +66,7 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 		switch {
 		case err == nil:
 			success++
-		case errors.Is(err, ErrDeviceBindingConflict):
+		case errors.Is(err, sessions.ErrDeviceBindingConflict):
 			conflicts++
 		default:
 			t.Fatal(err)
@@ -78,7 +79,7 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSessionDevice(ctx, otherTenant, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSessionDevice(ctx, otherTenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign lookup: %v", err)
 	}
 	pool.Close()
@@ -87,7 +88,7 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 	if err != nil || got != winner {
 		t.Fatalf("binding after restart: %+v %v", got, err)
 	}
-	if err := restarted.RevokeDevice(ctx, otherTenant, winner.ID); !errors.Is(err, ErrNotFound) {
+	if err := restarted.RevokeDevice(ctx, otherTenant, winner.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign revocation: %v", err)
 	}
 	for range 2 {
@@ -95,7 +96,7 @@ func TestDeviceBindingIsTenantScopedStableAndDurable(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := restarted.GetSessionDevice(ctx, tenant, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := restarted.GetSessionDevice(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("revoked device remains dispatchable: %v", err)
 	}
 }

@@ -27,7 +27,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	defer cancel()
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	cfg := json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[],"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"}},"environment":{"type":"none"}}`)
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture", Configuration: cfg})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture", Configuration: cfg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,12 +35,12 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	record := func(id string) {
 		t.Helper()
-		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, store.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {
+		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}

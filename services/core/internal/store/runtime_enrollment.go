@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -41,7 +42,7 @@ func (s *Store) EnrollRuntime(ctx context.Context, environmentID, credentialHash
 			EnvironmentID: lookup.ID, TenantID: lookup.TenantID, TokenSha256: credentialHash,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -51,14 +52,14 @@ func (s *Store) EnrollRuntime(ctx context.Context, environmentID, credentialHash
 			EnvironmentID: lookup.ID, ExecutorKeyID: authority.KeyID,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrDeviceBindingConflict
+			return sessions.ErrDeviceBindingConflict
 		}
 		if err != nil {
 			return err
 		}
 		_, err = q.BindSessionDevice(ctx, sqlc.BindSessionDeviceParams{TenantID: lookup.TenantID, ID: session, ID_2: bound.ID})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrDeviceBindingConflict
+			return sessions.ErrDeviceBindingConflict
 		}
 		if err != nil {
 			return err

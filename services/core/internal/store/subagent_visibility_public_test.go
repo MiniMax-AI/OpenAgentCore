@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -60,9 +59,9 @@ func collectEvents(t *testing.T, stream sseLines) eventCollector {
 	return collector
 }
 
-func subagentFixture(kind string, value any) store.ExecutionEvent {
+func subagentFixture(kind string, value any) sessions.ExecutionEvent {
 	raw, _ := json.Marshal(value)
-	return store.ExecutionEvent{Kind: kind, Payload: raw}
+	return sessions.ExecutionEvent{Kind: kind, Payload: raw}
 }
 
 // Child work appears only where the official service shows it: Session Turn
@@ -127,19 +126,19 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	if err = writer.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = writer.TransitionTurn(ctx, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	identity := func(child, parent string, created int64) store.ExecutionEvent {
+	identity := func(child, parent string, created int64) sessions.ExecutionEvent {
 		return subagentFixture(proto.TypeSubagentIdentity, proto.SubagentIdentityPayload{NativeID: child, ParentNativeID: parent, NativeCreatedAt: created, ParentTurnID: "native-root", SourceItemID: "spawn-" + child})
 	}
 	opened, finished := int64(1700000001000), int64(1700000002000)
-	message := func(child, turn, id string, position int32) store.ExecutionEvent {
+	message := func(child, turn, id string, position int32) sessions.ExecutionEvent {
 		text := "answer " + id
 		payload, _ := json.Marshal(proto.OutputMessagePayload{ID: id, Status: "completed", Text: &text})
 		return subagentFixture(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: child, TurnID: turn, ItemID: id, Position: position, Kind: proto.TypeOutputMessage, Payload: payload})
 	}
-	facts := []store.ExecutionEvent{
+	facts := []sessions.ExecutionEvent{
 		identity("child", "root", 1700000001), identity("nested", "child", 1700000001),
 		subagentFixture(proto.TypeSubagentCoordination, proto.SubagentCoordinationPayload{ID: "spawn", Kind: "create_subagent_call", Status: "completed"}),
 		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}),
@@ -151,7 +150,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	if err = writer.AppendTurnEvents(ctx, tenant, session, root, 1, facts); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
+	if _, err = writer.TransitionTurn(ctx, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
 

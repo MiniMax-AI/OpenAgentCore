@@ -14,7 +14,8 @@ import (
 // forbidSessionAccess withdraws the Session and deployment model provider reads
 // testHandler serves, so any access fails the test.
 func forbidSessionAccess(_ *Dependencies, f *testFakes) {
-	f.sessions.createSession, f.sessions.getSession, f.sessions.findSessionCreation, f.sessions.listSessions = nil, nil, nil, nil
+	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = nil, nil
+	f.sessions.getSession, f.sessions.listSessions = nil, nil
 	f.modelProviders.resolve = nil
 }
 

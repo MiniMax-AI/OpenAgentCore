@@ -34,8 +34,8 @@ type dispatchHarness struct {
 	d            *execution.Dispatcher
 	lease        execution.Ownership // held by tests that run execution operations without a Worker
 	tenant       string
-	session      store.Session
-	device       store.ExecutionDevice
+	session      sessions.Session
+	device       sessions.ExecutionDevice
 	conn         *websocket.Conn
 	registry     *runtimegateway.Registry
 	url          string
@@ -54,7 +54,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	h := &dispatchHarness{t: t, s: s, db: db, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error
-	h.session, err = s.CreateSession(ctx, h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "session", Configuration: configuration}))
+	h.session, err = s.CreateSession(ctx, h.tenant, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "session", Configuration: configuration}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	return h
 }
 
-func (h *dispatchHarness) message(key, text string) store.InputReceipt {
+func (h *dispatchHarness) message(key, text string) sessions.InputReceipt {
 	h.t.Helper()
 	body, _ := json.Marshal(map[string]string{"text": text})
 	r, err := h.s.SubmitMessage(context.Background(), h.tenant, h.session.ID, key, body)
@@ -202,10 +202,10 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.ConversationID != h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
 		t.Fatalf("wrong resolved request: %+v", prompt)
 	}
-	if _, err := h.d.Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := h.d.Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign execution: %v", err)
 	}
-	if _, err := h.d.Run(ctx, h.tenant, h.session.ID, first.TurnID); !errors.Is(err, store.ErrTurnConflict) {
+	if _, err := h.d.Run(ctx, h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("duplicate execution: %v", err)
 	}
 	second := h.message("second", "Follow-up input")
@@ -331,7 +331,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 				}
 			}
 			if kind != "disconnect" {
-				if _, err := h.d.Run(context.Background(), h.tenant, h.session.ID, first.TurnID); !errors.Is(err, store.ErrTurnConflict) {
+				if _, err := h.d.Run(context.Background(), h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
 					t.Fatalf("terminal replay: %v", err)
 				}
 			}
@@ -343,12 +343,12 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 	h := newDispatchHarness(t)
 	first := h.message("first", "Run")
 	ctx := context.Background()
-	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
 	late := h.message("second", "Late")
-	if _, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, store.ErrUnappliedInputs) {
+	if _, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, sessions.ErrUnappliedInputs) {
 		t.Fatalf("unapplied completion: %v", err)
 	}
 	bound, _ := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
@@ -371,7 +371,7 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 	for err := range errs {
 		if err == nil {
 			success++
-		} else if !errors.Is(err, store.ErrTurnConflict) {
+		} else if !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal(err)
 		}
 	}

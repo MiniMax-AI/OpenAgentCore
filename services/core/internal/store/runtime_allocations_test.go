@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -26,10 +27,10 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if err != nil || bound.ID != owner.DeviceID || bound.EnvironmentID != environment.ID {
 		t.Fatalf("binding not committed with allocation: %+v %v", bound, err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), uuid.NewString(), environment.ID, provider, runtimedevice.HashCredential(secret)); !errors.Is(err, ErrNotFound) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), uuid.NewString(), environment.ID, provider, runtimedevice.HashCredential(secret)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign allocation accepted: %v", err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(secret)); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(secret)); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatalf("provider target changed: %v", err)
 	}
 	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, w.pool)
@@ -57,13 +58,13 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if err != nil || !retained.SessionDeleted || retained.ID != owner.ID {
 		t.Fatalf("deletion discarded cleanup identity: %+v %v", retained, err)
 	}
-	if _, err := next.ObserveRuntimeRunning(t.Context(), owner); !errors.Is(err, ErrNotFound) {
+	if _, err := next.ObserveRuntimeRunning(t.Context(), owner); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("late creation revived deleted Session: %v", err)
 	}
 	if _, err := next.RequestRuntimeCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := next.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, ErrTurnConflict) {
+	if _, err := next.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("unknown Create forgotten: %v", err)
 	}
 	found, cursor := false, ""
@@ -172,7 +173,7 @@ func TestRuntimeAllocationExpiryAndRevocation(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.KeepRuntimeAllocation(t.Context(), owner); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.KeepRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("expired allocation renewed: %v", err)
 	}
 	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {

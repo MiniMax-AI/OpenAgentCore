@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -180,7 +181,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err != nil || placement.Type != "openai_hosted" {
 		return store.RuntimeAllocation{}, sandbox.ErrInvalid
 	}
-	if _, err := r.store.GetRuntimeAllocation(ctx, tenant, environment); errors.Is(err, store.ErrNotFound) {
+	if _, err := r.store.GetRuntimeAllocation(ctx, tenant, environment); errors.Is(err, sessions.ErrNotFound) {
 		if r.config.AdmissionPaused && r.config.Generation == 0 {
 			return store.RuntimeAllocation{}, ErrExecutionUnavailable
 		}

@@ -13,7 +13,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -40,14 +40,14 @@ func (s *validationStore) CreateVault(_ context.Context, input vaults.CreateVaul
 	return vaults.Vault{ID: uuid.NewString(), TenantID: input.TenantID, Name: input.Name, Metadata: input.Metadata}, nil
 }
 
-func (s *validationStore) UpdateSessionMetadata(_ context.Context, tenant, id string, metadata map[string]string) (store.Session, error) {
+func (s *validationStore) UpdateSessionMetadata(_ context.Context, tenant, id string, metadata map[string]string) (sessions.Session, error) {
 	s.writes++
-	return store.Session{ID: id, TenantID: tenant, Metadata: metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
+	return sessions.Session{ID: id, TenantID: tenant, Metadata: metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *validationStore) CreateSession(_ context.Context, tenant string, input store.CreateSessionInput) (store.Session, error) {
+func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	s.writes++
-	return store.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
+	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
 }
 
 func (s *validationStore) CreateEnvironmentTemplate(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {
@@ -64,7 +64,7 @@ func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, command e
 // with initial input into s. Session reads are unexpected.
 func (s *validationStore) serve(d *Dependencies, f *testFakes) {
 	d.Execution = f.execution()
-	f.admission.createSession = s.CreateSession
+	f.sessionAdmission.createSession = s.CreateSession
 	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
 	f.vaults.createVault = s.CreateVault
 	f.sessions.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata

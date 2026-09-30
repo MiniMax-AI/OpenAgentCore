@@ -7,7 +7,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type workerSchedule struct {
@@ -17,7 +16,7 @@ type workerSchedule struct {
 }
 
 type scheduledWork struct {
-	store.ExecutionWork
+	sessions.ExecutionWork
 	reservationID string
 }
 
@@ -33,7 +32,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 			return nil, err
 		}
 	}
-	var environments []store.EnvironmentInputWork
+	var environments []sessions.EnvironmentInputWork
 	if !time.Now().Before(s.nextEnvironmentScan) {
 		environments, err = w.dispatcher.Store.ListEnvironmentInputWork(ctx, s.environmentCursor, devices)
 		if err != nil {
@@ -57,7 +56,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 			value := environments[0]
 			environments = environments[1:]
 			s.environmentCursor = value.ReservationID
-			item = scheduledWork{ExecutionWork: store.ExecutionWork{TenantID: value.TenantID, SessionID: value.SessionID}, reservationID: value.ReservationID}
+			item = scheduledWork{ExecutionWork: sessions.ExecutionWork{TenantID: value.TenantID, SessionID: value.SessionID}, reservationID: value.ReservationID}
 			s.environmentFirst = false
 		} else {
 			item.ExecutionWork = turns[0]
@@ -73,7 +72,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 			ready, err = w.bind(ctx, item.ExecutionWork)
 		} else {
 			ready, err = w.bindDevice(ctx, item.TenantID, item.SessionID, nil)
-			if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrDeviceBindingConflict) {
+			if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, sessions.ErrDeviceBindingConflict) {
 				continue
 			}
 		}
@@ -97,16 +96,16 @@ func (w *Worker) runEnvironmentInput(ctx context.Context, item scheduledWork) er
 	if errors.Is(err, ErrModelProviderRequired) {
 		return w.dispatcher.Store.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "model_provider_required")
 	}
-	if errors.Is(err, errPreparationFailed) && run.Reservation.State == store.EnvironmentInputPending {
+	if errors.Is(err, errPreparationFailed) && run.Reservation.State == sessions.EnvironmentInputPending {
 		return w.dispatcher.Store.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "runtime_preparation_failed")
 	}
-	if run.Reservation.State == store.EnvironmentInputAdmitted {
+	if run.Reservation.State == sessions.EnvironmentInputAdmitted {
 		return err
 	}
-	if run.Reservation.State != store.EnvironmentInputPending && !errors.Is(err, store.ErrNotFound) {
+	if run.Reservation.State != sessions.EnvironmentInputPending && !errors.Is(err, sessions.ErrNotFound) {
 		return err
 	}
-	if ctx.Err() == nil && !errors.Is(err, store.ErrNotFound) {
+	if ctx.Err() == nil && !errors.Is(err, sessions.ErrNotFound) {
 		log.Ctx(ctx).Warn("oac-core environment preparation did not complete", "reservation_id", item.reservationID)
 	}
 	return nil

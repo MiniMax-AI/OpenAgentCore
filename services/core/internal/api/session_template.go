@@ -10,7 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Validate the reference and inline shape without looking up mutable resources.
@@ -22,7 +22,7 @@ func decodeTemplateEnvironment(raw json.RawMessage) (*v1.Environment, string, js
 func decodePreparationTemplate(raw json.RawMessage, extension bool) (*v1.Environment, string, json.RawMessage, error) {
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(raw, &fields) != nil {
-		return nil, "", nil, store.ErrInvalidInput
+		return nil, "", nil, sessions.ErrInvalidInput
 	}
 	reference, supplied := fields["environment_template_id"]
 	if !supplied {
@@ -36,7 +36,7 @@ func decodePreparationTemplate(raw json.RawMessage, extension bool) (*v1.Environ
 	}
 	var id, kind string
 	if json.Unmarshal(reference, &id) != nil || id == "" || json.Unmarshal(fields["type"], &kind) != nil || (kind != "openai_hosted" && !(extension && kind == "self_hosted")) {
-		return nil, "", nil, store.ErrInvalidInput
+		return nil, "", nil, sessions.ErrInvalidInput
 	}
 	delete(fields, "environment_template_id")
 	inline, err := json.Marshal(fields)
@@ -55,7 +55,7 @@ func applyTemplateEnvironment(input *sessionRequest, resolved environmenttemplat
 	template, files := resolved.Template, resolved.Files
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(input.templateEnvironment, &fields) != nil {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	if input.Environment.Type == "self_hosted" && template.NetworkAccess != "enabled" {
 		return &fieldError{param: "x_agents_core.environment.environment_template_id", message: "This template requires a managed network policy; user-managed machines do not enforce it."}
@@ -65,7 +65,7 @@ func applyTemplateEnvironment(input *sessionRequest, resolved environmenttemplat
 	}
 	effective := agentnetwork.Policy{Access: input.Environment.Network.Access, AllowedDomains: input.Environment.Network.AllowedDomains}
 	if !effective.Narrows(agentnetwork.Policy{Access: template.NetworkAccess, AllowedDomains: template.AllowedDomains}) {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	skills := input.initialization.Skills
 	if !templateFieldOverride(fields, "skills") {
@@ -98,7 +98,7 @@ func applyTemplateEnvironment(input *sessionRequest, resolved environmenttemplat
 	var managers map[string]json.RawMessage
 	if templateFieldOverride(fields, "packages") {
 		if json.Unmarshal(fields["packages"], &managers) != nil {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 	}
 	if templateFieldOverride(managers, "npm") {

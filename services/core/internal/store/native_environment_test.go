@@ -99,7 +99,7 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	provider := nativeModelProvider(model)
 	config, _ := json.Marshal(map[string]any{"agent": map[string]string{"model": "gpt-5.5", "instructions": "Keep this instruction."}, "environment": map[string]string{"type": "none"}})
 	var err error
-	h.session, err = h.s.CreateSession(ctx, h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-session", Configuration: config, ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceDeployment})
+	h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "native-session", Configuration: config, ModelProvider: provider, ModelProviderSource: v1.ModelProviderSourceDeployment})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -58,12 +58,12 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if err = writer.BindSessionDevice(t.Context(), tenant, active.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
-	queued, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "queued"})
+	queued, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "queued"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	pending := submitMessage(t, s, tenant, queued.ID, "queued")
-	waiting, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "waiting"})
+	waiting, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "waiting"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,14 +97,14 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 		}
 	}
 	mustReject("binding", writer.BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
-	_, err = writer.TransitionTurn(t.Context(), tenant, queued.ID, pending.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = writer.TransitionTurn(t.Context(), tenant, queued.ID, pending.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	mustReject("claim", err)
-	mustReject("journal", writer.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"stale"}`)}}))
+	mustReject("journal", writer.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"stale"}`)}}))
 	mustReject("callback", writer.RecordFunctionCall(t.Context(), tenant, active.ID, input.TurnID, functionCallFixture("late")))
 	mustReject("receipt", writer.ConfirmFunctionResult(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID))
 	_, err = writer.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"content":"stale"}}`), "stale-native", input.Sequence)
 	mustReject("completion", err)
-	_, err = writer.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
+	_, err = writer.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
 	mustReject("reconciliation", err)
 	_, err = writer.ExpireEnvironmentInputs(t.Context())
 	mustReject("input expiry", err)
@@ -125,7 +125,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if err != nil || saved.Applied {
 		t.Fatal("stale receipt persisted", saved, err)
 	}
-	if _, err = s.GetSessionDevice(t.Context(), tenant, queued.ID); !errors.Is(err, ErrNotFound) {
+	if _, err = s.GetSessionDevice(t.Context(), tenant, queued.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("stale binding persisted", err)
 	}
 	queuedTurn, err := s.GetTurn(t.Context(), tenant, queued.ID, pending.TurnID)
@@ -144,8 +144,8 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if err != nil || bound.NativeSessionID != "successor-native" {
 		t.Fatal(bound, err)
 	}
-	_, err = successor.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
-	if !errors.Is(err, ErrTurnConflict) {
+	_, err = successor.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
+	if !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("terminal CAS changed", err)
 	}
 	if err = successor.lease.Close(t.Context()); err != nil {
@@ -181,9 +181,9 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 	results := make(chan error, len(tasks)*2)
 	for _, task := range tasks {
 		group.Go(func() {
-			_, err := writer.TransitionTurn(t.Context(), task.tenant, task.session, task.turn, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+			_, err := writer.TransitionTurn(t.Context(), task.tenant, task.session, task.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			if err == nil {
-				err = writer.AppendTurnEvents(t.Context(), task.tenant, task.session, task.turn, 1, []ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"accepted"}`)}})
+				err = writer.AppendTurnEvents(t.Context(), task.tenant, task.session, task.turn, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"accepted"}`)}})
 			}
 			results <- err
 		})
@@ -235,7 +235,7 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	}
 	_, archiveErr := s.ArchiveManagedSession(t.Context(), tenant, session.ID, 0)
 	_, expiryErr := s.ExpireEnvironmentInputs(t.Context())
-	subagent := []ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"visible"}`)}, subagentIdentityEvent("child", "root", 100)}
+	subagent := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"visible"}`)}, subagentIdentityEvent("child", "root", 100)}
 	for name, err := range map[string]error{
 		"ownership check":   s.checkExecutionOwnership(t.Context()),
 		"archive":           archiveErr,

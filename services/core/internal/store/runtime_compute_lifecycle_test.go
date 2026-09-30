@@ -18,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -303,7 +304,7 @@ func (f *computeLifecycleFixture) sql(query string, args ...any) {
 		f.t.Fatal(err)
 	}
 }
-func (f *computeLifecycleFixture) create() (string, store.Session, store.Environment, store.RuntimeAllocation) {
+func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.Environment, store.RuntimeAllocation) {
 	t := f.t
 	t.Helper()
 	tenant, session, environment := managedSession(t, f.store)

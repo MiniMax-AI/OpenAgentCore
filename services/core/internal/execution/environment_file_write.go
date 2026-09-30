@@ -9,16 +9,16 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 )
 
 // Known Files.create destination refusals reported by the Runtime installer.
-// They wrap store.ErrInvalidInput; the rejected write installed nothing.
+// They wrap sessions.ErrInvalidInput; the rejected write installed nothing.
 var (
-	ErrEnvironmentFileDirectory = fmt.Errorf("%w: environment file destination is a directory", store.ErrInvalidInput)
-	ErrEnvironmentFileUnsafe    = fmt.Errorf("%w: environment file destination exists or traverses a link", store.ErrInvalidInput)
+	ErrEnvironmentFileDirectory = fmt.Errorf("%w: environment file destination is a directory", sessions.ErrInvalidInput)
+	ErrEnvironmentFileUnsafe    = fmt.Errorf("%w: environment file destination exists or traverses a link", sessions.ErrInvalidInput)
 )
 
 type fileWriteResult struct {
@@ -27,7 +27,7 @@ type fileWriteResult struct {
 }
 type fileWriteRequest struct {
 	ctx         context.Context
-	environment store.Environment
+	environment sessions.Environment
 	path        string
 	data        []byte
 	result      chan fileWriteResult
@@ -35,9 +35,9 @@ type fileWriteRequest struct {
 
 // WriteEnvironmentFile observes a Worker-owned mutation. Caller detachment never
 // clears the durable write intent or starts a replacement operation.
-func (w *Worker) WriteEnvironmentFile(ctx context.Context, environment store.Environment, path string, data []byte) (int64, error) {
+func (w *Worker) WriteEnvironmentFile(ctx context.Context, environment sessions.Environment, path string, data []byte) (int64, error) {
 	if len(data) > proto.WorkspaceWriteMaxBytes {
-		return 0, store.ErrInvalidInput
+		return 0, sessions.ErrInvalidInput
 	}
 	if err := w.waitRuntimeAwake(ctx, environment); err != nil {
 		return 0, err
@@ -79,7 +79,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		return fileWriteResult{err: err}
 	}
 	if environment.SessionID != request.environment.SessionID {
-		return fileWriteResult{err: store.ErrNotFound}
+		return fileWriteResult{err: sessions.ErrNotFound}
 	}
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
 	if err != nil || (placement.Type != "openai_hosted" && placement.Type != "self_hosted") {
@@ -106,9 +106,9 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	digest := sha256.Sum256(body)
 	wire := proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment.ID, SessionID: session.ID, Path: request.path, SizeBytes: len(request.data), SHA256: hex.EncodeToString(dataDigest[:])}
 	if !proto.ValidWorkspaceWriteRequest(wire) {
-		return fileWriteResult{err: store.ErrInvalidInput}
+		return fileWriteResult{err: sessions.ErrInvalidInput}
 	}
-	key := store.FileWriteIdentity{ID: uuid.NewString(), DeviceID: bound.ID, RequestSHA256: hex.EncodeToString(digest[:])}
+	key := sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: bound.ID, RequestSHA256: hex.EncodeToString(digest[:])}
 	intent, err := w.dispatcher.Store.ReserveEnvironmentFileWrite(ctx, environment.TenantID, environment.ID, key)
 	if err != nil {
 		return fileWriteResult{err: err}
@@ -136,7 +136,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		case result.ErrorCode == "write_rejected" && result.Reason == proto.WorkspaceWriteReasonUnsafe:
 			return fileWriteResult{err: ErrEnvironmentFileUnsafe}
 		case result.ErrorCode == "invalid_request" || result.ErrorCode == "write_rejected":
-			return fileWriteResult{err: store.ErrInvalidInput}
+			return fileWriteResult{err: sessions.ErrInvalidInput}
 		}
 		return unavailable
 	}

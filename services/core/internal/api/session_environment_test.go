@@ -8,16 +8,15 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 const environmentOrigin = "wss://core.example/api/v1/agent-daemon/ws"
 
-func environmentSession() store.Session {
-	return store.Session{
+func environmentSession() sessions.Session {
+	return sessions.Session{
 		ID: "session", TenantID: "tenant", CreatedAt: time.Unix(1700000000, 0), Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"self_hosted"}}`),
-		Environment: &store.Environment{
+		Environment: &sessions.Environment{
 			ID: "environment", SessionID: "session", TenantID: "tenant", Status: "pending",
 			Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/remote/workspace","capability_directories":["/remote/capabilities"],"id":"forged","remote_url":"https://secret@private","env":{"SECRET":"private"},"setup_commands":["private"]}`),
 		},
@@ -49,13 +48,13 @@ func TestSessionEnvironmentUsesSafeStoredAssociation(t *testing.T) {
 	if err != nil || response.Environment.CapabilityDirectories == nil || *response.Environment.CapabilityDirectories == nil {
 		t.Fatal("missing capability paths must project as an empty array", response, err)
 	}
-	for _, change := range []func(*store.Session){
-		func(s *store.Session) { s.Environment = nil },
-		func(s *store.Session) { s.Environment.ID = "" },
-		func(s *store.Session) { s.Environment.TenantID = "foreign" },
-		func(s *store.Session) { s.Environment.SessionID = "other" },
-		func(s *store.Session) { s.Environment.Configuration = json.RawMessage(`{"type":"self_hosted"}`) },
-		func(s *store.Session) {
+	for _, change := range []func(*sessions.Session){
+		func(s *sessions.Session) { s.Environment = nil },
+		func(s *sessions.Session) { s.Environment.ID = "" },
+		func(s *sessions.Session) { s.Environment.TenantID = "foreign" },
+		func(s *sessions.Session) { s.Environment.SessionID = "other" },
+		func(s *sessions.Session) { s.Environment.Configuration = json.RawMessage(`{"type":"self_hosted"}`) },
+		func(s *sessions.Session) {
 			s.Configuration = json.RawMessage(`{"agent":{"id":"agent","model":"model"},"environment":{"type":"openai_hosted"}}`)
 		},
 	} {

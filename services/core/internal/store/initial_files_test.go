@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -50,7 +51,7 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 		t.Fatal(err)
 	}
 	initial := []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a/data", Data: canary}, {Type: "file_id", Path: "/workspace/b", FileID: upload.ID}}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: initial}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: initial}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -81,10 +82,10 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	changed := input
 	changed.InitialFiles = append([]environmentconfig.InitialFile(nil), initial...)
 	changed.InitialFiles[0].Data = []byte("changed")
-	if _, err := s.CreateSession(t.Context(), tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.CreateSession(t.Context(), tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed bytes retried", err)
 	}
-	if _, err := s.GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("uninitialized environment exposed", err)
 	}
 }

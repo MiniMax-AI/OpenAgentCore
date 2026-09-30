@@ -17,7 +17,7 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "metadata-update", Metadata: map[string]string{"old": "value"}, Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "metadata-update", Metadata: map[string]string{"old": "value"}, Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)}
 	first, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 		}
 		changed := input
 		changed.Metadata = metadata
-		if _, err := s.CreateSession(ctx, tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := s.CreateSession(ctx, tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatalf("changed creation request: %v", err)
 		}
 	}
@@ -61,12 +61,12 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 		metadata        map[string]string
 		want            error
 	}{
-		{uuid.NewString(), first.ID, nil, ErrNotFound},
-		{tenant, uuid.NewString(), nil, ErrNotFound},
-		{"invalid", first.ID, nil, ErrInvalidInput},
+		{uuid.NewString(), first.ID, nil, sessions.ErrNotFound},
+		{tenant, uuid.NewString(), nil, sessions.ErrNotFound},
+		{"invalid", first.ID, nil, sessions.ErrInvalidInput},
 		// A malformed path identifier is indistinguishable from a missing Session.
-		{tenant, "invalid", nil, ErrNotFound},
-		{tenant, first.ID, map[string]string{"large": strings.Repeat("x", 64*1024)}, ErrInvalidInput},
+		{tenant, "invalid", nil, sessions.ErrNotFound},
+		{tenant, first.ID, map[string]string{"large": strings.Repeat("x", 64*1024)}, sessions.ErrInvalidInput},
 	} {
 		if _, err := s.UpdateSessionMetadata(ctx, test.tenant, test.session, test.metadata); !errors.Is(err, test.want) {
 			t.Fatalf("rejected update error = %v, want %v", err, test.want)
@@ -82,7 +82,7 @@ func TestSessionMetadataConcurrentReplacement(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	first, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "concurrent-metadata"})
+	first, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "concurrent-metadata"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestSessionMetadataPreservesTerminalActivity(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "terminal-metadata"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "terminal-metadata"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,10 +118,10 @@ func TestSessionMetadataPreservesTerminalActivity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status}); err != nil {
 			t.Fatal(err)
 		}
 		before, err := s.GetSession(ctx, tenant, session.ID)

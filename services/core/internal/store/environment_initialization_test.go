@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -54,7 +55,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			}
 			s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
 			principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
-			session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
+			session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 				Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 				Configuration:  json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/home/user/work"}}`),
 				InitialFiles:   []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
@@ -131,7 +132,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				want = "failed"
 			}
 			awaitInitialization(t, s, principal.TenantID, environment.ID, want)
-			if _, err := s.GetRuntimeAllocation(t.Context(), principal.TenantID, environment.ID); !errors.Is(err, store.ErrNotFound) {
+			if _, err := s.GetRuntimeAllocation(t.Context(), principal.TenantID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("self-hosted preparation fabricated allocation", err)
 			}
 			if outcome == "completed" {
@@ -170,9 +171,9 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
 	principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
-	create := func() store.EnvironmentInitialization {
+	create := func() sessions.EnvironmentInitialization {
 		t.Helper()
-		session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
+		session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 			Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{"environment":{"type":"self_hosted","workspace_directory":"/home/user/work"}}`),
 			InitialFiles:  []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/input", Data: []byte("frozen")}},
@@ -192,19 +193,19 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return store.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
+		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
 	owned := executionOwner(t, db, s).Store
 	if err := s.RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}
-	if err := owned.ClaimEnvironmentInitialization(t.Context(), revoked); !errors.Is(err, store.ErrNotFound) {
+	if err := owned.ClaimEnvironmentInitialization(t.Context(), revoked); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("revocation escaped normal admission handling: %v", err)
 	}
 	stale := other
 	stale.DeviceID = uuid.NewString()
-	if err := owned.ClaimEnvironmentInitialization(t.Context(), stale); !errors.Is(err, store.ErrTurnConflict) {
+	if err := owned.ClaimEnvironmentInitialization(t.Context(), stale); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("stale binding escaped normal admission handling: %v", err)
 	}
 	if initializationState(t, s, other.TenantID, other.EnvironmentID) != "pending" {

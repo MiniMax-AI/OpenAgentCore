@@ -12,11 +12,11 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type artifactFixture struct {
-	artifact                                 store.SessionArtifact
+	artifact                                 sessions.Artifact
 	tenant, session, id, environment, cursor string
 	limit                                    int
 	ascending                                bool
@@ -25,22 +25,22 @@ type artifactFixture struct {
 	calls                                    int
 }
 
-func (f *artifactFixture) GetSessionArtifact(_ context.Context, tenant, session, id string) (store.SessionArtifact, error) {
+func (f *artifactFixture) GetSessionArtifact(_ context.Context, tenant, session, id string) (sessions.Artifact, error) {
 	f.calls++
 	f.tenant, f.session, f.id = tenant, session, id
 	return f.artifact, f.err
 }
 
-func (f *artifactFixture) ListSessionArtifacts(_ context.Context, tenant, session, environment, cursor string, limit int, ascending bool) (store.ArtifactPage, error) {
+func (f *artifactFixture) ListSessionArtifacts(_ context.Context, tenant, session, environment, cursor string, limit int, ascending bool) (sessions.ArtifactPage, error) {
 	f.calls++
 	f.tenant, f.session, f.environment, f.cursor, f.limit, f.ascending = tenant, session, environment, cursor, limit, ascending
 	if f.empty {
-		return store.ArtifactPage{Artifacts: []store.SessionArtifact{}}, f.err
+		return sessions.ArtifactPage{Artifacts: []sessions.Artifact{}}, f.err
 	}
-	return store.ArtifactPage{Artifacts: []store.SessionArtifact{f.artifact}, NextCursor: f.artifact.ID}, f.err
+	return sessions.ArtifactPage{Artifacts: []sessions.Artifact{f.artifact}, NextCursor: f.artifact.ID}, f.err
 }
 
-func (f *artifactFixture) ReadSessionArtifact(ctx context.Context, tenant, session, id string, consume func(store.SessionArtifact, io.Reader) error) error {
+func (f *artifactFixture) ReadSessionArtifact(ctx context.Context, tenant, session, id string, consume func(sessions.Artifact, io.Reader) error) error {
 	a, err := f.GetSessionArtifact(ctx, tenant, session, id)
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ type artifactResponseRecorder struct{ *httptest.ResponseRecorder }
 func (*artifactResponseRecorder) SetWriteDeadline(time.Time) error { return nil }
 
 func TestSessionArtifactRoutesAndPublicProjection(t *testing.T) {
-	f := &artifactFixture{artifact: store.SessionArtifact{ID: "artifact", SessionID: "session", EnvironmentID: "environment", TurnID: "turn", Path: "/workspace/outputs/a.bin", SizeBytes: 3, CreatedAt: time.Unix(123, 456)}}
+	f := &artifactFixture{artifact: sessions.Artifact{ID: "artifact", SessionID: "session", EnvironmentID: "environment", TurnID: "turn", Path: "/workspace/outputs/a.bin", SizeBytes: 3, CreatedAt: time.Unix(123, 456)}}
 	h, _, tenant := testHandler(t, f.wire)
 	request := func(method, suffix, beta string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, "/v1/agents/sessions/session/artifacts"+suffix, nil)
@@ -123,7 +123,7 @@ func TestSessionArtifactRoutesAndPublicProjection(t *testing.T) {
 		if w := request(route.method, route.suffix, ""); w.Code != 400 || f.calls != before {
 			t.Fatalf("missing Beta accepted: %s %s %d", route.method, route.suffix, w.Code)
 		}
-		f.err = store.ErrNotFound
+		f.err = sessions.ErrNotFound
 		if w := request(route.method, route.suffix, "agents=v1"); w.Code != 404 {
 			t.Fatalf("not-found mapping: %s %s %d", route.method, route.suffix, w.Code)
 		}

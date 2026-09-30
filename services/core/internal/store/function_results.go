@@ -8,22 +8,19 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// ErrFunctionResultConflict rejects a result that differs from the one already
-// saved for its call, including after the Turn ended (EVT-12).
-var ErrFunctionResultConflict = errors.New("tool call already has a different result")
-
 // SubmitFunctionResult stores a caller-validated result object; its wire schema belongs to the API.
 func (s *Store) SubmitFunctionResult(ctx context.Context, tenantID, sessionID, turnID, callID string, result json.RawMessage) error {
 	if len(result) == 0 || len(result) > 512*1024 {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	result, err := jsonobject.Normalize(result)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		return fmt.Errorf("%w: %w", sessions.ErrInvalidInput, err)
 	}
 	return s.withFunctionCall(ctx, tenantID, sessionID, turnID, callID, func(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn, call sqlc.FunctionCall) error {
 		return storeFunctionResult(ctx, q, turn, call.CallID, result)
@@ -37,7 +34,7 @@ func (s *Store) ConfirmFunctionResult(ctx context.Context, tenantID, sessionID, 
 			return nil
 		}
 		if len(call.Result) == 0 || !acceptsFunctionResult(turn) {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		if err := q.ApplyFunctionResult(ctx, sqlc.ApplyFunctionResultParams{SessionID: turn.SessionID, TurnID: turn.ID, CallID: call.CallID}); err != nil {
 			return err
@@ -52,19 +49,19 @@ func (s *Store) withFunctionCall(ctx context.Context, tenantID, sessionID, turnI
 		return err
 	}
 	if !validFunctionIdentity(callID) {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		turn, err := q.GetTurn(ctx, p)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
 		call, err := q.GetFunctionCall(ctx, sqlc.GetFunctionCallParams{TenantID: p.TenantID, SessionID: session, TurnID: p.ID, CallID: callID})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -76,19 +73,19 @@ func (s *Store) withFunctionCall(ctx context.Context, tenantID, sessionID, turnI
 func storeFunctionResult(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn, callID string, result json.RawMessage) error {
 	match, err := q.MatchFunctionResult(ctx, sqlc.MatchFunctionResultParams{SessionID: turn.SessionID, TurnID: turn.ID, CallID: callID, Result: result})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
+		return sessions.ErrNotFound
 	}
 	if err != nil {
 		return err
 	}
 	if match.Submitted {
 		if !match.Matches {
-			return ErrFunctionResultConflict
+			return sessions.ErrFunctionResultConflict
 		}
 		return nil
 	}
 	if !acceptsFunctionResult(turn) {
-		return ErrTurnConflict
+		return sessions.ErrTurnConflict
 	}
 	return q.SubmitFunctionResult(ctx, sqlc.SubmitFunctionResultParams{SessionID: turn.SessionID, TurnID: turn.ID, CallID: callID, Result: result})
 }

@@ -13,16 +13,16 @@ import (
 	"github.com/google/uuid"
 )
 
-func resultInput(t *testing.T, turn, call, result string) Input {
+func resultInput(t *testing.T, turn, call, result string) sessions.Input {
 	t.Helper()
-	raw, err := json.Marshal(FunctionResultInput{TurnID: turn, CallID: call, Result: json.RawMessage(result)})
+	raw, err := json.Marshal(sessions.FunctionResultInput{TurnID: turn, CallID: call, Result: json.RawMessage(result)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return Input{Kind: "tool_result", Payload: raw}
+	return sessions.Input{Kind: "tool_result", Payload: raw}
 }
 
-func functionInputFixture(t *testing.T, s *Store) (string, Session, string) {
+func functionInputFixture(t *testing.T, s *Store) (string, sessions.Session, string) {
 	t.Helper()
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
@@ -39,7 +39,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session, turn := functionInputFixture(t, s)
 	full := `{"success":false,"output":[{"type":"input_text","text":""},{"type":"input_image","image_url":"data:image/png;base64,AA=="},{"type":"input_text","text":"after"}],"error":"failed"}`
-	batch := []Input{resultInput(t, turn, "a", full), {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, resultInput(t, turn, "b", `{"success":true,"output":null,"error":null}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
+	batch := []sessions.Input{resultInput(t, turn, "a", full), {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, resultInput(t, turn, "b", `{"success":true,"output":null,"error":null}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
 	receipts, err := s.SubmitInputs(t.Context(), tenant, session.ID, "batch", batch)
 	if err != nil || len(receipts) != 4 {
 		t.Fatal(receipts, err)
@@ -85,8 +85,8 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	if err != nil || !current.CancelRequestedAt.IsZero() || current.Status != sessions.TurnQueued {
 		t.Fatal(current, err)
 	}
-	changed := []Input{batch[1], batch[0], batch[2], batch[3]}
-	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "batch", changed); !errors.Is(err, ErrIdempotencyConflict) {
+	changed := []sessions.Input{batch[1], batch[0], batch[2], batch[3]}
+	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "batch", changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal(err)
 	}
 	// A new request identity can repeat an identical saved result, without native application.
@@ -104,11 +104,11 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			s, _ := testStore(t)
 			tenant, session, turn := functionInputFixture(t, s)
-			message := Input{Kind: "message", Payload: json.RawMessage(`{"text":"Must roll back"}`)}
-			cancel := Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
+			message := sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"Must roll back"}`)}
+			cancel := sessions.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
 			first := resultInput(t, turn, "a", `{"success":true}`)
-			batch := []Input{message, first, cancel}
-			expected := ErrUnknownFunctionCall
+			batch := []sessions.Input{message, first, cancel}
+			expected := sessions.ErrUnknownFunctionCall
 			switch mode {
 			case "missing-call":
 				batch = append(batch, resultInput(t, turn, "missing", `{"success":true}`))
@@ -117,7 +117,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 				if mode == "foreign-turn" {
 					otherTenant = uuid.NewString()
 				}
-				other, err := s.CreateSession(t.Context(), otherTenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
+				other, err := s.CreateSession(t.Context(), otherTenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -127,13 +127,13 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 					t.Fatal(err)
 				}
 				batch = append(batch, resultInput(t, otherTurn, "a", `{"success":true}`))
-				expected = ErrFunctionCallTurnMismatch
+				expected = sessions.ErrFunctionCallTurnMismatch
 			case "cancel-first":
-				batch = []Input{message, cancel, first}
-				expected = ErrTurnConflict
+				batch = []sessions.Input{message, cancel, first}
+				expected = sessions.ErrTurnConflict
 			case "changed-result":
 				batch = append(batch, resultInput(t, turn, "a", `{"success":false}`))
-				expected = ErrFunctionResultConflict
+				expected = sessions.ErrFunctionResultConflict
 			}
 			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "failed-batch", batch); !errors.Is(err, expected) {
 				t.Fatal(err)
@@ -150,7 +150,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 			if err != nil || len(history) != 1 {
 				t.Fatal(history, err)
 			}
-			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "failed-batch", []Input{first, cancel}); err != nil {
+			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "failed-batch", []sessions.Input{first, cancel}); err != nil {
 				t.Fatal("failed transaction retained retry identity", err)
 			}
 		})
@@ -164,7 +164,7 @@ func TestFunctionInputConcurrentBatchesSelectOneResult(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
 	for i := range 2 {
-		batch := []Input{{Kind: "message", Payload: json.RawMessage(fmt.Sprintf(`{"text":"message-%d"}`, i))}, resultInput(t, turn, "a", fmt.Sprintf(`{"success":true,"output":"%d"}`, i))}
+		batch := []sessions.Input{{Kind: "message", Payload: json.RawMessage(fmt.Sprintf(`{"text":"message-%d"}`, i))}, resultInput(t, turn, "a", fmt.Sprintf(`{"success":true,"output":"%d"}`, i))}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -178,7 +178,7 @@ func TestFunctionInputConcurrentBatchesSelectOneResult(t *testing.T) {
 	for err := range results {
 		if err == nil {
 			wins++
-		} else if errors.Is(err, ErrFunctionResultConflict) {
+		} else if errors.Is(err, sessions.ErrFunctionResultConflict) {
 			conflicts++
 		} else {
 			t.Fatal(err)
@@ -197,16 +197,16 @@ func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session, turn := functionInputFixture(t, s)
 	for _, raw := range []string{`{}`, `{"turn_id":"","call_id":"a","result":{}}`, fmt.Sprintf(`{"turn_id":%q,"call_id":" ","result":{}}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a"}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a","result":null}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a","result":[]}`, turn)} {
-		_, err := s.SubmitInputs(t.Context(), tenant, session.ID, "invalid", []Input{{Kind: "tool_result", Payload: json.RawMessage(raw)}})
-		if !errors.Is(err, ErrInvalidInput) {
+		_, err := s.SubmitInputs(t.Context(), tenant, session.ID, "invalid", []sessions.Input{{Kind: "tool_result", Payload: json.RawMessage(raw)}})
+		if !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal(err)
 		}
 	}
 	input := resultInput(t, turn, "a", `{"success":true}`)
 	// Missing, foreign and malformed Sessions are not found, whatever the target.
 	for _, scope := range []struct{ tenant, session string }{{uuid.NewString(), session.ID}, {tenant, uuid.NewString()}, {tenant, "sess_malformed"}} {
-		for _, target := range []Input{input, resultInput(t, "bad", "missing", `{"success":true}`)} {
-			if _, err := s.SubmitInputs(t.Context(), scope.tenant, scope.session, "foreign", []Input{target}); !errors.Is(err, ErrNotFound) {
+		for _, target := range []sessions.Input{input, resultInput(t, "bad", "missing", `{"success":true}`)} {
+			if _, err := s.SubmitInputs(t.Context(), scope.tenant, scope.session, "foreign", []sessions.Input{target}); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 		}
@@ -217,15 +217,15 @@ func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 		turn, call string
 		want       error
 	}{
-		{uuid.NewString(), "a", ErrFunctionCallTurnMismatch}, {"bad", "a", ErrFunctionCallTurnMismatch},
-		{turn, "missing", ErrUnknownFunctionCall}, {uuid.NewString(), "missing", ErrUnknownFunctionCall}, {"bad", "missing", ErrUnknownFunctionCall},
+		{uuid.NewString(), "a", sessions.ErrFunctionCallTurnMismatch}, {"bad", "a", sessions.ErrFunctionCallTurnMismatch},
+		{turn, "missing", sessions.ErrUnknownFunctionCall}, {uuid.NewString(), "missing", sessions.ErrUnknownFunctionCall}, {"bad", "missing", sessions.ErrUnknownFunctionCall},
 	} {
-		if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "target", []Input{resultInput(t, target.turn, target.call, `{"success":true}`)}); !errors.Is(err, target.want) {
+		if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "target", []sessions.Input{resultInput(t, target.turn, target.call, `{"success":true}`)}); !errors.Is(err, target.want) {
 			t.Fatal(target, err)
 		}
 	}
 	transition(t, s, tenant, session.ID, turn, sessions.TurnWaiting, sessions.TurnFailed)
-	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "late", []Input{input}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "late", []sessions.Input{input}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal(err)
 	}
 	current, err := s.GetSession(t.Context(), tenant, session.ID)

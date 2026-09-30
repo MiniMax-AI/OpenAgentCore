@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -38,19 +39,19 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 		t.Fatal("authorization", err)
 	}
 	for _, pair := range [][2]string{{token + "x", "build"}, {token, "other-build"}, {"", "build"}} {
-		if _, err := s.ValidateEnvironmentInstallation(ctx, pair[0], pair[1]); !errors.Is(err, ErrInstallationAuthorization) {
+		if _, err := s.ValidateEnvironmentInstallation(ctx, pair[0], pair[1]); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 			t.Fatal("accepted invalid authorization", err)
 		}
 	}
 	payload, _, _ := strings.Cut(token, ".")
 	raw, _ := base64.RawURLEncoding.DecodeString(payload)
-	var expired InstallationAuthorization
+	var expired sessions.InstallationAuthorization
 	_ = json.Unmarshal(raw, &expired)
 	expired.ExpiresAt = time.Now().Add(-time.Second).Unix()
 	raw, _ = json.Marshal(expired)
 	payload = base64.RawURLEncoding.EncodeToString(raw)
 	signature, _ := cipher.Fingerprint("environment-installation", payload)
-	if _, err := s.ValidateEnvironmentInstallation(ctx, payload+"."+signature, "build"); !errors.Is(err, ErrInstallationAuthorization) {
+	if _, err := s.ValidateEnvironmentInstallation(ctx, payload+"."+signature, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 		t.Fatal("accepted expired grant", err)
 	}
 	one, _, _ := newExecutorSecret()
@@ -70,7 +71,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 				t.Fatal("two machines claimed one Environment")
 			}
 			winner = i
-		} else if !errors.Is(err, ErrExecutorCredentialExists) {
+		} else if !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 			t.Fatal(err)
 		}
 	}
@@ -86,13 +87,13 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if err := s.RevokeExecutorCredential(ctx, p, environment.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); !errors.Is(err, ErrExecutorCredentialExists) {
+	if err := s.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("revoked key resurrected", err)
 	}
 	if err := s.DeleteSession(ctx, p.TenantID, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.ValidateEnvironmentInstallation(ctx, token, "build"); !errors.Is(err, ErrInstallationAuthorization) {
+	if _, err := s.ValidateEnvironmentInstallation(ctx, token, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {
 		t.Fatal("deleted Session grant accepted", err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -45,9 +46,9 @@ func EnrollmentHandler(s EnrollmentStore) http.Handler {
 		defer cancel()
 		binding, err := s.EnrollRuntime(ctx, input.EnvironmentID, runtimedevice.HashCredential(authorization[1]))
 		switch {
-		case errors.Is(err, store.ErrNotFound):
+		case errors.Is(err, sessions.ErrNotFound):
 			fail(http.StatusUnauthorized)
-		case errors.Is(err, store.ErrDeviceBindingConflict):
+		case errors.Is(err, sessions.ErrDeviceBindingConflict):
 			fail(http.StatusConflict)
 		case err != nil:
 			fail(http.StatusServiceUnavailable)

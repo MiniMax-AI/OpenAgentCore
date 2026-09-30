@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestDiscoveryResourceProjectionRetainsExecutionConfiguration(t *testing.T) {
 	raw := json.RawMessage(`{"agent":{"id":"agent","model":"model","tools":[{"type":"tool_search"},{"type":"function","name":"lookup","description":"Lookup","parameters":{"type":"object"},"defer_loading":true}]},"environment":{"type":"none"}}`)
-	session := store.Session{ID: "session", Configuration: raw}
+	session := sessions.Session{ID: "session", Configuration: raw}
 	resource, err := sessionResponse(session, "")
 	if err != nil || len(resource.Agent.Tools) != 1 || !strings.Contains(string(resource.Agent.Tools[0]), `"defer_loading":true`) {
 		t.Fatal(resource.Agent.Tools, err)

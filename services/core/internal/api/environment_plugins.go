@@ -5,7 +5,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func decodeEnvironmentPlugins(raw json.RawMessage) ([]environmentconfig.Plugin, error) {
@@ -14,7 +14,7 @@ func decodeEnvironmentPlugins(raw json.RawMessage) ([]environmentconfig.Plugin, 
 	}
 	var entries []json.RawMessage
 	if json.Unmarshal(raw, &entries) != nil || len(entries) > 50 {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	result := make([]environmentconfig.Plugin, 0, len(entries))
 	for _, entry := range entries {
@@ -25,7 +25,7 @@ func decodeEnvironmentPlugins(raw json.RawMessage) ([]environmentconfig.Plugin, 
 			Source      json.RawMessage `json:"source"`
 		}
 		if decodeInputObject(entry, &input, "type", "name", "description", "source") != nil || input.Type != "inline" {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		body, err := decodeCapabilityArchive(input.Source)
 		if err != nil {
@@ -51,13 +51,13 @@ func storedPlugins(raw json.RawMessage) ([]json.RawMessage, error) {
 	}
 	var entries []json.RawMessage
 	if json.Unmarshal(raw, &entries) != nil || len(entries) > 50 {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
 		var metadata agentplugin.Metadata
 		if decodeInputObject(entry, &metadata, "type", "name", "description") != nil || metadata.Type != "inline" || metadata.Name == "" || metadata.Description == "" || seen[metadata.Name] {
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		seen[metadata.Name] = true
 	}

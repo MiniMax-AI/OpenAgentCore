@@ -8,10 +8,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
-func runtimeEnrollmentFixture(t *testing.T, s *Store, p identity.Principal) (Session, Environment, IssuedExecutorCredential) {
+func runtimeEnrollmentFixture(t *testing.T, s *Store, p identity.Principal) (sessions.Session, sessions.Environment, sessions.IssuedExecutorCredential) {
 	t.Helper()
 	input := environmentInput(uuid.NewString(), "self_hosted", "/workspace")
 	input.Creator = p.Subject()
@@ -41,7 +42,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 		p,
 	} {
 		_, target, _ := runtimeEnrollmentFixture(t, s, other)
-		if _, err := s.EnrollRuntime(ctx, target.ID, executorDigest(key.Token)); !errors.Is(err, ErrNotFound) {
+		if _, err := s.EnrollRuntime(ctx, target.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign target enrollment: %v", err)
 		}
 	}
@@ -63,7 +64,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnrollRuntime(ctx, environment.ID, executorDigest(otherKey.Token)); !errors.Is(err, ErrDeviceBindingConflict) {
+	if _, err := s.EnrollRuntime(ctx, environment.ID, executorDigest(otherKey.Token)); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 		t.Fatalf("another key replaced binding: %v", err)
 	}
 	rotated, err := s.RotateExecutorCredential(ctx, p, key.KeyID)
@@ -94,7 +95,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if _, ok, err := s.GetDeviceCredential(ctx, bound.DeviceID); err != nil || ok {
 		t.Fatalf("revoked key authenticates: %v", err)
 	}
-	if _, err := s.GetSessionDevice(ctx, p.TenantID, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSessionDevice(ctx, p.TenantID, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("revoked binding dispatchable: %v", err)
 	}
 }
@@ -139,7 +140,7 @@ func TestRuntimeEnrollmentConcurrentAndDeletion(t *testing.T) {
 	if err := s.DeleteSession(t.Context(), p.TenantID, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnrollRuntime(t.Context(), environment.ID, executorDigest(key.Token)); !errors.Is(err, ErrNotFound) {
+	if _, err := s.EnrollRuntime(t.Context(), environment.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("deleted enrollment: %v", err)
 	}
 	if _, ok, err := s.GetDeviceCredential(t.Context(), bound.DeviceID); err != nil || ok {

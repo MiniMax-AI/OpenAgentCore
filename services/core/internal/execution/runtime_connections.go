@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -21,21 +22,21 @@ type runtimeConnection struct {
 
 func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner store.RuntimeAllocation) error {
 	bound, err := r.store.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, sessions.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	if bound.ID != owner.DeviceID || bound.EnvironmentID != owner.EnvironmentID {
-		return store.ErrDeviceBindingConflict
+		return sessions.ErrDeviceBindingConflict
 	}
 	if !owner.CreateSettled || owner.State != "running" {
 		return nil
 	}
 	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
 	connected := err == nil
-	if err != nil && !errors.Is(err, store.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
+	if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 		return err
 	}
 	return observeRuntimeConnection(ctx, r.store, r.connections, owner.TenantID, owner.EnvironmentID, peer, connected)
@@ -74,11 +75,11 @@ func (w *Worker) observeEnrolledRuntimes(ctx context.Context) error {
 		live[bound.EnvironmentID] = true
 		peer, err := w.dispatcher.authorizedPeer(ctx, bound.DeviceID)
 		connected := err == nil
-		if err != nil && !errors.Is(err, store.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
+		if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrSessionClosed) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 			return err
 		}
 		if err := observeRuntimeConnection(ctx, w.dispatcher.Store, w.enrolledConnections, bound.TenantID, bound.EnvironmentID, peer, connected); err != nil {
-			if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrInvalidInput) {
+			if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, sessions.ErrInvalidInput) {
 				continue
 			}
 			return err

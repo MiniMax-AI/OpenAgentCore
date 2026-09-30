@@ -7,7 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSkillReferenceNullableSelectorAdmissionAndTemplateProjection(t *testing.T) {
@@ -75,7 +75,7 @@ func TestInstalledSkillReferenceRequiresConcreteVersion(t *testing.T) {
 	}
 	for _, selector := range []string{`"2"`, `null`, `"latest"`} {
 		raw := json.RawMessage(`{"type":"openai_hosted","skills":[{"type":"skill_reference","skill_id":"skill-owned","version":` + selector + `,"name":"proof","description":"A proof."}]}`)
-		result, err := environmentResponse(store.Environment{ID: "environment-owned", Status: "pending", Configuration: raw})
+		result, err := environmentResponse(sessions.Environment{ID: "environment-owned", Status: "pending", Configuration: raw})
 		if selector != `"2"` {
 			if err == nil {
 				t.Fatalf("unresolved installed selector accepted: %s", selector)

@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestExecutorPrincipalMigrationRetiresUnknownAuthority(t *testing.T) {
@@ -103,16 +105,16 @@ func TestExecutorPrincipalMigrationRetiresUnknownAuthority(t *testing.T) {
 	t.Cleanup(migrated.Close)
 	s := New(migrated)
 	p := FixtureExecutorPrincipal(t, s, tenant)
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment, digest); !errors.Is(err, ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment, digest); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("legacy credential accepted", err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, p, environment, ""); !errors.Is(err, ErrExecutorCredentialExists) {
+	if _, err := s.IssueExecutorCredential(ctx, p, environment, ""); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("legacy key ID claimed", err)
 	}
-	if _, err := s.RotateExecutorCredential(ctx, p, environment); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RotateExecutorCredential(ctx, p, environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("legacy principal claimed", err)
 	}
-	if err := s.RevokeExecutorCredential(ctx, p, environment); !errors.Is(err, ErrNotFound) {
+	if err := s.RevokeExecutorCredential(ctx, p, environment); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("legacy principal manufactured", err)
 	}
 	key, err := s.IssueExecutorCredential(ctx, p, uuid.NewString(), "")

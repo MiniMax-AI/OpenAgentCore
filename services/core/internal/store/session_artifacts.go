@@ -4,49 +4,34 @@ import (
 	"context"
 	"errors"
 	"io"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type SessionArtifact struct {
-	ID            string
-	SessionID     string
-	TurnID        string
-	EnvironmentID string
-	Path          string
-	SizeBytes     int64
-	CreatedAt     time.Time
-}
-
-type ArtifactPage struct {
-	Artifacts  []SessionArtifact
-	NextCursor string
-}
-
-func (s *Store) GetSessionArtifact(ctx context.Context, tenantID, sessionID, artifactID string) (SessionArtifact, error) {
+func (s *Store) GetSessionArtifact(ctx context.Context, tenantID, sessionID, artifactID string) (sessions.Artifact, error) {
 	lookup, err := artifactLookup(tenantID, sessionID, artifactID)
 	if err != nil {
-		return SessionArtifact{}, err
+		return sessions.Artifact{}, err
 	}
 	row, err := s.queries.GetSessionArtifact(ctx, lookup)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SessionArtifact{}, ErrNotFound
+		return sessions.Artifact{}, sessions.ErrNotFound
 	}
 	return artifactFromRow(row), err
 }
 
-func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, environmentID, cursor string, limit int, ascending bool) (ArtifactPage, error) {
+func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, environmentID, cursor string, limit int, ascending bool) (sessions.ArtifactPage, error) {
 	if limit < 1 || limit > 100 {
-		return ArtifactPage{}, ErrInvalidInput
+		return sessions.ArtifactPage{}, sessions.ErrInvalidInput
 	}
 	if _, err := s.GetSession(ctx, tenantID, sessionID); err != nil {
-		return ArtifactPage{}, err
+		return sessions.ArtifactPage{}, err
 	}
 	tenant, _ := parseID(tenantID)
 	session, _ := parseID(sessionID)
@@ -59,26 +44,26 @@ func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, e
 		// Any cursor that is not an Artifact of this Session, including a
 		// malformed one, is an invalid cursor rather than a missing resource.
 		after, err := s.GetSessionArtifact(ctx, tenantID, sessionID, cursor)
-		if errors.Is(err, ErrNotFound) {
+		if errors.Is(err, sessions.ErrNotFound) {
 			// The Session lookup above is a separate statement: a Session deleted
 			// since then stays not found. Deleted Sessions never reappear, so an
 			// existing one here also existed when the cursor was read.
 			if _, err := s.GetSession(ctx, tenantID, sessionID); err != nil {
-				return ArtifactPage{}, err
+				return sessions.ArtifactPage{}, err
 			}
-			return ArtifactPage{}, errArtifactCursor
+			return sessions.ArtifactPage{}, sessions.ErrArtifactCursor
 		}
 		if err != nil {
-			return ArtifactPage{}, err
+			return sessions.ArtifactPage{}, err
 		}
 		params.AfterCreated = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
 		params.AfterID, _ = parseID(after.ID)
 	}
 	rows, err := s.queries.ListSessionArtifacts(ctx, params)
 	if err != nil {
-		return ArtifactPage{}, err
+		return sessions.ArtifactPage{}, err
 	}
-	page := ArtifactPage{Artifacts: make([]SessionArtifact, 0, min(limit, len(rows)))}
+	page := sessions.ArtifactPage{Artifacts: make([]sessions.Artifact, 0, min(limit, len(rows)))}
 	if len(rows) > limit {
 		page.NextCursor = uuid.UUID(rows[limit-1].ID.Bytes).String()
 		rows = rows[:limit]
@@ -90,18 +75,18 @@ func (s *Store) ListSessionArtifacts(ctx context.Context, tenantID, sessionID, e
 }
 
 // ReadSessionArtifact keeps an admitted snapshot available across concurrent deletion.
-func (s *Store) ReadSessionArtifact(ctx context.Context, tenantID, sessionID, artifactID string, consume func(SessionArtifact, io.Reader) error) error {
+func (s *Store) ReadSessionArtifact(ctx context.Context, tenantID, sessionID, artifactID string, consume func(sessions.Artifact, io.Reader) error) error {
 	lookup, err := artifactLookup(tenantID, sessionID, artifactID)
 	if err != nil {
 		return err
 	}
 	if consume == nil {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		row, err := s.queries.WithTx(tx).GetSessionArtifact(ctx, lookup)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -128,14 +113,14 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 		// Use the same lock order as whole-Session deletion and Turn publication.
 		locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
 		if errors.Is(err, pgx.ErrNoRows) || err == nil && locked.DeletedAt.Valid {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
 		oid, err := q.DeleteSessionArtifact(ctx, sqlc.DeleteSessionArtifactParams(lookup))
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -153,8 +138,8 @@ func artifactLookup(tenantID, sessionID, artifactID string) (sqlc.GetSessionArti
 	return sqlc.GetSessionArtifactParams{TenantID: ids.TenantID, SessionID: ids.SessionID, ID: ids.ID}, err
 }
 
-func artifactFromRow(row sqlc.SessionArtifact) SessionArtifact {
-	return SessionArtifact{ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),
+func artifactFromRow(row sqlc.SessionArtifact) sessions.Artifact {
+	return sessions.Artifact{ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),
 		TurnID: uuid.UUID(row.TurnID.Bytes).String(), EnvironmentID: uuid.UUID(row.EnvironmentID.Bytes).String(),
 		Path: row.Path, SizeBytes: row.SizeBytes, CreatedAt: row.CreatedAt.Time}
 }

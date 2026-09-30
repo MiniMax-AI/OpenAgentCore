@@ -11,13 +11,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type ConnectionStore interface {
 	AuthenticateEnvironmentExecutor(context.Context, string, string) (string, error)
-	GetEnvironment(context.Context, string, string) (store.Environment, error)
-	GetSessionDevice(context.Context, string, string) (store.ExecutionDevice, error)
+	GetEnvironment(context.Context, string, string) (sessions.Environment, error)
+	GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error)
 	GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error)
 }
 
@@ -48,9 +48,9 @@ func ConnectionHandler(s ConnectionStore, registry *runtimegateway.Registry) htt
 		defer cancel()
 		connected, err := RuntimeConnected(ctx, s, registry, environment, digest)
 		switch {
-		case errors.Is(err, store.ErrNotFound):
+		case errors.Is(err, sessions.ErrNotFound):
 			fail(http.StatusUnauthorized)
-		case errors.Is(err, store.ErrDeviceBindingConflict):
+		case errors.Is(err, sessions.ErrDeviceBindingConflict):
 			fail(http.StatusConflict)
 		case err != nil:
 			fail(http.StatusServiceUnavailable)
@@ -80,27 +80,27 @@ func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimeg
 		return false, err
 	}
 	if current.Status == "failed" || current.Status == "expired" {
-		return false, store.ErrNotFound
+		return false, sessions.ErrNotFound
 	}
 	bound, err := s.GetSessionDevice(ctx, tenant, current.SessionID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, sessions.ErrNotFound) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
 	if bound.EnvironmentID != environment {
-		return false, store.ErrDeviceBindingConflict
+		return false, sessions.ErrDeviceBindingConflict
 	}
 	credential, found, err := s.GetDeviceCredential(ctx, bound.ID)
 	if err != nil {
 		return false, err
 	}
 	if !found {
-		return false, store.ErrNotFound
+		return false, sessions.ErrNotFound
 	}
 	if credential.CredentialHash != digest {
-		return false, store.ErrDeviceBindingConflict
+		return false, sessions.ErrDeviceBindingConflict
 	}
 	if registry == nil {
 		return false, nil
@@ -127,10 +127,10 @@ func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimeg
 		return false, err
 	}
 	if !found {
-		return false, store.ErrNotFound
+		return false, sessions.ErrNotFound
 	}
 	if credential.CredentialHash != digest {
-		return false, store.ErrDeviceBindingConflict
+		return false, sessions.ErrDeviceBindingConflict
 	}
 	return !peer.IsClosed() && peer.AuthenticatedWith(digest), nil
 }

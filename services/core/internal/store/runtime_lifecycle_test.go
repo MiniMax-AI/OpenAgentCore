@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -112,10 +113,10 @@ func managedWorkerMode(t *testing.T, s *store.Store, db fixtureDB, key string, p
 	return w, stop
 }
 
-func managedSession(t *testing.T, s *store.Store) (string, store.Session, store.Environment) {
+func managedSession(t *testing.T, s *store.Store) (string, sessions.Session, sessions.Environment) {
 	t.Helper()
 	tenant := uuid.NewString()
-	v, e := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)}))
+	v, e := s.CreateSession(t.Context(), tenant, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)}))
 	if e != nil {
 		t.Fatal(e)
 	}

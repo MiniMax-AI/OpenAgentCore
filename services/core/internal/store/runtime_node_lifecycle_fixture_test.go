@@ -21,6 +21,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -165,10 +166,10 @@ func (f *nodeIsolationFixture) online(id string) {
 		f.t.Fatal(err)
 	}
 }
-func (f *nodeIsolationFixture) session(node string, initialize bool) (string, store.Session, store.Environment) {
+func (f *nodeIsolationFixture) session(node string, initialize bool) (string, sessions.Session, sessions.Environment) {
 	f.t.Helper()
 	tenant := uuid.NewString()
-	input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage("{\"agent\":{\"model\":\"test\"},\"environment\":{\"type\":\"openai_hosted\"}}")}
+	input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage("{\"agent\":{\"model\":\"test\"},\"environment\":{\"type\":\"openai_hosted\"}}")}
 	if initialize {
 		input.InitialFiles = []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
 	}
@@ -219,7 +220,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, st
 	}
 	return tenant, session, env
 }
-func (f *nodeIsolationFixture) provision(tenant string, env store.Environment) store.RuntimeAllocation {
+func (f *nodeIsolationFixture) provision(tenant string, env sessions.Environment) store.RuntimeAllocation {
 	f.t.Helper()
 	ctx, cancel := context.WithTimeout(f.t.Context(), 3*time.Second)
 	defer cancel()

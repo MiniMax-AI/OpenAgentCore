@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // A hint only accelerates observation of an already committed input. Lookup or
 // delivery failure leaves that input for the normal maintenance scan.
-func (w *Worker) hintRuntimeWake(ctx context.Context, session store.Session) {
+func (w *Worker) hintRuntimeWake(ctx context.Context, session sessions.Session) {
 	r := w.runtimes
 	if r == nil {
 		return

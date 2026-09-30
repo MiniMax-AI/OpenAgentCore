@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 const (
@@ -141,9 +141,9 @@ func TestCredentialOperationErrorsDoNotExposeDatabaseValues(t *testing.T) {
 	const secret = "postgres://operator:private-password@database/execution"
 	for _, err := range []error{
 		errors.New(secret),
-		fmt.Errorf("%w: %s", store.ErrInvalidInput, secret),
-		fmt.Errorf("%w: %s", store.ErrNotFound, secret),
-		fmt.Errorf("%w: %s", store.ErrExecutorCredentialExists, secret),
+		fmt.Errorf("%w: %s", sessions.ErrInvalidInput, secret),
+		fmt.Errorf("%w: %s", sessions.ErrNotFound, secret),
+		fmt.Errorf("%w: %s", sessions.ErrExecutorCredentialExists, secret),
 	} {
 		redacted := credentialOperationError(err)
 		if redacted == nil || strings.Contains(redacted.Error(), secret) {
@@ -153,7 +153,7 @@ func TestCredentialOperationErrorsDoNotExposeDatabaseValues(t *testing.T) {
 	if err := credentialOperationError(nil); err != nil {
 		t.Fatalf("successful revocation returned an error: %v", err)
 	}
-	if !errors.Is(credentialOperationError(store.ErrExecutorCredentialExists), store.ErrExecutorCredentialExists) {
+	if !errors.Is(credentialOperationError(sessions.ErrExecutorCredentialExists), sessions.ErrExecutorCredentialExists) {
 		t.Fatal("duplicate key guidance was lost")
 	}
 }

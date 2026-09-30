@@ -8,20 +8,16 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ItemPage struct {
-	Items   []v1.Item
-	HasMore bool
-}
-
-func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (ItemPage, error) {
+func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (sessions.ItemPage, error) {
 	if limit < 1 || limit > 100 {
-		return ItemPage{}, ErrInvalidInput
+		return sessions.ItemPage{}, sessions.ErrInvalidInput
 	}
-	page := ItemPage{Items: make([]v1.Item, 0, limit)}
+	page := sessions.ItemPage{Items: make([]v1.Item, 0, limit)}
 	err := s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		p := sqlc.ListSessionItemsParams{SessionID: session, PageLimit: int32(limit + 1), Ascending: ascending, AfterID: pgtype.UUID{Valid: true}}
 		if cursor != "" {
@@ -29,7 +25,7 @@ func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor strin
 			// malformed one, is an invalid cursor rather than a missing resource.
 			row, err := q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: session, ID: pgunit.PathID(cursor)})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return errItemCursor
+				return sessions.ErrItemCursor
 			}
 			if err != nil {
 				return err

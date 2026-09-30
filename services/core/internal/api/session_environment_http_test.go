@@ -13,20 +13,19 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 type environmentHTTPFixture struct{ streamFixture }
 
-func (f *environmentHTTPFixture) ListSessions(_ context.Context, tenant, _ string, _ int, _ bool, _ *string) (store.SessionPage, error) {
+func (f *environmentHTTPFixture) ListSessions(_ context.Context, tenant, _ string, _ int, _ bool, _ *string) (sessions.Page, error) {
 	if tenant != f.session.TenantID {
-		return store.SessionPage{}, store.ErrNotFound
+		return sessions.Page{}, sessions.ErrNotFound
 	}
-	return store.SessionPage{Sessions: []store.Session{f.session}}, nil
+	return sessions.Page{Sessions: []sessions.Session{f.session}}, nil
 }
 
-func (f *environmentHTTPFixture) UpdateSessionMetadata(ctx context.Context, tenant, session string, metadata map[string]string) (store.Session, error) {
+func (f *environmentHTTPFixture) UpdateSessionMetadata(ctx context.Context, tenant, session string, metadata map[string]string) (sessions.Session, error) {
 	value, err := f.GetSession(ctx, tenant, session)
 	value.Metadata = metadata
 	return value, err

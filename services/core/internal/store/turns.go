@@ -17,14 +17,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-var ErrTurnConflict = errors.New("turn state changed or cancellation was requested")
-
-type TurnTransition struct {
-	ExpectedStatus string
-	Status         string
-	Outcome        json.RawMessage
-}
-
 // GetTurn reads a root Turn. A Subagent Turn ID is not found here, exactly like
 // a missing one; GetSubagentTurn reads child Turns.
 func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string) (sessions.Turn, error) {
@@ -34,7 +26,7 @@ func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string)
 	}
 	row, err := s.queries.GetTurn(ctx, params)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sessions.Turn{}, ErrNotFound
+		return sessions.Turn{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return sessions.Turn{}, fmt.Errorf("get turn: %w", err)
@@ -45,20 +37,20 @@ func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string)
 // TransitionTurn is a compare-and-set for execution callbacks. Once terminal,
 // a Turn cannot be reopened or have its outcome overwritten, including by retries.
 // A dispatcher must claim queued -> in_progress before sending work to a daemon.
-func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID string, input TurnTransition) (sessions.Turn, error) {
+func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID string, input sessions.TurnTransition) (sessions.Turn, error) {
 	params, err := turnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
 	if !validTransition(input.ExpectedStatus, input.Status) || len(input.Outcome) > 512*1024 {
-		return sessions.Turn{}, fmt.Errorf("%w: invalid turn transition or outcome size", ErrInvalidInput)
+		return sessions.Turn{}, fmt.Errorf("%w: invalid turn transition or outcome size", sessions.ErrInvalidInput)
 	}
 	outcome, err := jsonobject.Normalize(input.Outcome)
 	if err != nil {
-		return sessions.Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		return sessions.Turn{}, fmt.Errorf("%w: %w", sessions.ErrInvalidInput, err)
 	}
 	if !sessions.TerminalStatus(input.Status) && string(outcome) != "{}" {
-		return sessions.Turn{}, fmt.Errorf("%w: outcome requires a terminal status", ErrInvalidInput)
+		return sessions.Turn{}, fmt.Errorf("%w: outcome requires a terminal status", sessions.ErrInvalidInput)
 	}
 	input.Outcome = outcome
 	var row sqlc.Turn
@@ -73,9 +65,9 @@ func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID 
 	return turnFromRow(row), nil
 }
 
-func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnParams, input TurnTransition) (sqlc.Turn, error) {
+func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnParams, input sessions.TurnTransition) (sqlc.Turn, error) {
 	if _, err := q.GetTurn(ctx, params); errors.Is(err, pgx.ErrNoRows) {
-		return sqlc.Turn{}, ErrNotFound
+		return sqlc.Turn{}, sessions.ErrNotFound
 	} else if err != nil {
 		return sqlc.Turn{}, err
 	}
@@ -89,7 +81,7 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 		NewStatus: input.Status, Outcome: input.Outcome,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sqlc.Turn{}, ErrTurnConflict
+		return sqlc.Turn{}, sessions.ErrTurnConflict
 	}
 	if err != nil {
 		return sqlc.Turn{}, err

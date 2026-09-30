@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
-func localEnvironment(t *testing.T, s *Store, tenant string) (Session, Environment) {
+func localEnvironment(t *testing.T, s *Store, tenant string) (sessions.Session, sessions.Environment) {
 	t.Helper()
-	session, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{
 		Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`),
 	})
@@ -33,14 +34,14 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 	sibling, _ := localEnvironment(t, s, tenant)
 	foreign, _ := localEnvironment(t, s, foreignTenant)
 	digest := runtimedevice.HashCredential(uuid.NewString())
-	if _, err := s.CreateEnvironmentDevice(t.Context(), foreignTenant, environment.ID, "foreign", digest); !errors.Is(err, ErrNotFound) {
+	if _, err := s.CreateEnvironmentDevice(t.Context(), foreignTenant, environment.ID, "foreign", digest); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign provisioning: %v", err)
 	}
 	bound, err := s.CreateEnvironmentDevice(t.Context(), tenant, environment.ID, "dedicated", digest)
 	if err != nil || bound.EnvironmentID != environment.ID {
 		t.Fatalf("provision: %+v %v", bound, err)
 	}
-	for _, other := range []Session{sibling, foreign} {
+	for _, other := range []sessions.Session{sibling, foreign} {
 		if err := s.BindSessionDevice(t.Context(), other.TenantID, other.ID, bound.ID); err == nil {
 			t.Fatal("dedicated credential bound to another Session")
 		}
@@ -89,7 +90,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 	for err := range results {
 		if err == nil {
 			winners++
-		} else if !errors.Is(err, ErrDeviceBindingConflict) {
+		} else if !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 			t.Fatal(err)
 		}
 	}
@@ -103,7 +104,7 @@ func TestEnvironmentDeviceProvisioningHasOneWinner(t *testing.T) {
 	if err := s.RevokeDevice(t.Context(), tenant, bound.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateEnvironmentDevice(t.Context(), tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrDeviceBindingConflict) {
+	if _, err := s.CreateEnvironmentDevice(t.Context(), tenant, environment.ID, "replacement", runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 		t.Fatalf("silent placement replacement: %v", err)
 	}
 }

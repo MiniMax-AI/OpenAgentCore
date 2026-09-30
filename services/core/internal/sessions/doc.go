@@ -1,5 +1,7 @@
-// Package sessions owns the Session change vocabulary, including Turns and
-// their statuses, and decides what Session writes publish: the public changes
-// that report Turn and Session transitions, what a Turn that ends settles,
-// measured Turn usage and the Session activity each change reports.
+// Package sessions owns the Session vocabulary: Sessions, Turns and their
+// statuses, inputs, Environments and their provisioning failures, function
+// calls, Item and Artifact reads, executor credentials, and the errors Session
+// operations return. It also decides what Session writes publish: the public
+// changes that report Turn and Session transitions, what a Turn that ends
+// settles, measured Turn usage and the Session activity each change reports.
 package sessions

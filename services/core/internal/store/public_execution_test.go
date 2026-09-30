@@ -13,9 +13,9 @@ import (
 	"github.com/google/uuid"
 )
 
-func publicSession(t *testing.T, h *dispatchHarness, key string) store.Session {
+func publicSession(t *testing.T, h *dispatchHarness, key string) sessions.Session {
 	t.Helper()
-	value, err := h.s.CreateSession(context.Background(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key, Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"test-model","instructions":"Keep this."},"environment":{"type":"none"}}`)})
+	value, err := h.s.CreateSession(context.Background(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key, Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"test-model","instructions":"Keep this."},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 		go second.Run(ctx)
 		t.Fatal("second service acquired database")
 	}
-	inputs := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"First"}]}]}`)}, {Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"Second"}]}]}`)}}
+	inputs := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"First"}]}]}`)}, {Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"Second"}]}]}`)}}
 	receipts, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "batch", inputs)
 	if err != nil {
 		t.Fatal(err)
@@ -112,13 +112,13 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	h.session = publicSession(t, h, "interrupted")
 	first := h.message("first", "Already sent")
 	ctx := context.Background()
-	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	// A native measurement committed before process loss must survive startup
 	// reconciliation even when no Done frame can be recovered.
 	usage := json.RawMessage(`{"tokens":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":13}}`)
-	if err := h.s.AppendTurnEvents(ctx, h.tenant, h.session.ID, first.TurnID, 1, []store.ExecutionEvent{{Kind: proto.TypeUsage, Payload: usage}}); err != nil {
+	if err := h.s.AppendTurnEvents(ctx, h.tenant, h.session.ID, first.TurnID, 1, []sessions.ExecutionEvent{{Kind: proto.TypeUsage, Payload: usage}}); err != nil {
 		t.Fatal(err)
 	}
 	checkMeasurement := func(ended bool) {

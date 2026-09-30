@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -60,12 +61,12 @@ func (s *Store) resetTransaction(ctx context.Context, apply func(context.Context
 // caller reads the deployment after commit.
 func (s *Store) StartSandboxReset(ctx context.Context, installation string, input SandboxResetRequest) error {
 	if input.Clear != "auto" && input.Clear != "force" {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	deadline := int32(3600)
 	if input.DeadlineSeconds != nil {
 		if input.Clear != "auto" || *input.DeadlineSeconds < 300 || *input.DeadlineSeconds > 86400 {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		deadline = *input.DeadlineSeconds
 	}
@@ -91,7 +92,7 @@ func (s *Store) StartSandboxReset(ctx context.Context, installation string, inpu
 		} else {
 			source, ok := adminaudit.FromContext(ctx)
 			if !ok {
-				return ErrInvalidInput
+				return sessions.ErrInvalidInput
 			}
 			// The audit insert validates the provenance before this transaction
 			// can commit. Persist only the same non-secret typed source.
@@ -146,7 +147,7 @@ func (s *Store) AdvanceSandboxResetDeadline(ctx context.Context) error {
 func sandboxResetAudit(d sqlc.RuntimeDeployment) (adminaudit.Source, error) {
 	var source adminaudit.Source
 	if !d.ResetClear.Valid || json.Unmarshal(d.ResetAudit, &source) != nil {
-		return source, ErrInvalidInput
+		return source, sessions.ErrInvalidInput
 	}
 	return source, nil
 }

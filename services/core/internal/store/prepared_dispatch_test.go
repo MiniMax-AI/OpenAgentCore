@@ -19,21 +19,21 @@ type preparedDispatchResult struct {
 	err error
 }
 
-func preparedDispatchHarness(t *testing.T) (*dispatchHarness, store.EnvironmentInputReservation) {
+func preparedDispatchHarness(t *testing.T) (*dispatchHarness, sessions.EnvironmentInputReservation) {
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	assertNoRuntimeAllocation(t, h)
 	owner := executionOwner(t, h.db, h.s)
 	h.d.Store, h.lease = owner.Store, owner.Lease
 	enableWorkerEnvironment(t, h)
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return h, pending
 }
 
-func runPreparedDispatch(h *dispatchHarness, ctx context.Context, pending store.EnvironmentInputReservation) <-chan preparedDispatchResult {
+func runPreparedDispatch(h *dispatchHarness, ctx context.Context, pending sessions.EnvironmentInputReservation) <-chan preparedDispatchResult {
 	out := make(chan preparedDispatchResult, 1)
 	go func() {
 		result, err := h.d.RunEnvironmentInput(ctx, h.lease, h.tenant, h.session.ID, pending.ID)
@@ -130,7 +130,7 @@ func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored, err := h.d.Store.ExpireEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID)
-	if err != nil || stored.State != store.EnvironmentInputAdmitted {
+	if err != nil || stored.State != sessions.EnvironmentInputAdmitted {
 		t.Fatal("admitted execution lost its owner to the pending-input deadline", err)
 	}
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
@@ -147,7 +147,7 @@ func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 // to the executor bound to that Session, not to another executor of the tenant.
 func TestSelfHostedProviderReachesOnlyBoundExecutor(t *testing.T) {
 	h, pending := preparedDispatchHarness(t)
-	other, err := h.s.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+	other, err := h.s.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)}))
 	if err != nil {
 		t.Fatal(err)

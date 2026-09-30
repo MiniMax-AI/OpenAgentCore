@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -50,7 +51,7 @@ func TestRequestBodyGateRejectsWithoutWritesPostgres(t *testing.T) {
 	credential := client.created(owner, "/v1/vaults/"+vault+"/credentials", `{"name":"body","auth":{"type":"static_bearer","mcp_server_url":"https://mcp.example/mcp","token":"body-token"}}`)
 	template := client.created(owner, "/v1/agents/environments/templates", `{"name":"body-template"}`)
 	session := client.created(owner, "/v1/agents/sessions", `{"agent":{"model":"body-model"},"environment":{"type":"none"},"input":"Keep this Session.","metadata":{"k":"v"}}`)
-	prepared, err := s.CreateSession(t.Context(), ownerTenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "body-environment",
+	prepared, err := s.CreateSession(t.Context(), ownerTenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "body-environment",
 		Configuration: json.RawMessage(`{"agent":{"model":"body-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil || prepared.Environment == nil {
 		t.Fatal("fixture Environment", err)
@@ -234,6 +235,6 @@ func TestRequestBodyGateExcludedRoutesPostgres(t *testing.T) {
 
 type unavailableWorkspaces struct{ strictStandIn }
 
-func (unavailableWorkspaces) WriteEnvironmentFile(context.Context, store.Environment, string, []byte) (int64, error) {
+func (unavailableWorkspaces) WriteEnvironmentFile(context.Context, sessions.Environment, string, []byte) (int64, error) {
 	return 0, execution.ErrExecutionUnavailable
 }

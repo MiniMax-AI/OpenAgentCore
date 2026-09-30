@@ -13,7 +13,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -26,7 +26,7 @@ type environmentFileCreateFixture struct {
 	wrongSize bool
 }
 
-func (f *environmentFileCreateFixture) WriteEnvironmentFile(_ context.Context, environment store.Environment, path string, data []byte) (int64, error) {
+func (f *environmentFileCreateFixture) WriteEnvironmentFile(_ context.Context, environment sessions.Environment, path string, data []byte) (int64, error) {
 	f.writes++
 	f.readEnvironment, f.path, f.data = environment, path, append([]byte(nil), data...)
 	if f.wrongSize {

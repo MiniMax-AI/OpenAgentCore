@@ -14,13 +14,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
-func validateInitialInputs(inputs []Input) ([]Input, json.RawMessage, error) {
+func validateInitialInputs(inputs []sessions.Input) ([]sessions.Input, json.RawMessage, error) {
 	for _, input := range inputs {
 		if input.Kind != "message" {
-			return nil, nil, ErrInvalidInput
+			return nil, nil, sessions.ErrInvalidInput
 		}
 	}
 	return validateInputs(inputs)
@@ -28,9 +29,9 @@ func validateInitialInputs(inputs []Input) ([]Input, json.RawMessage, error) {
 
 // The Session upsert locks retries. Only the new row reserves or admits work, so a
 // retry after completion or later Turns cannot submit the original input again.
-func (s *Store) createSessionResources(ctx context.Context, tenant string, params sqlc.CreateSessionParams, inputs []Input, encodedInput json.RawMessage, files []environmentconfig.InitialFile, setup environmentconfig.Setup, provider *v1.ModelProviderInput, executionConfiguration *v1.SessionExecutionConfiguration, providerSource string, deploymentRevision uuid.UUID) (sqlc.Session, *Environment, error) {
+func (s *Store) createSessionResources(ctx context.Context, tenant string, params sqlc.CreateSessionParams, inputs []sessions.Input, encodedInput json.RawMessage, files []environmentconfig.InitialFile, setup environmentconfig.Setup, provider *v1.ModelProviderInput, executionConfiguration *v1.SessionExecutionConfiguration, providerSource string, deploymentRevision uuid.UUID) (sqlc.Session, *sessions.Environment, error) {
 	var row sqlc.Session
-	var environment *Environment
+	var environment *sessions.Environment
 	err := s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		var err error

@@ -8,12 +8,12 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type recoveringWriter struct {
 	fail   bool
-	events []store.ExecutionEvent
+	events []sessions.ExecutionEvent
 }
 
 type ambiguousWriter struct {
@@ -21,14 +21,14 @@ type ambiguousWriter struct {
 	written    int
 }
 
-func (w *ambiguousWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []store.ExecutionEvent) error {
+func (w *ambiguousWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []sessions.ExecutionEvent) error {
 	if w.firstCount == 0 {
 		w.firstCount, w.written = len(events), len(events)
 		return context.DeadlineExceeded
 	}
 	if first == 1 {
 		if len(events) != w.firstCount {
-			return store.ErrIdempotencyConflict
+			return sessions.ErrIdempotencyConflict
 		}
 		return nil
 	}
@@ -63,7 +63,7 @@ func TestJournalKeepsBatchIdentityAfterAnUncertainCommit(t *testing.T) {
 	}
 }
 
-func (w *recoveringWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []store.ExecutionEvent) error {
+func (w *recoveringWriter) AppendTurnEvents(_ context.Context, _, _, _ string, first int32, events []sessions.ExecutionEvent) error {
 	if w.fail {
 		w.fail = false
 		return context.DeadlineExceeded

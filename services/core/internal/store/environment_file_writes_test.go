@@ -7,15 +7,16 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type fileWriteFixture struct {
 	s, writer *Store
 	tenant    string
-	session   Session
-	env       Environment
-	key       FileWriteIdentity
+	session   sessions.Session
+	env       sessions.Environment
+	key       sessions.FileWriteIdentity
 }
 
 func newFileWriteFixture(t *testing.T) fileWriteFixture {
@@ -29,7 +30,7 @@ func newFileWriteFixture(t *testing.T) fileWriteFixture {
 		t.Fatal(err)
 	}
 	return fileWriteFixture{s: s, writer: writer, tenant: tenant, session: session, env: env,
-		key: FileWriteIdentity{ID: uuid.NewString(), DeviceID: host.ID, RequestSHA256: strings.Repeat("a", 64)}}
+		key: sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: host.ID, RequestSHA256: strings.Repeat("a", 64)}}
 }
 
 func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
@@ -54,13 +55,13 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 	}
 	another := f.key
 	another.ID = uuid.NewString()
-	if _, err := next.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, another); !errors.Is(err, ErrTurnConflict) {
+	if _, err := next.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, another); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("restart admitted successor", err)
 	}
-	if _, err := reopened.ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, "new-input", []Input{messageInput("new")}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := reopened.ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, "new-input", []sessions.Input{messageInput("new")}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("unknown write admitted input", err)
 	}
-	if _, err := reopened.SubmitMessage(ctx, f.tenant, f.session.ID, "direct", messageInput("new").Payload); !errors.Is(err, ErrTurnConflict) {
+	if _, err := reopened.SubmitMessage(ctx, f.tenant, f.session.ID, "direct", messageInput("new").Payload); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("direct admission bypassed write", err)
 	}
 	if _, err := reopened.GetEnvironment(ctx, f.tenant, f.env.ID); err != nil {
@@ -91,27 +92,27 @@ func TestEnvironmentFileWriteMatchesReceiptAndRetainsDeletedOwner(t *testing.T) 
 	if _, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key); err != nil {
 		t.Fatal(err)
 	}
-	for _, change := range []func(*FileWriteIdentity){
-		func(k *FileWriteIdentity) { k.DeviceID = uuid.NewString() },
-		func(k *FileWriteIdentity) { k.RequestSHA256 = strings.Repeat("b", 64) },
+	for _, change := range []func(*sessions.FileWriteIdentity){
+		func(k *sessions.FileWriteIdentity) { k.DeviceID = uuid.NewString() },
+		func(k *sessions.FileWriteIdentity) { k.RequestSHA256 = strings.Repeat("b", 64) },
 	} {
 		wrong := f.key
 		change(&wrong)
-		if _, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, wrong); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, wrong); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("changed retry accepted", err)
 		}
-		if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, wrong, "rejected"); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, wrong, "rejected"); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("mismatched receipt settled", err)
 		}
 	}
-	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, uuid.NewString(), f.env.ID, f.key, "committed"); !errors.Is(err, ErrNotFound) {
+	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, uuid.NewString(), f.env.ID, f.key, "committed"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("cross-tenant settlement", err)
 	}
-	if _, err := f.s.GetEnvironmentFileWrite(ctx, uuid.NewString(), f.env.ID, f.key.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := f.s.GetEnvironmentFileWrite(ctx, uuid.NewString(), f.env.ID, f.key.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("cross-tenant read", err)
 	}
 	for _, state := range []string{"pending", "unknown", "cancelled", "retired"} {
-		if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, state); !errors.Is(err, ErrInvalidInput) {
+		if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, state); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal("non-receipt settled write", state, err)
 		}
 	}
@@ -121,7 +122,7 @@ func TestEnvironmentFileWriteMatchesReceiptAndRetainsDeletedOwner(t *testing.T) 
 	if got, err := f.s.GetEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
 		t.Fatal("deletion discarded unresolved write", got, err)
 	}
-	if _, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key); !errors.Is(err, ErrNotFound) {
+	if _, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted Session reopened write", err)
 	}
 	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "rejected"); err != nil {
@@ -130,7 +131,7 @@ func TestEnvironmentFileWriteMatchesReceiptAndRetainsDeletedOwner(t *testing.T) 
 	if got, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "rejected"); err != nil || !got.Replayed {
 		t.Fatal("receipt retry lost identity", got, err)
 	}
-	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "committed"); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "committed"); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("terminal outcome changed", err)
 	}
 }
@@ -140,7 +141,7 @@ func TestEnvironmentFileWriteSerializesWithInputAndRetry(t *testing.T) {
 	original := f.key
 	ctx := t.Context()
 	var group sync.WaitGroup
-	results := make(chan EnvironmentFileWrite, 8)
+	results := make(chan sessions.EnvironmentFileWrite, 8)
 	for range 8 {
 		group.Go(func() {
 			got, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key)
@@ -170,7 +171,7 @@ func TestEnvironmentFileWriteSerializesWithInputAndRetry(t *testing.T) {
 		f.key.ID = uuid.NewString()
 		start := make(chan struct{})
 		writes, inputs := make(chan error, 1), make(chan error, 1)
-		var pending EnvironmentInputReservation
+		var pending sessions.EnvironmentInputReservation
 		group.Go(func() {
 			<-start
 			_, err := f.writer.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key)
@@ -180,17 +181,17 @@ func TestEnvironmentFileWriteSerializesWithInputAndRetry(t *testing.T) {
 		group.Go(func() {
 			<-start
 			var err error
-			pending, err = f.s.ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, inputKey, []Input{messageInput("race")})
+			pending, err = f.s.ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, inputKey, []sessions.Input{messageInput("race")})
 			inputs <- err
 		})
 		close(start)
 		group.Wait()
 		writeErr, inputErr := <-writes, <-inputs
-		if writeErr == nil && errors.Is(inputErr, ErrTurnConflict) {
+		if writeErr == nil && errors.Is(inputErr, sessions.ErrTurnConflict) {
 			if _, err := f.writer.SettleEnvironmentFileWrite(ctx, f.tenant, f.env.ID, f.key, "rejected"); err != nil {
 				t.Fatal(err)
 			}
-		} else if inputErr == nil && errors.Is(writeErr, ErrTurnConflict) {
+		} else if inputErr == nil && errors.Is(writeErr, sessions.ErrTurnConflict) {
 			if _, err := f.s.CancelEnvironmentInput(ctx, f.tenant, f.session.ID, pending.ID); err != nil {
 				t.Fatal(err)
 			}

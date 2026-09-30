@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Dependencies is everything the handler uses. Each application area is one
@@ -43,8 +43,10 @@ type Dependencies struct {
 	Agents               Agents
 	AgentsReader         AgentsReader
 	Sessions             Sessions
+	SessionCreation      SessionCreation
 	SessionEvents        SessionEvents
-	SessionHistory       SessionHistory
+	Turns                Turns
+	Items                Items
 	Subagents            Subagents
 	Artifacts            Artifacts
 	SessionAdmin         SessionAdmin
@@ -74,10 +76,11 @@ type Dependencies struct {
 type Execution struct {
 	// ExecutorURL is the validated daemon WebSocket URL that self-hosted
 	// Sessions report and executors connect to.
-	ExecutorURL    string
-	Admission      Admission
-	SessionArchive SessionArchive
-	Workspaces     EnvironmentWorkspaces
+	ExecutorURL      string
+	SessionAdmission SessionAdmission
+	InputAdmission   InputAdmission
+	SessionArchive   SessionArchive
+	Workspaces       EnvironmentWorkspaces
 	// NativeInstaller is nil for a build without a source revision: the native
 	// installation routes are then absent and Sessions carry no installation.
 	NativeInstaller *NativeInstaller
@@ -112,7 +115,7 @@ func NewHandler(deps Dependencies) (http.Handler, error) {
 }
 
 func (d Dependencies) validate() error {
-	if !store.ValidEngine(d.Engine) {
+	if !sessions.ValidEngine(d.Engine) {
 		return errors.New("api: a valid default Harness is required")
 	}
 	if d.CoreKeys == nil {
@@ -128,7 +131,11 @@ func (d Dependencies) validate() error {
 		field{"Skills", d.Skills}, field{"SkillsReader", d.SkillsReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
 		field{"Sessions", d.Sessions},
-		field{"SessionEvents", d.SessionEvents}, field{"SessionHistory", d.SessionHistory}, field{"Subagents", d.Subagents},
+		field{"SessionCreation", d.SessionCreation},
+		field{"SessionEvents", d.SessionEvents},
+		field{"Turns", d.Turns},
+		field{"Items", d.Items},
+		field{"Subagents", d.Subagents},
 		field{"Artifacts", d.Artifacts}, field{"SessionAdmin", d.SessionAdmin}, field{"Environments", d.Environments},
 		field{"ExecutorConnections", d.ExecutorConnections}, field{"Admin", d.Admin}, field{"AdminAudit", d.AdminAudit}, field{"WriteAudit", d.WriteAudit},
 		field{"Metrics", d.Metrics}, field{"RuntimeObservations", d.RuntimeObservations}, field{"RuntimeHistory", d.RuntimeHistory},
@@ -142,7 +149,12 @@ func (d Dependencies) validate() error {
 		if e.NativeInstaller != nil && e.NativeInstaller.Version == "" {
 			return errors.New("api: Execution.NativeInstaller.Version is required")
 		}
-		if err := required(field{"Execution.Admission", e.Admission}, field{"Execution.SessionArchive", e.SessionArchive}, field{"Execution.Workspaces", e.Workspaces}); err != nil {
+		if err := required(
+			field{"Execution.SessionAdmission", e.SessionAdmission},
+			field{"Execution.InputAdmission", e.InputAdmission},
+			field{"Execution.SessionArchive", e.SessionArchive},
+			field{"Execution.Workspaces", e.Workspaces},
+		); err != nil {
 			return err
 		}
 	}

@@ -29,7 +29,7 @@ type finishObservationFixture struct {
 	pool       *pgxpool.Pool
 	defaults   *modelconfigurationpg.Store
 	tenant     string
-	session    store.Session
+	session    sessions.Session
 	dispatcher Dispatcher
 }
 
@@ -67,7 +67,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	}
 	tenant := uuid.NewString()
 	model, harness := "fixture-model", "codex"
-	input := store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: harness, IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"none"}}`), ModelProvider: snapshot.Provider, ModelProviderSource: "deployment", DeploymentProviderRevision: snapshot.Revision,
+	input := sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: harness, IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"none"}}`), ModelProvider: snapshot.Provider, ModelProviderSource: "deployment", DeploymentProviderRevision: snapshot.Revision,
 		ExecutionConfiguration: &v1.SessionExecutionConfiguration{Model: v1.ExecutionSelection{Value: &model, Source: "session"}, Harness: v1.ExecutionSelection{Value: &harness, Source: "deployment"}, ModelProvider: v1.ExecutionProviderSelection{Source: "deployment"}}}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
@@ -75,13 +75,13 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	}
 	return finishObservationFixture{s, owner.Store, owner.Lease, pool, defaults, tenant, session, Dispatcher{Store: owner.Store, Observer: defaults}}
 }
-func (f finishObservationFixture) start(t *testing.T) store.InputReceipt {
+func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	t.Helper()
 	receipt, err := f.s.SubmitMessage(t.Context(), f.tenant, f.session.ID, uuid.NewString(), json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.writer.TransitionTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = f.writer.TransitionTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	return receipt
@@ -135,7 +135,7 @@ func TestFinishRunObservesOnlyFinalCommittedOutcome(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, err = f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, "fixture-model", result, tc.status)
-			if !errors.Is(err, store.ErrTurnConflict) {
+			if !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("expected completion conflict", err)
 			}
 			used, code = f.fields(t)

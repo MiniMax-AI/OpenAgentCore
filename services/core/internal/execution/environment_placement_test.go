@@ -7,15 +7,15 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
-	session := store.Session{ID: "session", TenantID: "tenant"}
-	environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
+	session := sessions.Session{ID: "session", TenantID: "tenant"}
+	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
 		Configuration: []byte(`{"type":"openai_hosted","initialization":true,"skills":[{"type":"skill_reference","skill_id":"skill-private","version":"1","name":"proof","description":"A proof."}]}`)}
 	var request proto.PromptRequestPayload
-	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &request)
+	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &request)
 	if err != nil || request.LocalEnvironment == nil || !request.LocalEnvironment.Capabilities || len(request.LocalEnvironment.Skills) != 0 {
 		t.Fatal("resolved Skill did not use the common installation descriptor", err)
 	}
@@ -27,7 +27,7 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 	if !LocalWorkspaceConfiguration(environment.Configuration) {
 		t.Fatal("admission demanded installed metadata before the creation transaction")
 	}
-	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &proto.PromptRequestPayload{}); err == nil {
+	if err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &proto.PromptRequestPayload{}); err == nil {
 		t.Fatal("execution received an unresolved Skill selector")
 	}
 }
@@ -44,12 +44,12 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 			t.Fatalf("unqualified private profile accepted: %s", configuration)
 		}
 	}
-	session := store.Session{ID: "session", TenantID: "tenant"}
-	environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","network":{"access":"disabled"}}`)}
+	session := sessions.Session{ID: "session", TenantID: "tenant"}
+	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","network":{"access":"disabled"}}`)}
 	d := &Dispatcher{}
 	for _, scope := range []string{"", "other", environment.ID} {
 		var req proto.PromptRequestPayload
-		err := d.configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: scope}, &req)
+		err := d.configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: scope}, &req)
 		if scope == environment.ID {
 			if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.ID != environment.ID {
 				t.Fatal("local identity was not preserved", err)
@@ -61,16 +61,16 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 }
 
 func TestNetworkPolicySurvivesPreparedBinding(t *testing.T) {
-	session := store.Session{ID: "session", TenantID: "tenant"}
+	session := sessions.Session{ID: "session", TenantID: "tenant"}
 	for _, network := range []string{`{"access":"disabled"}`, `{"access":"restricted","allowed_domains":["Example.com","api.example.com"]}`} {
-		environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
+		environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
 			Configuration: []byte(`{"type":"openai_hosted","network":` + network + `}`)}
 		placement, err := parseEnvironmentPlacement(environment.Configuration)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var req proto.PromptRequestPayload
-		err = (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &req)
+		err = (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &req)
 		if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.NetworkAccess != placement.NetworkAccess || !slices.Equal(req.LocalEnvironment.AllowedDomains, placement.AllowedDomains) {
 			t.Fatal("prepared binding lost policy", req.LocalEnvironment, err)
 		}
@@ -78,10 +78,10 @@ func TestNetworkPolicySurvivesPreparedBinding(t *testing.T) {
 }
 
 func TestToolEnvironmentRemainsInExecutionBinding(t *testing.T) {
-	session := store.Session{ID: "session", TenantID: "tenant"}
-	environment := store.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","initialization":true,"packages":{"npm":["is-number"]}}`)}
+	session := sessions.Session{ID: "session", TenantID: "tenant"}
+	environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID, Configuration: []byte(`{"type":"openai_hosted","initialization":true,"packages":{"npm":["is-number"]}}`)}
 	var req proto.PromptRequestPayload
-	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, store.ExecutionDevice{EnvironmentID: environment.ID}, &req)
+	err := (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &req)
 	if err != nil || req.LocalEnvironment == nil || !req.LocalEnvironment.ToolEnvironment {
 		t.Fatal("tool initialization requirement lost", err)
 	}

@@ -44,12 +44,12 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				return 0
 			}
 			type admission struct {
-				value EnvironmentInputReservation
+				value sessions.EnvironmentInputReservation
 				err   error
 			}
 			admitted := make(chan admission, 1)
 			completed := make(chan error, 1)
-			batch := []Input{messageInput("first"), messageInput("second")}
+			batch := []sessions.Input{messageInput("first"), messageInput("second")}
 			input := func() {
 				value, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "racing-input", batch)
 				admitted <- admission{value, err}
@@ -74,7 +74,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				t.Fatal(got.err)
 			}
 			if completionFirst {
-				if completionErr != nil || got.value.State != EnvironmentInputPending || got.value.ID == "" || len(got.value.Receipts) != 0 || got.value.Deadline.Sub(got.value.CreatedAt) != 5*time.Minute {
+				if completionErr != nil || got.value.State != sessions.EnvironmentInputPending || got.value.ID == "" || len(got.value.Receipts) != 0 || got.value.Deadline.Sub(got.value.CreatedAt) != 5*time.Minute {
 					t.Fatal("completion winner did not leave new input waiting for preparation", completionErr, got.value)
 				}
 				environmentInputHistory(t, pool, session.ID, 1, 1)
@@ -90,7 +90,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 					t.Fatal(err)
 				}
 			} else {
-				if !errors.Is(completionErr, ErrUnappliedInputs) || got.value.State != EnvironmentInputAdmitted || got.value.ID != "" || !got.value.Deadline.IsZero() || len(got.value.Receipts) != 2 || got.value.Receipts[0].TurnID != original.TurnID || got.value.Receipts[0].Replayed {
+				if !errors.Is(completionErr, sessions.ErrUnappliedInputs) || got.value.State != sessions.EnvironmentInputAdmitted || got.value.ID != "" || !got.value.Deadline.IsZero() || len(got.value.Receipts) != 2 || got.value.Receipts[0].TurnID != original.TurnID || got.value.Receipts[0].Replayed {
 					t.Fatal("admitted input escaped the original Turn or application fence", completionErr, got.value)
 				}
 				environmentInputHistory(t, pool, session.ID, 1, 3)

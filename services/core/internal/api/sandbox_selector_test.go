@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -18,9 +18,9 @@ type sandboxCreationRecorder struct {
 	calls int
 }
 
-func (r *sandboxCreationRecorder) CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error) {
+func (r *sandboxCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
 	r.calls++
-	return store.Session{}, store.ErrInvalidInput
+	return sessions.Session{}, sessions.ErrInvalidInput
 }
 
 // Placement is automatic. A node selector is an unknown member wherever it appears.
@@ -34,7 +34,7 @@ func TestSessionCreationRejectsSandboxNodeSelector(t *testing.T) {
 		recorder := &sandboxCreationRecorder{}
 		handler, _ := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
 			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
-			f.admission.createSession = recorder.CreateSession
+			f.sessionAdmission.createSession = recorder.CreateSession
 		})
 		request := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer key")

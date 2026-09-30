@@ -16,13 +16,12 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 const hostedFailureReason = `Failed to provision environment: script "setup_commands[0]" failed with exit code 3`
 
-func hostedFailureSession() store.Session {
+func hostedFailureSession() sessions.Session {
 	session := environmentSession()
 	session.Configuration = json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"openai_hosted"}}`)
 	session.Environment.Configuration = json.RawMessage(`{"type":"openai_hosted"}`)
@@ -179,17 +178,17 @@ func TestGetStreamEndsAfterHostedProvisioningFailure(t *testing.T) {
 // keeps the local environment_unavailable response.
 func TestHostedProvisioningFailureInputConflict(t *testing.T) {
 	for err, want := range map[error]string{
-		fmt.Errorf("reserve: %w", store.ErrHostedEnvironmentFailed): `{"error":{"message":"the hosted environment failed to provision","type":"conflict_error","code":"conflict_error","param":null}}`,
-		store.ErrEnvironmentUnavailable:                             `{"error":{"message":"The environment is no longer available for new input.","type":"conflict_error","code":"environment_unavailable","param":null}}`,
+		fmt.Errorf("reserve: %w", sessions.ErrHostedEnvironmentFailed): `{"error":{"message":"the hosted environment failed to provision","type":"conflict_error","code":"conflict_error","param":null}}`,
+		sessions.ErrEnvironmentUnavailable:                             `{"error":{"message":"The environment is no longer available for new input.","type":"conflict_error","code":"environment_unavailable","param":null}}`,
 	} {
 		response := httptest.NewRecorder()
-		writeStoreError(response, httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session/events", nil), err)
+		writeSessionsError(response, httptest.NewRequest(http.MethodPost, "/v1/agents/sessions/session/events", nil), err)
 		body, _ := io.ReadAll(response.Body)
 		if response.Code != http.StatusConflict || strings.TrimSpace(string(body)) != want {
 			t.Fatal(response.Code, string(body))
 		}
 	}
-	if !errors.Is(store.ErrHostedEnvironmentFailed, store.ErrEnvironmentUnavailable) {
+	if !errors.Is(sessions.ErrHostedEnvironmentFailed, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("internal callers no longer see an unavailable Environment")
 	}
 }

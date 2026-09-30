@@ -11,18 +11,18 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type environmentResourceFixture struct {
-	environment store.Environment
+	environment sessions.Environment
 	err         error
 	tenant, id  string
 	calls       int
 }
 
-func (f *environmentResourceFixture) GetEnvironment(_ context.Context, tenant, id string) (store.Environment, error) {
+func (f *environmentResourceFixture) GetEnvironment(_ context.Context, tenant, id string) (sessions.Environment, error) {
 	f.tenant, f.id = tenant, id
 	f.calls++
 	return f.environment, f.err
@@ -30,7 +30,7 @@ func (f *environmentResourceFixture) GetEnvironment(_ context.Context, tenant, i
 
 func environmentResourceHandler(t *testing.T) (http.Handler, *environmentResourceFixture) {
 	t.Helper()
-	f := &environmentResourceFixture{environment: store.Environment{
+	f := &environmentResourceFixture{environment: sessions.Environment{
 		ID: uuid.NewString(), TenantID: uuid.NewString(), SessionID: uuid.NewString(), Status: "pending",
 		Configuration: json.RawMessage(`{"type":"self_hosted","workspace_directory":"/private/workspace"}`),
 	}}
@@ -126,10 +126,10 @@ func TestEnvironmentResourceRequestAndStoreErrors(t *testing.T) {
 		{"wrong beta", "GET", "", "Bearer resource-key", "agents=v2", nil, 400, 0},
 		// Unknown keys, including include, are not pinned retrieval parameters.
 		{"ignored query", "GET", "?tenant_id=foreign&include=files", "Bearer resource-key", "agents=v1", nil, 200, 1},
-		{"not found with query", "GET", "?include=files", "Bearer resource-key", "agents=v1", store.ErrNotFound, 404, 1},
+		{"not found with query", "GET", "?include=files", "Bearer resource-key", "agents=v1", sessions.ErrNotFound, 404, 1},
 		{"method", "POST", "", "Bearer resource-key", "agents=v1", nil, 405, 0},
-		{"not found", "GET", "", "Bearer resource-key", "agents=v1", store.ErrNotFound, 404, 1},
-		{"invalid id", "GET", "", "Bearer resource-key", "agents=v1", store.ErrInvalidInput, 400, 1},
+		{"not found", "GET", "", "Bearer resource-key", "agents=v1", sessions.ErrNotFound, 404, 1},
+		{"invalid id", "GET", "", "Bearer resource-key", "agents=v1", sessions.ErrInvalidInput, 400, 1},
 		{"backend", "GET", "", "Bearer resource-key", "agents=v1", errors.New("private-backend-canary"), 500, 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {

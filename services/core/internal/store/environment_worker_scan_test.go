@@ -6,7 +6,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
@@ -45,7 +44,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stop()
 	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
-	if err != nil || stored.State != store.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
+	if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
 		t.Fatal("readiness retry changed pending identity or admitted work", stored, err)
 	}
 }
@@ -53,7 +52,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 	h := newDispatchHarness(t)
 	enableWorkerEnvironment(t, h)
-	var last store.EnvironmentInputReservation
+	var last sessions.EnvironmentInputReservation
 	for range 101 {
 		pending := unboundWorkerEnvironmentReservation(t, h)
 		if pending.ID > last.ID {

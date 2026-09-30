@@ -10,6 +10,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -22,7 +23,7 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	s := NewWithCredentialCipher(pool, cipher)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	setup := environmentconfig.Setup{Env: map[string]string{"SECRET": "session-env-canary"}, Commands: []environmentconfig.SetupCommand{{Command: "printf session-command-canary > result"}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}}
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +35,7 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(frozen, setup) {
 		t.Fatal("Session did not freeze setup", err)
 	}
-	if _, err := s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Session initialization", err)
 	}
 	retry, err := s.CreateSession(t.Context(), tenant, input)
@@ -42,10 +43,10 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 		t.Fatal("creation replay", err)
 	}
 	input.Initialization.Env = map[string]string{"SECRET": "changed"}
-	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed setup retried", err)
 	}
-	if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("uninitialized execution admitted", err)
 	}
 }

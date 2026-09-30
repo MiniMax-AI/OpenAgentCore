@@ -29,8 +29,10 @@ type testFakes struct {
 	agents                 *fakeAgents
 	agentsReader           *fakeAgentsReader
 	sessions               *fakeSessions
+	sessionCreation        *fakeSessionCreation
 	sessionEvents          *fakeSessionEvents
-	sessionHistory         *fakeSessionHistory
+	turns                  *fakeTurns
+	items                  *fakeItems
 	subagents              *fakeSubagents
 	artifacts              *fakeArtifacts
 	sessionAdmin           *fakeSessionAdmin
@@ -43,7 +45,8 @@ type testFakes struct {
 	runtimeObservations    *fakeRuntimeObservations
 	runtimeHistory         *fakeRuntimeHistory
 	installationBindings   *fakeInstallationBindings
-	admission              *fakeAdmission
+	sessionAdmission       *fakeSessionAdmission
+	inputAdmission         *fakeInputAdmission
 	sessionArchive         *fakeSessionArchive
 	workspaces             *fakeEnvironmentWorkspaces
 	deployment             *fakeDeployment
@@ -70,12 +73,18 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		files: &fakeFiles{t: t}, filesReader: &fakeFilesReader{t: t},
 		skills: &fakeSkills{t: t}, skillsReader: &fakeSkillsReader{t: t},
 		agents: &fakeAgents{t: t}, agentsReader: &fakeAgentsReader{t: t},
-		sessions: &fakeSessions{t: t}, sessionEvents: &fakeSessionEvents{t: t},
-		sessionHistory: &fakeSessionHistory{t: t}, subagents: &fakeSubagents{t: t}, artifacts: &fakeArtifacts{t: t},
+		sessions:        &fakeSessions{t: t},
+		sessionCreation: &fakeSessionCreation{t: t},
+		sessionEvents:   &fakeSessionEvents{t: t},
+		turns:           &fakeTurns{t: t},
+		items:           &fakeItems{t: t},
+		subagents:       &fakeSubagents{t: t}, artifacts: &fakeArtifacts{t: t},
 		sessionAdmin: &fakeSessionAdmin{t: t}, environments: &fakeEnvironments{t: t}, executorConnections: &fakeExecutorConnections{t: t},
 		admin: &fakeAdmin{t: t}, adminAudit: &fakeAdminAudit{t: t}, writeAudit: &fakeWriteAudit{t: t}, metrics: &fakeMetrics{t: t},
 		runtimeObservations: &fakeRuntimeObservations{t: t}, runtimeHistory: &fakeRuntimeHistory{t: t}, installationBindings: &fakeInstallationBindings{t: t},
-		admission: &fakeAdmission{t: t}, sessionArchive: &fakeSessionArchive{t: t}, workspaces: &fakeEnvironmentWorkspaces{t: t},
+		sessionAdmission: &fakeSessionAdmission{t: t},
+		inputAdmission:   &fakeInputAdmission{t: t},
+		sessionArchive:   &fakeSessionArchive{t: t}, workspaces: &fakeEnvironmentWorkspaces{t: t},
 		deployment: &fakeDeployment{t: t}, nodeAllocations: &fakeNodeAllocations{t: t},
 		deploymentChanges: &fakeDeploymentChanges{t: t}, deploymentReset: &fakeDeploymentReset{t: t},
 		configurationDiscovery: &fakeConfigurationDiscovery{t: t},
@@ -89,8 +98,12 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		EnvironmentTemplates: f.environmentTemplates, EnvironmentTemplatesReader: f.environmentTemplatesReader,
 		Skills: f.skills, SkillsReader: f.skillsReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
-		Sessions: f.sessions, SessionEvents: f.sessionEvents,
-		SessionHistory: f.sessionHistory, Subagents: f.subagents, Artifacts: f.artifacts, SessionAdmin: f.sessionAdmin,
+		Sessions:        f.sessions,
+		SessionCreation: f.sessionCreation,
+		SessionEvents:   f.sessionEvents,
+		Turns:           f.turns,
+		Items:           f.items,
+		Subagents:       f.subagents, Artifacts: f.artifacts, SessionAdmin: f.sessionAdmin,
 		Environments: f.environments, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
 		Metrics: f.metrics, RuntimeObservations: f.runtimeObservations, RuntimeHistory: f.runtimeHistory,
 	}, f
@@ -99,7 +112,13 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 // execution is an Execution group backed by f's strict fakes, reporting
 // testExecutorURL and without a native installer.
 func (f *testFakes) execution() *Execution {
-	return &Execution{ExecutorURL: testExecutorURL, Admission: f.admission, SessionArchive: f.sessionArchive, Workspaces: f.workspaces}
+	return &Execution{
+		ExecutorURL:      testExecutorURL,
+		SessionAdmission: f.sessionAdmission,
+		InputAdmission:   f.inputAdmission,
+		SessionArchive:   f.sessionArchive,
+		Workspaces:       f.workspaces,
+	}
 }
 
 // sandboxes is a Sandboxes group backed by f's strict fakes. It requires
@@ -167,14 +186,21 @@ func TestNewHandlerRejectsIncompleteDependencies(t *testing.T) {
 		{"InstallationBindings", func(d *Dependencies, _ *testFakes) { d.InstallationBindings = nil }},
 		{"Projects", func(d *Dependencies, _ *testFakes) { d.Projects = nil }},
 		{"Sessions", func(d *Dependencies, _ *testFakes) { d.Sessions = nil }},
+		{"SessionCreation", func(d *Dependencies, _ *testFakes) { d.SessionCreation = nil }},
+		{"Turns", func(d *Dependencies, _ *testFakes) { d.Turns = nil }},
+		{"Items", func(d *Dependencies, _ *testFakes) { d.Items = nil }},
 		{"RuntimeHistory", func(d *Dependencies, _ *testFakes) { d.RuntimeHistory = nil }},
 		{"Execution.ExecutorURL", func(d *Dependencies, f *testFakes) {
 			d.Execution = f.execution()
 			d.Execution.ExecutorURL = ""
 		}},
-		{"Execution.Admission", func(d *Dependencies, f *testFakes) {
+		{"Execution.SessionAdmission", func(d *Dependencies, f *testFakes) {
 			d.Execution = f.execution()
-			d.Execution.Admission = nil
+			d.Execution.SessionAdmission = nil
+		}},
+		{"Execution.InputAdmission", func(d *Dependencies, f *testFakes) {
+			d.Execution = f.execution()
+			d.Execution.InputAdmission = nil
 		}},
 		{"Execution.NativeInstaller.Version", func(d *Dependencies, f *testFakes) {
 			d.Execution = f.execution()

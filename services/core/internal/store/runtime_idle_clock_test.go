@@ -66,7 +66,7 @@ func verifyManagedIdleClock(t *testing.T, s, w *Store, owner RuntimeAllocation, 
 		t.Fatal("idle clock did not use committed terminal ingestion", activity, before, after, err)
 	}
 	until := runtimeDatabaseTime(t, s).Add(time.Hour)
-	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.SetRuntimeCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("new completion admitted premature idle", err)
 	}
 	// Advance only the internal activity age; the remote public timestamp remains unchanged.
@@ -94,7 +94,7 @@ func TestManagedIdleClockIgnoresRootHostSkew(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, outcome, "", 0); !errors.Is(err, ErrTurnConflict) {
+			if _, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, outcome, "", 0); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("terminal replay accepted", err)
 			}
 			unchanged, err := w.RuntimeActivity(t.Context(), owner)
@@ -167,7 +167,7 @@ func TestUnmanagedRootCompletionPreservesHostSkew(t *testing.T) {
 					environment["workspace_directory"] = "/workspace"
 				}
 				configuration, _ := json.Marshal(map[string]any{"agent": map[string]string{"model": "test"}, "environment": environment})
-				session, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: configuration})
+				session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: configuration})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -183,7 +183,7 @@ func TestUnmanagedRootCompletionPreservesHostSkew(t *testing.T) {
 				if err != nil || read.Status != sessions.TurnCompleted || read.CompletedAt.UnixMilli() != source {
 					t.Fatal("public native timestamp rewritten", read, err)
 				}
-				if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, sessions.TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, ErrTurnConflict) {
+				if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, sessions.TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, sessions.ErrTurnConflict) {
 					t.Fatal("terminal replay accepted", err)
 				}
 			})
@@ -199,7 +199,7 @@ func TestRootCompletionRejectsNonpositiveSourceTime(t *testing.T) {
 			input := submitMessage(t, s, tenant, session.ID, "invalid-clock")
 			transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
-			if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, sessions.TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, ErrInvalidInput) {
+			if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, sessions.TurnCompleted, outcome, "", input.Sequence); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("invalid native timestamp accepted", err)
 			}
 		})

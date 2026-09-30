@@ -18,7 +18,7 @@ import (
 func claudeSession(t *testing.T, h *dispatchHarness, configuration string, prebound bool) {
 	t.Helper()
 	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "claude_sdk", IdempotencyKey: "claude", Configuration: json.RawMessage(configuration)})
+	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "claude_sdk", IdempotencyKey: "claude", Configuration: json.RawMessage(configuration)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 					t.Fatal(turn, err)
 				}
 				if !prebound {
-					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrNotFound) {
+					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
@@ -126,22 +126,22 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 	worker := startWorker(t, t.Context(), h.db, h.d)
 	defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 	input := h.message("start", "Run")
-	if _, err := h.s.TransitionTurn(t.Context(), h.tenant, h.session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := h.s.TransitionTurn(t.Context(), h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	call := store.FunctionCall{CallID: "public-call", ExecutorCallID: "native-call", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)}
+	call := sessions.FunctionCall{CallID: "public-call", ExecutorCallID: "native-call", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)}
 	if err := h.s.RecordFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call); err != nil {
 		t.Fatal(err)
 	}
-	result := func(raw string) store.Input {
-		payload, err := json.Marshal(store.FunctionResultInput{TurnID: input.TurnID, CallID: call.CallID, Result: json.RawMessage(raw)})
+	result := func(raw string) sessions.Input {
+		payload, err := json.Marshal(sessions.FunctionResultInput{TurnID: input.TurnID, CallID: call.CallID, Result: json.RawMessage(raw)})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return store.Input{Kind: "tool_result", Payload: payload}
+		return sessions.Input{Kind: "tool_result", Payload: payload}
 	}
-	batch := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, result(`{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
-	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, store.ErrInvalidInput) {
+	batch := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, result(`{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
+	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal(err)
 	}
 	saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, call.CallID)

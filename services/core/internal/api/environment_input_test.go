@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestPublicEnvironmentInputFailureMappings(t *testing.T) {
@@ -20,7 +20,7 @@ func TestPublicEnvironmentInputFailureMappings(t *testing.T) {
 		status int
 		code   string
 	}{
-		{store.ErrEnvironmentUnavailable, http.StatusConflict, "environment_unavailable"},
+		{sessions.ErrEnvironmentUnavailable, http.StatusConflict, "environment_unavailable"},
 		{execution.ErrEnvironmentInputExpired, http.StatusConflict, "environment_input_expired"},
 		{execution.ErrEnvironmentInputCancelled, http.StatusConflict, "environment_input_cancelled"},
 		{execution.ErrExecutionUnavailable, http.StatusServiceUnavailable, "execution_unavailable"},
@@ -52,7 +52,7 @@ type waitingEnvironmentInput struct {
 	release chan struct{}
 }
 
-func (s *waitingEnvironmentInput) SubmitInputs(ctx context.Context, _, _, _ string, _ []store.Input) ([]store.InputReceipt, error) {
+func (s *waitingEnvironmentInput) SubmitInputs(ctx context.Context, _, _, _ string, _ []sessions.Input) ([]sessions.InputReceipt, error) {
 	close(s.entered)
 	select {
 	case <-s.release:
@@ -73,7 +73,7 @@ func TestPreparedEnvironmentInputWaitExtendsOnlyItsResponseDeadline(t *testing.T
 			// The Worker admits the initial input into the fixture and waits on
 			// the next input.
 			handler, fixture := environmentCreationHandler(t, "codex", selfHostedExecution, func(_ *Dependencies, f *testFakes) {
-				f.admission.createSession, f.admission.submitInputs = f.sessions.createSession, waiting.SubmitInputs
+				f.sessionAdmission.createSession, f.inputAdmission.submitInputs = f.sessionCreation.createSession, waiting.SubmitInputs
 			})
 			create := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"MiniMax-M3"},"environment":`+environmentJSON+`,"input":"Prepare the response deadline fixture."}`))
 			create.Header.Set("Authorization", "Bearer key")

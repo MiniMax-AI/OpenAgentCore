@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,12 +62,12 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 					t.Error("worker did not stop")
 				}
 			}()
-			input := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}}
+			input := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}}
 			switch operation {
 			case "submit":
 				_, err = worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", input)
 			case "create", "stream":
-				creation := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "wake", Configuration: h.session.Configuration, InitialInputs: input}
+				creation := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "wake", Configuration: h.session.Configuration, InitialInputs: input}
 				if operation == "create" {
 					_, err = worker.CreateSession(ctx, h.tenant, creation)
 				} else {
@@ -118,7 +119,7 @@ func TestWorkerSchedulerHintBypassesEnvironmentScanThrottle(t *testing.T) {
 	admitted := make(chan error, 1)
 	started := time.Now()
 	go func() {
-		_, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}})
+		_, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wake"}`)}})
 		admitted <- err
 	}()
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)

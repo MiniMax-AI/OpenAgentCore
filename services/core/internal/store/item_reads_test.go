@@ -18,7 +18,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "items"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "items"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,11 +26,11 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
-	batch := []store.ExecutionEvent{
+	batch := []sessions.ExecutionEvent{
 		{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"in_progress"}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"draft"}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"cmd","stage":"before","observation":{"status":"in_progress","kind":"command","command":"exit 7"}}`)},
@@ -102,14 +102,14 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 			}
 		}
 	}
-	other, _ := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
+	other, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
 	// A foreign parent is not found before the cursor is read.
-	if _, err = s.ListItems(ctx, uuid.NewString(), session.ID, page.Items[0].ID, 20, true); !errors.Is(err, store.ErrNotFound) {
+	if _, err = s.ListItems(ctx, uuid.NewString(), session.ID, page.Items[0].ID, 20, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	// Another Session's Item is an invalid cursor here, like a missing or malformed one.
 	for _, cursor := range []string{page.Items[0].ID, uuid.NewString(), "not-a-uuid"} {
-		var invalid *store.InvalidCursorError
+		var invalid *sessions.CursorError
 		if _, err = s.ListItems(ctx, tenant, other.ID, cursor, 20, true); !errors.As(err, &invalid) || invalid.Message != "Invalid session item ID in `after`" {
 			t.Fatal(cursor, err)
 		}
@@ -120,16 +120,16 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	ctx := context.Background()
 	s, _ := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, _ := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
+	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
 	input, err := s.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
-	bad := []store.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"must roll back"}`)}, {Kind: "tool_call", Payload: json.RawMessage(`{"id":"mismatch","stage":"after","observation":{"status":"completed","kind":"invalid"}}`)}}
+	bad := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"must roll back"}`)}, {Kind: "tool_call", Payload: json.RawMessage(`{"id":"mismatch","stage":"after","observation":{"status":"completed","kind":"invalid"}}`)}}
 	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, bad); err == nil {
 		t.Fatal("invalid snapshot accepted")
 	}
@@ -141,7 +141,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal(page, err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted, Outcome: json.RawMessage(`{"done":{"content":"legacy answer","metadata":{"private":"SECRET"}}}`)})
+	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted, Outcome: json.RawMessage(`{"done":{"content":"legacy answer","metadata":{"private":"SECRET"}}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,17 +156,17 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
 	for _, receiptOnly := range []bool{true, false} {
-		session, _ := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
+		session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
 		input, err := s.SubmitMessage(ctx, tenant, session.ID, "first", json.RawMessage(`{"text":"test"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+		_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if receiptOnly {
-			err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, []store.ExecutionEvent{{Kind: "cancel_receipt", Payload: json.RawMessage(`{"applied":true,"outcome":{"content":"retained cancellation text"}}`)}})
+			err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "cancel_receipt", Payload: json.RawMessage(`{"applied":true,"outcome":{"content":"retained cancellation text"}}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -186,7 +186,7 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "failed-items"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "failed-items"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,11 +194,11 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
-	batch := []store.ExecutionEvent{
+	batch := []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"delta":"partial answer"}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"open","stage":"after","observation":{"status":"completed","kind":"web_search","action":{"type":"open_page","url":"https://example.com"}}}`)},
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"find","stage":"after","observation":{"status":"completed","kind":"web_search","action":{"type":"find_in_page","url":"https://example.com","pattern":"needle"}}}`)},

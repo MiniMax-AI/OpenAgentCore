@@ -15,8 +15,8 @@ import (
 	"github.com/google/uuid"
 )
 
-func functionCallFixture(id string) FunctionCall {
-	return FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}
+func functionCallFixture(id string) sessions.FunctionCall {
+	return sessions.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}
 }
 
 func TestFunctionCallsPersistCompleteResultsAndReceipts(t *testing.T) {
@@ -43,7 +43,7 @@ func TestFunctionCallsPersistCompleteResultsAndReceipts(t *testing.T) {
 		if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, retry); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, call.CallID); !errors.Is(err, ErrTurnConflict) {
+		if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, call.CallID); !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal("unsubmitted result applied", err)
 		}
 		if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, call.CallID, json.RawMessage(raw)); err != nil {
@@ -74,7 +74,7 @@ func TestFunctionCallsPersistCompleteResultsAndReceipts(t *testing.T) {
 		if err := reopened.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(expected)); err != nil {
 			t.Fatal(err)
 		}
-		if err := reopened.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(`{"success":false,"error":"changed"}`)); !errors.Is(err, ErrFunctionResultConflict) {
+		if err := reopened.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(`{"success":false,"error":"changed"}`)); !errors.Is(err, sessions.ErrFunctionResultConflict) {
 			t.Fatal(err)
 		}
 		for range 2 {
@@ -99,7 +99,7 @@ func TestFunctionCallsAreScopedAndImmutable(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 	call := functionCallFixture("call")
-	if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, call); !errors.Is(err, ErrTurnConflict) {
+	if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, call); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("queued turn accepted callback", err)
 	}
 	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
@@ -118,7 +118,7 @@ func TestFunctionCallsAreScopedAndImmutable(t *testing.T) {
 		case "arguments":
 			changed.Arguments = json.RawMessage(`{"ticket":9007199254740992}`)
 		}
-		if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, changed); !errors.Is(err, ErrIdempotencyConflict) {
+		if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal(field, err)
 		}
 	}
@@ -126,23 +126,23 @@ func TestFunctionCallsAreScopedAndImmutable(t *testing.T) {
 		{uuid.NewString(), session.ID, turn}, {tenant, uuid.NewString(), turn}, {tenant, session.ID, uuid.NewString()},
 	} {
 		_, err := s.GetFunctionCall(t.Context(), scope.tenant, scope.session, scope.turn, "call")
-		if !errors.Is(err, ErrNotFound) {
+		if !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
-		if _, err := s.PendingFunctionCalls(t.Context(), scope.tenant, scope.session, scope.turn); !errors.Is(err, ErrNotFound) {
+		if _, err := s.PendingFunctionCalls(t.Context(), scope.tenant, scope.session, scope.turn); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
-		if err := s.RecordFunctionCall(t.Context(), scope.tenant, scope.session, scope.turn, call); !errors.Is(err, ErrNotFound) {
+		if err := s.RecordFunctionCall(t.Context(), scope.tenant, scope.session, scope.turn, call); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
-		if err := s.SubmitFunctionResult(t.Context(), scope.tenant, scope.session, scope.turn, "call", json.RawMessage(`{"success":true}`)); !errors.Is(err, ErrNotFound) {
+		if err := s.SubmitFunctionResult(t.Context(), scope.tenant, scope.session, scope.turn, "call", json.RawMessage(`{"success":true}`)); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
-		if err := s.ConfirmFunctionResult(t.Context(), scope.tenant, scope.session, scope.turn, "call"); !errors.Is(err, ErrNotFound) {
+		if err := s.ConfirmFunctionResult(t.Context(), scope.tenant, scope.session, scope.turn, "call"); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
 	}
-	if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "missing", json.RawMessage(`{"success":true}`)); !errors.Is(err, ErrNotFound) {
+	if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "missing", json.RawMessage(`{"success":true}`)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 }
@@ -168,22 +168,22 @@ func TestFunctionResultsCannotApplyAfterCancellationOrCompletion(t *testing.T) {
 					t.Fatal(err)
 				}
 				assertNoPendingFunctions(t, s, tenant, session.ID, turn)
-				if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, "submitted"); !errors.Is(err, ErrTurnConflict) {
+				if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, "submitted"); !errors.Is(err, sessions.ErrTurnConflict) {
 					t.Fatal(err)
 				}
-				if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "pending", result); !errors.Is(err, ErrTurnConflict) {
+				if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "pending", result); !errors.Is(err, sessions.ErrTurnConflict) {
 					t.Fatal(err)
 				}
 			}
 			transition(t, s, tenant, session.ID, turn, sessions.TurnWaiting, terminal)
 			assertNoPendingFunctions(t, s, tenant, session.ID, turn)
-			if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, "submitted"); !errors.Is(err, ErrTurnConflict) {
+			if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, "submitted"); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
-			if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "pending", result); !errors.Is(err, ErrTurnConflict) {
+			if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "pending", result); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
-			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture("late")); !errors.Is(err, ErrTurnConflict) {
+			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture("late")); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
 			if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "submitted", result); err != nil {
@@ -235,7 +235,7 @@ func TestFunctionResultConcurrentSubmissionsChooseOneValue(t *testing.T) {
 	for err := range outcomes {
 		if err == nil {
 			winners++
-		} else if errors.Is(err, ErrFunctionResultConflict) {
+		} else if errors.Is(err, sessions.ErrFunctionResultConflict) {
 			conflicts++
 		} else {
 			t.Fatal(err)
@@ -255,7 +255,7 @@ func TestFunctionResultInvalidStorageInputDoesNotConsumeCall(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, raw := range []string{"", "null", "[]", "{} {}", `{"output":"` + strings.Repeat("a", 512*1024) + `"}`} {
-		if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "call", json.RawMessage(raw)); !errors.Is(err, ErrInvalidInput) {
+		if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, "call", json.RawMessage(raw)); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal(err)
 		}
 	}

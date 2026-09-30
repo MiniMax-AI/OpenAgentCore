@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // All Turn admission and lifecycle writes lock the tenant-scoped Session first.
@@ -25,7 +26,7 @@ func (s *Store) withPublicSession(ctx context.Context, tenantID, sessionID strin
 func (s *Store) withSessionState(ctx context.Context, tenantID, sessionID string, public bool, apply func(context.Context, *sqlc.Queries, pgtype.UUID) error) error {
 	return s.withLockedSession(ctx, tenantID, sessionID, public, func(ctx context.Context, q *sqlc.Queries, session sqlc.LockSessionRow) error {
 		if public && session.DeletedAt.Valid {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		return apply(ctx, q, session.ID)
 	})
@@ -49,7 +50,7 @@ func (s *Store) withLockedSession(ctx context.Context, tenantID, sessionID strin
 		q := s.queries.WithTx(tx)
 		session, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: tenant, ID: id})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		} else if err != nil {
 			return err
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -40,7 +41,7 @@ func (s *Store) ReconcileEnvironmentConnections(ctx context.Context) error {
 				}
 				return nil
 			})
-			if err != nil && !errors.Is(err, ErrNotFound) {
+			if err != nil && !errors.Is(err, sessions.ErrNotFound) {
 				return err
 			}
 			after = row.ID

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -15,10 +16,10 @@ func TestSessionCreatorIsRequiredBeforeCreation(t *testing.T) {
 	s, _ := testStore(t)
 	tenant := uuid.NewString()
 	input := environmentInput("creator-required", "self_hosted", "/workspace")
-	input.InitialInputs = []Input{messageInput("initial")}
+	input.InitialInputs = []sessions.Input{messageInput("initial")}
 	for _, invalid := range []identity.Subject{{}, {Kind: "user"}, {ID: "someone"}, {Kind: "workspace", ID: "someone"}} {
 		input.Creator = invalid
-		if _, err := s.CreateSessionStream(t.Context(), tenant, input); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.CreateSessionStream(t.Context(), tenant, input); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("invalid creator accepted: %v", err)
 		}
 	}
@@ -39,7 +40,7 @@ func TestConcurrentSessionCreatorsCannotShareCreationRetry(t *testing.T) {
 	request := json.RawMessage(`{"agent_id":"source"}`)
 	creators := []identity.Subject{{Kind: "user", ID: "same-id"}, {Kind: "service_account", ID: "same-id"}}
 	type outcome struct {
-		result SessionCreation
+		result sessions.Creation
 		err    error
 	}
 	results := make(chan outcome, 8)
@@ -50,7 +51,7 @@ func TestConcurrentSessionCreatorsCannotShareCreationRetry(t *testing.T) {
 		go func() {
 			input := environmentInput("shared-retry", "self_hosted", "/workspace")
 			input.Creator = creators[i%2]
-			input.CreationRequest, input.InitialInputs = request, []Input{messageInput("once")}
+			input.CreationRequest, input.InitialInputs = request, []sessions.Input{messageInput("once")}
 			ready.Done()
 			<-start
 			result, err := s.CreateSessionStream(t.Context(), tenant, input)
@@ -59,11 +60,11 @@ func TestConcurrentSessionCreatorsCannotShareCreationRetry(t *testing.T) {
 	}
 	ready.Wait()
 	close(start)
-	var winner Session
+	var winner sessions.Session
 	succeeded, conflicted, created := 0, 0, 0
 	for range 8 {
 		got := <-results
-		if errors.Is(got.err, ErrIdempotencyConflict) {
+		if errors.Is(got.err, sessions.ErrIdempotencyConflict) {
 			conflicted++
 			continue
 		}
@@ -101,11 +102,11 @@ func TestConcurrentSessionCreatorsCannotShareCreationRetry(t *testing.T) {
 			if err != nil || found.Session.ID != winner.ID || found.Session.Creator == nil || *found.Session.Creator != creator {
 				t.Fatal("creator retry did not survive restart", found, err)
 			}
-		} else if !errors.Is(err, ErrIdempotencyConflict) {
+		} else if !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("early recovery ignored creator kind", err)
 		}
 	}
-	if _, err := restarted.GetSession(t.Context(), uuid.NewString(), winner.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := restarted.GetSession(t.Context(), uuid.NewString(), winner.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("creator bypassed project isolation", err)
 	}
 }
@@ -139,10 +140,10 @@ func TestHistoricalUnknownCreatorCannotBeClaimedByRetry(t *testing.T) {
 			if err != nil || len(page.Sessions) != 1 || page.Sessions[0].Creator != nil {
 				t.Fatal("historical project reads changed", page, err)
 			}
-			if _, err := s.FindSessionCreation(ctx, tenant, input.IdempotencyKey, input.CreationRequest, input.Creator); !errors.Is(err, ErrIdempotencyConflict) {
+			if _, err := s.FindSessionCreation(ctx, tenant, input.IdempotencyKey, input.CreationRequest, input.Creator); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal("early retry claimed historical ownership", err)
 			}
-			if _, err := s.CreateSessionStream(ctx, tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+			if _, err := s.CreateSessionStream(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal("upsert claimed historical ownership", err)
 			}
 			for _, statement := range []string{

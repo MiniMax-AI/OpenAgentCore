@@ -14,39 +14,39 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type environmentCreationFixture struct {
 	streamFixture
-	input store.CreateSessionInput
+	input sessions.CreateSession
 }
 
-func (f *environmentCreationFixture) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error) {
-	return store.SessionCreation{}, store.ErrNotFound
+func (f *environmentCreationFixture) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error) {
+	return sessions.Creation{}, sessions.ErrNotFound
 }
 
-func (f *environmentCreationFixture) CreateSession(_ context.Context, tenant string, input store.CreateSessionInput) (store.Session, error) {
+func (f *environmentCreationFixture) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.input = input
-	f.session = store.Session{ID: uuid.NewString(), TenantID: tenant, Configuration: input.Configuration, Metadata: input.Metadata, CreatedAt: time.Unix(1700000000, 0)}
+	f.session = sessions.Session{ID: uuid.NewString(), TenantID: tenant, Configuration: input.Configuration, Metadata: input.Metadata, CreatedAt: time.Unix(1700000000, 0)}
 	var snapshot struct {
 		Environment json.RawMessage `json:"environment"`
 	}
 	if err := json.Unmarshal(input.Configuration, &snapshot); err != nil {
-		return store.Session{}, err
+		return sessions.Session{}, err
 	}
-	f.session.Environment = &store.Environment{
+	f.session.Environment = &sessions.Environment{
 		ID: uuid.NewString(), SessionID: f.session.ID, TenantID: tenant, Status: "pending", Configuration: snapshot.Environment,
 	}
 	return f.session, nil
 }
 
-func (f *environmentCreationFixture) CreateSessionStream(ctx context.Context, tenant string, input store.CreateSessionInput) (store.SessionCreation, error) {
+func (f *environmentCreationFixture) CreateSessionStream(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	session, err := f.CreateSession(ctx, tenant, input)
-	return store.SessionCreation{Session: session, Created: true}, err
+	return sessions.Creation{Session: session, Created: true}, err
 }
 
 // environmentCreationHandler serves Session creation and reads from a fresh
@@ -63,7 +63,7 @@ func environmentCreationHandler(t *testing.T, engine string, configure ...func(*
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: uuid.NewString(),
 	}).ResolveAPIKey
 	fixture.serve(fakes)
-	fakes.sessions.findSessionCreation, fakes.sessions.createSession, fakes.sessions.createSessionStream = fixture.FindSessionCreation, fixture.CreateSession, fixture.CreateSessionStream
+	fakes.sessionCreation.findSessionCreation, fakes.sessionCreation.createSession, fakes.sessionCreation.createSessionStream = fixture.FindSessionCreation, fixture.CreateSession, fixture.CreateSessionStream
 	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	for _, c := range configure {
 		c(&deps, fakes)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
@@ -15,51 +14,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var ErrEventLimit = errors.New("execution event storage limit exceeded")
-
-type TurnEvent struct {
-	Ordinal   int32
-	Kind      string
-	Payload   json.RawMessage
-	CreatedAt time.Time
-}
-
-type ExecutionEvent struct {
-	Kind    string          `json:"kind"`
-	Payload json.RawMessage `json:"payload"`
-}
-
 // AppendTurnEvents records an ordered batch atomically, not public SSE replay events.
-func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, first int32, events []ExecutionEvent) error {
+func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, first int32, events []sessions.ExecutionEvent) error {
 	p, err := turnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return err
 	}
 	if first < 1 || len(events) == 0 || len(events) > 64 {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	// Subagent observations are projected under the execution journal, so only
 	// the execution writer records a batch that contains one, replays included.
-	if slices.ContainsFunc(events, func(event ExecutionEvent) bool { return isSubagentObservation(event.Kind) }) {
+	if slices.ContainsFunc(events, func(event sessions.ExecutionEvent) bool { return isSubagentObservation(event.Kind) }) {
 		if err := s.checkExecutionAuthority(); err != nil {
 			return err
 		}
 	}
-	normalized := make([]ExecutionEvent, len(events))
+	normalized := make([]sessions.ExecutionEvent, len(events))
 	payloadBytes := 0
 	for i, event := range events {
-		if len(event.Payload) > 512*1024 || !enginePattern.MatchString(event.Kind) {
-			return ErrInvalidInput
+		if len(event.Payload) > 512*1024 || !sessions.ValidEngine(event.Kind) {
+			return sessions.ErrInvalidInput
 		}
 		payload, err := jsonobject.Normalize(event.Payload)
 		if err != nil {
-			return fmt.Errorf("%w: %w", ErrInvalidInput, err)
+			return fmt.Errorf("%w: %w", sessions.ErrInvalidInput, err)
 		}
-		normalized[i] = ExecutionEvent{Kind: event.Kind, Payload: payload}
+		normalized[i] = sessions.ExecutionEvent{Kind: event.Kind, Payload: payload}
 		payloadBytes += len(payload)
 	}
 	if payloadBytes > 1024*1024 {
-		return ErrEventLimit
+		return sessions.ErrEventLimit
 	}
 	batch, err := json.Marshal(normalized)
 	if err != nil {
@@ -68,7 +53,7 @@ func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnI
 	return s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, _ pgtype.UUID) error {
 		turn, err := q.GetTurn(ctx, p)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -79,15 +64,15 @@ func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnI
 				return err
 			}
 			if !matches {
-				return ErrIdempotencyConflict
+				return sessions.ErrIdempotencyConflict
 			}
 			return nil
 		}
 		if (turn.Status != sessions.TurnInProgress && turn.Status != sessions.TurnWaiting) || first != turn.EventCount+1 {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		if turn.EventCount+int32(len(events)) > 65536 || turn.EventBytes+int64(payloadBytes) > 32*1024*1024 {
-			return ErrEventLimit
+			return sessions.ErrEventLimit
 		}
 		if err = q.InsertTurnEventBatch(ctx, sqlc.InsertTurnEventBatchParams{SessionID: p.SessionID, TurnID: p.ID, FirstOrdinal: first, Batch: batch}); err != nil {
 			return err
@@ -110,13 +95,13 @@ func insertTurnEvent(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn, kind 
 	return indexEvents(ctx, q, turn.SessionID, turn.ID, turn.EventCount+1)
 }
 
-func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, after int32, limit int) ([]TurnEvent, error) {
+func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, after int32, limit int) ([]sessions.TurnEvent, error) {
 	p, err := turnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return nil, err
 	}
 	if after < 0 || limit < 1 || limit > 100 {
-		return nil, ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	if _, err = s.GetTurn(ctx, tenantID, sessionID, turnID); err != nil {
 		return nil, err
@@ -125,9 +110,9 @@ func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID 
 	if err != nil {
 		return nil, err
 	}
-	events := make([]TurnEvent, 0, len(rows))
+	events := make([]sessions.TurnEvent, 0, len(rows))
 	for _, row := range rows {
-		events = append(events, TurnEvent{Ordinal: row.Ordinal, Kind: row.Kind, Payload: row.Payload, CreatedAt: row.CreatedAt.Time})
+		events = append(events, sessions.TurnEvent{Ordinal: row.Ordinal, Kind: row.Kind, Payload: row.Payload, CreatedAt: row.CreatedAt.Time})
 	}
 	return events, nil
 }

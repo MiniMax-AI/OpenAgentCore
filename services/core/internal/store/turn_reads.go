@@ -11,19 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type TurnPage struct {
-	Turns      []sessions.Turn
-	NextCursor string
-}
-
 // ListTurns pages a Session's root Turns. Subagent Turns are not Session Turns;
 // ListSubagentTurns reads them.
-func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (TurnPage, error) {
+func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (sessions.TurnPage, error) {
 	if limit < 1 || limit > 100 {
-		return TurnPage{}, fmt.Errorf("%w: page size must be 1..100", ErrInvalidInput)
+		return sessions.TurnPage{}, fmt.Errorf("%w: page size must be 1..100", sessions.ErrInvalidInput)
 	}
 	if _, err := s.GetSession(ctx, tenantID, sessionID); err != nil {
-		return TurnPage{}, err
+		return sessions.TurnPage{}, err
 	}
 	tenant, _ := parseID(tenantID)
 	session, _ := parseID(sessionID)
@@ -32,16 +27,16 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 		// A child Turn is not a Session Turn, so its ID is a missing cursor here.
 		after, err := s.GetTurn(ctx, tenantID, sessionID, pgunit.LookupCursor(cursor))
 		if err != nil {
-			return TurnPage{}, err
+			return sessions.TurnPage{}, err
 		}
 		params.AfterCreated = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
 		params.AfterID, _ = parseID(after.ID)
 	}
 	rows, err := s.queries.ListRootTurns(ctx, params)
 	if err != nil {
-		return TurnPage{}, fmt.Errorf("list turns: %w", err)
+		return sessions.TurnPage{}, fmt.Errorf("list turns: %w", err)
 	}
-	page := TurnPage{Turns: make([]sessions.Turn, 0, min(limit, len(rows)))}
+	page := sessions.TurnPage{Turns: make([]sessions.Turn, 0, min(limit, len(rows)))}
 	if len(rows) > limit {
 		page.NextCursor = uuid.UUID(rows[limit-1].ID.Bytes).String()
 		rows = rows[:limit]

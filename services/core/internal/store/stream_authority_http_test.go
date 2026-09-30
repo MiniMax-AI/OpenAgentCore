@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -38,7 +39,7 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			session, err := s.CreateSession(t.Context(), project.TenantID, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[]},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
+			session, err := s.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[]},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -100,7 +101,7 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 					t.Fatal("revocation affected peer", valid.StatusCode)
 				}
 				// New events remain available to valid callers after the reader has closed.
-				if _, err := s.ReserveEnvironmentInput(t.Context(), project.TenantID, session.ID, "after-revocation", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"new event"}`)}}); err != nil {
+				if _, err := s.ReserveEnvironmentInput(t.Context(), project.TenantID, session.ID, "after-revocation", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"new event"}`)}}); err != nil {
 					t.Fatal(err)
 				}
 			}

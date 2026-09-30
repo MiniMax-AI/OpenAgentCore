@@ -19,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,7 +47,13 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		} else {
 			// Without a Worker, Core keeps its executor URL but admits nothing.
 			enabled = append(enabled, func(d *api.Dependencies) {
-				d.Execution = &api.Execution{ExecutorURL: origin, Admission: unavailableAdmission{}, SessionArchive: strictStandIn{t}, Workspaces: strictStandIn{t}}
+				d.Execution = &api.Execution{
+					ExecutorURL:      origin,
+					SessionAdmission: unavailableAdmission{},
+					InputAdmission:   unavailableAdmission{},
+					SessionArchive:   strictStandIn{t},
+					Workspaces:       strictStandIn{t},
+				}
 			})
 		}
 		handler, err := publicHandler(t, s, db, auth, "codex", enabled...)
@@ -91,9 +98,9 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	if err := json.Unmarshal(accepted, &created); err != nil || len(created.Cases) != 4 {
 		t.Fatal("missing public initial creation cases", err)
 	}
-	reservations := func(s *store.Store, pool *pgxpool.Pool) map[string]store.EnvironmentInputReservation {
+	reservations := func(s *store.Store, pool *pgxpool.Pool) map[string]sessions.EnvironmentInputReservation {
 		t.Helper()
-		result := make(map[string]store.EnvironmentInputReservation)
+		result := make(map[string]sessions.EnvironmentInputReservation)
 		for _, item := range created.Cases {
 			var id string
 			if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", item.ID).Scan(&id); err != nil {
@@ -139,7 +146,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	}
 	before := reservations(s, db.pool)
 	for _, reservation := range before {
-		if reservation.State != store.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute {
+		if reservation.State != sessions.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute {
 			t.Fatal("public initial creation did not retain its database deadline")
 		}
 	}
@@ -175,7 +182,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	after := reservations(reopened, reopenedDB.pool)
 	for id, reservation := range after {
 		if id == failureID {
-			if reservation.ID != before[id].ID || reservation.State != store.EnvironmentInputExpired || reservation.SettledAt == nil {
+			if reservation.ID != before[id].ID || reservation.State != sessions.EnvironmentInputExpired || reservation.SettledAt == nil {
 				t.Fatal("Worker did not settle the original public initial reservation")
 			}
 		} else if !reflect.DeepEqual(reservation, before[id]) {
@@ -229,17 +236,18 @@ func publicInitialWorker(t *testing.T, s *store.Store, db fixtureDB) (*execution
 	return worker, stop
 }
 
-// unavailableAdmission admits nothing, as a Core without a running Worker.
+// unavailableAdmission admits no Session creation or input, as a Core without
+// a running Worker.
 type unavailableAdmission struct{}
 
-func (unavailableAdmission) CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error) {
-	return store.Session{}, execution.ErrExecutionUnavailable
+func (unavailableAdmission) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
+	return sessions.Session{}, execution.ErrExecutionUnavailable
 }
 
-func (unavailableAdmission) CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error) {
-	return store.SessionCreation{}, execution.ErrExecutionUnavailable
+func (unavailableAdmission) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
+	return sessions.Creation{}, execution.ErrExecutionUnavailable
 }
 
-func (unavailableAdmission) SubmitInputs(context.Context, string, string, string, []store.Input) ([]store.InputReceipt, error) {
+func (unavailableAdmission) SubmitInputs(context.Context, string, string, string, []sessions.Input) ([]sessions.InputReceipt, error) {
 	return nil, execution.ErrExecutionUnavailable
 }

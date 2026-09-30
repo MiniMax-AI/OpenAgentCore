@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -32,7 +32,7 @@ func (h *Handler) deleteSession(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "session_id")
 	parsed, err := uuid.Parse(id)
 	if err != nil || parsed == uuid.Nil {
-		writeStoreError(w, r, store.ErrNotFound)
+		writeStoreError(w, r, sessions.ErrNotFound)
 		return
 	}
 	if err := h.Sessions.DeleteSession(r.Context(), tenantID(r), id); err != nil {

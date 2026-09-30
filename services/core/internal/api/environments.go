@@ -8,7 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -17,12 +17,12 @@ import (
 // Project's principal is an executor credential's execution principal; the
 // Core key that authorizes the request is not.
 type Environments interface {
-	GetEnvironment(context.Context, string, string) (store.Environment, error)
+	GetEnvironment(context.Context, string, string) (sessions.Environment, error)
 	AuthorizeEnvironmentInstallation(context.Context, identity.Principal, string, string) (string, int64, error)
-	ValidateEnvironmentInstallation(context.Context, string, string) (store.InstallationAuthorization, error)
+	ValidateEnvironmentInstallation(context.Context, string, string) (sessions.InstallationAuthorization, error)
 	ClaimEnvironmentInstallation(context.Context, string, string, string) error
-	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (store.ExecutorCredentialState, error)
-	IssueProjectExecutorCredential(context.Context, identity.Principal, string, string, bool) (store.IssuedExecutorCredential, error)
+	ProjectExecutorCredentialState(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
+	IssueProjectExecutorCredential(context.Context, identity.Principal, string, string, bool) (sessions.IssuedExecutorCredential, error)
 	RevokeProjectExecutorCredential(context.Context, identity.Principal, string, string) error
 }
 
@@ -50,7 +50,7 @@ func (h *Handler) getEnvironment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-func environmentResponse(environment store.Environment) (v1.EnvironmentInfo, error) {
+func environmentResponse(environment sessions.Environment) (v1.EnvironmentInfo, error) {
 	configuration, err := storedEnvironment(environment.Configuration)
 	if err != nil || (configuration.Type != "self_hosted" && configuration.Type != "openai_hosted") || environment.ID == "" {
 		return v1.EnvironmentInfo{}, errors.New("unsupported stored environment metadata configuration")

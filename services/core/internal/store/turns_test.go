@@ -33,7 +33,7 @@ func TestCancellationStaysBoundToItsOriginalTurn(t *testing.T) {
 	}
 	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnInProgress, sessions.TurnCancelled)
 	next := submitMessage(t, s, tenant, session.ID, "next")
-	for key, original := range map[string]InputReceipt{"cancel": cancel, "idle-cancel": idle} {
+	for key, original := range map[string]sessions.InputReceipt{"cancel": cancel, "idle-cancel": idle} {
 		retry, err := s.RequestCancel(ctx, tenant, session.ID, key)
 		if err != nil || !retry.Replayed || retry.TurnID != original.TurnID || retry.Sequence != original.Sequence {
 			t.Fatalf("cancellation retargeted: %+v, %v", retry, err)
@@ -50,7 +50,7 @@ func TestCancellationStaysBoundToItsOriginalTurn(t *testing.T) {
 	if err != nil || stopped.Status != sessions.TurnCancelled || stopped.CompletedAt.IsZero() || !stopped.StartedAt.IsZero() {
 		t.Fatalf("queued work did not stop: %+v, %v", stopped, err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, next.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, next.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("cancelled queued work was started: %v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestWaitingTurnRetainsInputsAndStartTime(t *testing.T) {
 	if _, err := s.RequestCancel(ctx, tenant, session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnInProgress}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("cancelling Turn resumed: %v", err)
 	}
 	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnWaiting, sessions.TurnCancelled)
@@ -98,7 +98,7 @@ func TestTerminalOutcomeIsImmutableDuringConcurrentCallbacks(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			outcome, _ := json.Marshal(map[string]string{"reported": status})
-			turn, err := other.TransitionTurn(ctx, tenant, session.ID, first.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status, Outcome: outcome})
+			turn, err := other.TransitionTurn(ctx, tenant, session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status, Outcome: outcome})
 			if err == nil {
 				winners <- turn
 			} else {
@@ -113,7 +113,7 @@ func TestTerminalOutcomeIsImmutableDuringConcurrentCallbacks(t *testing.T) {
 		t.Fatalf("winners=%d errors=%d", len(winners), len(errs))
 	}
 	for err := range errs {
-		if !errors.Is(err, ErrTurnConflict) {
+		if !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal(err)
 		}
 	}
@@ -121,7 +121,7 @@ func TestTerminalOutcomeIsImmutableDuringConcurrentCallbacks(t *testing.T) {
 	if winner.CompletedAt.IsZero() || winner.CancelRequestedAt.IsZero() || winner.CompletedAt.Before(winner.StartedAt) {
 		t.Fatalf("terminal timestamps: %+v", winner)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"late":true}`)}); !errors.Is(err, ErrTurnConflict) {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"late":true}`)}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("late terminal callback accepted: %v", err)
 	}
 	pool.Close()
@@ -137,7 +137,7 @@ func TestTurnInputValidationHasNoSideEffects(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	for _, raw := range []json.RawMessage{nil, json.RawMessage(`[]`), json.RawMessage(`null`), json.RawMessage(`{} {}`), json.RawMessage(`{"text":"` + string(make([]byte, 512*1024)) + `"}`)} {
-		if _, err := s.SubmitMessage(ctx, tenant, session.ID, "first", raw); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.SubmitMessage(ctx, tenant, session.ID, "first", raw); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("invalid input accepted: %v", err)
 		}
 	}
@@ -150,13 +150,13 @@ func TestTurnInputValidationHasNoSideEffects(t *testing.T) {
 	if first.Replayed {
 		t.Fatal("failed submission persisted a receipt")
 	}
-	for _, input := range []TurnTransition{
+	for _, input := range []sessions.TurnTransition{
 		{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCompleted},
 		{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnQueued},
 		{ExpectedStatus: sessions.TurnCompleted, Status: sessions.TurnInProgress},
 		{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{"premature":true}`)},
 	} {
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, input); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.TransitionTurn(ctx, tenant, session.ID, first.TurnID, input); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("invalid transition accepted: %v", err)
 		}
 	}

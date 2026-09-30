@@ -7,7 +7,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -50,10 +49,10 @@ type TurnDiagnostics struct {
 // SessionAdmin serves the administrator's per-Session reads: diagnostics
 // snapshots, the execution configuration and the managed archive state.
 type SessionAdmin interface {
-	GetSessionDiagnosticsSnapshot(context.Context, string, string) (store.Session, error)
-	GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (store.TurnDiagnosticsSnapshot, error)
+	GetSessionDiagnosticsSnapshot(context.Context, string, string) (sessions.Session, error)
+	GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (sessions.TurnDiagnosticsSnapshot, error)
 	GetSessionExecutionConfiguration(context.Context, string, string) (v1.SessionExecutionConfiguration, error)
-	GetManagedSessionArchive(context.Context, string, string) (store.ManagedSessionArchive, error)
+	GetManagedSessionArchive(context.Context, string, string) (sessions.ManagedArchive, error)
 }
 
 // @Summary Retrieve root Session diagnostics

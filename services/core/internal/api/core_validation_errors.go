@@ -7,7 +7,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 const invalidNameMessage = "The name exceeds its length limit or contains invalid characters."
@@ -18,7 +17,6 @@ func writeCoreValidationError(w http.ResponseWriter, err error) bool {
 	if !isCoreErrorWriter(w) {
 		return false
 	}
-	var field *store.AdminValidationError
 	var node *deployment.NodeValidationError
 	var configuration *deployment.ConfigurationError
 	switch {
@@ -30,9 +28,6 @@ func writeCoreValidationError(w http.ResponseWriter, err error) bool {
 			message = "Node capacity must be positive, at most 1000000, and max_retained must be at least max_active."
 		}
 		writeCoreError(w, http.StatusBadRequest, node.Code, message, details, node.Param)
-		return true
-	case errors.As(err, &field):
-		writeCoreError(w, http.StatusBadRequest, field.Code, invalidNameMessage, CoreErrorDetails{"max_length": CoreErrorNumber(float64(field.MaxLength))}, field.Param)
 		return true
 	case errors.As(err, &configuration) && configuration.Validation != nil:
 		field := configuration.Validation

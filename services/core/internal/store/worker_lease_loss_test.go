@@ -30,7 +30,7 @@ func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 			t.Error("worker did not stop")
 		}
 	})
-	inputs := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"execute"}]}]}`)}}
+	inputs := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"execute"}]}]}`)}}
 	receipts, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "active", inputs)
 	if err != nil {
 		t.Fatal(err)

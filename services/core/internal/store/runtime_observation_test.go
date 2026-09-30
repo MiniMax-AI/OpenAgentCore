@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -55,7 +56,7 @@ func TestRuntimeNodeObservationRetainsResourcesAndFencesStaleResults(t *testing.
 	if err != nil || recovered.ObservationError != "" || recovered.ID != owner.ID {
 		t.Fatal("stale error replaced recovered observation", recovered, err)
 	}
-	if err := w.RecordRuntimeObservation(t.Context(), current, "secret provider exception"); !errors.Is(err, ErrInvalidInput) {
+	if err := w.RecordRuntimeObservation(t.Context(), current, "secret provider exception"); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("raw diagnostics accepted", err)
 	}
 }

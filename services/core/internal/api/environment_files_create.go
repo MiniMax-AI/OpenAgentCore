@@ -18,7 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/echotext"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -56,28 +56,28 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := decodeInputObject(raw, &request, fields...); err != nil || request.Path == nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	switch request.Type {
 	case "inline":
 		fields = []string{"type", "path", "data"}
 		if request.Data == nil {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeStoreError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 	case "file_id":
 		fields = []string{"type", "path", "file_id"}
 		if request.FileID == nil || *request.FileID == "" {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeStoreError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 	default:
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if decodeInputObject(raw, &request, fields...) != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if err := environmentFileCreatePathError(*request.Path); err != nil {
@@ -88,7 +88,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	if request.Type == "inline" {
 		data, err = base64.StdEncoding.Strict().DecodeString(*request.Data)
 		if err != nil {
-			writeStoreError(w, r, store.ErrInvalidInput)
+			writeStoreError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 		if len(data) > maxInlineEnvironmentFileBytes {

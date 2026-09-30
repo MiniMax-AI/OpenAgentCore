@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSourceFileMissingErrorParameters(t *testing.T) {
@@ -37,28 +36,6 @@ func TestSourceFileMissingErrorParameters(t *testing.T) {
 				t.Fatalf("error projection: %s", raw)
 			}
 		})
-	}
-}
-
-func TestStoreErrorOptionalParameterPreservesOtherErrors(t *testing.T) {
-	for _, tc := range []struct {
-		path   string
-		err    error
-		status int
-		code   any
-		param  []string
-	}{
-		{"/v1/agents/agent_missing", store.ErrNotFound, 404, "not_found_error", nil},
-	} {
-		w := httptest.NewRecorder()
-		writeStoreError(w, httptest.NewRequest(http.MethodGet, tc.path, nil), tc.err, tc.param...)
-		var body map[string]map[string]any
-		if w.Code != tc.status || json.Unmarshal(w.Body.Bytes(), &body) != nil {
-			t.Fatalf("unexpected error: %d %s", w.Code, w.Body.String())
-		}
-		if body["error"]["code"] != tc.code || body["error"]["param"] != nil {
-			t.Fatalf("unrelated error changed: %s", w.Body.String())
-		}
 	}
 }
 

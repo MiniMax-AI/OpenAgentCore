@@ -17,7 +17,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -27,7 +26,7 @@ import (
 // they describe.
 type creationStreamFixture struct {
 	streamFixture
-	creation  store.SessionCreation
+	creation  sessions.Creation
 	recorded  bool
 	deleted   bool
 	sequence  int64
@@ -38,11 +37,11 @@ type creationStreamFixture struct {
 
 // GetSession returns the committed projection that commit changes atomically
 // with its events.
-func (f *creationStreamFixture) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
+func (f *creationStreamFixture) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.deleted || tenant != f.session.TenantID || id != f.session.ID {
-		return store.Session{}, store.ErrNotFound
+		return sessions.Session{}, sessions.ErrNotFound
 	}
 	return f.session, nil
 }
@@ -68,7 +67,7 @@ func (f *creationStreamFixture) ListSessionEvents(_ context.Context, _, _ string
 
 // SessionStreamSnapshot returns the projection and cursor from one snapshot,
 // running the one-shot race hooks before and after that read.
-func (f *creationStreamFixture) SessionStreamSnapshot(_ context.Context, tenant, id string) (store.Session, int64, error) {
+func (f *creationStreamFixture) SessionStreamSnapshot(_ context.Context, tenant, id string) (sessions.Session, int64, error) {
 	f.mu.Lock()
 	before := f.beforeSnapshot
 	f.beforeSnapshot = nil
@@ -85,21 +84,21 @@ func (f *creationStreamFixture) SessionStreamSnapshot(_ context.Context, tenant,
 		race()
 	}
 	if deleted || tenant != session.TenantID || id != session.ID {
-		return store.Session{}, 0, store.ErrNotFound
+		return sessions.Session{}, 0, sessions.ErrNotFound
 	}
 	return session, cursor, nil
 }
 
-func (f *creationStreamFixture) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error) {
+func (f *creationStreamFixture) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error) {
 	if !f.recorded {
-		return store.SessionCreation{}, store.ErrNotFound
+		return sessions.Creation{}, sessions.ErrNotFound
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// Recorded-intent lookup returns only the resource row and its cursor.
 	row := f.session
 	row.LastTurn, row.Usage, row.RequiredActions = nil, nil, nil
-	return store.SessionCreation{Session: row, Cursor: 10}, nil
+	return sessions.Creation{Session: row, Cursor: 10}, nil
 }
 
 // AuditSessionOperation accepts the audit of a replayed creation.
@@ -109,7 +108,7 @@ func (f *creationStreamFixture) AuditSessionOperation(context.Context, string, s
 
 // CreateSessionStream is the Worker's streamed admission: it returns the
 // prepared creation.
-func (f *creationStreamFixture) CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error) {
+func (f *creationStreamFixture) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	return f.creation, nil
 }
 
@@ -138,7 +137,7 @@ type creationStreamHarness struct {
 func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 	t.Helper()
 	tenant := uuid.NewString()
-	fixture := &creationStreamFixture{sequence: 10, streamFixture: streamFixture{session: store.Session{
+	fixture := &creationStreamFixture{sequence: 10, streamFixture: streamFixture{session: sessions.Session{
 		ID: uuid.NewString(), TenantID: tenant, CreatedAt: time.Unix(1700000000, 0), Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`),
 	}}}
@@ -147,11 +146,12 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: tenant,
 	}).ResolveAPIKey
-	fakes.sessions.getSession, fakes.sessions.findSessionCreation, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.FindSessionCreation, fixture.AuditSessionOperation
+	fakes.sessions.getSession, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.AuditSessionOperation
+	fakes.sessionCreation.findSessionCreation = fixture.FindSessionCreation
 	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = fixture.SessionEventCursor, fixture.SessionStreamSnapshot, fixture.ListSessionEvents
 	fakes.modelProviders.resolve = noDeploymentModelProvider
 	deps.Execution = fakes.execution()
-	fakes.admission.createSessionStream = fixture.CreateSessionStream
+	fakes.sessionAdmission.createSessionStream = fixture.CreateSessionStream
 	handler := newTestHandler(t, deps)
 	h := &creationStreamHarness{t: t, fixture: fixture}
 	h.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +184,7 @@ func (h *creationStreamHarness) turn(status string, usage string) *sessions.Turn
 
 // commit applies a projection change and its events atomically, as the Store
 // commits Session events with the state they describe.
-func (h *creationStreamHarness) commit(update func(*store.Session), changes ...sessions.SessionChange) {
+func (h *creationStreamHarness) commit(update func(*sessions.Session), changes ...sessions.SessionChange) {
 	h.fixture.mu.Lock()
 	defer h.fixture.mu.Unlock()
 	if update != nil {
@@ -336,8 +336,8 @@ const creationBody = `{"agent":{"model":"model"},"environment":{"type":"none"},"
 
 const savedBody = `{"agent_id":"agent_test","environment":{"type":"none"},"input":"First","stream":true}`
 
-func setTurn(turn *sessions.Turn) func(*store.Session) {
-	return func(session *store.Session) { session.LastTurn, session.RequiredActions = turn, nil }
+func setTurn(turn *sessions.Turn) func(*sessions.Session) {
+	return func(session *sessions.Session) { session.LastTurn, session.RequiredActions = turn, nil }
 }
 
 func TestCreationStreamClosesOnceSettled(t *testing.T) {
@@ -351,7 +351,7 @@ func TestCreationStreamClosesOnceSettled(t *testing.T) {
 			// The admission result is the committed post-input projection.
 			queued := h.turn(sessions.TurnQueued, "")
 			h.commit(setTurn(queued), turnChange("created", queued), userItemChange(queued), sessionChange("in_progress", queued, nil))
-			h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
+			h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: 10}
 			frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 			defer cancel()
 			observed := expectTypes(t, frames, "agent.session.created", "agent.session.turn.created", "agent.session.turn.item.added", "agent.session.in_progress")
@@ -390,14 +390,14 @@ func TestCreationStreamStaysOpenAcrossRequiredAction(t *testing.T) {
 	h := newCreationStreamHarness(t)
 	queued := h.turn(sessions.TurnQueued, "")
 	h.commit(setTurn(queued), turnChange("created", queued), userItemChange(queued), sessionChange("in_progress", queued, nil))
-	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
+	h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: 10}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 	defer cancel()
 	expectTypes(t, frames, "agent.session.created", "agent.session.turn.created", "agent.session.turn.item.added", "agent.session.in_progress")
 
 	waiting := h.turn(sessions.TurnWaiting, "")
 	actions := []v1.FunctionCallAction{{Type: "function_call", CallID: "call_1", Name: "lookup", TurnID: waiting.ID, Arguments: json.RawMessage(`{}`)}}
-	h.commit(func(session *store.Session) { session.LastTurn, session.RequiredActions = waiting, actions },
+	h.commit(func(session *sessions.Session) { session.LastTurn, session.RequiredActions = waiting, actions },
 		sessionChange("requires_action", waiting, actions))
 	expectTypes(t, frames, "agent.session.requires_action")
 	expectOpen(t, frames)
@@ -415,7 +415,7 @@ func TestCreationStreamStaysOpenAcrossRequiredAction(t *testing.T) {
 
 func TestCreationStreamWithoutAdmittedWorkClosesAfterCreated(t *testing.T) {
 	h := newCreationStreamHarness(t)
-	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
+	h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: 10}
 	// Work committed after the creation is not followed.
 	queued := h.turn(sessions.TurnQueued, "")
 	h.commit(nil, turnChange("created", queued))
@@ -435,8 +435,8 @@ func TestCreationStreamWaitsForPendingProvisioning(t *testing.T) {
 		t.Run(outcome, func(t *testing.T) {
 			h := newCreationStreamHarness(t)
 			// Hosted initial input is idle, without a Turn or public action, while it provisions.
-			h.commit(func(session *store.Session) { session.PendingInput = true })
-			h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
+			h.commit(func(session *sessions.Session) { session.PendingInput = true })
+			h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: 10}
 			frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 			defer cancel()
 			if created := expectTypes(t, frames, "agent.session.created")[0].event(t); created.Session.Status != "idle" {
@@ -445,12 +445,14 @@ func TestCreationStreamWaitsForPendingProvisioning(t *testing.T) {
 			expectOpen(t, frames)
 			if outcome == "failure" {
 				failed := &sessions.EnvironmentInputActivity{Status: "failed", Failure: "environment_unavailable", LastActiveAt: time.Unix(1700000005, 0)}
-				h.commit(func(session *store.Session) { session.PendingInput, session.EnvironmentInputActivity = false, failed },
+				h.commit(func(session *sessions.Session) {
+					session.PendingInput, session.EnvironmentInputActivity = false, failed
+				},
 					activityChange(failed, true))
 				expectTypes(t, frames, "agent.session.failed")
 			} else {
 				// A reservation can settle without recording an event.
-				h.commit(func(session *store.Session) { session.PendingInput = false })
+				h.commit(func(session *sessions.Session) { session.PendingInput = false })
 			}
 			expectEnded(t, frames)
 		})
@@ -461,11 +463,11 @@ func TestCreationStreamEndsWhenSessionIsDeleted(t *testing.T) {
 	h := newCreationStreamHarness(t)
 	queued := h.turn(sessions.TurnQueued, "")
 	h.commit(setTurn(queued))
-	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
+	h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: 10}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 	defer cancel()
 	expectTypes(t, frames, "agent.session.created")
-	h.commit(func(*store.Session) { h.fixture.deleted = true })
+	h.commit(func(*sessions.Session) { h.fixture.deleted = true })
 	expectEnded(t, frames)
 }
 
@@ -497,21 +499,21 @@ func TestCreationStreamStopsBeforeLaterWork(t *testing.T) {
 	t.Run("same batch as the settling idle", func(t *testing.T) {
 		h := newCreationStreamHarness(t)
 		h.commit(setTurn(h.turn(sessions.TurnInProgress, "")))
-		h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
+		h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
 		frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 		defer cancel()
 		expectTypes(t, frames, "agent.session.created")
 		// The settling idle and B's new Turn commit before the next poll drains them together.
 		completed := h.turn(sessions.TurnCompleted, "")
 		changes := append([]sessions.SessionChange{turnChange("completed", completed), sessionChange("idle", completed, nil)}, later(h)...)
-		h.commit(func(session *store.Session) { session.LastTurn = changes[2].Turn }, changes...)
+		h.commit(func(session *sessions.Session) { session.LastTurn = changes[2].Turn }, changes...)
 		expectTypes(t, frames, "agent.session.turn.completed", "agent.session.idle")
 		expectEnded(t, frames)
 	})
 	t.Run("between the settled snapshot and its drain", func(t *testing.T) {
 		h := newCreationStreamHarness(t)
-		h.commit(func(session *store.Session) { session.PendingInput = true })
-		h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
+		h.commit(func(session *sessions.Session) { session.PendingInput = true })
+		h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
 		frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 		defer cancel()
 		expectTypes(t, frames, "agent.session.created")
@@ -520,14 +522,14 @@ func TestCreationStreamStopsBeforeLaterWork(t *testing.T) {
 		// After an empty drain, the reservation settles without a status event,
 		// alongside an unsent environment event, before the fallback read.
 		h.fixture.beforeSnapshot = func() {
-			h.commit(func(session *store.Session) { session.PendingInput = false },
+			h.commit(func(session *sessions.Session) { session.PendingInput = false },
 				sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.environment.disconnected", EventID: uuid.NewString(), SessionID: h.fixture.session.ID,
 					Environment: &v1.SessionEnvironmentState{ID: "environment", Type: "self_hosted", Status: "disconnected"}}})
 		}
 		// B's Turn commits after that settled read and before its drain.
 		h.fixture.afterSnapshot = func() {
 			changes := later(h)
-			h.commit(func(session *store.Session) { session.LastTurn = changes[0].Turn }, changes...)
+			h.commit(func(session *sessions.Session) { session.LastTurn = changes[0].Turn }, changes...)
 		}
 		h.fixture.mu.Unlock()
 		expectTypes(t, frames, "agent.session.environment.disconnected")
@@ -538,18 +540,18 @@ func TestCreationStreamStopsBeforeLaterWork(t *testing.T) {
 func TestCreationStreamIgnoresConnectionIdle(t *testing.T) {
 	h := newCreationStreamHarness(t)
 	waiting := &sessions.EnvironmentInputActivity{Status: "requires_action", LastActiveAt: time.Unix(1700000002, 0)}
-	h.commit(func(session *store.Session) { session.PendingInput = true })
-	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
+	h.commit(func(session *sessions.Session) { session.PendingInput = true })
+	h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 	defer cancel()
 	expectTypes(t, frames, "agent.session.created")
 	// A self-hosted connection clears the action; the input is still pending.
 	connected := &sessions.EnvironmentInputActivity{Status: "idle", LastActiveAt: waiting.LastActiveAt}
-	h.commit(func(session *store.Session) { session.EnvironmentInputActivity = connected }, activityChange(connected, false))
+	h.commit(func(session *sessions.Session) { session.EnvironmentInputActivity = connected }, activityChange(connected, false))
 	expectTypes(t, frames, "agent.session.idle")
 	expectOpen(t, frames)
 	// Its later expiry records no event and ends the stream through the projection.
-	h.commit(func(session *store.Session) { session.PendingInput = false })
+	h.commit(func(session *sessions.Session) { session.PendingInput = false })
 	expectEnded(t, frames)
 }
 
@@ -557,7 +559,7 @@ func TestCreationStreamBoundsProjectionReads(t *testing.T) {
 	h := newCreationStreamHarness(t)
 	running := h.turn(sessions.TurnInProgress, "")
 	h.commit(setTurn(running))
-	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
+	h.fixture.creation = sessions.Creation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 	defer cancel()
 	expectTypes(t, frames, "agent.session.created")
@@ -605,7 +607,7 @@ func TestCreationRetryStreamEndsImmediately(t *testing.T) {
 		}, false},
 		{"upsert retry", func(h *creationStreamHarness) {
 			h.commit(setTurn(h.turn(sessions.TurnInProgress, "")))
-			h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Cursor: 10}
+			h.fixture.creation = sessions.Creation{Session: h.fixture.session, Cursor: 10}
 		}, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -679,7 +681,7 @@ func TestSessionSettledProjection(t *testing.T) {
 		{"requires_action", sessions.TurnWaiting, false, false},
 		{"requires_action", "", true, false},
 	} {
-		session := store.Session{PendingInput: test.pending}
+		session := sessions.Session{PendingInput: test.pending}
 		if test.turn != "" {
 			session.LastTurn = &sessions.Turn{Status: test.turn}
 		}

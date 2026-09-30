@@ -1,9 +1,18 @@
 package api
 
 import (
-	"github.com/go-chi/chi/v5"
+	"context"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
+
+// Items reads a Session's root Items.
+type Items interface {
+	ListItems(context.Context, string, string, string, int, bool) (sessions.ItemPage, error)
+}
 
 // @Summary List persisted execution Items
 // @Description Returns supported message and tool Items in first-observation order. Native engine fields are projected explicitly; unfinished Items on terminal Turns are incomplete. Cursors are Items of the same tenant and Session. Any other after value, including a malformed one, returns 400 invalid_request_error with the message "Invalid session item ID in `after`".
@@ -23,7 +32,7 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.SessionHistory.ListItems(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), options.after, options.limit, options.ascending)
+	page, err := h.Items.ListItems(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

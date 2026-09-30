@@ -8,13 +8,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
 	tenant, session, _ := managedSession(t, s)
-	inputs := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"accepted work"}`)}}
+	inputs := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"accepted work"}`)}}
 	accepted, err := s.SubmitInputs(t.Context(), tenant, session.ID, "work", inputs)
 	if err != nil {
 		t.Fatal(err)
@@ -22,10 +23,10 @@ func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w, stop := managedWorkerMode(t, s, db, uuid.NewString(), p, true)
 	defer stop()
-	if _, err := w.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, store.ErrEnvironmentUnavailable) {
+	if _, err := w.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("maintenance accepted new hosted Session", err)
 	}
-	cancel := []store.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}}
+	cancel := []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}}
 	first, err := w.SubmitInputs(t.Context(), tenant, session.ID, "cancel", cancel)
 	if err != nil || len(first) != 1 {
 		t.Fatal("existing work cannot be cancelled", first, err)
@@ -38,7 +39,7 @@ func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
 	if err != nil || len(retry) != 1 || !retry[0].Replayed || retry[0].Sequence != accepted[0].Sequence || retry[0].TurnID != accepted[0].TurnID {
 		t.Fatal("matching input retry lost its accepted outcome", retry, err)
 	}
-	if _, err := w.SubmitInputs(t.Context(), uuid.NewString(), session.ID, "cancel", cancel); !errors.Is(err, store.ErrNotFound) {
+	if _, err := w.SubmitInputs(t.Context(), uuid.NewString(), session.ID, "cancel", cancel); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("maintenance weakened tenant isolation", err)
 	}
 	if p.creates != 0 {

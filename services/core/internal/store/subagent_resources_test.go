@@ -14,18 +14,18 @@ import (
 	"github.com/google/uuid"
 )
 
-func newSubagentSession(t *testing.T, s *Store) (string, Session) {
+func newSubagentSession(t *testing.T, s *Store) (string, sessions.Session) {
 	t.Helper()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "subagent", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test","multi_agent":{"enabled":true,"max_concurrent_subagents":6}}}`)})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "subagent", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test","multi_agent":{"enabled":true,"max_concurrent_subagents":6}}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return tenant, session
 }
-func subagentFact(kind string, value any) ExecutionEvent {
+func subagentFact(kind string, value any) sessions.ExecutionEvent {
 	raw, _ := json.Marshal(value)
-	return ExecutionEvent{Kind: kind, Payload: raw}
+	return sessions.ExecutionEvent{Kind: kind, Payload: raw}
 }
 func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	s, pool := testStore(t)
@@ -42,7 +42,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	root := submitMessage(t, s, tenant, session.ID, "first")
 	transition(t, owner, tenant, session.ID, root.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	ordinal := int32(1)
-	appendFacts := func(facts ...ExecutionEvent) {
+	appendFacts := func(facts ...sessions.ExecutionEvent) {
 		t.Helper()
 		if err := owner.AppendTurnEvents(ctx, tenant, session.ID, root.TurnID, ordinal, facts); err != nil {
 			t.Fatal(err)
@@ -89,10 +89,10 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal(same, err)
 	}
 	// Session Turn reads carry root work only: a child Turn ID is missing there.
-	if _, err = s.GetTurn(ctx, tenant, session.ID, tid); !errors.Is(err, ErrNotFound) {
+	if _, err = s.GetTurn(ctx, tenant, session.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn in Session Turn retrieval", err)
 	}
-	if _, err = s.ListTurns(ctx, tenant, session.ID, tid, 100, true); !errors.Is(err, ErrNotFound) {
+	if _, err = s.ListTurns(ctx, tenant, session.ID, tid, 100, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn as a Session Turn cursor", err)
 	}
 	allTurns, err := s.ListTurns(ctx, tenant, session.ID, "", 100, true)
@@ -106,10 +106,10 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	if err != nil || len(nestedTurns.Data) != 1 || nestedTurns.Data[0].AgentID != "agent_root" || *nestedTurns.Data[0].SubagentID != nested.ID {
 		t.Fatal(nestedTurns, err)
 	}
-	if _, err = s.GetSubagentTurn(ctx, uuid.NewString(), session.ID, child.ID, tid); !errors.Is(err, ErrNotFound) {
+	if _, err = s.GetSubagentTurn(ctx, uuid.NewString(), session.ID, child.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant child Turn", err)
 	}
-	if _, err = s.ListSubagentTurns(ctx, uuid.NewString(), session.ID, child.ID, "", 20, true); !errors.Is(err, ErrNotFound) {
+	if _, err = s.ListSubagentTurns(ctx, uuid.NewString(), session.ID, child.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant child Turns", err)
 	}
 	if allTurns, err = s.ListTurns(ctx, tenant, session.ID, "", 100, true); err != nil || len(allTurns.Turns) != 1 {
@@ -128,13 +128,13 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 			t.Fatal("child Item leaked into root Items")
 		}
 	}
-	if _, err = s.GetSubagentTurn(ctx, tenant, session.ID, nested.ID, tid); !errors.Is(err, ErrNotFound) {
+	if _, err = s.GetSubagentTurn(ctx, tenant, session.ID, nested.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("nested ownership", err)
 	}
-	if _, err = s.ListSubagentItems(ctx, tenant, session.ID, nested.ID, own.Data[0].ID, 20, true); !errors.Is(err, errItemCursor) {
+	if _, err = s.ListSubagentItems(ctx, tenant, session.ID, nested.ID, own.Data[0].ID, 20, true); !errors.Is(err, sessions.ErrItemCursor) {
 		t.Fatal("another child's Item cursor", err)
 	}
-	if _, err = s.GetSubagent(ctx, uuid.NewString(), session.ID, child.ID); !errors.Is(err, ErrNotFound) {
+	if _, err = s.GetSubagent(ctx, uuid.NewString(), session.ID, child.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant", err)
 	}
 	closed := proto.SubagentLifecyclePayload{NativeID: "child", EffectID: "native-close-1", Status: "closed", OccurredAtMS: 103000}
@@ -177,11 +177,11 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	}
 	// A conflicting replay rolls back the whole batch, including an earlier new child.
 	closed.OccurredAtMS++
-	facts := []ExecutionEvent{subagentIdentityEvent("rollback", "root", 104), subagentFact(proto.TypeSubagentLifecycle, closed)}
-	if err = owner.AppendTurnEvents(ctx, tenant, session.ID, root.TurnID, ordinal, facts); !errors.Is(err, ErrIdempotencyConflict) {
+	facts := []sessions.ExecutionEvent{subagentIdentityEvent("rollback", "root", 104), subagentFact(proto.TypeSubagentLifecycle, closed)}
+	if err = owner.AppendTurnEvents(ctx, tenant, session.ID, root.TurnID, ordinal, facts); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal(err)
 	}
-	if _, err = s.GetSubagentIdentity(ctx, tenant, session.ID, "rollback"); !errors.Is(err, ErrNotFound) {
+	if _, err = s.GetSubagentIdentity(ctx, tenant, session.ID, "rollback"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("non-atomic batch", err)
 	}
 	// Reads do not invoke native processes, including after the root finishes.

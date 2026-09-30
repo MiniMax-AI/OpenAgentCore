@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
@@ -23,7 +24,7 @@ func TestSessionsPersistAndStayTenantScoped(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := context.Background()
 	tenantA, tenantB := uuid.NewString(), uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", Metadata: map[string]string{"source": "standalone"}, IdempotencyKey: "first",
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", Metadata: map[string]string{"source": "standalone"}, IdempotencyKey: "first",
 		Configuration: []byte(`{"agent":{"model":"test-model","instructions":"Keep the snapshot."},"environment":{"type":"none"}}`)}
 	first, err := s.CreateSession(ctx, tenantA, input)
 	if err != nil {
@@ -36,10 +37,10 @@ func TestSessionsPersistAndStayTenantScoped(t *testing.T) {
 	if first.ID == other.ID {
 		t.Fatal("idempotency leaked across tenants")
 	}
-	if _, err := s.GetSession(ctx, tenantB, first.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSession(ctx, tenantB, first.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-tenant read: %v", err)
 	}
-	if _, err := s.ListSessions(ctx, tenantB, first.ID, 10, false, nil); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ListSessions(ctx, tenantB, first.ID, 10, false, nil); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-tenant cursor: %v", err)
 	}
 	for _, key := range []string{"second", "third"} {
@@ -89,7 +90,7 @@ func TestConcurrentSessionCreationIsIdempotent(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "fake_alpha", Metadata: map[string]string{"b": "2", "a": "1"}, IdempotencyKey: "repeated"}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "fake_alpha", Metadata: map[string]string{"b": "2", "a": "1"}, IdempotencyKey: "repeated"}
 	const count = 8
 	ids := make(chan string, count)
 	errs := make(chan error, count)
@@ -118,15 +119,15 @@ func TestConcurrentSessionCreationIsIdempotent(t *testing.T) {
 	if len(unique) != 1 {
 		t.Fatalf("duplicate sessions: %+v", unique)
 	}
-	replay, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "fake_alpha", Metadata: map[string]string{"a": "1", "b": "2"}, IdempotencyKey: "repeated"})
+	replay, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "fake_alpha", Metadata: map[string]string{"a": "1", "b": "2"}, IdempotencyKey: "repeated"})
 	if err != nil || !unique[replay.ID] {
 		t.Fatalf("reordered metadata was not replayed: %+v %v", replay, err)
 	}
-	for _, changed := range []CreateSessionInput{
+	for _, changed := range []sessions.CreateSession{
 		{Creator: FixtureCreator(), Engine: "codex", Metadata: input.Metadata, IdempotencyKey: input.IdempotencyKey},
 		{Creator: FixtureCreator(), Engine: input.Engine, Metadata: map[string]string{"a": "changed"}, IdempotencyKey: input.IdempotencyKey},
 	} {
-		if _, err := s.CreateSession(ctx, tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := s.CreateSession(ctx, tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatalf("changed request = %v", err)
 		}
 	}

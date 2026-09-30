@@ -7,11 +7,10 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestFunctionStateEventsUseTheirOwnSnapshot(t *testing.T) {
-	session := store.Session{ID: "session", CreatedAt: time.Now(), Metadata: map[string]string{},
+	session := sessions.Session{ID: "session", CreatedAt: time.Now(), Metadata: map[string]string{},
 		Configuration:   json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`),
 		RequiredActions: []v1.FunctionCallAction{{CallID: "stale"}},
 	}

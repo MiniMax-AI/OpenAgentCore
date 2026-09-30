@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func deploymentSelection() deployment.ProcessDeployment {
@@ -85,7 +86,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, ErrTurnConflict) {
+	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("unknown creation lost cleanup ownership", err)
 	}
 	if err := deploymentExecution(t, w).ConfigureProcess(t.Context(), &old); err == nil {
@@ -128,7 +129,7 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 	old := deploymentSelection()
 	deploymentConfigure(t, w, &old)
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`)}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`)}
 	existing, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -140,14 +141,14 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 		t.Fatal("creation retry lost identity", err)
 	}
 	input.IdempotencyKey = uuid.NewString()
-	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrEnvironmentUnavailable) {
+	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("maintenance created hosted Session", err)
 	}
 	var count int
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM sessions WHERE tenant_id=$1", tenant).Scan(&count); err != nil || count != 1 {
 		t.Fatal("rejection left partial Session", count, err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("maintenance reserved new allocation", err)
 	}
 	for _, kind := range []string{"none", "self_hosted"} {
@@ -159,7 +160,7 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 	}
 	old.AdmissionPaused = false
 	deploymentConfigure(t, w, &old)
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrEnvironmentUnavailable) {
+	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("wrong installation reserved resource", err)
 	}
 	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
@@ -186,7 +187,7 @@ func TestRuntimeDeploymentMaintenanceSerializesHostedCreation(t *testing.T) {
 	done := make(chan error, 1)
 	tenant := uuid.NewString()
 	go func() {
-		_, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`)})
+		_, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`)})
 		done <- err
 	}()
 	runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -196,7 +197,7 @@ func TestRuntimeDeploymentMaintenanceSerializesHostedCreation(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-done; !errors.Is(err, ErrEnvironmentUnavailable) {
+	if err := <-done; !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("creation bypassed committed maintenance", err)
 	}
 	var count int

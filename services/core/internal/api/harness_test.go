@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSessionHarnessAdmission(t *testing.T) {
@@ -94,7 +94,7 @@ func TestSavedHarnessReplacementAndEffectiveRead(t *testing.T) {
 		t.Fatal("mutated saved Agent")
 	}
 	raw, _ := json.Marshal(configuration{Agent: v1.Agent{ID: "agent", Model: "fixture", XAgentsCore: &v1.AgentsCore{Harness: "claude_sdk"}}, Environment: v1.Environment{Type: "none"}})
-	response, err := sessionResponse(store.Session{Engine: "mcode", Configuration: raw}, "")
+	response, err := sessionResponse(sessions.Session{Engine: "mcode", Configuration: raw}, "")
 	if err != nil || response.Agent.XAgentsCore.Harness != "mcode" {
 		t.Fatalf("effective read=%+v %v", response, err)
 	}
@@ -102,7 +102,7 @@ func TestSavedHarnessReplacementAndEffectiveRead(t *testing.T) {
 
 func TestDefaultHarnessPreservesSessionAgentResponse(t *testing.T) {
 	raw, _ := json.Marshal(configuration{Agent: v1.Agent{ID: "agent", Model: "fixture"}, Environment: v1.Environment{Type: "none"}})
-	response, err := sessionResponse(store.Session{Engine: "codex", Configuration: raw}, "")
+	response, err := sessionResponse(sessions.Session{Engine: "codex", Configuration: raw}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

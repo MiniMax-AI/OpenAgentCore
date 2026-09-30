@@ -8,6 +8,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -20,7 +21,7 @@ func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
 	st := NewWithCredentialCipher(pool, cipher)
 	ctx := t.Context()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "mcode", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"actual-model"},"environment":{"type":"openai_hosted"}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://example.com", APIKey: "private-model-canary", ContextWindow: 100000, MaxOutputTokens: 8000}}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "mcode", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"actual-model"},"environment":{"type":"openai_hosted"}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://example.com", APIKey: "private-model-canary", ContextWindow: 100000, MaxOutputTokens: 8000}}
 	session, err := st.CreateSession(ctx, tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +38,7 @@ func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
 		t.Fatal("retry changed snapshot", err)
 	}
 	input.ModelProvider.APIKey = "conflicting-key"
-	if _, err := st.CreateSession(ctx, tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := st.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed credentials accepted", err)
 	}
 	restarted := NewWithCredentialCipher(pool, cipher)

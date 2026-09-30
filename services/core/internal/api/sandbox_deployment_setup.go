@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -189,7 +190,7 @@ func (h *Handler) cancelSandboxReset(w http.ResponseWriter, r *http.Request) {
 func parseResetGeneration(r *http.Request) (uint64, error) {
 	query, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil || len(query) != 1 || len(query["expected_generation"]) != 1 {
-		return 0, store.ErrInvalidInput
+		return 0, sessions.ErrInvalidInput
 	}
 	return strconv.ParseUint(query.Get("expected_generation"), 10, 64)
 }

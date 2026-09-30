@@ -21,7 +21,7 @@ func newFunctionHarness(t *testing.T) *dispatchHarness {
 	t.Helper()
 	h := newDispatchHarness(t)
 	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
+	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func newFunctionHarness(t *testing.T) *dispatchHarness {
 	}
 }
 
-func functionState(t *testing.T, h *dispatchHarness, count int) store.Session {
+func functionState(t *testing.T, h *dispatchHarness, count int) sessions.Session {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
@@ -164,7 +164,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			if err != nil || saved.Applied || len(saved.Result) == 0 {
 				t.Fatal(saved, err)
 			}
-			if err := h.s.ConfirmFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id); !errors.Is(err, store.ErrTurnConflict) {
+			if err := h.s.ConfirmFunctionResult(t.Context(), h.tenant, h.session.ID, input.TurnID, id); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
 			functionState(t, h, 0)
@@ -190,7 +190,7 @@ func TestExecutionFunctionsRejectUndeclaredCallsAndPrematureDone(t *testing.T) {
 
 func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 	h := newDispatchHarness(t)
-	session, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
+	session, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
 	if err != nil {
 		t.Fatal(err)
 	}

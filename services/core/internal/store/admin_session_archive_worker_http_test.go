@@ -72,9 +72,9 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	create := func() store.Session {
+	create := func() sessions.Session {
 		t.Helper()
-		session, err := s.CreateSession(t.Context(), project.TenantID, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)})
+		session, err := s.CreateSession(t.Context(), project.TenantID, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +110,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		return w
 	}
 	w := request(http.MethodPost, active.ID)
-	var archived store.ManagedSessionArchive
+	var archived sessions.ManagedArchive
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &archived) != nil || archived.State != "cleanup_pending" || archived.SessionID != active.ID {
 		t.Fatalf("archive did not use Worker's leased Store: %d %s", w.Code, w.Body)
 	}

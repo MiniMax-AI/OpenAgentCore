@@ -10,29 +10,30 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newEnvironmentExpiryReservation(t *testing.T, s *store.Store) (string, store.EnvironmentInputReservation) {
+func newEnvironmentExpiryReservation(t *testing.T, s *store.Store) (string, sessions.EnvironmentInputReservation) {
 	t.Helper()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(),
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(),
 		Engine: "codex", IdempotencyKey: "environment",
 		Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wait for the environment"}`)}})
+	pending, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wait for the environment"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return tenant, pending
 }
 
-func makeEnvironmentExpiryDue(t *testing.T, pool *pgxpool.Pool, pending *store.EnvironmentInputReservation) {
+func makeEnvironmentExpiryDue(t *testing.T, pool *pgxpool.Pool, pending *sessions.EnvironmentInputReservation) {
 	t.Helper()
 	if err := pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE id=$1 RETURNING deadline", pending.ID).Scan(&pending.Deadline); err != nil {
 		t.Fatal(err)
@@ -63,7 +64,7 @@ func startEnvironmentExpiryWorker(t *testing.T, db fixtureDB, d *execution.Dispa
 	return worker, stop
 }
 
-func waitEnvironmentExpiry(t *testing.T, s *store.Store, tenant string, pending store.EnvironmentInputReservation) {
+func waitEnvironmentExpiry(t *testing.T, s *store.Store, tenant string, pending sessions.EnvironmentInputReservation) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -71,7 +72,7 @@ func waitEnvironmentExpiry(t *testing.T, s *store.Store, tenant string, pending 
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.State == store.EnvironmentInputExpired {
+		if got.State == sessions.EnvironmentInputExpired {
 			if got.SettledAt == nil || !got.Deadline.Equal(pending.Deadline) || len(got.Receipts) != 0 {
 				t.Fatal("expiry changed identity or created receipts", got)
 			}
@@ -107,7 +108,7 @@ func TestWorkerEnvironmentExpiryWithoutDevicesAndAfterRestart(t *testing.T) {
 	_, stop := startEnvironmentExpiryWorker(t, db, d)
 	waitEnvironmentExpiry(t, s, dueTenant, due)
 	got, err := s.GetEnvironmentInputReservation(t.Context(), futureTenant, future.SessionID, future.ID)
-	if err != nil || got.State != store.EnvironmentInputPending || !got.Deadline.Equal(future.Deadline) {
+	if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(future.Deadline) {
 		t.Fatal("future input changed", got, err)
 	}
 	stop()

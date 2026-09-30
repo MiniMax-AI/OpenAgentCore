@@ -8,7 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -17,7 +17,7 @@ type localWriteResult struct {
 	err  error
 }
 
-func startLocalWrite(ctx context.Context, w *execution.Worker, e store.Environment) <-chan localWriteResult {
+func startLocalWrite(ctx context.Context, w *execution.Worker, e sessions.Environment) <-chan localWriteResult {
 	done := make(chan localWriteResult, 1)
 	go func() {
 		size, err := w.WriteEnvironmentFile(ctx, e, "input", []byte("abc"))
@@ -41,7 +41,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	h, w, environment := localWorker(t, true, false)
 	foreign := environment
 	foreign.TenantID = uuid.NewString()
-	if _, err := w.WriteEnvironmentFile(t.Context(), foreign, "input", nil); !errors.Is(err, store.ErrNotFound) {
+	if _, err := w.WriteEnvironmentFile(t.Context(), foreign, "input", nil); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign upload", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -56,7 +56,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	if err != nil || intent.State != "pending" || intent.Identity.DeviceID != h.device.ID {
 		t.Fatal("dispatch preceded durable ownership", intent, err)
 	}
-	if _, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "concurrent", []store.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, store.ErrTurnConflict) {
+	if _, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "concurrent", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("upload admitted concurrent execution", err)
 	}
 	cancel()
@@ -98,7 +98,7 @@ func TestLocalEnvironmentFileWriteLostReceiptRemainsPending(t *testing.T) {
 	if err != nil || intent.State != "pending" {
 		t.Fatal("disconnect guessed rejection", intent, err)
 	}
-	if _, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "after-loss", []store.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, store.ErrTurnConflict) {
+	if _, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "after-loss", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("unknown upload admitted execution", err)
 	}
 }

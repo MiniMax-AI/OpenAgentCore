@@ -24,7 +24,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 		t.Fatal(err)
 	}
 	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "fixture_harness", IdempotencyKey: "structured", Configuration: configuration})
+	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "fixture_harness", IdempotencyKey: "structured", Configuration: configuration})
 	if err != nil {
 		t.Fatal(err)
 	}

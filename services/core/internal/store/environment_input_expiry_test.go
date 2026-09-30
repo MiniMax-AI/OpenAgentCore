@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEnvironmentExpiryBoundsBatchAndRequiresExecutionWriter(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := t.Context()
-	var reservations []EnvironmentInputReservation
+	var reservations []sessions.EnvironmentInputReservation
 	for range 33 {
 		tenant, session := environmentInputSession(t, s)
 		pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
@@ -45,7 +47,7 @@ func TestEnvironmentExpiryBoundsBatchAndRequiresExecutionWriter(t *testing.T) {
 	}
 	for _, pending := range reservations {
 		var state string
-		if err := pool.QueryRow(ctx, "SELECT state FROM environment_input_reservations WHERE id=$1", pending.ID).Scan(&state); err != nil || state != EnvironmentInputExpired {
+		if err := pool.QueryRow(ctx, "SELECT state FROM environment_input_reservations WHERE id=$1", pending.ID).Scan(&state); err != nil || state != sessions.EnvironmentInputExpired {
 			t.Fatal(state, err)
 		}
 		environmentInputHistory(t, pool, pending.SessionID, 0, 0)
@@ -69,10 +71,10 @@ func TestEnvironmentExpiryFencesLostExecutionOwner(t *testing.T) {
 		t.Fatal("lost owner expired input", n, err)
 	}
 	got, err := s.GetEnvironmentInputReservation(t.Context(), tenant, session.ID, pending.ID)
-	if err != nil || got.State != EnvironmentInputPending {
+	if err != nil || got.State != sessions.EnvironmentInputPending {
 		t.Fatal("lost owner wrote through the pool", got, err)
 	}
-	for got.State == EnvironmentInputPending {
+	for got.State == sessions.EnvironmentInputPending {
 		n, err := successor.ExpireEnvironmentInputs(t.Context())
 		if err != nil || n == 0 {
 			t.Fatal("successor could not expire input", n, err)
@@ -82,7 +84,7 @@ func TestEnvironmentExpiryFencesLostExecutionOwner(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got.State != EnvironmentInputExpired {
+	if got.State != sessions.EnvironmentInputExpired {
 		t.Fatal(got)
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
@@ -124,18 +126,18 @@ func TestEnvironmentExpirySerializesWithTargetedSettlement(t *testing.T) {
 			if err := pool.QueryRow(t.Context(), "SELECT state FROM environment_input_reservations WHERE id=$1", pending.ID).Scan(&state); err != nil {
 				t.Fatal(err)
 			}
-			if state != EnvironmentInputExpired && (action != "delete" || state != EnvironmentInputCancelled) {
+			if state != sessions.EnvironmentInputExpired && (action != "delete" || state != sessions.EnvironmentInputCancelled) {
 				t.Fatal("invalid competing settlement", state)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
 			if action == "delete" {
-				if _, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); !errors.Is(err, ErrNotFound) {
+				if _, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("deleted input resurrected", err)
 				}
 				return
 			}
 			later := reserveEnvironmentInput(t, s, tenant, session.ID, uuid.NewString())
-			for _, settle := range []func(context.Context, string, string, string) (EnvironmentInputReservation, error){writer.PromoteEnvironmentInput, s.CancelEnvironmentInput, s.ExpireEnvironmentInput} {
+			for _, settle := range []func(context.Context, string, string, string) (sessions.EnvironmentInputReservation, error){writer.PromoteEnvironmentInput, s.CancelEnvironmentInput, s.ExpireEnvironmentInput} {
 				old, err := settle(t.Context(), tenant, session.ID, pending.ID)
 				if err != nil || old.State != state {
 					t.Fatal("old reservation changed", old, err)
@@ -145,7 +147,7 @@ func TestEnvironmentExpirySerializesWithTargetedSettlement(t *testing.T) {
 				t.Fatal(err)
 			}
 			got, err := s.GetEnvironmentInputReservation(t.Context(), tenant, session.ID, later.ID)
-			if err != nil || got.State != EnvironmentInputPending || !got.Deadline.Equal(later.Deadline) {
+			if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(later.Deadline) {
 				t.Fatal("old settlement affected successor", got, err)
 			}
 		})

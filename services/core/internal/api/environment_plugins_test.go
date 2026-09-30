@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func pluginInput(t *testing.T) json.RawMessage {
@@ -72,7 +72,7 @@ func TestPluginsSharedParsingConfidentialMetadataAndOverrides(t *testing.T) {
 	if err != nil || len(stored.Plugins) != 1 || len(stored.CapabilityDirectories) != 1 {
 		t.Fatal("metadata", err)
 	}
-	env := store.Environment{ID: "environment", Status: "connected", Configuration: snapshot.Environment}
+	env := sessions.Environment{ID: "environment", Status: "connected", Configuration: snapshot.Environment}
 	if response, err := environmentResponse(env); err != nil || len(response.Plugins) != 1 {
 		t.Fatal("environment response", err)
 	}

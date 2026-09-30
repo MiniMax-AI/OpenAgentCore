@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -28,8 +28,8 @@ type EnvironmentExecutorCredentialRequest struct {
 
 // ExecutorCredentialList holds credential metadata only, never a secret.
 type ExecutorCredentialList struct {
-	Data       []store.ExecutorCredential `json:"data" binding:"required"`
-	Connection ExecutorConnection         `json:"connection" binding:"required"`
+	Data       []sessions.ExecutorCredential `json:"data" binding:"required"`
+	Connection ExecutorConnection            `json:"connection" binding:"required"`
 }
 
 // ExecutorConnection reports binding history and current Core-observed connectivity.
@@ -77,7 +77,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 		connection = ExecutorConnection{Status: "disconnected", BoundKeyID: observed.BoundKeyID, EnrolledAt: observed.EnrolledAt, LastSeenAt: observed.LastSeenAt}
 		if observed.EnvironmentStatus == "connected" && observed.CredentialHash != "" {
 			connected, err := h.ExecutorConnections.ExecutorConnected(r.Context(), state.EnvironmentID, observed.CredentialHash)
-			if err != nil && !errors.Is(err, store.ErrNotFound) && !errors.Is(err, store.ErrDeviceBindingConflict) {
+			if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 				writeStoreError(w, r, err)
 				return
 			}
@@ -98,7 +98,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 // @Param project_id path string true "Project UUID"
 // @Param environment_id path string true "Environment UUID"
 // @Param body body api.EnvironmentExecutorCredentialRequest true "Request"
-// @Success 201 {object} store.IssuedExecutorCredential
+// @Success 201 {object} sessions.IssuedExecutorCredential
 // @Failure 400,401,404,409,500 {object} CoreErrorResponse
 // @Router /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials [post]
 func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +111,7 @@ func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request
 	var input EnvironmentExecutorCredentialRequest
 	var fields map[string]json.RawMessage
 	if decodeInputObject(raw, &input, "key_id", "rotate") != nil || json.Unmarshal(raw, &fields) != nil || bytes.Equal(bytes.TrimSpace(fields["rotate"]), []byte("null")) || !executorManagementID(input.KeyID) {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	binding, ok := h.adminProjectScope(w, r)
@@ -143,7 +143,7 @@ func (h *Handler) revokeExecutorCredential(w http.ResponseWriter, r *http.Reques
 	}
 	keyID := chi.URLParam(r, "key_id")
 	if !executorManagementID(keyID) {
-		writeStoreError(w, r, store.ErrNotFound)
+		writeStoreError(w, r, sessions.ErrNotFound)
 		return
 	}
 	if err := h.Environments.RevokeProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), keyID); err != nil {

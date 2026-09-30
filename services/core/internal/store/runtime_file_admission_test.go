@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func runtimeFileWriteKey(owner RuntimeAllocation) FileWriteIdentity {
-	return FileWriteIdentity{ID: uuid.NewString(), DeviceID: owner.DeviceID, RequestSHA256: strings.Repeat("a", 64)}
+func runtimeFileWriteKey(owner RuntimeAllocation) sessions.FileWriteIdentity {
+	return sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: owner.DeviceID, RequestSHA256: strings.Repeat("a", 64)}
 }
 
 func TestRuntimeFileWriteRequiresRunningComputeBeforeNewIntent(t *testing.T) {
@@ -23,10 +25,10 @@ func TestRuntimeFileWriteRequiresRunningComputeBeforeNewIntent(t *testing.T) {
 			write, err := w.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, key)
 			blocked := phase != "disabled" && phase != "running"
 			if blocked {
-				if !errors.Is(err, ErrTurnConflict) {
+				if !errors.Is(err, sessions.ErrTurnConflict) {
 					t.Fatal("suspended compute admitted a new write", write, err)
 				}
-				if _, err := s.GetEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, key.ID); !errors.Is(err, ErrNotFound) {
+				if _, err := s.GetEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, key.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("rejected admission retained a blocking intent", err)
 				}
 				runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase='running',compute_retained_until=NULL WHERE id=$1`, owner.ID)
@@ -59,10 +61,10 @@ func TestRuntimeFileWritePhaseFencePreservesExistingReceipts(t *testing.T) {
 		}
 		changed := key
 		changed.RequestSHA256 = strings.Repeat("b", 64)
-		if _, err := w.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, changed); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := w.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("phase fence masked changed retry identity", err)
 		}
-		if _, err := w.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, runtimeFileWriteKey(owner)); !errors.Is(err, ErrTurnConflict) {
+		if _, err := w.ReserveEnvironmentFileWrite(t.Context(), owner.TenantID, owner.EnvironmentID, runtimeFileWriteKey(owner)); !errors.Is(err, sessions.ErrTurnConflict) {
 			t.Fatal("receipt authorized a successor while waking", err)
 		}
 		if state == "pending" {
@@ -106,7 +108,7 @@ func TestRuntimeFileWriteAndQuiesceSerializeBothOrders(t *testing.T) {
 			if err := tx.Commit(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-done; !errors.Is(err, ErrTurnConflict) {
+			if err := <-done; !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("competing durable owner bypassed the phase fence", err)
 			}
 			allocation, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
@@ -115,7 +117,7 @@ func TestRuntimeFileWriteAndQuiesceSerializeBothOrders(t *testing.T) {
 			}
 			write, err := s.GetEnvironmentFileWrite(ctx, owner.TenantID, owner.EnvironmentID, key.ID)
 			if first == "quiesce" {
-				if allocation.ComputePhase != "quiescing" || !errors.Is(err, ErrNotFound) {
+				if allocation.ComputePhase != "quiescing" || !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("late write survived quiesce", allocation.ComputePhase, write, err)
 				}
 			} else if allocation.ComputePhase != "running" || err != nil || write.State != "pending" {

@@ -13,21 +13,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-var ErrInstallationAuthorization = errors.New("installation authorization is invalid or expired; obtain a new command from the Session")
-
-// InstallationAuthorization permits claiming one Environment's connect-only key.
-// The Environment UUID is reserved as that key's ID. Reissuing an authorization
-// never rotates or revives the key, and a retry must prove the same local secret.
-type InstallationAuthorization struct {
-	Principal   identity.Principal `json:"principal"`
-	Environment string             `json:"environment_id"`
-	Version     string             `json:"version"`
-	ExpiresAt   int64              `json:"expires_at"`
-}
 
 func (s *Store) AuthorizeEnvironmentInstallation(ctx context.Context, principal identity.Principal, environment, version string) (string, int64, error) {
 	if err := s.selfHostedExecutorTarget(ctx, principal, environment); err != nil {
@@ -36,7 +25,7 @@ func (s *Store) AuthorizeEnvironmentInstallation(ctx context.Context, principal 
 	if err := activeProject(ctx, s.queries, principal); err != nil {
 		return "", 0, err
 	}
-	claim := InstallationAuthorization{Principal: principal, Environment: environment, Version: version, ExpiresAt: time.Now().Add(30 * time.Minute).Unix()}
+	claim := sessions.InstallationAuthorization{Principal: principal, Environment: environment, Version: version, ExpiresAt: time.Now().Add(30 * time.Minute).Unix()}
 	payload, err := json.Marshal(claim)
 	if err != nil {
 		return "", 0, err
@@ -49,25 +38,25 @@ func (s *Store) AuthorizeEnvironmentInstallation(ctx context.Context, principal 
 	return encoded + "." + signature, claim.ExpiresAt, nil
 }
 
-func (s *Store) ValidateEnvironmentInstallation(ctx context.Context, token, version string) (InstallationAuthorization, error) {
-	var claim InstallationAuthorization
+func (s *Store) ValidateEnvironmentInstallation(ctx context.Context, token, version string) (sessions.InstallationAuthorization, error) {
+	var claim sessions.InstallationAuthorization
 	encoded, signature, ok := strings.Cut(token, ".")
 	if !ok || len(token) > 4096 {
-		return claim, ErrInstallationAuthorization
+		return claim, sessions.ErrInstallationAuthorization
 	}
 	want, err := s.credentialCipher.Fingerprint("environment-installation", encoded)
 	if err != nil || !hmac.Equal([]byte(want), []byte(signature)) {
-		return claim, ErrInstallationAuthorization
+		return claim, sessions.ErrInstallationAuthorization
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(encoded)
 	if err != nil || json.Unmarshal(payload, &claim) != nil || claim.Version != version || claim.ExpiresAt <= time.Now().Unix() {
-		return InstallationAuthorization{}, ErrInstallationAuthorization
+		return sessions.InstallationAuthorization{}, sessions.ErrInstallationAuthorization
 	}
 	if err := s.selfHostedExecutorTarget(ctx, claim.Principal, claim.Environment); err != nil {
-		return InstallationAuthorization{}, ErrInstallationAuthorization
+		return sessions.InstallationAuthorization{}, sessions.ErrInstallationAuthorization
 	}
 	if err := activeProject(ctx, s.queries, claim.Principal); err != nil {
-		return InstallationAuthorization{}, ErrInstallationAuthorization
+		return sessions.InstallationAuthorization{}, sessions.ErrInstallationAuthorization
 	}
 	return claim, nil
 }
@@ -82,7 +71,7 @@ func (s *Store) ClaimEnvironmentInstallation(ctx context.Context, token, version
 	}
 	decoded, err := base64.RawURLEncoding.DecodeString(secret)
 	if err != nil || len(decoded) != 32 || base64.RawURLEncoding.EncodeToString(decoded) != secret {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	principal := claim.Principal
 	tenant, id, err := executorCredentialIdentity(principal, claim.Environment)
@@ -102,17 +91,17 @@ func (s *Store) ClaimEnvironmentInstallation(ctx context.Context, token, version
 		if len(keys) > 0 {
 			// Existing operator-issued keys must not be replaced by onboarding.
 			if len(keys) != 1 || keys[0].KeyID != id || keys[0].RevokedAt.Valid {
-				return ErrExecutorCredentialExists
+				return sessions.ErrExecutorCredentialExists
 			}
 			_, err := q.AuthenticateEnvironmentExecutor(ctx, sqlc.AuthenticateEnvironmentExecutorParams{EnvironmentID: id, TokenSha256: digest})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrExecutorCredentialExists
+				return sessions.ErrExecutorCredentialExists
 			}
 			return err
 		}
 		_, err = q.IssueExecutorCredential(ctx, sqlc.IssueExecutorCredentialParams{KeyID: id, TenantID: tenant, SubjectKind: pgtype.Text{String: principal.SubjectKind, Valid: true}, SubjectID: pgtype.Text{String: principal.SubjectID, Valid: true}, OrganizationID: principal.OrganizationID, ProjectID: principal.ProjectID, EnvironmentID: id, TokenSha256: digest})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrExecutorCredentialExists
+			return sessions.ErrExecutorCredentialExists
 		}
 		return err
 	})

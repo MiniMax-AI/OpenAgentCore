@@ -13,12 +13,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
-func executionProjectionInput(source string) CreateSessionInput {
+func executionProjectionInput(source string) sessions.CreateSession {
 	model, harness := "frozen-model", "codex"
-	return CreateSessionInput{
+	return sessions.CreateSession{
 		Creator: FixtureCreator(), Engine: harness, IdempotencyKey: uuid.NewString(),
 		Configuration: []byte(`{"agent":{"model":"frozen-model"},"environment":{"type":"openai_hosted"}}`),
 		ExecutionConfiguration: &v1.SessionExecutionConfiguration{
@@ -46,7 +47,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				input.ExecutionConfiguration.Object = "untrusted-object"
 				input.ExecutionConfiguration.SchemaVersion = 99
 				input.ExecutionConfiguration.SessionID = "untrusted-session"
-				var session Session
+				var session sessions.Session
 				var err error
 				if stream {
 					created, e := s.CreateSessionStream(t.Context(), tenant, input)
@@ -108,14 +109,14 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 					}
 				}
 				for _, lookup := range []struct{ tenant, id string }{{uuid.NewString(), session.ID}, {tenant, uuid.NewString()}, {tenant, "malformed"}} {
-					if _, err := reader.GetSessionExecutionConfiguration(t.Context(), lookup.tenant, lookup.id); !errors.Is(err, ErrNotFound) {
+					if _, err := reader.GetSessionExecutionConfiguration(t.Context(), lookup.tenant, lookup.id); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("foreign/missing projection read differed", err)
 					}
 				}
 				if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
+				if _, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("deleted Session projection remained public", err)
 				}
 			})
@@ -127,7 +128,7 @@ func TestSessionExecutionConfigurationHistoricalProvenance(t *testing.T) {
 	s, pool := testStore(t)
 	tenant := uuid.NewString()
 	for _, configuration := range []string{`{}`, `{"agent":{"model":null}}`, `{"agent":{"model":"historical-model"},"model_provider_configured":true}`} {
-		input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: []byte(configuration)}
+		input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: []byte(configuration)}
 		session, err := s.CreateSession(t.Context(), tenant, input)
 		if err != nil {
 			t.Fatal(err)
@@ -185,7 +186,7 @@ func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
 		case "post_projection_failure":
 			input.InitialFiles = []environmentconfig.InitialFile{{Type: "inline", Path: "invalid-path"}}
 		}
-		if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrInvalidInput) {
+		if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatalf("%s: invalid projection/creation accepted: %v", kind, err)
 		}
 	}

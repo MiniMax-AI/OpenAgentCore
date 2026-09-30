@@ -8,51 +8,32 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// Result targets are resolved only inside a tenant-owned Session, after its
-// lookup, so a missing or foreign Session still returns ErrNotFound (EVT-11).
-var (
-	// ErrUnknownFunctionCall rejects a result whose call_id names no function
-	// call in the Session.
-	ErrUnknownFunctionCall = errors.New("unknown pending tool call")
-	// ErrFunctionCallTurnMismatch rejects a result whose call exists in the
-	// Session but not in the named Turn, including a malformed or unknown Turn.
-	ErrFunctionCallTurnMismatch = errors.New("tool call belongs to a different turn")
-)
-
-// FunctionResultInput identifies a persisted call; Result is validated by the API.
-// It is an internal command, not an upstream input event. TurnID is the caller's
-// value and is resolved within the Session at admission.
-type FunctionResultInput struct {
-	TurnID string          `json:"turn_id"`
-	CallID string          `json:"call_id"`
-	Result json.RawMessage `json:"result"`
-}
-
-func functionInput(raw json.RawMessage) (FunctionResultInput, error) {
-	var input FunctionResultInput
+func functionInput(raw json.RawMessage) (sessions.FunctionResultInput, error) {
+	var input sessions.FunctionResultInput
 	if json.Unmarshal(raw, &input) != nil || input.TurnID == "" || !validFunctionIdentity(input.CallID) || len(input.Result) == 0 {
-		return input, ErrInvalidInput
+		return input, sessions.ErrInvalidInput
 	}
 	result, err := jsonobject.Normalize(input.Result)
 	if err != nil {
-		return input, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		return input, fmt.Errorf("%w: %w", sessions.ErrInvalidInput, err)
 	}
 	input.Result = result
 	return input, nil
 }
 
-func admitFunctionResult(ctx context.Context, q *sqlc.Queries, tenantID string, session pgtype.UUID, key string, position int32, input Input) (InputReceipt, error) {
+func admitFunctionResult(ctx context.Context, q *sqlc.Queries, tenantID string, session pgtype.UUID, key string, position int32, input sessions.Input) (sessions.InputReceipt, error) {
 	result, err := functionInput(input.Payload)
 	if err != nil {
-		return InputReceipt{}, err
+		return sessions.InputReceipt{}, err
 	}
 	tenant, err := parseID(tenantID)
 	if err != nil {
-		return InputReceipt{}, err
+		return sessions.InputReceipt{}, err
 	}
 	var turn sqlc.Turn
 	found := false
@@ -62,25 +43,25 @@ func admitFunctionResult(ctx context.Context, q *sqlc.Queries, tenantID string, 
 		if err == nil {
 			found = true
 		} else if !errors.Is(err, pgx.ErrNoRows) {
-			return InputReceipt{}, err
+			return sessions.InputReceipt{}, err
 		}
 	}
 	if found {
 		err = storeFunctionResult(ctx, q, turn, result.CallID, result.Result)
-		if errors.Is(err, ErrNotFound) {
+		if errors.Is(err, sessions.ErrNotFound) {
 			found = false
 		} else if err != nil {
-			return InputReceipt{}, err
+			return sessions.InputReceipt{}, err
 		}
 	}
 	if !found {
-		return InputReceipt{}, unknownFunctionResultTarget(ctx, q, session, result.CallID)
+		return sessions.InputReceipt{}, unknownFunctionResultTarget(ctx, q, session, result.CallID)
 	}
 	sequence, err := q.CreateTurnInput(ctx, sqlc.CreateTurnInputParams{
 		SessionID: session, TurnID: turn.ID, IdempotencyKey: key, Kind: input.Kind, Payload: input.Payload, BatchPosition: position,
 	})
 	if err != nil {
-		return InputReceipt{}, err
+		return sessions.InputReceipt{}, err
 	}
 	return inputReceipt(sequence, turn.ID, false), nil
 }
@@ -93,7 +74,7 @@ func unknownFunctionResultTarget(ctx context.Context, q *sqlc.Queries, session p
 		return err
 	}
 	if elsewhere {
-		return ErrFunctionCallTurnMismatch
+		return sessions.ErrFunctionCallTurnMismatch
 	}
-	return ErrUnknownFunctionCall
+	return sessions.ErrUnknownFunctionCall
 }

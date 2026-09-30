@@ -9,11 +9,10 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type EnvironmentRun struct {
-	Reservation store.EnvironmentInputReservation
+	Reservation sessions.EnvironmentInputReservation
 	Turn        sessions.Turn
 }
 
@@ -24,7 +23,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		return run, err
 	}
 	run.Reservation, err = d.Store.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)
-	if err != nil || run.Reservation.State != store.EnvironmentInputPending {
+	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
 	session, err := d.Store.GetSession(ctx, tenantID, sessionID)
@@ -37,7 +36,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	}
 	var snapshot Snapshot
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
-		return run, store.ErrInvalidInput
+		return run, sessions.ErrInvalidInput
 	}
 	if !snapshot.ModelProviderConfigured && snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
 		// Reserved before providers were required; the caller settles it as failed.
@@ -64,7 +63,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	var messages proto.MessageInput
 	for _, input := range run.Reservation.Inputs {
 		if input.Kind != "message" {
-			return run, store.ErrInvalidInput
+			return run, sessions.ErrInvalidInput
 		}
 		text, err := messageInput(input.Payload)
 		if err != nil {
@@ -87,14 +86,14 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		return run, err
 	}
 	run.Reservation, err = d.awaitPreparation(owner, tenantID, sessionID, run.Reservation, prepared)
-	if err != nil || run.Reservation.State != store.EnvironmentInputPending {
+	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
 	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
 		return run, err
 	}
 	promoted, err := d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
-	if errors.Is(err, store.ErrTurnConflict) {
+	if errors.Is(err, sessions.ErrTurnConflict) {
 		// A rejected claim leaves the reservation pending for a later attempt.
 		return run, err
 	}
@@ -102,7 +101,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		d.notifications.notify(tenantID, sessionID)
 	}
 	run.Reservation = promoted
-	if err != nil || run.Reservation.State != store.EnvironmentInputAdmitted {
+	if err != nil || run.Reservation.State != sessions.EnvironmentInputAdmitted {
 		return run, err
 	}
 	if run.Reservation.Receipts[0].Replayed {

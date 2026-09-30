@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -35,7 +36,7 @@ func TestSkillsFrozenInSession(t *testing.T) {
 	}
 	setup := environmentconfig.Setup{Skills: []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive.Bytes()}}}
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func TestSkillsFrozenInSession(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(frozen.Skills, setup.Skills) {
 		t.Fatal("frozen content changed", err)
 	}
-	if _, err = s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err = s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign content", err)
 	}
 }

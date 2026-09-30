@@ -43,11 +43,11 @@ func unexpectedCall(t testing.TB, method string) {
 
 type fakeAdmin struct {
 	t                       testing.TB
-	readAdminSummary        func(context.Context, string, store.AdminSummaryFilter, func(store.Session, *string) error) (store.AdminAssetCounts, error)
+	readAdminSummary        func(context.Context, string, store.AdminSummaryFilter, func(sessions.Session, *string) error) (store.AdminAssetCounts, error)
 	listAdminRuntimeTargets func(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
 }
 
-func (f *fakeAdmin) ReadAdminSummary(a0 context.Context, a1 string, a2 store.AdminSummaryFilter, a3 func(store.Session, *string) error) (store.AdminAssetCounts, error) {
+func (f *fakeAdmin) ReadAdminSummary(a0 context.Context, a1 string, a2 store.AdminSummaryFilter, a3 func(sessions.Session, *string) error) (store.AdminAssetCounts, error) {
 	if f.readAdminSummary == nil {
 		unexpectedCall(f.t, "ReadAdminSummary")
 	}
@@ -71,34 +71,6 @@ func (f *fakeAdminAudit) ListAdminAudit(a0 context.Context, a1 adminaudit.Filter
 		unexpectedCall(f.t, "ListAdminAudit")
 	}
 	return f.listAdminAudit(a0, a1)
-}
-
-type fakeAdmission struct {
-	t                   testing.TB
-	createSession       func(context.Context, string, store.CreateSessionInput) (store.Session, error)
-	createSessionStream func(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error)
-	submitInputs        func(context.Context, string, string, string, []store.Input) ([]store.InputReceipt, error)
-}
-
-func (f *fakeAdmission) CreateSession(a0 context.Context, a1 string, a2 store.CreateSessionInput) (store.Session, error) {
-	if f.createSession == nil {
-		unexpectedCall(f.t, "CreateSession")
-	}
-	return f.createSession(a0, a1, a2)
-}
-
-func (f *fakeAdmission) CreateSessionStream(a0 context.Context, a1 string, a2 store.CreateSessionInput) (store.SessionCreation, error) {
-	if f.createSessionStream == nil {
-		unexpectedCall(f.t, "CreateSessionStream")
-	}
-	return f.createSessionStream(a0, a1, a2)
-}
-
-func (f *fakeAdmission) SubmitInputs(a0 context.Context, a1 string, a2 string, a3 string, a4 []store.Input) ([]store.InputReceipt, error) {
-	if f.submitInputs == nil {
-		unexpectedCall(f.t, "SubmitInputs")
-	}
-	return f.submitInputs(a0, a1, a2, a3, a4)
 }
 
 type fakeAgents struct {
@@ -159,27 +131,27 @@ func (f *fakeAgentsReader) GetAgentWithModelProvider(a0 context.Context, a1 stri
 
 type fakeArtifacts struct {
 	t                     testing.TB
-	getSessionArtifact    func(context.Context, string, string, string) (store.SessionArtifact, error)
-	listSessionArtifacts  func(context.Context, string, string, string, string, int, bool) (store.ArtifactPage, error)
-	readSessionArtifact   func(context.Context, string, string, string, func(store.SessionArtifact, io.Reader) error) error
+	getSessionArtifact    func(context.Context, string, string, string) (sessions.Artifact, error)
+	listSessionArtifacts  func(context.Context, string, string, string, string, int, bool) (sessions.ArtifactPage, error)
+	readSessionArtifact   func(context.Context, string, string, string, func(sessions.Artifact, io.Reader) error) error
 	deleteSessionArtifact func(context.Context, string, string, string) error
 }
 
-func (f *fakeArtifacts) GetSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string) (store.SessionArtifact, error) {
+func (f *fakeArtifacts) GetSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string) (sessions.Artifact, error) {
 	if f.getSessionArtifact == nil {
 		unexpectedCall(f.t, "GetSessionArtifact")
 	}
 	return f.getSessionArtifact(a0, a1, a2, a3)
 }
 
-func (f *fakeArtifacts) ListSessionArtifacts(a0 context.Context, a1 string, a2 string, a3 string, a4 string, a5 int, a6 bool) (store.ArtifactPage, error) {
+func (f *fakeArtifacts) ListSessionArtifacts(a0 context.Context, a1 string, a2 string, a3 string, a4 string, a5 int, a6 bool) (sessions.ArtifactPage, error) {
 	if f.listSessionArtifacts == nil {
 		unexpectedCall(f.t, "ListSessionArtifacts")
 	}
 	return f.listSessionArtifacts(a0, a1, a2, a3, a4, a5, a6)
 }
 
-func (f *fakeArtifacts) ReadSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string, a4 func(store.SessionArtifact, io.Reader) error) error {
+func (f *fakeArtifacts) ReadSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string, a4 func(sessions.Artifact, io.Reader) error) error {
 	if f.readSessionArtifact == nil {
 		unexpectedCall(f.t, "ReadSessionArtifact")
 	}
@@ -399,18 +371,18 @@ func (f *fakeEnvironmentTemplatesReader) Resolve(a0 context.Context, a1 string, 
 
 type fakeEnvironmentWorkspaces struct {
 	t                        testing.TB
-	readEnvironmentDirectory func(context.Context, store.Environment, string) (proto.WorkspaceDirectoryResult, error)
-	writeEnvironmentFile     func(context.Context, store.Environment, string, []byte) (int64, error)
+	readEnvironmentDirectory func(context.Context, sessions.Environment, string) (proto.WorkspaceDirectoryResult, error)
+	writeEnvironmentFile     func(context.Context, sessions.Environment, string, []byte) (int64, error)
 }
 
-func (f *fakeEnvironmentWorkspaces) ReadEnvironmentDirectory(a0 context.Context, a1 store.Environment, a2 string) (proto.WorkspaceDirectoryResult, error) {
+func (f *fakeEnvironmentWorkspaces) ReadEnvironmentDirectory(a0 context.Context, a1 sessions.Environment, a2 string) (proto.WorkspaceDirectoryResult, error) {
 	if f.readEnvironmentDirectory == nil {
 		unexpectedCall(f.t, "ReadEnvironmentDirectory")
 	}
 	return f.readEnvironmentDirectory(a0, a1, a2)
 }
 
-func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 store.Environment, a2 string, a3 []byte) (int64, error) {
+func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 sessions.Environment, a2 string, a3 []byte) (int64, error) {
 	if f.writeEnvironmentFile == nil {
 		unexpectedCall(f.t, "WriteEnvironmentFile")
 	}
@@ -419,16 +391,16 @@ func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 
 
 type fakeEnvironments struct {
 	t                                testing.TB
-	getEnvironment                   func(context.Context, string, string) (store.Environment, error)
+	getEnvironment                   func(context.Context, string, string) (sessions.Environment, error)
 	authorizeEnvironmentInstallation func(context.Context, identity.Principal, string, string) (string, int64, error)
-	validateEnvironmentInstallation  func(context.Context, string, string) (store.InstallationAuthorization, error)
+	validateEnvironmentInstallation  func(context.Context, string, string) (sessions.InstallationAuthorization, error)
 	claimEnvironmentInstallation     func(context.Context, string, string, string) error
-	projectExecutorCredentialState   func(context.Context, identity.Principal, string) (store.ExecutorCredentialState, error)
-	issueProjectExecutorCredential   func(context.Context, identity.Principal, string, string, bool) (store.IssuedExecutorCredential, error)
+	projectExecutorCredentialState   func(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
+	issueProjectExecutorCredential   func(context.Context, identity.Principal, string, string, bool) (sessions.IssuedExecutorCredential, error)
 	revokeProjectExecutorCredential  func(context.Context, identity.Principal, string, string) error
 }
 
-func (f *fakeEnvironments) GetEnvironment(a0 context.Context, a1 string, a2 string) (store.Environment, error) {
+func (f *fakeEnvironments) GetEnvironment(a0 context.Context, a1 string, a2 string) (sessions.Environment, error) {
 	if f.getEnvironment == nil {
 		unexpectedCall(f.t, "GetEnvironment")
 	}
@@ -442,7 +414,7 @@ func (f *fakeEnvironments) AuthorizeEnvironmentInstallation(a0 context.Context, 
 	return f.authorizeEnvironmentInstallation(a0, a1, a2, a3)
 }
 
-func (f *fakeEnvironments) ValidateEnvironmentInstallation(a0 context.Context, a1 string, a2 string) (store.InstallationAuthorization, error) {
+func (f *fakeEnvironments) ValidateEnvironmentInstallation(a0 context.Context, a1 string, a2 string) (sessions.InstallationAuthorization, error) {
 	if f.validateEnvironmentInstallation == nil {
 		unexpectedCall(f.t, "ValidateEnvironmentInstallation")
 	}
@@ -456,14 +428,14 @@ func (f *fakeEnvironments) ClaimEnvironmentInstallation(a0 context.Context, a1 s
 	return f.claimEnvironmentInstallation(a0, a1, a2, a3)
 }
 
-func (f *fakeEnvironments) ProjectExecutorCredentialState(a0 context.Context, a1 identity.Principal, a2 string) (store.ExecutorCredentialState, error) {
+func (f *fakeEnvironments) ProjectExecutorCredentialState(a0 context.Context, a1 identity.Principal, a2 string) (sessions.ExecutorCredentialState, error) {
 	if f.projectExecutorCredentialState == nil {
 		unexpectedCall(f.t, "ProjectExecutorCredentialState")
 	}
 	return f.projectExecutorCredentialState(a0, a1, a2)
 }
 
-func (f *fakeEnvironments) IssueProjectExecutorCredential(a0 context.Context, a1 identity.Principal, a2 string, a3 string, a4 bool) (store.IssuedExecutorCredential, error) {
+func (f *fakeEnvironments) IssueProjectExecutorCredential(a0 context.Context, a1 identity.Principal, a2 string, a3 string, a4 bool) (sessions.IssuedExecutorCredential, error) {
 	if f.issueProjectExecutorCredential == nil {
 		unexpectedCall(f.t, "IssueProjectExecutorCredential")
 	}
@@ -537,6 +509,18 @@ func (f *fakeFiles) Delete(a0 context.Context, a1 files.DeleteCommand) error {
 	return f.delete(a0, a1)
 }
 
+type fakeInputAdmission struct {
+	t            testing.TB
+	submitInputs func(context.Context, string, string, string, []sessions.Input) ([]sessions.InputReceipt, error)
+}
+
+func (f *fakeInputAdmission) SubmitInputs(a0 context.Context, a1 string, a2 string, a3 string, a4 []sessions.Input) ([]sessions.InputReceipt, error) {
+	if f.submitInputs == nil {
+		unexpectedCall(f.t, "SubmitInputs")
+	}
+	return f.submitInputs(a0, a1, a2, a3, a4)
+}
+
 type fakeInstallationBindings struct {
 	t               testing.TB
 	addressBindings func(context.Context) (store.AddressBindings, error)
@@ -547,6 +531,18 @@ func (f *fakeInstallationBindings) AddressBindings(a0 context.Context) (store.Ad
 		unexpectedCall(f.t, "AddressBindings")
 	}
 	return f.addressBindings(a0)
+}
+
+type fakeItems struct {
+	t         testing.TB
+	listItems func(context.Context, string, string, string, int, bool) (sessions.ItemPage, error)
+}
+
+func (f *fakeItems) ListItems(a0 context.Context, a1 string, a2 string, a3 string, a4 int, a5 bool) (sessions.ItemPage, error) {
+	if f.listItems == nil {
+		unexpectedCall(f.t, "ListItems")
+	}
+	return f.listItems(a0, a1, a2, a3, a4, a5)
 }
 
 type fakeMetrics struct {
@@ -731,20 +727,20 @@ func (f *fakeRuntimeObservations) ObserveSessions(a0 context.Context, a1 []runti
 
 type fakeSessionAdmin struct {
 	t                                testing.TB
-	getSessionDiagnosticsSnapshot    func(context.Context, string, string) (store.Session, error)
-	getTurnDiagnosticsSnapshot       func(context.Context, string, string, string) (store.TurnDiagnosticsSnapshot, error)
+	getSessionDiagnosticsSnapshot    func(context.Context, string, string) (sessions.Session, error)
+	getTurnDiagnosticsSnapshot       func(context.Context, string, string, string) (sessions.TurnDiagnosticsSnapshot, error)
 	getSessionExecutionConfiguration func(context.Context, string, string) (v1.SessionExecutionConfiguration, error)
-	getManagedSessionArchive         func(context.Context, string, string) (store.ManagedSessionArchive, error)
+	getManagedSessionArchive         func(context.Context, string, string) (sessions.ManagedArchive, error)
 }
 
-func (f *fakeSessionAdmin) GetSessionDiagnosticsSnapshot(a0 context.Context, a1 string, a2 string) (store.Session, error) {
+func (f *fakeSessionAdmin) GetSessionDiagnosticsSnapshot(a0 context.Context, a1 string, a2 string) (sessions.Session, error) {
 	if f.getSessionDiagnosticsSnapshot == nil {
 		unexpectedCall(f.t, "GetSessionDiagnosticsSnapshot")
 	}
 	return f.getSessionDiagnosticsSnapshot(a0, a1, a2)
 }
 
-func (f *fakeSessionAdmin) GetTurnDiagnosticsSnapshot(a0 context.Context, a1 string, a2 string, a3 string) (store.TurnDiagnosticsSnapshot, error) {
+func (f *fakeSessionAdmin) GetTurnDiagnosticsSnapshot(a0 context.Context, a1 string, a2 string, a3 string) (sessions.TurnDiagnosticsSnapshot, error) {
 	if f.getTurnDiagnosticsSnapshot == nil {
 		unexpectedCall(f.t, "GetTurnDiagnosticsSnapshot")
 	}
@@ -758,30 +754,78 @@ func (f *fakeSessionAdmin) GetSessionExecutionConfiguration(a0 context.Context, 
 	return f.getSessionExecutionConfiguration(a0, a1, a2)
 }
 
-func (f *fakeSessionAdmin) GetManagedSessionArchive(a0 context.Context, a1 string, a2 string) (store.ManagedSessionArchive, error) {
+func (f *fakeSessionAdmin) GetManagedSessionArchive(a0 context.Context, a1 string, a2 string) (sessions.ManagedArchive, error) {
 	if f.getManagedSessionArchive == nil {
 		unexpectedCall(f.t, "GetManagedSessionArchive")
 	}
 	return f.getManagedSessionArchive(a0, a1, a2)
 }
 
-type fakeSessionArchive struct {
-	t                     testing.TB
-	archiveManagedSession func(context.Context, string, string, uint64) (store.ManagedSessionArchive, error)
+type fakeSessionAdmission struct {
+	t                   testing.TB
+	createSession       func(context.Context, string, sessions.CreateSession) (sessions.Session, error)
+	createSessionStream func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
 }
 
-func (f *fakeSessionArchive) ArchiveManagedSession(a0 context.Context, a1 string, a2 string, a3 uint64) (store.ManagedSessionArchive, error) {
+func (f *fakeSessionAdmission) CreateSession(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Session, error) {
+	if f.createSession == nil {
+		unexpectedCall(f.t, "CreateSession")
+	}
+	return f.createSession(a0, a1, a2)
+}
+
+func (f *fakeSessionAdmission) CreateSessionStream(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Creation, error) {
+	if f.createSessionStream == nil {
+		unexpectedCall(f.t, "CreateSessionStream")
+	}
+	return f.createSessionStream(a0, a1, a2)
+}
+
+type fakeSessionArchive struct {
+	t                     testing.TB
+	archiveManagedSession func(context.Context, string, string, uint64) (sessions.ManagedArchive, error)
+}
+
+func (f *fakeSessionArchive) ArchiveManagedSession(a0 context.Context, a1 string, a2 string, a3 uint64) (sessions.ManagedArchive, error) {
 	if f.archiveManagedSession == nil {
 		unexpectedCall(f.t, "ArchiveManagedSession")
 	}
 	return f.archiveManagedSession(a0, a1, a2, a3)
 }
 
+type fakeSessionCreation struct {
+	t                   testing.TB
+	createSession       func(context.Context, string, sessions.CreateSession) (sessions.Session, error)
+	createSessionStream func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	findSessionCreation func(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error)
+}
+
+func (f *fakeSessionCreation) CreateSession(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Session, error) {
+	if f.createSession == nil {
+		unexpectedCall(f.t, "CreateSession")
+	}
+	return f.createSession(a0, a1, a2)
+}
+
+func (f *fakeSessionCreation) CreateSessionStream(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Creation, error) {
+	if f.createSessionStream == nil {
+		unexpectedCall(f.t, "CreateSessionStream")
+	}
+	return f.createSessionStream(a0, a1, a2)
+}
+
+func (f *fakeSessionCreation) FindSessionCreation(a0 context.Context, a1 string, a2 string, a3 json.RawMessage, a4 identity.Subject) (sessions.Creation, error) {
+	if f.findSessionCreation == nil {
+		unexpectedCall(f.t, "FindSessionCreation")
+	}
+	return f.findSessionCreation(a0, a1, a2, a3, a4)
+}
+
 type fakeSessionEvents struct {
 	t                     testing.TB
 	sessionEventCursor    func(context.Context, string, string) (int64, error)
 	listSessionEvents     func(context.Context, string, string, int64) ([]sessions.SessionChange, error)
-	sessionStreamSnapshot func(context.Context, string, string) (store.Session, int64, error)
+	sessionStreamSnapshot func(context.Context, string, string) (sessions.Session, int64, error)
 }
 
 func (f *fakeSessionEvents) SessionEventCursor(a0 context.Context, a1 string, a2 string) (int64, error) {
@@ -798,89 +842,37 @@ func (f *fakeSessionEvents) ListSessionEvents(a0 context.Context, a1 string, a2 
 	return f.listSessionEvents(a0, a1, a2, a3)
 }
 
-func (f *fakeSessionEvents) SessionStreamSnapshot(a0 context.Context, a1 string, a2 string) (store.Session, int64, error) {
+func (f *fakeSessionEvents) SessionStreamSnapshot(a0 context.Context, a1 string, a2 string) (sessions.Session, int64, error) {
 	if f.sessionStreamSnapshot == nil {
 		unexpectedCall(f.t, "SessionStreamSnapshot")
 	}
 	return f.sessionStreamSnapshot(a0, a1, a2)
 }
 
-type fakeSessionHistory struct {
-	t         testing.TB
-	getTurn   func(context.Context, string, string, string) (sessions.Turn, error)
-	listTurns func(context.Context, string, string, string, int, bool) (store.TurnPage, error)
-	listItems func(context.Context, string, string, string, int, bool) (store.ItemPage, error)
-}
-
-func (f *fakeSessionHistory) GetTurn(a0 context.Context, a1 string, a2 string, a3 string) (sessions.Turn, error) {
-	if f.getTurn == nil {
-		unexpectedCall(f.t, "GetTurn")
-	}
-	return f.getTurn(a0, a1, a2, a3)
-}
-
-func (f *fakeSessionHistory) ListTurns(a0 context.Context, a1 string, a2 string, a3 string, a4 int, a5 bool) (store.TurnPage, error) {
-	if f.listTurns == nil {
-		unexpectedCall(f.t, "ListTurns")
-	}
-	return f.listTurns(a0, a1, a2, a3, a4, a5)
-}
-
-func (f *fakeSessionHistory) ListItems(a0 context.Context, a1 string, a2 string, a3 string, a4 int, a5 bool) (store.ItemPage, error) {
-	if f.listItems == nil {
-		unexpectedCall(f.t, "ListItems")
-	}
-	return f.listItems(a0, a1, a2, a3, a4, a5)
-}
-
 type fakeSessions struct {
 	t                     testing.TB
-	createSession         func(context.Context, string, store.CreateSessionInput) (store.Session, error)
-	createSessionStream   func(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error)
-	findSessionCreation   func(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error)
-	getSession            func(context.Context, string, string) (store.Session, error)
-	listSessions          func(context.Context, string, string, int, bool, *string) (store.SessionPage, error)
-	updateSessionMetadata func(context.Context, string, string, map[string]string) (store.Session, error)
+	getSession            func(context.Context, string, string) (sessions.Session, error)
+	listSessions          func(context.Context, string, string, int, bool, *string) (sessions.Page, error)
+	updateSessionMetadata func(context.Context, string, string, map[string]string) (sessions.Session, error)
 	deleteSession         func(context.Context, string, string) error
 	auditSessionOperation func(context.Context, string, string, string) error
 }
 
-func (f *fakeSessions) CreateSession(a0 context.Context, a1 string, a2 store.CreateSessionInput) (store.Session, error) {
-	if f.createSession == nil {
-		unexpectedCall(f.t, "CreateSession")
-	}
-	return f.createSession(a0, a1, a2)
-}
-
-func (f *fakeSessions) CreateSessionStream(a0 context.Context, a1 string, a2 store.CreateSessionInput) (store.SessionCreation, error) {
-	if f.createSessionStream == nil {
-		unexpectedCall(f.t, "CreateSessionStream")
-	}
-	return f.createSessionStream(a0, a1, a2)
-}
-
-func (f *fakeSessions) FindSessionCreation(a0 context.Context, a1 string, a2 string, a3 json.RawMessage, a4 identity.Subject) (store.SessionCreation, error) {
-	if f.findSessionCreation == nil {
-		unexpectedCall(f.t, "FindSessionCreation")
-	}
-	return f.findSessionCreation(a0, a1, a2, a3, a4)
-}
-
-func (f *fakeSessions) GetSession(a0 context.Context, a1 string, a2 string) (store.Session, error) {
+func (f *fakeSessions) GetSession(a0 context.Context, a1 string, a2 string) (sessions.Session, error) {
 	if f.getSession == nil {
 		unexpectedCall(f.t, "GetSession")
 	}
 	return f.getSession(a0, a1, a2)
 }
 
-func (f *fakeSessions) ListSessions(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 *string) (store.SessionPage, error) {
+func (f *fakeSessions) ListSessions(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 *string) (sessions.Page, error) {
 	if f.listSessions == nil {
 		unexpectedCall(f.t, "ListSessions")
 	}
 	return f.listSessions(a0, a1, a2, a3, a4, a5)
 }
 
-func (f *fakeSessions) UpdateSessionMetadata(a0 context.Context, a1 string, a2 string, a3 map[string]string) (store.Session, error) {
+func (f *fakeSessions) UpdateSessionMetadata(a0 context.Context, a1 string, a2 string, a3 map[string]string) (sessions.Session, error) {
 	if f.updateSessionMetadata == nil {
 		unexpectedCall(f.t, "UpdateSessionMetadata")
 	}
@@ -1047,6 +1039,26 @@ func (f *fakeSubagents) ListSubagentTurnItems(a0 context.Context, a1 string, a2 
 		unexpectedCall(f.t, "ListSubagentTurnItems")
 	}
 	return f.listSubagentTurnItems(a0, a1, a2, a3, a4, a5, a6, a7)
+}
+
+type fakeTurns struct {
+	t         testing.TB
+	getTurn   func(context.Context, string, string, string) (sessions.Turn, error)
+	listTurns func(context.Context, string, string, string, int, bool) (sessions.TurnPage, error)
+}
+
+func (f *fakeTurns) GetTurn(a0 context.Context, a1 string, a2 string, a3 string) (sessions.Turn, error) {
+	if f.getTurn == nil {
+		unexpectedCall(f.t, "GetTurn")
+	}
+	return f.getTurn(a0, a1, a2, a3)
+}
+
+func (f *fakeTurns) ListTurns(a0 context.Context, a1 string, a2 string, a3 string, a4 int, a5 bool) (sessions.TurnPage, error) {
+	if f.listTurns == nil {
+		unexpectedCall(f.t, "ListTurns")
+	}
+	return f.listTurns(a0, a1, a2, a3, a4, a5)
 }
 
 type fakeVaults struct {

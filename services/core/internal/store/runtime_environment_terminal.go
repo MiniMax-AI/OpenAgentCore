@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -12,55 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// provisioningFailureReason is the safe reason for an Environment that
-// failed without a confirmed failed step: timeouts, unknown effects, missing or
-// old receipts, bootstrap rejection and Core restart during initialization.
-const provisioningFailureReason = "Failed to provision environment: initialization did not complete"
-
-// Provisioning step kinds for ProvisioningFailure.Step.
-const (
-	ProvisioningSetupCommand   = "setup"
-	ProvisioningPythonPackages = "python"
-	ProvisioningNPMPackages    = "npm"
-	ProvisioningInitialFile    = "file"
-	ProvisioningSkill          = "skill"
-	ProvisioningHarness        = "harness"
-)
-
-// ProvisioningFailure identifies a confirmed failed initialization step.
-// It cannot carry Runtime output: Step selects a fixed label, Index is the setup
-// command position and ExitCode is the Runtime-reported status (0 when absent).
-type ProvisioningFailure struct {
-	Step     string
-	Index    int
-	ExitCode int
-}
-
-// reason renders the public Session error. The setup_commands and Python package
-// labels match observed official errors (which append raw pip output for Python;
-// Core never does). The npm, file and Skill labels are unverified.
-// A script step without a reported exit status keeps the generic reason.
-func (f ProvisioningFailure) reason() string {
-	label := map[string]string{
-		ProvisioningPythonPackages: "Python package installation",
-		ProvisioningNPMPackages:    "npm package installation",
-	}[f.Step]
-	if f.Step == ProvisioningSetupCommand && f.Index >= 0 {
-		label = fmt.Sprintf("setup_commands[%d]", f.Index)
-	}
-	switch {
-	case label != "" && f.ExitCode > 0 && f.ExitCode < 256:
-		return fmt.Sprintf("Failed to provision environment: script %q failed with exit code %d", label, f.ExitCode)
-	case f.Step == ProvisioningInitialFile:
-		return "Failed to provision environment: initial file installation failed"
-	case f.Step == ProvisioningHarness:
-		return "Failed to prepare environment: the selected Harness is unavailable. Install the supported Harness version on the Runtime and create a new Session."
-	case f.Step == ProvisioningSkill:
-		return "Failed to provision environment: Skill installation failed"
-	}
-	return provisioningFailureReason
-}
-
 func environmentFailure(row sqlc.Environment) *sessions.EnvironmentFailure {
 	if row.Status != "failed" || !row.FailureReason.Valid || !row.FailedAt.Valid {
 		return nil
@@ -68,7 +18,7 @@ func environmentFailure(row sqlc.Environment) *sessions.EnvironmentFailure {
 	failure := &sessions.EnvironmentFailure{Reason: row.FailureReason.String, FailedAt: row.FailedAt.Time}
 	var detail sessions.ProvisioningFailureDetail
 	if json.Unmarshal(row.FailureDetail, &detail) == nil {
-		failure.Detail = sanitizedProvisioningDetail(detail)
+		failure.Detail = sessions.SanitizedProvisioningDetail(detail)
 	}
 	return failure
 }

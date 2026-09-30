@@ -10,7 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
@@ -26,7 +25,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			}
 			turnID := got.Receipts[0].TurnID
 			if deleted {
-				if err := s.DeleteSession(t.Context(), tenant, pending.SessionID); !errors.Is(err, store.ErrSessionNotIdle) {
+				if err := s.DeleteSession(t.Context(), tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("claimed Session deleted", err)
 				}
 				if err := s.CommitLegacyDeletion(t.Context(), tenant, pending.SessionID); err != nil {
@@ -69,7 +68,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			successor := executionOwner(t, db, s).Store
 			retry, err := successor.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if deleted {
-				if !errors.Is(err, store.ErrNotFound) {
+				if !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("deleted reservation was exposed", err)
 				}
 			} else if err != nil || len(retry.Receipts) != 1 || !retry.Receipts[0].Replayed || retry.Receipts[0].Sequence != got.Receipts[0].Sequence || retry.Receipts[0].TurnID != turnID {

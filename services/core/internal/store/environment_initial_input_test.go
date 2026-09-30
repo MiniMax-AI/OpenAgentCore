@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func initialEnvironmentReservation(t *testing.T, s *Store, pool *pgxpool.Pool, tenant, session string) EnvironmentInputReservation {
+func initialEnvironmentReservation(t *testing.T, s *Store, pool *pgxpool.Pool, tenant, session string) sessions.EnvironmentInputReservation {
 	t.Helper()
 	var id string
 	if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", session).Scan(&id); err != nil {
@@ -32,7 +32,7 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 	s, pool := testStore(t)
 	tenant := uuid.NewString()
 	input := environmentInput("initial-failure-rollback", "self_hosted", "/workspace")
-	input.InitialInputs = []Input{messageInput("initial")}
+	input.InitialInputs = []sessions.Input{messageInput("initial")}
 	session, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 		t.Fatal("expiry committed without its failure event")
 	}
 	retained := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
-	if retained.State != EnvironmentInputPending || retained.SettledAt != nil {
+	if retained.State != sessions.EnvironmentInputPending || retained.SettledAt != nil {
 		t.Fatal("failure event rollback lost reservation", retained)
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "requires_action", session.Environment.ID)
@@ -61,16 +61,16 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 		t.Fatal(err)
 	}
 	type result struct {
-		reservation EnvironmentInputReservation
+		reservation sessions.EnvironmentInputReservation
 		err         error
 	}
 	results := make(chan result, 2)
-	for _, settle := range []func(context.Context, string, string, string) (EnvironmentInputReservation, error){writer.PromoteEnvironmentInput, s.ExpireEnvironmentInput} {
+	for _, settle := range []func(context.Context, string, string, string) (sessions.EnvironmentInputReservation, error){writer.PromoteEnvironmentInput, s.ExpireEnvironmentInput} {
 		go func() { r, err := settle(t.Context(), tenant, session.ID, reservation.ID); results <- result{r, err} }()
 	}
 	for i := 0; i < 2; i++ {
 		got := <-results
-		if got.err != nil || got.reservation.State != EnvironmentInputExpired || len(got.reservation.Receipts) != 0 {
+		if got.err != nil || got.reservation.State != sessions.EnvironmentInputExpired || len(got.reservation.Receipts) != 0 {
 			t.Fatal("expiry/promotion race started work", got)
 		}
 	}
@@ -87,7 +87,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			s, pool := testStore(t)
 			tenant := uuid.NewString()
 			input := environmentInput("initial", kind, "/workspace")
-			input.InitialInputs = []Input{messageInput("first"), messageInput("second")}
+			input.InitialInputs = []sessions.Input{messageInput("first"), messageInput("second")}
 			creation, err := s.CreateSessionStream(t.Context(), tenant, input)
 			if err != nil || !creation.Created || creation.Cursor != 0 || creation.Session.LastTurn != nil {
 				t.Fatal("creation started initial work before native readiness", creation, err)
@@ -95,7 +95,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			session := creation.Session
 			// The snapshot is the committed JSON projection: self-hosted input requests
 			// its connection, while hosted initial provisioning has no caller action.
-			activityStatus := func(value Session) string {
+			activityStatus := func(value sessions.Session) string {
 				if value.EnvironmentInputActivity == nil {
 					return ""
 				}
@@ -107,7 +107,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			storedBatch, marshalErr := json.Marshal(reservation.Inputs)
 			originalBatch, _ := json.Marshal(input.InitialInputs)
-			if marshalErr != nil || reservation.State != EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute || string(storedBatch) != string(originalBatch) {
+			if marshalErr != nil || reservation.State != sessions.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute || string(storedBatch) != string(originalBatch) {
 				t.Fatal("initial batch/deadline changed", reservation)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
@@ -133,13 +133,13 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 				t.Fatal("retry changed initial reservation")
 			}
 			changed := input
-			changed.InitialInputs = []Input{messageInput("different")}
-			if _, err := other.CreateSession(t.Context(), tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
+			changed.InitialInputs = []sessions.Input{messageInput("different")}
+			if _, err := other.CreateSession(t.Context(), tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal("changed initial batch accepted", err)
 			}
 			changed = input
 			changed.Creator.ID = "different-creator"
-			if _, err := other.CreateSession(t.Context(), tenant, changed); !errors.Is(err, ErrIdempotencyConflict) {
+			if _, err := other.CreateSession(t.Context(), tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal("changed creator accepted", err)
 			}
 			writer := executionWriter(t, s)
@@ -157,7 +157,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			requireEnvironmentInputActivity(t, s, tenant, session.ID, connectedStatus, "")
 			environmentInputHistory(t, pool, session.ID, 0, 0)
 			promoted, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
-			if err != nil || promoted.State != EnvironmentInputAdmitted || !promoted.IsInitial || len(promoted.Receipts) != 2 {
+			if err != nil || promoted.State != sessions.EnvironmentInputAdmitted || !promoted.IsInitial || len(promoted.Receipts) != 2 {
 				t.Fatal("initial batch did not promote", promoted, err)
 			}
 			active := requireEnvironmentInputActivity(t, s, tenant, session.ID, "", "")
@@ -200,7 +200,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			s, pool := testStore(t)
 			tenant := uuid.NewString()
 			input := environmentInput("initial-expiry", kind, "/workspace")
-			input.InitialInputs = []Input{messageInput("private initial text")}
+			input.InitialInputs = []sessions.Input{messageInput("private initial text")}
 			session, err := s.CreateSession(t.Context(), tenant, input)
 			if err != nil {
 				t.Fatal(err)
@@ -210,7 +210,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 				t.Fatal(err)
 			}
 			writer := executionWriter(t, s)
-			for reservation.State == EnvironmentInputPending {
+			for reservation.State == sessions.EnvironmentInputPending {
 				count, err := writer.ExpireEnvironmentInputs(t.Context())
 				if err != nil || count < 1 || count > 32 {
 					t.Fatal("expiry made no bounded progress", count, err)
@@ -251,7 +251,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 				t.Fatal(err)
 			}
 			late, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
-			if err != nil || late.State != EnvironmentInputExpired || len(late.Receipts) != 0 {
+			if err != nil || late.State != sessions.EnvironmentInputExpired || len(late.Receipts) != 0 {
 				t.Fatal("late connection resurrected initial input", late, err)
 			}
 			requireEnvironmentInputActivity(t, reopened, tenant, session.ID, "failed", "")
@@ -266,7 +266,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 				t.Fatal("later work changed historical failure", err)
 			}
 			// The later input is still pending, so deletion waits for it to settle.
-			if err := reopened.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+			if err := reopened.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 				t.Fatal("pending later input deleted", err)
 			}
 			if _, err := reopened.CancelEnvironmentInput(t.Context(), tenant, session.ID, later.ID); err != nil {
@@ -275,7 +275,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err := reopened.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := reopened.GetSession(t.Context(), tenant, session.ID); !errors.Is(err, ErrNotFound) {
+			if _, err := reopened.GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("deleted initial Session remained visible", err)
 			}
 		})

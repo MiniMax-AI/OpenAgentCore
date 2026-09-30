@@ -31,7 +31,7 @@ func workerEnvironmentCapabilities() proto.AgentKindCapabilities {
 	return prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, WorkspaceOutputExport: proto.CapabilitySupported})
 }
 
-func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) store.EnvironmentInputReservation {
+func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessions.EnvironmentInputReservation {
 	t.Helper()
 	pending := unboundWorkerEnvironmentReservation(t, h)
 	session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
@@ -42,13 +42,13 @@ func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) store.Enviro
 	return pending
 }
 
-func unboundWorkerEnvironmentReservation(t *testing.T, h *dispatchHarness) store.EnvironmentInputReservation {
+func unboundWorkerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessions.EnvironmentInputReservation {
 	t.Helper()
-	session, err := h.s.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)}))
+	session, err := h.s.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "work", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "work", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func nextWorkerFrame(t *testing.T, frames <-chan proto.Envelope, kind string) pr
 	}
 }
 
-func awaitWorkerEnvironmentRun(t *testing.T, ctx context.Context, s *store.Store, tenant string, pending store.EnvironmentInputReservation) execution.EnvironmentRun {
+func awaitWorkerEnvironmentRun(t *testing.T, ctx context.Context, s *store.Store, tenant string, pending sessions.EnvironmentInputReservation) execution.EnvironmentRun {
 	t.Helper()
 	var run execution.EnvironmentRun
 	awaitDaemonRemoteCondition(t, ctx, 5*time.Minute, "worker terminal Environment Turn", func() bool {

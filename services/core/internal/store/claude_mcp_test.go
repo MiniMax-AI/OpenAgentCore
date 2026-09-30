@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
@@ -61,7 +60,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 					t.Fatal("incapable runtime claimed work", turn, err)
 				}
 				if !prebound {
-					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrNotFound) {
+					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable runtime", err)
 					}
 				}

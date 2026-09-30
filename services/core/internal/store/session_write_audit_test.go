@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 )
@@ -87,7 +88,7 @@ func TestSessionWriteAuditCreationReplayNoopAndDeletion(t *testing.T) {
 	if err := s.pool.QueryRow(t.Context(), "SELECT jsonb_agg(to_jsonb(o))::text FROM write_audit_operations o WHERE tenant_id=$1", tenant).Scan(&history); err != nil || strings.Contains(history, "not in audit") || strings.Contains(history, "/workspace") {
 		t.Fatal("payload entered audit", err)
 	}
-	if err := s.AuditSessionOperation(sessionAuditContext(t, tenant, "b"), tenant, created.ID, "send_events"); !errors.Is(err, ErrNotFound) {
+	if err := s.AuditSessionOperation(sessionAuditContext(t, tenant, "b"), tenant, created.ID, "send_events"); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted no-op accepted", err)
 	}
 	sessionAuditCount(t, s, tenant, 7)
@@ -142,11 +143,11 @@ func TestSessionWriteAuditRollback(t *testing.T) {
 			case "delete":
 				err = s.DeleteSession(ctx, tenant, created.ID)
 			case "events":
-				_, err = s.SubmitInputs(ctx, tenant, created.ID, "events", []Input{messageInput("private")})
+				_, err = s.SubmitInputs(ctx, tenant, created.ID, "events", []sessions.Input{messageInput("private")})
 			case "noop":
 				err = s.AuditSessionOperation(ctx, tenant, created.ID, "send_events")
 			case "reserve":
-				_, err = s.ReserveEnvironmentInput(ctx, tenant, created.ID, "reserve", []Input{messageInput("private")})
+				_, err = s.ReserveEnvironmentInput(ctx, tenant, created.ID, "reserve", []sessions.Input{messageInput("private")})
 			}
 			if err == nil {
 				t.Fatal("mutation bypassed audit failure")
@@ -176,10 +177,10 @@ func TestEventsWriteAuditAdmissionAndReplay(t *testing.T) {
 			}
 			submit := func(ctx context.Context) error {
 				if prepared {
-					_, err := s.ReserveEnvironmentInput(ctx, tenant, created.ID, "batch", []Input{messageInput("private")})
+					_, err := s.ReserveEnvironmentInput(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
 					return err
 				}
-				_, err := s.SubmitInputs(ctx, tenant, created.ID, "batch", []Input{messageInput("private")})
+				_, err := s.SubmitInputs(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
 				return err
 			}
 			first := sessionAuditContext(t, tenant, "a")
@@ -203,7 +204,7 @@ func TestSessionWriteAuditInitialInputAndHistoricalReplay(t *testing.T) {
 			s, _ := testStore(t)
 			tenant := uuid.NewString()
 			input := environmentInput("audit-initial", kind, "/workspace")
-			input.InitialInputs = []Input{messageInput("private initial message")}
+			input.InitialInputs = []sessions.Input{messageInput("private initial message")}
 			created, err := s.CreateSessionStream(sessionAuditContext(t, tenant, "a"), tenant, input)
 			if err != nil || !created.Created {
 				t.Fatal(created, err)

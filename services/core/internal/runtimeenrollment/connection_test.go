@@ -13,7 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type connectionStub struct {
@@ -24,15 +24,15 @@ type connectionStub struct {
 func (s *connectionStub) AuthenticateEnvironmentExecutor(_ context.Context, environment, digest string) (string, error) {
 	s.calls++
 	if environment != "environment" || digest != runtimedevice.HashCredential("test-key") {
-		return "", store.ErrNotFound
+		return "", sessions.ErrNotFound
 	}
 	return "tenant", s.err
 }
-func (*connectionStub) GetEnvironment(context.Context, string, string) (store.Environment, error) {
-	return store.Environment{ID: "environment", SessionID: "session", Status: "pending"}, nil
+func (*connectionStub) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
+	return sessions.Environment{ID: "environment", SessionID: "session", Status: "pending"}, nil
 }
-func (*connectionStub) GetSessionDevice(context.Context, string, string) (store.ExecutionDevice, error) {
-	return store.ExecutionDevice{}, store.ErrNotFound
+func (*connectionStub) GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error) {
+	return sessions.ExecutionDevice{}, sessions.ErrNotFound
 }
 func (*connectionStub) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
 	panic("unbound lookup")
@@ -50,7 +50,7 @@ func TestConnectionReadContract(t *testing.T) {
 		{"GET", "environment_id=environment&environment_id=other", "Bearer test-key", nil, 400, 0},
 		{"GET", "environment_id=environment&other=1", "Bearer test-key", nil, 400, 0},
 		{"GET", "environment_id=%zz", "Bearer test-key", nil, 400, 0},
-		{"GET", "environment_id=environment", "Bearer test-key", store.ErrNotFound, 401, 1},
+		{"GET", "environment_id=environment", "Bearer test-key", sessions.ErrNotFound, 401, 1},
 		{"GET", "environment_id=environment", "Bearer test-key", errors.New("private detail"), 503, 1},
 	} {
 		s := &connectionStub{err: tc.err}
@@ -89,16 +89,16 @@ func (s *liveConnectionStore) AuthenticateEnvironmentExecutor(context.Context, s
 			return "", s.recheckError
 		}
 		if s.revokeAtRecheck {
-			return "", store.ErrNotFound
+			return "", sessions.ErrNotFound
 		}
 	}
 	return "tenant", nil
 }
-func (s *liveConnectionStore) GetEnvironment(context.Context, string, string) (store.Environment, error) {
-	return store.Environment{ID: "environment", SessionID: "session", Status: "connected"}, nil
+func (s *liveConnectionStore) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
+	return sessions.Environment{ID: "environment", SessionID: "session", Status: "connected"}, nil
 }
-func (s *liveConnectionStore) GetSessionDevice(context.Context, string, string) (store.ExecutionDevice, error) {
-	return store.ExecutionDevice{ID: "device", EnvironmentID: "environment"}, nil
+func (s *liveConnectionStore) GetSessionDevice(context.Context, string, string) (sessions.ExecutionDevice, error) {
+	return sessions.ExecutionDevice{ID: "device", EnvironmentID: "environment"}, nil
 }
 func (s *liveConnectionStore) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
 	s.credentialCalls++
@@ -141,10 +141,10 @@ func TestRuntimeConnectedCurrentAuthorityAfterPeer(t *testing.T) {
 				digest = s.digest
 			case "revoked after peer":
 				s.revokeAtRecheck = true
-				wantErr = store.ErrNotFound
+				wantErr = sessions.ErrNotFound
 			case "device revoked after peer", "retired after peer":
 				s.deviceRevokedAtRecheck = true
-				wantErr = store.ErrNotFound
+				wantErr = sessions.ErrNotFound
 			case "store error after peer":
 				s.recheckError = errors.New("database unavailable")
 				wantErr = s.recheckError

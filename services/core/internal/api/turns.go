@@ -9,15 +9,13 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
-// SessionHistory reads a Session's root Turns and Items.
-type SessionHistory interface {
+// Turns reads a Session's root Turns.
+type Turns interface {
 	GetTurn(context.Context, string, string, string) (sessions.Turn, error)
-	ListTurns(context.Context, string, string, string, int, bool) (store.TurnPage, error)
-	ListItems(context.Context, string, string, string, int, bool) (store.ItemPage, error)
+	ListTurns(context.Context, string, string, string, int, bool) (sessions.TurnPage, error)
 }
 
 // @Summary Retrieve an execution Turn
@@ -33,7 +31,7 @@ type SessionHistory interface {
 // @Router /agents/sessions/{session_id}/turns/{turn_id} [get]
 func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "session_id")
-	turn, err := h.SessionHistory.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
+	turn, err := h.Turns.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -75,7 +73,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	page, err := h.SessionHistory.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
+	page, err := h.Turns.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -92,7 +90,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, turnListResponse(response.Data, response.HasMore))
 }
 
-func turnResponse(session store.Session, turn sessions.Turn) (v1.Turn, error) {
+func turnResponse(session sessions.Session, turn sessions.Turn) (v1.Turn, error) {
 	var cfg configuration
 	if err := json.Unmarshal(session.Configuration, &cfg); err != nil || cfg.Agent.ID == "" {
 		return v1.Turn{}, errors.New("missing stored agent identity")

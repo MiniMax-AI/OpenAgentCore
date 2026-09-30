@@ -6,12 +6,12 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func profileError(err error) error {
 	if errors.Is(err, engine.ErrInvalidInput) {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return err
 }
@@ -50,7 +50,7 @@ func validateProfileConfiguration(profile engine.Profile, snapshot Snapshot) err
 	return err
 }
 
-func validateProfileInputs(profile engine.Profile, placement string, inputs []store.Input) error {
+func validateProfileInputs(profile engine.Profile, placement string, inputs []sessions.Input) error {
 	for _, input := range inputs {
 		if input.Kind == "message" {
 			messages, err := messageInput(input.Payload)
@@ -68,13 +68,13 @@ func validateProfileInputs(profile engine.Profile, placement string, inputs []st
 		if input.Kind != "tool_result" || profile.FunctionResultValidation == engine.CommonValidationOnly {
 			continue
 		}
-		var value store.FunctionResultInput
+		var value sessions.FunctionResultInput
 		if json.Unmarshal(input.Payload, &value) != nil {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
-		result, err := functionResult(store.FunctionCall{CallID: value.CallID, Result: value.Result})
+		result, err := functionResult(sessions.FunctionCall{CallID: value.CallID, Result: value.Result})
 		if err != nil {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		if err := profile.ValidateFunctionResult(placement, result); err != nil {
 			return profileError(err)

@@ -21,6 +21,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -235,14 +236,14 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 // reserved before the upgrade fails with that reason instead of waiting.
 func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
-	legacy, err := h.s.CreateSession(t.Context(), h.tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+	legacy, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	executor := connectFixtureRuntime(t, h, legacy)
 	// Reserved directly, as a pre-upgrade Core did.
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +259,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 		return count
 	}
 	before := reservations()
-	message := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"start"}`)}}
+	message := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"start"}`)}}
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, execution.ErrModelProviderRequired) {
 		t.Fatal("provider-free Session accepted work", err)
 	}
@@ -267,7 +268,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "legacy reservation settled", func() bool {
 		got, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
-		return err == nil && got.State == store.EnvironmentInputFailed
+		return err == nil && got.State == sessions.EnvironmentInputFailed
 	})
 	session, err := h.s.GetSession(t.Context(), h.tenant, legacy.ID)
 	if err != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Failure != "model_provider_required" {

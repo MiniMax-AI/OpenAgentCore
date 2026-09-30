@@ -65,7 +65,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillS
 	f.session = client.created(token, "/v1/agents/sessions", newSession)
 	f.turn = first("/v1/agents/sessions/" + f.session + "/turns")
 	f.item = first("/v1/agents/sessions/" + f.session + "/items")
-	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SubmitMessage(ctx, tenant, f.session, label+"-second", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"second"}]}]}`)); err != nil {
@@ -85,7 +85,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillS
 	// Subagent history is seeded through the execution lease, as a daemon would.
 	seedSubagents := func(key string) (session, rootTurn string) {
 		t.Helper()
-		created, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
+		created, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: key,
 			Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"cursor-model","multi_agent":{"enabled":true,"max_concurrent_subagents":4}}}`)})
 		if err != nil {
 			t.Fatal(err)
@@ -101,23 +101,23 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillS
 		if err = writer.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		opened := int64(1700000001000)
-		identity := func(child string) store.ExecutionEvent {
+		identity := func(child string) sessions.ExecutionEvent {
 			return subagentFixture(proto.TypeSubagentIdentity, proto.SubagentIdentityPayload{NativeID: child, ParentNativeID: "root", NativeCreatedAt: 1700000001, ParentTurnID: "native-root", SourceItemID: "spawn-" + child})
 		}
 		// Distinct creation times keep child-turn before later-child-turn.
-		turn := func(child, id string, created int64) store.ExecutionEvent {
+		turn := func(child, id string, created int64) sessions.ExecutionEvent {
 			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: sessions.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
 		}
-		message := func(child, turn, id string, position int32) store.ExecutionEvent {
+		message := func(child, turn, id string, position int32) sessions.ExecutionEvent {
 			text := "answer " + id
 			payload, _ := json.Marshal(proto.OutputMessagePayload{ID: id, Status: "completed", Text: &text})
 			return subagentFixture(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: child, TurnID: turn, ItemID: id, Position: position, Kind: proto.TypeOutputMessage, Payload: payload})
 		}
-		facts := []store.ExecutionEvent{identity("child"), identity("sibling"),
+		facts := []sessions.ExecutionEvent{identity("child"), identity("sibling"),
 			turn("child", "child-turn", opened), message("child", "child-turn", "child-item", 0), message("child", "child-turn", "child-item-2", 1),
 			turn("child", "later-child-turn", opened+1000), message("child", "later-child-turn", "later-child-item", 0),
 			turn("sibling", "sibling-turn", opened), message("sibling", "sibling-turn", "sibling-item", 0)}

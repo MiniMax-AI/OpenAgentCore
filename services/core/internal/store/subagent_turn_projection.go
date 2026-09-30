@@ -27,23 +27,23 @@ func nativeMillis(value *int64) pgtype.Timestamptz {
 func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, raw json.RawMessage) error {
 	var p proto.SubagentTurnPayload
 	if json.Unmarshal(raw, &p) != nil || !validNativeIdentity(p.NativeID) || !validNativeIdentity(p.TurnID) || p.CreatedAtMS <= 0 {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	if p.Status != sessions.TurnQueued && p.Status != sessions.TurnInProgress && p.Status != sessions.TurnWaiting && !sessions.TerminalStatus(p.Status) {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	if sessions.TerminalStatus(p.Status) != (p.CompletedAtMS != nil) {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	if (p.StartedAtMS != nil && *p.StartedAtMS < p.CreatedAtMS) || (p.CompletedAtMS != nil && (*p.CompletedAtMS < p.CreatedAtMS || (p.StartedAtMS != nil && *p.CompletedAtMS < *p.StartedAtMS))) {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	child, err := q.GetNativeSubagent(ctx, sqlc.GetNativeSubagentParams{SessionID: session, NativeID: p.NativeID})
 	if err != nil {
 		return err
 	}
 	if !child.PublicVisible {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	id, _ := parseID(items.Identity(uuid.UUID(child.ID.Bytes).String(), "turn:"+p.TurnID))
 	old, err := q.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: session, ID: id})
@@ -57,7 +57,7 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 		if measured := sessions.MeasuredUsage("usage", value); measured != nil {
 			usage, _ = json.Marshal(measured)
 		} else {
-			return ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 	}
 	// Re-reading native history cannot reopen or mutate a completed child Turn.
@@ -69,16 +69,16 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 		_ = json.Unmarshal(old.TokenUsage, &previousUsage)
 		_ = json.Unmarshal(usage, &nextUsage)
 		if old.Status != p.Status || old.CompletedAt.Time.UnixMilli() != *p.CompletedAtMS || !reflect.DeepEqual(previousUsage, nextUsage) {
-			return ErrIdempotencyConflict
+			return sessions.ErrIdempotencyConflict
 		}
 		return nil
 	}
 	if !fresh && old.Status != p.Status && !validTransition(old.Status, p.Status) {
-		return ErrTurnConflict
+		return sessions.ErrTurnConflict
 	}
 	row, err := q.PutChildTurn(ctx, sqlc.PutChildTurnParams{ID: id, SessionID: session, SubagentID: child.ID, NativeID: p.TurnID, Status: p.Status, CreatedAt: pgtype.Timestamptz{Time: time.UnixMilli(p.CreatedAtMS), Valid: true}, StartedAt: nativeMillis(p.StartedAtMS), CompletedAt: nativeMillis(p.CompletedAtMS), TokenUsage: usage})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrIdempotencyConflict
+		return sessions.ErrIdempotencyConflict
 	}
 	if err != nil {
 		return err

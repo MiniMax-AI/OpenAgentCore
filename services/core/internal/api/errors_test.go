@@ -15,7 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -32,7 +32,7 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 			if strings.HasPrefix(path, "/v1/files") {
 				writeFilesError(response, request, fmt.Errorf("lookup: %w", files.ErrNotFound))
 			} else {
-				writeStoreError(response, request, fmt.Errorf("lookup: %w", store.ErrNotFound))
+				writeSessionsError(response, request, fmt.Errorf("lookup: %w", sessions.ErrNotFound))
 			}
 			var body v1.ErrorResponse
 			if response.Code != http.StatusNotFound || json.Unmarshal(response.Body.Bytes(), &body) != nil {
@@ -53,6 +53,9 @@ func TestResourceNotFoundErrorSurfaces(t *testing.T) {
 			if _, present := envelope["code"]; !present {
 				t.Fatal("nullable error code must remain present")
 			}
+			if param, present := envelope["param"]; !present || string(param) != "null" {
+				t.Fatalf("param = %s", param)
+			}
 		})
 	}
 }
@@ -67,7 +70,7 @@ func TestInvalidCursorErrorFields(t *testing.T) {
 	} {
 		response := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, path, nil)
-		writeStoreError(response, request, fmt.Errorf("list: %w", &store.InvalidCursorError{Message: "Invalid session item ID in `after`"}))
+		writeSessionsError(response, request, fmt.Errorf("list: %w", &sessions.CursorError{Message: "Invalid session item ID in `after`"}))
 		if response.Code != http.StatusBadRequest || response.Body.String() != want+"\n" {
 			t.Errorf("%s: %d %s", path, response.Code, response.Body)
 		}
@@ -121,7 +124,7 @@ func equalOptional(got, want *string) bool {
 func TestSessionDeletionConflictError(t *testing.T) {
 	response := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodDelete, "/v1/agents/sessions/session", nil)
-	writeStoreError(response, request, fmt.Errorf("delete: %w", store.ErrSessionNotIdle))
+	writeSessionsError(response, request, fmt.Errorf("delete: %w", sessions.ErrNotIdle))
 	want := `{"error":{"message":"session must be durably idle or failed without required actions before deletion","type":"conflict_error","code":"conflict_error","param":null}}` + "\n"
 	if response.Code != http.StatusConflict || response.Body.String() != want {
 		t.Fatalf("response = %d %s", response.Code, response.Body)
@@ -137,14 +140,14 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 		deployment.ErrNodeInUse:                "runtime_node_in_use",
 		deployment.ErrLocalNodeConfigured:      "runtime_local_node_configured",
 		deployment.ErrNodeAddressMismatch:      "sandbox_node_address_mismatch",
-		store.ErrEnvironmentUnavailable:        "environment_unavailable",
+		sessions.ErrEnvironmentUnavailable:     "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",
 		execution.ErrEnvironmentInputCancelled: "environment_input_cancelled",
-		store.ErrSessionNotIdle:                "conflict_error",
-		store.ErrFunctionResultConflict:        "conflict_error",
-		store.ErrIdempotencyConflict:           "idempotency_conflict",
-		store.ErrTurnConflict:                  "turn_conflict",
-		store.ErrSessionInputPending:           "turn_conflict",
+		sessions.ErrNotIdle:                    "conflict_error",
+		sessions.ErrFunctionResultConflict:     "conflict_error",
+		sessions.ErrIdempotencyConflict:        "idempotency_conflict",
+		sessions.ErrTurnConflict:               "turn_conflict",
+		sessions.ErrInputPending:               "turn_conflict",
 	} {
 		t.Run(code, func(t *testing.T) {
 			response := httptest.NewRecorder()
@@ -173,7 +176,7 @@ func TestSharedPersistenceErrors(t *testing.T) {
 		write(response, httptest.NewRequest(http.MethodPost, "/v1/agents", nil), err)
 		return response
 	}
-	invalid := respond(storeError, store.ErrInvalidInput).Body.String()
+	invalid := respond(storeError, sessions.ErrInvalidInput).Body.String()
 	for _, test := range []struct {
 		write  func(http.ResponseWriter, *http.Request, error)
 		err    error

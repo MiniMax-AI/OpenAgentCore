@@ -17,9 +17,9 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	other, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "initial", InitialInputs: []Input{messageInput("first"), messageInput("second")}}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "initial", InitialInputs: []sessions.Input{messageInput("first"), messageInput("second")}}
 	var wg sync.WaitGroup
-	results := make(chan Session, 8)
+	results := make(chan sessions.Session, 8)
 	for i := range 8 {
 		wg.Add(1)
 		go func() {
@@ -38,7 +38,7 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	}
 	wg.Wait()
 	close(results)
-	var first Session
+	var first sessions.Session
 	for session := range results {
 		if first.ID == "" {
 			first = session
@@ -57,17 +57,17 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	if !strings.Contains(string(inputs[0].Payload), "first") || !strings.Contains(string(inputs[1].Payload), "second") {
 		t.Fatal(inputs)
 	}
-	for _, changed := range [][]Input{nil, {messageInput("changed")}, {input.InitialInputs[1], input.InitialInputs[0]}} {
+	for _, changed := range [][]sessions.Input{nil, {messageInput("changed")}, {input.InitialInputs[1], input.InitialInputs[0]}} {
 		request := input
 		request.InitialInputs = changed
-		if _, err := s.CreateSession(ctx, tenant, request); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := s.CreateSession(ctx, tenant, request); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("changed initial input accepted", err)
 		}
 	}
 	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnQueued, sessions.TurnInProgress)
 	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnInProgress, sessions.TurnCompleted)
 	// The same caller key at the events endpoint is an independent request.
-	next, err := s.SubmitInputs(ctx, tenant, first.ID, input.IdempotencyKey, []Input{messageInput("later")})
+	next, err := s.SubmitInputs(ctx, tenant, first.ID, input.IdempotencyKey, []sessions.Input{messageInput("later")})
 	if err != nil || len(next) != 1 || next[0].TurnID == first.LastTurn.ID {
 		t.Fatal(next, err)
 	}
@@ -108,7 +108,7 @@ func TestInitialInputFailureRollsBackSessionAndWork(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(ctx, "ALTER TABLE turn_inputs DROP CONSTRAINT IF EXISTS "+constraint) })
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "rollback", InitialInputs: []Input{messageInput("first"), messageInput(marker)}}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "rollback", InitialInputs: []sessions.Input{messageInput("first"), messageInput(marker)}}
 	if got, err := s.CreateSession(ctx, tenant, input); err == nil || got.ID != "" {
 		t.Fatal("partial creation succeeded", got, err)
 	}

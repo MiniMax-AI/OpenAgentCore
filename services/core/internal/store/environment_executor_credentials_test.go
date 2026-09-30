@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func executorDigest(token string) string {
@@ -28,10 +30,10 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID, environment.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.IssueExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign issue", err)
 	}
-	if _, err := s.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("rotate manufactured a credential", err)
 	}
 	issued, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID)
@@ -46,22 +48,22 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 			if err != nil || owner != tenant {
 				t.Fatal("credential not accepted for owner", err)
 			}
-		} else if !errors.Is(err, ErrNotFound) {
+		} else if !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("invalid credential accepted", err)
 		}
 	}
 	check(s, token, true)
 	check(s, "caller/device/harness/grant", false)
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, uuid.NewString(), executorDigest(token)); !errors.Is(err, ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(ctx, uuid.NewString(), executorDigest(token)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment accepted", err)
 	}
-	if _, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, ErrExecutorCredentialExists) {
+	if _, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("issue silently replaced credential", err)
 	}
-	if err := s.RevokeExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, ErrNotFound) {
+	if err := s.RevokeExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign revoke", err)
 	}
-	if _, err := s.RotateExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RotateExecutorCredential(ctx, FixtureExecutorPrincipal(t, s, foreign), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign rotate", err)
 	}
 	var stored string
@@ -86,7 +88,7 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 		}
 	}
 	check(restarted, next.Token, false)
-	if _, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, ErrExecutorCredentialExists) {
+	if _, err := s.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("ordinary issue resurrected revoked authority", err)
 	}
 	restored, err := s.RotateExecutorCredential(ctx, principal, environment.ID)
@@ -99,7 +101,7 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	check(restarted, restored.Token, false)
-	if _, err := s.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.RotateExecutorCredential(ctx, principal, environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted Session authority resurrected", err)
 	}
 	if err := pool.QueryRow(ctx, "SELECT token_sha256 FROM environment_executor_credentials WHERE environment_id=$1", environment.ID).Scan(&stored); err != nil || stored != executorDigest(restored.Token) {
@@ -137,7 +139,7 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 			token, err := st.IssueExecutorCredential(ctx, principal, environment.ID, environment.ID)
 			if err == nil {
 				tokens <- token.Token
-			} else if !errors.Is(err, ErrExecutorCredentialExists) {
+			} else if !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 				t.Error(err)
 			}
 		}()
@@ -155,7 +157,7 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 		token, err := other.RotateExecutorCredential(ctx, principal, environment.ID)
 		if err == nil {
 			rotated <- token.Token
-		} else if !errors.Is(err, ErrNotFound) {
+		} else if !errors.Is(err, sessions.ErrNotFound) {
 			t.Error(err)
 		}
 	}()
@@ -165,11 +167,11 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 	wg.Wait()
 	close(rotated)
 	for token := range rotated {
-		if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(token)); !errors.Is(err, ErrNotFound) {
+		if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(token)); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("racing rotation authorized deleted Environment", err)
 		}
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(original)); !errors.Is(err, ErrNotFound) {
+	if _, err := s.AuthenticateEnvironmentExecutor(ctx, environment.ID, executorDigest(original)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("original key survived deletion", err)
 	}
 }

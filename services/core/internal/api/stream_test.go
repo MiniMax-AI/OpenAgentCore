@@ -15,22 +15,21 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 // streamFixture serves one Session and its event stream.
 type streamFixture struct {
-	session store.Session
+	session sessions.Session
 	mu      sync.Mutex
 	changes []sessions.SessionChange
 	gap     bool
 	cursors []int64
 }
 
-func (f *streamFixture) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
+func (f *streamFixture) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
 	if tenant != f.session.TenantID || id != f.session.ID {
-		return store.Session{}, store.ErrNotFound
+		return sessions.Session{}, sessions.ErrNotFound
 	}
 	return f.session, nil
 }
@@ -39,11 +38,11 @@ func (f *streamFixture) SessionEventCursor(context.Context, string, string) (int
 	return 10, nil
 }
 
-func (f *streamFixture) SessionStreamSnapshot(_ context.Context, tenant, id string) (store.Session, int64, error) {
+func (f *streamFixture) SessionStreamSnapshot(_ context.Context, tenant, id string) (sessions.Session, int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if tenant != f.session.TenantID || id != f.session.ID {
-		return store.Session{}, 0, store.ErrNotFound
+		return sessions.Session{}, 0, sessions.ErrNotFound
 	}
 	return f.session, 10, nil
 }
@@ -53,7 +52,7 @@ func (f *streamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor
 	defer f.mu.Unlock()
 	f.cursors = append(f.cursors, cursor)
 	if f.gap {
-		return nil, store.ErrStreamGap
+		return nil, sessions.ErrStreamGap
 	}
 	changes := f.changes
 	f.changes = nil
@@ -67,7 +66,7 @@ func (f *streamFixture) serve(fakes *testFakes) {
 }
 
 func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
-	f := &streamFixture{session: store.Session{ID: uuid.NewString(), TenantID: uuid.NewString(), CreatedAt: time.Now(), Metadata: map[string]string{},
+	f := &streamFixture{session: sessions.Session{ID: uuid.NewString(), TenantID: uuid.NewString(), CreatedAt: time.Now(), Metadata: map[string]string{},
 		Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}}
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("key"), TenantID: f.session.TenantID}, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("foreign"), TenantID: uuid.NewString()}).ResolveAPIKey
@@ -153,7 +152,7 @@ func TestLiveStreamAuthDisconnectRecoveryAndServerDeadline(t *testing.T) {
 }
 
 func TestTerminalTurnEventsMirrorTurnUsage(t *testing.T) {
-	session := store.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}
+	session := sessions.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`)}
 	measured := json.RawMessage(`{"input_tokens":7,"input_tokens_details":{"cached_tokens":2},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":1},"total_tokens":10}`)
 	child := &v1.Turn{ID: "child", Status: "cancelled"}
 	for _, test := range []struct {
@@ -195,7 +194,7 @@ func TestTerminalTurnEventsMirrorTurnUsage(t *testing.T) {
 // Item events carry output_index, null for input Items, and Session snapshots
 // carry both reasoning keys (EVT-09, SES-23).
 func TestStreamEventsCarryExplicitNullFields(t *testing.T) {
-	session := store.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[],"reasoning":{}},"environment":{"type":"none"}}`)}
+	session := sessions.Session{ID: "session", Configuration: json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[],"reasoning":{}},"environment":{"type":"none"}}`)}
 	text := "question"
 	user := &v1.Item{ID: "item", TurnID: "turn", Type: "message", Status: "completed", Role: "user", Content: []v1.ItemContent{{Type: "input_text", Text: &text}}}
 	result := &v1.Item{ID: "result", TurnID: "turn", Type: "function_call_output", Status: "completed", CallID: "call", Output: "value"}

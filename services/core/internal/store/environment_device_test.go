@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -33,7 +34,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 				t.Fatal("incapable enrolled device received work", frame.Type)
 			case <-time.After(time.Second):
 			}
-			if _, err := h.s.GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, store.ErrNotFound) {
+			if _, err := h.s.GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("unregistered Runtime was assigned general compute", err)
 			}
 			session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
@@ -59,9 +60,9 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 				t.Fatal("preparation owner was not released")
 			}
 			stop()
-			for _, value := range []store.EnvironmentInputReservation{pending, bound} {
+			for _, value := range []sessions.EnvironmentInputReservation{pending, bound} {
 				stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, value.SessionID, value.ID)
-				if err != nil || stored.State != store.EnvironmentInputPending || !stored.Deadline.Equal(value.Deadline) {
+				if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(value.Deadline) {
 					t.Fatal("device readiness changed pending input", err)
 				}
 				assertEnvironmentExpiryHasNoHistory(t, pool, value.SessionID)

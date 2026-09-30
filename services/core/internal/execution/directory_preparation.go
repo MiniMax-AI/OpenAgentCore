@@ -6,10 +6,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func (d *Dispatcher) readPreparedDirectory(ctx context.Context, peer *runtimegateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, read proto.WorkspaceReadPayload) directoryReadResult {
+func (d *Dispatcher) readPreparedDirectory(ctx context.Context, peer *runtimegateway.Session, session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, read proto.WorkspaceReadPayload) directoryReadResult {
 	owner, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	var result directoryReadResult
@@ -24,7 +24,7 @@ func (d *Dispatcher) readPreparedDirectory(ctx context.Context, peer *runtimegat
 	return result
 }
 
-func (d *Dispatcher) withPreparedWorkspace(owner context.Context, peer *runtimegateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, consume func(context.Context, string) error) error {
+func (d *Dispatcher) withPreparedWorkspace(owner context.Context, peer *runtimegateway.Session, session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, consume func(context.Context, string) error) error {
 	req := proto.PromptRequestPayload{AgentKind: session.Engine, AgentStateKey: "agents-api-" + session.ID, StrictResume: true, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
 	if err := d.configurePreparedEnvironment(session, environment, bound, &req); err != nil {
 		return ErrExecutionUnavailable

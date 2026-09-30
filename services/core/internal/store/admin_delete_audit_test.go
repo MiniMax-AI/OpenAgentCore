@@ -169,7 +169,7 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 			if artifact.Path == "/workspace/outputs/other.txt" {
 				want = []byte("second body")
 			}
-			if err := s.ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ SessionArtifact, r io.Reader) error {
+			if err := s.ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ sessions.Artifact, r io.Reader) error {
 				got, err := io.ReadAll(r)
 				if !bytes.Equal(got, want) {
 					t.Error("artifact large-object bytes were not restored")
@@ -200,7 +200,7 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 	default:
 		t.Fatal("unsupported delete fixture")
 	}
-	if !errors.Is(err, ErrNotFound) {
+	if !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("successful deletion left resource visible", err)
 	}
 }

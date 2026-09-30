@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -244,23 +245,23 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "e2b")
 	tenant := uuid.NewString()
-	var sessions []Session
+	var created []sessions.Session
 	for range 12 {
 		session, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		sessions = append(sessions, session)
+		created = append(created, session)
 	}
 	type result struct {
-		session Session
+		session sessions.Session
 		owner   RuntimeAllocation
 		err     error
 	}
 	start := make(chan struct{})
-	results := make(chan result, len(sessions))
+	results := make(chan result, len(created))
 	maintenance := make(chan error, 1)
-	for _, session := range sessions {
+	for _, session := range created {
 		go func() {
 			<-start
 			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
@@ -276,7 +277,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	var allocated int64
-	for range sessions {
+	for range created {
 		result := <-results
 		if result.err == nil {
 			allocated++
@@ -294,7 +295,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 		}
 	}
 	after, err := deploymentService(t, s).View(t.Context())
-	if err != nil || after.Reset == nil || after.Generation != view.Generation || after.Resources.Allocations != allocated || after.Resources.Pending != int64(len(sessions))-allocated {
+	if err != nil || after.Reset == nil || after.Generation != view.Generation || after.Resources.Allocations != allocated || after.Resources.Pending != int64(len(created))-allocated {
 		t.Fatal("concurrent maintenance lost resource accounting", after.Resources, err)
 	}
 	input.Resources.CPUs++

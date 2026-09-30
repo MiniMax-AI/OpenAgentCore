@@ -25,14 +25,14 @@ func isSubagentObservation(kind string) bool {
 func projectSubagentItem(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, raw json.RawMessage) error {
 	var p proto.SubagentItemPayload
 	if json.Unmarshal(raw, &p) != nil || !validNativeIdentity(p.NativeID) || !validNativeIdentity(p.TurnID) || !validNativeIdentity(p.ItemID) || p.Position < 0 || p.Position > 1073741823 {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	child, err := q.GetNativeSubagent(ctx, sqlc.GetNativeSubagentParams{SessionID: session, NativeID: p.NativeID})
 	if err != nil {
 		return err
 	}
 	if !child.PublicVisible {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	turnID := items.Identity(uuid.UUID(child.ID.Bytes).String(), "turn:"+p.TurnID)
 	turn, err := childTurn(ctx, q, session, uuid.UUID(child.ID.Bytes).String(), turnID)
@@ -65,7 +65,7 @@ func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.
 	var previous v1.Item
 	if !fresh {
 		if old.TurnID != turn.ID || old.Position != position {
-			return ErrIdempotencyConflict
+			return sessions.ErrIdempotencyConflict
 		}
 		if err = json.Unmarshal(old.Payload, &previous); err != nil {
 			return err
@@ -74,11 +74,11 @@ func putChildItem(ctx context.Context, q *sqlc.Queries, session, childID pgtype.
 			return nil
 		}
 		if previous.Status != "in_progress" {
-			return ErrIdempotencyConflict
+			return sessions.ErrIdempotencyConflict
 		}
 	}
 	if sessions.TerminalStatus(turn.Status) {
-		return ErrTurnConflict
+		return sessions.ErrTurnConflict
 	}
 	// Child Items publish no Session events: the Session stream carries root work,
 	// and child history is read through the Subagent routes. The stored output
@@ -93,19 +93,19 @@ func childItems(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, turn 
 	case proto.TypeSubagentCoordination:
 		var value proto.SubagentCoordinationPayload
 		if json.Unmarshal(p.Payload, &value) != nil || value.ID != p.ItemID || value.ActorID != p.NativeID {
-			return result, ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 		item, err := coordinationItem(ctx, q, session, turn, value)
 		return []v1.Item{item}, err
 	case proto.TypeOutputMessage:
 		var message proto.OutputMessagePayload
 		if json.Unmarshal(p.Payload, &message) != nil || message.ID != p.ItemID || message.Text == nil {
-			return result, ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 	case proto.TypeToolCall:
 		var call proto.ToolCallPayload
 		if json.Unmarshal(p.Payload, &call) != nil || call.ID != p.ItemID || call.Observation == nil {
-			return result, ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 	case "message":
 		// Input projection validates and normalizes the existing public message shape.
@@ -115,30 +115,30 @@ func childItems(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, turn 
 			Summary []v1.SummaryText `json:"summary"`
 		}
 		if json.Unmarshal(p.Payload, &value) != nil {
-			return result, ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 		if value.Status != "" && value.Status != "in_progress" && value.Status != "completed" && value.Status != "incomplete" {
-			return result, ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 		for _, part := range value.Summary {
 			if part.Type != "summary_text" {
-				return result, ErrInvalidInput
+				return result, sessions.ErrInvalidInput
 			}
 		}
 		return []v1.Item{{ID: items.Identity(turn, "reasoning:"+p.ItemID), TurnID: turn, Type: "reasoning", Status: value.Status, Summary: value.Summary}}, nil
 	default:
-		return result, ErrInvalidInput
+		return result, sessions.ErrInvalidInput
 	}
 	updates, err := items.Project(turn, p.Kind, int64(p.Position), p.Payload)
 	if err != nil {
 		return result, err
 	}
 	if len(updates) < 1 || len(updates) > 2 {
-		return nil, ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	for _, update := range updates {
 		if update.AppendText {
-			return nil, ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		result = append(result, update.Item)
 	}

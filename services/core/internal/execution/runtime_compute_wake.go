@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -19,7 +20,7 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 	}
 	peer, err := authorizedRuntimePeer(ctx, r.store, r.registry, owner.DeviceID)
 	if err != nil {
-		if !errors.Is(err, store.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
+		if !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, runtimegateway.ErrDeviceNotRegistered) && !errors.Is(err, runtimegateway.ErrSessionClosed) {
 			return err
 		}
 		// This idempotent control signal is fenced by guest PID/start time and the
@@ -103,12 +104,12 @@ func (r *runtimeLifecycle) cleanupCompute(ctx context.Context, p sandbox.Checkpo
 
 // waitRuntimeAwake is called only for live Environment file operations, before
 // entering the Worker's work queues. Persisted history/artifact reads bypass it.
-func (w *Worker) waitRuntimeAwake(ctx context.Context, environment store.Environment) error {
+func (w *Worker) waitRuntimeAwake(ctx context.Context, environment sessions.Environment) error {
 	if w.runtimes == nil {
 		return nil
 	}
 	owner, err := w.admission.GetRuntimeAllocation(ctx, environment.TenantID, environment.ID)
-	if errors.Is(err, store.ErrNotFound) {
+	if errors.Is(err, sessions.ErrNotFound) {
 		return nil
 	}
 	if err != nil {

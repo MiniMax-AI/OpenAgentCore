@@ -7,7 +7,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type directoryReadResult struct {
@@ -17,7 +16,7 @@ type directoryReadResult struct {
 
 type directoryReadRequest struct {
 	ctx         context.Context
-	environment store.Environment
+	environment sessions.Environment
 	path        string
 	result      chan directoryReadResult
 }
@@ -25,7 +24,7 @@ type directoryReadRequest struct {
 func (r directoryReadRequest) reply(result directoryReadResult) { r.result <- result }
 
 // ReadEnvironmentDirectory observes a Worker-owned read without admitting model input.
-func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment store.Environment, path string) (proto.WorkspaceDirectoryResult, error) {
+func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment sessions.Environment, path string) (proto.WorkspaceDirectoryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	current, err := w.admission.GetEnvironment(ctx, environment.TenantID, environment.ID)
@@ -33,7 +32,7 @@ func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment store
 		return proto.WorkspaceDirectoryResult{}, err
 	}
 	if current.SessionID != environment.SessionID {
-		return proto.WorkspaceDirectoryResult{}, store.ErrNotFound
+		return proto.WorkspaceDirectoryResult{}, sessions.ErrNotFound
 	}
 	if err := w.waitRuntimeAwake(ctx, current); err != nil {
 		return proto.WorkspaceDirectoryResult{}, err
@@ -79,7 +78,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		return
 	}
 	if environment.SessionID != request.environment.SessionID {
-		result.err = store.ErrNotFound
+		result.err = sessions.ErrNotFound
 		return
 	}
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
@@ -149,7 +148,7 @@ func readEnvironmentDirectory(ctx context.Context, peer *runtimegateway.Session,
 		return directoryReadResult{directory: proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}
 	}
 	if err == nil && result.Outcome == "rejected" && result.ErrorCode == "not_found" {
-		return directoryReadResult{err: store.ErrNotFound}
+		return directoryReadResult{err: sessions.ErrNotFound}
 	}
 	return directoryReadResult{err: ErrExecutionUnavailable}
 }

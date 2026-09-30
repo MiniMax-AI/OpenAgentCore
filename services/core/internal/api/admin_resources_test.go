@@ -120,10 +120,10 @@ type summaryFixture struct {
 	filter store.AdminSummaryFilter
 }
 
-func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filter store.AdminSummaryFilter, visit func(store.Session, *string) error) (store.AdminAssetCounts, error) {
+func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filter store.AdminSummaryFilter, visit func(sessions.Session, *string) error) (store.AdminAssetCounts, error) {
 	s.tenant, s.filter = tenant, filter
 	for i, usage := range []json.RawMessage{nil, json.RawMessage(`{"input_tokens":3,"output_tokens":5,"total_tokens":8,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}`)} {
-		session := store.Session{ID: "session", TenantID: tenant, Configuration: json.RawMessage(`{"agent":{"id":"agent","model":"model","tools":[]},"environment":{"type":"none"}}`), CreatedAt: time.Unix(100+int64(i), 0), Usage: usage}
+		session := sessions.Session{ID: "session", TenantID: tenant, Configuration: json.RawMessage(`{"agent":{"id":"agent","model":"model","tools":[]},"environment":{"type":"none"}}`), CreatedAt: time.Unix(100+int64(i), 0), Usage: usage}
 		if i == 0 {
 			session.LastTurn = &sessions.Turn{Status: sessions.TurnInProgress, CreatedAt: time.Unix(110, 0)}
 		}

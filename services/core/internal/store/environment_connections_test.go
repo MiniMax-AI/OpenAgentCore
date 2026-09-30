@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func connectionFixture(t *testing.T, s *Store) (string, Session, Environment) {
+func connectionFixture(t *testing.T, s *Store) (string, sessions.Session, sessions.Environment) {
 	t.Helper()
 	tenant, session := environmentInputSession(t, s)
 	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
@@ -140,10 +140,10 @@ func TestEnvironmentConnectionRequiresOwnerAndRollsBackWithEvent(t *testing.T) {
 	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.ReplaceEnvironmentConnection(t.Context(), uuid.NewString(), environment.ID, generation); !errors.Is(err, ErrNotFound) {
+	if err := writer.ReplaceEnvironmentConnection(t.Context(), uuid.NewString(), environment.ID, generation); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign generation accepted", err)
 	}
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, session.ID, generation, 1, true); !errors.Is(err, ErrNotFound) {
+	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, session.ID, generation, 1, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("Session ID used as Environment", err)
 	}
 	before := connectionSnapshot(t, pool, environment.ID)

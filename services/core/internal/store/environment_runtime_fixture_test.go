@@ -8,12 +8,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
-func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session store.Session) (store.ExecutionDevice, string) {
+func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session sessions.Session) (sessions.ExecutionDevice, string) {
 	t.Helper()
 	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
@@ -35,7 +36,7 @@ func enrollFixtureSession(t *testing.T, s *store.Store, tenant string, session s
 	return bound, key.Token
 }
 
-func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session store.Session) *dispatchHarness {
+func connectFixtureRuntime(t *testing.T, h *dispatchHarness, session sessions.Session) *dispatchHarness {
 	t.Helper()
 	// The Runtime shares the harness's Core, not its connection or write lock.
 	other := &dispatchHarness{t: h.t, s: h.s, db: h.db, lease: h.lease, d: h.d, tenant: h.tenant, session: session, registry: h.registry, url: h.url,

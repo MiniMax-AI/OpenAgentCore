@@ -282,7 +282,7 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT id FROM turns WHERE session_id=$1", streamed).Scan(&turn); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(t.Context(), tenantA, streamed, turn, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
+	if _, err := s.TransitionTurn(t.Context(), tenantA, streamed, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
 		t.Fatal(err)
 	}
 	_, tools = snapshot(stream, "agent.session.idle")

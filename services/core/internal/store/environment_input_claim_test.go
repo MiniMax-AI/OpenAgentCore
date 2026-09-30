@@ -16,7 +16,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	const count = 8
-	results := make(chan EnvironmentInputReservation, count)
+	results := make(chan sessions.EnvironmentInputReservation, count)
 	var group sync.WaitGroup
 	for range count {
 		group.Go(func() {
@@ -34,7 +34,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 	fresh, received := 0, 0
 	for got := range results {
 		received++
-		if got.State != EnvironmentInputAdmitted || len(got.Receipts) != 2 {
+		if got.State != sessions.EnvironmentInputAdmitted || len(got.Receipts) != 2 {
 			t.Fatal("promotion lost the original batch", got)
 		}
 		if turnID == "" {
@@ -89,7 +89,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 		t.Fatal("terminal retry published events", after, cursor, err)
 	}
 	retained, err := s.GetEnvironmentInputReservation(t.Context(), tenant, session.ID, later.ID)
-	if err != nil || retained.State != EnvironmentInputPending || !retained.Deadline.Equal(later.Deadline) {
+	if err != nil || retained.State != sessions.EnvironmentInputPending || !retained.Deadline.Equal(later.Deadline) {
 		t.Fatal("old promotion affected new preparation", retained, err)
 	}
 }

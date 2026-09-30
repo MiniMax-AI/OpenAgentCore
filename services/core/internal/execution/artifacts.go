@@ -9,10 +9,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
-func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtimegateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, turnID string, result Result, status string) (Result, string) {
+func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtimegateway.Session, session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, turnID string, result Result, status string) (Result, string) {
 	if status != sessions.TurnCompleted || !LocalWorkspaceConfiguration(environment.Configuration) {
 		return result, status
 	}
@@ -31,7 +30,7 @@ func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtim
 	}
 	// Do not expose native diagnostics or publish partial output after a failed capture.
 	result.ErrorCode = "artifact_capture_failed"
-	if errors.Is(err, store.ErrUnappliedInputs) {
+	if errors.Is(err, sessions.ErrUnappliedInputs) {
 		result.ErrorCode = "input_not_applied"
 	}
 	status = sessions.TurnFailed

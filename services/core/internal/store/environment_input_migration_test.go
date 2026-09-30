@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -120,7 +121,7 @@ func TestEnvironmentInputPromotionUsesCurrentExecutionWriter(t *testing.T) {
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
 	got, err := successor.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID)
-	if err != nil || got.State != EnvironmentInputAdmitted {
+	if err != nil || got.State != sessions.EnvironmentInputAdmitted {
 		t.Fatal("successor could not promote", got, err)
 	}
 	environmentInputHistory(t, pool, session.ID, 1, 2)

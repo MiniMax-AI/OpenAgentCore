@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type environmentFileOptions struct {
@@ -31,12 +31,12 @@ var (
 // ignored and a repeated supported key uses the Beta duplicate-field error.
 // Unlike the shared lists, which drop malformed pairs, it rejects malformed
 // query encoding.
-func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environment store.Environment) (environmentFileOptions, bool) {
+func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environment sessions.Environment) (environmentFileOptions, bool) {
 	var options environmentFileOptions
 	// Malformed query encoding remains a local rejection; no official sample exists.
 	q, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return options, false
 	}
 	for _, key := range environmentFileQueryKeys {

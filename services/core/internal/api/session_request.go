@@ -7,7 +7,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Keep explicit null until validation for fields whose Go zero values would
@@ -44,7 +44,7 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 	input := sessionRequest{CreateSessionRequest: request.CreateSessionRequest, Input: request.Input}
 	if len(request.Execution) > 0 && !bytes.Equal(bytes.TrimSpace(request.Execution), []byte("null")) {
 		if decodeInputObject(request.Execution, &input.XAgentsCore, "model_provider", "harness_config", "environment") != nil {
-			return input, store.ErrInvalidInput
+			return input, sessions.ErrInvalidInput
 		}
 		var fields map[string]json.RawMessage
 		_ = json.Unmarshal(request.Execution, &fields)
@@ -52,12 +52,12 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 	}
 	var vaultIDs []*string
 	if len(request.VaultIDs) != 0 && json.Unmarshal(request.VaultIDs, &vaultIDs) != nil {
-		return input, store.ErrInvalidInput
+		return input, sessions.ErrInvalidInput
 	}
 	input.VaultIDs = make([]string, 0, len(vaultIDs))
 	for _, id := range vaultIDs {
 		if id == nil {
-			return input, store.ErrInvalidInput
+			return input, sessions.ErrInvalidInput
 		}
 		input.VaultIDs = append(input.VaultIDs, *id)
 	}
@@ -68,7 +68,7 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 	input.originalEnvironment = request.Environment
 	var environmentFields map[string]json.RawMessage
 	if json.Unmarshal(canonicalEnvironment, &environmentFields) != nil {
-		return input, store.ErrInvalidInput
+		return input, sessions.ErrInvalidInput
 	}
 	input.initialization, err = decodeEnvironmentSetup(environmentFields)
 	if err != nil {
@@ -88,25 +88,25 @@ func (request decodedSessionRequest) validated() (sessionRequest, error) {
 			return input, err
 		}
 		if decodeInputObject(request.Agent, &input.Agent, "model", "instructions", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
-			return input, store.ErrInvalidInput
+			return input, sessions.ErrInvalidInput
 		}
 		if err := json.Unmarshal(request.Agent, &input.agentFields); err != nil {
-			return input, store.ErrInvalidInput
+			return input, sessions.ErrInvalidInput
 		}
 		if _, supplied := input.agentFields["model"]; supplied && input.Agent.Model == nil {
-			return input, store.ErrInvalidInput
+			return input, sessions.ErrInvalidInput
 		}
 	}
 	if len(request.AgentID) > 0 {
 		var id string
 		if bytes.Equal(bytes.TrimSpace(request.AgentID), []byte("null")) || json.Unmarshal(request.AgentID, &id) != nil {
-			return input, store.ErrInvalidInput
+			return input, sessions.ErrInvalidInput
 		}
 		input.AgentID = &id
 	}
 	if len(request.Stream) > 0 {
 		if bytes.Equal(bytes.TrimSpace(request.Stream), []byte("null")) || json.Unmarshal(request.Stream, &input.Stream) != nil {
-			return input, store.ErrInvalidInput
+			return input, sessions.ErrInvalidInput
 		}
 	}
 	input.Metadata, err = stringMetadata(request.Metadata)

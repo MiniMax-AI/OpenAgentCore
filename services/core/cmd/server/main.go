@@ -369,14 +369,27 @@ func run() error {
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templateStore,
 		Files: fileService, FilesReader: fileStore,
 		Agents: agentService, AgentsReader: agentStore,
-		Sessions: executionStore, SessionEvents: executionStore, SessionHistory: executionStore,
-		Subagents: executionStore, Artifacts: executionStore, SessionAdmin: executionStore,
-		Environments: executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},
+		Sessions:        executionStore,
+		SessionCreation: executionStore,
+		SessionEvents:   executionStore,
+		Turns:           executionStore,
+		Items:           executionStore,
+		Subagents:       executionStore,
+		Artifacts:       executionStore,
+		SessionAdmin:    executionStore,
+		Environments:    executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},
 		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 	}
 	if worker != nil {
-		deps.Execution = &api.Execution{ExecutorURL: executorURL, Admission: worker, SessionArchive: worker, Workspaces: worker, NativeInstaller: nativeInstaller}
+		deps.Execution = &api.Execution{
+			ExecutorURL:      executorURL,
+			SessionAdmission: worker,
+			InputAdmission:   worker,
+			SessionArchive:   worker,
+			Workspaces:       worker,
+			NativeInstaller:  nativeInstaller,
+		}
 	}
 	if managedNodes != nil {
 		deps.Sandboxes = &api.Sandboxes{

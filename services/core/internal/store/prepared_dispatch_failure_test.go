@@ -32,7 +32,7 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "delete":
-				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); !errors.Is(err, store.ErrSessionNotIdle) {
+				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("pending input deleted", err)
 				}
 				if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, h.session.ID); err != nil {
@@ -48,9 +48,9 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 				t.Fatal("unready preparation admitted work", got)
 			}
 			if action == "cancel" || action == "expire" {
-				want := store.EnvironmentInputCancelled
+				want := sessions.EnvironmentInputCancelled
 				if action == "expire" {
-					want = store.EnvironmentInputExpired
+					want = sessions.EnvironmentInputExpired
 				}
 				if got.err != nil || got.run.Reservation.State != want {
 					t.Fatal("terminal reservation outcome changed", got)
@@ -58,7 +58,7 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 			} else if got.err == nil {
 				t.Fatal("preparation failure was hidden")
 			}
-			if action == "delete" && !errors.Is(got.err, store.ErrNotFound) {
+			if action == "delete" && !errors.Is(got.err, sessions.ErrNotFound) {
 				t.Fatal("deleted reservation remained accessible", got.err)
 			}
 			if action != "disconnect" {
@@ -67,7 +67,7 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 			assertEnvironmentExpiryHasNoHistory(t, pool, h.session.ID)
 			if action == "prepare-failure" || action == "disconnect" {
 				stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
-				if err != nil || stored.State != store.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) {
+				if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) {
 					t.Fatal("preparation failure changed the pending identity", stored, err)
 				}
 			}

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type emptyEventSessionStore struct {
@@ -18,13 +18,13 @@ type emptyEventSessionStore struct {
 	reads      int
 }
 
-func (s *emptyEventSessionStore) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
+func (s *emptyEventSessionStore) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
 	s.tenant, s.id = tenant, id
 	s.reads++
 	if id != "owned" {
-		return store.Session{}, store.ErrNotFound
+		return sessions.Session{}, sessions.ErrNotFound
 	}
-	return store.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
+	return sessions.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
 }
 
 func (s *emptyEventSessionStore) AuditSessionOperation(context.Context, string, string, string) error {

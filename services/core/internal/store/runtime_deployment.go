@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // sandboxProviders interprets the deployment's provider declarations for
@@ -28,18 +29,18 @@ func checkRuntimeDeploymentAdmission(ctx context.Context, q *sqlc.Queries, insta
 		return ErrSandboxResetAdmission
 	}
 	if current.AdmissionPaused {
-		return fmt.Errorf("%w: sandbox creation is paused for provider maintenance", ErrEnvironmentUnavailable)
+		return fmt.Errorf("%w: sandbox creation is paused for provider maintenance", sessions.ErrEnvironmentUnavailable)
 	}
 	if current.ProviderKind != "" {
 		var spec sandbox.DeploymentSpec
 		if json.Unmarshal(current.Specification, &spec) != nil || sandboxProviders.ValidateSpecification(current.ProviderKind, spec) != nil {
-			return fmt.Errorf("%w: sandbox creation requires a deployment specification", ErrEnvironmentUnavailable)
+			return fmt.Errorf("%w: sandbox creation requires a deployment specification", sessions.ErrEnvironmentUnavailable)
 		}
 	}
 	if installation != "" {
 		id, err := parseConnectionGeneration(installation)
 		if err != nil || id != current.InstallationID {
-			return fmt.Errorf("%w: sandbox installation does not match deployment", ErrEnvironmentUnavailable)
+			return fmt.Errorf("%w: sandbox installation does not match deployment", sessions.ErrEnvironmentUnavailable)
 		}
 	}
 	return nil

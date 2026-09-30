@@ -70,7 +70,7 @@ func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error
 	if !declared {
 		return errors.New("undeclared function callback")
 	}
-	err := f.store.RecordFunctionCall(ctx, f.tenant, f.session, f.turn, store.FunctionCall{
+	err := f.store.RecordFunctionCall(ctx, f.tenant, f.session, f.turn, sessions.FunctionCall{
 		CallID: items.Identity(f.turn, "tool:"+call.CallID), ExecutorCallID: call.CallID, Name: call.Name, Arguments: call.Arguments,
 	})
 	return f.unlessCancelling(ctx, err)
@@ -123,7 +123,7 @@ func (f *functionExchange) confirm(ctx context.Context, reply functionReply) err
 }
 
 func (f *functionExchange) unlessCancelling(ctx context.Context, err error) error {
-	if errors.Is(err, store.ErrTurnConflict) {
+	if errors.Is(err, sessions.ErrTurnConflict) {
 		turn, lookupErr := f.store.GetTurn(ctx, f.tenant, f.session, f.turn)
 		if lookupErr == nil && !turn.CancelRequestedAt.IsZero() {
 			return nil
@@ -153,7 +153,7 @@ func (f *functionExchange) complete(ctx context.Context) error {
 	return nil
 }
 
-func functionResult(call store.FunctionCall) (proto.FunctionResultPayload, error) {
+func functionResult(call sessions.FunctionCall) (proto.FunctionResultPayload, error) {
 	var value struct {
 		Success *bool           `json:"success"`
 		Output  json.RawMessage `json:"output"`

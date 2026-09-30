@@ -10,7 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type environmentPlacement struct {
@@ -34,7 +34,7 @@ func LocalWorkspaceConfiguration(configuration json.RawMessage) bool {
 func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacement, error) {
 	var placement environmentPlacement
 	if json.Unmarshal(configuration, &placement) != nil {
-		return placement, store.ErrInvalidInput
+		return placement, sessions.ErrInvalidInput
 	}
 	var local struct {
 		Plugins               []agentplugin.Metadata                  `json:"plugins,omitempty"`
@@ -50,48 +50,48 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	decoder := json.NewDecoder(bytes.NewReader(configuration))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&local) != nil || agentcapabilities.ValidateSourceDirectories(local.CapabilityDirectories) != nil {
-		return placement, store.ErrInvalidInput
+		return placement, sessions.ErrInvalidInput
 	}
 	// Placement selects a workspace; all preparation fields are shared.
 	switch placement.Type {
 	case "openai_hosted":
 		if local.WorkspaceDirectory != "" || agentcapabilities.ValidateDirectories(local.CapabilityDirectories) != nil {
-			return placement, store.ErrInvalidInput
+			return placement, sessions.ErrInvalidInput
 		}
 		placement.WorkspaceDirectory = "/workspace"
 	case "self_hosted":
 		if !validSelfHostedPlacement(placement) {
-			return placement, store.ErrInvalidInput
+			return placement, sessions.ErrInvalidInput
 		}
 	default:
-		return placement, store.ErrInvalidInput
+		return placement, sessions.ErrInvalidInput
 	}
 	placement.NetworkAccess = "enabled"
 	if local.Network != nil {
 		if (agentnetwork.Policy{Access: local.Network.Access, AllowedDomains: local.Network.AllowedDomains}).Validate() != nil {
-			return placement, store.ErrInvalidInput
+			return placement, sessions.ErrInvalidInput
 		}
 		placement.NetworkAccess, placement.AllowedDomains = local.Network.Access, append([]string(nil), local.Network.AllowedDomains...)
 	}
 	return placement, nil
 }
 
-func environmentDeviceMatches(session store.Session, environment store.Environment, bound store.ExecutionDevice) bool {
+func environmentDeviceMatches(session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice) bool {
 	if environment.SessionID != session.ID || environment.TenantID != session.TenantID {
 		return false
 	}
 	return bound.EnvironmentID == environment.ID
 }
 
-func (d *Dispatcher) configurePreparedEnvironment(session store.Session, environment store.Environment, bound store.ExecutionDevice, req *proto.PromptRequestPayload) error {
+func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, req *proto.PromptRequestPayload) error {
 	placement, err := parseEnvironmentPlacement(environment.Configuration)
 	if err != nil || !environmentDeviceMatches(session, environment, bound) {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	sources := &agentcapabilities.Input{Plugins: append([]agentplugin.Metadata(nil), placement.Plugins...), Directories: append([]string(nil), placement.CapabilityDirectories...)}
 	for _, metadata := range placement.Skills {
 		if metadata.ValidateInstalled() != nil {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		sources.Skills = append(sources.Skills, (environmentconfig.Skill{Metadata: metadata}).InstallationMetadata())
 	}

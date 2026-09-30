@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestExecutionConfigurationSources(t *testing.T) {
@@ -74,7 +74,7 @@ func TestExecutionConfigurationReadBoundary(t *testing.T) {
 		err    error
 		status int
 	}{
-		{"", nil, 401}, {"Bearer admin", nil, 200}, {"Bearer admin", store.ErrNotFound, 404},
+		{"", nil, 401}, {"Bearer admin", nil, 200}, {"Bearer admin", sessions.ErrNotFound, 404},
 	} {
 		s.err = tc.err
 		before := s.calls

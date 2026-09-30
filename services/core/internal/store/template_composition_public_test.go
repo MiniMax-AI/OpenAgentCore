@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -112,7 +113,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 					t.Fatalf("%s command order differs", label)
 				}
 			}
-			if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, store.ErrNotFound) {
+			if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatalf("%s foreign setup read: %v", label, err)
 			}
 			for position, want := range contents {

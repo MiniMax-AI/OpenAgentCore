@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -15,7 +16,7 @@ type adminTenantContextKey struct{}
 // Admin reads the administrator's cross-Project views: the asset summary and
 // the Sessions whose Runtime is observed.
 type Admin interface {
-	ReadAdminSummary(context.Context, string, store.AdminSummaryFilter, func(store.Session, *string) error) (store.AdminAssetCounts, error)
+	ReadAdminSummary(context.Context, string, store.AdminSummaryFilter, func(sessions.Session, *string) error) (store.AdminAssetCounts, error)
 	ListAdminRuntimeTargets(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
 }
 

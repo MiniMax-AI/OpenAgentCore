@@ -59,7 +59,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			configuration := strings.Replace(functionConfiguration, `"type":"none"`, `"type":"openai_hosted","network":{"access":"disabled"}`, 1)
-			session, err := s.CreateSession(t.Context(), project.TenantID, store.WithFixtureModelProvider(store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(configuration)}))
+			session, err := s.CreateSession(t.Context(), project.TenantID, store.WithFixtureModelProvider(sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(configuration)}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -118,7 +118,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			pending, err := s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+			pending, err := s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,7 +129,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			handle := acknowledgePreparation(h, frame.ID)
 			start := readyPreparedDispatch(t, h, frame.ID, handle)
 			h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
-			input := store.InputReceipt{TurnID: start.RunID}
+			input := sessions.InputReceipt{TurnID: start.RunID}
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "pending", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)})
 			state := functionState(t, h, 1)
 			if state.LastTurn.Status != sessions.TurnWaiting {

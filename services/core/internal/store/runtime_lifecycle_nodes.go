@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -106,7 +107,7 @@ func (s *Store) ResolveRuntimeLifecycleNode(ctx context.Context, tenant, environ
 	}
 	row, err := s.queries.GetRuntimeLifecyclePlacement(ctx, sqlc.GetRuntimeLifecyclePlacementParams{TenantID: lookup.TenantID, ID: lookup.ID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", ErrNotFound
+		return "", sessions.ErrNotFound
 	}
 	if err != nil {
 		return "", err

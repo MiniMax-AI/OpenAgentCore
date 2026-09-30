@@ -8,18 +8,18 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // ValidateSessionConfiguration checks engine placement and configuration before persistence.
 func (p Policy) ValidateSessionConfiguration(engine string, configuration json.RawMessage) error {
 	var snapshot Snapshot
 	if json.Unmarshal(configuration, &snapshot) != nil {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	profile, ok := p.Engines.Lookup(engine)
 	if !ok || (snapshot.Environment != nil && !profile.Accepts(snapshot.Environment.Type)) {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	_, err := p.mcpCredentialBindings(engine, snapshot)
 	if err != nil {
@@ -27,18 +27,18 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 	}
 	if snapshot.Environment != nil && snapshot.Environment.Type == "self_hosted" {
 		if strings.TrimSpace(snapshot.Agent.Model) == "" || !validSelfHostedPlacement(environmentPlacement{WorkspaceDirectory: snapshot.Environment.WorkspaceDirectory, CapabilityDirectories: snapshot.Environment.CapabilityDirectories}) {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 	}
 	if snapshot.Environment != nil && snapshot.Environment.Type == "openai_hosted" {
 		// Only this placement/engine combination has current native qualification.
 		// Runtime capability checks still apply before any execution claim.
 		if strings.TrimSpace(snapshot.Agent.Model) == "" {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 		configuration, err := json.Marshal(snapshot.Environment)
 		if err != nil || !LocalWorkspaceConfiguration(configuration) {
-			return store.ErrInvalidInput
+			return sessions.ErrInvalidInput
 		}
 	}
 	if snapshot.Environment != nil && snapshot.Environment.Type != "none" {
@@ -60,14 +60,14 @@ func (p Policy) canAdmitInputs(engine string, configuration json.RawMessage) boo
 	return p.ValidateSessionConfiguration(engine, configuration) == nil
 }
 
-func (p Policy) validateEngineInputs(engine string, configuration json.RawMessage, inputs []store.Input) error {
+func (p Policy) validateEngineInputs(engine string, configuration json.RawMessage, inputs []sessions.Input) error {
 	profile, ok := p.Engines.Lookup(engine)
 	if !ok {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	var snapshot Snapshot
 	if json.Unmarshal(configuration, &snapshot) != nil {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	placement := ""
 	if snapshot.Environment != nil {

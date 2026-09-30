@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 const setupCanary = "CANARY-runtime-setup-9b3e"
@@ -54,7 +54,7 @@ func TestRuntimeSetupReceiptOutcomes(t *testing.T) {
 	}
 }
 func TestRuntimeSetupFailureLabels(t *testing.T) {
-	for action, want := range map[string]store.ProvisioningFailure{"setup": {Step: store.ProvisioningSetupCommand, Index: 2, ExitCode: 3}, "python": {Step: store.ProvisioningPythonPackages, Index: 2, ExitCode: 3}, "npm": {Step: store.ProvisioningNPMPackages, Index: 2, ExitCode: 3}, "skill": {Step: store.ProvisioningSkill, Index: 2, ExitCode: 3}, "configure": {}, "": {}} {
+	for action, want := range map[string]sessions.ProvisioningFailure{"setup": {Step: sessions.ProvisioningSetupCommand, Index: 2, ExitCode: 3}, "python": {Step: sessions.ProvisioningPythonPackages, Index: 2, ExitCode: 3}, "npm": {Step: sessions.ProvisioningNPMPackages, Index: 2, ExitCode: 3}, "skill": {Step: sessions.ProvisioningSkill, Index: 2, ExitCode: 3}, "configure": {}, "": {}} {
 		op := runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: action}, Index: 2}
 		if action != "skill" {
 			op.Request = proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: action}}

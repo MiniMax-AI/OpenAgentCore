@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -107,7 +108,7 @@ func (m *runtimeManager) resetPage(parent, ctx context.Context) error {
 		}
 		_, err := m.store.ArchiveSandboxResetSession(ctx, candidate.TenantID, candidate.SessionID, current.Generation, current.Reset.RequestedAt)
 		m.resetCursor = candidate.SessionID
-		if err != nil && !errors.Is(err, store.ErrSandboxResetSessionBusy) && !errors.Is(err, store.ErrNotFound) {
+		if err != nil && !errors.Is(err, store.ErrSandboxResetSessionBusy) && !errors.Is(err, sessions.ErrNotFound) {
 			// Do not log a provider body, request, credential or stored provenance.
 			log.Warn(ctx, "Sandbox reset archive remains pending", "session_id", candidate.SessionID)
 		}

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestConfigurationSizeLimitSurvivesJSONBRoundTrip(t *testing.T) {
@@ -15,7 +17,7 @@ func TestConfigurationSizeLimitSurvivesJSONBRoundTrip(t *testing.T) {
 	tenant := uuid.NewString()
 	empty := `{"agent":{"model":"example","instructions":""},"environment":{"type":"none"}}`
 	raw := strings.Replace(empty, `"instructions":""`, `"instructions":"`+strings.Repeat("x", 512*1024-len(empty))+`"`, 1)
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "size-limit", Configuration: []byte(raw)}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "size-limit", Configuration: []byte(raw)}
 	first, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +31,7 @@ func TestConfigurationSizeLimitSurvivesJSONBRoundTrip(t *testing.T) {
 		t.Fatalf("configuration broke listing: %v", err)
 	}
 	input.Configuration = append(input.Configuration, ' ')
-	if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatalf("oversized request accepted: %v", err)
 	}
 }
@@ -38,7 +40,7 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "configured",
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "configured",
 		Configuration: []byte(`{"agent":{"model":"example","instructions":"First"},"environment":{"type":"none"}}`)}
 	first, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {
@@ -55,7 +57,7 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 		`{"agent":{"model":"example","instructions":"First"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`,
 	} {
 		input.Configuration = []byte(configuration)
-		if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+		if _, err := s.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatalf("changed snapshot was accepted: %v", err)
 		}
 	}
@@ -68,7 +70,7 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 func TestEmptyConfigurationCanonicalizationPreservesCreator(t *testing.T) {
 	s, _ := testStore(t)
 	tenant := uuid.NewString()
-	input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "empty-configuration"}
+	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "empty-configuration"}
 	first, err := s.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -81,7 +83,7 @@ func TestEmptyConfigurationCanonicalizationPreservesCreator(t *testing.T) {
 		}
 	}
 	input.Creator.ID += "-other"
-	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("another creator claimed the same request", err)
 	}
 }

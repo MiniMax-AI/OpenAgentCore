@@ -15,8 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var ErrUnappliedInputs = errors.New("turn has messages without an executor receipt")
-
 // CompleteExecution commits the outcome and native continuity under the admission lock.
 func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turnID, status string, outcome json.RawMessage, nativeID string, appliedThrough int64) (sessions.Turn, error) {
 	p, err := turnLookup(tenantID, sessionID, turnID)
@@ -24,22 +22,22 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 		return sessions.Turn{}, err
 	}
 	if !sessions.TerminalStatus(status) || len(outcome) > 512*1024 || len(nativeID) > 512 || appliedThrough < 0 {
-		return sessions.Turn{}, ErrInvalidInput
+		return sessions.Turn{}, sessions.ErrInvalidInput
 	}
 	outcome, err = jsonobject.Normalize(outcome)
 	if err != nil {
-		return sessions.Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
+		return sessions.Turn{}, fmt.Errorf("%w: %w", sessions.ErrInvalidInput, err)
 	}
 	var row sqlc.Turn
 	err = s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		current, err := q.GetTurn(ctx, p)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		} else if err != nil {
 			return err
 		}
 		if current.Status != sessions.TurnInProgress && (current.Status != sessions.TurnWaiting || status == sessions.TurnCompleted) {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		if status == sessions.TurnCompleted {
 			pending, err := q.HasUnappliedMessages(ctx, sqlc.HasUnappliedMessagesParams{SessionID: session, TurnID: p.ID, Sequence: appliedThrough})
@@ -47,7 +45,7 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 				return err
 			}
 			if pending {
-				return ErrUnappliedInputs
+				return sessions.ErrUnappliedInputs
 			}
 		}
 		sourceCompleted := pgtype.Timestamptz{}
@@ -58,12 +56,12 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 				} `json:"done"`
 			}
 			if json.Unmarshal(outcome, &snapshot) != nil {
-				return ErrInvalidInput
+				return sessions.ErrInvalidInput
 			}
 			if snapshot.Done != nil && snapshot.Done.SourceCompletedAtMS != nil {
 				ms := *snapshot.Done.SourceCompletedAtMS
 				if ms <= 0 {
-					return ErrInvalidInput
+					return sessions.ErrInvalidInput
 				}
 				// Native and Core timestamps come from independent host clocks.
 				// Preserve source time; committed activity uses the database clock.
@@ -72,7 +70,7 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 		}
 		row, err = q.TransitionTurn(ctx, sqlc.TransitionTurnParams{ID: p.ID, SessionID: session, ExpectedStatus: current.Status, NewStatus: status, Outcome: outcome, SourceCompletedAt: sourceCompleted})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		if err != nil {
 			return err
@@ -86,7 +84,7 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 				return err
 			}
 			if n != 1 {
-				return ErrNotFound
+				return sessions.ErrNotFound
 			}
 		}
 		row, err = q.GetTurn(ctx, p)

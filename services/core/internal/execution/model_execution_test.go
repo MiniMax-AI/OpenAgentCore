@@ -8,18 +8,18 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	var d Dispatcher
-	if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); err == nil {
+	if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); err == nil {
 		t.Fatal("missing Session credentials fell back")
 	}
 	// Hosted and self-hosted Runtimes have no model configuration of their own.
 	for _, environment := range []string{"openai_hosted", "self_hosted"} {
 		snapshot := Snapshot{Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
+		if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
 			t.Fatal("provider-free Session dispatched", environment, err)
 		}
 	}
@@ -27,7 +27,7 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	// Core sends only the Agent's model and instructions.
 	instructions := "Keep this instruction."
 	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: &v1.Environment{Type: "none"}}
-	request, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{})
+	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{})
 	if err != nil || !reflect.DeepEqual(request.AgentOptions, map[string]any{"model": "device-model", "system_prompt": &instructions}) {
 		t.Fatal("none Session received adapter options Core does not own", request.AgentOptions, err)
 	}

@@ -8,17 +8,15 @@ import (
 	"reflect"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-// Admission creates Sessions that admit work and submits Session input through
-// the execution Worker, which validates execution support first.
-type Admission interface {
-	CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error)
-	CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error)
-	SubmitInputs(context.Context, string, string, string, []store.Input) ([]store.InputReceipt, error)
+// InputAdmission submits Session input through the execution Worker, which
+// validates execution support first.
+type InputAdmission interface {
+	SubmitInputs(context.Context, string, string, string, []sessions.Input) ([]sessions.InputReceipt, error)
 }
 
 // @Summary Submit Session input events
@@ -53,7 +51,7 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	if key == "" {
 		key = uuid.NewString()
 	}
-	if err := store.ValidateInputKey(key); err != nil {
+	if err := sessions.ValidateInputKey(key); err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
@@ -85,7 +83,7 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	if _, err := h.Execution.Admission.SubmitInputs(r.Context(), tenantID(r), sessionID, key, inputs); err != nil {
+	if _, err := h.Execution.InputAdmission.SubmitInputs(r.Context(), tenantID(r), sessionID, key, inputs); err != nil {
 		writeInputError(w, r, err)
 		return
 	}
@@ -93,11 +91,11 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func executionInputs(events []json.RawMessage) ([]store.Input, error) {
+func executionInputs(events []json.RawMessage) ([]sessions.Input, error) {
 	if len(events) == 0 || len(events) > 64 {
-		return nil, store.ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
-	inputs := make([]store.Input, 0, len(events))
+	inputs := make([]sessions.Input, 0, len(events))
 	for _, raw := range events {
 		event, err := decodeInputEvent(raw)
 		if err != nil {
@@ -106,9 +104,9 @@ func executionInputs(events []json.RawMessage) ([]store.Input, error) {
 		switch event.Type {
 		case "agent.session.input.cancel":
 			if event.Input != nil {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
-			inputs = append(inputs, store.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)})
+			inputs = append(inputs, sessions.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)})
 		case "agent.session.input.tool_result":
 			input, err := functionResultInput(event)
 			if err != nil {
@@ -117,27 +115,27 @@ func executionInputs(events []json.RawMessage) ([]store.Input, error) {
 			inputs = append(inputs, input)
 		case "agent.session.input.message":
 			if len(event.Input) == 0 {
-				return nil, store.ErrInvalidInput
+				return nil, sessions.ErrInvalidInput
 			}
 			for _, message := range event.Input {
 				if message.Role != "user" || (message.Type != "" && message.Type != "message") || len(message.Content) == 0 {
-					return nil, store.ErrInvalidInput
+					return nil, sessions.ErrInvalidInput
 				}
 				converted := proto.MessageInput{{}}
 				for _, content := range message.Content {
 					converted[0].Content = append(converted[0].Content, proto.InputContent{Type: content.Type, Text: content.Text, ImageURL: content.ImageURL})
 				}
 				if converted.Validate() != nil || converted.ValidateInlineImages() != nil {
-					return nil, store.ErrInvalidInput
+					return nil, sessions.ErrInvalidInput
 				}
 			}
 			payload, err := json.Marshal(event)
 			if err != nil {
 				return nil, err
 			}
-			inputs = append(inputs, store.Input{Kind: "message", Payload: payload})
+			inputs = append(inputs, sessions.Input{Kind: "message", Payload: payload})
 		default:
-			return nil, store.ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 	}
 	return inputs, nil

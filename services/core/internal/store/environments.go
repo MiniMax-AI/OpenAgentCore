@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,18 +13,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
-
-// Environment retains execution ownership; its configuration is an internal snapshot, not a public response.
-type Environment struct {
-	Initialization string
-	ID             string
-	SessionID      string
-	TenantID       string
-	Status         string
-	CreatedAt      time.Time
-	Configuration  json.RawMessage
-}
 
 func createSessionEnvironment(ctx context.Context, q *sqlc.Queries, session sqlc.Session) error {
 	var snapshot struct {
@@ -34,7 +23,7 @@ func createSessionEnvironment(ctx context.Context, q *sqlc.Queries, session sqlc
 		} `json:"environment"`
 	}
 	if err := json.Unmarshal(session.Configuration, &snapshot); err != nil {
-		return fmt.Errorf("%w: invalid environment configuration", ErrInvalidInput)
+		return fmt.Errorf("%w: invalid environment configuration", sessions.ErrInvalidInput)
 	}
 	if snapshot.Environment == nil || snapshot.Environment.Type == "none" {
 		return nil
@@ -45,45 +34,45 @@ func createSessionEnvironment(ctx context.Context, q *sqlc.Queries, session sqlc
 			ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: session.ID,
 		})
 	default:
-		return fmt.Errorf("%w: unsupported environment type", ErrInvalidInput)
+		return fmt.Errorf("%w: unsupported environment type", sessions.ErrInvalidInput)
 	}
 }
 
-func (s *Store) GetEnvironment(ctx context.Context, tenantID, environmentID string) (Environment, error) {
+func (s *Store) GetEnvironment(ctx context.Context, tenantID, environmentID string) (sessions.Environment, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
-		return Environment{}, err
+		return sessions.Environment{}, err
 	}
 	id := pgunit.PathID(environmentID)
 	row, err := s.queries.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenant, ID: id})
 	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }
 
-func (s *Store) GetSessionEnvironment(ctx context.Context, tenantID, sessionID string) (Environment, error) {
+func (s *Store) GetSessionEnvironment(ctx context.Context, tenantID, sessionID string) (sessions.Environment, error) {
 	tenant, err := parseID(tenantID)
 	if err != nil {
-		return Environment{}, err
+		return sessions.Environment{}, err
 	}
 	id, err := parseID(sessionID)
 	if err != nil {
-		return Environment{}, err
+		return sessions.Environment{}, err
 	}
 	row, err := s.queries.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
 	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }
 
-func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration []byte, err error) (Environment, error) {
+func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration []byte, err error) (sessions.Environment, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Environment{}, ErrNotFound
+		return sessions.Environment{}, sessions.ErrNotFound
 	}
 	if err != nil {
-		return Environment{}, fmt.Errorf("get environment: %w", err)
+		return sessions.Environment{}, fmt.Errorf("get environment: %w", err)
 	}
 	configuration, err = jsonobject.Normalize(configuration)
 	if err != nil {
-		return Environment{}, fmt.Errorf("decode environment configuration: %w: %w", ErrInvalidInput, err)
+		return sessions.Environment{}, fmt.Errorf("decode environment configuration: %w: %w", sessions.ErrInvalidInput, err)
 	}
-	return Environment{
+	return sessions.Environment{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(),
 		TenantID: uuid.UUID(tenant.Bytes).String(), Status: row.Status,
 		Initialization: row.Initialization, CreatedAt: row.CreatedAt.Time, Configuration: configuration,

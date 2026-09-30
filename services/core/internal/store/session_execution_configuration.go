@@ -9,6 +9,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -28,12 +29,12 @@ func saveSessionExecutionConfiguration(ctx context.Context, q *sqlc.Queries, ses
 	}
 	if !sameExecutionValue(frozen.Model.Value, model) || frozen.Harness.Value == nil || *frozen.Harness.Value != session.Engine ||
 		!validExecutionSource(frozen.Model.Source) || !validExecutionSource(frozen.Harness.Source) {
-		return fmt.Errorf("%w: execution projection does not match Session configuration", ErrInvalidInput)
+		return fmt.Errorf("%w: execution projection does not match Session configuration", sessions.ErrInvalidInput)
 	}
 	switch frozen.ModelProvider.Source {
 	case "deployment":
 		if provider == nil {
-			return fmt.Errorf("%w: execution projection has no model provider", ErrInvalidInput)
+			return fmt.Errorf("%w: execution projection has no model provider", sessions.ErrInvalidInput)
 		}
 		// The deployment default is readable with the same Core key, so the
 		// safe view is recorded from the frozen bundle itself. Native options
@@ -45,13 +46,13 @@ func saveSessionExecutionConfiguration(ctx context.Context, q *sqlc.Queries, ses
 		}
 	case "session", "agent":
 		if provider == nil || frozen.ModelProvider.Status != "available" || frozen.ModelProvider.Configuration == nil || *frozen.ModelProvider.Configuration != *provider.SafeView() {
-			return fmt.Errorf("%w: execution projection does not match model provider", ErrInvalidInput)
+			return fmt.Errorf("%w: execution projection does not match model provider", sessions.ErrInvalidInput)
 		}
 	case "unknown":
 		frozen.ModelProvider.Status = "unavailable"
 		frozen.ModelProvider.Configuration = nil
 	default:
-		return fmt.Errorf("%w: invalid execution projection source", ErrInvalidInput)
+		return fmt.Errorf("%w: invalid execution projection source", sessions.ErrInvalidInput)
 	}
 	normalizeExecutionProjection(&frozen, uuid.UUID(session.ID.Bytes).String())
 	raw, err := json.Marshal(frozen)
@@ -70,7 +71,7 @@ func (s *Store) GetSessionExecutionConfiguration(ctx context.Context, tenantID, 
 	}
 	row, err := s.queries.GetSessionExecutionConfiguration(ctx, sqlc.GetSessionExecutionConfigurationParams{TenantID: tenant, SessionID: pgunit.PathID(sessionID)})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return v1.SessionExecutionConfiguration{}, ErrNotFound
+		return v1.SessionExecutionConfiguration{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return v1.SessionExecutionConfiguration{}, fmt.Errorf("get session execution configuration: %w", err)

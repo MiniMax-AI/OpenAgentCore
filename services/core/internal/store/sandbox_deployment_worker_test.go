@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -42,7 +43,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		return w, stop
 	}
 	w, stop := start()
-	input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)}
+	input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`)}
 	if _, err := w.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("uninitialized worker admitted hosted Session", err)
 	}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -69,7 +69,7 @@ func TestEnvironmentFileCreateDestinationConflicts(t *testing.T) {
 		{execution.ErrEnvironmentFileDirectory, "invalid_request_error", conflict},
 		{execution.ErrEnvironmentFileUnsafe, "invalid_request_error", unsafe},
 		// A generic installer rejection keeps the local code.
-		{store.ErrInvalidInput, "invalid_request", "Invalid resource identifier or request limits."},
+		{sessions.ErrInvalidInput, "invalid_request", "Invalid resource identifier or request limits."},
 	} {
 		f.err = tc.err
 		assertListQueryError(t, requestCreateEnvironmentFile(h, f.environment.ID, body, "files-key"), tc.code, nil, tc.message)

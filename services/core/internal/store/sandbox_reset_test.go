@@ -353,7 +353,7 @@ func TestSandboxResetPaginationSkipsBusyPrefixAndPreservesSelfHosted(t *testing.
 	if err != nil || len(second) != 2 {
 		t.Fatal(second, err)
 	}
-	if _, err := w.ArchiveSandboxResetSession(t.Context(), selfTenant, self.ID, 1, reset.Reset.RequestedAt); !errors.Is(err, ErrInvalidInput) {
+	if _, err := w.ArchiveSandboxResetSession(t.Context(), selfTenant, self.ID, 1, reset.Reset.RequestedAt); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("self-hosted reset archive", err)
 	}
 	view, err := s.GetSession(t.Context(), selfTenant, self.ID)

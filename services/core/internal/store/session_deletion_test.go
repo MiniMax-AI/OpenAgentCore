@@ -52,7 +52,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 	tenant := uuid.NewString()
 	for _, status := range []string{sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnCompleted, sessions.TurnFailed} {
 		t.Run(status, func(t *testing.T) {
-			input := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: status}
+			input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: status}
 			session, err := s.CreateSession(ctx, tenant, input)
 			if err != nil {
 				t.Fatal(err)
@@ -62,7 +62,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				t.Fatal(err)
 			}
 			if status != sessions.TurnQueued {
-				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -72,7 +72,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+			if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			if status == sessions.TurnQueued || status == sessions.TurnInProgress {
@@ -81,7 +81,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("active Session deleted", err)
 				}
 				turn, err := s.GetTurn(ctx, tenant, session.ID, receipt.TurnID)
@@ -100,7 +100,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 				if status == sessions.TurnInProgress {
-					if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+					if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 						t.Fatal("cancelling Session deleted", err)
 					}
 					if _, err := s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnCancelled, nil, "", receipt.Sequence); err != nil {
@@ -118,29 +118,29 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				if err := repeat.DeleteSession(ctx, tenant, session.ID); err != nil {
 					t.Fatal("repeated deletion", err)
 				}
-				if err := repeat.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+				if err := repeat.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("foreign deleted Session", err)
 				}
 			}
 			if again := sessionDeletedAt(t, pool, session.ID); again != marker {
 				t.Fatal("repeated deletion rewrote the marker", marker, again)
 			}
-			if _, err := fresh.GetSession(ctx, tenant, session.ID); !errors.Is(err, ErrNotFound) {
+			if _, err := fresh.GetSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.CreateSession(ctx, tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+			if _, err := fresh.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.CreateSessionStream(ctx, tenant, input); !errors.Is(err, ErrIdempotencyConflict) {
+			if _, err := fresh.CreateSessionStream(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`)); !errors.Is(err, ErrNotFound) {
+			if _, err := fresh.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`)); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.RequestCancel(ctx, tenant, session.ID, "late-cancel"); !errors.Is(err, ErrNotFound) {
+			if _, err := fresh.RequestCancel(ctx, tenant, session.ID, "late-cancel"); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.ListItems(ctx, tenant, session.ID, "", 20, true); !errors.Is(err, ErrNotFound) {
+			if _, err := fresh.ListItems(ctx, tenant, session.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			turn, err := fresh.GetTurn(ctx, tenant, session.ID, receipt.TurnID)
@@ -154,17 +154,17 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if turn.Status != want {
 				t.Fatal(turn)
 			}
-			if _, err := fresh.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, ErrTurnConflict) {
+			if _, err := fresh.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
 			inputs, err := fresh.ListTurnInputs(ctx, tenant, session.ID, receipt.TurnID, 0, 20)
 			if err != nil || len(inputs) == 0 || inputs[0].Sequence != receipt.Sequence {
 				t.Fatal(inputs, err)
 			}
-			if _, err := fresh.SessionEventCursor(ctx, tenant, session.ID); !errors.Is(err, ErrNotFound) {
+			if _, err := fresh.SessionEventCursor(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, ErrNotFound) {
+			if _, err := fresh.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 		})
@@ -175,7 +175,7 @@ func TestSessionDeletionSerializesAdmissionBeforeRetryLookup(t *testing.T) {
 	s, pool := testStore(t)
 	ctx := t.Context()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "creation"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "creation"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestSessionDeletionSerializesAdmissionBeforeRetryLookup(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-done; !errors.Is(err, ErrNotFound) {
+	if err := <-done; !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("retry admitted after deletion", err)
 	}
 }
@@ -264,7 +264,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			tenant, session := environmentInputSession(t, s)
 			return tenant, session.ID
 		}, func(ctx context.Context, s *Store, tenant, session string) error {
-			_, err := s.ReserveEnvironmentInput(ctx, tenant, session, "racing", []Input{messageInput("racing")})
+			_, err := s.ReserveEnvironmentInput(ctx, tenant, session, "racing", []sessions.Input{messageInput("racing")})
 			return err
 		}},
 	}
@@ -291,7 +291,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			if err := kind.admit(t.Context(), s, tenant, session); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-deleted; !errors.Is(err, ErrSessionNotIdle) {
+			if err := <-deleted; !errors.Is(err, sessions.ErrNotIdle) {
 				t.Fatal("deletion ignored committed admission", err)
 			}
 			if sessionDeletedAt(t, pool, session).Valid {
@@ -318,7 +318,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			if err := s.DeleteSession(t.Context(), tenant, session); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-admitted; !errors.Is(err, ErrNotFound) {
+			if err := <-admitted; !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("admission after deletion", err)
 			}
 			var turns, reservations int
@@ -351,7 +351,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 				for _, err := range []error{first, second} {
 					if err != nil {
 						failures++
-						if !errors.Is(err, ErrSessionNotIdle) && !errors.Is(err, ErrNotFound) {
+						if !errors.Is(err, sessions.ErrNotIdle) && !errors.Is(err, sessions.ErrNotFound) {
 							t.Fatal(err)
 						}
 					}
@@ -373,7 +373,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	input := managerSessionInput("reserved-input")
-	input.InitialInputs = []Input{messageInput("reserved")}
+	input.InitialInputs = []sessions.Input{messageInput("reserved")}
 	session, err := s.CreateSession(ctx, tenant, input)
 	if err != nil {
 		t.Fatal(err)
@@ -401,10 +401,10 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	if before.deleted.Valid || before.released.Valid || before.retained != 1 || before.reserved != 1 {
 		t.Fatal("unexpected reserved placement", before)
 	}
-	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign deletion", err)
 	}
-	if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, ErrSessionNotIdle) {
+	if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("provisioning input deleted", err)
 	}
 	if after := read(); after != before {
@@ -429,7 +429,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	if again := read(); again != deleted {
 		t.Fatal("repeated deletion changed timestamps", deleted, again)
 	}
-	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign deletion of a deleted Session", err)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -41,7 +42,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	}
 	setup := environmentconfig.Setup{Plugins: []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin-proof", Description: "A proof."}, Archive: archive.Bytes()}}, CapabilityDirectories: []string{"/workspace/generated"}}
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	request := CreateSessionInput{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup}
+	request := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup}
 	session, err := s.CreateSession(t.Context(), tenant, request)
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +64,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err != nil || retry.ID != session.ID {
 		t.Fatal("retry", err)
 	}
-	if _, err = s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, ErrNotFound) {
+	if _, err = s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign snapshot", err)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
@@ -43,7 +43,7 @@ func (h *Handler) writeAuditScope(w http.ResponseWriter, r *http.Request, allowe
 	}
 	tenant, ok := r.Context().Value(adminTenantContextKey{}).(string)
 	if !ok || tenant == "" {
-		writeStoreError(w, r, store.ErrNotFound)
+		writeStoreError(w, r, sessions.ErrNotFound)
 		return nil, "", false
 	}
 	return values, tenant, true

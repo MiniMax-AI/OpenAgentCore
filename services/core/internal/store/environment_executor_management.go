@@ -4,70 +4,45 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
-
-// ExecutorCredential is the metadata of one Environment executor credential.
-// Its secret is returned only when issued or rotated.
-type ExecutorCredential struct {
-	KeyID     string     `json:"key_id" format:"uuid"`
-	CreatedAt time.Time  `json:"created_at"`
-	RevokedAt *time.Time `json:"revoked_at" extensions:"x-nullable"`
-}
 
 // The Project* methods serve Core-key executor credential management. project
 // is the Project's own principal, which becomes the credential's execution
 // principal; the target must be a self_hosted Environment of that Project whose
 // Session is not deleted, and only credentials restricted to it are managed.
 
-// ExecutorConnectionState is an internal durable observation, never a wire payload.
-// In particular the current credential digest must not be serialized.
-type ExecutorConnectionState struct {
-	DeviceID          string     `json:"-"`
-	BoundKeyID        *string    `json:"-"`
-	EnrolledAt        *time.Time `json:"-"`
-	LastSeenAt        *time.Time `json:"-"`
-	CredentialHash    string     `json:"-"`
-	EnvironmentStatus string     `json:"-"`
-}
-
-type ExecutorCredentialState struct {
-	EnvironmentID string `json:"-"`
-	Credentials   []ExecutorCredential
-	Connection    ExecutorConnectionState
-}
-
-func (s *Store) ListProjectExecutorCredentials(ctx context.Context, project identity.Principal, environment string) ([]ExecutorCredential, error) {
+func (s *Store) ListProjectExecutorCredentials(ctx context.Context, project identity.Principal, environment string) ([]sessions.ExecutorCredential, error) {
 	state, err := s.ProjectExecutorCredentialState(ctx, project, environment)
 	return state.Credentials, err
 }
 
 // ProjectExecutorCredentialState reads list metadata and binding facts in one
 // read-only snapshot. The snapshot ends before any live peer/authority observation.
-func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project identity.Principal, environment string) (ExecutorCredentialState, error) {
+func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project identity.Principal, environment string) (sessions.ExecutorCredentialState, error) {
 	if err := project.Validate(); err != nil {
-		return ExecutorCredentialState{}, ErrInvalidInput
+		return sessions.ExecutorCredentialState{}, sessions.ErrInvalidInput
 	}
 	tenant, err := parseID(project.TenantID)
 	if err != nil {
-		return ExecutorCredentialState{}, err
+		return sessions.ExecutorCredentialState{}, err
 	}
 	environmentID := pgunit.PathID(environment)
-	result := ExecutorCredentialState{Credentials: []ExecutorCredential{}}
+	result := sessions.ExecutorCredentialState{Credentials: []sessions.ExecutorCredential{}}
 	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		row, err := q.GetEnvironmentExecutorConnection(ctx, sqlc.GetEnvironmentExecutorConnectionParams{EnvironmentID: environmentID, TenantID: tenant})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
@@ -100,7 +75,7 @@ func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project iden
 			return err
 		}
 		for _, row := range rows {
-			credential := ExecutorCredential{KeyID: uuid.UUID(row.KeyID.Bytes).String(), CreatedAt: row.CreatedAt.Time}
+			credential := sessions.ExecutorCredential{KeyID: uuid.UUID(row.KeyID.Bytes).String(), CreatedAt: row.CreatedAt.Time}
 			if row.RevokedAt.Valid {
 				revoked := row.RevokedAt.Time
 				credential.RevokedAt = &revoked
@@ -116,19 +91,19 @@ func (s *Store) ProjectExecutorCredentialState(ctx context.Context, project iden
 // secret of an existing key restricted to the Environment. An archived Project
 // gets neither (projects.ErrArchived). The administrator audit entry commits in
 // the same transaction and never contains the secret.
-func (s *Store) IssueProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string, rotate bool) (IssuedExecutorCredential, error) {
+func (s *Store) IssueProjectExecutorCredential(ctx context.Context, project identity.Principal, environment, keyID string, rotate bool) (sessions.IssuedExecutorCredential, error) {
 	// The target is checked first, then the archived Project, then the key.
 	if err := s.selfHostedExecutorTarget(ctx, project, environment); err != nil {
-		return IssuedExecutorCredential{}, err
+		return sessions.IssuedExecutorCredential{}, err
 	}
 	if err := activeProject(ctx, s.queries, project); err != nil {
-		return IssuedExecutorCredential{}, err
+		return sessions.IssuedExecutorCredential{}, err
 	}
 	if !rotate {
 		return s.issueExecutorCredential(ctx, project, keyID, environment, activeProjectAudit(project, "issue", keyID))
 	}
 	if err := s.exactExecutorRestriction(ctx, project, environment, keyID); err != nil {
-		return IssuedExecutorCredential{}, err
+		return sessions.IssuedExecutorCredential{}, err
 	}
 	return s.rotateExecutorCredential(ctx, project, keyID, activeProjectAudit(project, "rotate", keyID))
 }
@@ -154,7 +129,7 @@ func (s *Store) RevokeProjectExecutorCredential(ctx context.Context, project ide
 			return err
 		}
 		if n == 0 {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		return record(ctx, q)
 	})
@@ -187,7 +162,7 @@ func activeProject(ctx context.Context, q *sqlc.Queries, project identity.Princi
 	}
 	row, err := q.LockProjectByTenant(ctx, tenant)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrNotFound
+		return sessions.ErrNotFound
 	}
 	if err != nil {
 		return err
@@ -200,7 +175,7 @@ func activeProject(ctx context.Context, q *sqlc.Queries, project identity.Princi
 
 func (s *Store) selfHostedExecutorTarget(ctx context.Context, principal identity.Principal, environment string) error {
 	if err := principal.Validate(); err != nil {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	owned, err := s.GetEnvironment(ctx, principal.TenantID, environment)
 	if err != nil {
@@ -210,7 +185,7 @@ func (s *Store) selfHostedExecutorTarget(ctx context.Context, principal identity
 		Type string `json:"type"`
 	}
 	if json.Unmarshal(owned.Configuration, &configuration) != nil || configuration.Type != "self_hosted" {
-		return ErrNotFound
+		return sessions.ErrNotFound
 	}
 	return nil
 }
@@ -228,7 +203,7 @@ func (s *Store) exactExecutorRestriction(ctx context.Context, principal identity
 	// Restrictions and principals are immutable, so checking before the
 	// rotation or revocation transaction cannot authorize a different target.
 	if !actual.Valid || actual != want {
-		return ErrNotFound
+		return sessions.ErrNotFound
 	}
 	return nil
 }

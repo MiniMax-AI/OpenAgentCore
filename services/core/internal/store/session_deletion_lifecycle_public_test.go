@@ -41,12 +41,12 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	client := pathIDClient{t: t, server: server}
 	writer := executionOwner(t, db, s).Store
 
-	create := func(environment string, initial bool) store.Session {
+	create := func(environment string, initial bool) sessions.Session {
 		t.Helper()
-		input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{` + deletionAgent + `,"environment":` + environment + `}`)}
 		if initial {
-			input.InitialInputs = []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
+			input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
 		}
 		session, err := s.CreateSession(ctx, tenant, input)
 		if err != nil {
@@ -70,11 +70,11 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			case "cancel":
 				_, err = s.RequestCancel(ctx, tenant, session.ID, "cancel")
 			case "function":
-				err = s.RecordFunctionCall(ctx, tenant, session.ID, receipt.TurnID, store.FunctionCall{CallID: "pending", ExecutorCallID: "native-pending", Name: "lookup", Arguments: json.RawMessage(`{}`)})
+				err = s.RecordFunctionCall(ctx, tenant, session.ID, receipt.TurnID, sessions.FunctionCall{CallID: "pending", ExecutorCallID: "native-pending", Name: "lookup", Arguments: json.RawMessage(`{}`)})
 			case sessions.TurnCompleted, sessions.TurnFailed:
 				_, err = s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence)
 			default:
-				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: from, Status: status})
+				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: from, Status: status})
 				from = status
 			}
 			if err != nil {
@@ -83,15 +83,15 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 		}
 		return session.ID
 	}
-	reserve := func(session store.Session) store.EnvironmentInputReservation {
+	reserve := func(session sessions.Session) sessions.EnvironmentInputReservation {
 		t.Helper()
-		reservation, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "later", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}})
-		if err != nil || reservation.State != store.EnvironmentInputPending {
+		reservation, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}})
+		if err != nil || reservation.State != sessions.EnvironmentInputPending {
 			t.Fatal(reservation, err)
 		}
 		return reservation
 	}
-	connect := func(session store.Session) {
+	connect := func(session sessions.Session) {
 		t.Helper()
 		generation := uuid.NewString()
 		if err := writer.ReplaceEnvironmentConnection(ctx, tenant, session.Environment.ID, generation); err != nil {

@@ -11,7 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // The leased Worker owns preparation for every Environment. Compute managers
@@ -48,7 +48,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			}
 			if owner.State == "running" {
 				// Lost process-local progress cannot prove which side effects ran.
-				if err := w.dispatcher.Store.FailEnvironmentInitialization(ctx, owner, store.ProvisioningFailure{}); err != nil && !errors.Is(err, store.ErrNotFound) {
+				if err := w.dispatcher.Store.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
 					return err
 				}
 				continue
@@ -58,7 +58,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			}
 			peer, err := w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
 			if err != nil {
-				if errors.Is(err, store.ErrNotFound) || errors.Is(err, runtimegateway.ErrSessionClosed) || errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
+				if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, runtimegateway.ErrSessionClosed) || errors.Is(err, runtimegateway.ErrDeviceNotRegistered) {
 					continue
 				}
 				return err
@@ -68,20 +68,20 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 				continue
 			}
 			if !found || !harness.Available {
-				if err := w.dispatcher.Store.FailEnvironmentInitialization(ctx, owner, store.ProvisioningFailure{Step: store.ProvisioningHarness}); err != nil && !errors.Is(err, store.ErrNotFound) {
+				if err := w.dispatcher.Store.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{Step: sessions.ProvisioningHarness}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
 					return err
 				}
 				continue
 			}
 			if err := w.dispatcher.Store.ClaimEnvironmentInitialization(ctx, owner); err != nil {
-				if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrTurnConflict) {
+				if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, sessions.ErrTurnConflict) {
 					continue
 				}
 				return err
 			}
 			active[owner.EnvironmentID] = true
 			running.Add(1)
-			go func(owner store.EnvironmentInitialization) {
+			go func(owner sessions.EnvironmentInitialization) {
 				defer running.Done()
 				w.initializeEnvironment(ctx, owner)
 				done <- owner.EnvironmentID
@@ -90,10 +90,10 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 	}
 }
 
-func (w *Worker) initializeEnvironment(ctx context.Context, owner store.EnvironmentInitialization) {
+func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.EnvironmentInitialization) {
 	operation, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
-	failure := store.ProvisioningFailure{}
+	failure := sessions.ProvisioningFailure{}
 	err := w.prepareEnvironment(operation, owner, &failure)
 	if err == nil {
 		err = w.dispatcher.Store.CompleteEnvironmentInitialization(operation, owner)
@@ -107,7 +107,7 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner store.Environm
 	}
 }
 
-func (w *Worker) prepareEnvironment(ctx context.Context, owner store.EnvironmentInitialization, failure *store.ProvisioningFailure) error {
+func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.EnvironmentInitialization, failure *sessions.ProvisioningFailure) error {
 	environment, err := w.dispatcher.Store.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
 	if err != nil {
 		return err
@@ -116,7 +116,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner store.Environment
 		Files []environmentconfig.InitialFileMetadata `json:"files"`
 	}
 	if json.Unmarshal(environment.Configuration, &cfg) != nil || len(cfg.Files) > 50 {
-		return store.ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	setup, err := w.dispatcher.Store.ReadEnvironmentSetup(ctx, owner.TenantID, owner.SessionID)
 	if err != nil {
@@ -138,7 +138,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner store.Environment
 				err = errors.New("Runtime connection changed during initialization")
 			}
 		}
-		candidate := store.ProvisioningFailure{Step: store.ProvisioningInitialFile}
+		candidate := sessions.ProvisioningFailure{Step: sessions.ProvisioningInitialFile}
 		if err == nil && index < len(cfg.Files) {
 			var metadata environmentconfig.InitialFileMetadata
 			var body []byte

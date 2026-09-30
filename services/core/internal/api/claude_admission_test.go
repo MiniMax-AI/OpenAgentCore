@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestClaudeSessionConfigurationAdmission(t *testing.T) {
@@ -47,9 +47,9 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 						d.Engine = "claude_sdk"
 						admitSessions(d, f)
 						// The Worker's stream admission reports that it cannot execute.
-						f.admission.createSessionStream = func(_ context.Context, _ string, input store.CreateSessionInput) (store.SessionCreation, error) {
+						f.sessionAdmission.createSessionStream = func(_ context.Context, _ string, input sessions.CreateSession) (sessions.Creation, error) {
 							streamed = input.Engine
-							return store.SessionCreation{}, execution.ErrExecutionUnavailable
+							return sessions.Creation{}, execution.ErrExecutionUnavailable
 						}
 						f.metrics.recordUnavailable = func() {}
 					})

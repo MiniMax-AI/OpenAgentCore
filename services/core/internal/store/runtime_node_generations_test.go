@@ -7,6 +7,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -33,7 +34,7 @@ func generationHeartbeat(t *testing.T, s *Store, node deployment.Enrollment, con
 	}
 }
 
-func placedGeneration(t *testing.T, s *Store, session Session) (string, int64) {
+func placedGeneration(t *testing.T, s *Store, session sessions.Session) (string, int64) {
 	t.Helper()
 	var node string
 	var generation int64

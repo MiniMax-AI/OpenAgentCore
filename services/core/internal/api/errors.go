@@ -9,9 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -57,20 +54,6 @@ func writeAPIError(w http.ResponseWriter, status int, code, message string, deta
 	writeJSON(w, status, v1.ErrorResponse{Error: v1.APIError{Message: message, Type: kind, Code: errorCode, Param: errorParam}})
 }
 
-// writeInputError reports Session input admission failures. Input that the
-// Session cannot accept in its current state is the official conflict_error;
-// Idempotency-Key reuse keeps Core's local idempotency_conflict code.
-func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, store.ErrSessionInputPending):
-		writeError(w, http.StatusConflict, "conflict_error", "Earlier input to this Session is still pending.")
-	case errors.Is(err, store.ErrTurnConflict):
-		writeError(w, http.StatusConflict, "conflict_error", "The Turn cannot accept this input in its current state.")
-	default:
-		writeStoreError(w, r, err)
-	}
-}
-
 // writeContentTooLarge reports uploaded or copied content beyond the
 // operation's limit.
 func writeContentTooLarge(w http.ResponseWriter) {
@@ -102,7 +85,9 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFoundParam ...string) {
+// writeStoreError reports a failure of an operation that can meet a sandbox
+// reset or a deployment's sandbox resources, then the Session errors.
+func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	// A reset's resource check unwraps to deployment.ErrConflict and admission
 	// paused by a reset is Session admission's, so both precede the deployment errors.
 	var inUse *store.SandboxInUseError
@@ -117,57 +102,7 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 	if writeSandboxError(w, err) {
 		return
 	}
-	var cursor *store.InvalidCursorError
-	switch {
-	case errors.Is(err, projects.ErrArchived):
-		// Executor credential management checks the Project in its own
-		// transaction.
-		writeProjectsError(w, r, err)
-	case errors.Is(err, store.ErrInstallationAuthorization):
-		writeError(w, http.StatusUnauthorized, "installation_authorization_invalid", store.ErrInstallationAuthorization.Error())
-	case errors.Is(err, store.ErrExecutorCredentialExists):
-		writeError(w, http.StatusConflict, "executor_credential_exists", "This executor key ID already exists. Explicitly rotate it to replace the secret.")
-	case errors.Is(err, execution.ErrModelProviderRequired):
-		writeError(w, http.StatusBadRequest, "model_provider_required", "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved.")
-	case errors.Is(err, store.ErrHostedEnvironmentFailed):
-		// Observed official status, type, code, null param and message.
-		writeError(w, http.StatusConflict, "conflict_error", "the hosted environment failed to provision")
-	case errors.Is(err, store.ErrEnvironmentUnavailable):
-		writeError(w, http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input.")
-	case errors.Is(err, execution.ErrEnvironmentInputExpired):
-		writeError(w, http.StatusConflict, "environment_input_expired", "The environment input deadline elapsed before admission.")
-	case errors.Is(err, execution.ErrEnvironmentInputCancelled):
-		writeError(w, http.StatusConflict, "environment_input_cancelled", "The environment input was cancelled before admission.")
-	case errors.Is(err, execution.ErrWhitespaceOnlyText):
-		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", "This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.")
-	case errors.Is(err, execution.ErrExecutionUnavailable):
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
-	case errors.As(err, &cursor):
-		// Observed official fields for an unresolved Beta list cursor, with a null param.
-		writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
-	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found_error", "Resource not found.", notFoundParam...)
-	case errors.Is(err, store.ErrSessionNotIdle):
-		// Observed official status, type, code, null param and message.
-		writeError(w, http.StatusConflict, "conflict_error", "session must be durably idle or failed without required actions before deletion")
-	case errors.Is(err, store.ErrUnknownFunctionCall):
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "Unknown pending tool call.")
-	case errors.Is(err, store.ErrFunctionCallTurnMismatch):
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "The tool call belongs to a different Turn.")
-	case errors.Is(err, store.ErrFunctionResultConflict):
-		writeError(w, http.StatusConflict, "conflict_error", "The tool call already has a different result.")
-	case errors.Is(err, store.ErrTurnConflict):
-		writeError(w, http.StatusConflict, "turn_conflict", "The Turn cannot accept this input in its current state.")
-	case errors.Is(err, store.ErrIdempotencyConflict):
-		writeError(w, http.StatusConflict, "idempotency_conflict", "This idempotency key was used with different input.")
-	case errors.Is(err, store.ErrInvalidInput), errors.Is(err, environmentconfig.ErrInvalid):
-		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
-	default:
-		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
-			return
-		}
-		writeInternalError(w, r)
-	}
+	writeSessionsError(w, r, err)
 }
 
 // invalidInputMessage accompanies the 400 invalid_request for invalid

@@ -14,7 +14,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -22,8 +22,8 @@ import (
 // fakeSessions with record.
 type recordingStore struct {
 	tenant            string
-	input             store.CreateSessionInput
-	sessions          []store.Session
+	input             sessions.CreateSession
+	sessions          []sessions.Session
 	nextSessionCursor string
 	listTenant        string
 	listAfter         string
@@ -31,27 +31,28 @@ type recordingStore struct {
 	listAscending     bool
 }
 
-func (s *recordingStore) ListSessions(_ context.Context, tenant, after string, limit int, ascending bool, _ *string) (store.SessionPage, error) {
+func (s *recordingStore) ListSessions(_ context.Context, tenant, after string, limit int, ascending bool, _ *string) (sessions.Page, error) {
 	s.listTenant, s.listAfter, s.listLimit, s.listAscending = tenant, after, limit, ascending
-	return store.SessionPage{Sessions: append([]store.Session(nil), s.sessions...), NextCursor: s.nextSessionCursor}, nil
+	return sessions.Page{Sessions: append([]sessions.Session(nil), s.sessions...), NextCursor: s.nextSessionCursor}, nil
 }
 
-func (s *recordingStore) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
-	return store.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
+func (s *recordingStore) GetSession(_ context.Context, tenant, id string) (sessions.Session, error) {
+	return sessions.Session{ID: id, TenantID: tenant, Configuration: json.RawMessage(`{"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *recordingStore) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error) {
-	return store.SessionCreation{}, store.ErrNotFound
+func (s *recordingStore) FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error) {
+	return sessions.Creation{}, sessions.ErrNotFound
 }
 
-func (s *recordingStore) CreateSession(_ context.Context, tenant string, input store.CreateSessionInput) (store.Session, error) {
+func (s *recordingStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	s.tenant, s.input = tenant, input
-	return store.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, nil
+	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, nil
 }
 
 // record answers Session creation, reads and listing from s.
 func (s *recordingStore) record(f *testFakes) {
-	f.sessions.createSession, f.sessions.getSession, f.sessions.findSessionCreation, f.sessions.listSessions = s.CreateSession, s.GetSession, s.FindSessionCreation, s.ListSessions
+	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = s.CreateSession, s.FindSessionCreation
+	f.sessions.getSession, f.sessions.listSessions = s.GetSession, s.ListSessions
 }
 
 // testHandler serves strict fakes for a fresh tenant whose caller
@@ -78,7 +79,7 @@ func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (ht
 // does for a Session with initial input, into the recording store.
 func admitSessions(d *Dependencies, f *testFakes) {
 	d.Execution = f.execution()
-	f.admission.createSession = f.sessions.createSession
+	f.sessionAdmission.createSession = f.sessionCreation.createSession
 }
 
 func TestHTTPConfigurationAndTenantIdentity(t *testing.T) {

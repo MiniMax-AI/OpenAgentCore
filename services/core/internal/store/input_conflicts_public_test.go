@@ -55,10 +55,10 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 
 	create := func(environment string, initial bool) string {
 		t.Helper()
-		input := store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 			Configuration: json.RawMessage(`{` + conflictAgent + `,"environment":` + environment + `}`)}
 		if initial {
-			input.InitialInputs = []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
+			input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"reserved"}`)}}
 		}
 		session, err := s.CreateSession(ctx, tenant, input)
 		if err != nil {
@@ -67,21 +67,21 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		return session.ID
 	}
 	// waiting starts a Turn that waits for one function result.
-	waiting := func(session, key, call string) store.InputReceipt {
+	waiting := func(session, key, call string) sessions.InputReceipt {
 		t.Helper()
 		receipt, err := s.SubmitMessage(ctx, tenant, session, key, json.RawMessage(`{"text":"work"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, store.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
+		if err := s.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, sessions.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 		return receipt
 	}
-	complete := func(session string, receipt store.InputReceipt, call string) {
+	complete := func(session string, receipt sessions.InputReceipt, call string) {
 		t.Helper()
 		if err := s.ConfirmFunctionResult(ctx, tenant, session, receipt.TurnID, call); err != nil {
 			t.Fatal(err)

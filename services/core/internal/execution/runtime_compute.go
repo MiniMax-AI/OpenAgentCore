@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -175,7 +176,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	// The Session-locked phase commit checks pending work and wake requests.
 	// A competing request keeps its queue position and resumes this source.
 	suspending, err := r.saveCompute(ctx, next, "suspending", state, &until)
-	if errors.Is(err, store.ErrTurnConflict) {
+	if errors.Is(err, sessions.ErrTurnConflict) {
 		state.Rollback = true
 		next, err = r.saveCompute(ctx, next, "waking", state, &until)
 		if err != nil {

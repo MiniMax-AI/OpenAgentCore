@@ -26,11 +26,11 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
-	session, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture"})
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := s.CreateSession(ctx, tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
+	other, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,11 +38,11 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"a", "b", "c", "rollback", "late"} {
-		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, store.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
+		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -107,7 +107,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil || len(history) != 6 {
 		t.Fatal(history, err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
 		t.Fatal(err)
 	}
 	next, err := s.SubmitMessage(ctx, tenant, session.ID, "next", json.RawMessage(`{"text":"next"}`))

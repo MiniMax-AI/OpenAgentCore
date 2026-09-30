@@ -78,14 +78,14 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	}
 	var snapshot Snapshot
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
-		return sessions.Turn{}, store.ErrInvalidInput
+		return sessions.Turn{}, sessions.ErrInvalidInput
 	}
 	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
 	if !environmentNone(snapshot) {
-		return sessions.Turn{}, store.ErrInvalidInput
+		return sessions.Turn{}, sessions.ErrInvalidInput
 	}
 	text, through, err := d.initialInput(ctx, tenantID, sessionID, turnID)
 	if err != nil {
@@ -104,7 +104,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 		return sessions.Turn{}, err
 	}
 	defer prepared.close()
-	if _, err := d.Store.TransitionTurn(ctx, tenantID, sessionID, turnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := d.Store.TransitionTurn(ctx, tenantID, sessionID, turnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		return sessions.Turn{}, err
 	}
 	req.ConversationID, req.RunID, req.Input = sessionID, turnID, text
@@ -131,7 +131,7 @@ func (d *Dispatcher) finishRun(tenantID, sessionID, turnID, model string, result
 		status, nativeID = sessions.TurnFailed, ""
 	}
 	turn, err := d.Store.CompleteExecution(finishCtx, tenantID, sessionID, turnID, status, encoded, nativeID, result.AppliedThrough)
-	if errors.Is(err, store.ErrUnappliedInputs) {
+	if errors.Is(err, sessions.ErrUnappliedInputs) {
 		result.ErrorCode = "input_not_applied"
 		encoded, _ = json.Marshal(result)
 		turn, err = d.Store.CompleteExecution(finishCtx, tenantID, sessionID, turnID, sessions.TurnFailed, encoded, nativeID, result.AppliedThrough)

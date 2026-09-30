@@ -13,10 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// ErrSessionNotIdle rejects deletion of a Session that still has work or input
-// pending. Callers cancel first and delete after the Session settles.
-var ErrSessionNotIdle = errors.New("session must be durably idle or failed without required actions before deletion")
-
 // DeleteSession removes public access to a durably idle or failed Session while
 // retaining state needed to settle execution. The decision is taken under the
 // Session lock that also orders Turn and input admission, so a concurrent
@@ -53,7 +49,7 @@ func (s *Store) DeleteSession(ctx context.Context, tenantID, sessionID string) e
 // hosted initial input while provisioning. Terminal idle and failed Sessions pass.
 func requireSessionSettled(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 	if _, err := q.GetActiveTurn(ctx, session); err == nil {
-		return ErrSessionNotIdle
+		return sessions.ErrNotIdle
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
@@ -62,7 +58,7 @@ func requireSessionSettled(ctx context.Context, q *sqlc.Queries, session pgtype.
 		return err
 	}
 	if pending {
-		return ErrSessionNotIdle
+		return sessions.ErrNotIdle
 	}
 	return nil
 }

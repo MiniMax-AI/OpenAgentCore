@@ -28,7 +28,7 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 	}
 	environment, err := parseID(environmentID)
 	if err != nil || input == nil {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	// Authorize before reading caller-controlled bytes or allocating storage.
 	owned, err := s.GetSessionEnvironment(ctx, tenantID, sessionID)
@@ -36,7 +36,7 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 		return err
 	}
 	if owned.ID != environmentID {
-		return ErrNotFound
+		return sessions.ErrNotFound
 	}
 	var configuration struct {
 		Type string `json:"type"`
@@ -45,7 +45,7 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 		return err
 	}
 	if configuration.Type != "openai_hosted" && configuration.Type != "self_hosted" {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		rows, err := captureArtifactArchive(ctx, tx, input)
@@ -55,20 +55,20 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 		q := s.queries.WithTx(tx)
 		locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
 		if locked.DeletedAt.Valid {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		turn, err := q.GetTurn(ctx, lookup)
 		if err != nil {
 			return err
 		}
 		if turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.Valid {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		for _, row := range rows {
 			row.SessionID, row.TurnID, row.EnvironmentID = lookup.SessionID, lookup.ID, environment
@@ -94,7 +94,7 @@ func captureArtifactArchive(ctx context.Context, tx pgx.Tx, input io.Reader) ([]
 			return nil, err
 		}
 		if header.Typeflag != tar.TypeReg || !strings.HasPrefix(header.Name, "outputs/") || !fs.ValidPath(header.Name) || strings.ContainsAny(header.Name, "\\\x00\r\n") || len(header.Name) > 4096 || header.Size < 0 || header.Size > MaxArtifactBytes || header.Size > MaxArtifactBatchBytes-total || len(rows) >= 4096 || seen[header.Name] {
-			return nil, ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 		seen[header.Name] = true
 		total += header.Size
@@ -117,11 +117,11 @@ func captureArtifactArchive(ctx context.Context, tx pgx.Tx, input io.Reader) ([]
 		return nil, err
 	}
 	if len(padding) > 32768 {
-		return nil, ErrInvalidInput
+		return nil, sessions.ErrInvalidInput
 	}
 	for _, b := range padding {
 		if b != 0 {
-			return nil, ErrInvalidInput
+			return nil, sessions.ErrInvalidInput
 		}
 	}
 	return rows, nil

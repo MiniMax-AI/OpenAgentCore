@@ -12,22 +12,34 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 )
 
-// Sessions creates, reads, updates and deletes Sessions without execution
-// work, and records their public write audit. Creation that admits work goes
-// through Execution.Admission.
+// SessionCreation creates Sessions without execution work and finds an
+// earlier creation by its retry identity. Creation that admits work goes
+// through Execution.SessionAdmission.
+type SessionCreation interface {
+	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error)
+	CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error)
+}
+
+// SessionAdmission creates Sessions that admit work through the execution
+// Worker, which validates execution support first.
+type SessionAdmission interface {
+	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error)
+	CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+}
+
+// Sessions reads, updates and deletes Sessions, and records their public write
+// audit.
 type Sessions interface {
-	CreateSession(context.Context, string, store.CreateSessionInput) (store.Session, error)
-	CreateSessionStream(context.Context, string, store.CreateSessionInput) (store.SessionCreation, error)
-	FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (store.SessionCreation, error)
-	GetSession(context.Context, string, string) (store.Session, error)
-	ListSessions(context.Context, string, string, int, bool, *string) (store.SessionPage, error)
-	UpdateSessionMetadata(context.Context, string, string, map[string]string) (store.Session, error)
+	GetSession(context.Context, string, string) (sessions.Session, error)
+	ListSessions(context.Context, string, string, int, bool, *string) (sessions.Page, error)
+	UpdateSessionMetadata(context.Context, string, string, map[string]string) (sessions.Session, error)
 	DeleteSession(context.Context, string, string) error
 	AuditSessionOperation(context.Context, string, string, string) error
 }
@@ -250,7 +262,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	executionConfiguration := sessionExecutionProjection(input, saved, inheritedProvider, provider, selectedEngine, configuration)
-	createInput := store.CreateSessionInput{
+	createInput := sessions.CreateSession{
 		ExecutionConfiguration:     &executionConfiguration,
 		ModelProvider:              provider,
 		ModelProviderSource:        providerSource,
@@ -262,13 +274,13 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		h.createSessionStream(w, r, createInput)
 		return
 	}
-	create := h.Sessions.CreateSession
+	create := h.SessionCreation.CreateSession
 	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {
 		if h.Execution == nil {
 			writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution input is not enabled on this service.")
 			return
 		}
-		create = h.Execution.Admission.CreateSession
+		create = h.Execution.SessionAdmission.CreateSession
 	}
 	session, err := create(r.Context(), tenantID(r), createInput)
 	if err != nil {
@@ -297,11 +309,11 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 	h.respondSession(w, r, session)
 }
 
-func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session store.Session) {
+func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session sessions.Session) {
 	h.respondSessionStatus(w, r, session, http.StatusOK)
 }
 
-func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session store.Session, status int) {
+func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session sessions.Session, status int) {
 	response, err := sessionResponse(session, h.executorURL())
 	if err != nil {
 		writeStoreError(w, r, err)

@@ -9,18 +9,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // inputRecorder is the Worker's input admission. It records submitted inputs
 // and answers with err.
 type inputRecorder struct {
 	tenant, session, key string
-	inputs               []store.Input
+	inputs               []sessions.Input
 	err                  error
 }
 
-func (s *inputRecorder) SubmitInputs(_ context.Context, tenant, session, key string, inputs []store.Input) ([]store.InputReceipt, error) {
+func (s *inputRecorder) SubmitInputs(_ context.Context, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
 	s.tenant, s.session, s.key, s.inputs = tenant, session, key, inputs
 	return nil, s.err
 }
@@ -28,7 +28,7 @@ func (s *inputRecorder) SubmitInputs(_ context.Context, tenant, session, key str
 // admit enables Execution whose Worker records submitted inputs in s.
 func (s *inputRecorder) admit(d *Dependencies, f *testFakes) {
 	d.Execution = f.execution()
-	f.admission.submitInputs = s.SubmitInputs
+	f.inputAdmission.submitInputs = s.SubmitInputs
 }
 
 func TestPublicInputAdmission(t *testing.T) {

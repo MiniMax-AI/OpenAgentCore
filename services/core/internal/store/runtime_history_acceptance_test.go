@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/postgresreader"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,7 +31,7 @@ func historyBackend(t *testing.T, s *store.Store) *postgresreader.Reader {
 func historyOwner(t *testing.T, s *store.Store) runtimehistory.Scope {
 	t.Helper()
 	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"openai_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"openai_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}

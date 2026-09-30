@@ -18,29 +18,29 @@ func (s *Store) BeginTurnArtifactCapture(ctx context.Context, tenantID, sessionI
 		return err
 	}
 	if appliedThrough < 0 {
-		return ErrInvalidInput
+		return sessions.ErrInvalidInput
 	}
 	return s.withSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		turn, err := q.GetTurn(ctx, lookup)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNotFound
+			return sessions.ErrNotFound
 		}
 		if err != nil {
 			return err
 		}
 		if turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.Valid {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		pending, err := q.HasUnappliedMessages(ctx, sqlc.HasUnappliedMessagesParams{SessionID: session, TurnID: lookup.ID, Sequence: appliedThrough})
 		if err != nil {
 			return err
 		}
 		if pending {
-			return ErrUnappliedInputs
+			return sessions.ErrUnappliedInputs
 		}
 		count, err := q.BeginTurnArtifactCapture(ctx, sqlc.BeginTurnArtifactCaptureParams{SessionID: session, ID: lookup.ID})
 		if err == nil && count != 1 {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		return err
 	})

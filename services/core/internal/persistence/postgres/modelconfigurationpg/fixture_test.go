@@ -18,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -84,8 +85,8 @@ type observed struct {
 	fixture
 	sessions *store.Store
 	tenant   string
-	input    store.CreateSessionInput
-	session  store.Session
+	input    sessions.CreateSession
+	session  sessions.Session
 }
 
 func newObserved(t *testing.T) observed {
@@ -94,7 +95,7 @@ func newObserved(t *testing.T) observed {
 	f.replace(t, fixtureProvider)
 	snapshot := f.resolve(t)
 	model, harness := "frozen-model", "codex"
-	input := store.CreateSessionInput{
+	input := sessions.CreateSession{
 		Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: harness, IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"frozen-model"},"environment":{"type":"none"}}`),
 		ModelProvider: snapshot.Provider, ModelProviderSource: "deployment", DeploymentProviderRevision: snapshot.Revision,

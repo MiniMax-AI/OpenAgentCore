@@ -92,23 +92,23 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 			t.Fatalf("publication metadata: %+v", a)
 		}
 		foreign := uuid.NewString()
-		if _, err := s.GetSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, ErrNotFound) {
+		if _, err := s.GetSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign metadata: %v", err)
 		}
-		if _, err := s.GetSessionArtifact(t.Context(), tenant, uuid.NewString(), a.ID); !errors.Is(err, ErrNotFound) {
+		if _, err := s.GetSessionArtifact(t.Context(), tenant, uuid.NewString(), a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("wrong session metadata: %v", err)
 		}
-		if err := s.DeleteSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, ErrNotFound) {
+		if err := s.DeleteSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign delete: %v", err)
 		}
-		if err := s.ReadSessionArtifact(t.Context(), foreign, session, a.ID, func(SessionArtifact, io.Reader) error {
+		if err := s.ReadSessionArtifact(t.Context(), foreign, session, a.ID, func(sessions.Artifact, io.Reader) error {
 			t.Error("foreign read reached content")
 			return nil
-		}); !errors.Is(err, ErrNotFound) {
+		}); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign read: %v", err)
 		}
 	}
-	if _, err := s.ListSessionArtifacts(t.Context(), uuid.NewString(), session, "", "", 100, false); !errors.Is(err, ErrNotFound) {
+	if _, err := s.ListSessionArtifacts(t.Context(), uuid.NewString(), session, "", "", 100, false); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign list: %v", err)
 	}
 	if empty, err := s.ListSessionArtifacts(t.Context(), tenant, session, uuid.NewString(), "", 100, false); err != nil || len(empty.Artifacts) != 0 {
@@ -126,7 +126,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 		t.Fatal(all, err)
 	}
 	for _, asc := range []bool{true, false} {
-		var got []SessionArtifact
+		var got []sessions.Artifact
 		cursor := ""
 		for {
 			part, err := s.ListSessionArtifacts(t.Context(), tenant, session, environment, cursor, 1, asc)
@@ -142,7 +142,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 			}
 			cursor = part.NextCursor
 		}
-		want := append([]SessionArtifact(nil), all.Artifacts...)
+		want := append([]sessions.Artifact(nil), all.Artifacts...)
 		if !asc {
 			want[0], want[2] = want[2], want[0]
 		}
@@ -155,7 +155,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 		t.Fatal(err)
 	}
 	for _, a := range page.Artifacts {
-		if err := New(pool).ReadSessionArtifact(t.Context(), tenant, session, a.ID, func(meta SessionArtifact, r io.Reader) error {
+		if err := New(pool).ReadSessionArtifact(t.Context(), tenant, session, a.ID, func(meta sessions.Artifact, r io.Reader) error {
 			if err := s.DeleteSessionArtifact(t.Context(), tenant, session, a.ID); err != nil {
 				return err
 			}
@@ -171,7 +171,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.GetSessionArtifact(t.Context(), tenant, session, a.ID); !errors.Is(err, ErrNotFound) {
+		if _, err := s.GetSessionArtifact(t.Context(), tenant, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("deleted metadata retained: %v", err)
 		}
 	}
@@ -215,7 +215,7 @@ func testSessionArtifactsRejectIncompleteAndUnownedCapture(t *testing.T, kind st
 		})
 	}
 	for _, ids := range [][4]string{{uuid.NewString(), session, turn, environment}, {tenant, session, turn, uuid.NewString()}} {
-		if err := s.StageTurnArtifacts(t.Context(), ids[0], ids[1], ids[2], ids[3], artifactReadError{}); !errors.Is(err, ErrNotFound) {
+		if err := s.StageTurnArtifacts(t.Context(), ids[0], ids[1], ids[2], ids[3], artifactReadError{}); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("unauthorized capture reached reader: %v", err)
 		}
 	}
@@ -235,7 +235,7 @@ func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
 			if count := largeObjectCount(t, pool); count != before {
 				t.Fatalf("terminal capture leaked objects: %d -> %d", before, count)
 			}
-			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(body)); !errors.Is(err, ErrTurnConflict) {
+			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(body)); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatalf("late capture accepted: %v", err)
 			}
 			if count := largeObjectCount(t, pool); count != before {
@@ -262,10 +262,10 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
-			want := ErrNotFound
+			want := sessions.ErrNotFound
 			if operation == "delete" {
 				// The idle-only decision itself is not blocked by the transfer.
-				if err := s.DeleteSession(ctx, tenant, session); !errors.Is(err, ErrSessionNotIdle) {
+				if err := s.DeleteSession(ctx, tenant, session); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatalf("transfer blocked or bypassed the deletion rule: %v", err)
 				}
 				if err := s.commitLegacyDeletion(ctx, tenant, session); err != nil {
@@ -275,7 +275,7 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 				if _, err := s.RequestCancel(ctx, tenant, session, "cancel-capture"); err != nil {
 					t.Fatalf("transfer blocked cancellation: %v", err)
 				}
-				want = ErrTurnConflict
+				want = sessions.ErrTurnConflict
 			}
 			writer.Close()
 			if err := <-result; !errors.Is(err, want) {
@@ -309,13 +309,13 @@ func stageArtifactOutputs(t *testing.T, s *Store, tenant, session, environment, 
 }
 
 // publishedByTurn returns the Artifacts one Turn published, keyed by outputs-relative path.
-func publishedByTurn(t *testing.T, s *Store, tenant, session, turn string) map[string]SessionArtifact {
+func publishedByTurn(t *testing.T, s *Store, tenant, session, turn string) map[string]sessions.Artifact {
 	t.Helper()
 	page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || page.NextCursor != "" {
 		t.Fatalf("list: %+v %v", page, err)
 	}
-	got := make(map[string]SessionArtifact)
+	got := make(map[string]sessions.Artifact)
 	for _, artifact := range page.Artifacts {
 		if artifact.TurnID == turn {
 			got[strings.TrimPrefix(artifact.Path, "/workspace/outputs/")] = artifact
@@ -327,7 +327,7 @@ func publishedByTurn(t *testing.T, s *Store, tenant, session, turn string) map[s
 func artifactBytes(t *testing.T, s *Store, tenant, session, id string) string {
 	t.Helper()
 	var body []byte
-	if err := s.ReadSessionArtifact(t.Context(), tenant, session, id, func(_ SessionArtifact, r io.Reader) error {
+	if err := s.ReadSessionArtifact(t.Context(), tenant, session, id, func(_ sessions.Artifact, r io.Reader) error {
 		var err error
 		body, err = io.ReadAll(r)
 		return err
@@ -337,7 +337,7 @@ func artifactBytes(t *testing.T, s *Store, tenant, session, id string) string {
 	return string(body)
 }
 
-func publishedPaths(published map[string]SessionArtifact) []string {
+func publishedPaths(published map[string]sessions.Artifact) []string {
 	paths := make([]string, 0, len(published))
 	for path := range published {
 		paths = append(paths, path)
@@ -353,7 +353,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	tenant, session, environment, first := artifactTurn(t, s, "openai_hosted")
 	before := largeObjectCount(t, pool)
 	turnNumber := 1
-	run := func(files map[string]string, want ...string) map[string]SessionArtifact {
+	run := func(files map[string]string, want ...string) map[string]sessions.Artifact {
 		t.Helper()
 		turn := first
 		if turnNumber > 1 {
@@ -374,7 +374,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 		}
 		return published
 	}
-	unchanged := func(artifacts ...SessionArtifact) {
+	unchanged := func(artifacts ...sessions.Artifact) {
 		t.Helper()
 		for _, artifact := range artifacts {
 			if got, err := s.GetSessionArtifact(t.Context(), tenant, session, artifact.ID); err != nil || got != artifact {
@@ -490,7 +490,7 @@ func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	one := publishedByTurn(t, s, tenant, session, first.TurnID)["b.txt"]
-	run := func(key, body string) map[string]SessionArtifact {
+	run := func(key, body string) map[string]sessions.Artifact {
 		t.Helper()
 		turn := startArtifactTurn(t, s, tenant, session, key)
 		stageArtifactOutputs(t, s, tenant, session, env.ID, turn, map[string]string{"b.txt": body})
@@ -546,7 +546,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.TransitionTurn(t.Context(), tenant, session, turn, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted})
+		_, err := s.TransitionTurn(t.Context(), tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted})
 		done <- err
 	}()
 	// Completion must be blocked on the Session lock before the deletion commits.
@@ -582,7 +582,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 	if got := publishedPaths(published); strings.Join(got, ",") != "a.txt" || artifactBytes(t, s, tenant, session, published["a.txt"].ID) != "alpha" {
 		t.Fatalf("concurrent deletion was not republished: %v", got)
 	}
-	if _, err := s.GetSessionArtifact(t.Context(), tenant, session, newest.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetSessionArtifact(t.Context(), tenant, session, newest.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("deleted Artifact remains: %v", err)
 	}
 	if count := largeObjectCount(t, pool); count != before+1 {

@@ -9,14 +9,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
 func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
 	h, _, tenant := adminTestHandler(t, databaseSessionReads(s))
-	session, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "diagnostic-test"}, Engine: "codex", IdempotencyKey: "diagnostics", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
+	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "diagnostic-test"}, Engine: "codex", IdempotencyKey: "diagnostics", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,10 +23,10 @@ func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"device_disconnected","error":"Bearer raw-secret-canary https://private.example/key","done":{"native_id":"secret-native-canary"}}`)}); err != nil {
+	if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"device_disconnected","error":"Bearer raw-secret-canary https://private.example/key","done":{"native_id":"secret-native-canary"}}`)}); err != nil {
 		t.Fatal(err)
 	}
 	base := adminSessionsPath + session.ID
@@ -63,20 +62,20 @@ func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 }
 
 type diagnosticSnapshotStore struct {
-	session store.Session
+	session sessions.Session
 }
 
-func (s diagnosticSnapshotStore) GetSessionDiagnosticsSnapshot(context.Context, string, string) (store.Session, error) {
+func (s diagnosticSnapshotStore) GetSessionDiagnosticsSnapshot(context.Context, string, string) (sessions.Session, error) {
 	return s.session, nil
 }
-func (s diagnosticSnapshotStore) GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (store.TurnDiagnosticsSnapshot, error) {
-	return store.TurnDiagnosticsSnapshot{Session: s.session, Turn: *s.session.LastTurn, Items: []store.ItemDiagnosticTiming{}}, nil
+func (s diagnosticSnapshotStore) GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (sessions.TurnDiagnosticsSnapshot, error) {
+	return sessions.TurnDiagnosticsSnapshot{Session: s.session, Turn: *s.session.LastTurn, Items: []sessions.ItemDiagnosticTiming{}}, nil
 }
 
 // diagnosticSnapshots answers Core diagnostic reads.
 type diagnosticSnapshots interface {
-	GetSessionDiagnosticsSnapshot(context.Context, string, string) (store.Session, error)
-	GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (store.TurnDiagnosticsSnapshot, error)
+	GetSessionDiagnosticsSnapshot(context.Context, string, string) (sessions.Session, error)
+	GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (sessions.TurnDiagnosticsSnapshot, error)
 }
 
 // serveDiagnostics answers Session and Turn diagnostic reads from source.
@@ -88,7 +87,7 @@ func serveDiagnostics(source diagnosticSnapshots) func(*Dependencies, *testFakes
 
 func TestDiagnosticsFailurePrecedenceAndUnknownTime(t *testing.T) {
 	id, turnID := uuid.NewString(), uuid.NewString()
-	base := store.Session{ID: id, Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`), LastTurn: &sessions.Turn{ID: turnID, SessionID: id, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed","error":"secret-canary"}`)}}
+	base := sessions.Session{ID: id, Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`), LastTurn: &sessions.Turn{ID: turnID, SessionID: id, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed","error":"secret-canary"}`)}}
 	for _, tc := range []struct {
 		activity     *sessions.EnvironmentInputActivity
 		code, source string

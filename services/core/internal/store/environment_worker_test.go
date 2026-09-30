@@ -15,7 +15,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	h := newDispatchHarness(t)
 	_, pool := store.NewTestStore(t)
 	enableWorkerEnvironment(t, h)
-	pending := map[string]store.EnvironmentInputReservation{}
+	pending := map[string]sessions.EnvironmentInputReservation{}
 	for range 2 {
 		value := workerEnvironmentReservation(t, h)
 		pending[value.SessionID] = value
@@ -25,7 +25,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 		runtimes = append(runtimes, runtime)
 	}
 	frames := workerFrames(t, runtimes...)
-	ordinary := map[string]store.Session{}
+	ordinary := map[string]sessions.Session{}
 	for _, key := range []string{"one", "two", "three"} {
 		session := publicSession(t, h, key)
 		h.session = session
@@ -160,7 +160,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	stop()
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
-	if err != nil || stored.State != store.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
+	if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
 		t.Fatal("retry or shutdown changed the original reservation", stored, err)
 	}
 	_, stop = startEnvironmentExpiryWorker(t, h.db, h.d)

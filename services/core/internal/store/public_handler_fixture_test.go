@@ -26,6 +26,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -79,8 +80,13 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templates,
 		Skills: skillService, SkillsReader: skillStore,
 		Agents: agentService, AgentsReader: agentStore,
-		Sessions: s, SessionEvents: s, SessionHistory: s, Subagents: s,
-		Artifacts: s, SessionAdmin: s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
+		Sessions:        s,
+		SessionCreation: s,
+		SessionEvents:   s,
+		Turns:           s,
+		Items:           s,
+		Subagents:       s,
+		Artifacts:       s, SessionAdmin: s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}
 	for _, c := range configure {
@@ -135,14 +141,26 @@ func withPolicy(policy execution.Policy) func(*api.Dependencies) {
 // Worker, so nothing runs them.
 func storeExecution(t testing.TB, s *store.Store) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
-		d.Execution = &api.Execution{ExecutorURL: testExecutorURL, Admission: s, SessionArchive: strictStandIn{t}, Workspaces: strictStandIn{t}}
+		d.Execution = &api.Execution{
+			ExecutorURL:      testExecutorURL,
+			SessionAdmission: s,
+			InputAdmission:   s,
+			SessionArchive:   strictStandIn{t},
+			Workspaces:       strictStandIn{t},
+		}
 	}
 }
 
 // workerExecution runs Sessions through worker.
 func workerExecution(worker *execution.Worker) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
-		d.Execution = &api.Execution{ExecutorURL: testExecutorURL, Admission: worker, SessionArchive: worker, Workspaces: worker}
+		d.Execution = &api.Execution{
+			ExecutorURL:      testExecutorURL,
+			SessionAdmission: worker,
+			InputAdmission:   worker,
+			SessionArchive:   worker,
+			Workspaces:       worker,
+		}
 	}
 }
 
@@ -236,17 +254,17 @@ func (s strictStandIn) ExecutorConnected(context.Context, string, string) (bool,
 	return false, nil
 }
 
-func (s strictStandIn) ArchiveManagedSession(context.Context, string, string, uint64) (store.ManagedSessionArchive, error) {
+func (s strictStandIn) ArchiveManagedSession(context.Context, string, string, uint64) (sessions.ManagedArchive, error) {
 	s.unexpected("ArchiveManagedSession")
-	return store.ManagedSessionArchive{}, nil
+	return sessions.ManagedArchive{}, nil
 }
 
-func (s strictStandIn) ReadEnvironmentDirectory(context.Context, store.Environment, string) (proto.WorkspaceDirectoryResult, error) {
+func (s strictStandIn) ReadEnvironmentDirectory(context.Context, sessions.Environment, string) (proto.WorkspaceDirectoryResult, error) {
 	s.unexpected("ReadEnvironmentDirectory")
 	return proto.WorkspaceDirectoryResult{}, nil
 }
 
-func (s strictStandIn) WriteEnvironmentFile(context.Context, store.Environment, string, []byte) (int64, error) {
+func (s strictStandIn) WriteEnvironmentFile(context.Context, sessions.Environment, string, []byte) (int64, error) {
 	s.unexpected("WriteEnvironmentFile")
 	return 0, nil
 }

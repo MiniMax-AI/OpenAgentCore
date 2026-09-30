@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -34,8 +35,8 @@ func TestEnrollmentConnectionContract(t *testing.T) {
 		{"missing authority", `{"environment_id":"environment"}`, "", nil, 401, 0},
 		{"caller binding", `{"environment_id":"environment","session_id":"other"}`, "Bearer private-test-token", nil, 400, 0},
 		{"extra input", `{"environment_id":"environment"}{}`, "Bearer private-test-token", nil, 400, 0},
-		{"foreign", `{"environment_id":"environment"}`, "Bearer private-test-token", store.ErrNotFound, 401, 1},
-		{"conflict", `{"environment_id":"environment"}`, "Bearer private-test-token", store.ErrDeviceBindingConflict, 409, 1},
+		{"foreign", `{"environment_id":"environment"}`, "Bearer private-test-token", sessions.ErrNotFound, 401, 1},
+		{"conflict", `{"environment_id":"environment"}`, "Bearer private-test-token", sessions.ErrDeviceBindingConflict, 409, 1},
 		{"internal failure", `{"environment_id":"environment"}`, "Bearer private-test-token", errors.New("private database detail"), 503, 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {

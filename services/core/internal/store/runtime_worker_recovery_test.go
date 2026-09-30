@@ -37,7 +37,7 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 	h, _ := runtimeWorkerHarness(t)
 	owner := executionOwner(t, h.db, h.s)
 	h.d.Store, h.lease = owner.Store, owner.Lease
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 	handle := acknowledgePreparation(h, frame.ID)
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	got := awaitPreparedDispatch(t, result)
-	if !errors.Is(got.err, store.ErrTurnConflict) || got.run.Reservation.ID != pending.ID || got.run.Reservation.State != store.EnvironmentInputPending {
+	if !errors.Is(got.err, sessions.ErrTurnConflict) || got.run.Reservation.ID != pending.ID || got.run.Reservation.State != sessions.EnvironmentInputPending {
 		t.Fatal("rejected promotion lost its pending owner", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
@@ -58,7 +58,7 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 
 func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	h, pool := runtimeWorkerHarness(t)
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		t.Fatal("conflicted preparation was not released")
 	}
 	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
-	if err != nil || stored.State != store.EnvironmentInputPending || len(stored.Receipts) != 0 {
+	if err != nil || stored.State != sessions.EnvironmentInputPending || len(stored.Receipts) != 0 {
 		t.Fatal("conflict consumed queued input", stored, err)
 	}
 	setPhase("running")

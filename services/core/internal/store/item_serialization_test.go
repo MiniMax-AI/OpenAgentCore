@@ -46,23 +46,23 @@ func TestAssistantMessageEventsFollowOfficialSequence(t *testing.T) {
 	answer := " {\"text\":\"red é \\u00e9\\n\"}\n"
 	for _, test := range []struct {
 		name   string
-		events []ExecutionEvent
+		events []sessions.ExecutionEvent
 		phase  string
 		deltas []string
 		final  string
 	}{
-		{"streamed deltas", []ExecutionEvent{
+		{"streamed deltas", []sessions.ExecutionEvent{
 			{Kind: "delta", Payload: json.RawMessage(`{"item_id":"a","delta":"Hel"}`)},
 			{Kind: "delta", Payload: json.RawMessage(`{"item_id":"a","delta":"lo"}`)},
 			{Kind: "output_message", Payload: json.RawMessage(`{"id":"a","status":"completed","text":"Hello"}`)},
 		}, "null", []string{"Hel", "lo"}, "Hello"},
-		{"native start", []ExecutionEvent{
+		{"native start", []sessions.ExecutionEvent{
 			{Kind: "output_message", Payload: json.RawMessage(`{"id":"a","status":"in_progress","phase":"final_answer"}`)},
 			{Kind: "delta", Payload: json.RawMessage(`{"item_id":"a","delta":"Hi"}`)},
 			{Kind: "output_message", Payload: json.RawMessage(`{"id":"a","status":"completed","phase":"final_answer","text":"Hi"}`)},
 		}, `"final_answer"`, []string{"Hi"}, "Hi"},
 		// A non-streamed native final carries its exact text in one delta.
-		{"non-streamed final", []ExecutionEvent{
+		{"non-streamed final", []sessions.ExecutionEvent{
 			{Kind: "output_message", Payload: json.RawMessage(`{"id":"a","status":"completed","phase":"final_answer","text":` + mustJSON(t, answer) + `}`)},
 		}, `"final_answer"`, []string{answer}, answer},
 	} {

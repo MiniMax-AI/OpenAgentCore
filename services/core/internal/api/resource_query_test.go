@@ -16,8 +16,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -29,7 +29,7 @@ type missingResourceStore struct {
 
 func (s *missingResourceStore) missing(tenant string) error {
 	s.tenants = append(s.tenants, tenant)
-	return store.ErrNotFound
+	return sessions.ErrNotFound
 }
 
 // missingAgent records the tenant and reports the Agent as missing.
@@ -50,16 +50,16 @@ func (s *missingResourceStore) UpdateAgent(_ context.Context, command agents.Upd
 	return agents.Agent{}, s.missingAgent(command.TenantID)
 }
 
-func (s *missingResourceStore) GetSession(_ context.Context, tenant, _ string) (store.Session, error) {
-	return store.Session{}, s.missing(tenant)
+func (s *missingResourceStore) GetSession(_ context.Context, tenant, _ string) (sessions.Session, error) {
+	return sessions.Session{}, s.missing(tenant)
 }
 
 func (s *missingResourceStore) DeleteSession(_ context.Context, tenant, _ string) error {
 	return s.missing(tenant)
 }
 
-func (s *missingResourceStore) UpdateSessionMetadata(_ context.Context, tenant, _ string, _ map[string]string) (store.Session, error) {
-	return store.Session{}, s.missing(tenant)
+func (s *missingResourceStore) UpdateSessionMetadata(_ context.Context, tenant, _ string, _ map[string]string) (sessions.Session, error) {
+	return sessions.Session{}, s.missing(tenant)
 }
 
 // Environment Template operations report a missing Template with their
@@ -257,7 +257,7 @@ type ownedArtifactStore struct {
 func (s *ownedArtifactStore) DeleteSessionArtifact(_ context.Context, tenant, session, id string) error {
 	s.tenants = append(s.tenants, tenant)
 	if tenant != s.owner || session != "session" || id != "artifact" {
-		return store.ErrNotFound
+		return sessions.ErrNotFound
 	}
 	s.deleted++
 	return nil

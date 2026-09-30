@@ -42,13 +42,13 @@ func (s *Store) SettleRuntimeCreation(ctx context.Context, owner RuntimeAllocati
 // Cancellation requests do not prove existing native work has stopped. A live,
 // unexpired Environment fails with the generic provisioning reason.
 func (s *Store) RequestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
-	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, nil, false)
+	return s.requestRuntimeCleanup(ctx, owner, sessions.ProvisioningFailureReason, nil, false)
 }
 
 // ReleaseAbsentRuntimeCreation consumes provider proof that the original attempt
 // is settled and owns no resources. Authority revocation and release commit together.
 func (s *Store) ReleaseAbsentRuntimeCreation(ctx context.Context, owner RuntimeAllocation) (RuntimeAllocation, error) {
-	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, nil, true)
+	return s.requestRuntimeCleanup(ctx, owner, sessions.ProvisioningFailureReason, nil, true)
 }
 
 func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string, detail *sessions.ProvisioningFailureDetail, absent bool) (RuntimeAllocation, error) {
@@ -119,7 +119,7 @@ func (s *Store) mutateRuntimeAllocation(ctx context.Context, owner RuntimeAlloca
 		return RuntimeAllocation{}, err
 	}
 	if previous.ID != owner.ID || previous.DeviceID != owner.DeviceID || previous.ProviderKey != owner.ProviderKey || previous.NodeID != owner.NodeID {
-		return RuntimeAllocation{}, ErrIdempotencyConflict
+		return RuntimeAllocation{}, sessions.ErrIdempotencyConflict
 	}
 	lookup, _ := deviceLookup(owner.TenantID, owner.EnvironmentID)
 	var result RuntimeAllocation
@@ -130,19 +130,19 @@ func (s *Store) mutateRuntimeAllocation(ctx context.Context, owner RuntimeAlloca
 		}
 		if live {
 			if current.DeletedAt.Valid {
-				return ErrNotFound
+				return sessions.ErrNotFound
 			}
 			device, err := q.GetSessionDevice(ctx, sqlc.GetSessionDeviceParams{TenantID: lookup.TenantID, ID: session})
 			if err != nil {
 				return err
 			}
 			if device.ID != current.RuntimeAllocation.DeviceID || device.EnvironmentID != lookup.ID {
-				return ErrDeviceBindingConflict
+				return sessions.ErrDeviceBindingConflict
 			}
 		}
 		row, err := apply(ctx, q, current.RuntimeAllocation)
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrTurnConflict
+			return sessions.ErrTurnConflict
 		}
 		if err == nil {
 			result = runtimeAllocationFromRow(row, session, lookup.TenantID, current.DeletedAt, current.Expired)

@@ -7,15 +7,15 @@ import (
 	"path"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
 // Artifacts reads, streams and deletes a Session's published Artifacts.
 type Artifacts interface {
-	GetSessionArtifact(context.Context, string, string, string) (store.SessionArtifact, error)
-	ListSessionArtifacts(context.Context, string, string, string, string, int, bool) (store.ArtifactPage, error)
-	ReadSessionArtifact(context.Context, string, string, string, func(store.SessionArtifact, io.Reader) error) error
+	GetSessionArtifact(context.Context, string, string, string) (sessions.Artifact, error)
+	ListSessionArtifacts(context.Context, string, string, string, string, int, bool) (sessions.ArtifactPage, error)
+	ReadSessionArtifact(context.Context, string, string, string, func(sessions.Artifact, io.Reader) error) error
 	DeleteSessionArtifact(context.Context, string, string, string) error
 }
 
@@ -103,7 +103,7 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
 	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
-		return h.Artifacts.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a store.SessionArtifact, body io.Reader) error {
+		return h.Artifacts.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a sessions.Artifact, body io.Reader) error {
 			return consume(path.Base(a.Path), a.SizeBytes, body)
 		})
 	})
@@ -112,7 +112,7 @@ func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func artifactResponse(a store.SessionArtifact) v1.SessionArtifact {
+func artifactResponse(a sessions.Artifact) v1.SessionArtifact {
 	return v1.SessionArtifact{ID: a.ID, CreatedAt: a.CreatedAt.Unix(), EnvironmentID: a.EnvironmentID,
 		Object: "agent.session.artifact", Path: a.Path, SessionID: a.SessionID, SizeBytes: a.SizeBytes, TurnID: a.TurnID}
 }

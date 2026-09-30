@@ -17,7 +17,7 @@ import (
 func publicSubagent(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, id string) (v1.Subagent, error) {
 	row, err := q.GetPublicSubagent(ctx, sqlc.GetPublicSubagentParams{SessionID: session, ID: pgunit.PathID(id)})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return v1.Subagent{}, ErrNotFound
+		return v1.Subagent{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return v1.Subagent{}, err
@@ -49,7 +49,7 @@ func (s *Store) GetSubagent(ctx context.Context, tenant, session, id string) (v1
 func (s *Store) ListSubagents(ctx context.Context, tenant, session, after string, limit int, asc bool) (v1.SubagentList, error) {
 	result := v1.SubagentList{Data: []v1.Subagent{}}
 	if limit < 1 || limit > 100 {
-		return result, ErrInvalidInput
+		return result, sessions.ErrInvalidInput
 	}
 	err := s.withPublicSession(ctx, tenant, session, func(ctx context.Context, q *sqlc.Queries, sid pgtype.UUID) error {
 		p := sqlc.ListPublicSubagentsParams{SessionID: sid, Ascending: asc, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}}
@@ -58,7 +58,7 @@ func (s *Store) ListSubagents(ctx context.Context, tenant, session, after string
 			// malformed one, is an invalid cursor rather than a missing resource.
 			cursor, err := publicSubagent(ctx, q, sid, after)
 			if err != nil {
-				return unresolvedCursor(err, errResourceCursor)
+				return unresolvedCursor(err, sessions.ErrResourceCursor)
 			}
 			p.AfterOpened = pgtype.Int8{Int64: cursor.OpenedAt, Valid: true}
 			p.AfterID, _ = parseID(after)
@@ -86,7 +86,7 @@ func (s *Store) ListSubagents(ctx context.Context, tenant, session, after string
 func childTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, child, id string) (sqlc.SubagentTurn, error) {
 	row, err := q.GetChildTurn(ctx, sqlc.GetChildTurnParams{SessionID: session, ID: pgunit.PathID(id)})
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && uuid.UUID(row.SubagentID.Bytes).String() != child) {
-		return row, ErrNotFound
+		return row, sessions.ErrNotFound
 	}
 	return row, err
 }
@@ -144,7 +144,7 @@ func (s *Store) GetSubagentTurn(ctx context.Context, tenant, session, child, id 
 func (s *Store) ListSubagentTurns(ctx context.Context, tenant, session, child, after string, limit int, asc bool) (v1.TurnList, error) {
 	result := v1.TurnList{Data: []v1.Turn{}}
 	if limit < 1 || limit > 100 {
-		return result, ErrInvalidInput
+		return result, sessions.ErrInvalidInput
 	}
 	err := s.withPublicSession(ctx, tenant, session, func(ctx context.Context, q *sqlc.Queries, sid pgtype.UUID) error {
 		if _, err := publicSubagent(ctx, q, sid, child); err != nil {
@@ -156,7 +156,7 @@ func (s *Store) ListSubagentTurns(ctx context.Context, tenant, session, child, a
 			// Root Turns and other children's Turns are outside this list.
 			row, err := childTurn(ctx, q, sid, child, after)
 			if err != nil {
-				return unresolvedCursor(err, errResourceCursor)
+				return unresolvedCursor(err, sessions.ErrResourceCursor)
 			}
 			p.AfterCreated = row.CreatedAt
 			p.AfterID = row.ID

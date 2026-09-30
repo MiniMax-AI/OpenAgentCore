@@ -368,7 +368,7 @@ definitions:
         $ref: '#/definitions/api.ExecutorConnection'
       data:
         items:
-          $ref: '#/definitions/store.ExecutorCredential'
+          $ref: '#/definitions/sessions.ExecutorCredential'
         type: array
     required:
       - connection
@@ -1335,6 +1335,35 @@ definitions:
       source_commit:
         type: string
     type: object
+  sessions.ExecutorCredential:
+    properties:
+      created_at:
+        type: string
+      key_id:
+        format: uuid
+        type: string
+      revoked_at:
+        type: string
+        x-nullable: true
+    type: object
+  sessions.IssuedExecutorCredential:
+    properties:
+      environment_id:
+        type: string
+      executor_token:
+        type: string
+      key_id:
+        type: string
+    type: object
+  sessions.ManagedArchive:
+    properties:
+      environment_id:
+        type: string
+      session_id:
+        type: string
+      state:
+        type: string
+    type: object
   store.AddressBindings:
     properties:
       hosted_sandboxes:
@@ -1360,35 +1389,6 @@ definitions:
         type: integer
       vaults:
         type: integer
-    type: object
-  store.ExecutorCredential:
-    properties:
-      created_at:
-        type: string
-      key_id:
-        format: uuid
-        type: string
-      revoked_at:
-        type: string
-        x-nullable: true
-    type: object
-  store.IssuedExecutorCredential:
-    properties:
-      environment_id:
-        type: string
-      executor_token:
-        type: string
-      key_id:
-        type: string
-    type: object
-  store.ManagedSessionArchive:
-    properties:
-      environment_id:
-        type: string
-      session_id:
-        type: string
-      state:
-        type: string
     type: object
   store.RuntimeNodeAllocation:
     properties:
@@ -4162,7 +4162,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/store.IssuedExecutorCredential'
+            $ref: '#/definitions/sessions.IssuedExecutorCredential'
         "400":
           description: Bad Request
           schema:
@@ -4771,7 +4771,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.ManagedSessionArchive'
+            $ref: '#/definitions/sessions.ManagedArchive'
         "400":
           description: Bad Request
           schema:
@@ -4824,7 +4824,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/store.ManagedSessionArchive'
+            $ref: '#/definitions/sessions.ManagedArchive'
         "400":
           description: Bad Request
           schema:

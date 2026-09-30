@@ -28,7 +28,7 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	call := json.RawMessage(`{"id":"native-file-change","stage":"after","observation":{"status":"completed","kind":"function","name":"apply_patch","arguments":{"count":9007199254740993,"scale":1e2},"content":[{"type":"input_text","text":"file written"}]}}`)
 	text := "child answer"
 	message, _ := json.Marshal(proto.OutputMessagePayload{ID: "answer", Status: "completed", Text: &text})
-	facts := []ExecutionEvent{
+	facts := []sessions.ExecutionEvent{
 		subagentIdentityEvent("child", "root", 100),
 		subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "turn", Status: sessions.TurnInProgress, CreatedAtMS: 100000}),
 		subagentFact(proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: "child", TurnID: "turn", ItemID: "native-file-change", Position: 0, Kind: proto.TypeToolCall, Payload: call}),
@@ -39,7 +39,7 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	}
 	finished := int64(101000)
 	terminal := subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "turn", Status: sessions.TurnCompleted, CreatedAtMS: 100000, CompletedAtMS: &finished})
-	if err = owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 5, []ExecutionEvent{terminal, facts[2], facts[3]}); err != nil {
+	if err = owner.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{terminal, facts[2], facts[3]}); err != nil {
 		t.Fatal("identical native tool history must survive replay after completion", err)
 	}
 	child, err := s.GetSubagentIdentity(t.Context(), tenant, session.ID, "child")
@@ -105,7 +105,7 @@ func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 	})
 	finished := int64(101000)
 	terminal := subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnCancelled, CreatedAtMS: 100000, CompletedAtMS: &finished})
-	facts := []ExecutionEvent{
+	facts := []sessions.ExecutionEvent{
 		subagentIdentityEvent("child", "root", 100),
 		subagentFact(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnInProgress, CreatedAtMS: 100000}),
 		message, terminal,

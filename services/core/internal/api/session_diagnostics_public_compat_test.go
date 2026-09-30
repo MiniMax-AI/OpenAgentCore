@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
 	"github.com/google/uuid"
@@ -24,7 +25,7 @@ func TestDiagnosticPublicCompatibility(t *testing.T) {
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
 	databaseSessionReads(s)(&deps, fakes)
 	h := newTestHandler(t, deps)
-	session, err := s.CreateSession(t.Context(), key.TenantID, store.CreateSessionInput{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
+	session, err := s.CreateSession(t.Context(), key.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +62,7 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 
 // databaseSessionReads serves Session, Turn, Item and diagnostic reads from s.
 func databaseSessionReads(s *store.Store) func(*Dependencies, *testFakes) {
-	return func(d *Dependencies, _ *testFakes) { d.Sessions, d.SessionHistory, d.SessionAdmin = s, s, s }
+	return func(d *Dependencies, _ *testFakes) { d.Sessions, d.Turns, d.Items, d.SessionAdmin = s, s, s, s }
 }
 
 func diagnosticDatabase(t *testing.T) (*store.Store, *pgxpool.Pool) {

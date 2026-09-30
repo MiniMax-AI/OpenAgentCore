@@ -10,7 +10,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -141,7 +141,7 @@ func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 		{runtimehistory.ErrUnsupported, http.StatusConflict},
 		{runtimehistory.ErrUnavailable, http.StatusServiceUnavailable},
 		{runtimehistory.ErrInvalidResult, http.StatusServiceUnavailable},
-		{store.ErrNotFound, http.StatusNotFound},
+		{sessions.ErrNotFound, http.StatusNotFound},
 	} {
 		service.err = tc.err
 		response := runtimeObservationRequest(handler, path)

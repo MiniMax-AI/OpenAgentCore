@@ -6,7 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 var errSystemPackages = &fieldError{
@@ -32,12 +32,12 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfi
 	if value, ok := fields["env"]; ok {
 		var entries map[string]*string
 		if json.Unmarshal(value, &entries) != nil {
-			return result, store.ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 		result.Env = make(map[string]string, len(entries))
 		for name, entry := range entries {
 			if entry == nil {
-				return result, store.ErrInvalidInput
+				return result, sessions.ErrInvalidInput
 			}
 			result.Env[name] = *entry
 		}
@@ -45,7 +45,7 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfi
 	if value, ok := fields["setup_commands"]; ok {
 		var commands []json.RawMessage
 		if json.Unmarshal(value, &commands) != nil {
-			return result, store.ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 		for _, command := range commands {
 			var input struct {
@@ -53,12 +53,12 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfi
 				CWD     *string `json:"cwd"`
 			}
 			if decodeInputObject(command, &input, "command", "cwd") != nil || input.Command == nil {
-				return result, store.ErrInvalidInput
+				return result, sessions.ErrInvalidInput
 			}
 			step := environmentconfig.SetupCommand{Command: *input.Command}
 			if input.CWD != nil {
 				if *input.CWD == "" {
-					return result, store.ErrInvalidInput
+					return result, sessions.ErrInvalidInput
 				}
 				step.CWD = *input.CWD
 			}
@@ -71,7 +71,7 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfi
 			Python []*string `json:"python"`
 		}
 		if decodeInputObject(value, &input, "npm", "python") != nil {
-			return result, store.ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 		for name, entries := range map[string][]*string{"npm": input.NPM, "python": input.Python} {
 			var target *[]string
@@ -83,7 +83,7 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfi
 			}
 			for _, entry := range entries {
 				if entry == nil {
-					return result, store.ErrInvalidInput
+					return result, sessions.ErrInvalidInput
 				}
 				*target = append(*target, *entry)
 			}
@@ -101,11 +101,11 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfi
 	if raw, supplied := fields["capability_directories"]; supplied {
 		var entries []*string
 		if json.Unmarshal(raw, &entries) != nil {
-			return result, store.ErrInvalidInput
+			return result, sessions.ErrInvalidInput
 		}
 		for _, entry := range entries {
 			if entry == nil {
-				return result, store.ErrInvalidInput
+				return result, sessions.ErrInvalidInput
 			}
 			result.CapabilityDirectories = append(result.CapabilityDirectories, *entry)
 		}

@@ -20,6 +20,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -75,7 +76,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err := s.CreateSession(ctx, binding.Principal.TenantID, store.CreateSessionInput{Creator: binding.Principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+	session, err := s.CreateSession(ctx, binding.Principal.TenantID, sessions.CreateSession{Creator: binding.Principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
 	if err != nil {
 		t.Fatal(err)
@@ -84,7 +85,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var executor store.IssuedExecutorCredential
+	var executor sessions.IssuedExecutorCredential
 	created("POST", "/core/v1/projects/"+project.ID+"/environments/"+environment.ID+"/executor-credentials", coreKey, `{"key_id":"`+uuid.NewString()+`"}`, &executor)
 
 	// A node credential: a Docker deployment, an enrollment token issued with the Core key, and an enrolled node.

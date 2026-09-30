@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -15,7 +16,7 @@ import (
 func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
 	tenant, idle, idleEnvironment := managedSession(t, s)
-	initial, err := s.CreateSession(t.Context(), tenant, store.CreateSessionInput{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"hello"}`)}}})
+	initial, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"hello"}`)}}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -82,16 +82,16 @@ func (h *Handler) registerNativeInstallationRoutes(r chi.Router) {
 
 // installationAuthorization validates a grant route's bearer grant. The routes
 // are registered only when this Core serves a native installer.
-func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Request) (store.InstallationAuthorization, string, bool) {
+func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Request) (sessions.InstallationAuthorization, string, bool) {
 	w.Header().Set("Cache-Control", "no-store")
 	if h.Execution.NativeInstaller.Catalog == nil {
 		writeError(w, 503, "installation_unavailable", "Matching native installation artifacts are unavailable.")
-		return store.InstallationAuthorization{}, "", false
+		return sessions.InstallationAuthorization{}, "", false
 	}
 	parts := strings.Fields(r.Header.Get("Authorization"))
 	if len(r.Header.Values("Authorization")) != 1 || len(parts) != 2 || parts[0] != "Bearer" {
-		writeStoreError(w, r, store.ErrInstallationAuthorization)
-		return store.InstallationAuthorization{}, "", false
+		writeStoreError(w, r, sessions.ErrInstallationAuthorization)
+		return sessions.InstallationAuthorization{}, "", false
 	}
 	claim, err := h.Environments.ValidateEnvironmentInstallation(r.Context(), parts[1], h.Execution.NativeInstaller.Version)
 	if err != nil {
@@ -154,7 +154,7 @@ func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request
 	}
 	var input NativeInstallationClaim
 	if decodeInputObject(raw, &input, "executor_token") != nil {
-		writeStoreError(w, r, store.ErrInvalidInput)
+		writeStoreError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if err := h.Environments.ClaimEnvironmentInstallation(r.Context(), token, h.Execution.NativeInstaller.Version, input.ExecutorToken); err != nil {

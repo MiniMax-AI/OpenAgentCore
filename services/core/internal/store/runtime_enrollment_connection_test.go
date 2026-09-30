@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -24,7 +25,7 @@ import (
 func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	s, db := newTestStoreDB(t)
 	principal := store.FixtureExecutorPrincipal(t, s, uuid.NewString())
-	session, err := s.CreateSession(t.Context(), principal.TenantID, store.CreateSessionInput{
+	session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 		Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	})
