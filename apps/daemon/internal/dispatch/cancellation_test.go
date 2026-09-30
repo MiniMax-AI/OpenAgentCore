@@ -5,6 +5,7 @@ import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -17,10 +18,11 @@ type cancelReceiptSession struct {
 	entered chan struct{}
 	release chan struct{}
 	err     error
+	outcome proto.DonePayload
 }
 
 func (s *cancelReceiptSession) CancellationOutcome() proto.DonePayload {
-	return proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-cancelled"}}
+	return s.outcome
 }
 
 func TestCompletionWaitsForNativeWriterRelease(t *testing.T) {
@@ -58,14 +60,22 @@ func (s *cancelReceiptSession) Cancel(ctx context.Context) error {
 }
 
 func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
-	for _, fails := range []bool{false, true} {
-		t.Run(map[bool]string{false: "applied", true: "rejected"}[fails], func(t *testing.T) {
+	observed := proto.DonePayload{Content: "partial output", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-cancelled"}}
+	for _, test := range []struct {
+		name    string
+		outcome proto.DonePayload
+		err     error
+	}{
+		{name: "observed", outcome: observed},
+		{name: "unknown"},
+		{name: "failed", outcome: observed, err: errors.New("adapter could not cancel")},
+		{name: "unsupported", outcome: observed, err: agent.ErrUnsupportedOperation},
+		{name: "deadline", outcome: observed, err: context.DeadlineExceeded},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
-			sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{})}
-			if fails {
-				sess.err = errors.New("adapter could not cancel")
-			}
+			sess := &cancelReceiptSession{entered: make(chan struct{}), release: make(chan struct{}), outcome: test.outcome, err: test.err}
 			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				sess.fakeSession = &fakeSession{out: out, closeOutOnCancel: true}
 				return sess, nil
@@ -93,11 +103,15 @@ func TestCancellationReceiptFollowsAdapterOutcome(t *testing.T) {
 					found = true
 					var ack proto.InteractionDecisionAckPayload
 					_ = env.DecodePayload(&ack)
-					if ack.Applied == fails || ack.DeliveryID != "cancel-1" {
+					if ack.Applied != (test.err == nil) || ack.DeliveryID != "cancel-1" {
 						t.Fatalf("wrong receipt: %+v", ack)
 					}
-					if !fails && (ack.Outcome == nil || ack.Outcome.Metadata[proto.DoneMetaAgentSessionID] != "native-cancelled") {
-						t.Fatal("cancellation receipt lost native identity")
+					if test.err == nil {
+						if ack.ErrorCode != "" || ack.Outcome == nil || !reflect.DeepEqual(*ack.Outcome, test.outcome) {
+							t.Fatalf("cancellation receipt changed observed evidence: %+v", ack)
+						}
+					} else if ack.ErrorCode != "cancel_failed" || ack.Outcome != nil {
+						t.Fatalf("failed cancellation supplied a success outcome: %+v", ack)
 					}
 				}
 			}

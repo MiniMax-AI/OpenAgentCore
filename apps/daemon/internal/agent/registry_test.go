@@ -22,6 +22,8 @@ func stubFactory(marker string) agent.Factory {
 
 type stubSession struct{ marker string }
 
+func (stubSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
+
 func (stubSession) Cancel(context.Context) error { return nil }
 func (stubSession) SubmitPermission(context.Context, string, proto.PermissionDecisionPayload) error {
 	return nil

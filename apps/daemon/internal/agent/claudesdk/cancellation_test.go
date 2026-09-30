@@ -41,11 +41,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("unsettled cancellation reported %v", err)
 	}
-	provider, ok := running.(interface{ CancellationOutcome() proto.DonePayload })
-	if !ok {
-		t.Fatal("missing cancellation outcome provider")
-	}
-	if got := provider.CancellationOutcome(); !reflect.DeepEqual(got, proto.DonePayload{}) {
+	if got := running.CancellationOutcome(); !reflect.DeepEqual(got, proto.DonePayload{}) {
 		t.Fatal("unsettled outcome was exposed", got)
 	}
 	if err := running.(*session).Steer(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}); !errors.Is(err, agent.ErrSteeringInactive) {
@@ -62,7 +58,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	default:
 		t.Fatal("successful cancellation preceded owned process release")
 	}
-	got := provider.CancellationOutcome()
+	got := running.CancellationOutcome()
 	if got.Content != "partialtaildrained" || got.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || got.Usage.Raw["claude_sdk_result"] == nil || got.Usage.Tokens != nil {
 		t.Fatalf("lost drained cancellation outcome: %+v", got)
 	}

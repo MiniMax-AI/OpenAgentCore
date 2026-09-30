@@ -84,6 +84,8 @@ type askCall struct {
 	decision proto.PromptForUserChoiceDecisionPayload
 }
 
+func (s *fakeSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
+
 func (s *fakeSession) Cancel(context.Context) error {
 	s.cancelMu.Lock()
 	s.cancelCalls++

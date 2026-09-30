@@ -65,8 +65,8 @@ func (p *controlledPreparation) CancellationOutcome() proto.DonePayload {
 	p.mu.Lock()
 	session := p.session
 	p.mu.Unlock()
-	if provider, ok := session.(interface{ CancellationOutcome() proto.DonePayload }); ok {
-		return provider.CancellationOutcome()
+	if session != nil {
+		return session.CancellationOutcome()
 	}
 	return proto.DonePayload{}
 }

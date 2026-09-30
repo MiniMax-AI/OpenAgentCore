@@ -110,7 +110,6 @@ type Executor interface {
 type Turn interface {
 	Session
 	DurableSteerer
-	CancellationOutcome() proto.DonePayload
 	// Success confirms closed output and settled native input, function,
 	// interaction and child-work obligations. Errors cannot prove cancellation.
 	AwaitSettlement(context.Context) (TurnSettlement, error)
@@ -123,13 +122,19 @@ type TurnSettlement struct {
 	Reason   string
 }
 
-// Session is the cancellation surface shared by direct prompt runs and Turns.
+// Session is the cancellation and outcome surface shared by direct prompt runs
+// and Turns. Every owner exposes observed state, including direct-call sessions.
 // For Executor-owned Turns, AwaitSettlement and Executor.Close define settlement
 // and resource retirement; Cancel alone does not transfer resource ownership.
 type Session interface {
 	// Cancel signals the session to abort. Idempotent. Actual teardown
 	// happens asynchronously and is signalled via the out channel close.
 	Cancel(ctx context.Context) error
+	// CancellationOutcome snapshots observed native identity, usage and output.
+	// It remains readable after Cancel; missing evidence stays unset. An empty
+	// result means no observed evidence, not unsupported cancellation or success.
+	// Reading it does not wait for or establish native settlement.
+	CancellationOutcome() proto.DonePayload
 }
 
 // Turn extension contracts. Every public Harness implements each interface;
@@ -215,10 +220,10 @@ type Prepared interface {
 // same native resource across Start. Read-only preparations need only Prepared.
 type PreparedCancellation interface {
 	Prepared
+	Session
 	// Cancel returns after local cleanup and all output writes have stopped.
 	// An error retains ownership so callers can retry this exact object serially.
 	Cancel(context.Context) error
-	CancellationOutcome() proto.DonePayload
 }
 
 // A factory may return both a resource and an error when construction failed but
