@@ -270,7 +270,17 @@ an explicit boolean for every field; omitted and null fields are invalid. A new
 field requires a decision by every production declaration. Runtime consumers use
 `IsSupported()` and reject unsupported requests before native operations; an
 interface assertion only verifies implementation, never support. Every declaration
-must match behavior verified for that installation. Runtime registration does not grant Core qualification;
+must match behavior verified for that installation.
+
+The admission mapping is explicit: `Steering` controls non-durable `Steerer` input;
+`DurableInputReceipts` controls `DurableSteerer` input and also requires the Turn
+settlement contract. Neither implies the other. Core's current public text profile
+requires both advertised capabilities. `Permissions` qualifies permission and
+user-choice responses together; a supported declaration requires both native
+response paths. Workspace declarations describe the selected authorized resource
+owner, including the common Runtime workspace implementation.
+
+Runtime registration does not grant Core qualification;
 that belongs to the service profile.
 
 The runnable test-only example is
