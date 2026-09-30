@@ -95,11 +95,11 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         systemPrompt: request.system_prompt,
         ...(request.resume ? { resume: request.resume } : {}),
         tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed, strictMcpConfig: true, settingSources: [],
-        ...(profile && !workspace ? {
+        ...(profile ? {
           agent: "oac_root", disallowedTools: profile.denied,
           hooks: { PreToolUse: [{ hooks: [profile.beforeTool] }] },
           agents: { oac_root: { description: "Execution root.", prompt: request.system_prompt,
-            model: request.model, tools: profile.allowed } },
+            model: request.model, tools: [...(Array.isArray(workspace?.options.tools) ? workspace.options.tools : []), ...profile.allowed] } },
         } : {}),
         persistSession: true, includePartialMessages: true, abortController: abort,
         canUseTool: async () => ({ behavior: "deny", message: "Tools are unavailable in this execution profile." }),
