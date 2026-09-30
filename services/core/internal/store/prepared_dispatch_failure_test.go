@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -102,9 +103,9 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 				h.write(start.RunID, proto.TypeInteractionDecisionAck, ack)
 			}
 			got := awaitPreparedDispatch(t, result)
-			want := store.TurnFailed
+			want := sessions.TurnFailed
 			if action == "cancel" {
-				want = store.TurnCancelled
+				want = sessions.TurnCancelled
 			}
 			if got.err != nil || got.run.Turn.Status != want || got.run.Turn.ID != start.RunID {
 				t.Fatal("Start control did not settle through ordinary completion", got)
@@ -168,9 +169,9 @@ func TestPreparedDispatchCancellationReceiptSurvivesStartFailure(t *testing.T) {
 			if json.Unmarshal(got.run.Turn.Outcome, &outcome) != nil {
 				t.Fatal("invalid stored cancellation outcome")
 			}
-			want, code := store.TurnFailed, "cancel_outcome_unavailable"
+			want, code := sessions.TurnFailed, "cancel_outcome_unavailable"
 			if withOutcome {
-				want, code = store.TurnCancelled, ""
+				want, code = sessions.TurnCancelled, ""
 			}
 			if got.err != nil || got.run.Turn.Status != want || outcome.ErrorCode != code {
 				t.Fatal("preparation failure replaced the cancellation receipt", got)

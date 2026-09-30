@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -78,7 +79,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				}()
 				time.Sleep(650 * time.Millisecond)
 				current, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-				if err != nil || current.Status != store.TurnQueued {
+				if err != nil || current.Status != sessions.TurnQueued {
 					t.Fatal(current, err)
 				}
 				if !prebound {
@@ -109,7 +110,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					t.Fatal(prompt)
 				}
 				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
-				waitTurn(t, h, input.TurnID, store.TurnCompleted)
+				waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			})
 		}
 	}

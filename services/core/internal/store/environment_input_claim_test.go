@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"sync"
 	"testing"
 )
@@ -52,7 +53,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 		t.Fatal("promotion authorized multiple starts", received, fresh)
 	}
 	turn, err := s.GetTurn(t.Context(), tenant, session.ID, turnID)
-	if err != nil || turn.Status != TurnInProgress || turn.StartedAt.IsZero() {
+	if err != nil || turn.Status != sessions.TurnInProgress || turn.StartedAt.IsZero() {
 		t.Fatal("promotion did not persist its execution claim", turn, err)
 	}
 	environmentInputHistory(t, pool, session.ID, 1, 2)
@@ -61,7 +62,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 		t.Fatal("missing promotion events", changes, err)
 	}
 	created, claimed := changes[0], changes[len(changes)-1]
-	if created.Event.Type != "agent.session.turn.created" || created.Turn == nil || created.Turn.Status != TurnQueued || claimed.Event.Type != "agent.session.turn.in_progress" || claimed.Turn == nil || claimed.Turn.ID != turnID || claimed.Turn.Status != TurnInProgress {
+	if created.Event.Type != "agent.session.turn.created" || created.Turn == nil || created.Turn.Status != sessions.TurnQueued || claimed.Event.Type != "agent.session.turn.in_progress" || claimed.Turn == nil || claimed.Turn.ID != turnID || claimed.Turn.Status != sessions.TurnInProgress {
 		t.Fatal("claim reordered or replaced admission snapshots", created, claimed)
 	}
 	claimEvents := 0
@@ -73,7 +74,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 	if claimEvents != 1 {
 		t.Fatal("retry published another claim", claimEvents)
 	}
-	transition(t, writer, tenant, session.ID, turnID, TurnInProgress, TurnCompleted)
+	transition(t, writer, tenant, session.ID, turnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	later := reserveEnvironmentInput(t, s, tenant, session.ID, "later")
 	cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {

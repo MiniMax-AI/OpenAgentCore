@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -26,7 +27,7 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+			if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 				t.Fatal(err)
 			}
 			status := 503
@@ -35,7 +36,7 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnInProgress, Status: store.TurnFailed, Outcome: outcome}); err != nil {
+			if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: outcome}); err != nil {
 				t.Fatal(err)
 			}
 			snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)

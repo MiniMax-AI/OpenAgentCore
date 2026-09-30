@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -52,20 +53,20 @@ func seed() error {
 	}
 	defer pool.Close()
 	s := store.New(pool)
-	for _, status := range []string{store.TurnCompleted, store.TurnFailed, store.TurnCancelled, store.TurnInProgress} {
+	for _, status := range []string{sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled, sessions.TurnInProgress} {
 		receipt, err := s.SubmitMessage(ctx, f.Tenant, f.Session, uuid.NewString(), json.RawMessage(`{"text":"recovery fixture"}`))
 		if err != nil {
 			return err
 		}
-		if _, err = s.TransitionTurn(ctx, f.Tenant, f.Session, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+		if _, err = s.TransitionTurn(ctx, f.Tenant, f.Session, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			return err
 		}
 		if err = observeItems(ctx, s, f.Tenant, f.Session, receipt.TurnID, status); err != nil {
 			return err
 		}
-		if status != store.TurnInProgress {
+		if status != sessions.TurnInProgress {
 			outcome := json.RawMessage(`{"error":"SECRET engine log","done":{"metadata":{"agent_session_id":"PRIVATE"}}}`)
-			if _, err = s.TransitionTurn(ctx, f.Tenant, f.Session, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnInProgress, Status: status, Outcome: outcome}); err != nil {
+			if _, err = s.TransitionTurn(ctx, f.Tenant, f.Session, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status, Outcome: outcome}); err != nil {
 				return err
 			}
 		}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -23,7 +24,7 @@ func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
 		t.Fatal("unadvertised observation capability requested")
 	}
 	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
-	h.finished(result, store.TurnCompleted)
+	h.finished(result, sessions.TurnCompleted)
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -60,7 +61,7 @@ func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
 	var cancel proto.PromptCancelPayload
 	_ = env.DecodePayload(&cancel)
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
-	h.finished(result, store.TurnCancelled)
+	h.finished(result, sessions.TurnCancelled)
 	reopened, pool := store.NewTestStore(t)
 	defer pool.Close()
 	events, err := reopened.ListTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 0, 100)

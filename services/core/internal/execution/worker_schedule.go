@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -21,13 +22,13 @@ type scheduledWork struct {
 }
 
 func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool) ([]scheduledWork, error) {
-	turns, err := w.dispatcher.Store.ListExecutionWork(ctx, s.turnCursor, []string{store.TurnQueued}, devices)
+	turns, err := w.dispatcher.Store.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
 	if err != nil {
 		return nil, err
 	}
 	if len(turns) == 0 && s.turnCursor != "" {
 		s.turnCursor = ""
-		turns, err = w.dispatcher.Store.ListExecutionWork(ctx, "", []string{store.TurnQueued}, devices)
+		turns, err = w.dispatcher.Store.ListExecutionWork(ctx, "", []string{sessions.TurnQueued}, devices)
 		if err != nil {
 			return nil, err
 		}

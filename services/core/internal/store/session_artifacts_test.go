@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -48,7 +49,7 @@ func artifactTurn(t *testing.T, s *Store, kind string) (tenant, session, environ
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, created.ID, "artifact-turn")
-	transition(t, s, tenant, created.ID, input.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, created.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	return tenant, created.ID, env.ID, input.TurnID
 }
 
@@ -71,7 +72,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 	if err != nil || len(page.Artifacts) != 0 {
 		t.Fatalf("private capture visible: %+v %v", page, err)
 	}
-	completed := transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+	completed := transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
 	page, err = s.ListSessionArtifacts(t.Context(), tenant, session, environment, "", 100, true)
 	if err != nil || len(page.Artifacts) != 2 {
 		t.Fatalf("published capture: %+v %v", page, err)
@@ -105,11 +106,11 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 	}
 	// A later completed Turn publishes another immutable version of the same path.
 	next := submitMessage(t, s, tenant, session, "version-two")
-	transition(t, s, tenant, session, next.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session, next.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if err := s.StageTurnArtifacts(t.Context(), tenant, session, next.TurnID, environment, bytes.NewReader(artifactArchive(t, map[string][]byte{"outputs/a.bin": []byte("new")}))); err != nil {
 		t.Fatal(err)
 	}
-	transition(t, s, tenant, session, next.TurnID, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session, next.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	all, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || len(all.Artifacts) != 3 {
 		t.Fatal(all, err)
@@ -211,7 +212,7 @@ func testSessionArtifactsRejectIncompleteAndUnownedCapture(t *testing.T, kind st
 }
 
 func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
-	for _, status := range []string{TurnFailed, TurnCancelled} {
+	for _, status := range []string{sessions.TurnFailed, sessions.TurnCancelled} {
 		t.Run(status, func(t *testing.T) {
 			s, pool := testStore(t)
 			tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
@@ -220,7 +221,7 @@ func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
 			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(body)); err != nil {
 				t.Fatal(err)
 			}
-			transition(t, s, tenant, session, turn, TurnInProgress, status)
+			transition(t, s, tenant, session, turn, sessions.TurnInProgress, status)
 			if count := sourceObjectCount(t, pool); count != before {
 				t.Fatalf("terminal capture leaked objects: %d -> %d", before, count)
 			}
@@ -281,7 +282,7 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 func startArtifactTurn(t *testing.T, s *Store, tenant, session, key string) string {
 	t.Helper()
 	input := submitMessage(t, s, tenant, session, key)
-	transition(t, s, tenant, session, input.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	return input.TurnID
 }
 
@@ -350,7 +351,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 		}
 		turnNumber++
 		stageArtifactOutputs(t, s, tenant, session, environment, turn, files)
-		transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+		transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
 		published := publishedByTurn(t, s, tenant, session, turn)
 		sort.Strings(want)
 		if got := publishedPaths(published); strings.Join(got, ",") != strings.Join(want, ",") {
@@ -424,7 +425,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	if err := s.DeleteSessionArtifact(t.Context(), tenant, session, two["a.txt"].ID); err != nil {
 		t.Fatal(err)
 	}
-	transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
 	if got := publishedPaths(publishedByTurn(t, s, tenant, session, turn)); !reflect.DeepEqual(got, []string{"a.txt"}) {
 		t.Fatalf("deletion during capture: published %v", got)
 	}
@@ -441,7 +442,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	}
 	otherTurn := startArtifactTurn(t, s, tenant, other.ID, "artifact-other-turn")
 	stageArtifactOutputs(t, s, tenant, other.ID, otherEnvironment.ID, otherTurn, outputs)
-	transition(t, s, tenant, other.ID, otherTurn, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, other.ID, otherTurn, sessions.TurnInProgress, sessions.TurnCompleted)
 	if got := publishedPaths(publishedByTurn(t, s, tenant, other.ID, otherTurn)); !reflect.DeepEqual(got, []string{"a.txt", "empty.txt", "sub/b.txt"}) {
 		t.Fatalf("other Session first Turn published %v", got)
 	}
@@ -472,10 +473,10 @@ func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
 	// Turn 1 reports a native completion one hour ahead, so its Artifact is
 	// published later than every following Turn's.
 	first := submitMessage(t, s, tenant, session, "artifact-order-1")
-	transition(t, s, tenant, session, first.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	stageArtifactOutputs(t, s, tenant, session, env.ID, first.TurnID, map[string]string{"b.txt": "bravo"})
 	future := time.Now().Add(time.Hour).UnixMilli()
-	if _, err := s.CompleteExecution(t.Context(), tenant, session, first.TurnID, TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, future)), "", first.Sequence); err != nil {
+	if _, err := s.CompleteExecution(t.Context(), tenant, session, first.TurnID, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, future)), "", first.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	one := publishedByTurn(t, s, tenant, session, first.TurnID)["b.txt"]
@@ -483,7 +484,7 @@ func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
 		t.Helper()
 		turn := startArtifactTurn(t, s, tenant, session, key)
 		stageArtifactOutputs(t, s, tenant, session, env.ID, turn, map[string]string{"b.txt": body})
-		transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+		transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
 		return publishedByTurn(t, s, tenant, session, turn)
 	}
 	two := run("artifact-order-2", "bravo-v2")["b.txt"]
@@ -506,7 +507,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 	tenant, session, environment, first := artifactTurn(t, s, "openai_hosted")
 	before := sourceObjectCount(t, pool)
 	stageArtifactOutputs(t, s, tenant, session, environment, first, map[string]string{"a.txt": "alpha"})
-	transition(t, s, tenant, session, first, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session, first, sessions.TurnInProgress, sessions.TurnCompleted)
 	newest := publishedByTurn(t, s, tenant, session, first)["a.txt"]
 	turn := startArtifactTurn(t, s, tenant, session, "artifact-concurrent-delete")
 	stageArtifactOutputs(t, s, tenant, session, environment, turn, map[string]string{"a.txt": "alpha"})
@@ -535,7 +536,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.TransitionTurn(t.Context(), tenant, session, turn, TurnTransition{ExpectedStatus: TurnInProgress, Status: TurnCompleted})
+		_, err := s.TransitionTurn(t.Context(), tenant, session, turn, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted})
 		done <- err
 	}()
 	// Completion must be blocked on the Session lock before the deletion commits.
@@ -558,7 +559,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if status, err := s.GetTurn(t.Context(), tenant, session, turn); err != nil || status.Status != TurnInProgress {
+	if status, err := s.GetTurn(t.Context(), tenant, session, turn); err != nil || status.Status != sessions.TurnInProgress {
 		t.Fatalf("Turn settled while the deletion held the lock: %+v %v", status, err)
 	}
 	if err := tx.Commit(t.Context()); err != nil {

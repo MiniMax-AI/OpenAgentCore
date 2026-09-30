@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -46,7 +47,7 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 			t.Fatal(err)
 		}
 	}
-	transition(store.TurnQueued, store.TurnInProgress)
+	transition(sessions.TurnQueued, sessions.TurnInProgress)
 	var archive bytes.Buffer
 	w := tar.NewWriter(&archive)
 	for name, body := range outputs {
@@ -63,7 +64,7 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 	if err := s.StageTurnArtifacts(t.Context(), tenant, session, receipt.TurnID, environment, &archive); err != nil {
 		t.Fatal(err)
 	}
-	transition(store.TurnInProgress, store.TurnCompleted)
+	transition(sessions.TurnInProgress, sessions.TurnCompleted)
 	return receipt.TurnID
 }
 

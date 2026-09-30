@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -14,7 +15,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	before, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -26,17 +27,17 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 			}
 		}
 	}
-	assertFunctionState(t, s, tenant, session.ID, TurnWaiting, 2)
+	assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 2)
 	for _, id := range []string{"first", "second"} {
 		if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(`{"success":true,"output":"private result"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	assertFunctionState(t, s, tenant, session.ID, TurnWaiting, 2)
+	assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 2)
 	pool.Close()
 	s, _ = testStore(t)
-	assertFunctionState(t, s, tenant, session.ID, TurnWaiting, 2)
-	if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, turn, TurnCompleted, nil, "", 1); !errors.Is(err, ErrTurnConflict) {
+	assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 2)
+	if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, turn, sessions.TurnCompleted, nil, "", 1); !errors.Is(err, ErrTurnConflict) {
 		t.Fatal("waiting execution completed", err)
 	}
 	for i, id := range []string{"first", "second"} {
@@ -45,9 +46,9 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		status := TurnWaiting
+		status := sessions.TurnWaiting
 		if i == 1 {
-			status = TurnInProgress
+			status = sessions.TurnInProgress
 		}
 		assertFunctionState(t, s, tenant, session.ID, status, 1-i)
 	}
@@ -69,7 +70,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 			if err != nil || string(raw) != `{"ticket":9007199254740993}` {
 				t.Fatal("argument precision lost", string(raw), err)
 			}
-			if change.Turn.Status != TurnWaiting {
+			if change.Turn.Status != sessions.TurnWaiting {
 				t.Fatal(change.Turn)
 			}
 		}
@@ -83,30 +84,30 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 }
 
 func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
-	for _, status := range []string{TurnCancelled, TurnFailed, TurnCompleted} {
+	for _, status := range []string{sessions.TurnCancelled, sessions.TurnFailed, sessions.TurnCompleted} {
 		t.Run(status, func(t *testing.T) {
 			s, _ := testStore(t)
 			tenant, session := newTurnSession(t, s)
 			input := submitMessage(t, s, tenant, session.ID, "start")
-			transition(t, s, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, input.TurnID, functionCallFixture("call")); err != nil {
 				t.Fatal(err)
 			}
-			if status == TurnCancelled {
+			if status == sessions.TurnCancelled {
 				before, _ := s.SessionEventCursor(t.Context(), tenant, session.ID)
 				for _, key := range []string{"cancel", "cancel", "another-cancel"} {
 					if _, err := s.RequestCancel(t.Context(), tenant, session.ID, key); err != nil {
 						t.Fatal(err)
 					}
 				}
-				assertFunctionState(t, s, tenant, session.ID, TurnWaiting, 0)
+				assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 0)
 				changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, before)
 				if err != nil || len(changes) != 1 || changes[0].Event.Type != "agent.session.in_progress" || len(changes[0].RequiredActions) != 0 || changes[0].Turn.CancelRequestedAt.IsZero() {
 					t.Fatal(changes, err)
 				}
 			}
-			if status == TurnCompleted {
-				transition(t, s, tenant, session.ID, input.TurnID, TurnWaiting, status)
+			if status == sessions.TurnCompleted {
+				transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnWaiting, status)
 			} else if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, status, nil, "", input.Sequence); err != nil {
 				t.Fatal(err)
 			}
@@ -118,7 +119,7 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 			if next.TurnID == input.TurnID {
 				t.Fatal("terminal turn reused")
 			}
-			assertFunctionState(t, s, tenant, session.ID, TurnQueued, 0)
+			assertFunctionState(t, s, tenant, session.ID, sessions.TurnQueued, 0)
 		})
 	}
 }
@@ -127,7 +128,7 @@ func TestFunctionStateReadsRemainConsistentDuringReceipts(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	var wg sync.WaitGroup
 	done := make(chan struct{})
 	wg.Go(func() {
@@ -154,7 +155,7 @@ func TestFunctionStateReadsRemainConsistentDuringReceipts(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if (current.LastTurn.Status == TurnWaiting) != (len(current.RequiredActions) > 0) {
+		if (current.LastTurn.Status == sessions.TurnWaiting) != (len(current.RequiredActions) > 0) {
 			t.Fatalf("torn activity snapshot: %+v", current)
 		}
 		select {

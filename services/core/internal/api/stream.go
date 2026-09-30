@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -20,7 +21,7 @@ import (
 // projection with its event cursor from one snapshot.
 type SessionEvents interface {
 	SessionEventCursor(context.Context, string, string) (int64, error)
-	ListSessionEvents(context.Context, string, string, int64) ([]store.SessionChange, error)
+	ListSessionEvents(context.Context, string, string, int64) ([]sessions.SessionChange, error)
 	SessionStreamSnapshot(context.Context, string, string) (store.Session, int64, error)
 }
 
@@ -209,7 +210,7 @@ func emitSessionEvent(write func([]byte) error, session string, event v1.Session
 // settlingEvent reports a recorded event after which a creation stream ends: an
 // idle marked settled when recorded, or any failure. A self-hosted connection
 // that clears a pending input's action to idle is not marked.
-func settlingEvent(change store.SessionChange) bool {
+func settlingEvent(change sessions.SessionChange) bool {
 	switch change.Event.Type {
 	case "agent.session.failed":
 		return true
@@ -222,7 +223,7 @@ func settlingEvent(change store.SessionChange) bool {
 // terminalEvent reports the agent.session.failed of a hosted provisioning
 // failure. The Session can never run again, so GET streams end after it too, as
 // officially observed; other failures leave GET streams open.
-func terminalEvent(change store.SessionChange) bool {
+func terminalEvent(change sessions.SessionChange) bool {
 	return change.Event.Type == "agent.session.failed" && change.EnvironmentFailure != nil
 }
 
@@ -234,7 +235,7 @@ func sessionStatusEvent(eventType string) bool {
 	return false
 }
 
-func streamResponse(session store.Session, change store.SessionChange, executorURL string) (v1.SessionEvent, error) {
+func streamResponse(session store.Session, change sessions.SessionChange, executorURL string) (v1.SessionEvent, error) {
 	event := change.Event
 	if change.Turn == nil && change.EnvironmentInputActivity == nil && change.EnvironmentFailure == nil {
 		return withTurnUsage(event), nil

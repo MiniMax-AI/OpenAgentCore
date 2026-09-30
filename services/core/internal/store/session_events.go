@@ -10,6 +10,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -17,26 +18,7 @@ import (
 
 var ErrStreamGap = errors.New("live event buffer exceeded; recover through Session and Items reads")
 
-// SessionChange keeps transition snapshots separate from public response rendering.
-type SessionChange struct {
-	Sequence                 int64                     `json:"-"`
-	Event                    v1.SessionEvent           `json:"event"`
-	Turn                     *Turn                     `json:"turn,omitempty"`
-	SessionUsage             json.RawMessage           `json:"session_usage,omitempty"`
-	RequiredActions          []v1.FunctionCallAction   `json:"required_actions,omitempty"`
-	EnvironmentInputActivity *EnvironmentInputActivity `json:"environment_input_activity,omitempty"`
-	// EnvironmentFailure is set on the agent.session.failed snapshot of a hosted
-	// provisioning failure, which also ends live event streams.
-	EnvironmentFailure *EnvironmentFailure `json:"environment_failure,omitempty"`
-	// Settled marks an idle or failed snapshot recorded when a Turn ends, or when
-	// the latest input reservation stops being pending (expired, cancelled or
-	// failed). A reservation made while the ending Turn captured Artifacts can
-	// still be pending and start a later Turn. It is internal, never a wire
-	// field; snapshots recorded without it read as unsettled.
-	Settled bool `json:"settled,omitempty"`
-}
-
-func recordSessionChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, change SessionChange) error {
+func recordSessionChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, change sessions.SessionChange) error {
 	change.Event.EventID = uuid.NewString()
 	change.Event.SessionID = uuid.UUID(session.Bytes).String()
 	payload, err := json.Marshal(change)
@@ -47,7 +29,7 @@ func recordSessionChange(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 }
 
 func recordTurnChange(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, created bool) error {
-	if row.Status == TurnWaiting {
+	if row.Status == sessions.TurnWaiting {
 		return nil
 	}
 	if terminalStatus(row.Status) {
@@ -81,7 +63,7 @@ func recordTurnChange(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, creat
 	if created {
 		kind = "created"
 	}
-	change := SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn." + kind, TurnID: turn.ID}, Turn: &turn}
+	change := sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn." + kind, TurnID: turn.ID}, Turn: &turn}
 	if err := recordSessionChange(ctx, q, row.SessionID, change); err != nil {
 		return err
 	}
@@ -105,7 +87,7 @@ func (s *Store) SessionEventCursor(ctx context.Context, tenantID, sessionID stri
 	return cursor, err
 }
 
-func (s *Store) ListSessionEvents(ctx context.Context, tenantID, sessionID string, after int64) ([]SessionChange, error) {
+func (s *Store) ListSessionEvents(ctx context.Context, tenantID, sessionID string, after int64) ([]sessions.SessionChange, error) {
 	if after < 0 {
 		return nil, ErrInvalidInput
 	}
@@ -125,7 +107,7 @@ func (s *Store) ListSessionEvents(ctx context.Context, tenantID, sessionID strin
 	if err != nil {
 		return nil, err
 	}
-	changes := make([]SessionChange, 0, len(rows))
+	changes := make([]sessions.SessionChange, 0, len(rows))
 	if len(rows) == 0 && latest > after {
 		return nil, ErrStreamGap
 	}
@@ -133,7 +115,7 @@ func (s *Store) ListSessionEvents(ctx context.Context, tenantID, sessionID strin
 		if row.Sequence != after+1 {
 			return nil, ErrStreamGap
 		}
-		var change SessionChange
+		var change sessions.SessionChange
 		decoder := json.NewDecoder(bytes.NewReader(row.Payload))
 		decoder.UseNumber()
 		if err := decoder.Decode(&change); err != nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -56,7 +57,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				}()
 				time.Sleep(650 * time.Millisecond)
 				turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-				if err != nil || turn.Status != store.TurnQueued {
+				if err != nil || turn.Status != sessions.TurnQueued {
 					t.Fatal("incapable runtime claimed work", turn, err)
 				}
 				if !prebound {
@@ -83,7 +84,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 					t.Fatal("dispatch lost scoped authentication or authenticated an anonymous server")
 				}
 				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
-				waitTurn(t, h, input.TurnID, store.TurnCompleted)
+				waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
 			})
 		}
 	}
@@ -122,7 +123,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 				t.Fatal("unsupported MCP configuration claimed")
 			}
 			turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
-			if err != nil || turn.Status != store.TurnQueued {
+			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal(turn, err)
 			}
 		})

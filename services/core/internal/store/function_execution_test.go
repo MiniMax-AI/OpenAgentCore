@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -75,7 +76,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		}
 	}
 	state := functionState(t, h, 2)
-	if state.LastTurn.Status != store.TurnWaiting {
+	if state.LastTurn.Status != sessions.TurnWaiting {
 		t.Fatal(state.LastTurn)
 	}
 	for _, id := range []string{"a", "b"} {
@@ -104,7 +105,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 			h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: reply.DeliveryID, Applied: true})
 		}
 	}
-	h.finished(result, store.TurnCompleted)
+	h.finished(result, sessions.TurnCompleted)
 	functionState(t, h, 0)
 	next := h.message("next", "Resume")
 	result = h.run(t.Context(), next.TurnID)
@@ -113,7 +114,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		t.Fatal(prompt)
 	}
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
-	h.finished(result, store.TurnCompleted)
+	h.finished(result, sessions.TurnCompleted)
 }
 
 func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
@@ -134,7 +135,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			if reply.Success || len(reply.Content) != 1 || *reply.Content[0].Text != "tool failed" {
 				t.Fatal(reply)
 			}
-			status := store.TurnFailed
+			status := sessions.TurnFailed
 			if cancel {
 				if _, err := h.s.RequestCancel(t.Context(), h.tenant, h.session.ID, "cancel"); err != nil {
 					t.Fatal(err)
@@ -148,7 +149,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 				case <-time.After(40 * time.Millisecond):
 				}
 				h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-cancelled-functions"}}})
-				status = store.TurnCancelled
+				status = sessions.TurnCancelled
 			} else {
 				h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: reply.DeliveryID, ErrorCode: "not_pending"})
 			}
@@ -182,7 +183,7 @@ func TestExecutionFunctionsRejectUndeclaredCallsAndPrematureDone(t *testing.T) {
 			h.read(testExecutionRequest)
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "a", Name: name, Arguments: json.RawMessage(`{}`)})
 			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{})
-			h.finished(result, store.TurnFailed)
+			h.finished(result, sessions.TurnFailed)
 		})
 	}
 }
@@ -203,7 +204,7 @@ func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 		t.Fatal(result)
 	}
 	turn, err := h.s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnQueued {
+	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal(turn, err)
 	}
 }

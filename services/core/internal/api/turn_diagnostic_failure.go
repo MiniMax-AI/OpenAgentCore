@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func turnDiagnosticFailure(turn store.Turn) *DiagnosticFailure {
-	if turn.Status != store.TurnFailed {
+func turnDiagnosticFailure(turn sessions.Turn) *DiagnosticFailure {
+	if turn.Status != sessions.TurnFailed {
 		return nil
 	}
 	var outcome map[string]json.RawMessage

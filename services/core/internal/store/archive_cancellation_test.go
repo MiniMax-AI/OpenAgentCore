@@ -19,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -126,7 +127,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			input := store.InputReceipt{TurnID: start.RunID}
 			h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "pending", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)})
 			state := functionState(t, h, 1)
-			if state.LastTurn.Status != store.TurnWaiting {
+			if state.LastTurn.Status != sessions.TurnWaiting {
 				t.Fatal(state.LastTurn)
 			}
 
@@ -171,7 +172,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			current, err := s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
-			if err != nil || current.Status != store.TurnWaiting || current.CancelRequestedAt.IsZero() {
+			if err != nil || current.Status != sessions.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}
 			if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
@@ -279,15 +280,15 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			got := awaitPreparedDispatch(t, result)
-			wantStatus := store.TurnCancelled
+			wantStatus := sessions.TurnCancelled
 			if closedCase || scenario == "negative_ack" || scenario == "missing_outcome" {
-				wantStatus = store.TurnFailed
+				wantStatus = sessions.TurnFailed
 			}
 			if got.err != nil || got.run.Turn.Status != wantStatus {
 				t.Fatal(got.run.Turn.Status, got.err, string(got.run.Turn.Outcome))
 			}
 			var outcome execution.Result
-			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == store.TurnCancelled && outcome.Done.Usage.InputTokens != 17) {
+			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == sessions.TurnCancelled && outcome.Done.Usage.InputTokens != 17) {
 				t.Fatal("receipt lost usage", string(got.run.Turn.Outcome), err)
 			}
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -110,5 +111,5 @@ func functionCallFromRow(row sqlc.FunctionCall) FunctionCall {
 func validFunctionIdentity(id string) bool { return strings.TrimSpace(id) != "" && len(id) <= 512 }
 
 func acceptsFunctionResult(turn sqlc.Turn) bool {
-	return (turn.Status == TurnInProgress || turn.Status == TurnWaiting) && !turn.CancelRequestedAt.Valid
+	return (turn.Status == sessions.TurnInProgress || turn.Status == sessions.TurnWaiting) && !turn.CancelRequestedAt.Valid
 }

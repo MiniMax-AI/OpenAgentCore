@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -28,7 +29,7 @@ func (s *diagnosticDeadlineStore) GetTurnDiagnosticsSnapshot(ctx context.Context
 
 func TestDiagnosticsReadDeadline(t *testing.T) {
 	id, turn := uuid.NewString(), uuid.NewString()
-	session := store.Session{ID: id, Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`), LastTurn: &store.Turn{ID: turn, SessionID: id, Status: store.TurnCompleted}}
+	session := store.Session{ID: id, Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`), LastTurn: &sessions.Turn{ID: turn, SessionID: id, Status: sessions.TurnCompleted}}
 	for _, suffix := range []string{"/diagnostics", "/turns/" + turn + "/diagnostics"} {
 		for _, shorter := range []bool{false, true} {
 			t.Run(suffix+map[bool]string{false: "/server", true: "/caller"}[shorter], func(t *testing.T) {

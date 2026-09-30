@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -63,8 +64,8 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 			t.Fatal("changed initial input accepted", err)
 		}
 	}
-	transition(t, s, tenant, first.ID, first.LastTurn.ID, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, first.ID, first.LastTurn.ID, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnInProgress, sessions.TurnCompleted)
 	// The same caller key at the events endpoint is an independent request.
 	next, err := s.SubmitInputs(ctx, tenant, first.ID, input.IdempotencyKey, []Input{messageInput("later")})
 	if err != nil || len(next) != 1 || next[0].TurnID == first.LastTurn.ID {
@@ -83,7 +84,7 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	pool.Close()
 	restarted, _ := testStore(t)
 	retry, err := restarted.CreateSession(ctx, tenant, input)
-	if err != nil || retry.ID != first.ID || retry.LastTurn.ID != next[0].TurnID || retry.LastTurn.Status != TurnCancelled || retry.Metadata["updated"] != "yes" {
+	if err != nil || retry.ID != first.ID || retry.LastTurn.ID != next[0].TurnID || retry.LastTurn.Status != sessions.TurnCancelled || retry.Metadata["updated"] != "yes" {
 		t.Fatal(retry, err)
 	}
 	after, err := restarted.ListSessionEvents(ctx, tenant, first.ID, 0)

@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -63,14 +64,14 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		from := store.TurnQueued
+		from := sessions.TurnQueued
 		for _, status := range to {
 			switch status {
 			case "cancel":
 				_, err = s.RequestCancel(ctx, tenant, session.ID, "cancel")
 			case "function":
 				err = s.RecordFunctionCall(ctx, tenant, session.ID, receipt.TurnID, store.FunctionCall{CallID: "pending", ExecutorCallID: "native-pending", Name: "lookup", Arguments: json.RawMessage(`{}`)})
-			case store.TurnCompleted, store.TurnFailed:
+			case sessions.TurnCompleted, sessions.TurnFailed:
 				_, err = s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence)
 			default:
 				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: from, Status: status})
@@ -104,9 +105,9 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	// D3: every Session that is not durably idle or failed without required actions.
 	busy := map[string]string{
 		"queued_turn":      turn(),
-		"in_progress_turn": turn(store.TurnInProgress),
-		"cancelling_turn":  turn(store.TurnInProgress, "cancel"),
-		"required_action":  turn(store.TurnInProgress, "function"),
+		"in_progress_turn": turn(sessions.TurnInProgress),
+		"cancelling_turn":  turn(sessions.TurnInProgress, "cancel"),
+		"required_action":  turn(sessions.TurnInProgress, "function"),
 	}
 	awaiting := create(selfHosted, true)
 	busy["self_hosted_awaiting_connection"] = awaiting.ID
@@ -125,8 +126,8 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	// D4: settled Sessions, including idle hosted provisioning without input.
 	settled := map[string]string{
 		"none_idle":                 create(none, false).ID,
-		"completed_turn":            turn(store.TurnInProgress, store.TurnCompleted),
-		"failed_turn":               turn(store.TurnInProgress, store.TurnFailed),
+		"completed_turn":            turn(sessions.TurnInProgress, sessions.TurnCompleted),
+		"failed_turn":               turn(sessions.TurnInProgress, sessions.TurnFailed),
 		"cancelled_turn":            turn("cancel"),
 		"self_hosted_idle":          create(selfHosted, false).ID,
 		"hosted_provisioning_idle":  create(hosted, false).ID,

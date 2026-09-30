@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 const (
@@ -262,7 +263,7 @@ func settleEnvironmentInput(ctx context.Context, q *sqlc.Queries, tenantID strin
 			return EnvironmentInputReservation{}, err
 		}
 		if _, err := transitionTurn(ctx, q, params, TurnTransition{
-			ExpectedStatus: TurnQueued, Status: TurnInProgress, Outcome: json.RawMessage(`{}`),
+			ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{}`),
 		}); err != nil {
 			return EnvironmentInputReservation{}, err
 		}

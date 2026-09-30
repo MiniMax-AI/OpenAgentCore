@@ -11,6 +11,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -65,7 +66,7 @@ func (f finishObservationFixture) start(t *testing.T) store.InputReceipt {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.writer.TransitionTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err = f.writer.TransitionTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	return receipt
@@ -83,13 +84,13 @@ func TestFinishRunObservesOnlyFinalCommittedOutcome(t *testing.T) {
 		name, status, core, native       string
 		unapplied, invalid, used, failed bool
 	}{
-		{name: "success", status: store.TurnCompleted, used: true},
-		{name: "provider_failure", status: store.TurnFailed, core: "engine_failed", native: "authentication_error", failed: true},
-		{name: "runtime_dominates", status: store.TurnFailed, core: "device_disconnected", native: "authentication_error"},
-		{name: "input_policy", status: store.TurnFailed, core: "engine_failed", native: "cyber_policy"},
-		{name: "cancelled", status: store.TurnCancelled, core: "engine_failed", native: "authentication_error"},
-		{name: "fallback", status: store.TurnCompleted, core: "engine_failed", native: "authentication_error", unapplied: true},
-		{name: "invalid_result", status: store.TurnCompleted, invalid: true},
+		{name: "success", status: sessions.TurnCompleted, used: true},
+		{name: "provider_failure", status: sessions.TurnFailed, core: "engine_failed", native: "authentication_error", failed: true},
+		{name: "runtime_dominates", status: sessions.TurnFailed, core: "device_disconnected", native: "authentication_error"},
+		{name: "input_policy", status: sessions.TurnFailed, core: "engine_failed", native: "cyber_policy"},
+		{name: "cancelled", status: sessions.TurnCancelled, core: "engine_failed", native: "authentication_error"},
+		{name: "fallback", status: sessions.TurnCompleted, core: "engine_failed", native: "authentication_error", unapplied: true},
+		{name: "invalid_result", status: sessions.TurnCompleted, invalid: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,7 +108,7 @@ func TestFinishRunObservesOnlyFinalCommittedOutcome(t *testing.T) {
 				t.Fatal(err)
 			}
 			if tc.unapplied || tc.invalid {
-				if turn.Status != store.TurnFailed {
+				if turn.Status != sessions.TurnFailed {
 					t.Fatal("fallback not final", turn.Status)
 				}
 			}
@@ -174,7 +175,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer conn.Release()
-				turn, err := f.writer.CompleteExecution(t.Context(), f.tenant, f.session.ID, receipt.TurnID, store.TurnCompleted, json.RawMessage(`{}`), "", receipt.Sequence)
+				turn, err := f.writer.CompleteExecution(t.Context(), f.tenant, f.session.ID, receipt.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "", receipt.Sequence)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -193,9 +194,9 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				defer cleanup()
 			}
 			started := time.Now()
-			turn, err := f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, "fixture-model", Result{AppliedThrough: receipt.Sequence}, store.TurnCompleted)
+			turn, err := f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, "fixture-model", Result{AppliedThrough: receipt.Sequence}, sessions.TurnCompleted)
 			elapsed := time.Since(started)
-			if err != nil || turn.Status != store.TurnCompleted {
+			if err != nil || turn.Status != sessions.TurnCompleted {
 				t.Fatal("observation changed commit result", err, turn.Status)
 			}
 			if elapsed > 2*time.Second || (mode == "lock_timeout" && elapsed < 900*time.Millisecond) {
@@ -205,7 +206,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				cleanup()
 			}
 			persisted, err := f.s.GetTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID)
-			if err != nil || persisted.Status != store.TurnCompleted {
+			if err != nil || persisted.Status != sessions.TurnCompleted {
 				t.Fatal("terminal outcome lost", err)
 			}
 			used, code := f.fields(t)

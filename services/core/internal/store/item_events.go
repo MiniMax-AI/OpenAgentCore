@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -23,7 +24,7 @@ func recordItemChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID,
 	}
 	emit := func(kind string, event v1.SessionEvent) error {
 		event.Type = "agent.session.turn." + kind
-		return recordSessionChange(ctx, q, session, SessionChange{Event: event})
+		return recordSessionChange(ctx, q, session, sessions.SessionChange{Event: event})
 	}
 	textMessage := item.Type == "message" && item.Role == "assistant" && len(item.Content) == 1 && item.Content[0].Text != nil
 	if previous.ID == "" {
@@ -60,7 +61,7 @@ func recordItemChange(ctx context.Context, q *sqlc.Queries, session pgtype.UUID,
 		event := base
 		event.Type = "agent.output.command_execution_output.delta"
 		event.ItemID, event.Delta = item.ID, delta
-		return recordSessionChange(ctx, q, session, SessionChange{Event: event})
+		return recordSessionChange(ctx, q, session, sessions.SessionChange{Event: event})
 	}
 	if textMessage {
 		zero := 0

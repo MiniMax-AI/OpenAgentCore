@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -67,7 +68,7 @@ func readyPreparedDispatch(t *testing.T, h *dispatchHarness, request, handle str
 		t.Fatal("Start changed preparation or original batch", frame.ID, start)
 	}
 	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
-	if err != nil || turn.Status != store.TurnInProgress {
+	if err != nil || turn.Status != sessions.TurnInProgress {
 		t.Fatal("Start preceded atomic claim", turn, err)
 	}
 	return start
@@ -102,7 +103,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "answer", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "retained-prepared-native"}})
 	completeEmptyArtifactExport(t, h)
 	got := awaitPreparedDispatch(t, result)
-	if got.err != nil || got.run.Turn.Status != store.TurnCompleted || len(got.run.Reservation.Receipts) != 2 || got.run.Reservation.Receipts[0].Replayed || got.run.Reservation.Receipts[1].Sequence >= late.Sequence {
+	if got.err != nil || got.run.Turn.Status != sessions.TurnCompleted || len(got.run.Reservation.Receipts) != 2 || got.run.Reservation.Receipts[0].Replayed || got.run.Reservation.Receipts[1].Sequence >= late.Sequence {
 		t.Fatal("prepared completion", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
@@ -136,7 +137,7 @@ func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "completed after the reservation deadline"})
 	completeEmptyArtifactExport(t, h)
 	got := awaitPreparedDispatch(t, result)
-	if got.err != nil || got.run.Turn.Status != store.TurnCompleted {
+	if got.err != nil || got.run.Turn.Status != sessions.TurnCompleted {
 		t.Fatal("completion did not settle the execution owner", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)

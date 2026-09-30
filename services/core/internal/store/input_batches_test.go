@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -108,11 +109,11 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 		t.Fatalf("cancellation targets: %+v", first)
 	}
 	cancelled, err := s.GetTurn(ctx, tenant, session.ID, first[1].TurnID)
-	if err != nil || cancelled.Status != TurnCancelled {
+	if err != nil || cancelled.Status != sessions.TurnCancelled {
 		t.Fatalf("cancelled turn=%+v err=%v", cancelled, err)
 	}
-	transition(t, s, tenant, session.ID, first[3].TurnID, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, session.ID, first[3].TurnID, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session.ID, first[3].TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, session.ID, first[3].TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	next := submitMessage(t, s, tenant, session.ID, "next")
 	for _, changed := range [][]Input{batch[:3], append(append([]Input{}, batch...), cancel), {batch[0], batch[3], batch[2], batch[1]}} {
 		if _, err := s.SubmitInputs(ctx, tenant, session.ID, "mixed", changed); !errors.Is(err, ErrIdempotencyConflict) {
@@ -130,7 +131,7 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 		t.Fatalf("restart changed receipts: %+v, %v", retry, err)
 	}
 	current, err := restarted.GetTurn(ctx, tenant, session.ID, next.TurnID)
-	if err != nil || current.Status != TurnQueued || !current.CancelRequestedAt.IsZero() {
+	if err != nil || current.Status != sessions.TurnQueued || !current.CancelRequestedAt.IsZero() {
 		t.Fatalf("retry cancelled later work: %+v, %v", current, err)
 	}
 	otherTenant, _ := newTurnSession(t, restarted)
@@ -144,7 +145,7 @@ func TestFailedBatchRollsBackEarlierCancellationAndInputs(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	ctx := context.Background()
 	initial := submitMessage(t, s, tenant, session.ID, "initial")
-	transition(t, s, tenant, session.ID, initial.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, initial.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	key := uuid.NewString()
 	constraint := "batch_failure_" + strings.ReplaceAll(key, "-", "")
 	// Inject a storage error on the second insert, after cancellation has run.
@@ -158,7 +159,7 @@ func TestFailedBatchRollsBackEarlierCancellationAndInputs(t *testing.T) {
 		t.Fatalf("partial batch succeeded: %+v %v", got, err)
 	}
 	turn, err := s.GetTurn(ctx, tenant, session.ID, initial.TurnID)
-	if err != nil || turn.Status != TurnInProgress || !turn.CancelRequestedAt.IsZero() {
+	if err != nil || turn.Status != sessions.TurnInProgress || !turn.CancelRequestedAt.IsZero() {
 		t.Fatalf("cancellation escaped rollback: %+v %v", turn, err)
 	}
 	inputs, err := s.ListTurnInputs(ctx, tenant, session.ID, initial.TurnID, 0, 100)

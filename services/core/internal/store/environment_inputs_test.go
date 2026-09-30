@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -186,8 +187,8 @@ func TestEnvironmentInputReservationKeepsEarlierDirectIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	transition(t, s, tenant, session.ID, receipts[0].TurnID, TurnQueued, TurnInProgress)
-	transition(t, s, tenant, session.ID, receipts[0].TurnID, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session.ID, receipts[0].TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	transition(t, s, tenant, session.ID, receipts[0].TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	pending := reserveEnvironmentInput(t, s, tenant, session.ID, "new")
 	got, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "direct", []Input{input})
 	if err != nil || got.State != EnvironmentInputAdmitted || got.ID != "" || !got.Deadline.IsZero() || len(got.Receipts) != 1 || got.Receipts[0].Sequence != receipts[0].Sequence {

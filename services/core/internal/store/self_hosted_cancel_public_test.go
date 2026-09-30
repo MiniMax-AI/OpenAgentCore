@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -131,7 +132,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		transition(input.TurnID, store.TurnQueued, store.TurnInProgress)
+		transition(input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 		settings["turn_id"] = input.TurnID
 		return input.TurnID
 	}
@@ -155,7 +156,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	run("active")
 	activeReceipts := receipts(created.ActiveKey, first)
 	turn, err := s.GetTurn(t.Context(), tenant, created.ID, first)
-	if err != nil || turn.Status != store.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
+	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
 		t.Fatal("202 must admit cancellation without fabricating native completion", err)
 	}
 	itemsAfter, err := s.ListItems(t.Context(), tenant, created.ID, "", 100, true)
@@ -166,7 +167,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || afterCursor != cursor {
 		t.Fatal("cancellation admission fabricated an execution event", err)
 	}
-	transition(first, store.TurnInProgress, store.TurnCancelled)
+	transition(first, sessions.TurnInProgress, sessions.TurnCancelled)
 	for _, reopen := range []bool{false, true} {
 		if reopen {
 			stop(false)
@@ -187,6 +188,6 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 				t.Fatal("rejected cancellation changed pending reservation, deadline or history", "reopened", reopen)
 			}
 		}
-		transition(next, store.TurnInProgress, store.TurnCompleted)
+		transition(next, sessions.TurnInProgress, sessions.TurnCompleted)
 	}
 }

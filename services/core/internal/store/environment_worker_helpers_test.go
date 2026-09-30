@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -125,7 +126,7 @@ func awaitWorkerEnvironmentRun(t *testing.T, ctx context.Context, s *store.Store
 		if err != nil {
 			t.Fatal(err)
 		}
-		return run.Turn.Status == store.TurnCompleted || run.Turn.Status == store.TurnFailed || run.Turn.Status == store.TurnCancelled
+		return run.Turn.Status == sessions.TurnCompleted || run.Turn.Status == sessions.TurnFailed || run.Turn.Status == sessions.TurnCancelled
 	})
 	return run
 }

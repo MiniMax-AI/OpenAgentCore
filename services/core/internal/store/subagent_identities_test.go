@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -31,7 +32,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "first")
-	transition(t, w, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	a, b := subagentIdentityEvent("child-a", "root", 102), subagentIdentityEvent("child-b", "root", 101)
 	batch := []ExecutionEvent{a, b, a}
 	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); !errors.Is(err, ErrExecutionAuthority) {
@@ -96,7 +97,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 		t.Fatal(err)
 	}
 	foreignInput := submitMessage(t, s, tenant, foreign.ID, "first")
-	transition(t, w, tenant, foreign.ID, foreignInput.TurnID, TurnQueued, TurnInProgress)
+	transition(t, w, tenant, foreign.ID, foreignInput.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if err = w.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []ExecutionEvent{a}); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatal("same device/native child reassigned to another Session", err)
 	}
@@ -106,7 +107,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err = w.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []ExecutionEvent{subagentIdentityEvent("other-child", "root", 101)}); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatal("known root binding ignored", err)
 	}
-	if _, err = w.CompleteExecution(ctx, tenant, session.ID, input.TurnID, TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
+	if _, err = w.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	if err = w.lease.Close(ctx); err != nil {
@@ -119,7 +120,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 		t.Fatal("restart changed identity", again, err)
 	}
 	second := submitMessage(t, reopened, tenant, session.ID, "second")
-	transition(t, nextOwner, tenant, session.ID, second.TurnID, TurnQueued, TurnInProgress)
+	transition(t, nextOwner, tenant, session.ID, second.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if err = w.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, []ExecutionEvent{a}); err == nil {
 		t.Fatal("closed owner wrote identity")
 	}
@@ -148,7 +149,7 @@ func TestSubagentIdentityRejectsLostLease(t *testing.T) {
 	old := executionWriter(t, s)
 	tenant, session := newSubagentSession(t, s)
 	input := submitMessage(t, s, tenant, session.ID, "first")
-	transition(t, old, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+	transition(t, old, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	var killed bool
 	if err := pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", executionOwnerPID(t, pool)).Scan(&killed); err != nil || !killed {
 		t.Fatal(killed, err)

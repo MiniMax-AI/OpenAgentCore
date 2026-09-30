@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -91,7 +92,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		return
 	}
 	run := ""
-	if session.LastTurn != nil && (session.LastTurn.Status == store.TurnInProgress || session.LastTurn.Status == store.TurnWaiting) {
+	if session.LastTurn != nil && (session.LastTurn.Status == sessions.TurnInProgress || session.LastTurn.Status == sessions.TurnWaiting) {
 		run = session.LastTurn.ID
 	}
 	if (run == "") != reserved {

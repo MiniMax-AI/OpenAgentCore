@@ -20,6 +20,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -114,7 +115,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		t.Fatal("archive did not retain cleanup ownership", allocation, err)
 	}
 	turn, err := s.GetTurn(t.Context(), project.TenantID, active.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnCancelled {
+	if err != nil || turn.Status != sessions.TurnCancelled {
 		t.Fatal("archive did not cancel queued work", turn, err)
 	}
 	var audits int

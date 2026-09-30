@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -146,7 +147,7 @@ func (f *functionExchange) complete(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if turn.Status == store.TurnWaiting {
+	if turn.Status == sessions.TurnWaiting {
 		return errors.New("function turn has not resumed")
 	}
 	return nil

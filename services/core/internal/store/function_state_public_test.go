@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -34,7 +35,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	record := func(id string) {
@@ -77,7 +78,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, store.TurnCompleted, nil, "", input.Sequence); err != nil {
+	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, nil, "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	if err := command.Wait(); err != nil {

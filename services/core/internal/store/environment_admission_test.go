@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -153,7 +154,7 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "admitted-native"}})
 	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
-	if run.Turn.Status != store.TurnCompleted {
+	if run.Turn.Status != sessions.TurnCompleted {
 		t.Fatal("completion", run.Turn)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)

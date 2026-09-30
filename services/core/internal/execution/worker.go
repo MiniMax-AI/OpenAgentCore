@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -330,7 +331,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 func (w *Worker) reconcile(ctx context.Context) error {
 	cursor := ""
 	for {
-		work, err := w.dispatcher.Store.ListExecutionWork(ctx, cursor, []string{store.TurnInProgress, store.TurnWaiting}, nil)
+		work, err := w.dispatcher.Store.ListExecutionWork(ctx, cursor, []string{sessions.TurnInProgress, sessions.TurnWaiting}, nil)
 		if err != nil {
 			return err
 		}
@@ -338,7 +339,7 @@ func (w *Worker) reconcile(ctx context.Context) error {
 			return nil
 		}
 		for _, item := range work {
-			_, err := w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: item.Status, Status: store.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
+			_, err := w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: item.Status, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
 			if err != nil && !errors.Is(err, store.ErrTurnConflict) {
 				return err
 			}
@@ -364,16 +365,16 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 	if err != nil {
 		return err
 	}
-	if turn.Status == store.TurnQueued && capacityRejected {
+	if turn.Status == sessions.TurnQueued && capacityRejected {
 		// No input was sent. Leave durable work for the existing scheduler tick;
 		// active and cleanup-held Runtime capacity have the same rejection.
 		return nil
 	}
-	if turn.Status == store.TurnCompleted || turn.Status == store.TurnFailed || turn.Status == store.TurnCancelled {
+	if turn.Status == sessions.TurnCompleted || turn.Status == sessions.TurnFailed || turn.Status == sessions.TurnCancelled {
 		return nil
 	}
 	log.Ctx(ctx).Error("oac-core dispatch did not complete", "turn_id", item.TurnID)
-	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: turn.Status, Status: store.TurnFailed, Outcome: outcome})
+	_, err = w.dispatcher.Store.TransitionTurn(finish, item.TenantID, item.SessionID, item.TurnID, store.TurnTransition{ExpectedStatus: turn.Status, Status: sessions.TurnFailed, Outcome: outcome})
 	if errors.Is(err, store.ErrTurnConflict) {
 		return nil
 	}

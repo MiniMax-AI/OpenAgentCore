@@ -8,11 +8,12 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtimegateway.Session, session store.Session, environment store.Environment, bound store.ExecutionDevice, turnID string, result Result, status string) (Result, string) {
-	if status != store.TurnCompleted || !LocalWorkspaceConfiguration(environment.Configuration) {
+	if status != sessions.TurnCompleted || !LocalWorkspaceConfiguration(environment.Configuration) {
 		return result, status
 	}
 	owner, cancel := context.WithTimeout(ctx, 180*time.Second)
@@ -33,11 +34,11 @@ func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtim
 	if errors.Is(err, store.ErrUnappliedInputs) {
 		result.ErrorCode = "input_not_applied"
 	}
-	status = store.TurnFailed
+	status = sessions.TurnFailed
 	check, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
 	if turn, err := d.Store.GetTurn(check, session.TenantID, session.ID, turnID); err == nil && !turn.CancelRequestedAt.IsZero() {
-		status = store.TurnCancelled
+		status = sessions.TurnCancelled
 	}
 	return result, status
 }

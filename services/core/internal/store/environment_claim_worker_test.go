@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -32,7 +33,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				}
 			}
 			turn, err := s.GetTurn(t.Context(), tenant, pending.SessionID, turnID)
-			if err != nil || turn.Status != store.TurnInProgress || (deleted && turn.CancelRequestedAt.IsZero()) {
+			if err != nil || turn.Status != sessions.TurnInProgress || (deleted && turn.CancelRequestedAt.IsZero()) {
 				t.Fatal("promotion did not retain the active claim", turn, err)
 			}
 			// Simulate owner loss after commit, without sending any daemon Start.
@@ -53,7 +54,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			var outcome struct {
 				ErrorCode string `json:"error_code"`
 			}
-			if err != nil || turn.Status != store.TurnFailed || json.Unmarshal(turn.Outcome, &outcome) != nil || outcome.ErrorCode != "execution_interrupted" {
+			if err != nil || turn.Status != sessions.TurnFailed || json.Unmarshal(turn.Outcome, &outcome) != nil || outcome.ErrorCode != "execution_interrupted" {
 				t.Fatal("restart failed to settle the original claim", turn, err)
 			}
 			var turns, inputs, queued int

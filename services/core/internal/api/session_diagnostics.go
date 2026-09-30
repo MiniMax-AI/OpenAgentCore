@@ -6,6 +6,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
@@ -154,7 +155,7 @@ func diagnosticTime(value time.Time) *time.Time {
 	return &value
 }
 
-func provisioningFailureParams(detail *store.ProvisioningFailureDetail) CoreErrorDetails {
+func provisioningFailureParams(detail *sessions.ProvisioningFailureDetail) CoreErrorDetails {
 	params := CoreErrorDetails{"step": CoreErrorNull(), "index": CoreErrorNull(), "exit_code": CoreErrorNull()}
 	if detail == nil {
 		return params

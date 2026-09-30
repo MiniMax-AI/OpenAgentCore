@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -164,7 +165,7 @@ func (h *dispatchHarness) read(kind string) proto.Envelope {
 }
 
 type runResult struct {
-	turn store.Turn
+	turn sessions.Turn
 	err  error
 }
 
@@ -174,7 +175,7 @@ func (h *dispatchHarness) run(ctx context.Context, turn string) <-chan runResult
 	return out
 }
 
-func (h *dispatchHarness) finished(result <-chan runResult, status string) store.Turn {
+func (h *dispatchHarness) finished(result <-chan runResult, status string) sessions.Turn {
 	h.t.Helper()
 	select {
 	case got := <-result:
@@ -185,7 +186,7 @@ func (h *dispatchHarness) finished(result <-chan runResult, status string) store
 	case <-time.After(10 * time.Second):
 		h.t.Fatal("execution did not finish")
 	}
-	return store.Turn{}
+	return sessions.Turn{}
 }
 
 func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
@@ -219,7 +220,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	}
 	h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Accepted: true})
 	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "Finished", Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread-1"}})
-	done := h.finished(result, store.TurnCompleted)
+	done := h.finished(result, sessions.TurnCompleted)
 	var outcome execution.Result
 	_ = json.Unmarshal(done.Outcome, &outcome)
 	if outcome.AppliedThrough != second.Sequence || outcome.Done.Usage.InputTokens != 7 {
@@ -241,7 +242,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 		t.Fatal("native continuity lost")
 	}
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "Continued"})
-	h.finished(result, store.TurnCompleted)
+	h.finished(result, sessions.TurnCompleted)
 }
 
 func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T) {
@@ -262,7 +263,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 				t.Fatal("cancellation has no receipt identity")
 			}
 			current, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
-			if err != nil || current.Status != store.TurnInProgress {
+			if err != nil || current.Status != sessions.TurnInProgress {
 				t.Fatal("cancel finished before receipt")
 			}
 			if withDone {
@@ -270,7 +271,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 			}
 			outcome := &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}, Usage: proto.Usage{InputTokens: 10}}
 			h.write(first.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: outcome})
-			h.finished(result, store.TurnCancelled)
+			h.finished(result, sessions.TurnCancelled)
 			next := h.message("next", "Continue after cancellation")
 			result = h.run(context.Background(), next.TurnID)
 			env = h.read(testExecutionRequest)
@@ -280,7 +281,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 				t.Fatal("cancellation lost native continuity")
 			}
 			h.write(next.TurnID, proto.TypeDone, proto.DonePayload{})
-			h.finished(result, store.TurnCompleted)
+			h.finished(result, sessions.TurnCompleted)
 		})
 	}
 	h := newDispatchHarness(t)
@@ -289,7 +290,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 	result := h.run(ctx, first.TurnID)
 	h.read(testExecutionRequest)
 	cancel()
-	done := h.finished(result, store.TurnFailed)
+	done := h.finished(result, sessions.TurnFailed)
 	var outcome execution.Result
 	_ = json.Unmarshal(done.Outcome, &outcome)
 	if outcome.ErrorCode != "execution_interrupted" {
@@ -319,7 +320,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 				h.read(proto.TypePromptSteer)
 				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 			}
-			done := h.finished(result, store.TurnFailed)
+			done := h.finished(result, sessions.TurnFailed)
 			if kind == "engine" {
 				var outcome execution.Result
 				_ = json.Unmarshal(done.Outcome, &outcome)
@@ -340,12 +341,12 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 	h := newDispatchHarness(t)
 	first := h.message("first", "Run")
 	ctx := context.Background()
-	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress})
+	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
 	late := h.message("second", "Late")
-	if _, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, store.ErrUnappliedInputs) {
+	if _, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, store.ErrUnappliedInputs) {
 		t.Fatalf("unapplied completion: %v", err)
 	}
 	bound, _ := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
@@ -358,7 +359,7 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, store.TurnCompleted, []byte(`{}`), native, late.Sequence)
+			_, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), native, late.Sequence)
 			errs <- err
 		}()
 	}
@@ -410,7 +411,7 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 				t.Fatalf("Run error = %v, want %q", err, tc.message)
 			}
 			turn, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
-			if err != nil || turn.Status != store.TurnQueued {
+			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal("Runtime without a required capability claimed work")
 			}
 		})

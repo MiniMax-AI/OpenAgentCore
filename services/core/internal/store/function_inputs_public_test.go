@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -37,7 +38,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"a", "b", "c", "rollback", "late"} {
@@ -106,7 +107,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil || len(history) != 6 {
 		t.Fatal(history, err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnWaiting, Status: store.TurnFailed}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
 		t.Fatal(err)
 	}
 	next, err := s.SubmitMessage(ctx, tenant, session.ID, "next", json.RawMessage(`{"text":"next"}`))
@@ -124,7 +125,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 		t.Fatal(history, err)
 	}
 	current, err := s.GetTurn(ctx, tenant, session.ID, next.TurnID)
-	if err != nil || current.Status != store.TurnQueued || !current.CancelRequestedAt.IsZero() {
+	if err != nil || current.Status != sessions.TurnQueued || !current.CancelRequestedAt.IsZero() {
 		t.Fatal(current, err)
 	}
 }

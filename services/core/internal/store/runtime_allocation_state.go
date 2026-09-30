@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // ObserveRuntimeRunning requires verified original compute identity. It does not
@@ -50,7 +51,7 @@ func (s *Store) ReleaseAbsentRuntimeCreation(ctx context.Context, owner RuntimeA
 	return s.requestRuntimeCleanup(ctx, owner, provisioningFailureReason, nil, true)
 }
 
-func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string, detail *ProvisioningFailureDetail, absent bool) (RuntimeAllocation, error) {
+func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocation, reason string, detail *sessions.ProvisioningFailureDetail, absent bool) (RuntimeAllocation, error) {
 	return s.mutateRuntimeAllocation(ctx, owner, false, func(ctx context.Context, q *sqlc.Queries, row sqlc.RuntimeAllocation) (sqlc.RuntimeAllocation, error) {
 		if row.State == "released" {
 			return row, nil

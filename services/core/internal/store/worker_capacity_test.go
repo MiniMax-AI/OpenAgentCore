@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 // Consume the actual controls so capacity rejection is exercised before any
@@ -35,11 +35,11 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	h := newDispatchHarness(t)
 	enableWorkerEnvironment(t, h)
 	h.d.MaxConcurrentExecutions = 5
-	sessions := make(map[string]string)
+	turns := make(map[string]string)
 	for i := range 5 {
 		h.session = publicSession(t, h, fmt.Sprintf("capacity-%d", i))
 		receipt := h.message("work", "once")
-		sessions[h.session.ID] = receipt.TurnID
+		turns[h.session.ID] = receipt.TurnID
 	}
 	frames := capacityWorkerFrames(t, h)
 	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
@@ -53,7 +53,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 		switch frame.Type {
 		case proto.TypeExecutionPrepare:
 			var prepare proto.ExecutionPreparePayload
-			if frame.DecodePayload(&prepare) != nil || sessions[prepare.SessionID] == "" || len(prepare.Configuration.Input) != 0 || prepare.Configuration.RunID != "" {
+			if frame.DecodePayload(&prepare) != nil || turns[prepare.SessionID] == "" || len(prepare.Configuration.Input) != 0 || prepare.Configuration.RunID != "" {
 				t.Fatal("invalid input-free preparation", prepare)
 			}
 			if blocked == "" && len(admissions) == 4 {
@@ -69,7 +69,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 		case proto.TypeExecutionStart:
 			var start proto.ExecutionStartPayload
 			session := admissions[frame.ID]
-			if frame.DecodePayload(&start) != nil || session == "" || start.RunID != sessions[session] || inputTextForTest(t, start.Input) != "once" {
+			if frame.DecodePayload(&start) != nil || session == "" || start.RunID != turns[session] || inputTextForTest(t, start.Input) != "once" {
 				t.Fatal("Start changed the original input or Turn", start)
 			}
 			started[session]++
@@ -102,8 +102,8 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	}
 	assertQueued := func() {
 		t.Helper()
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, blocked, sessions[blocked])
-		if err != nil || turn.Status != store.TurnQueued {
+		turn, err := h.s.GetTurn(t.Context(), h.tenant, blocked, turns[blocked])
+		if err != nil || turn.Status != sessions.TurnQueued {
 			t.Fatal("capacity rejection failed queued work", turn, err)
 		}
 	}
@@ -133,25 +133,25 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	observeCapacity()
 	// After completion, Runtime can retire the idle Executor. Its cleanup
 	// still owns a slot and reports the same capacity rejection.
-	h.write(sessions[first], proto.TypeDone, proto.DonePayload{Content: "done"})
+	h.write(turns[first], proto.TypeDone, proto.DonePayload{Content: "done"})
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "first completed Turn", func() bool {
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, first, sessions[first])
-		return err == nil && turn.Status == store.TurnCompleted
+		turn, err := h.s.GetTurn(t.Context(), h.tenant, first, turns[first])
+		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	observeCapacity()
 	capacityReleased = true
 	for started[blocked] == 0 {
 		next()
 	}
-	for session, turn := range sessions {
+	for session, turn := range turns {
 		if session != first {
 			h.write(turn, proto.TypeDone, proto.DonePayload{Content: "done"})
 		}
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "all five Turns completed", func() bool {
-		for session, id := range sessions {
+		for session, id := range turns {
 			turn, err := h.s.GetTurn(t.Context(), h.tenant, session, id)
-			if err != nil || turn.Status != store.TurnCompleted {
+			if err != nil || turn.Status != sessions.TurnCompleted {
 				return false
 			}
 		}
@@ -183,7 +183,7 @@ func TestWorkerDoesNotDeferOtherPreparationOrStartRejections(t *testing.T) {
 				nextWorkerFrame(t, frames, proto.TypeExecutionStart)
 			}
 			h.write(prepare.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{State: "rejected", Operation: test.operation, ErrorCode: test.code})
-			waitTurn(t, h, receipt.TurnID, store.TurnFailed)
+			waitTurn(t, h, receipt.TurnID, sessions.TurnFailed)
 		})
 	}
 }

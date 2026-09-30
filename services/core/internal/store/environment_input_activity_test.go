@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -87,7 +88,7 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 		t.Fatal(err)
 	}
 	active := requireEnvironmentInputActivity(t, s, tenant, session.ID, "", "")
-	if active.LastTurn == nil || active.LastTurn.Status != TurnInProgress {
+	if active.LastTurn == nil || active.LastTurn.Status != sessions.TurnInProgress {
 		t.Fatal("normal Turn did not take ownership")
 	}
 	if _, err := s.GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, ErrNotFound) {
@@ -105,12 +106,12 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.TransitionTurn(t.Context(), tenant, session.ID, prior[0].TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnFailed, Outcome: []byte(`{}`)}); err != nil {
+			if _, err := writer.TransitionTurn(t.Context(), tenant, session.ID, prior[0].TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: []byte(`{}`)}); err != nil {
 				t.Fatal(err)
 			}
 			reservation := reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
 			value, err := s.GetSession(t.Context(), tenant, session.ID)
-			if err != nil || value.LastTurn.Status != TurnFailed || value.EnvironmentInputActivity.Status != "requires_action" || !value.PendingInput {
+			if err != nil || value.LastTurn.Status != sessions.TurnFailed || value.EnvironmentInputActivity.Status != "requires_action" || !value.PendingInput {
 				t.Fatal("prior failure hid waiting input", err)
 			}
 			waitingCursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)

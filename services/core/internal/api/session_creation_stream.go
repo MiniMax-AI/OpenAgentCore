@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -83,7 +84,7 @@ func sessionSettled(session store.Session, response v1.Session) bool {
 	}
 	if turn := session.LastTurn; turn != nil {
 		switch turn.Status {
-		case store.TurnQueued, store.TurnInProgress, store.TurnWaiting:
+		case sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting:
 			return false
 		}
 	}

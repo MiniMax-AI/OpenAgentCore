@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"reflect"
 	"testing"
 )
@@ -11,7 +12,7 @@ func TestFunctionResultEventsAreInputs(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-	transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	events := []ExecutionEvent{
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"call","stage":"after","observation":{"status":"completed","kind":"function","name":"lookup","arguments":{},"content":[{"type":"input_text","text":"result"}]}}`)},
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"answer"}`)},
@@ -65,7 +66,7 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 			s, pool := testStore(t)
 			tenant, session := newTurnSession(t, s)
 			turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-			transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 			call := functionCallFixture(items.Identity(turn, "tool:call"))
 			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, call); err != nil {
 				t.Fatal(err)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -86,7 +87,7 @@ func requestTurnCancel(ctx context.Context, q *sqlc.Queries, session pgtype.UUID
 	if err := q.RequestTurnCancel(ctx, sqlc.RequestTurnCancelParams{ID: turn.ID, SessionID: session}); err != nil {
 		return err
 	}
-	if turn.Status == TurnQueued {
+	if turn.Status == sessions.TurnQueued {
 		cancelled, err := q.SessionEventTurn(ctx, sqlc.SessionEventTurnParams{SessionID: session, ID: turn.ID})
 		if err != nil {
 			return err
@@ -94,7 +95,7 @@ func requestTurnCancel(ctx context.Context, q *sqlc.Queries, session pgtype.UUID
 		if err := recordTurnChange(ctx, q, cancelled, false); err != nil {
 			return err
 		}
-	} else if turn.Status == TurnWaiting && !turn.CancelRequestedAt.Valid {
+	} else if turn.Status == sessions.TurnWaiting && !turn.CancelRequestedAt.Valid {
 		cancelling, err := q.SessionEventTurn(ctx, sqlc.SessionEventTurnParams{SessionID: session, ID: turn.ID})
 		if err != nil {
 			return err

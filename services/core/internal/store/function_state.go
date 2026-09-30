@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -29,9 +30,9 @@ func recordFunctionState(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn) e
 	if err != nil {
 		return err
 	}
-	status := TurnInProgress
+	status := sessions.TurnInProgress
 	if len(actions) > 0 {
-		status = TurnWaiting
+		status = sessions.TurnWaiting
 	}
 	if turn.Status != status {
 		turn, err = q.TransitionTurn(ctx, sqlc.TransitionTurnParams{ID: turn.ID, SessionID: turn.SessionID, ExpectedStatus: turn.Status, NewStatus: status, Outcome: []byte(`{}`)})
@@ -51,7 +52,7 @@ func recordSessionActivity(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, 
 	status := "in_progress"
 	if terminalStatus(row.Status) {
 		status = "idle"
-		if row.Status == TurnFailed {
+		if row.Status == sessions.TurnFailed {
 			status = "failed"
 		}
 	} else if len(actions) > 0 {
@@ -63,7 +64,7 @@ func recordSessionActivity(ctx context.Context, q *sqlc.Queries, row sqlc.Turn, 
 	}
 	// Mark the idle or failure of an ending Turn; a reservation made during its
 	// Artifact capture is newer work.
-	return recordSessionChange(ctx, q, row.SessionID, SessionChange{
+	return recordSessionChange(ctx, q, row.SessionID, sessions.SessionChange{
 		Event: v1.SessionEvent{Type: "agent.session." + status}, Turn: &turn,
 		SessionUsage: usage, RequiredActions: actions, Settled: terminalStatus(row.Status),
 	})

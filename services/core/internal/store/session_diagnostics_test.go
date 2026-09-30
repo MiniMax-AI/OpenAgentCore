@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -23,7 +24,7 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	before := diagnosticToolEvent("cmd", "before", "in_progress")
 	after := diagnosticToolEvent("cmd", "after", "failed")
 	for i, event := range []ExecutionEvent{before, after} {
@@ -54,7 +55,7 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, []ExecutionEvent{after}); err != nil {
 		t.Fatal(err)
 	}
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnInProgress, TurnFailed)
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
 	snap, err = s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil || snap.Items[1].CompletedAt != nil {
 		t.Fatal("historical settlement synthesized", snap, err)
@@ -73,7 +74,7 @@ func TestDiagnosticForceSettlementIgnoresNativeClock(t *testing.T) {
 			}
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			before := runtimeDatabaseTime(t, s)
-			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
+			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
 			after := runtimeDatabaseTime(t, s)
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("public native completion changed", completed, err)
@@ -98,7 +99,7 @@ func TestDiagnosticSettlementWaitsForSessionLock(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +110,7 @@ func TestDiagnosticSettlementWaitsForSessionLock(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: TurnInProgress, Status: TurnFailed})
+		_, err := s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
 		done <- err
 	}()
 	// Wait for the actual competing transaction to block, not a scheduler delay.
@@ -278,7 +279,7 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	receipt := submitMessage(t, s, tenant, session.ID, "start")
-	transition(t, s, tenant, session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	events := []ExecutionEvent{diagnosticToolEvent("cmd", "before", "in_progress"), diagnosticToolEvent("cmd", "after", "completed")}
 	if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 1, events); err != nil {
 		t.Fatal(err)
@@ -296,7 +297,7 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 	for _, force := range []bool{false, true} {
 		runtimeSuspensionSQL(t, pool, "UPDATE session_items SET payload=jsonb_set(payload,'{status}','\"in_progress\"') WHERE id=$1", item.ItemID)
 		if force {
-			transition(t, s, tenant, session.ID, receipt.TurnID, TurnInProgress, TurnFailed)
+			transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
 		} else if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, events[1:]); err != nil {
 			t.Fatal(err)
 		}

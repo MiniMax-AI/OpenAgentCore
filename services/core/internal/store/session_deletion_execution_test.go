@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -46,7 +47,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "deleted-native"}}})
-	waitTurn(t, h, input.TurnID, store.TurnCancelled)
+	waitTurn(t, h, input.TurnID, sessions.TurnCancelled)
 	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "deleted-native" {
 		t.Fatal(bound, err)
@@ -61,14 +62,14 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	next := h.message("next", "Unrelated work")
 	h.read(testExecutionRequest)
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "unaffected"})
-	waitTurn(t, h, next.TurnID, store.TurnCompleted)
+	waitTurn(t, h, next.TurnID, sessions.TurnCompleted)
 }
 
 func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 	h := newDispatchHarness(t)
 	input := h.message("interrupted", "Run")
 	ctx := t.Context()
-	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrSessionNotIdle) {
@@ -84,7 +85,7 @@ func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnFailed {
+	if err != nil || turn.Status != sessions.TurnFailed {
 		t.Fatal(turn, err)
 	}
 	if _, err := h.s.GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrNotFound) {
@@ -116,7 +117,7 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); !errors.Is(err, store.ErrSessionNotIdle) {
 		t.Fatal("waiting Session deleted", err)
 	}
-	if again := functionState(t, h, 1); again.LastTurn == nil || again.LastTurn.Status != store.TurnWaiting || !again.LastTurn.CancelRequestedAt.IsZero() {
+	if again := functionState(t, h, 1); again.LastTurn == nil || again.LastTurn.Status != sessions.TurnWaiting || !again.LastTurn.CancelRequestedAt.IsZero() {
 		t.Fatal("rejected deletion changed required actions", again)
 	}
 	if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "cancel-before-delete"); err != nil {
@@ -131,7 +132,7 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 		t.Fatal("Session deleted before cancellation settled", err)
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}}})
-	waitTurn(t, h, input.TurnID, store.TurnCancelled)
+	waitTurn(t, h, input.TurnID, sessions.TurnCancelled)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		err := h.s.DeleteSession(ctx, h.tenant, h.session.ID)
@@ -157,5 +158,5 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	next := h.message("next", "Unrelated work")
 	h.read(testExecutionRequest)
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "unaffected"})
-	waitTurn(t, h, next.TurnID, store.TurnCompleted)
+	waitTurn(t, h, next.TurnID, sessions.TurnCompleted)
 }

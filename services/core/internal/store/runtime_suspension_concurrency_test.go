@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -58,7 +59,7 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)
 			go func() {
-				_, err := w.TransitionTurn(ctx, owner.TenantID, owner.SessionID, turn, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnInProgress})
+				_, err := w.TransitionTurn(ctx, owner.TenantID, owner.SessionID, turn, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 				done <- err
 			}()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -82,10 +83,10 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 			if err := pool.QueryRow(ctx, `SELECT count(*) FROM session_events WHERE session_id=$1 AND payload->'event'->>'type'='agent.session.turn.in_progress'`, owner.SessionID).Scan(&startedEvents); err != nil {
 				t.Fatal(err)
 			}
-			if blocked && (got.Status != TurnQueued || !got.StartedAt.IsZero() || startedEvents != 0) {
+			if blocked && (got.Status != sessions.TurnQueued || !got.StartedAt.IsZero() || startedEvents != 0) {
 				t.Fatal("blocked claim changed Turn or projected start", got, startedEvents)
 			}
-			if !blocked && (got.Status != TurnInProgress || got.StartedAt.IsZero() || startedEvents != 1) {
+			if !blocked && (got.Status != sessions.TurnInProgress || got.StartedAt.IsZero() || startedEvents != 1) {
 				t.Fatal("ordinary compute no longer starts work", got, startedEvents)
 			}
 		})
@@ -202,7 +203,7 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := transitionTurn(ctx, w.queries.WithTx(tx), params, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnInProgress, Outcome: json.RawMessage(`{}`)}); err != nil {
+	if _, err := transitionTurn(ctx, w.queries.WithTx(tx), params, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{}`)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {

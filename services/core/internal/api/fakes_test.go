@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -739,7 +740,7 @@ func (f *fakeSessionArchive) ArchiveManagedSession(a0 context.Context, a1 string
 type fakeSessionEvents struct {
 	t                     testing.TB
 	sessionEventCursor    func(context.Context, string, string) (int64, error)
-	listSessionEvents     func(context.Context, string, string, int64) ([]store.SessionChange, error)
+	listSessionEvents     func(context.Context, string, string, int64) ([]sessions.SessionChange, error)
 	sessionStreamSnapshot func(context.Context, string, string) (store.Session, int64, error)
 }
 
@@ -750,7 +751,7 @@ func (f *fakeSessionEvents) SessionEventCursor(a0 context.Context, a1 string, a2
 	return f.sessionEventCursor(a0, a1, a2)
 }
 
-func (f *fakeSessionEvents) ListSessionEvents(a0 context.Context, a1 string, a2 string, a3 int64) ([]store.SessionChange, error) {
+func (f *fakeSessionEvents) ListSessionEvents(a0 context.Context, a1 string, a2 string, a3 int64) ([]sessions.SessionChange, error) {
 	if f.listSessionEvents == nil {
 		unexpectedCall(f.t, "ListSessionEvents")
 	}
@@ -766,12 +767,12 @@ func (f *fakeSessionEvents) SessionStreamSnapshot(a0 context.Context, a1 string,
 
 type fakeSessionHistory struct {
 	t         testing.TB
-	getTurn   func(context.Context, string, string, string) (store.Turn, error)
+	getTurn   func(context.Context, string, string, string) (sessions.Turn, error)
 	listTurns func(context.Context, string, string, string, int, bool) (store.TurnPage, error)
 	listItems func(context.Context, string, string, string, int, bool) (store.ItemPage, error)
 }
 
-func (f *fakeSessionHistory) GetTurn(a0 context.Context, a1 string, a2 string, a3 string) (store.Turn, error) {
+func (f *fakeSessionHistory) GetTurn(a0 context.Context, a1 string, a2 string, a3 string) (sessions.Turn, error) {
 	if f.getTurn == nil {
 		unexpectedCall(f.t, "GetTurn")
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -27,7 +28,7 @@ func projectSubagentTurn(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 	if json.Unmarshal(raw, &p) != nil || !validNativeIdentity(p.NativeID) || !validNativeIdentity(p.TurnID) || p.CreatedAtMS <= 0 {
 		return ErrInvalidInput
 	}
-	if p.Status != TurnQueued && p.Status != TurnInProgress && p.Status != TurnWaiting && !terminalStatus(p.Status) {
+	if p.Status != sessions.TurnQueued && p.Status != sessions.TurnInProgress && p.Status != sessions.TurnWaiting && !terminalStatus(p.Status) {
 		return ErrInvalidInput
 	}
 	if terminalStatus(p.Status) != (p.CompletedAtMS != nil) {

@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -54,7 +55,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 		t.Fatal("unqualified structured output dispatched")
 	}
 	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
-	if err != nil || turn.Status != store.TurnQueued {
+	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal("unqualified work was claimed", turn.Status, err)
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -63,7 +64,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 	f.session = client.created(token, "/v1/agents/sessions", newSession)
 	f.turn = first("/v1/agents/sessions/" + f.session + "/turns")
 	f.item = first("/v1/agents/sessions/" + f.session + "/items")
-	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnCancelled}); err != nil {
+	if _, err := s.TransitionTurn(ctx, tenant, f.session, f.turn, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.SubmitMessage(ctx, tenant, f.session, label+"-second", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"second"}]}]}`)); err != nil {
@@ -99,7 +100,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		if err = writer.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+		if _, err = writer.TransitionTurn(ctx, tenant, created.ID, receipt.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		opened := int64(1700000001000)
@@ -108,7 +109,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, client
 		}
 		// Distinct creation times keep child-turn before later-child-turn.
 		turn := func(child, id string, created int64) store.ExecutionEvent {
-			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: store.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
+			return subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: child, TurnID: id, Status: sessions.TurnInProgress, CreatedAtMS: created, StartedAtMS: &created})
 		}
 		message := func(child, turn, id string, position int32) store.ExecutionEvent {
 			text := "answer " + id

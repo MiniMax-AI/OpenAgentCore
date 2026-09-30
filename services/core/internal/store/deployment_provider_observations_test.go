@@ -13,6 +13,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -52,10 +53,10 @@ func newProviderObservationFixture(t *testing.T) providerObservationFixture {
 	}
 	return providerObservationFixture{s, pool, tenant, input, session}
 }
-func (f providerObservationFixture) terminal(t *testing.T, status, coreCode, nativeCode string) Turn {
+func (f providerObservationFixture) terminal(t *testing.T, status, coreCode, nativeCode string) sessions.Turn {
 	t.Helper()
 	receipt := submitMessage(t, f.s, f.tenant, f.session.ID, uuid.NewString())
-	transition(t, f.s, f.tenant, f.session.ID, receipt.TurnID, TurnQueued, TurnInProgress)
+	transition(t, f.s, f.tenant, f.session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	outcome, _ := json.Marshal(map[string]string{"error_code": coreCode, "engine_error_code": nativeCode})
 	turn, err := f.s.CompleteExecution(t.Context(), f.tenant, f.session.ID, receipt.TurnID, status, outcome, "", receipt.Sequence)
 	if err != nil {
@@ -63,7 +64,7 @@ func (f providerObservationFixture) terminal(t *testing.T, status, coreCode, nat
 	}
 	return turn
 }
-func (f providerObservationFixture) observe(t *testing.T, turn Turn, want int64) {
+func (f providerObservationFixture) observe(t *testing.T, turn sessions.Turn, want int64) {
 	t.Helper()
 	n, err := f.s.ObserveDeploymentModelProvider(t.Context(), f.tenant, f.session.ID, turn.ID)
 	if err != nil || n != want {
@@ -110,7 +111,7 @@ func TestDeploymentObservationSnapshotReplacementAndRetry(t *testing.T) {
 	if err != nil || frozen == nil || *frozen != *before.Provider {
 		t.Fatal("frozen tuple bundle changed", err)
 	}
-	staleFixture.observe(t, staleFixture.terminal(t, TurnFailed, "engine_failed", "authentication_error"), 0)
+	staleFixture.observe(t, staleFixture.terminal(t, sessions.TurnFailed, "engine_failed", "authentication_error"), 0)
 	current, _ := f.s.DeploymentModelProvider(t.Context(), "codex")
 	retry := f.input
 	retry.ModelProvider = current.Provider
@@ -133,7 +134,7 @@ func TestDeploymentObservationSnapshotReplacementAndRetry(t *testing.T) {
 	if err != nil || frozenProvider == nil || *frozenProvider != *f.input.ModelProvider {
 		t.Fatal("migration/replacement changed Session bundle", err)
 	}
-	f.observe(t, f.terminal(t, TurnCompleted, "", ""), 0)
+	f.observe(t, f.terminal(t, sessions.TurnCompleted, "", ""), 0)
 }
 func TestDeploymentObservationEligibilityAndReset(t *testing.T) {
 	allowed := []string{"authentication_error", "connection_failed", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "resource_not_found", "request_timeout", "invalid_request"}
@@ -142,12 +143,12 @@ func TestDeploymentObservationEligibilityAndReset(t *testing.T) {
 		if _, err := f.pool.Exec(t.Context(), "UPDATE deployment_model_providers SET last_error_at=NULL,last_error_code=NULL,recovery_pending=false"); err != nil {
 			t.Fatal(err)
 		}
-		f.observe(t, f.terminal(t, TurnFailed, "engine_failed", code), 1)
+		f.observe(t, f.terminal(t, sessions.TurnFailed, "engine_failed", code), 1)
 	}
-	for _, tc := range []struct{ status, core, code string }{{TurnFailed, "engine_failed", "context_length_exceeded"}, {TurnFailed, "engine_failed", "cyber_policy"}, {TurnFailed, "engine_failed", "harness_error"}, {TurnFailed, "engine_failed", "untrusted raw text"}, {TurnFailed, "input_not_applied", "authentication_error"}, {TurnFailed, "device_disconnected", "authentication_error"}, {TurnCancelled, "engine_failed", "authentication_error"}} {
+	for _, tc := range []struct{ status, core, code string }{{sessions.TurnFailed, "engine_failed", "context_length_exceeded"}, {sessions.TurnFailed, "engine_failed", "cyber_policy"}, {sessions.TurnFailed, "engine_failed", "harness_error"}, {sessions.TurnFailed, "engine_failed", "untrusted raw text"}, {sessions.TurnFailed, "input_not_applied", "authentication_error"}, {sessions.TurnFailed, "device_disconnected", "authentication_error"}, {sessions.TurnCancelled, "engine_failed", "authentication_error"}} {
 		f.observe(t, f.terminal(t, tc.status, tc.core, tc.code), 0)
 	}
-	success := f.terminal(t, TurnCompleted, "", "")
+	success := f.terminal(t, sessions.TurnCompleted, "", "")
 	f.observe(t, success, 1)
 	n, err := f.s.ObserveDeploymentModelProvider(t.Context(), uuid.NewString(), f.session.ID, success.ID)
 	if n != 0 || err != nil {
@@ -207,16 +208,16 @@ func TestDeploymentObservationSourceAndHistoricalExclusion(t *testing.T) {
 }
 func TestDeploymentObservationConcurrentThrottleAndRecovery(t *testing.T) {
 	f := newProviderObservationFixture(t)
-	successes := []Turn{}
-	failures := []Turn{}
+	successes := []sessions.Turn{}
+	failures := []sessions.Turn{}
 	for range 8 {
-		successes = append(successes, f.terminal(t, TurnCompleted, "", ""))
+		successes = append(successes, f.terminal(t, sessions.TurnCompleted, "", ""))
 	}
 	for i := range 8 {
 		code := []string{"authentication_error", "rate_limit_exceeded"}[i%2]
-		failures = append(failures, f.terminal(t, TurnFailed, "engine_failed", code))
+		failures = append(failures, f.terminal(t, sessions.TurnFailed, "engine_failed", code))
 	}
-	concurrent := func(turns []Turn, want int64) {
+	concurrent := func(turns []sessions.Turn, want int64) {
 		t.Helper()
 		var wg sync.WaitGroup
 		counts := make(chan int64, len(turns))
@@ -268,12 +269,12 @@ func (db *observationClockDB) Exec(ctx context.Context, sql string, args ...any)
 }
 func TestDeploymentObservationClockBoundariesRollbackAndPlan(t *testing.T) {
 	f := newProviderObservationFixture(t)
-	success := f.terminal(t, TurnCompleted, "", "")
-	failure := f.terminal(t, TurnFailed, "engine_failed", "authentication_error")
+	success := f.terminal(t, sessions.TurnCompleted, "", "")
+	failure := f.terminal(t, sessions.TurnFailed, "engine_failed", "authentication_error")
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	db := &observationClockDB{Pool: f.pool}
 	q := sqlc.New(db)
-	observe := func(turn Turn, offset time.Duration, want int64) {
+	observe := func(turn sessions.Turn, offset time.Duration, want int64) {
 		t.Helper()
 		db.at = base.Add(offset)
 		lookup, _ := turnLookup(f.tenant, f.session.ID, turn.ID)
@@ -327,7 +328,7 @@ func TestDeploymentObservationReplacementLockRecheckAndTimeout(t *testing.T) {
 	for _, remove := range []bool{false, true} {
 		t.Run(fmt.Sprint("delete=", remove), func(t *testing.T) {
 			f := newProviderObservationFixture(t)
-			turn := f.terminal(t, TurnCompleted, "", "")
+			turn := f.terminal(t, sessions.TurnCompleted, "", "")
 			tx, err := f.pool.Begin(t.Context())
 			if err != nil {
 				t.Fatal(err)
@@ -420,5 +421,5 @@ func TestDeploymentObservationMigrationRoundTrip(t *testing.T) {
 	if err != nil || frozenProvider == nil || *frozenProvider != *f.input.ModelProvider {
 		t.Fatal("migration/replacement changed Session bundle", err)
 	}
-	f.observe(t, f.terminal(t, TurnCompleted, "", ""), 0)
+	f.observe(t, f.terminal(t, sessions.TurnCompleted, "", ""), 0)
 }

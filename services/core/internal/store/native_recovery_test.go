@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"testing"
 )
 
@@ -26,9 +27,9 @@ func TestSessionExecutionBindingRetainsStartedExecutionRequirement(t *testing.T)
 	assertStarted(s, false)
 	first := submitMessage(t, s, tenant, session.ID, "first")
 	assertStarted(s, false)
-	transition(t, s, tenant, session.ID, first.TurnID, TurnQueued, TurnInProgress)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	assertStarted(s, true)
-	transition(t, s, tenant, session.ID, first.TurnID, TurnInProgress, TurnFailed)
+	transition(t, s, tenant, session.ID, first.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
 	pool.Close()
 	restarted, _ := testStore(t)
 	assertStarted(restarted, true)

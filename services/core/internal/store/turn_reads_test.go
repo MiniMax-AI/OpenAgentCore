@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -17,7 +18,7 @@ func TestTurnPaginationRetainsScopeAndOrder(t *testing.T) {
 	ids := make([]string, 0, 4)
 	for i := 0; i < 4; i++ {
 		receipt := submitMessage(t, s, tenant, session.ID, uuid.NewString())
-		transition(t, s, tenant, session.ID, receipt.TurnID, TurnQueued, TurnCancelled)
+		transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnQueued, sessions.TurnCancelled)
 		ids = append(ids, receipt.TurnID)
 	}
 	// Equal creation times exercise the ID tie-breaker across page boundaries.

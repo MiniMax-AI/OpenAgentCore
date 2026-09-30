@@ -26,6 +26,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 var (
@@ -46,14 +47,14 @@ type Session struct {
 	Metadata                 map[string]string
 	CreatedAt                time.Time
 	Configuration            json.RawMessage
-	LastTurn                 *Turn
+	LastTurn                 *sessions.Turn
 	Usage                    json.RawMessage
 	RequiredActions          []v1.FunctionCallAction
 	Environment              *Environment
-	EnvironmentInputActivity *EnvironmentInputActivity
+	EnvironmentInputActivity *sessions.EnvironmentInputActivity
 	// EnvironmentFailure is the recorded provisioning failure of a failed hosted
 	// Environment. It makes the Session failed and is terminal.
-	EnvironmentFailure *EnvironmentFailure
+	EnvironmentFailure *sessions.EnvironmentFailure
 	// PendingInput reports that the latest input reservation, read once no Turn
 	// is active or newer, can still start a Turn. It only supports settlement
 	// checks and is never rendered.

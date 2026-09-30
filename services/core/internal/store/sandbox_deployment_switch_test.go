@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -321,13 +322,13 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, TurnTransition{ExpectedStatus: TurnQueued, Status: TurnInProgress}); err != nil {
+	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	if err := w.AppendTurnEvents(t.Context(), tenant, history.ID, input.TurnID, 1, []ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained answer"}`)}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, TurnTransition{ExpectedStatus: TurnInProgress, Status: TurnCompleted}); err != nil {
+	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
 	items, err := s.ListItems(t.Context(), tenant, history.ID, "", 100, true)

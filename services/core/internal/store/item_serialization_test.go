@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"reflect"
 	"strings"
 	"testing"
@@ -69,7 +70,7 @@ func TestAssistantMessageEventsFollowOfficialSequence(t *testing.T) {
 			s, _ := testStore(t)
 			tenant, session := newTurnSession(t, s)
 			turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
-			transition(t, s, tenant, session.ID, turn, TurnQueued, TurnInProgress)
+			transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 			cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
 			if err != nil {
 				t.Fatal(err)

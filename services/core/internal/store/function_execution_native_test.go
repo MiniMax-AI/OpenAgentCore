@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -27,14 +28,14 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 		running := h.run(ctx, input.TurnID)
 		state := functionState(t, h, 1)
 		action := state.RequiredActions[0]
-		if action.Name != "lookup_ticket" || action.TurnID != input.TurnID || state.LastTurn.Status != store.TurnWaiting {
+		if action.Name != "lookup_ticket" || action.TurnID != input.TurnID || state.LastTurn.Status != sessions.TurnWaiting {
 			t.Fatal(action, state.LastTurn)
 		}
 		if index == 2 {
 			if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "native-cancel"); err != nil {
 				t.Fatal(err)
 			}
-			h.finished(running, store.TurnCancelled)
+			h.finished(running, sessions.TurnCancelled)
 			break
 		}
 		value := map[string]any{"success": index == 0, "output": output}
@@ -47,7 +48,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 				t.Fatal(err)
 			}
 		}
-		h.finished(running, store.TurnCompleted)
+		h.finished(running, sessions.TurnCompleted)
 		saved, err := h.s.GetFunctionCall(ctx, h.tenant, h.session.ID, input.TurnID, action.CallID)
 		if err != nil || !saved.Applied {
 			t.Fatal(saved, err)

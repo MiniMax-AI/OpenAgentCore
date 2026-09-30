@@ -8,12 +8,13 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type EnvironmentRun struct {
 	Reservation store.EnvironmentInputReservation
-	Turn        store.Turn
+	Turn        sessions.Turn
 }
 
 // RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor. It
@@ -112,7 +113,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	through := run.Reservation.Receipts[len(run.Reservation.Receipts)-1].Sequence
 	releaseDelivery, err := peer.TrackExecutionDelivery(req.RunID)
 	if err != nil {
-		run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, store.TurnFailed)
+		run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 		return run, err
 	}
 	defer releaseDelivery()

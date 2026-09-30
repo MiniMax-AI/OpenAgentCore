@@ -16,6 +16,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -52,11 +53,11 @@ func (f *creationStreamFixture) SessionEventCursor(context.Context, string, stri
 	return f.sequence, nil
 }
 
-func (f *creationStreamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor int64) ([]store.SessionChange, error) {
+func (f *creationStreamFixture) ListSessionEvents(_ context.Context, _, _ string, cursor int64) ([]sessions.SessionChange, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cursors = append(f.cursors, cursor)
-	var changes []store.SessionChange
+	var changes []sessions.SessionChange
 	for _, change := range f.changes {
 		if change.Sequence > cursor {
 			changes = append(changes, change)
@@ -173,8 +174,8 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 }
 
 // turn returns a Turn snapshot with the given status for the fixture Session.
-func (h *creationStreamHarness) turn(status string, usage string) *store.Turn {
-	turn := &store.Turn{ID: "turn_1", SessionID: h.fixture.session.ID, Status: status, CreatedAt: time.Unix(1700000001, 0)}
+func (h *creationStreamHarness) turn(status string, usage string) *sessions.Turn {
+	turn := &sessions.Turn{ID: "turn_1", SessionID: h.fixture.session.ID, Status: status, CreatedAt: time.Unix(1700000001, 0)}
 	if usage != "" {
 		turn.Usage = json.RawMessage(usage)
 	}
@@ -183,7 +184,7 @@ func (h *creationStreamHarness) turn(status string, usage string) *store.Turn {
 
 // commit applies a projection change and its events atomically, as the Store
 // commits Session events with the state they describe.
-func (h *creationStreamHarness) commit(update func(*store.Session), changes ...store.SessionChange) {
+func (h *creationStreamHarness) commit(update func(*store.Session), changes ...sessions.SessionChange) {
 	h.fixture.mu.Lock()
 	defer h.fixture.mu.Unlock()
 	if update != nil {
@@ -308,24 +309,24 @@ func sameJSON(t *testing.T, raw json.RawMessage, value any) bool {
 	return reflect.DeepEqual(left, right)
 }
 
-func turnChange(kind string, turn *store.Turn) store.SessionChange {
-	return store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn." + kind, EventID: uuid.NewString(), SessionID: turn.SessionID, TurnID: turn.ID}, Turn: turn}
+func turnChange(kind string, turn *sessions.Turn) sessions.SessionChange {
+	return sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn." + kind, EventID: uuid.NewString(), SessionID: turn.SessionID, TurnID: turn.ID}, Turn: turn}
 }
 
 // sessionChange records a Turn-owned Session status snapshot, settled when its
 // Turn is terminal, as the Store records it.
-func sessionChange(status string, turn *store.Turn, actions []v1.FunctionCallAction) store.SessionChange {
-	settled := turn != nil && (turn.Status == store.TurnCompleted || turn.Status == store.TurnFailed || turn.Status == store.TurnCancelled)
-	return store.SessionChange{Event: v1.SessionEvent{Type: "agent.session." + status, EventID: uuid.NewString(), SessionID: "session"}, Turn: turn, RequiredActions: actions, Settled: settled}
+func sessionChange(status string, turn *sessions.Turn, actions []v1.FunctionCallAction) sessions.SessionChange {
+	settled := turn != nil && (turn.Status == sessions.TurnCompleted || turn.Status == sessions.TurnFailed || turn.Status == sessions.TurnCancelled)
+	return sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session." + status, EventID: uuid.NewString(), SessionID: "session"}, Turn: turn, RequiredActions: actions, Settled: settled}
 }
 
-func activityChange(activity *store.EnvironmentInputActivity, settled bool) store.SessionChange {
-	return store.SessionChange{Event: v1.SessionEvent{Type: "agent.session." + activity.Status, EventID: uuid.NewString()}, EnvironmentInputActivity: activity, Settled: settled}
+func activityChange(activity *sessions.EnvironmentInputActivity, settled bool) sessions.SessionChange {
+	return sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session." + activity.Status, EventID: uuid.NewString()}, EnvironmentInputActivity: activity, Settled: settled}
 }
 
-func userItemChange(turn *store.Turn) store.SessionChange {
+func userItemChange(turn *sessions.Turn) sessions.SessionChange {
 	text := "First"
-	return store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", EventID: uuid.NewString(), SessionID: turn.SessionID, TurnID: turn.ID,
+	return sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.item.added", EventID: uuid.NewString(), SessionID: turn.SessionID, TurnID: turn.ID,
 		Item: &v1.Item{ID: "item_1", TurnID: turn.ID, Type: "message", Status: "completed", Role: "user", Content: []v1.ItemContent{{Type: "input_text", Text: &text}}}}}
 }
 
@@ -335,7 +336,7 @@ const creationBody = `{"agent":{"model":"model"},"environment":{"type":"none"},"
 
 const savedBody = `{"agent_id":"agent_test","environment":{"type":"none"},"input":"First","stream":true}`
 
-func setTurn(turn *store.Turn) func(*store.Session) {
+func setTurn(turn *sessions.Turn) func(*store.Session) {
 	return func(session *store.Session) { session.LastTurn, session.RequiredActions = turn, nil }
 }
 
@@ -348,7 +349,7 @@ func TestCreationStreamClosesOnceSettled(t *testing.T) {
 		t.Run(test.terminal, func(t *testing.T) {
 			h := newCreationStreamHarness(t)
 			// The admission result is the committed post-input projection.
-			queued := h.turn(store.TurnQueued, "")
+			queued := h.turn(sessions.TurnQueued, "")
 			h.commit(setTurn(queued), turnChange("created", queued), userItemChange(queued), sessionChange("in_progress", queued, nil))
 			h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
 			frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
@@ -359,7 +360,7 @@ func TestCreationStreamClosesOnceSettled(t *testing.T) {
 			if err != nil || created.Session == nil || created.Session.Status != "in_progress" || !sameJSON(t, observed[0].Data["session"], projection) {
 				t.Fatal("created snapshot differs from the JSON projection", string(observed[0].Data["session"]), err)
 			}
-			running := h.turn(store.TurnInProgress, "")
+			running := h.turn(sessions.TurnInProgress, "")
 			h.commit(setTurn(running), turnChange("in_progress", running))
 			expectTypes(t, frames, "agent.session.turn.in_progress")
 			expectOpen(t, frames)
@@ -387,14 +388,14 @@ func TestCreationStreamClosesOnceSettled(t *testing.T) {
 
 func TestCreationStreamStaysOpenAcrossRequiredAction(t *testing.T) {
 	h := newCreationStreamHarness(t)
-	queued := h.turn(store.TurnQueued, "")
+	queued := h.turn(sessions.TurnQueued, "")
 	h.commit(setTurn(queued), turnChange("created", queued), userItemChange(queued), sessionChange("in_progress", queued, nil))
 	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 	defer cancel()
 	expectTypes(t, frames, "agent.session.created", "agent.session.turn.created", "agent.session.turn.item.added", "agent.session.in_progress")
 
-	waiting := h.turn(store.TurnWaiting, "")
+	waiting := h.turn(sessions.TurnWaiting, "")
 	actions := []v1.FunctionCallAction{{Type: "function_call", CallID: "call_1", Name: "lookup", TurnID: waiting.ID, Arguments: json.RawMessage(`{}`)}}
 	h.commit(func(session *store.Session) { session.LastTurn, session.RequiredActions = waiting, actions },
 		sessionChange("requires_action", waiting, actions))
@@ -402,11 +403,11 @@ func TestCreationStreamStaysOpenAcrossRequiredAction(t *testing.T) {
 	expectOpen(t, frames)
 
 	// The function result resumes the Turn; the stream ends once it settles.
-	resumed := h.turn(store.TurnInProgress, "")
+	resumed := h.turn(sessions.TurnInProgress, "")
 	h.commit(setTurn(resumed), sessionChange("in_progress", resumed, nil))
 	expectTypes(t, frames, "agent.session.in_progress")
 	expectOpen(t, frames)
-	completed := h.turn(store.TurnCompleted, measuredUsage)
+	completed := h.turn(sessions.TurnCompleted, measuredUsage)
 	h.commit(setTurn(completed), turnChange("completed", completed), sessionChange("idle", completed, nil))
 	expectTypes(t, frames, "agent.session.turn.completed", "agent.session.idle")
 	expectEnded(t, frames)
@@ -416,7 +417,7 @@ func TestCreationStreamWithoutAdmittedWorkClosesAfterCreated(t *testing.T) {
 	h := newCreationStreamHarness(t)
 	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
 	// Work committed after the creation is not followed.
-	queued := h.turn(store.TurnQueued, "")
+	queued := h.turn(sessions.TurnQueued, "")
 	h.commit(nil, turnChange("created", queued))
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 	defer cancel()
@@ -443,7 +444,7 @@ func TestCreationStreamWaitsForPendingProvisioning(t *testing.T) {
 			}
 			expectOpen(t, frames)
 			if outcome == "failure" {
-				failed := &store.EnvironmentInputActivity{Status: "failed", Failure: "environment_unavailable", LastActiveAt: time.Unix(1700000005, 0)}
+				failed := &sessions.EnvironmentInputActivity{Status: "failed", Failure: "environment_unavailable", LastActiveAt: time.Unix(1700000005, 0)}
 				h.commit(func(session *store.Session) { session.PendingInput, session.EnvironmentInputActivity = false, failed },
 					activityChange(failed, true))
 				expectTypes(t, frames, "agent.session.failed")
@@ -458,7 +459,7 @@ func TestCreationStreamWaitsForPendingProvisioning(t *testing.T) {
 
 func TestCreationStreamEndsWhenSessionIsDeleted(t *testing.T) {
 	h := newCreationStreamHarness(t)
-	queued := h.turn(store.TurnQueued, "")
+	queued := h.turn(sessions.TurnQueued, "")
 	h.commit(setTurn(queued))
 	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: 10}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
@@ -470,15 +471,15 @@ func TestCreationStreamEndsWhenSessionIsDeleted(t *testing.T) {
 
 func TestGetStreamStaysOpenAfterSettlement(t *testing.T) {
 	h := newCreationStreamHarness(t)
-	h.commit(setTurn(h.turn(store.TurnInProgress, "")))
+	h.commit(setTurn(h.turn(sessions.TurnInProgress, "")))
 	frames, cancel := h.open(http.MethodGet, "/v1/agents/sessions/"+h.fixture.session.ID+"/events", "")
 	defer cancel()
-	completed := h.turn(store.TurnCompleted, "")
+	completed := h.turn(sessions.TurnCompleted, "")
 	h.commit(setTurn(completed), turnChange("completed", completed), sessionChange("idle", completed, nil))
 	expectTypes(t, frames, "agent.session.turn.completed", "agent.session.idle")
 	expectOpen(t, frames)
-	later := h.turn(store.TurnQueued, "")
-	failed := h.turn(store.TurnFailed, "")
+	later := h.turn(sessions.TurnQueued, "")
+	failed := h.turn(sessions.TurnFailed, "")
 	h.commit(setTurn(failed), turnChange("created", later), sessionChange("failed", failed, nil))
 	expectTypes(t, frames, "agent.session.turn.created", "agent.session.failed")
 	expectOpen(t, frames)
@@ -488,21 +489,21 @@ func TestGetStreamStaysOpenAfterSettlement(t *testing.T) {
 // commits in the same drained batch as the settling idle or between the
 // fallback's settled snapshot and its drain.
 func TestCreationStreamStopsBeforeLaterWork(t *testing.T) {
-	later := func(h *creationStreamHarness) []store.SessionChange {
-		queued := h.turn(store.TurnQueued, "")
+	later := func(h *creationStreamHarness) []sessions.SessionChange {
+		queued := h.turn(sessions.TurnQueued, "")
 		queued.ID = "turn_b"
-		return []store.SessionChange{turnChange("created", queued), userItemChange(queued), sessionChange("in_progress", queued, nil)}
+		return []sessions.SessionChange{turnChange("created", queued), userItemChange(queued), sessionChange("in_progress", queued, nil)}
 	}
 	t.Run("same batch as the settling idle", func(t *testing.T) {
 		h := newCreationStreamHarness(t)
-		h.commit(setTurn(h.turn(store.TurnInProgress, "")))
+		h.commit(setTurn(h.turn(sessions.TurnInProgress, "")))
 		h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
 		frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 		defer cancel()
 		expectTypes(t, frames, "agent.session.created")
 		// The settling idle and B's new Turn commit before the next poll drains them together.
-		completed := h.turn(store.TurnCompleted, "")
-		changes := append([]store.SessionChange{turnChange("completed", completed), sessionChange("idle", completed, nil)}, later(h)...)
+		completed := h.turn(sessions.TurnCompleted, "")
+		changes := append([]sessions.SessionChange{turnChange("completed", completed), sessionChange("idle", completed, nil)}, later(h)...)
 		h.commit(func(session *store.Session) { session.LastTurn = changes[2].Turn }, changes...)
 		expectTypes(t, frames, "agent.session.turn.completed", "agent.session.idle")
 		expectEnded(t, frames)
@@ -520,7 +521,7 @@ func TestCreationStreamStopsBeforeLaterWork(t *testing.T) {
 		// alongside an unsent environment event, before the fallback read.
 		h.fixture.beforeSnapshot = func() {
 			h.commit(func(session *store.Session) { session.PendingInput = false },
-				store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.environment.disconnected", EventID: uuid.NewString(), SessionID: h.fixture.session.ID,
+				sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.environment.disconnected", EventID: uuid.NewString(), SessionID: h.fixture.session.ID,
 					Environment: &v1.SessionEnvironmentState{ID: "environment", Type: "self_hosted", Status: "disconnected"}}})
 		}
 		// B's Turn commits after that settled read and before its drain.
@@ -536,14 +537,14 @@ func TestCreationStreamStopsBeforeLaterWork(t *testing.T) {
 
 func TestCreationStreamIgnoresConnectionIdle(t *testing.T) {
 	h := newCreationStreamHarness(t)
-	waiting := &store.EnvironmentInputActivity{Status: "requires_action", LastActiveAt: time.Unix(1700000002, 0)}
+	waiting := &sessions.EnvironmentInputActivity{Status: "requires_action", LastActiveAt: time.Unix(1700000002, 0)}
 	h.commit(func(session *store.Session) { session.PendingInput = true })
 	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
 	defer cancel()
 	expectTypes(t, frames, "agent.session.created")
 	// A self-hosted connection clears the action; the input is still pending.
-	connected := &store.EnvironmentInputActivity{Status: "idle", LastActiveAt: waiting.LastActiveAt}
+	connected := &sessions.EnvironmentInputActivity{Status: "idle", LastActiveAt: waiting.LastActiveAt}
 	h.commit(func(session *store.Session) { session.EnvironmentInputActivity = connected }, activityChange(connected, false))
 	expectTypes(t, frames, "agent.session.idle")
 	expectOpen(t, frames)
@@ -554,7 +555,7 @@ func TestCreationStreamIgnoresConnectionIdle(t *testing.T) {
 
 func TestCreationStreamBoundsProjectionReads(t *testing.T) {
 	h := newCreationStreamHarness(t)
-	running := h.turn(store.TurnInProgress, "")
+	running := h.turn(sessions.TurnInProgress, "")
 	h.commit(setTurn(running))
 	h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Created: true, Cursor: h.fixture.sequence}
 	frames, cancel := h.open(http.MethodPost, "/v1/agents/sessions", creationBody)
@@ -565,7 +566,7 @@ func TestCreationStreamBoundsProjectionReads(t *testing.T) {
 	count := 0
 	for time.Now().Before(deadline) {
 		text := "x"
-		h.commit(nil, store.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.output_text.delta", EventID: uuid.NewString(), SessionID: running.SessionID, TurnID: running.ID, Delta: &text}})
+		h.commit(nil, sessions.SessionChange{Event: v1.SessionEvent{Type: "agent.session.turn.output_text.delta", EventID: uuid.NewString(), SessionID: running.SessionID, TurnID: running.ID, Delta: &text}})
 		count++
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -590,20 +591,20 @@ func TestCreationRetryStreamEndsImmediately(t *testing.T) {
 		upsert bool
 	}{
 		{"initial work running", func(h *creationStreamHarness) {
-			running := h.turn(store.TurnInProgress, "")
+			running := h.turn(sessions.TurnInProgress, "")
 			h.commit(setTurn(running), turnChange("in_progress", running))
 		}, false},
 		{"initial work settled", func(h *creationStreamHarness) {
-			completed := h.turn(store.TurnCompleted, "")
+			completed := h.turn(sessions.TurnCompleted, "")
 			h.commit(setTurn(completed), turnChange("completed", completed), sessionChange("idle", completed, nil))
 		}, false},
 		{"superseded by another client's Turn", func(h *creationStreamHarness) {
-			later := h.turn(store.TurnInProgress, "")
+			later := h.turn(sessions.TurnInProgress, "")
 			later.ID = "turn_b"
 			h.commit(setTurn(later), turnChange("created", later), userItemChange(later), sessionChange("in_progress", later, nil))
 		}, false},
 		{"upsert retry", func(h *creationStreamHarness) {
-			h.commit(setTurn(h.turn(store.TurnInProgress, "")))
+			h.commit(setTurn(h.turn(sessions.TurnInProgress, "")))
 			h.fixture.creation = store.SessionCreation{Session: h.fixture.session, Cursor: 10}
 		}, true},
 	} {
@@ -643,17 +644,17 @@ func TestCreationRetryStreamEndsImmediately(t *testing.T) {
 
 func TestSettlingEvents(t *testing.T) {
 	for _, test := range []struct {
-		change  store.SessionChange
+		change  sessions.SessionChange
 		settles bool
 	}{
-		{sessionChange("idle", &store.Turn{Status: store.TurnCompleted}, nil), true},
-		{activityChange(&store.EnvironmentInputActivity{Status: "idle"}, true), true},
-		{activityChange(&store.EnvironmentInputActivity{Status: "idle"}, false), false},
-		{activityChange(&store.EnvironmentInputActivity{Status: "failed"}, true), true},
-		{sessionChange("failed", &store.Turn{Status: store.TurnFailed}, nil), true},
-		{sessionChange("requires_action", &store.Turn{Status: store.TurnWaiting}, nil), false},
-		{sessionChange("in_progress", &store.Turn{Status: store.TurnQueued}, nil), false},
-		{turnChange("completed", &store.Turn{Status: store.TurnCompleted}), false},
+		{sessionChange("idle", &sessions.Turn{Status: sessions.TurnCompleted}, nil), true},
+		{activityChange(&sessions.EnvironmentInputActivity{Status: "idle"}, true), true},
+		{activityChange(&sessions.EnvironmentInputActivity{Status: "idle"}, false), false},
+		{activityChange(&sessions.EnvironmentInputActivity{Status: "failed"}, true), true},
+		{sessionChange("failed", &sessions.Turn{Status: sessions.TurnFailed}, nil), true},
+		{sessionChange("requires_action", &sessions.Turn{Status: sessions.TurnWaiting}, nil), false},
+		{sessionChange("in_progress", &sessions.Turn{Status: sessions.TurnQueued}, nil), false},
+		{turnChange("completed", &sessions.Turn{Status: sessions.TurnCompleted}), false},
 	} {
 		if settlingEvent(test.change) != test.settles {
 			t.Fatal("unexpected settling event", test.change.Event.Type, test.change.Settled)
@@ -668,19 +669,19 @@ func TestSessionSettledProjection(t *testing.T) {
 		pending bool
 		settled bool
 	}{
-		{"idle", store.TurnCompleted, false, true},
-		{"failed", store.TurnFailed, false, true},
+		{"idle", sessions.TurnCompleted, false, true},
+		{"failed", sessions.TurnFailed, false, true},
 		{"idle", "", false, true},
 		{"failed", "", false, true},
 		{"idle", "", true, false},
-		{"idle", store.TurnCancelled, true, false},
-		{"in_progress", store.TurnQueued, false, false},
-		{"requires_action", store.TurnWaiting, false, false},
+		{"idle", sessions.TurnCancelled, true, false},
+		{"in_progress", sessions.TurnQueued, false, false},
+		{"requires_action", sessions.TurnWaiting, false, false},
 		{"requires_action", "", true, false},
 	} {
 		session := store.Session{PendingInput: test.pending}
 		if test.turn != "" {
-			session.LastTurn = &store.Turn{Status: test.turn}
+			session.LastTurn = &sessions.Turn{Status: test.turn}
 		}
 		if sessionSettled(session, v1.Session{Status: test.status}) != test.settled {
 			t.Fatal("unexpected settlement", test)

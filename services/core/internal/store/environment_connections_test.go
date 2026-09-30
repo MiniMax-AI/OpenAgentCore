@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,13 +35,13 @@ func connectionSnapshot(t *testing.T, pool *pgxpool.Pool, id string) string {
 	return value
 }
 
-func connectionChanges(t *testing.T, s *Store, tenant, session string) []SessionChange {
+func connectionChanges(t *testing.T, s *Store, tenant, session string) []sessions.SessionChange {
 	t.Helper()
 	all, err := s.ListSessionEvents(t.Context(), tenant, session, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var changes []SessionChange
+	var changes []sessions.SessionChange
 	for _, change := range all {
 		if change.Event.Environment != nil {
 			changes = append(changes, change)

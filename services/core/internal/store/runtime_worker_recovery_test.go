@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -125,7 +126,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "original input completed once", func() bool {
 		turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
-		return err == nil && turn.Status == store.TurnCompleted
+		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	var turns int
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM turns WHERE session_id=$1`, h.session.ID).Scan(&turns); err != nil || turns != 1 {
@@ -155,7 +156,7 @@ func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, turn)
-	if err != nil || got.Status != store.TurnQueued || !got.StartedAt.IsZero() {
+	if err != nil || got.Status != sessions.TurnQueued || !got.StartedAt.IsZero() {
 		t.Fatal("startup consumed queued work before restore", got, err)
 	}
 }

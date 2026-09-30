@@ -12,6 +12,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -106,13 +107,13 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	first := h.message("first", "Return an answer.")
-	h.finished(h.run(ctx, first.TurnID), store.TurnCompleted)
+	h.finished(h.run(ctx, first.TurnID), sessions.TurnCompleted)
 	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID == "" {
 		t.Fatal(bound, err)
 	}
 	second := h.message("second", "Continue the same conversation.")
-	h.finished(h.run(ctx, second.TurnID), store.TurnCompleted)
+	h.finished(h.run(ctx, second.TurnID), sessions.TurnCompleted)
 	again, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || again.NativeSessionID != bound.NativeSessionID {
 		t.Fatal(again, err)

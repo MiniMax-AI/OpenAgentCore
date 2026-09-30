@@ -10,6 +10,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,24 +19,24 @@ type turnReadStore struct {
 	limit                             int
 	ascending                         bool
 	session                           store.Session
-	turn                              store.Turn
+	turn                              sessions.Turn
 }
 
 func (s *turnReadStore) GetSession(_ context.Context, tenant, id string) (store.Session, error) {
 	s.tenant, s.sessionID = tenant, id
 	return s.session, nil
 }
-func (s *turnReadStore) GetTurn(_ context.Context, tenant, session, id string) (store.Turn, error) {
+func (s *turnReadStore) GetTurn(_ context.Context, tenant, session, id string) (sessions.Turn, error) {
 	s.tenant, s.sessionID, s.turnID = tenant, session, id
 	return s.turn, nil
 }
 func (s *turnReadStore) ListTurns(_ context.Context, tenant, session, cursor string, limit int, asc bool) (store.TurnPage, error) {
 	s.tenant, s.sessionID, s.cursor, s.limit, s.ascending = tenant, session, cursor, limit, asc
-	return store.TurnPage{Turns: []store.Turn{s.turn}, NextCursor: s.turn.ID}, nil
+	return store.TurnPage{Turns: []sessions.Turn{s.turn}, NextCursor: s.turn.ID}, nil
 }
 
 func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
-	s := &turnReadStore{session: store.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}, turn: store.Turn{ID: "turn", SessionID: "session", Status: store.TurnFailed, CreatedAt: time.Unix(1700000000, 999), Outcome: json.RawMessage(`{"error":"Bearer SECRET","done":{"metadata":{"password":"SECRET"}}}`)}}
+	s := &turnReadStore{session: store.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}, turn: sessions.Turn{ID: "turn", SessionID: "session", Status: sessions.TurnFailed, CreatedAt: time.Unix(1700000000, 999), Outcome: json.RawMessage(`{"error":"Bearer SECRET","done":{"metadata":{"password":"SECRET"}}}`)}}
 	h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {
 		f.sessions.getSession, f.sessionHistory.getTurn, f.sessionHistory.listTurns = s.GetSession, s.GetTurn, s.ListTurns
 	})
@@ -84,10 +85,10 @@ func TestTurnRoutesUseAuthenticatedScopeAndSafeProjection(t *testing.T) {
 
 func TestTurnProjectionPreservesLifecycle(t *testing.T) {
 	session := store.Session{Configuration: json.RawMessage(`{"agent":{"id":"agent_snapshot"}}`)}
-	for _, status := range []string{store.TurnQueued, store.TurnInProgress, store.TurnWaiting, store.TurnCompleted, store.TurnFailed, store.TurnCancelled} {
-		turn := store.Turn{Status: status, CreatedAt: time.Unix(1700000000, 0), StartedAt: time.Unix(1700000001, 0), CompletedAt: time.Unix(1700000002, 0)}
+	for _, status := range []string{sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting, sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled} {
+		turn := sessions.Turn{Status: status, CreatedAt: time.Unix(1700000000, 0), StartedAt: time.Unix(1700000001, 0), CompletedAt: time.Unix(1700000002, 0)}
 		got, err := turnResponse(session, turn)
-		if err != nil || got.Status != status || *got.StartedAt != 1700000001 || *got.CompletedAt != 1700000002 || (got.Error != nil) != (status == store.TurnFailed) {
+		if err != nil || got.Status != status || *got.StartedAt != 1700000001 || *got.CompletedAt != 1700000002 || (got.Error != nil) != (status == sessions.TurnFailed) {
 			t.Fatalf("lifecycle %s: %+v %v", status, got, err)
 		}
 	}

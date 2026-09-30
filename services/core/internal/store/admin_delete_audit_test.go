@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -166,7 +167,7 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 	if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(archive)); err != nil {
 		t.Fatal(err)
 	}
-	transition(t, s, tenant, session, turn, TurnInProgress, TurnCompleted)
+	transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
 	page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || len(page.Artifacts) != 2 {
 		t.Fatal("artifact fixture", err)

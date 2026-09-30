@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -70,7 +71,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if before != after {
 		t.Fatal("input retry published duplicate events")
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	batch := []store.ExecutionEvent{
@@ -95,10 +96,10 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if before != after {
 		t.Fatal("failed transaction published events")
 	}
-	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, store.TurnCancelled, json.RawMessage(`{"private":"must not escape"}`), "", input.Sequence); err != nil {
+	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"private":"must not escape"}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
-	var all []store.SessionChange
+	var all []sessions.SessionChange
 	cursor := int64(0)
 	for {
 		page, err := store.New(pool).ListSessionEvents(ctx, tenant, session.ID, cursor)
@@ -111,7 +112,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 		all = append(all, page...)
 		cursor = page[len(page)-1].Sequence
 	}
-	if all[0].Event.Type != "agent.session.turn.created" || all[0].Turn.Status != store.TurnQueued || all[len(all)-1].Event.Type != "agent.session.idle" || all[len(all)-1].Turn.Status != store.TurnCancelled {
+	if all[0].Event.Type != "agent.session.turn.created" || all[0].Turn.Status != sessions.TurnQueued || all[len(all)-1].Event.Type != "agent.session.idle" || all[len(all)-1].Turn.Status != sessions.TurnCancelled {
 		t.Fatalf("transition snapshots changed: %+v", all)
 	}
 	counts := map[string]int{}

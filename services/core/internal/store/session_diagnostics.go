@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -21,7 +22,7 @@ type ItemDiagnosticTiming struct {
 
 type TurnDiagnosticsSnapshot struct {
 	Session        Session
-	Turn           Turn
+	Turn           sessions.Turn
 	Items          []ItemDiagnosticTiming
 	ItemsTruncated bool
 }

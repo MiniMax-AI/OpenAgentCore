@@ -8,6 +8,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -115,7 +116,7 @@ func publicChildTurn(row sqlc.SubagentTurn, agent string) v1.Turn {
 		value.CompletedAt = &seconds
 	}
 	_ = json.Unmarshal(row.TokenUsage, &value.Usage)
-	if row.Status == TurnFailed {
+	if row.Status == sessions.TurnFailed {
 		value.Error = &v1.TurnError{Code: "internal_error", Message: "The execution could not complete."}
 	}
 	return value

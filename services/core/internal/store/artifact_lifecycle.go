@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -27,7 +28,7 @@ func (s *Store) BeginTurnArtifactCapture(ctx context.Context, tenantID, sessionI
 		if err != nil {
 			return err
 		}
-		if turn.Status != TurnInProgress || turn.CancelRequestedAt.Valid {
+		if turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.Valid {
 			return ErrTurnConflict
 		}
 		pending, err := q.HasUnappliedMessages(ctx, sqlc.HasUnappliedMessagesParams{SessionID: session, TurnID: lookup.ID, Sequence: appliedThrough})
@@ -51,7 +52,7 @@ func (s *Store) BeginTurnArtifactCapture(ctx context.Context, tenantID, sessionI
 // the Turn completes: new paths, changed bytes and paths whose newest Artifact
 // was deleted are published; unchanged paths keep their existing Artifact IDs.
 func settleTurnArtifacts(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn) error {
-	if turn.Status == TurnCompleted {
+	if turn.Status == sessions.TurnCompleted {
 		if err := q.DeleteUnchangedTurnArtifacts(ctx, sqlc.DeleteUnchangedTurnArtifactsParams{SessionID: turn.SessionID, TurnID: turn.ID}); err != nil {
 			return err
 		}

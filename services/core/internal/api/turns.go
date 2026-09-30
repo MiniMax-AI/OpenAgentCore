@@ -8,13 +8,14 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
 // SessionHistory reads a Session's root Turns and Items.
 type SessionHistory interface {
-	GetTurn(context.Context, string, string, string) (store.Turn, error)
+	GetTurn(context.Context, string, string, string) (sessions.Turn, error)
 	ListTurns(context.Context, string, string, string, int, bool) (store.TurnPage, error)
 	ListItems(context.Context, string, string, string, int, bool) (store.ItemPage, error)
 }
@@ -91,14 +92,14 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, turnListResponse(response.Data, response.HasMore))
 }
 
-func turnResponse(session store.Session, turn store.Turn) (v1.Turn, error) {
+func turnResponse(session store.Session, turn sessions.Turn) (v1.Turn, error) {
 	var cfg configuration
 	if err := json.Unmarshal(session.Configuration, &cfg); err != nil || cfg.Agent.ID == "" {
 		return v1.Turn{}, errors.New("missing stored agent identity")
 	}
 	// Session Turns are root Turns, so subagent_id is always null here.
 	response := v1.Turn{Usage: tokenUsage(turn.Usage), ID: turn.ID, SessionID: turn.SessionID, AgentID: cfg.Agent.ID, Object: "agent.session.turn", Status: turn.Status, CreatedAt: turn.CreatedAt.Unix(), StartedAt: unixTime(turn.StartedAt), CompletedAt: unixTime(turn.CompletedAt)}
-	if turn.Status == store.TurnFailed {
+	if turn.Status == sessions.TurnFailed {
 		// Native errors can contain secrets; publish a stable category without raw diagnostics.
 		response.Error = &v1.TurnError{Code: "internal_error", Message: "The execution could not complete."}
 	}

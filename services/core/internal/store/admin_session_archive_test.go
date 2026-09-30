@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -130,7 +131,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := submitMessage(t, s, tenant, session.ID, "completed")
-	transition(t, w, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if err := w.AppendTurnEvents(t.Context(), tenant, session.ID, input.TurnID, 1, []ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained"}`)}}); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +139,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if err := s.StageTurnArtifacts(t.Context(), tenant, session.ID, input.TurnID, session.Environment.ID, bytes.NewReader(artifactArchive(t, map[string][]byte{"outputs/result.txt": body}))); err != nil {
 		t.Fatal(err)
 	}
-	transition(t, w, tenant, session.ID, input.TurnID, TurnInProgress, TurnCompleted)
+	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	history := adminMutationSnapshot(t, s, "sessions", "turns", "session_items", "session_artifacts", "source_files", "pg_largeobject", "pg_largeobject_metadata")
 	request := uuid.NewString()
 	result, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, request), tenant, session.ID, 1)
@@ -163,7 +164,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, err := s.GetSession(t.Context(), tenant, session.ID)
-	if err != nil || current.EnvironmentFailure != nil || current.LastTurn == nil || current.LastTurn.Status != TurnCompleted || current.Environment.Status != "expired" {
+	if err != nil || current.EnvironmentFailure != nil || current.LastTurn == nil || current.LastTurn.Status != sessions.TurnCompleted || current.Environment.Status != "expired" {
 		t.Fatal("cleanup rewrote completed outcome", current, err)
 	}
 	if _, err := w.SettleRuntimeCreation(t.Context(), owner); err != nil {
@@ -204,7 +205,7 @@ func TestManagedSessionArchiveAuditFailureRollsBack(t *testing.T) {
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	archiveAllocation(t, w, tenant, session, installation)
 	input := submitMessage(t, s, tenant, session.ID, "running")
-	transition(t, w, tenant, session.ID, input.TurnID, TurnQueued, TurnInProgress)
+	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	rejectAdminAuditInsert(t, s)
 	tables := []string{"sessions", "environments", "turns", "session_events", "devices", "runtime_allocations", "runtime_placements", "environment_input_reservations", "admin_audit_log"}
 	before := adminMutationSnapshot(t, s, tables...)
@@ -218,7 +219,7 @@ func TestManagedSessionArchiveAuditFailureRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	turn, err := s.GetTurn(t.Context(), tenant, session.ID, input.TurnID)
-	if err != nil || turn.Status != TurnInProgress || turn.CancelRequestedAt.IsZero() {
+	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() {
 		t.Fatal("archive did not request cancellation or fabricated settlement", turn, err)
 	}
 }

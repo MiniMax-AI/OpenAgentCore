@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,12 +31,12 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 			t.Fatalf("unexpected usage: %s", raw)
 		}
 	}
-	for n, status := range []string{store.TurnFailed, store.TurnCancelled} {
+	for n, status := range []string{sessions.TurnFailed, sessions.TurnCancelled} {
 		admission, err := s.SubmitMessage(ctx, tenant, session.ID, fmt.Sprint(n), json.RawMessage(`{"text":"measure"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress})
+		_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -54,11 +55,11 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 			t.Fatal(err)
 		}
 		check(measured.Usage, 20)
-		if _, err = s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, store.TurnCompleted, json.RawMessage(`{"done":{"usage":`+string(usage(99))+`}}`), "missing-binding", admission.Sequence); !errors.Is(err, store.ErrNotFound) {
+		if _, err = s.CompleteExecution(ctx, tenant, session.ID, admission.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"usage":`+string(usage(99))+`}}`), "missing-binding", admission.Sequence); !errors.Is(err, store.ErrNotFound) {
 			t.Fatal(err)
 		}
 		rolledBack, err := s.GetTurn(ctx, tenant, session.ID, admission.TurnID)
-		if err != nil || rolledBack.Status != store.TurnInProgress {
+		if err != nil || rolledBack.Status != sessions.TurnInProgress {
 			t.Fatalf("rollback: %+v %v", rolledBack, err)
 		}
 		check(rolledBack.Usage, 20)
@@ -114,7 +115,7 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress})
+	_, err = s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +124,7 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Startup recovery has no in-memory cancellation outcome.
-	recovered, err := s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: store.TurnInProgress, Status: store.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
+	recovered, err := s.TransitionTurn(ctx, tenant, session.ID, admission.TurnID, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_interrupted"}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,14 +214,14 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	measured(-1)
 	first := submit("first")
 	total(-1)
-	move(first.TurnID, store.TurnQueued, store.TurnInProgress)
+	move(first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if err = s.AppendTurnEvents(ctx, tenant, session.ID, first.TurnID, 1, usage(10)); err != nil {
 		t.Fatal(err)
 	}
 	// An active Turn's recorded snapshot does not count yet.
 	total(-1)
 	measured(13)
-	finish(first, store.TurnCompleted)
+	finish(first, sessions.TurnCompleted)
 	total(13)
 	if idle := lastIdleUsage(); idle == nil {
 		t.Fatal("settled Session snapshot lost the known total")
@@ -228,33 +229,33 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	// A queued, active or waiting Turn hides the known terminal totals.
 	second := submit("second")
 	total(-1)
-	move(second.TurnID, store.TurnQueued, store.TurnInProgress)
+	move(second.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	total(-1)
 	if err = s.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, usage(20)); err != nil {
 		t.Fatal(err)
 	}
 	total(-1)
-	move(second.TurnID, store.TurnInProgress, store.TurnWaiting)
+	move(second.TurnID, sessions.TurnInProgress, sessions.TurnWaiting)
 	total(-1)
 	measured(36)
-	move(second.TurnID, store.TurnWaiting, store.TurnInProgress)
-	finish(second, store.TurnCancelled)
+	move(second.TurnID, sessions.TurnWaiting, sessions.TurnInProgress)
+	finish(second, sessions.TurnCancelled)
 	total(36)
 	// A Turn that ends without usage makes the total unknown for good.
 	third := submit("third")
-	move(third.TurnID, store.TurnQueued, store.TurnInProgress)
-	finish(third, store.TurnCancelled)
+	move(third.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
+	finish(third, sessions.TurnCancelled)
 	total(-1)
 	measured(36)
 	if idle := lastIdleUsage(); idle != nil && string(idle) != "null" {
 		t.Fatalf("settled Session snapshot usage: %s", idle)
 	}
 	fourth := submit("fourth")
-	move(fourth.TurnID, store.TurnQueued, store.TurnInProgress)
+	move(fourth.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	if err = s.AppendTurnEvents(ctx, tenant, session.ID, fourth.TurnID, 1, usage(30)); err != nil {
 		t.Fatal(err)
 	}
-	finish(fourth, store.TurnCompleted)
+	finish(fourth, sessions.TurnCompleted)
 	total(-1)
 	measured(69)
 }

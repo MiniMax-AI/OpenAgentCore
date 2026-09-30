@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
@@ -126,7 +127,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	if err = writer.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: store.TurnQueued, Status: store.TurnInProgress}); err != nil {
+	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	identity := func(child, parent string, created int64) store.ExecutionEvent {
@@ -141,16 +142,16 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	facts := []store.ExecutionEvent{
 		identity("child", "root", 1700000001), identity("nested", "child", 1700000001),
 		subagentFixture(proto.TypeSubagentCoordination, proto.SubagentCoordinationPayload{ID: "spawn", Kind: "create_subagent_call", Status: "completed"}),
-		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: store.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}),
+		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}),
 		message("child", "child-turn", "first", 0), message("child", "child-turn", "second", 1),
-		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: store.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
-		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "nested", TurnID: "nested-turn", Status: store.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
+		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
+		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "nested", TurnID: "nested-turn", Status: sessions.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
 		subagentFixture(proto.TypeSubagentCoordination, proto.SubagentCoordinationPayload{ID: "wait", Kind: "wait_for_subagents_call", Status: "completed", Recipients: []string{"child"}}),
 	}
 	if err = writer.AppendTurnEvents(ctx, tenant, session, root, 1, facts); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: store.TurnInProgress, Status: store.TurnCompleted}); err != nil {
+	if _, err = writer.TransitionTurn(ctx, tenant, session, root, store.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
 

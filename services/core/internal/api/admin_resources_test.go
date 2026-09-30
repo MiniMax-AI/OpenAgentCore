@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -123,7 +124,7 @@ func (s *summaryFixture) ReadAdminSummary(_ context.Context, tenant string, filt
 	for i, usage := range []json.RawMessage{nil, json.RawMessage(`{"input_tokens":3,"output_tokens":5,"total_tokens":8,"input_tokens_details":{"cached_tokens":2},"output_tokens_details":{"reasoning_tokens":1}}`)} {
 		session := store.Session{ID: "session", TenantID: tenant, Configuration: json.RawMessage(`{"agent":{"id":"agent","model":"model","tools":[]},"environment":{"type":"none"}}`), CreatedAt: time.Unix(100+int64(i), 0), Usage: usage}
 		if i == 0 {
-			session.LastTurn = &store.Turn{Status: store.TurnInProgress, CreatedAt: time.Unix(110, 0)}
+			session.LastTurn = &sessions.Turn{Status: sessions.TurnInProgress, CreatedAt: time.Unix(110, 0)}
 		}
 		if err := visit(session, nil); err != nil {
 			return store.AdminAssetCounts{}, err
