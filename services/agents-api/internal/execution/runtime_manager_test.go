@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
 	"sync"
 	"testing"
 	"time"
@@ -154,5 +155,47 @@ func TestRuntimeManagerHintsRemainPerNode(t *testing.T) {
 	case m.hints("a") <- struct{}{}:
 		t.Fatal("stopped manager accepted hint")
 	default:
+	}
+}
+
+func TestRuntimeLifecycleLoadsCommittedPolicyAtOperationBoundary(t *testing.T) {
+	m := testRuntimeManager(t)
+	node, err := m.node("node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := node.lifecycle
+	if err := r.lock(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if r.config.Suspension != nil {
+		t.Fatal("unexpected initial policy")
+	}
+	policy := &RuntimeSuspensionPolicy{IdleTimeout: 5 * time.Minute, Retention: 24 * time.Hour, MaxActive: 4, MaxRetained: 16}
+	m.publishDeployment(PreparedRuntimeDeployment{Config: &RuntimeProvider{ProviderKind: "docker", Suspension: policy}}, store.RuntimeDeploymentView{Generation: 2})
+	if r.config.Suspension != nil {
+		t.Fatal("in-flight operation policy changed")
+	}
+	<-r.gate
+	if err := r.lock(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if r.config.Suspension == nil || *r.config.Suspension != *policy {
+		t.Fatal("existing lifecycle did not load committed policy")
+	}
+	if r.config.Suspension == policy {
+		t.Fatal("operation must own its policy snapshot")
+	}
+	<-r.gate
+	m.publishDeployment(PreparedRuntimeDeployment{Config: &RuntimeProvider{ProviderKind: "docker"}}, store.RuntimeDeploymentView{Generation: 3})
+	if err := r.lock(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { <-r.gate }()
+	if r.config.Suspension != nil {
+		t.Fatal("disabled policy was not adopted")
+	}
+	if again, err := m.node("node"); err != nil || again != node {
+		t.Fatal("policy update replaced lifecycle")
 	}
 }

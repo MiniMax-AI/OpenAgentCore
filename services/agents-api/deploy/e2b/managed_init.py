@@ -13,6 +13,9 @@ shared = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(shared)
 
 
+SUSPEND_DIRECTORY = Path("/run/oac")
+
+
 def identity(payload):
     fields = ['InstallationID', 'TenantID', 'EnvironmentID', 'AllocationID', 'SessionID', 'DeviceID']
     if not isinstance(payload, dict) or set(payload) != set(fields + ['NetworkAccess', 'AllowedDomains', 'RuntimeBootstrap']):
@@ -42,6 +45,10 @@ def initialize():
     binding = identity(payload)
     shared.write_private(root / 'managed-launch.json', binding)
     environment = shared.prepare_runtime()
+    SUSPEND_DIRECTORY.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chown(SUSPEND_DIRECTORY, 1000, 1000)
+    SUSPEND_DIRECTORY.chmod(0o700)
+    environment['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'] = str(SUSPEND_DIRECTORY / 'daemon-suspend.json')
     environment.update(OAC_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
                        OAC_RUNTIME_SESSION_ID=payload['SessionID'],
                        OAC_RUNTIME_NETWORK_ACCESS=payload['NetworkAccess'],

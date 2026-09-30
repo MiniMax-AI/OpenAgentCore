@@ -40,19 +40,20 @@ type RuntimeProvider struct {
 }
 
 type runtimeLifecycle struct {
-	store           *store.Store
-	registry        *gateway.Registry
-	config          RuntimeProvider
-	nodeID          string
-	gate            chan struct{}
-	ctx             context.Context
-	stop            context.CancelFunc
-	cancelMu        sync.Mutex
-	reconcileCancel context.CancelFunc
-	cursor          string
-	pendingCursor   string
-	connections     map[string]*runtimeConnection
-	wakeHints       chan struct{}
+	store                *store.Store
+	registry             *gateway.Registry
+	config               RuntimeProvider
+	loadSuspensionPolicy func() *RuntimeSuspensionPolicy
+	nodeID               string
+	gate                 chan struct{}
+	ctx                  context.Context
+	stop                 context.CancelFunc
+	cancelMu             sync.Mutex
+	reconcileCancel      context.CancelFunc
+	cursor               string
+	pendingCursor        string
+	connections          map[string]*runtimeConnection
+	wakeHints            chan struct{}
 }
 
 func newRuntimeManager(s *store.Store, registry *gateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
@@ -118,6 +119,9 @@ func (r *runtimeLifecycle) lock(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			<-r.gate
 			return err
+		}
+		if r.loadSuspensionPolicy != nil {
+			r.config.Suspension = r.loadSuspensionPolicy()
 		}
 		return nil
 	case <-ctx.Done():

@@ -82,7 +82,8 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 		ctx, stop := context.WithCancel(m.ctx)
 		n = &runtimeNode{lifecycle: &runtimeLifecycle{
 			store: m.store, registry: m.registry, config: m.config, nodeID: id,
-			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
+			loadSuspensionPolicy: m.suspensionPolicy,
+			gate:                 make(chan struct{}, 1), ctx: ctx, stop: stop,
 			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
 		}}
 		m.nodes[id] = n
@@ -311,3 +312,15 @@ func (m *runtimeManager) stop() {
 // stop must precede drain. Both background loops and external provisioning or
 // manual reconciliation finish before Worker releases its unique writer lease.
 func (m *runtimeManager) drain() { m.active.Wait() }
+
+// Each serialized lifecycle operation uses the latest committed scheduling policy.
+// Provider identity and generation routing remain bound to the existing lifecycle.
+func (m *runtimeManager) suspensionPolicy() *RuntimeSuspensionPolicy {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.config.Suspension == nil {
+		return nil
+	}
+	policy := *m.config.Suspension
+	return &policy
+}
