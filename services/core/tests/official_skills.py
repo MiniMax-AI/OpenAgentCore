@@ -9,7 +9,7 @@ import secrets
 import sys
 import zipfile
 
-import httpx
+import httpx2
 import openai
 from openai import DefaultHttpxClient, OpenAI
 
@@ -34,7 +34,7 @@ def main():
     marker = "confidential-skill-" + secrets.token_hex(20)
     data, manifest = bundle(marker)
     owned = []
-    with httpx.Client(timeout=20, trust_env=False) as http:
+    with httpx2.Client(timeout=20, trust_env=False) as http:
         try:
             raw = client.skills.with_raw_response.create(files=[("proof/SKILL.md", manifest, "text/markdown"), ("proof/scripts/proof.py", b"print('proof')", "text/plain")])
             skill = raw.parse()

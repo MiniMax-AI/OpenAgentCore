@@ -7,7 +7,7 @@ import json
 import secrets
 import sys
 
-import httpx
+import httpx2
 import openai
 from openai import DefaultHttpxClient, OpenAI
 
@@ -46,7 +46,7 @@ def main():
         assert parsed.skills[0].skill_id == skill_id
         return parsed.id
 
-    with httpx.Client(timeout=20, trust_env=False) as http:
+    with httpx2.Client(timeout=20, trust_env=False) as http:
         try:
             uploaded = client.skills.with_raw_response.create(files=[("proof/SKILL.md", manifest, "text/markdown")])
             skill_id = uploaded.parse().id
