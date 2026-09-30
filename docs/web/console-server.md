@@ -1,10 +1,6 @@
 # Console server
 
-The console server (`services/core-console`, the `oac-web` process) serves the
-built console, signs the administrator in with the Core key and forwards the
-signed-in browser's `/core/v1` requests to Core with that key. The browser never
-holds the Core key or any API key. Applications, nodes and self-hosted executors
-call Core directly; the console forwards none of their traffic.
+The console server (`services/core-console`, the `oac-web` process) serves the built console, signs the administrator in with the Core key and forwards the signed-in browser's `/core/v1` requests to Core with that key. The browser never holds the Core key or any API key. Applications, nodes and self-hosted executors call Core directly; the console forwards none of their traffic.
 
 ## Request boundary
 
@@ -26,9 +22,7 @@ flowchart LR
   core <--> database
 ```
 
-The deployment's reverse proxy routes `/v1` and `/api/v1` to Core and every other
-path to the console; the [installation guide](../getting-started/install.md#https-and-the-reverse-proxy)
-gives the routes. The console handles each path as follows:
+The deployment's reverse proxy routes `/v1` and `/api/v1` to Core and every other path to the console; the [installation guide](../getting-started/install.md#https-and-the-reverse-proxy) gives the routes. The console handles each path as follows:
 
 | Path | Sign-in | Handling |
 | --- | --- | --- |
@@ -44,49 +38,27 @@ gives the routes. The console handles each path as follows:
 
 Every request except `/healthz`, `/v1` and `/api/v1` must pass these checks first:
 
-1. **Host and origin.** The `Host` header must equal the host of `OAC_WEB_ORIGIN`.
-   An `Origin` header, when present, must equal that origin, and `Sec-Fetch-Site`
-   must be `same-origin` or `none`. A write that carries neither `Origin` nor
-   `Sec-Fetch-Site: same-origin` needs a same-origin `Referer`. Otherwise the
-   console answers 403. `/node-install/*` checks only the host and the path.
-2. **Safe request.** The path must start with `/` and contain no `%`, backslash,
-   NUL, dot segment or empty segment. Absolute-form request targets, `CONNECT`,
-   `TRACE` and any request with an `Upgrade` header get 400. A request can
-   therefore never leave `/core/v1` on Core, and the console carries no WebSocket.
+1. **Host and origin.** The `Host` header must equal the host of `OAC_WEB_ORIGIN`. An `Origin` header, when present, must equal that origin, and `Sec-Fetch-Site` must be `same-origin` or `none`. A write that carries neither `Origin` nor `Sec-Fetch-Site: same-origin` needs a same-origin `Referer`. Otherwise the console answers 403. `/node-install/*` checks only the host and the path.
+2. **Safe request.** The path must start with `/` and contain no `%`, backslash, NUL, dot segment or empty segment. Absolute-form request targets, `CONNECT`, `TRACE` and any request with an `Upgrade` header get 400. A request can therefore never leave `/core/v1` on Core, and the console carries no WebSocket.
 3. **Sign-in.** Paths that need sign-in answer 401 without a valid session cookie.
 
-Under `/core`, these failures use the Core error envelope with the codes in
-[console-generated failures](../../contracts/agents-api/core-errors.md#console-generated-failures);
-elsewhere they return `{"error": "…"}`, or plain text for an unsafe request. Every
-response carries `Cache-Control:
-no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and
-`Content-Security-Policy: frame-ancestors 'none'`.
+Under `/core`, these failures use the Core error envelope with the codes in [console-generated failures](../../contracts/agents-api/core-errors.md#console-generated-failures); elsewhere they return `{"error": "…"}`, or plain text for an unsafe request. Every response carries `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Content-Security-Policy: frame-ancestors 'none'`.
 
 ## Forwarding to Core
 
-The console forwards each signed-in `/core/v1/*` request by prefix to
-`OAC_WEB_UPSTREAM`, with its path and query unchanged. Core alone decides whether
-the route exists, and its responses and errors pass through unchanged. The console
-therefore needs no change when Core adds a `/core/v1` route.
+The console forwards each signed-in `/core/v1/*` request by prefix to `OAC_WEB_UPSTREAM`, with its path and query unchanged. Core alone decides whether the route exists, and its responses and errors pass through unchanged. The console therefore needs no change when Core adds a `/core/v1` route.
 
 On the way to Core, the console:
 
-- removes the browser's `Authorization`, `Proxy-Authorization`, `Cookie`, `Origin`
-  and `Referer` headers;
+- removes the browser's `Authorization`, `Proxy-Authorization`, `Cookie`, `Origin` and `Referer` headers;
 - sends `Authorization: Bearer <Core key>`;
-- sets `X-Core-Console-Actor: console`, replacing any value the browser sent. Core
-  records it as a display-only audit label ([administrator API](../../contracts/agents-api/admin-api.md));
-- ignores ambient HTTP proxy settings, so the Core key reaches only the configured
-  Core;
+- sets `X-Core-Console-Actor: console`, replacing any value the browser sent. Core records it as a display-only audit label ([administrator API](../../contracts/agents-api/admin-api.md));
+- ignores ambient HTTP proxy settings, so the Core key reaches only the configured Core;
 - streams responses without buffering.
 
-On the way back, it removes `Set-Cookie`, `WWW-Authenticate`, `Location`, `Refresh`
-and every `Access-Control-*` header. A redirect from Core, or a failed connection to
-Core, becomes 502 `core_unreachable`.
+On the way back, it removes `Set-Cookie`, `WWW-Authenticate`, `Location`, `Refresh` and every `Access-Control-*` header. A redirect from Core, or a failed connection to Core, becomes 502 `core_unreachable`.
 
-The console never retries a request. Browser code calls `/core/v1` through the typed
-clients in [`packages/agents-client`](../../packages/agents-client/README.md);
-[console API usage](console-api-usage.md) lists what each page reads and writes.
+The console never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](../../packages/agents-client/README.md); [console API usage](console-api-usage.md) lists what each page reads and writes.
 
 ## Sign-in
 
@@ -96,25 +68,15 @@ clients in [`packages/agents-client`](../../packages/agents-client/README.md);
 | `POST /console/auth/login` | `Content-Type: application/json`; body `{"core_key":"…"}` with no other member, at most 4 KiB | `200 {"mode":"authenticated"}` and the session cookie |
 | `POST /console/auth/logout` | No body | `200 {"mode":"login"}`; ends the session and clears the cookie |
 
-The administrator signs in with the deployment's
-[Core key](../getting-started/operations.md#core-key). There are no console
-accounts, usernames or setup step, and signing in grants the whole console.
+The administrator signs in with the deployment's [Core key](../getting-started/operations.md#core-key). There are no console accounts, usernames or setup step, and signing in grants the whole console.
 
-- The console compares SHA-256 digests of the submitted and configured keys in
-  constant time. It never logs or returns the key.
-- The session cookie `core_console_session` is HttpOnly, `SameSite=Strict`, and
-  `Secure` when `OAC_WEB_ORIGIN` is HTTPS. It lasts 12 hours.
-- Sessions live only in the console's memory, at most 64 at a time; the oldest is
-  dropped first. A console restart or a Core key rotation signs everyone out.
-- At most two sign-in checks run at once; another attempt gets 429 with
-  `Retry-After: 1`.
-- Failed attempts share a budget of 10 per minute; beyond it, a wrong key gets 429
-  with `Retry-After: 60`. The correct key always signs in, which is why the console
-  refuses to start with a Core key shorter than 32 characters.
+- The console compares SHA-256 digests of the submitted and configured keys in constant time. It never logs or returns the key.
+- The session cookie `core_console_session` is HttpOnly, `SameSite=Strict`, and `Secure` when `OAC_WEB_ORIGIN` is HTTPS. It lasts 12 hours.
+- Sessions live only in the console's memory, at most 64 at a time; the oldest is dropped first. A console restart or a Core key rotation signs everyone out.
+- At most two sign-in checks run at once; another attempt gets 429 with `Retry-After: 1`.
+- Failed attempts share a budget of 10 per minute; beyond it, a wrong key gets 429 with `Retry-After: 60`. The correct key always signs in, which is why the console refuses to start with a Core key shorter than 32 characters.
 
-Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a method
-other than `POST`, 415 for a body that is not JSON, 429 as above, and 503 when the
-console cannot create a session.
+Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a method other than `POST`, 415 for a body that is not JSON, 429 as above, and 503 when the console cannot create a session.
 
 ## Console configuration
 
@@ -128,58 +90,28 @@ console cannot create a session.
 
 ## Node installation payload
 
-With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution's
-node payload at `/node-install/` without sign-in: `node-install.pyz`,
-`manifest.json`, `SHA256SUMS`, `runtime/seccomp.json`, and the node artifacts the
-manifest declares under `artifacts/`. An artifact missing locally redirects (307)
-to its pinned release download. Node install and uninstall commands download from
-`<public_url>/node-install/`, so the reverse proxy must send that path to the
-console. Nodes verify every checksum themselves.
+With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution's node payload at `/node-install/` without sign-in: `node-install.pyz`, `manifest.json`, `SHA256SUMS`, `runtime/seccomp.json`, and the node artifacts the manifest declares under `artifacts/`. An artifact missing locally redirects (307) to its pinned release download. Node install and uninstall commands download from `<public_url>/node-install/`, so the reverse proxy must send that path to the console. Nodes verify every checksum themselves.
 
 ## Domain setup
 
-`GET` and `POST /console/installation/domain` let **System → Domain and HTTPS**
-configure a managed installation's domain. They are console routes, not Core
-routes. After the same origin and sign-in checks, the console passes the request
-body (at most 2 KiB) to the installer's Unix socket at
-`OAC_WEB_INSTALLATION_SOCKET`, authenticated with the Core key, and returns the
-installer's JSON answer and status. The request times out after 20 seconds.
+`GET` and `POST /console/installation/domain` let **System → Domain and HTTPS** configure a managed installation's domain. They are console routes, not Core routes. After the same origin and sign-in checks, the console passes the request body (at most 2 KiB) to the installer's Unix socket at `OAC_WEB_INSTALLATION_SOCKET`, authenticated with the Core key, and returns the installer's JSON answer and status. The request times out after 20 seconds.
 
 | Method | Request | Result |
 | --- | --- | --- |
 | `GET` | No body | The domain status |
 | `POST` | `{"hostname":"core.example.com"}`, optionally with `"confirm_public_url_change":"https://core.example.com"` | 202 and the status; the installer checks and applies the domain in the background |
 
-The status has `supported`, `state` (`unconfigured`, `checking`, `applying`,
-`ready` or `failed`), and nullable `public_url`, `target_url` and `message`.
-Installer errors use `{"error":{"code":"…","message":"…"}}`. Changing an address
-that nodes or executors already use returns 409 `public_url_confirmation_required`
-until the request confirms the new URL; pending `config.json` edits, an installation
-that is not applied or not running, and hand-edited generated files also return 409.
+The status has `supported`, `state` (`unconfigured`, `checking`, `applying`, `ready` or `failed`), and nullable `public_url`, `target_url` and `message`. Installer errors use `{"error":{"code":"…","message":"…"}}`. Changing an address that nodes or executors already use returns 409 `public_url_confirmation_required` until the request confirms the new URL; pending `config.json` edits, an installation that is not applied or not running, and hand-edited generated files also return 409.
 
-Without `OAC_WEB_INSTALLATION_SOCKET` (external reverse proxy installations), `GET`
-reports `supported: false` and `POST` returns 400 `domain_setup_unavailable`. An
-unreachable installer or an invalid answer returns 502 `installation_unreachable`.
+Without `OAC_WEB_INSTALLATION_SOCKET` (external reverse proxy installations), `GET` reports `supported: false` and `POST` returns 400 `domain_setup_unavailable`. An unreachable installer or an invalid answer returns 502 `installation_unreachable`.
 
-The System page submits a hostname once, polls the status every 2 seconds while it
-is `checking` or `applying`, and asks for confirmation when the installer requires
-it. It never retries a write. Applying the domain restarts the console, which ends
-every session; the page keeps a sign-in link to the new HTTPS address. Only the
-`ready` state confirms HTTPS; the browser does not probe the new origin. The
-installer owns certificates, locking and recovery
-([managed HTTPS](../../deploy/install/README.md#managed-https)).
+The System page submits a hostname once, polls the status every 2 seconds while it is `checking` or `applying`, and asks for confirmation when the installer requires it. It never retries a write. Applying the domain restarts the console, which ends every session; the page keeps a sign-in link to the new HTTPS address. Only the `ready` state confirms HTTPS; the browser does not probe the new origin. The installer owns certificates, locking and recovery ([managed HTTPS](../../deploy/install/README.md#managed-https)).
 
-`OAC_WEB_BOOTSTRAP=1`, which the installer sets while no public URL is configured,
-lets the console also accept plain HTTP requests addressed to a literal IP address,
-treating `http://<that address>` as the origin, so an operator can sign in through
-the server's IP address. Host names still require `OAC_WEB_ORIGIN`, so DNS
-rebinding cannot reach the console.
+`OAC_WEB_BOOTSTRAP=1`, which the installer sets while no public URL is configured, lets the console also accept plain HTTP requests addressed to a literal IP address, treating `http://<that address>` as the origin, so an operator can sign in through the server's IP address. Host names still require `OAC_WEB_ORIGIN`, so DNS rebinding cannot reach the console.
 
 ## Settings
 
-The installer sets these variables from `config.json`; set them yourself only when
-you run the console without the installer. Of the installation's secrets, the
-installer gives the console only `secrets/core.key`.
+The installer sets these variables from `config.json`; set them yourself only when you run the console without the installer. Of the installation's secrets, the installer gives the console only `secrets/core.key`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -192,28 +124,16 @@ installer gives the console only `secrets/core.key`.
 | `OAC_WEB_INSTALLATION_SOCKET` | unset | Absolute path of the installer's domain socket. Unset, domain setup reports unsupported |
 | `OAC_WEB_BOOTSTRAP` | `0` | `1` accepts literal-IP hosts before a domain is configured. Requires an `http://` origin and `OAC_WEB_INSTALLATION_SOCKET` |
 
-The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE`
-([configuration](../configuration.md#appendix-core-environment-without-the-installer)).
-An invalid value stops the console at startup with a message naming the variable.
-Use HTTPS for any browser that is not on the same machine.
+The console also reads `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT` and `OAC_LOG_ADD_SOURCE` ([configuration](../configuration.md#appendix-core-environment-without-the-installer)). An invalid value stops the console at startup with a message naming the variable. Use HTTPS for any browser that is not on the same machine.
 
 ## Verification
 
 After installing or changing the console, check:
 
-1. `GET /healthz` on the console and on Core. Each proves only that the process
-   answers.
-2. Sign in, then read `GET /core/v1/projects` in the browser. This proves the
-   browser-to-console and console-to-Core path and the console's Core key.
-3. A Project API key works on `/v1` and fails on `/core/v1`. The Core key fails on
-   `/v1`, and `/v1` sent to the console answers 404.
-4. A cross-origin write to the console is rejected, and a forged
-   `X-Core-Console-Actor` header does not change the audit label.
-5. Neither sign-in nor the sandbox deployment read (`GET /core/v1/sandbox/deployment`)
-   proves that a model or a sandbox is ready. Runtime observations and history
-   report execution separately.
+1. `GET /healthz` on the console and on Core. Each proves only that the process answers.
+2. Sign in, then read `GET /core/v1/projects` in the browser. This proves the browser-to-console and console-to-Core path and the console's Core key.
+3. A Project API key works on `/v1` and fails on `/core/v1`. The Core key fails on `/v1`, and `/v1` sent to the console answers 404.
+4. A cross-origin write to the console is rejected, and a forged `X-Core-Console-Actor` header does not change the audit label.
+5. Neither sign-in nor the sandbox deployment read (`GET /core/v1/sandbox/deployment`) proves that a model or a sandbox is ready. Runtime observations and history report execution separately.
 
-A sign-in failure belongs to the console. A 401 from Core on a signed-in request
-means the console's Core key does not match Core's digest, or the console reaches
-the wrong Core. The [troubleshooting table](../getting-started/operations.md#troubleshooting)
-covers the common symptoms.
+A sign-in failure belongs to the console. A 401 from Core on a signed-in request means the console's Core key does not match Core's digest, or the console reaches the wrong Core. The [troubleshooting table](../getting-started/operations.md#troubleshooting) covers the common symptoms.

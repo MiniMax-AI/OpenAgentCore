@@ -1,9 +1,6 @@
 # Console API usage
 
-This page lists the Core routes each console page reads and writes, and how the
-console bounds its reads. The [administrator API contract](../../contracts/agents-api/admin-api.md)
-defines the routes, response shapes, pagination and audit records;
-[API namespaces and credentials](../api/README.md) defines the terms used here.
+This page lists the Core routes each console page reads and writes, and how the console bounds its reads. The [administrator API contract](../../contracts/agents-api/admin-api.md) defines the routes, response shapes, pagination and audit records; [API namespaces and credentials](../api/README.md) defines the terms used here.
 
 ## Interfaces
 
@@ -14,13 +11,7 @@ defines the routes, response shapes, pagination and audit records;
 | Sandbox administration | `/core/v1/sandbox/**` | The Core key, added by the console server | Sandbox configuration, Nodes, fleet and capacity figures on Overview and Sandbox metrics, Runtime observations of every project |
 | Agents API | `/v1/**` | Project API key | Not used. The console shows developers how to call it (see [Provenance and monitoring](#provenance-and-monitoring)) |
 
-Browser requests are same-origin and carry only the console session cookie. The
-browser sends the Core key once, in the sign-in request body, and never stores it;
-it never holds or sends an API key or an `OpenAI-Beta` header. The console reads
-through `AdminClient`, `SandboxAdminClient` and `CoreMetricsClient` from
-[`packages/agents-client`](../../packages/agents-client/README.md), which validate
-every response: a malformed value is reported as a failure, or marked as
-unrecognised where noted below, and never replaced by a guessed or zero value.
+Browser requests are same-origin and carry only the console session cookie. The browser sends the Core key once, in the sign-in request body, and never stores it; it never holds or sends an API key or an `OpenAI-Beta` header. The console reads through `AdminClient`, `SandboxAdminClient` and `CoreMetricsClient` from [`packages/agents-client`](../../packages/agents-client/README.md), which validate every response: a malformed value is reported as a failure, or marked as unrecognised where noted below, and never replaced by a guessed or zero value.
 
 ## Projects and keys
 
@@ -34,16 +25,11 @@ unrecognised where noted below, and never replaced by a guessed or zero value.
 | Issue key | `POST /core/v1/projects/{project_id}/keys` | **Issue key** on an active project, also from Getting started; the plaintext is shown once |
 | Revoke key | `DELETE /core/v1/projects/{project_id}/keys/{key_id}` | **Revoke**, with a warning when it is the project's last active key |
 
-Names are checked for length (projects 1–128 characters, keys 1–80) and control
-characters before sending. An issued key's plaintext stays in component memory
-until the administrator confirms it was saved and is never written to browser
-storage, URLs or logs. There is no project deletion and no plaintext recovery.
+Names are checked for length (projects 1–128 characters, keys 1–80) and control characters before sending. An issued key's plaintext stays in component memory until the administrator confirms it was saved and is never written to browser storage, URLs or logs. There is no project deletion and no plaintext recovery.
 
 ## Project resources
 
-Routes are relative to `/core/v1/projects/{project_id}` and return the same
-objects as the corresponding public `/v1` operations, so the console applies the
-public client's strict projections. Archived projects remain readable.
+Routes are relative to `/core/v1/projects/{project_id}` and return the same objects as the corresponding public `/v1` operations, so the console applies the public client's strict projections. Archived projects remain readable.
 
 | Resource | Reads used | Deletion | Creator | Console surface |
 | --- | --- | --- | --- | --- |
@@ -57,32 +43,16 @@ public client's strict projections. Archived projects remain readable.
 
 Resource-specific rules:
 
-- **Environment templates.** `env` and setup commands are write-only and never
-  returned, so the console cannot tell whether a Template has them. Inline files
-  report only their size. A Template with a section or field the client does not
-  recognise is marked; its recognised sections are still shown and nothing else is
-  guessed.
-- **Skills.** A version upload, a default-pointer change and every other Skill write
-  belong to the project's keys. The console downloads the default or an exact
-  version as a ZIP, deletes versions (the default version is blocked while others
-  remain; deleting the only version deletes the Skill) and deletes a Skill after
-  its name is typed.
-- **Files.** The list is read 100 per page, newest or oldest first. The
-  administrator API has no File content route, so the console offers no download.
-- **Vaults.** Credential tokens are never returned. The console shows each
-  Credential's name, MCP server URL, authentication type and update time.
-- **Sessions.** A malformed Session fails the read of its project instead of being
-  skipped.
-- **Diagnostics.** The console translates Core's classified reason and never infers
-  a cause from raw logs. An unavailable or mismatched diagnostic offers an explicit
-  read retry; a retry never replays execution.
+- **Environment templates.** `env` and setup commands are write-only and never returned, so the console cannot tell whether a Template has them. Inline files report only their size. A Template with a section or field the client does not recognise is marked; its recognised sections are still shown and nothing else is guessed.
+- **Skills.** A version upload, a default-pointer change and every other Skill write belong to the project's keys. The console downloads the default or an exact version as a ZIP, deletes versions (the default version is blocked while others remain; deleting the only version deletes the Skill) and deletes a Skill after its name is typed.
+- **Files.** The list is read 100 per page, newest or oldest first. The administrator API has no File content route, so the console offers no download.
+- **Vaults.** Credential tokens are never returned. The console shows each Credential's name, MCP server URL, authentication type and update time.
+- **Sessions.** A malformed Session fails the read of its project instead of being skipped.
+- **Diagnostics.** The console translates Core's classified reason and never infers a cause from raw logs. An unavailable or mismatched diagnostic offers an explicit read retry; a retry never replays execution.
 
 ## Executor credentials and host connection
 
-The **Executor credentials** section of a Session page appears only when the
-Session's environment is `self_hosted`, for that Session's `project_id` and
-`environment.id`. The [executor credential contract](../../contracts/agents-api/environment-executor-credentials.md)
-defines the routes, their 404 and 409 responses and the credential file.
+The **Executor credentials** section of a Session page appears only when the Session's environment is `self_hosted`, for that Session's `project_id` and `environment.id`. The [executor credential contract](../../contracts/agents-api/environment-executor-credentials.md) defines the routes, their 404 and 409 responses and the credential file.
 
 | Operation | Route | Console use |
 | --- | --- | --- |
@@ -91,8 +61,7 @@ defines the routes, their 404 and 409 responses and the credential file.
 | Revoke | `DELETE …/executor-credentials/{key_id}` | **Revoke**, confirmed (the executor disconnects and does not retry; its daemon stays parked until the operator stops it), then the list is read again and shows the credential as Revoked |
 | Installation commands | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **Connect a host**: Core's short-lived Linux/macOS and PowerShell commands, shown as Core returned them with a platform selector and a link to the [native installation guide](../getting-started/self-hosted.md). The commands install the daemon and its Harnesses, start it and check its connection; their authorization expires after 30 minutes, and the console reads them again every 20 minutes. Without an available, unexpired answer the section says the command is unavailable. Archived projects do not read it |
 
-In an archived project the section hides **Issue credential** and **Rotate** behind
-a note and keeps the list and **Revoke**, which Core still allows.
+In an archived project the section hides **Issue credential** and **Rotate** behind a note and keeps the list and **Revoke**, which Core still allows.
 
 ## Provenance and monitoring
 
@@ -104,24 +73,11 @@ a note and keeps the list and **Revoke**, which Core still allows.
 | Installation | `GET /core/v1/installation` | System's Installation facts (`public_url`, `api_base_url`, `installation_id`, `source_commit`) and read-only Startup settings (`configuration.settings` under its `path`, `apply_command` and `applied_at`; a sensitive setting shows only whether it is `configured`); `api_base_url` in the call samples; `public_url` as the download origin and `--source-url` of the node install and uninstall commands (and the install command's `--core-url`); `path` and `apply_command` beside a sandbox configuration Core rejected. A sensitive setting with a value, or an unknown member, fails the read; `configuration: null` shows a note |
 | Core metrics | `GET /core/v1/metrics?range=` | Core metrics page; the Core popover on Overview. A Core without the route (404) is shown as not reporting, and the popover then shows only Core's status. The [Core metrics contract](../../contracts/agents-api/core-metrics.md) defines every measurement |
 
-`local_only`, or a `public_url` that is not an HTTPS origin, stops Add node from
-issuing a command and Clean up the host from giving one. Overview, Nodes and System
-then show a visible warning with Core's configuration path and apply command as
-copyable values; when `configuration` is null, they state that the path and command
-are unavailable. Nodes disables Add node with a visible reason, and Getting started
-leaves its sandbox step to do.
+`local_only`, or a `public_url` that is not an HTTPS origin, stops Add node from issuing a command and Clean up the host from giving one. Overview, Nodes and System then show a visible warning with Core's configuration path and apply command as copyable values; when `configuration` is null, they state that the path and command are unavailable. Nodes disables Add node with a visible reason, and Getting started leaves its sandbox step to do.
 
-Wherever a new key is shown, and without any key on an active project's page, the
-console gives shell exports of `OPENAI_BASE_URL` (the installation's `api_base_url`)
-and `OPENAI_API_KEY` (the new key, or a placeholder for a key of the project), with
-`curl` and Python examples for `GET /v1/agents` and `POST /v1/agents/sessions`, and
-sends none of them. When the installation is `local_only` it says the API is
-reachable only on the Core machine, and without an `api_base_url` it says to set
-`public_url`.
+Wherever a new key is shown, and without any key on an active project's page, the console gives shell exports of `OPENAI_BASE_URL` (the installation's `api_base_url`) and `OPENAI_API_KEY` (the new key, or a placeholder for a key of the project), with `curl` and Python examples for `GET /v1/agents` and `POST /v1/agents/sessions`, and sends none of them. When the installation is `local_only` it says the API is reachable only on the Core machine, and without an `api_base_url` it says to set `public_url`.
 
-Summary figures are cumulative per Session and are not billing records. Sessions
-without reported usage count toward coverage but not toward token sums, and the
-console shows missing values as missing, never as zero.
+Summary figures are cumulative per Session and are not billing records. Sessions without reported usage count toward coverage but not toward token sums, and the console shows missing values as missing, never as zero.
 
 ## Default models
 
@@ -131,8 +87,7 @@ console shows missing values as missing, never as zero.
 | Set or replace | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** or **Replace**: the complete model configuration with its write-only provider key, never prefilled and never retried; a 400 shows Core's message in the form, and a 503 `credential_storage_unavailable` says Core has no credential encryption key; then the list is read again |
 | Clear | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**, confirmed, then the list is read again |
 
-The list carries each harness's configuration, so the console does not read
-`GET /core/v1/harnesses/{harness}/model-configuration`.
+The list carries each harness's configuration, so the console does not read `GET /core/v1/harnesses/{harness}/model-configuration`.
 
 ## Sandbox administration
 
@@ -149,42 +104,18 @@ The list carries each harness's configuration, so the console does not read
 | Remove node | `DELETE /core/v1/sandbox/nodes/{node_id}` | Confirmed node removal; the row goes only after Core acknowledges the deletion, and a Clean up the host dialog then gives the host's uninstall command (requiring root or sudo; for a node enrolled with another address than the deployment's, also with `--force`, which skips the installer's confirmation with Core) |
 | Runtime observations | `GET /core/v1/sandbox/runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project; an E2B sandbox's dialog adds its `observation.disk` as used / limit (null elsewhere) |
 
-An E2B deployment has no nodes; its API key is write-only. Overview and Sandbox
-metrics count its running and starting sandboxes from the deployment's
-`resources.allocations` and `resources.pending`, while the hosted Runtime rows come
-from Runtime observations. The two sources refresh independently, so the console
-does not infer retention or cleanup from their difference. The Runtime release sent
-for Docker and microsandbox comes from the console's own
-`GET /node-install/manifest.json`; without it the administrator enters the release
-under advanced settings.
+An E2B deployment has no nodes; its API key is write-only. Overview and Sandbox metrics count its running and starting sandboxes from the deployment's `resources.allocations` and `resources.pending`, while the hosted Runtime rows come from Runtime observations. The two sources refresh independently, so the console does not infer retention or cleanup from their difference. The Runtime release sent for Docker and microsandbox comes from the console's own `GET /node-install/manifest.json`; without it the administrator enters the release under advanced settings.
 
 ## Writes
 
-- Deletion uses the administrator API with the same preconditions as the public
-  delete operation. Every deletion is confirmed. A 4xx keeps the dialog open with
-  Core's reason, a 404 counts as already deleted, and any other failure is reported
-  as uncertain and followed by a fresh read.
-- The console offers Session deletion only for idle or failed Sessions without
-  required actions and never cancels work to make a Session deletable.
-- Project, key, executor credential, deletion and sandbox writes are sent once per
-  explicit action and never retried automatically. An uncertain result stays
-  visible until the administrator reads the state again and decides.
-- An executor credential issuance with an unknown outcome (no answer, a 30-second
-  timeout, a 5xx) opens an error dialog whose next step is **Refresh list**. If the
-  kept `key_id` is then listed, it was issued and its secret lost: the console
-  offers to rotate it (`rotate: true`) for a fresh secret, shown once. If it is not
-  listed, the next Issue sends the same `key_id` with `rotate: false`; should that
-  return 409 because the first request was issued after all, the console reads the
-  list again and offers the same rotation only if the credential is listed as
-  active in an active project, and otherwise reports the issuance as rejected. A
-  kept `key_id` that is already listed is never sent again, and rotating or
-  revoking it from its row forgets it: the next Issue generates a new `key_id`.
+- Deletion uses the administrator API with the same preconditions as the public delete operation. Every deletion is confirmed. A 4xx keeps the dialog open with Core's reason, a 404 counts as already deleted, and any other failure is reported as uncertain and followed by a fresh read.
+- The console offers Session deletion only for idle or failed Sessions without required actions and never cancels work to make a Session deletable.
+- Project, key, executor credential, deletion and sandbox writes are sent once per explicit action and never retried automatically. An uncertain result stays visible until the administrator reads the state again and decides.
+- An executor credential issuance with an unknown outcome (no answer, a 30-second timeout, a 5xx) opens an error dialog whose next step is **Refresh list**. If the kept `key_id` is then listed, it was issued and its secret lost: the console offers to rotate it (`rotate: true`) for a fresh secret, shown once. If it is not listed, the next Issue sends the same `key_id` with `rotate: false`; should that return 409 because the first request was issued after all, the console reads the list again and offers the same rotation only if the credential is listed as active in an active project, and otherwise reports the issuance as rejected. A kept `key_id` that is already listed is never sent again, and rotating or revoking it from its row forgets it: the next Issue generates a new `key_id`.
 
 ## Read bounds
 
-The console assembles several figures in the browser from bounded reads of each
-project. Session history is read in pages and polled; there is no management event
-stream.
+The console assembles several figures in the browser from bounded reads of each project. Session history is read in pages and polled; there is no management event stream.
 
 | Page | Reads | Bound |
 | --- | --- | --- |
@@ -197,24 +128,15 @@ stream.
 
 Agent metrics states these limits in its help tips:
 
-- A request is one root Agent Turn. HTTP request counts, status codes and API
-  latency are not available.
-- The model of a request comes from the Session's Agent snapshot, not from the
-  Session's execution configuration.
-- Subagent Turns and deleted Sessions are not counted. Busy projects exceed the
-  Session caps, so long ranges can be partial; the page names the projects that were
-  cut short.
+- A request is one root Agent Turn. HTTP request counts, status codes and API latency are not available.
+- The model of a request comes from the Session's Agent snapshot, not from the Session's execution configuration.
+- Subagent Turns and deleted Sessions are not counted. Busy projects exceed the Session caps, so long ranges can be partial; the page names the projects that were cut short.
 - Usage by API key counts Sessions created in the range by their creating key.
-- The console accepts Turn times up to 15 minutes after the end of the range, to
-  allow for clock differences between the browser and Core.
+- The console accepts Turn times up to 15 minutes after the end of the range, to allow for clock differences between the browser and Core.
 
 ## Not consumed
 
-- Any `/v1/**` route, including Session creation, Session events and their stream,
-  message input, function results and cancellation.
-- Creation or update of Agents, Environment templates, Skills, Files, Vaults or
-  Credentials, including uploads and Credential token replacement.
-- Single Turn reads, Artifacts, Session execution configuration, Environment Files
-  and administrative Session archive.
-- The administrator audit log (`GET /core/v1/audit-log`). System shows the
-  installation, each harness's default model and the sandbox deployment instead.
+- Any `/v1/**` route, including Session creation, Session events and their stream, message input, function results and cancellation.
+- Creation or update of Agents, Environment templates, Skills, Files, Vaults or Credentials, including uploads and Credential token replacement.
+- Single Turn reads, Artifacts, Session execution configuration, Environment Files and administrative Session archive.
+- The administrator audit log (`GET /core/v1/audit-log`). System shows the installation, each harness's default model and the sandbox deployment instead.
