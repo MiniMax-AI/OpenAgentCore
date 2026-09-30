@@ -60,26 +60,6 @@
     "reason": "These four settings belong to the separate product integration; Core does not rename their protocol."
   },
   {
-    "path": "apps/daemon/internal/cli/retired_configuration.go",
-    "regex": "PARSAR_[A-Z0-9_]*\\*?",
-    "reason": "This file only rejects retired Runtime settings, maps their replacements and exempts the separate product hooks."
-  },
-  {
-    "path": "apps/daemon/internal/cli/retired_configuration_test.go",
-    "regex": "PARSAR_[A-Z0-9_]*",
-    "reason": "These fixtures assert rejection and replacement messages for retired Runtime settings."
-  },
-  {
-    "path": "services/core/cmd/server/process_configuration.go",
-    "regex": "AGENTS_API_[A-Z0-9_]+",
-    "reason": "The Core startup retirement table must identify every rejected old setting and its replacement."
-  },
-  {
-    "path": "services/core/cmd/server/process_configuration_test.go",
-    "regex": "AGENTS_API_[A-Z0-9_]+",
-    "reason": "These fixtures assert Core startup rejection of retired settings."
-  },
-  {
     "path": "services/core/migrations/000078_oac_runtime_names.sql",
     "regex": "parsar-core-runtime@",
     "reason": "The guarded up/down data migration must recognize and restore the historical stored Runtime reference prefix."
@@ -190,51 +170,6 @@
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/web/config.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "services/web/config_test.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "internal/obs/log/retired.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "internal/obs/log/retired_test.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "services/core/cmd/sandbox-node/main_test.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "services/core/cmd/server/process_configuration_test.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "services/core/internal/databaseurl/databaseurl_test.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "services/core/cmd/server/managed_nodes.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
-    "path": "services/core/cmd/server/managed_setup_test.go",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_LOG_)[A-Z0-9_]*\\*?",
-    "reason": "These spans reject old settings or assert their retirement diagnostics; they are not supported aliases."
-  },
-  {
     "path": "Makefile",
     "regex": "PARSAR_AGENTS_API_TEST_DATABASE_URL",
     "reason": "R0 deliberately rejects the old test database variable with an actionable replacement message."
@@ -243,26 +178,6 @@
     "path": "CONTRIBUTING.md",
     "regex": "PARSAR_AGENTS_API_TEST_DATABASE_URL",
     "reason": "R0 deliberately rejects the old test database variable with an actionable replacement message."
-  },
-  {
-    "path": "scripts/build-core-release.sh",
-    "regex": "AGENTS_API_RELEASE_RUNTIME_IMAGE",
-    "reason": "The incomplete old Docker release mode is explicitly rejected with a distribution-build replacement."
-  },
-  {
-    "path": "services/core/internal/api/sandbox_node_configuration.go",
-    "regex": "X-Parsar-Node-ID",
-    "reason": "R4 explicitly rejects this retired header even when the current header is also present."
-  },
-  {
-    "path": "services/core/internal/api/sandbox_node_configuration_test.go",
-    "regex": "X-Parsar-Node-ID",
-    "reason": "R4 explicitly rejects this retired header even when the current header is also present."
-  },
-  {
-    "path": "services/web/auth_test.go",
-    "regex": "/?parsar-mark-(?:light|dark)\\.png",
-    "reason": "Anonymous access to these retired asset routes must fail after the active logo filenames change."
   },
   {
     "path": "services/core/internal/store/oac_runtime_names_migration_test.go",
@@ -375,64 +290,9 @@
     "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
   },
   {
-    "path": "apps/web/vite-settings.ts",
-    "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
-    "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
-  },
-  {
-    "path": "apps/web/src/lib/vite-settings.test.ts",
-    "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
-    "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
-  },
-  {
-    "path": "apps/web/src/lib/vite-config.test.ts",
-    "regex": "(?:AGENTS_API_|AGENTS_CORE_WEB_)[A-Z0-9_]*\\*?",
-    "reason": "These Web settings occur only in explicit retirement tables, diagnostics and rejection fixtures."
-  },
-  {
     "path": "scripts/core-doctor.test.mjs",
     "regex": "\"\\.parsar\"|\"agents-api\"",
     "reason": "These fixtures prove the old development credential directory is ignored."
-  },
-  {
-    "path": "apps/web/src/lib/vite-auth.test.ts",
-    "regex": "\"\\.parsar\"|\"agents-api\"",
-    "reason": "These fixtures prove the old development credential directory is ignored."
-  },
-  {
-    "path": "apps/web/src/style.css",
-    "regex": "parsar-diff(?:__[a-z-]+)?",
-    "reason": "Internal diff-view CSS class identity is deliberately deferred; no user-facing label or runtime setting uses it."
-  },
-  {
-    "path": "apps/web/src/features/sessions/items/ApplyPatchDiffViewer.tsx",
-    "regex": "parsar-diff(?:__[a-z-]+)?",
-    "reason": "Internal diff-view CSS class identity is deliberately deferred; no user-facing label or runtime setting uses it."
-  },
-  {
-    "path": "apps/web/src/features/sessions/items/apply-patch.test.tsx",
-    "regex": "parsar-diff(?:__[a-z-]+)?",
-    "reason": "Internal diff-view CSS class identity is deliberately deferred; no user-facing label or runtime setting uses it."
-  },
-  {
-    "path": "apps/web/src/features/sessions/items/ItemRenderers.tsx",
-    "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
-  },
-  {
-    "path": "apps/web/src/features/sessions/items/apply-patch.ts",
-    "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
-  },
-  {
-    "path": "apps/web/src/features/sessions/items/apply-patch.test.tsx",
-    "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
-  },
-  {
-    "path": "apps/web/src/features/sessions/trace/TraceView.tsx",
-    "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
   },
   {
     "path": "apps/web/src/features/sandbox/deployment-specification.test.ts",
@@ -505,31 +365,6 @@
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
   },
   {
-    "path": "contracts/agents-api/sandbox-deployment.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "services/core/README.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "services/core/deploy/codex/README.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "services/core/deploy/microsandbox/README.md",
-    "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
-    "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "contracts/agents-api/sandbox-deployment.md",
-    "regex": "parsar-core-runtime@",
-    "reason": "Documents the one old stored reference prefix rewritten by the guarded database migration."
-  },
-  {
     "path": "docs/getting-started/operations.md",
     "regex": "~/\\.parsar/core",
     "reason": "A default install refuses while this path holds an installation of an earlier release; the troubleshooting row names it."
@@ -548,21 +383,6 @@
     "path": "apps/web/.impeccable/surfaces/src-app-tsx.md",
     "regex": "Parsar [Ii]ndigo|Parsar\\n",
     "reason": "The design records explicitly attribute the copied indigo palette to its original product; it is not a rendered Core product label."
-  },
-  {
-    "path": "apps/web/src/styles/system.css",
-    "regex": "Parsar [Ii]ndigo|Parsar\\n",
-    "reason": "The design records explicitly attribute the copied indigo palette to its original product; it is not a rendered Core product label."
-  },
-  {
-    "path": "apps/web/src/style.css",
-    "regex": "Parsar's (?:MessageMarkdown prose classes|shared primitives|Issue Ledger visual system)",
-    "reason": "These comments attribute the copied design primitives to the external product."
-  },
-  {
-    "path": "apps/web/src/style.css",
-    "regex": "Parsar apply_patch",
-    "reason": "This comment identifies the recognized product-origin patch extension, matching the intentionally retained parser symbol."
   },
   {
     "path": "example/*",

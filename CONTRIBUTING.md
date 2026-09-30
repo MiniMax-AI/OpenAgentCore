@@ -150,7 +150,7 @@ Native adapter changes require their build/check targets and live provider accep
 | Provider ownership labels | `io.oac.*` |
 | E2B metadata | `oac_*` |
 
-Provider bootstrap, Runtime images and Harness adapters must agree on these names. Daemon startup rejects renamed settings before any subcommand and reports replacements without values; the separate Parsar product integration settings remain unchanged. No old label is accepted as a fallback.
+Provider bootstrap, Runtime images and Harness adapters must agree on these names. The separate Parsar product integration settings keep their own names.
 
 Historical Runtime and project-version upgrades are not supported. Do not ship retired installer conversion implementations; preserve rejection guards under the [installer lifecycle contract](deploy/install/README.md#versions-and-the-lock). Preserve older installations, Runtime files, provider resources and Session history; install the current release separately. Startup never verifies and rebinds historical allocations or accepts node deployments without a valid specification. Keep the original Core responsible for unresolved resources; see the [installation version policy](docs/getting-started/operations.md#installation-version-policy). Use this release's template builder for new E2B templates. Ordinary current-version database initialization uses the migration runner.
 

@@ -1321,12 +1321,7 @@ lifecycle gate waiting for the receipt. Lost peers, expiry and restart retain th
 ordinary failure/cleanup fallback, never a fabricated cancelled outcome. Preserve
 unknown Create ownership and reject schema downgrade with unsettled markers.
 
-Core rejects the retired managed-runtimes file setting; there is no file-managed startup
-path or embedded local node. An older file-managed database is not automatically
-adopted after its environment variable is removed. Settle and drain that deployment
-with its previous release and original backend, preserving business data, private
-receipts, identities and storage. The legacy file-managed path has no automatic adoption or force conversion. The supported current path is a database-managed
-deployment. Harness selection and public/self-hosted contracts remain unchanged.
+There is no file-managed startup path or embedded local node. An older file-managed database is not automatically adopted after its environment variable is removed. Settle and drain that deployment with its previous release and original backend, preserving business data, private receipts, identities and storage. The legacy file-managed path has no automatic adoption or force conversion. The supported current path is a database-managed deployment. Harness selection and public/self-hosted contracts remain unchanged.
 
 The paired console serves only matched, non-secret distribution artifacts for node
 installation. Never serve private installation files or arbitrary paths. Installation

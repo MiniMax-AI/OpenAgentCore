@@ -1321,7 +1321,7 @@ html[data-theme="dark"] .brand-mark {
   min-width: 0;
 }
 
-.trace-detail .parsar-diff {
+.trace-detail .patch-diff {
   padding-left: 0;
 }
 
@@ -1377,7 +1377,7 @@ html[data-theme="dark"] .brand-mark {
   white-space: pre-wrap;
 }
 
-/* Non-Tailwind equivalent of Parsar's MessageMarkdown prose classes. */
+/* Markdown prose styles. */
 .message-markdown {
   min-width: 0;
   max-width: none;
@@ -1862,56 +1862,56 @@ button.trace-step-row:hover {
   border-radius: 6px;
 }
 
-/* Parsar apply_patch extension: read-only, protocol-gated diff presentation. */
-.parsar-diff {
+/* apply_patch extension: read-only, protocol-gated diff presentation. */
+.patch-diff {
   min-width: 0;
   padding: 0 0 10px 20px;
 }
 
-.parsar-diff__summary,
-.parsar-diff__file-toggle {
+.patch-diff__summary,
+.patch-diff__file-toggle {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
 }
 
-.parsar-diff__summary {
+.patch-diff__summary {
   min-height: 30px;
   color: var(--fg-muted);
   font-size: 12px;
 }
 
-.parsar-diff__summary strong {
+.patch-diff__summary strong {
   color: var(--fg);
   font-weight: 500;
 }
 
-.parsar-diff__additions,
-.parsar-diff__counts i {
+.patch-diff__additions,
+.patch-diff__counts i {
   color: var(--success);
 }
 
-.parsar-diff__deletions,
-.parsar-diff__counts b {
+.patch-diff__deletions,
+.patch-diff__counts b {
   color: var(--danger);
 }
 
-.parsar-diff__status {
+.patch-diff__status {
   margin-left: auto;
 }
 
-.parsar-diff__files {
+.patch-diff__files {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
 
-.parsar-diff__file + .parsar-diff__file {
+.patch-diff__file + .patch-diff__file {
   border-top: 1px solid var(--line);
 }
 
-.parsar-diff__file-toggle {
+.patch-diff__file-toggle {
   width: 100%;
   min-height: 34px;
   padding: 4px 8px;
@@ -1921,21 +1921,21 @@ button.trace-step-row:hover {
   border: 0;
 }
 
-.parsar-diff__file-toggle:focus-visible {
+.patch-diff__file-toggle:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
   outline-offset: -2px;
 }
 
-.parsar-diff__file-toggle > svg {
+.patch-diff__file-toggle > svg {
   flex: 0 0 auto;
   transition: transform 150ms var(--ease-settle);
 }
 
-.parsar-diff__file-toggle > svg.open {
+.patch-diff__file-toggle > svg.open {
   transform: rotate(90deg);
 }
 
-.parsar-diff__file-toggle code {
+.patch-diff__file-toggle code {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -1945,7 +1945,7 @@ button.trace-step-row:hover {
   white-space: nowrap;
 }
 
-.parsar-diff__kind {
+.patch-diff__kind {
   flex: 0 0 auto;
   padding: 1px 5px;
   color: var(--fg-muted);
@@ -1956,7 +1956,7 @@ button.trace-step-row:hover {
   border-radius: 4px;
 }
 
-.parsar-diff__counts {
+.patch-diff__counts {
   display: flex;
   flex: 0 0 auto;
   gap: 5px;
@@ -1964,13 +1964,13 @@ button.trace-step-row:hover {
   font-size: 11px;
 }
 
-.parsar-diff__counts i,
-.parsar-diff__counts b {
+.patch-diff__counts i,
+.patch-diff__counts b {
   font-style: normal;
   font-weight: 400;
 }
 
-.parsar-diff__content {
+.patch-diff__content {
   max-height: 360px;
   margin: 0;
   overflow: auto;
@@ -1983,31 +1983,31 @@ button.trace-step-row:hover {
   outline: none;
 }
 
-.parsar-diff__content:focus-visible {
+.patch-diff__content:focus-visible {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
-.parsar-diff__line {
+.patch-diff__line {
   display: block;
   min-width: max-content;
   padding: 0 8px;
 }
 
-.parsar-diff__raw {
+.patch-diff__raw {
   display: flex;
   margin-top: 8px;
   flex-direction: column;
   gap: 4px;
 }
 
-.parsar-diff__raw summary {
+.patch-diff__raw summary {
   width: fit-content;
   color: var(--fg-muted);
   font-size: 12px;
   cursor: pointer;
 }
 
-.parsar-diff__raw pre {
+.patch-diff__raw pre {
   max-height: 180px;
   margin: 4px 0 0;
   padding: 8px;
@@ -2054,7 +2054,7 @@ button.trace-step-row:hover {
   color: var(--fg-muted);
 }
 
-/* Dialogs and controls mirror Parsar's shared primitives. */
+/* Shared dialog and control styles. */
 
 .modal-backdrop {
   position: fixed;
@@ -2391,7 +2391,7 @@ button.trace-step-row:hover {
 /* Architecture — facts presented as flat ledger rows. */
 
 /* Sidebar product navigation and global creation keep OpenAI's clear
-   information architecture inside Parsar's Issue Ledger visual system. */
+   information architecture with the shared visual system. */
 
 /* Dedicated Agent setup. */
 

@@ -59,15 +59,6 @@ func refreshIdentity(t *testing.T, coreURL string) error {
 	return err
 }
 
-func TestNodeRejectsRetiredLoggingSettingsBeforeStartup(t *testing.T) {
-	t.Setenv("PARSAR_LOG_LEVEL", "private-log")
-	t.Setenv("PARSAR_LOG_FORMAT", "")
-	err := run(t.Context(), []string{"run"})
-	if err == nil || !strings.Contains(err.Error(), "PARSAR_LOG_LEVEL → OAC_LOG_LEVEL") || !strings.Contains(err.Error(), "PARSAR_LOG_FORMAT → OAC_LOG_FORMAT") || strings.Contains(err.Error(), "private-log") {
-		t.Fatalf("retired logging settings were ignored or exposed: %v", err)
-	}
-}
-
 func TestProtocolVersionRequiresNoProviderOrIdentity(t *testing.T) {
 	// This is a binary capability check, not a provider readiness probe.
 	if err := run(t.Context(), []string{"protocol-version"}); err != nil {

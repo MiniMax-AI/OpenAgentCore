@@ -25,7 +25,7 @@ func coreKeyConsoleConfig(t *testing.T, backend http.Handler) config {
 	if err := os.Mkdir(filepath.Join(dist, "assets"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{"index.html": "console application", "assets/main.js": "app script", "private.txt": "not public", "oac-mark.svg": "vector mark", "favicon.svg": "vector favicon", "parsar-mark-light.png": "retired mark"} {
+	for name, body := range map[string]string{"index.html": "console application", "assets/main.js": "app script", "private.txt": "not public", "oac-mark.svg": "vector mark", "favicon.svg": "vector favicon"} {
 		if err := os.WriteFile(filepath.Join(dist, name), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +100,7 @@ func TestCoreKeySignInSessionAndLogout(t *testing.T) {
 	if w := authRequest(h, "GET", "/console/auth", "", nil); w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"mode":"login"}` {
 		t.Fatalf("initial mode: %d %s", w.Code, w.Body)
 	}
-	for _, path := range []string{"/core/v1/projects", "/console/config", "/core/v1/sandbox/nodes", "/private.txt", "/parsar-mark-light.png", "/parsar-mark-dark.png", "/oac-mark-other.png"} {
+	for _, path := range []string{"/core/v1/projects", "/console/config", "/core/v1/sandbox/nodes", "/private.txt", "/oac-mark-other.png"} {
 		if w := authRequest(h, "GET", path, "", nil); w.Code != 401 {
 			t.Errorf("private path %s returned %d", path, w.Code)
 		}

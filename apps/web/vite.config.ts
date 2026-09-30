@@ -10,13 +10,11 @@ import {
   loadLocalDockerGuideProfile,
 } from "./src/lib/docker-guide-config.ts";
 import { loadProxyBearerAuth } from "./vite-auth.ts";
-import { assertCurrentWebSettings } from "./vite-settings.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, repositoryRoot, "");
-  assertCurrentWebSettings(env);
   const target = env.OAC_WEB_DEV_PROXY_TARGET ?? "http://127.0.0.1:8091";
   const selfHostedSessionsEnabled = env.OAC_WEB_SELF_HOSTED_SESSIONS === "1";
   const openAIHostedSessionsEnabled = env.OAC_WEB_OPENAI_HOSTED_SESSIONS === "1";

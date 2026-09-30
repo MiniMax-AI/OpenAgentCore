@@ -42,7 +42,7 @@ ordinary Session deletion has different retention behavior. Existing Sessions ne
 migrate to another backend.
 
 
-Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`. It does not automatically adopt an
+Core does not automatically adopt an
 older file-managed database, even after its resources are drained. Keep the
 previous release and original backend available to resolve that deployment;
 removing an environment variable does not migrate its configuration ownership.

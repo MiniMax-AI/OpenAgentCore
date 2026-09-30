@@ -49,7 +49,7 @@ function parseDiff(diff: string): Pick<ParsedPatchChange, "lines" | "additions" 
   return { lines, additions, deletions };
 }
 
-export function parseParsarApplyPatch(argumentsValue: unknown): ParsedApplyPatch | null {
+export function parseApplyPatch(argumentsValue: unknown): ParsedApplyPatch | null {
   if (!argumentsValue || typeof argumentsValue !== "object" || Array.isArray(argumentsValue)) return null;
   const root = argumentsValue as Record<string, unknown>;
   if (!exactKeys(root, ["changes"]) || !Array.isArray(root.changes) || root.changes.length === 0) return null;

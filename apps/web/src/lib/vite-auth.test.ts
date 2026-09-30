@@ -26,14 +26,6 @@ describe("Vite OpenAgentCore proxy authentication", () => {
     expect(loadProxyBearerAuth({ homeDir })).toBeUndefined();
   });
 
-  it("does not read the retired conventional token path", () => {
-    const homeDir = makeTemporaryDirectory();
-    const retiredDirectory = join(homeDir, ".parsar", "agents-api");
-    mkdirSync(retiredDirectory, { recursive: true });
-    writeFileSync(join(retiredDirectory, "web-token"), "retired-token-marker", { mode: 0o600 });
-    expect(loadProxyBearerAuth({ homeDir })).toBeUndefined();
-  });
-
   it("expands the conventional home path and reads a private token file", () => {
     const homeDir = makeTemporaryDirectory();
     const stateDirectory = join(homeDir, ".oac", "dev");

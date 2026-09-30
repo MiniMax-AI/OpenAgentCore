@@ -112,17 +112,7 @@ resource and same-selection conditions, including an identical old request body.
 | `configuration` | Provider-owned public selectors. E2B accepts immutable `template` and optional paired `api_url`/`domain`; node providers accept only `{}` or omission. |
 | `credential` | Write-only provider credential object. E2B accepts `{api_key}`; required at first setup, omitted on PUT to preserve the key. Null and empty keys reject. Node providers reject this object. |
 
-The request has no Core address. Core derives the deployment's `core_url` from the
-installation public URL (`public_url` in `config.json`, `OAC_PUBLIC_URL` for
-Core): the HTTPS origin nodes and sandbox guests use to reach Core. A request that
-contains `core_url` is rejected with 400 `invalid_request_error` and
-`param: "core_url"`. E2B guests reach Core from E2B's cloud, so an E2B selection is
-rejected with 409 `sandbox_configuration_error` while the public URL is loopback.
-Docker and microsandbox selections do not depend on the address; a loopback public
-URL serves local development only, because a guest's loopback address does not
-reach its host. Changing the public URL is an installation change, not this
-operation: nodes enrolled with the old address receive no new sandboxes and must
-be removed and added again.
+The request has no Core address. Core derives the deployment's `core_url` from the installation public URL (`public_url` in `config.json`, `OAC_PUBLIC_URL` for Core): the HTTPS origin nodes and sandbox guests use to reach Core. A request that contains `core_url` is rejected with 400 `invalid_request` like any other unknown member. E2B guests reach Core from E2B's cloud, so an E2B selection is rejected with 409 `sandbox_configuration_error` while the public URL is loopback. Docker and microsandbox selections do not depend on the address; a loopback public URL serves local development only, because a guest's loopback address does not reach its host. Changing the public URL is an installation change, not this operation: nodes enrolled with the old address receive no new sandboxes and must be removed and added again.
 
 ### Resources
 
@@ -427,10 +417,6 @@ make a new explicit decision. Do not revoke old E2B credentials before cleanup.
 
 ## Node configuration and enrollment
 
-The retired `X-Parsar-Node-ID` header is rejected even when empty or accompanied
-by its replacement: `400 invalid_request`, with the message
-`X-Parsar-Node-ID was renamed to X-OAC-Node-ID; use the node command from this Core's Web`. Header values are never included in this diagnostic.
-
 For a new node, send `Authorization: Bearer <enrollment-token>` to the configuration
 GET without `X-OAC-Node-ID`. The token must be valid, unexpired, unconsumed and
 belong to this installation. This read does not consume it. An active reset prevents
@@ -518,14 +504,7 @@ handling does not establish cross-version compatibility. See
 [Readiness codes](../../docs/getting-started/nodes.md#readiness-codes)
 for causes, precedence and operator actions.
 
-Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`. A node provider file remains an
-installed copy of the database selection, not a Core startup configuration source.
-Historical file-managed deployments and selections without a complete specification
-are unsupported. Preserve their database, identities, provider receipts, Runtime
-resources and history; install the current release separately. Do not clear state,
-run a historical service to convert it, or treat removal of an environment variable
-as a transfer of ownership. See the
-[installation version policy](../../docs/getting-started/operations.md#installation-version-policy).
+A node provider file is an installed copy of the database selection, not a Core startup configuration source. Historical file-managed deployments and selections without a complete specification are unsupported. Preserve their database, identities, provider receipts, Runtime resources and history; install the current release separately. Do not clear state, run a historical service to convert it, or treat removal of an environment variable as a transfer of ownership. See the [installation version policy](../../docs/getting-started/operations.md#installation-version-policy).
 
 Landed migrations and their refusal conditions remain historical schema evidence.
 They do not establish an operator upgrade, downgrade or conversion procedure.

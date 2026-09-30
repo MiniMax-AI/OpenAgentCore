@@ -35,13 +35,6 @@ describe("Web Vite settings boundary", () => {
     expect(JSON.stringify(config.define)).not.toContain("private-");
   });
 
-  it.each(["serve", "build"] as const)("rejects retired settings before reading credentials during %s", (command) => {
-    expect(() => configure({
-      AGENTS_API_PROXY_TOKEN: "retired-secret-marker",
-      OAC_WEB_DEV_PROXY_TOKEN_FILE: "/missing/private-file-marker",
-    }, command)).toThrow(new Error("Retired Web settings: AGENTS_API_PROXY_TOKEN is no longer supported; use OAC_WEB_DEV_PROXY_TOKEN."));
-  });
-
   it("does not read a development credential file during a production build", async () => {
     const config = await configure({ OAC_WEB_DEV_PROXY_TOKEN_FILE: "/missing/private-file-marker" }, "build");
     expect(config.define?.__OAC_WEB_DEV_PROXY_AUTH__).toBe("false");

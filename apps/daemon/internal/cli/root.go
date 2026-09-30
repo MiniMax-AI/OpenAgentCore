@@ -55,9 +55,6 @@ func Execute(argv []string) error {
 
 func execute(ctx *runContext, argv []string) error {
 	useInstalledNativeHome()
-	if err := validateRuntimeConfiguration(); err != nil {
-		return err
-	}
 	if len(argv) == 0 || argv[0] == "-h" || argv[0] == "--help" || argv[0] == "help" {
 		printRootHelp(ctx.stdout)
 		if len(argv) == 0 {

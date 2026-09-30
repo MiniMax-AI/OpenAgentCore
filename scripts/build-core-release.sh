@@ -19,11 +19,6 @@ for value in sys.argv[2:]:
         sys.exit("Agents API release directories must be absolute and under ~/.oac")
 PY
 
-if [[ -n "${AGENTS_API_RELEASE_RUNTIME_IMAGE:-}" ]]; then
-  printf 'AGENTS_API_RELEASE_RUNTIME_IMAGE is retired: the Docker-hosted archive could not carry a complete Runtime release. Build the Core distribution (make build-core-distribution) instead\n' >&2
-  exit 1
-fi
-
 require_clean_source() {
   local source_status
   source_status="$(git -C "$repo_root" status --porcelain --untracked-files=all)"

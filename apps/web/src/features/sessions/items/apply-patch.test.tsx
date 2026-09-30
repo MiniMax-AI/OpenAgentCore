@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { SessionItem } from "@oac/agents-client";
 
 import { ApplyPatchDiffViewer } from "./ApplyPatchDiffViewer";
-import { parseParsarApplyPatch } from "./apply-patch";
+import { parseApplyPatch } from "./apply-patch";
 import { mergeFunctionSteps, ThreadItems, toolResult } from "./ItemRenderers";
 
 const changes = [
@@ -17,9 +17,9 @@ function item(overrides: Partial<SessionItem> = {}): SessionItem {
   return { id: "patch", turn_id: "turn", type: "function_call", status: "completed", name: "apply_patch", call_id: "call", arguments: { changes }, ...overrides } as SessionItem;
 }
 
-describe("Parsar apply_patch parsing", () => {
+describe("apply_patch parsing", () => {
   it("parses add, modify, delete, multiple files, and unified-diff counts", () => {
-    const parsed = parseParsarApplyPatch({ changes });
+    const parsed = parseApplyPatch({ changes });
     expect(parsed?.changes.map((change) => change.kind)).toEqual(["add", "modify", "delete"]);
     expect(parsed).toMatchObject({ additions: 3, deletions: 2 });
     expect(parsed?.changes[0]?.lines.map((line) => line.kind)).toContain("header");
@@ -38,12 +38,12 @@ describe("Parsar apply_patch parsing", () => {
     { changes: [{ path: "x", kind: { type: "add" }, diff: "+x", alternate: true }] },
     { changes, provider: "another-core" },
   ])("fails closed for empty, malformed, string, missing, or alternate shapes", (value) => {
-    expect(parseParsarApplyPatch(value)).toBeNull();
+    expect(parseApplyPatch(value)).toBeNull();
   });
 
   it("keeps XSS-like text and long lines as inert text", () => {
     const long = "x".repeat(20_000);
-    const parsed = parseParsarApplyPatch({ changes: [{ path: "<img src=x onerror=alert(1)>", kind: { type: "update" }, diff: `+<script>alert(1)</script>${long}` }] });
+    const parsed = parseApplyPatch({ changes: [{ path: "<img src=x onerror=alert(1)>", kind: { type: "update" }, diff: `+<script>alert(1)</script>${long}` }] });
     expect(parsed?.changes[0]?.path).toContain("<img");
     expect(parsed?.changes[0]?.diff).toContain(long);
     const html = renderToStaticMarkup(<ApplyPatchDiffViewer item={item({ arguments: { changes: parsed && [{ path: parsed.changes[0]?.path, kind: { type: "update" }, diff: parsed.changes[0]?.diff }] } })} patch={parsed!} result={{ ok: true }} />);
@@ -60,9 +60,9 @@ describe("protocol-aware Item rendering", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ status: "completed", output: { applied: true }, duration_ms: 12 });
     expect(toolResult(merged[0]!)).toEqual({ output: { applied: true }, duration_ms: 12 });
-    expect(renderToStaticMarkup(<ApplyPatchDiffViewer item={item({ status: "in_progress" })} patch={parseParsarApplyPatch({ changes })!} result={undefined} />)).toContain("In progress");
-    expect(renderToStaticMarkup(<ApplyPatchDiffViewer item={item()} patch={parseParsarApplyPatch({ changes })!} result="ok" />)).toContain("Completed");
-    expect(renderToStaticMarkup(<ApplyPatchDiffViewer item={item({ status: "failed" })} patch={parseParsarApplyPatch({ changes })!} result={{ error: "no" }} />)).toContain("Failed");
+    expect(renderToStaticMarkup(<ApplyPatchDiffViewer item={item({ status: "in_progress" })} patch={parseApplyPatch({ changes })!} result={undefined} />)).toContain("In progress");
+    expect(renderToStaticMarkup(<ApplyPatchDiffViewer item={item()} patch={parseApplyPatch({ changes })!} result="ok" />)).toContain("Completed");
+    expect(renderToStaticMarkup(<ApplyPatchDiffViewer item={item({ status: "failed" })} patch={parseApplyPatch({ changes })!} result={{ error: "no" }} />)).toContain("Failed");
   });
 
   it("preserves message, command, MCP, function output, web search, and unknown fallbacks", () => {

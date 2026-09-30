@@ -102,8 +102,6 @@ node identity, paths and credentials until cleanup is confirmed. Explicit archiv
 preserves history and persisted Files/Artifacts but discards unpersisted workspace;
 ordinary Session deletion has different retention behavior. Existing Sessions never
 migrate to another backend.
-Core rejects `AGENTS_API_MANAGED_RUNTIMES_FILE`; restarting or editing
-an old file does not replace database configuration ownership.
 
 Node providers use explicit local Unix Docker sockets, ignoring ambient
 `DOCKER_HOST`. Optional `extra_hosts` is trusted node configuration. No Docker
