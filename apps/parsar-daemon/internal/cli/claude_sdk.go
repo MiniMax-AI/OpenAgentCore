@@ -30,10 +30,36 @@ func discoverClaudeSDK(parent context.Context, rc *runContext, profile string, c
 		return nil
 	}
 	out := &claudeSDKDiscovery{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: proto.AgentKindCapabilities{
-		Streaming: true, Usage: true, Resume: true, Steering: true, MessageItems: true,
-		ToolObservations: true, EnvironmentNone: true, SubagentControl: true,
-		DurableTurns: true, DurableInputReceipts: true, FunctionTools: true, ExecutionControls: true,
-		ProgrammaticToolCallingDisable: true,
+		SubagentObservations:           proto.CapabilityUnsupported,
+		Streaming:                      proto.CapabilitySupported,
+		Permissions:                    proto.CapabilityUnsupported,
+		Usage:                          proto.CapabilitySupported,
+		Resume:                         proto.CapabilitySupported,
+		NativeSessionRecovery:          proto.CapabilityUnsupported,
+		WorkspaceAuthoring:             proto.CapabilityUnsupported,
+		Steering:                       proto.CapabilitySupported,
+		MessageItems:                   proto.CapabilitySupported,
+		ToolObservations:               proto.CapabilitySupported,
+		EnvironmentNone:                proto.CapabilitySupported,
+		LocalEnvironment:               proto.CapabilityUnsupported,
+		Preparation:                    proto.CapabilityUnsupported,
+		WorkspaceReadPreparation:       proto.CapabilityUnsupported,
+		WorkspaceOutputExport:          proto.CapabilityUnsupported,
+		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
+		WebSearchControl:               proto.CapabilityUnsupported,
+		ExecutionControls:              proto.CapabilitySupported,
+		TextVerbosity:                  proto.CapabilityUnsupported,
+		StructuredOutput:               proto.CapabilityUnsupported,
+		ToolSearch:                     proto.CapabilityUnsupported,
+		MessageImages:                  proto.CapabilityUnsupported,
+		FunctionResultImages:           proto.CapabilityUnsupported,
+		SubagentControl:                proto.CapabilitySupported,
+		DurableInputReceipts:           proto.CapabilitySupported,
+		DurableTurns:                   proto.CapabilitySupported,
+		FunctionTools:                  proto.CapabilitySupported,
+		MCPHTTPTools:                   proto.CapabilityUnsupported,
+		MCPHTTPRequired:                proto.CapabilityUnsupported,
+		MCPHTTPBearerAuth:              proto.CapabilityUnsupported,
 	}}}
 	fail := func(err error) *claudeSDKDiscovery {
 		fmt.Fprintf(rc.stderr, "oac-daemon: configured Claude SDK runtime unavailable: %v\n", err)
@@ -92,28 +118,28 @@ func discoverClaudeSDK(parent context.Context, rc *runContext, profile string, c
 			return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
 		}
 		caps := &out.Info.Capabilities
-		caps.EnvironmentNone, caps.FunctionTools = false, info.SupportsWorkspaceFunctions()
-		caps.Preparation, caps.LocalEnvironment = true, true
-		caps.WorkspaceReadPreparation, caps.NativeSessionRecovery = true, true
+		caps.EnvironmentNone, caps.FunctionTools = proto.CapabilityUnsupported, proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
+		caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
+		caps.WorkspaceReadPreparation, caps.NativeSessionRecovery = proto.CapabilitySupported, proto.CapabilitySupported
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK
-	out.Info.Capabilities.MessageImages = info.SupportsMessageImages()
-	out.Info.Capabilities.FunctionResultImages = info.SupportsFunctionResultImages()
-	out.Info.Capabilities.ToolSearch = info.SupportsToolSearch()
+	out.Info.Capabilities.MessageImages = proto.CapabilityFromBool(info.SupportsMessageImages())
+	out.Info.Capabilities.FunctionResultImages = proto.CapabilityFromBool(info.SupportsFunctionResultImages())
+	out.Info.Capabilities.ToolSearch = proto.CapabilityFromBool(info.SupportsToolSearch())
 	if out.Config.Workspace != nil {
-		out.Info.Capabilities.ToolSearch = info.SupportsWorkspaceToolSearch()
+		out.Info.Capabilities.ToolSearch = proto.CapabilityFromBool(info.SupportsWorkspaceToolSearch())
 	}
-	out.Info.Capabilities.StructuredOutput = info.SupportsStructuredOutput()
+	out.Info.Capabilities.StructuredOutput = proto.CapabilityFromBool(info.SupportsStructuredOutput())
 	if out.Config.Workspace != nil {
-		out.Info.Capabilities.StructuredOutput = info.SupportsWorkspaceStructuredOutput()
+		out.Info.Capabilities.StructuredOutput = proto.CapabilityFromBool(info.SupportsWorkspaceStructuredOutput())
 	}
-	out.Info.Capabilities.SubagentObservations = info.SupportsSubagents()
-	out.Info.Capabilities.MCPHTTPTools = info.SupportsHTTPMCP()
-	out.Info.Capabilities.MCPHTTPBearerAuth = info.SupportsHTTPMCPBearer()
-	out.Info.Capabilities.MCPHTTPRequired = info.SupportsHTTPMCPRequired()
+	out.Info.Capabilities.SubagentObservations = proto.CapabilityFromBool(info.SupportsSubagents())
+	out.Info.Capabilities.MCPHTTPTools = proto.CapabilityFromBool(info.SupportsHTTPMCP())
+	out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityFromBool(info.SupportsHTTPMCPBearer())
+	out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityFromBool(info.SupportsHTTPMCPRequired())
 	if out.Config.Workspace != nil && !info.SupportsWorkspaceMCP() {
-		out.Info.Capabilities.MCPHTTPTools, out.Info.Capabilities.MCPHTTPBearerAuth = false, false
-		out.Info.Capabilities.MCPHTTPRequired = false
+		out.Info.Capabilities.MCPHTTPTools, out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityUnsupported, proto.CapabilityUnsupported
+		out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityUnsupported
 	}
 	fmt.Fprintf(rc.stdout, "Claude SDK preflight ok (SDK %s, %s)\n", info.SDK, info.Native)
 	return out
@@ -133,7 +159,7 @@ func registerClaudeSDK(registry *agent.Registry, discovery *claudeSDKDiscovery) 
 	if discovery.Info.Available {
 		registry.RegisterExecutor("claude_sdk", claudesdk.NewExecutorFactory(discovery.Config))
 	}
-	if discovery.Info.Available && discovery.Info.Capabilities.LocalEnvironment {
+	if discovery.Info.Available && discovery.Info.Capabilities.LocalEnvironment.IsSupported() {
 		registry.RegisterPreparation("claude_sdk", true, claudesdk.NewPreparationFactory(discovery.Config))
 	}
 }

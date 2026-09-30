@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/agent/mcode"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/localworkspace"
 	"github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/paths"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
 )
 
 func discoverMCodeWorkspace(parent context.Context, rc *runContext, discovery *agentCLIDiscovery) {
@@ -69,7 +70,7 @@ func discoverMCodeWorkspace(parent context.Context, rc *runContext, discovery *a
 	}
 	discovery.MCodeWorkspace = &c
 	caps := &discovery.MCode.Capabilities
-	caps.EnvironmentNone = false
-	caps.Preparation, caps.LocalEnvironment = true, true
-	caps.WorkspaceReadPreparation = true
+	caps.EnvironmentNone = proto.CapabilityUnsupported
+	caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
+	caps.WorkspaceReadPreparation = proto.CapabilitySupported
 }
