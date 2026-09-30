@@ -144,7 +144,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if snapshot(created.ID) != before {
 		t.Fatal("idle cancellation replay or rejected input changed active work")
 	}
-	itemsBefore, err := s.ListItems(t.Context(), tenant, created.ID, "", 100, true)
+	itemsBefore, err := sessionReads(db.pool).ListItems(t.Context(), tenant, created.ID, "", 100, true)
 	if err != nil || len(itemsBefore.Items) != 2 {
 		t.Fatal("controlled partial output was not recorded", err)
 	}
@@ -158,7 +158,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
 		t.Fatal("202 must admit cancellation without fabricating native completion", err)
 	}
-	itemsAfter, err := s.ListItems(t.Context(), tenant, created.ID, "", 100, true)
+	itemsAfter, err := sessionReads(db.pool).ListItems(t.Context(), tenant, created.ID, "", 100, true)
 	if err != nil || !reflect.DeepEqual(itemsBefore, itemsAfter) {
 		t.Fatal("cancellation admission changed partial history", err)
 	}

@@ -37,10 +37,10 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // publicHandler serves s through api.NewHandler. s backs every area the Store
 // implements, and db is the database and credential key that built s; the
-// audit reads, Agents, Files and Vaults come from db. keys authenticate as Project
-// keys and "admin" as the Core key. Metrics, Runtime observation and history,
-// and executor connections are strict stand-ins. Execution and Sandboxes stay
-// disabled unless configure sets them.
+// audit reads, Agents, Files, Vaults, Items, Subagents and Artifacts come from
+// db. keys authenticate as Project keys and "admin" as the Core key. Metrics,
+// Runtime observation and history, and executor connections are strict
+// stand-ins. Execution and Sandboxes stay disabled unless configure sets them.
 func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
 	t.Helper()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
@@ -71,6 +71,10 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		return nil, err
 	}
 	projectStore, projectService := fixtureProjects(t, db)
+	sessionStore, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		return nil, err
+	}
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: s,
 		Projects: projectService, ProjectsReader: fixtureProjectsReader{Reader: projectStore, keys: keys},
@@ -84,9 +88,11 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		SessionCreation: s,
 		SessionEvents:   s,
 		Turns:           s,
-		Items:           s,
-		Subagents:       s,
-		Artifacts:       s, SessionAdmin: s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
+		Items:           sessionStore,
+		Subagents:       sessionStore,
+		Artifacts:       sessionService,
+		ArtifactsReader: sessionStore,
+		SessionAdmin:    s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}
 	for _, c := range configure {

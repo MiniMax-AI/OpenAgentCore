@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
@@ -23,7 +25,7 @@ func TestDiagnosticPublicCompatibility(t *testing.T) {
 	key := callerBinding()
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
-	databaseSessionReads(s)(&deps, fakes)
+	databaseSessionReads(s, pool)(&deps, fakes)
 	h := newTestHandler(t, deps)
 	session, err := s.CreateSession(t.Context(), key.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
@@ -60,9 +62,13 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 	return w
 }
 
-// databaseSessionReads serves Session, Turn, Item and diagnostic reads from s.
-func databaseSessionReads(s *store.Store) func(*Dependencies, *testFakes) {
-	return func(d *Dependencies, _ *testFakes) { d.Sessions, d.Turns, d.Items, d.SessionAdmin = s, s, s, s }
+// databaseSessionReads serves Session, Turn and diagnostic reads from s, and
+// Item reads from the Session adapter on pool.
+func databaseSessionReads(s *store.Store, pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
+	return func(d *Dependencies, _ *testFakes) {
+		d.Sessions, d.Turns, d.SessionAdmin = s, s, s
+		d.Items = sessionpg.New(pgunit.NewPool(pool))
+	}
 }
 
 func diagnosticDatabase(t *testing.T) (*store.Store, *pgxpool.Pool) {

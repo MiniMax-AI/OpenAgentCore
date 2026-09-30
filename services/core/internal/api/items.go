@@ -34,7 +34,7 @@ func (h *Handler) listItems(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := h.Items.ListItems(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, itemListResponse(page.Items, page.HasMore))

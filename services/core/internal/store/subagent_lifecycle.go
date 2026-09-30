@@ -20,7 +20,7 @@ func validNativeIdentity(value string) bool {
 	return value != "" && len(value) <= 512 && strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\x00\r\n")
 }
 func recordSubagentChange(ctx context.Context, q *sqlc.Queries, session, id pgtype.UUID, kind string) error {
-	value, err := publicSubagent(ctx, q, session, uuid.UUID(id.Bytes).String())
+	value, err := sessionpg.LoadPublicSubagent(ctx, q, session, uuid.UUID(id.Bytes).String())
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ import (
 
 func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
-	h, _, tenant := adminTestHandler(t, databaseSessionReads(s))
+	h, _, tenant := adminTestHandler(t, databaseSessionReads(s, pool))
 	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "diagnostic-test"}, Engine: "codex", IdempotencyKey: "diagnostics", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)

@@ -254,9 +254,9 @@ type ownedArtifactStore struct {
 	deleted int
 }
 
-func (s *ownedArtifactStore) DeleteSessionArtifact(_ context.Context, tenant, session, id string) error {
-	s.tenants = append(s.tenants, tenant)
-	if tenant != s.owner || session != "session" || id != "artifact" {
+func (s *ownedArtifactStore) DeleteSessionArtifact(_ context.Context, command sessions.DeleteSessionArtifactCommand) error {
+	s.tenants = append(s.tenants, command.TenantID)
+	if command.TenantID != s.owner || command.SessionID != "session" || command.ArtifactID != "artifact" {
 		return sessions.ErrNotFound
 	}
 	s.deleted++

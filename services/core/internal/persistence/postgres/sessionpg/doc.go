@@ -6,7 +6,9 @@
 // sequence positions, event IDs, Item positions and output indexes, and write
 // the public change journal, Items, Turn usage, Artifact settlement,
 // Environment state, input reservations and devices. SessionTx binds a Session
-// to its caller's transaction for the sessions procedures.
+// to its caller's transaction for the sessions procedures. Store is the pooled
+// adapter: it stores the sessions.Service use cases and serves the Session
+// reads.
 package sessionpg
 
 import (

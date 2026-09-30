@@ -145,7 +145,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if _, err := fresh.RequestCancel(ctx, tenant, session.ID, "late-cancel"); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.ListItems(ctx, tenant, session.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sessionAdapter(fresh).ListItems(ctx, tenant, session.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			turn, err := fresh.GetTurn(ctx, tenant, session.ID, receipt.TurnID)

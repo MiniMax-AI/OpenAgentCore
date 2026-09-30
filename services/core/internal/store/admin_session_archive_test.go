@@ -140,7 +140,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := []byte("retained artifact")
-	if err := s.StageTurnArtifacts(t.Context(), tenant, session.ID, input.TurnID, session.Environment.ID, bytes.NewReader(artifactArchive(t, map[string][]byte{"outputs/result.txt": body}))); err != nil {
+	if err := stageTurnArtifacts(t.Context(), s, tenant, session.ID, input.TurnID, session.Environment.ID, bytes.NewReader(artifactArchive(t, map[string][]byte{"outputs/result.txt": body}))); err != nil {
 		t.Fatal(err)
 	}
 	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
@@ -180,11 +180,11 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if result, err := s.GetManagedSessionArchive(t.Context(), tenant, session.ID); err != nil || result.State != "released" {
 		t.Fatal("release not reflected", result, err)
 	}
-	page, err := s.ListSessionArtifacts(t.Context(), tenant, session.ID, "", "", 100, true)
+	page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session.ID, "", "", 100, true)
 	if err != nil || len(page.Artifacts) != 1 {
 		t.Fatal(page, err)
 	}
-	if err := s.ReadSessionArtifact(t.Context(), tenant, session.ID, page.Artifacts[0].ID, func(_ sessions.Artifact, r io.Reader) error {
+	if err := sessionAdapter(s).ReadSessionArtifact(t.Context(), tenant, session.ID, page.Artifacts[0].ID, func(_ sessions.Artifact, r io.Reader) error {
 		got, err := io.ReadAll(r)
 		if !bytes.Equal(got, body) {
 			t.Error("archive damaged published artifact bytes")

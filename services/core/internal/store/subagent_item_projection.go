@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -35,7 +36,7 @@ func projectSubagentItem(ctx context.Context, q *sqlc.Queries, session pgtype.UU
 		return sessions.ErrInvalidInput
 	}
 	turnID := items.Identity(uuid.UUID(child.ID.Bytes).String(), "turn:"+p.TurnID)
-	turn, err := childTurn(ctx, q, session, uuid.UUID(child.ID.Bytes).String(), turnID)
+	turn, err := sessionpg.LoadChildTurn(ctx, q, session, uuid.UUID(child.ID.Bytes).String(), turnID)
 	if err != nil {
 		return err
 	}

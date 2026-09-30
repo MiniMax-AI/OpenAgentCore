@@ -43,8 +43,9 @@ func newManagedTestStoreDB(t *testing.T) (*store.Store, fixtureDB) {
 // startWorker starts the execution Worker as cmd/server does: it acquires the
 // execution lease on db and hands it, with the execution writer built on it, to
 // the Worker, which closes it when Run exits. The Worker opens MCP bearer tokens
-// through the vaults service on db and records model configuration observations
-// through the model configuration adapter on db.
+// through the vaults service on db, records model configuration observations
+// through the model configuration adapter on db and runs Session use cases
+// and reads through the Session service and adapter on db.
 func startWorker(t testing.TB, ctx context.Context, db fixtureDB, dispatcher *execution.Dispatcher) *execution.Worker {
 	t.Helper()
 	worker, err := startWorkerErr(ctx, db, dispatcher)
@@ -60,6 +61,10 @@ func startWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dis
 	if err != nil {
 		return nil, err
 	}
+	sessionStore, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		return nil, err
+	}
 	lease, err := pgunit.AcquireLease(ctx, db.pool)
 	if err != nil {
 		return nil, err
@@ -72,6 +77,8 @@ func startWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dis
 	owned.Credentials = credentials
 	owned.Observer = modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher)
 	owned.Deployment = deployments
+	owned.Sessions = sessionService
+	owned.SessionsReader = sessionStore
 	return execution.StartWorker(ctx, &owned, execution.Owner{
 		Lease:      lease,
 		Store:      store.NewExecution(dispatcher.Store, lease),

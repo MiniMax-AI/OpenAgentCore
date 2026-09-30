@@ -131,38 +131,42 @@ func (f *fakeAgentsReader) GetAgentWithModelProvider(a0 context.Context, a1 stri
 
 type fakeArtifacts struct {
 	t                     testing.TB
-	getSessionArtifact    func(context.Context, string, string, string) (sessions.Artifact, error)
-	listSessionArtifacts  func(context.Context, string, string, string, string, int, bool) (sessions.ArtifactPage, error)
-	readSessionArtifact   func(context.Context, string, string, string, func(sessions.Artifact, io.Reader) error) error
-	deleteSessionArtifact func(context.Context, string, string, string) error
+	deleteSessionArtifact func(context.Context, sessions.DeleteSessionArtifactCommand) error
 }
 
-func (f *fakeArtifacts) GetSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string) (sessions.Artifact, error) {
+func (f *fakeArtifacts) DeleteSessionArtifact(a0 context.Context, a1 sessions.DeleteSessionArtifactCommand) error {
+	if f.deleteSessionArtifact == nil {
+		unexpectedCall(f.t, "DeleteSessionArtifact")
+	}
+	return f.deleteSessionArtifact(a0, a1)
+}
+
+type fakeArtifactsReader struct {
+	t                    testing.TB
+	getSessionArtifact   func(context.Context, string, string, string) (sessions.Artifact, error)
+	listSessionArtifacts func(context.Context, string, string, string, string, int, bool) (sessions.ArtifactPage, error)
+	readSessionArtifact  func(context.Context, string, string, string, func(sessions.Artifact, io.Reader) error) error
+}
+
+func (f *fakeArtifactsReader) GetSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string) (sessions.Artifact, error) {
 	if f.getSessionArtifact == nil {
 		unexpectedCall(f.t, "GetSessionArtifact")
 	}
 	return f.getSessionArtifact(a0, a1, a2, a3)
 }
 
-func (f *fakeArtifacts) ListSessionArtifacts(a0 context.Context, a1 string, a2 string, a3 string, a4 string, a5 int, a6 bool) (sessions.ArtifactPage, error) {
+func (f *fakeArtifactsReader) ListSessionArtifacts(a0 context.Context, a1 string, a2 string, a3 string, a4 string, a5 int, a6 bool) (sessions.ArtifactPage, error) {
 	if f.listSessionArtifacts == nil {
 		unexpectedCall(f.t, "ListSessionArtifacts")
 	}
 	return f.listSessionArtifacts(a0, a1, a2, a3, a4, a5, a6)
 }
 
-func (f *fakeArtifacts) ReadSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string, a4 func(sessions.Artifact, io.Reader) error) error {
+func (f *fakeArtifactsReader) ReadSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string, a4 func(sessions.Artifact, io.Reader) error) error {
 	if f.readSessionArtifact == nil {
 		unexpectedCall(f.t, "ReadSessionArtifact")
 	}
 	return f.readSessionArtifact(a0, a1, a2, a3, a4)
-}
-
-func (f *fakeArtifacts) DeleteSessionArtifact(a0 context.Context, a1 string, a2 string, a3 string) error {
-	if f.deleteSessionArtifact == nil {
-		unexpectedCall(f.t, "DeleteSessionArtifact")
-	}
-	return f.deleteSessionArtifact(a0, a1, a2, a3)
 }
 
 type fakeConfigurationDiscovery struct {

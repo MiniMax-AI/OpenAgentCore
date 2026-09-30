@@ -21,7 +21,7 @@ func (d *Dispatcher) captureCompletedArtifacts(ctx context.Context, peer *runtim
 	if err == nil {
 		err = d.withPreparedWorkspace(owner, peer, session, environment, bound, func(ctx context.Context, handle string) error {
 			return peer.ExportWorkspaceOutputs(ctx, proto.WorkspaceExportPayload{Handle: handle, EnvironmentID: environment.ID}, func(body io.Reader) error {
-				return d.Store.StageTurnArtifacts(ctx, session.TenantID, session.ID, turnID, environment.ID, body)
+				return d.Sessions.StageTurnArtifacts(ctx, sessions.StageTurnArtifactsCommand{TenantID: session.TenantID, SessionID: session.ID, TurnID: turnID, EnvironmentID: environment.ID, Export: body})
 			})
 		})
 	}

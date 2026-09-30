@@ -46,7 +46,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	page, err := s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reopened := store.New(pool)
+	reopened := sessionReads(pool)
 	page, err = reopened.ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil {
 		t.Fatal(err)
@@ -104,13 +104,13 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	}
 	other, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "other"})
 	// A foreign parent is not found before the cursor is read.
-	if _, err = s.ListItems(ctx, uuid.NewString(), session.ID, page.Items[0].ID, 20, true); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionReads(pool).ListItems(ctx, uuid.NewString(), session.ID, page.Items[0].ID, 20, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	// Another Session's Item is an invalid cursor here, like a missing or malformed one.
 	for _, cursor := range []string{page.Items[0].ID, uuid.NewString(), "not-a-uuid"} {
 		var invalid *sessions.CursorError
-		if _, err = s.ListItems(ctx, tenant, other.ID, cursor, 20, true); !errors.As(err, &invalid) || invalid.Message != "Invalid session item ID in `after`" {
+		if _, err = sessionReads(pool).ListItems(ctx, tenant, other.ID, cursor, 20, true); !errors.As(err, &invalid) || invalid.Message != "Invalid session item ID in `after`" {
 			t.Fatal(cursor, err)
 		}
 	}
@@ -118,7 +118,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 
 func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T) {
 	ctx := context.Background()
-	s, _ := store.NewTestStore(t)
+	s, pool := store.NewTestStore(t)
 	tenant := uuid.NewString()
 	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
 	input, err := s.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
@@ -137,7 +137,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil || len(events) != 0 {
 		t.Fatal(events, err)
 	}
-	page, err := s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal(page, err)
 	}
@@ -145,7 +145,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	current, err := s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	current, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(current.Items) != 2 || *current.Items[1].Content[0].Text != "legacy answer" {
 		t.Fatal(current, err)
 	}
@@ -175,7 +175,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		page, err := store.New(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
+		page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 		if err != nil || len(page.Items) != 2 || page.Items[1].Status != "incomplete" || *page.Items[1].Content[0].Text != "retained cancellation text" {
 			t.Fatal(page, err)
 		}
@@ -212,7 +212,7 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := store.New(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 4 {
 		t.Fatal(page, err)
 	}

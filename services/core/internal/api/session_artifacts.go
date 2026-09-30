@@ -11,12 +11,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Artifacts reads, streams and deletes a Session's published Artifacts.
+// Artifacts deletes a Session's published Artifacts.
 type Artifacts interface {
+	DeleteSessionArtifact(context.Context, sessions.DeleteSessionArtifactCommand) error
+}
+
+// ArtifactsReader reads and streams a Session's published Artifacts.
+type ArtifactsReader interface {
 	GetSessionArtifact(context.Context, string, string, string) (sessions.Artifact, error)
 	ListSessionArtifacts(context.Context, string, string, string, string, int, bool) (sessions.ArtifactPage, error)
 	ReadSessionArtifact(context.Context, string, string, string, func(sessions.Artifact, io.Reader) error) error
-	DeleteSessionArtifact(context.Context, string, string, string) error
 }
 
 // @Summary List immutable Session artifacts
@@ -38,9 +42,9 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	page, err := h.Artifacts.ListSessionArtifacts(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), r.URL.Query().Get("environment_id"), options.after, options.limit, options.ascending)
+	page, err := h.ArtifactsReader.ListSessionArtifacts(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), r.URL.Query().Get("environment_id"), options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	data := make([]v1.SessionArtifact, 0, len(page.Artifacts))
@@ -62,9 +66,9 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
-	artifact, err := h.Artifacts.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
+	artifact, err := h.ArtifactsReader.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, artifactResponse(artifact))
@@ -83,8 +87,8 @@ func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "artifact_id")
-	if err := h.Artifacts.DeleteSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), id); err != nil {
-		writeStoreError(w, r, err)
+	if err := h.Artifacts.DeleteSessionArtifact(r.Context(), sessions.DeleteSessionArtifactCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id"), ArtifactID: id}); err != nil {
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.SessionArtifactDeleted{ID: id, Object: "agent.session.artifact.deleted", Deleted: true})
@@ -103,12 +107,12 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 // @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
 	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
-		return h.Artifacts.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a sessions.Artifact, body io.Reader) error {
+		return h.ArtifactsReader.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a sessions.Artifact, body io.Reader) error {
 			return consume(path.Base(a.Path), a.SizeBytes, body)
 		})
 	})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 	}
 }
 

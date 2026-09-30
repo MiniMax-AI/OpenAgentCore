@@ -7,5 +7,6 @@
 // The Session writes that several operations share are procedures here, over
 // the transaction interfaces declared beside them: cancelling work, failing
 // and terminating an Environment, tracking input activity and the admission
-// gates.
+// gates. Service runs the pooled Session use cases, such as staging a Turn's
+// Artifacts, over Storage, and Reader declares the Session reads.
 package sessions

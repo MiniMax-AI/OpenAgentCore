@@ -49,6 +49,7 @@ type Dependencies struct {
 	Items                Items
 	Subagents            Subagents
 	Artifacts            Artifacts
+	ArtifactsReader      ArtifactsReader
 	SessionAdmin         SessionAdmin
 	Environments         Environments
 	ExecutorConnections  ExecutorConnections
@@ -136,7 +137,9 @@ func (d Dependencies) validate() error {
 		field{"Turns", d.Turns},
 		field{"Items", d.Items},
 		field{"Subagents", d.Subagents},
-		field{"Artifacts", d.Artifacts}, field{"SessionAdmin", d.SessionAdmin}, field{"Environments", d.Environments},
+		field{"Artifacts", d.Artifacts},
+		field{"ArtifactsReader", d.ArtifactsReader},
+		field{"SessionAdmin", d.SessionAdmin}, field{"Environments", d.Environments},
 		field{"ExecutorConnections", d.ExecutorConnections}, field{"Admin", d.Admin}, field{"AdminAudit", d.AdminAudit}, field{"WriteAudit", d.WriteAudit},
 		field{"Metrics", d.Metrics}, field{"RuntimeObservations", d.RuntimeObservations}, field{"RuntimeHistory", d.RuntimeHistory},
 	); err != nil {

@@ -59,6 +59,12 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.Deployment == nil {
 		return nil, errors.New("execution worker requires the deployment service")
 	}
+	if dispatcher.Sessions == nil {
+		return nil, errors.New("execution worker requires the Session service")
+	}
+	if dispatcher.SessionsReader == nil {
+		return nil, errors.New("execution worker requires the Session reader")
+	}
 	if owner.Store == nil {
 		return nil, errors.New("execution worker requires the execution Store")
 	}

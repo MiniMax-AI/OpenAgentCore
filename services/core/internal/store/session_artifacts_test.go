@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -75,15 +76,15 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 	before := largeObjectCount(t, pool)
 	data := bytes.Repeat([]byte("immutable\x00"), 100000)
 	archive := artifactArchive(t, map[string][]byte{"outputs/a.bin": data, "outputs/nested/empty": {}})
-	if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(archive)); err != nil {
+	if err := stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, bytes.NewReader(archive)); err != nil {
 		t.Fatal(err)
 	}
-	page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
+	page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || len(page.Artifacts) != 0 {
 		t.Fatalf("private capture visible: %+v %v", page, err)
 	}
 	completed := transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
-	page, err = s.ListSessionArtifacts(t.Context(), tenant, session, environment, "", 100, true)
+	page, err = sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, environment, "", 100, true)
 	if err != nil || len(page.Artifacts) != 2 {
 		t.Fatalf("published capture: %+v %v", page, err)
 	}
@@ -92,36 +93,36 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 			t.Fatalf("publication metadata: %+v", a)
 		}
 		foreign := uuid.NewString()
-		if _, err := s.GetSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(s).GetSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign metadata: %v", err)
 		}
-		if _, err := s.GetSessionArtifact(t.Context(), tenant, uuid.NewString(), a.ID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(s).GetSessionArtifact(t.Context(), tenant, uuid.NewString(), a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("wrong session metadata: %v", err)
 		}
-		if err := s.DeleteSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
+		if err := sessionAdapter(s).DeleteSessionArtifact(t.Context(), foreign, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign delete: %v", err)
 		}
-		if err := s.ReadSessionArtifact(t.Context(), foreign, session, a.ID, func(sessions.Artifact, io.Reader) error {
+		if err := sessionAdapter(s).ReadSessionArtifact(t.Context(), foreign, session, a.ID, func(sessions.Artifact, io.Reader) error {
 			t.Error("foreign read reached content")
 			return nil
 		}); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("foreign read: %v", err)
 		}
 	}
-	if _, err := s.ListSessionArtifacts(t.Context(), uuid.NewString(), session, "", "", 100, false); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), uuid.NewString(), session, "", "", 100, false); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign list: %v", err)
 	}
-	if empty, err := s.ListSessionArtifacts(t.Context(), tenant, session, uuid.NewString(), "", 100, false); err != nil || len(empty.Artifacts) != 0 {
+	if empty, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, uuid.NewString(), "", 100, false); err != nil || len(empty.Artifacts) != 0 {
 		t.Fatalf("environment filter: %+v %v", empty, err)
 	}
 	// A later completed Turn publishes another immutable version of the same path.
 	next := submitMessage(t, s, tenant, session, "version-two")
 	transition(t, s, tenant, session, next.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	if err := s.StageTurnArtifacts(t.Context(), tenant, session, next.TurnID, environment, bytes.NewReader(artifactArchive(t, map[string][]byte{"outputs/a.bin": []byte("new")}))); err != nil {
+	if err := stageTurnArtifacts(t.Context(), s, tenant, session, next.TurnID, environment, bytes.NewReader(artifactArchive(t, map[string][]byte{"outputs/a.bin": []byte("new")}))); err != nil {
 		t.Fatal(err)
 	}
 	transition(t, s, tenant, session, next.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
-	all, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
+	all, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || len(all.Artifacts) != 3 {
 		t.Fatal(all, err)
 	}
@@ -129,7 +130,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 		var got []sessions.Artifact
 		cursor := ""
 		for {
-			part, err := s.ListSessionArtifacts(t.Context(), tenant, session, environment, cursor, 1, asc)
+			part, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, environment, cursor, 1, asc)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -155,8 +156,8 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 		t.Fatal(err)
 	}
 	for _, a := range page.Artifacts {
-		if err := New(pool).ReadSessionArtifact(t.Context(), tenant, session, a.ID, func(meta sessions.Artifact, r io.Reader) error {
-			if err := s.DeleteSessionArtifact(t.Context(), tenant, session, a.ID); err != nil {
+		if err := sessionAdapter(New(pool)).ReadSessionArtifact(t.Context(), tenant, session, a.ID, func(meta sessions.Artifact, r io.Reader) error {
+			if err := sessionAdapter(s).DeleteSessionArtifact(t.Context(), tenant, session, a.ID); err != nil {
 				return err
 			}
 			body, err := io.ReadAll(r)
@@ -171,7 +172,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.GetSessionArtifact(t.Context(), tenant, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(s).GetSessionArtifact(t.Context(), tenant, session, a.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatalf("deleted metadata retained: %v", err)
 		}
 	}
@@ -183,44 +184,6 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 	}
 }
 
-type artifactReadError struct{}
-
-func (artifactReadError) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
-
-func TestSessionArtifactsRejectIncompleteAndUnownedCapture(t *testing.T) {
-	for _, kind := range []string{"openai_hosted", "self_hosted"} {
-		t.Run(kind, func(t *testing.T) { testSessionArtifactsRejectIncompleteAndUnownedCapture(t, kind) })
-	}
-}
-
-func testSessionArtifactsRejectIncompleteAndUnownedCapture(t *testing.T, kind string) {
-	s, pool := testStore(t)
-	tenant, session, environment, turn := artifactTurn(t, s, kind)
-	before := largeObjectCount(t, pool)
-	valid := artifactArchive(t, map[string][]byte{"outputs/a": []byte("data")})
-	for name, body := range map[string]io.Reader{
-		"transport-failure-after-valid-tar": io.MultiReader(bytes.NewReader(valid), artifactReadError{}),
-		"truncated-body":                    bytes.NewReader(valid[:513]),
-		"trailing-data":                     io.MultiReader(bytes.NewReader(valid), bytes.NewReader([]byte("not archive padding"))),
-		"traversal":                         bytes.NewReader(artifactArchive(t, map[string][]byte{"outputs/../secret": []byte("no")})),
-		"private-root":                      bytes.NewReader(artifactArchive(t, map[string][]byte{"secrets/key": []byte("no")})),
-	} {
-		t.Run(name, func(t *testing.T) {
-			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, body); err == nil {
-				t.Fatal("invalid capture accepted")
-			}
-			if count := largeObjectCount(t, pool); count != before {
-				t.Fatalf("rollback leaked objects: %d -> %d", before, count)
-			}
-		})
-	}
-	for _, ids := range [][4]string{{uuid.NewString(), session, turn, environment}, {tenant, session, turn, uuid.NewString()}} {
-		if err := s.StageTurnArtifacts(t.Context(), ids[0], ids[1], ids[2], ids[3], artifactReadError{}); !errors.Is(err, sessions.ErrNotFound) {
-			t.Fatalf("unauthorized capture reached reader: %v", err)
-		}
-	}
-}
-
 func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
 	for _, status := range []string{sessions.TurnFailed, sessions.TurnCancelled} {
 		t.Run(status, func(t *testing.T) {
@@ -228,14 +191,14 @@ func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
 			tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
 			before := largeObjectCount(t, pool)
 			body := artifactArchive(t, map[string][]byte{"outputs/a": []byte("private")})
-			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(body)); err != nil {
+			if err := stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, bytes.NewReader(body)); err != nil {
 				t.Fatal(err)
 			}
 			transition(t, s, tenant, session, turn, sessions.TurnInProgress, status)
 			if count := largeObjectCount(t, pool); count != before {
 				t.Fatalf("terminal capture leaked objects: %d -> %d", before, count)
 			}
-			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(body)); !errors.Is(err, sessions.ErrTurnConflict) {
+			if err := stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, bytes.NewReader(body)); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatalf("late capture accepted: %v", err)
 			}
 			if count := largeObjectCount(t, pool); count != before {
@@ -255,7 +218,7 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 			defer reader.Close()
 			defer writer.Close()
 			result := make(chan error, 1)
-			go func() { result <- s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, reader) }()
+			go func() { result <- stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, reader) }()
 			// A complete TAR arrives, but transport has not acknowledged success yet.
 			if _, err := writer.Write(artifactArchive(t, map[string][]byte{"outputs/a": []byte("partial")})); err != nil {
 				t.Fatal(err)
@@ -303,7 +266,7 @@ func stageArtifactOutputs(t *testing.T, s *Store, tenant, session, environment, 
 	for name, body := range files {
 		archive["outputs/"+name] = []byte(body)
 	}
-	if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(artifactArchive(t, archive))); err != nil {
+	if err := stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, bytes.NewReader(artifactArchive(t, archive))); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -311,7 +274,7 @@ func stageArtifactOutputs(t *testing.T, s *Store, tenant, session, environment, 
 // publishedByTurn returns the Artifacts one Turn published, keyed by outputs-relative path.
 func publishedByTurn(t *testing.T, s *Store, tenant, session, turn string) map[string]sessions.Artifact {
 	t.Helper()
-	page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
+	page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || page.NextCursor != "" {
 		t.Fatalf("list: %+v %v", page, err)
 	}
@@ -327,7 +290,7 @@ func publishedByTurn(t *testing.T, s *Store, tenant, session, turn string) map[s
 func artifactBytes(t *testing.T, s *Store, tenant, session, id string) string {
 	t.Helper()
 	var body []byte
-	if err := s.ReadSessionArtifact(t.Context(), tenant, session, id, func(_ sessions.Artifact, r io.Reader) error {
+	if err := sessionAdapter(s).ReadSessionArtifact(t.Context(), tenant, session, id, func(_ sessions.Artifact, r io.Reader) error {
 		var err error
 		body, err = io.ReadAll(r)
 		return err
@@ -377,7 +340,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	unchanged := func(artifacts ...sessions.Artifact) {
 		t.Helper()
 		for _, artifact := range artifacts {
-			if got, err := s.GetSessionArtifact(t.Context(), tenant, session, artifact.ID); err != nil || got != artifact {
+			if got, err := sessionAdapter(s).GetSessionArtifact(t.Context(), tenant, session, artifact.ID); err != nil || got != artifact {
 				t.Fatalf("existing Artifact changed: %+v -> %+v %v", artifact, got, err)
 			}
 		}
@@ -396,7 +359,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	// The first Turn behaves as before: every regular output is published.
 	outputs := map[string]string{"a.txt": "alpha", "sub/b.txt": "bravo", "empty.txt": ""}
 	one := run(outputs, "a.txt", "sub/b.txt", "empty.txt")
-	if err := s.DeleteSessionArtifact(t.Context(), tenant, session, one["a.txt"].ID); err != nil {
+	if err := sessionAdapter(s).DeleteSessionArtifact(t.Context(), tenant, session, one["a.txt"].ID); err != nil {
 		t.Fatal(err)
 	}
 	// New c.txt and deleted-then-unchanged a.txt; unchanged paths keep their IDs.
@@ -420,7 +383,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	unchanged(one["sub/b.txt"], one["empty.txt"], two["a.txt"], two["c.txt"], three["sub/b.txt"], four["sub/b.txt"])
 	objects()
 	// Deletion leaves no tombstone: the newest remaining version is the comparison base.
-	if err := s.DeleteSessionArtifact(t.Context(), tenant, session, four["sub/b.txt"].ID); err != nil {
+	if err := sessionAdapter(s).DeleteSessionArtifact(t.Context(), tenant, session, four["sub/b.txt"].ID); err != nil {
 		t.Fatal(err)
 	}
 	outputs["sub/b.txt"] = "bravo-v2"
@@ -432,7 +395,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 	// by the completion transaction, so the same Turn republishes the path.
 	turn := startArtifactTurn(t, s, tenant, session, "artifact-turn-delete-during-capture")
 	stageArtifactOutputs(t, s, tenant, session, environment, turn, outputs)
-	if err := s.DeleteSessionArtifact(t.Context(), tenant, session, two["a.txt"].ID); err != nil {
+	if err := sessionAdapter(s).DeleteSessionArtifact(t.Context(), tenant, session, two["a.txt"].ID); err != nil {
 		t.Fatal(err)
 	}
 	transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
@@ -528,15 +491,16 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(context.Background())
-	lookup, err := artifactLookup(tenant, session, newest.ID)
+	tenantID, err := pgunit.ParseID(tenant)
 	if err != nil {
 		t.Fatal(err)
 	}
+	lookup := sqlc.DeleteSessionArtifactParams{TenantID: tenantID, SessionID: pgunit.PathID(session), ID: pgunit.PathID(newest.ID)}
 	q := s.queries.WithTx(tx)
 	if _, err := q.LockSession(t.Context(), sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID}); err != nil {
 		t.Fatal(err)
 	}
-	oid, err := q.DeleteSessionArtifact(t.Context(), sqlc.DeleteSessionArtifactParams(lookup))
+	oid, err := q.DeleteSessionArtifact(t.Context(), lookup)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -582,7 +546,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 	if got := publishedPaths(published); strings.Join(got, ",") != "a.txt" || artifactBytes(t, s, tenant, session, published["a.txt"].ID) != "alpha" {
 		t.Fatalf("concurrent deletion was not republished: %v", got)
 	}
-	if _, err := s.GetSessionArtifact(t.Context(), tenant, session, newest.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSessionArtifact(t.Context(), tenant, session, newest.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("deleted Artifact remains: %v", err)
 	}
 	if count := largeObjectCount(t, pool); count != before+1 {

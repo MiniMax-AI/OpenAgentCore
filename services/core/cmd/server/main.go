@@ -48,6 +48,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/projectpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
@@ -60,6 +61,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
@@ -159,6 +161,11 @@ func run() error {
 	sandboxProviders := providers.Builtin()
 	deploymentStore := deploymentpg.New(units, credentialKey)
 	deploymentService, err := deployment.NewService(deploymentStore, deploymentStore, sandboxProviders, public)
+	if err != nil {
+		return err
+	}
+	sessionStore := sessionpg.New(units)
+	sessionService, err := sessions.NewService(sessionStore)
 	if err != nil {
 		return err
 	}
@@ -283,6 +290,8 @@ func run() error {
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
 			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService,
+			Sessions:        sessionService,
+			SessionsReader:  sessionStore,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
 		lease, err := pgunit.AcquireLease(ctx, pool)
 		if err != nil {
@@ -373,9 +382,10 @@ func run() error {
 		SessionCreation: executionStore,
 		SessionEvents:   executionStore,
 		Turns:           executionStore,
-		Items:           executionStore,
-		Subagents:       executionStore,
-		Artifacts:       executionStore,
+		Items:           sessionStore,
+		Subagents:       sessionStore,
+		Artifacts:       sessionService,
+		ArtifactsReader: sessionStore,
 		SessionAdmin:    executionStore,
 		Environments:    executionStore, ExecutorConnections: executorConnections{store: executionStore, registry: registry},
 		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,

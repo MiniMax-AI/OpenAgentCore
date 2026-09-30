@@ -1,17 +1,20 @@
-package store
+package sessionpg
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
+
+var _ sessions.ItemReader = (*Store)(nil)
 
 func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (sessions.ItemPage, error) {
 	if limit < 1 || limit > 100 {

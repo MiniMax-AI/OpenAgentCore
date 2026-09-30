@@ -34,7 +34,7 @@ type cursorFixture struct {
 	file                                                            string
 }
 
-func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillService *skills.Service, client pathIDClient, token, tenant, label string) cursorFixture {
+func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillService *skills.Service, artifacts *sessions.Service, client pathIDClient, token, tenant, label string) cursorFixture {
 	t.Helper()
 	ctx := t.Context()
 	var f cursorFixture
@@ -76,10 +76,10 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillS
 
 	artifactSession, environment := hostedArtifactSession(t, s, tenant, label+"-artifacts")
 	f.artifactSession = artifactSession
-	f.artifactTurn = completeArtifactTurn(t, s, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha", "c.txt": "charlie"})
+	f.artifactTurn = completeArtifactTurn(t, s, artifacts, tenant, artifactSession, environment, label+"-artifact-turn", map[string]string{"a.txt": "alpha", "c.txt": "charlie"})
 	f.artifact = first("/v1/agents/sessions/" + artifactSession + "/artifacts")
 	otherArtifactSession, otherEnvironment := hostedArtifactSession(t, s, tenant, label+"-other-artifacts")
-	completeArtifactTurn(t, s, tenant, otherArtifactSession, otherEnvironment, label+"-other-artifact-turn", map[string]string{"b.txt": "bravo"})
+	completeArtifactTurn(t, s, artifacts, tenant, otherArtifactSession, otherEnvironment, label+"-other-artifact-turn", map[string]string{"b.txt": "bravo"})
 	f.otherArtifact = first("/v1/agents/sessions/" + otherArtifactSession + "/artifacts")
 
 	// Subagent history is seeded through the execution lease, as a daemon would.
@@ -137,9 +137,10 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillS
 	f.subSession, f.rootTurn = seedSubagents(label + "-subagents")
 	f.rootItem = first("/v1/agents/sessions/" + f.subSession + "/items")
 	f.child, f.sibling = subagent(f.subSession, "child"), subagent(f.subSession, "sibling")
-	childTurns, err := s.ListSubagentTurns(ctx, tenant, f.subSession, f.child, "", 10, true)
-	if err != nil || len(childTurns.Data) != 2 {
-		t.Fatal("fixture child Turns", childTurns, err)
+	status, raw := client.do(token, http.MethodGet, "/v1/agents/sessions/"+f.subSession+"/subagents/"+f.child+"/turns?order=asc", "", nil)
+	var childTurns struct{ Data []struct{ ID string } }
+	if status != http.StatusOK || json.Unmarshal([]byte(raw), &childTurns) != nil || len(childTurns.Data) != 2 {
+		t.Fatal("fixture child Turns", status, raw)
 	}
 	f.childTurn, f.laterChildTurn = childTurns.Data[0].ID, childTurns.Data[1].ID
 	f.childItem = first("/v1/agents/sessions/" + f.subSession + "/subagents/" + f.child + "/turns/" + f.childTurn + "/items")
@@ -199,7 +200,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, writer *store.Store, skillS
 	if err := form.Close(); err != nil {
 		t.Fatal(err)
 	}
-	status, raw := client.do(token, http.MethodPost, "/v1/files", form.FormDataContentType(), upload.Bytes())
+	status, raw = client.do(token, http.MethodPost, "/v1/files", form.FormDataContentType(), upload.Bytes())
 	var file struct{ ID string }
 	if status != http.StatusOK || json.Unmarshal([]byte(raw), &file) != nil || file.ID == "" {
 		t.Fatalf("fixture File: %d %s", status, raw)
@@ -240,8 +241,12 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	client := pathIDClient{t: t, server: server}
 	writer := executionOwner(t, db, s).Store
 	skillService := store.SkillService(t, db.pool, db.cipher)
-	a := seedCursorFixture(t, s, writer, skillService, client, owner, ownerTenant, "a")
-	b := seedCursorFixture(t, s, writer, skillService, client, foreign, foreignTenant, "b")
+	_, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := seedCursorFixture(t, s, writer, skillService, sessionService, client, owner, ownerTenant, "a")
+	b := seedCursorFixture(t, s, writer, skillService, sessionService, client, foreign, foreignTenant, "b")
 
 	text := func(value string) *string { return &value }
 	var (

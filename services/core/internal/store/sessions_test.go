@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"io"
 	"reflect"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -18,6 +20,20 @@ func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.Open(t)
 	return New(pool), pool
+}
+
+// sessionAdapter is the Session adapter on s's database. It serves the Item,
+// Subagent and Artifact reads and deletes Artifacts.
+func sessionAdapter(s *Store) *sessionpg.Store { return sessionpg.New(s.pooled) }
+
+// stageTurnArtifacts stages export as the Turn's Artifacts through the Session
+// service on s's database, as the execution Worker does.
+func stageTurnArtifacts(ctx context.Context, s *Store, tenant, session, turn, environment string, export io.Reader) error {
+	service, err := sessions.NewService(sessionAdapter(s))
+	if err != nil {
+		return err
+	}
+	return service.StageTurnArtifacts(ctx, sessions.StageTurnArtifactsCommand{TenantID: tenant, SessionID: session, TurnID: turn, EnvironmentID: environment, Export: export})
 }
 
 func TestSessionsPersistAndStayTenantScoped(t *testing.T) {

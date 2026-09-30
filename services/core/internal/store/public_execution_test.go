@@ -74,7 +74,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	}
 	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "Answer", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "worker-native"}})
 	waitTurn(t, h, receipts[0].TurnID, sessions.TurnCompleted)
-	items, err := h.s.ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+	items, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil || len(items.Items) != 3 {
 		t.Fatal(items, err)
 	}

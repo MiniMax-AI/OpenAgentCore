@@ -54,7 +54,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if before != after {
 		t.Fatal("rollback published output")
 	}
-	page, err := store.New(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 2 {
 		t.Fatalf("read draft: %+v %v", page, err)
 	}
@@ -76,7 +76,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	// Reopening the Store recovers committed Items without creating events.
 	reopened := store.New(pool)
 	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
-	page, err = reopened.ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 3 {
 		t.Fatalf("recovery: %+v %v", page, err)
 	}
@@ -145,7 +145,7 @@ func TestExecutionJournalsCommandOutputBeforeCancellation(t *testing.T) {
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
 	h.finished(result, sessions.TurnCancelled)
-	page, err := h.s.ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+	page, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 2 || page.Items[1].Status != "incomplete" || page.Items[1].Output != "partial" {
 		t.Fatalf("journal/cancellation lost partial output: %+v %v", page, err)
 	}

@@ -40,6 +40,11 @@ type Dispatcher struct {
 	// Deployment reads the sandbox deployment and prepares a selection's setup.
 	// It is required; deployment changes go through Owner.Deployment.
 	Deployment *deployment.Service
+	// Sessions runs the pooled Session use cases, such as staging a Turn's
+	// Artifacts. It is required.
+	Sessions *sessions.Service
+	// SessionsReader serves the plain Session reads. It is required.
+	SessionsReader sessions.Reader
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.

@@ -152,7 +152,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	if err != nil || bound.Device.EnvironmentID != environment.ID || bound.NativeSessionID != "local-native-history" {
 		t.Fatal("local native identity was not retained", err)
 	}
-	artifacts, err := h.s.ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, environment.ID, "", 20, false)
+	artifacts, err := sessionReads(h.db.pool).ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, environment.ID, "", 20, false)
 	if err != nil || len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].Path != "/workspace/outputs/result.bin" || artifacts.Artifacts[0].TurnID != start.RunID || artifacts.Artifacts[0].SizeBytes != 3 {
 		t.Fatalf("completed turn did not publish output: %+v %v", artifacts, err)
 	}

@@ -102,6 +102,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		Items:           struct{ api.Items }{},
 		Subagents:       struct{ api.Subagents }{},
 		Artifacts:       struct{ api.Artifacts }{},
+		ArtifactsReader: struct{ api.ArtifactsReader }{},
 		SessionAdmin:    struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},
 		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},

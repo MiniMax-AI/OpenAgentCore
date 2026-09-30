@@ -323,7 +323,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
-	items, err := s.ListItems(t.Context(), tenant, history.ID, "", 100, true)
+	items, err := sessionAdapter(s).ListItems(t.Context(), tenant, history.ID, "", 100, true)
 	if err != nil || len(items.Items) != 2 {
 		t.Fatal("history fixture", err)
 	}
@@ -338,7 +338,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if _, err := resetAndSelect(t, w, installation, 1, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	items, err = s.ListItems(t.Context(), tenant, history.ID, "", 100, true)
+	items, err = sessionAdapter(s).ListItems(t.Context(), tenant, history.ID, "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}

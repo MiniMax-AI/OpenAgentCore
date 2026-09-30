@@ -48,15 +48,16 @@ func (f *artifactFixture) ReadSessionArtifact(ctx context.Context, tenant, sessi
 	return consume(a, bytes.NewReader([]byte{0, 255, 1}))
 }
 
-func (f *artifactFixture) DeleteSessionArtifact(ctx context.Context, tenant, session, id string) error {
-	_, err := f.GetSessionArtifact(ctx, tenant, session, id)
+func (f *artifactFixture) DeleteSessionArtifact(ctx context.Context, command sessions.DeleteSessionArtifactCommand) error {
+	_, err := f.GetSessionArtifact(ctx, command.TenantID, command.SessionID, command.ArtifactID)
 	return err
 }
 
-// wire serves the Artifacts area from f.
+// wire serves the Artifacts and ArtifactsReader areas from f.
 func (f *artifactFixture) wire(_ *Dependencies, fakes *testFakes) {
-	fakes.artifacts.getSessionArtifact, fakes.artifacts.listSessionArtifacts = f.GetSessionArtifact, f.ListSessionArtifacts
-	fakes.artifacts.readSessionArtifact, fakes.artifacts.deleteSessionArtifact = f.ReadSessionArtifact, f.DeleteSessionArtifact
+	fakes.artifactsReader.getSessionArtifact, fakes.artifactsReader.listSessionArtifacts = f.GetSessionArtifact, f.ListSessionArtifacts
+	fakes.artifactsReader.readSessionArtifact = f.ReadSessionArtifact
+	fakes.artifacts.deleteSessionArtifact = f.DeleteSessionArtifact
 }
 
 type artifactResponseRecorder struct{ *httptest.ResponseRecorder }

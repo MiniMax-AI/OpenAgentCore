@@ -33,9 +33,9 @@ func hostedArtifactSession(t *testing.T, s *store.Store, tenant, key string) (se
 	return created.ID, created.Environment.ID
 }
 
-// completeArtifactTurn runs one Turn whose complete outputs tree is captured
-// and settled as completed, and returns the Turn ID.
-func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environment, key string, outputs map[string]string) string {
+// completeArtifactTurn runs one Turn whose complete outputs tree is staged
+// through artifacts and settled as completed, and returns the Turn ID.
+func completeArtifactTurn(t *testing.T, s *store.Store, artifacts *sessions.Service, tenant, session, environment, key string, outputs map[string]string) string {
 	t.Helper()
 	receipt, err := s.SubmitMessage(t.Context(), tenant, session, key, json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"publish outputs"}]}]}`))
 	if err != nil {
@@ -61,7 +61,7 @@ func completeArtifactTurn(t *testing.T, s *store.Store, tenant, session, environ
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.StageTurnArtifacts(t.Context(), tenant, session, receipt.TurnID, environment, &archive); err != nil {
+	if err := artifacts.StageTurnArtifacts(t.Context(), sessions.StageTurnArtifactsCommand{TenantID: tenant, SessionID: session, TurnID: receipt.TurnID, EnvironmentID: environment, Export: &archive}); err != nil {
 		t.Fatal(err)
 	}
 	transition(sessions.TurnInProgress, sessions.TurnCompleted)
@@ -91,14 +91,18 @@ func artifactHTTPServer(t *testing.T, s *store.Store, db fixtureDB) (server *htt
 // without weakening tenant or Session scoping.
 func TestSessionArtifactListEnvelopeAndEnvironmentFilterPostgres(t *testing.T) {
 	s, db := newTestStoreDB(t)
+	_, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	server, owner, ownerTenant, foreign, foreignTenant := artifactHTTPServer(t, s, db)
 	client := pathIDClient{t: t, server: server}
 
 	session, environment := hostedArtifactSession(t, s, ownerTenant, "artifact-list")
-	completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-list-turn", map[string]string{"a.txt": "alpha", "b.txt": "bravo"})
+	completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-list-turn", map[string]string{"a.txt": "alpha", "b.txt": "bravo"})
 	idle, otherEnvironment := hostedArtifactSession(t, s, ownerTenant, "artifact-idle")
 	foreignSession, foreignEnvironment := hostedArtifactSession(t, s, foreignTenant, "artifact-foreign")
-	completeArtifactTurn(t, s, foreignTenant, foreignSession, foreignEnvironment, "artifact-foreign-turn", map[string]string{"a.txt": "alpha"})
+	completeArtifactTurn(t, s, sessionService, foreignTenant, foreignSession, foreignEnvironment, "artifact-foreign-turn", map[string]string{"a.txt": "alpha"})
 
 	type envelope struct {
 		Object  *string           `json:"object"`
@@ -211,25 +215,29 @@ func TestSessionArtifactsOfficialClientPostgres(t *testing.T) {
 		t.Skip("pinned official Python SDK required")
 	}
 	s, db := newTestStoreDB(t)
+	sessionStore, sessionService, err := fixtureSessions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	server, owner, ownerTenant, foreign, _ := artifactHTTPServer(t, s, db)
 	session, environment := hostedArtifactSession(t, s, ownerTenant, "artifact-sdk")
 	outputs := map[string]string{"a.txt": "alpha", "sub/b.txt": "bravo", "empty.txt": ""}
-	first := completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-sdk-1", outputs)
-	page, err := s.ListSessionArtifacts(t.Context(), ownerTenant, session, "", "", 100, true)
+	first := completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-sdk-1", outputs)
+	page, err := sessionStore.ListSessionArtifacts(t.Context(), ownerTenant, session, "", "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, artifact := range page.Artifacts {
 		if artifact.Path == "/workspace/outputs/a.txt" {
-			if err := s.DeleteSessionArtifact(t.Context(), ownerTenant, session, artifact.ID); err != nil {
+			if err := sessionService.DeleteSessionArtifact(t.Context(), sessions.DeleteSessionArtifactCommand{TenantID: ownerTenant, SessionID: session, ArtifactID: artifact.ID}); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 	outputs["c.txt"] = "charlie"
-	second := completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-sdk-2", outputs)
+	second := completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-sdk-2", outputs)
 	outputs["sub/b.txt"] = "bravo-v2"
-	third := completeArtifactTurn(t, s, ownerTenant, session, environment, "artifact-sdk-3", outputs)
+	third := completeArtifactTurn(t, s, sessionService, ownerTenant, session, environment, "artifact-sdk-3", outputs)
 	hex := func(files map[string]string) map[string]string {
 		out := make(map[string]string, len(files))
 		for name, body := range files {

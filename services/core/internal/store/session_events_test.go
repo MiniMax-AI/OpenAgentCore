@@ -142,7 +142,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 		t.Fatal("foreign event access", err)
 	}
 	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
-	if _, err = s.ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
+	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
 		t.Fatal(err)
 	}
 	after, _ = s.SessionEventCursor(ctx, tenant, session.ID)
@@ -195,7 +195,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	if _, err = pool.Exec(ctx, "UPDATE session_events SET payload=jsonb_build_object('padding',repeat('x',524288)) WHERE session_id=$1", session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.ListItems(ctx, tenant, session.ID, "", 1, true); err != nil {
+	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 1, true); err != nil {
 		t.Fatal(err)
 	}
 	var bytes int64

@@ -53,7 +53,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 		if err != nil || !saved.Applied {
 			t.Fatal(saved, err)
 		}
-		page, err := h.s.ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+		page, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 		if err != nil {
 			t.Fatal(err)
 		}

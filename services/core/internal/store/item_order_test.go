@@ -30,7 +30,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	page, err := s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal(page, err)
 	}
@@ -54,7 +54,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 	if _, err = s.SubmitMessage(ctx, tenant, session.ID, "steer", json.RawMessage(`{"text":"continue"}`)); err != nil {
 		t.Fatal(err)
 	}
-	page, err = s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	page, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 5 {
 		t.Fatal(page, err)
 	}
@@ -87,7 +87,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 			var got []string
 			cursor := ""
 			for {
-				page, err := store.New(pool).ListItems(ctx, tenant, session.ID, cursor, 2, asc)
+				page, err := sessionReads(pool).ListItems(ctx, tenant, session.ID, cursor, 2, asc)
 				if err != nil {
 					t.Fatal(err)
 				}

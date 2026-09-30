@@ -50,7 +50,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		ordinal += int32(len(facts))
 	}
 	appendFacts(subagentIdentityEvent("child", "root", 100), subagentIdentityEvent("nested", "child", 101), subagentIdentityEvent("sibling", "root", 100))
-	page, err := s.ListSubagents(ctx, tenant, session.ID, "", 100, true)
+	page, err := sessionAdapter(s).ListSubagents(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Data) != 3 {
 		t.Fatal(page, err)
 	}
@@ -59,7 +59,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	nested, _ := s.GetSubagentIdentity(ctx, tenant, session.ID, "nested")
-	resource, err := s.GetSubagent(ctx, tenant, session.ID, nested.ID)
+	resource, err := sessionAdapter(s).GetSubagent(ctx, tenant, session.ID, nested.ID)
 	if err != nil || resource.ParentAgentID != child.ID {
 		t.Fatal(resource, err)
 	}
@@ -76,7 +76,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	appendFacts(subagentFact(proto.TypeSubagentTurn, turn))
 	// Later history reads preserve the terminal Turn and all existing Items.
 	appendFacts(subagentFact(proto.TypeSubagentItem, item), subagentFact(proto.TypeSubagentTurn, turn))
-	turns, err := s.ListSubagentTurns(ctx, tenant, session.ID, child.ID, "", 20, true)
+	turns, err := sessionAdapter(s).ListSubagentTurns(ctx, tenant, session.ID, child.ID, "", 20, true)
 	if err != nil || len(turns.Data) != 1 {
 		t.Fatal(turns, err)
 	}
@@ -85,7 +85,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	if turns.Data[0].AgentID != "agent_root" || turns.Data[0].SubagentID == nil || *turns.Data[0].SubagentID != child.ID || turns.Data[0].Usage != nil {
 		t.Fatal(turns)
 	}
-	if same, err := s.GetSubagentTurn(ctx, tenant, session.ID, child.ID, tid); err != nil || !reflect.DeepEqual(same, turns.Data[0]) {
+	if same, err := sessionAdapter(s).GetSubagentTurn(ctx, tenant, session.ID, child.ID, tid); err != nil || !reflect.DeepEqual(same, turns.Data[0]) {
 		t.Fatal(same, err)
 	}
 	// Session Turn reads carry root work only: a child Turn ID is missing there.
@@ -102,24 +102,24 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	// Nested children follow the same agent_id rule (unobserved officially).
 	nestedTurn := proto.SubagentTurnPayload{NativeID: "nested", TurnID: "native-nested-turn", Status: sessions.TurnInProgress, CreatedAtMS: opened, StartedAtMS: &opened}
 	appendFacts(subagentFact(proto.TypeSubagentTurn, nestedTurn))
-	nestedTurns, err := s.ListSubagentTurns(ctx, tenant, session.ID, nested.ID, "", 20, true)
+	nestedTurns, err := sessionAdapter(s).ListSubagentTurns(ctx, tenant, session.ID, nested.ID, "", 20, true)
 	if err != nil || len(nestedTurns.Data) != 1 || nestedTurns.Data[0].AgentID != "agent_root" || *nestedTurns.Data[0].SubagentID != nested.ID {
 		t.Fatal(nestedTurns, err)
 	}
-	if _, err = s.GetSubagentTurn(ctx, uuid.NewString(), session.ID, child.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).GetSubagentTurn(ctx, uuid.NewString(), session.ID, child.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant child Turn", err)
 	}
-	if _, err = s.ListSubagentTurns(ctx, uuid.NewString(), session.ID, child.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).ListSubagentTurns(ctx, uuid.NewString(), session.ID, child.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant child Turns", err)
 	}
 	if allTurns, err = s.ListTurns(ctx, tenant, session.ID, "", 100, true); err != nil || len(allTurns.Turns) != 1 {
 		t.Fatal(allTurns, err)
 	}
-	own, err := s.ListSubagentTurnItems(ctx, tenant, session.ID, child.ID, tid, "", 20, true)
+	own, err := sessionAdapter(s).ListSubagentTurnItems(ctx, tenant, session.ID, child.ID, tid, "", 20, true)
 	if err != nil || len(own.Data) != 1 || own.Data[0].TurnID != tid {
 		t.Fatal(own, err)
 	}
-	rootItems, err := s.ListItems(ctx, tenant, session.ID, "", 100, true)
+	rootItems, err := sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,24 +128,24 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 			t.Fatal("child Item leaked into root Items")
 		}
 	}
-	if _, err = s.GetSubagentTurn(ctx, tenant, session.ID, nested.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).GetSubagentTurn(ctx, tenant, session.ID, nested.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("nested ownership", err)
 	}
-	if _, err = s.ListSubagentItems(ctx, tenant, session.ID, nested.ID, own.Data[0].ID, 20, true); !errors.Is(err, sessions.ErrItemCursor) {
+	if _, err = sessionAdapter(s).ListSubagentItems(ctx, tenant, session.ID, nested.ID, own.Data[0].ID, 20, true); !errors.Is(err, sessions.ErrItemCursor) {
 		t.Fatal("another child's Item cursor", err)
 	}
-	if _, err = s.GetSubagent(ctx, uuid.NewString(), session.ID, child.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).GetSubagent(ctx, uuid.NewString(), session.ID, child.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant", err)
 	}
 	closed := proto.SubagentLifecyclePayload{NativeID: "child", EffectID: "native-close-1", Status: "closed", OccurredAtMS: 103000}
 	resumed := proto.SubagentLifecyclePayload{NativeID: "child", EffectID: "native-resume-1", Status: "active", OccurredAtMS: 104000}
 	appendFacts(subagentFact(proto.TypeSubagentLifecycle, closed), subagentFact(proto.TypeSubagentLifecycle, closed))
-	value, err := s.GetSubagent(ctx, tenant, session.ID, child.ID)
+	value, err := sessionAdapter(s).GetSubagent(ctx, tenant, session.ID, child.ID)
 	if err != nil || value.Status != "closed" || value.ClosedAt == nil || *value.ClosedAt != 103 {
 		t.Fatal(value, err)
 	}
 	appendFacts(subagentFact(proto.TypeSubagentLifecycle, resumed), subagentFact(proto.TypeSubagentLifecycle, resumed))
-	reopened := New(pool)
+	reopened := sessionAdapter(New(pool))
 	value, err = reopened.GetSubagent(ctx, tenant, session.ID, child.ID)
 	if err != nil || value.Status != "active" || value.ClosedAt != nil || value.OpenedAt != 100 {
 		t.Fatal(value, err)

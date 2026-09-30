@@ -124,7 +124,7 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("forbidden command may have executed: %v", err)
 	}
-	page, err := h.s.ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+	page, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}

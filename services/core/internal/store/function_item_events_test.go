@@ -40,7 +40,7 @@ func TestFunctionResultEventsAreInputs(t *testing.T) {
 			t.Fatal("function result consumed an output index", event)
 		}
 	}
-	page, err := s.ListItems(t.Context(), tenant, session.ID, "", 100, true)
+	page, err := sessionAdapter(s).ListItems(t.Context(), tenant, session.ID, "", 100, true)
 	if err != nil || results != 1 {
 		t.Fatal(page, results, err)
 	}
@@ -96,7 +96,7 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 					}
 				}
 			}
-			page, err := s.ListItems(t.Context(), tenant, session.ID, "", 100, true)
+			page, err := sessionAdapter(s).ListItems(t.Context(), tenant, session.ID, "", 100, true)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -46,7 +46,7 @@ func TestSubagentNativeFunctionResultDoesNotConsumeOutputIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := s.ListSubagentItems(t.Context(), tenant, session.ID, child.ID, "", 20, true)
+	items, err := sessionAdapter(s).ListSubagentItems(t.Context(), tenant, session.ID, child.ID, "", 20, true)
 	if err != nil || len(items.Data) != 3 {
 		t.Fatal(items, err)
 	}
@@ -119,11 +119,11 @@ func TestSubagentCancelledPartialMessageSurvivesHistoryReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := s.ListSubagentItems(t.Context(), tenant, session.ID, child.ID, "", 20, true)
+	items, err := sessionAdapter(s).ListSubagentItems(t.Context(), tenant, session.ID, child.ID, "", 20, true)
 	if err != nil || len(items.Data) != 1 || items.Data[0].Status != "incomplete" || *items.Data[0].Content[0].Text != "Partial native answer" {
 		t.Fatal(items, err)
 	}
-	turns, err := s.ListSubagentTurns(t.Context(), tenant, session.ID, child.ID, "", 20, true)
+	turns, err := sessionAdapter(s).ListSubagentTurns(t.Context(), tenant, session.ID, child.ID, "", 20, true)
 	if err != nil || len(turns.Data) != 1 || turns.Data[0].Status != sessions.TurnCancelled {
 		t.Fatal(turns, err)
 	}

@@ -43,7 +43,7 @@ func (h *Handler) registerSubagentRoutes(r chi.Router) {
 func (h *Handler) getSubagent(w http.ResponseWriter, r *http.Request) {
 	value, err := h.Subagents.GetSubagent(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "subagent_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, value)
@@ -69,7 +69,7 @@ func (h *Handler) listSubagents(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := h.Subagents.ListSubagents(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, subagentListResponse(page.Data, page.HasMore))
@@ -96,7 +96,7 @@ func (h *Handler) listSubagentItems(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := h.Subagents.ListSubagentItems(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "subagent_id"), options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, itemListResponse(page.Data, page.HasMore))

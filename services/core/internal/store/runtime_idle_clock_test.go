@@ -142,7 +142,7 @@ func TestManagedIdleClockIgnoresChildHostSkewAndReplay(t *testing.T) {
 				t.Fatal("replayed child completion reset idle", unchanged, err)
 			}
 			verifyManagedIdleClock(t, s, w, owner, before, after)
-			page, err := s.ListSubagentTurns(t.Context(), owner.TenantID, owner.SessionID, child, "", 10, true)
+			page, err := sessionAdapter(s).ListSubagentTurns(t.Context(), owner.TenantID, owner.SessionID, child, "", 10, true)
 			if err != nil || len(page.Data) != 1 {
 				t.Fatal(page, err)
 			}

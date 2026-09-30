@@ -115,7 +115,7 @@ func TestAssistantMessageEventsFollowOfficialSequence(t *testing.T) {
 			if !reflect.DeepEqual(kinds, want) || !reflect.DeepEqual(deltas, test.deltas) || done != test.final {
 				t.Fatalf("sequence %v deltas %q done %q", kinds, deltas, done)
 			}
-			page, err := s.ListItems(t.Context(), tenant, session.ID, "", 100, true)
+			page, err := sessionAdapter(s).ListItems(t.Context(), tenant, session.ID, "", 100, true)
 			if err != nil || len(page.Items) != 2 || *page.Items[1].Content[0].Text != test.final {
 				t.Fatalf("stored answer changed: %+v %v", page, err)
 			}
@@ -144,7 +144,7 @@ func TestInputItemEventsCarryNullOutputIndexAndPhase(t *testing.T) {
 			t.Fatalf("user item.added: %v %s", event.fields, event.fields["item"])
 		}
 	}
-	page, err := s.ListItems(t.Context(), tenant, session.ID, "", 100, true)
+	page, err := sessionAdapter(s).ListItems(t.Context(), tenant, session.ID, "", 100, true)
 	if err != nil || added != 1 || len(page.Items) != 1 {
 		t.Fatal(page, added, err)
 	}

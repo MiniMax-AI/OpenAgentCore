@@ -41,7 +41,7 @@ func completeLocalArtifactExport(t *testing.T, h *dispatchHarness, worker *execu
 	if next.DecodePayload(&export) != nil || export.Step != "next" || export.Offset != int64(data.Len()) {
 		t.Fatal("export did not await native completion")
 	}
-	page, err := h.s.ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, "", "", 20, false)
+	page, err := sessionReads(h.db.pool).ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, "", "", 20, false)
 	if err != nil || len(page.Artifacts) != 0 {
 		t.Fatal("capture published before native completion", err)
 	}

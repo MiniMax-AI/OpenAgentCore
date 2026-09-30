@@ -35,6 +35,7 @@ type testFakes struct {
 	items                  *fakeItems
 	subagents              *fakeSubagents
 	artifacts              *fakeArtifacts
+	artifactsReader        *fakeArtifactsReader
 	sessionAdmin           *fakeSessionAdmin
 	environments           *fakeEnvironments
 	executorConnections    *fakeExecutorConnections
@@ -78,8 +79,10 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		sessionEvents:   &fakeSessionEvents{t: t},
 		turns:           &fakeTurns{t: t},
 		items:           &fakeItems{t: t},
-		subagents:       &fakeSubagents{t: t}, artifacts: &fakeArtifacts{t: t},
-		sessionAdmin: &fakeSessionAdmin{t: t}, environments: &fakeEnvironments{t: t}, executorConnections: &fakeExecutorConnections{t: t},
+		subagents:       &fakeSubagents{t: t},
+		artifacts:       &fakeArtifacts{t: t},
+		artifactsReader: &fakeArtifactsReader{t: t},
+		sessionAdmin:    &fakeSessionAdmin{t: t}, environments: &fakeEnvironments{t: t}, executorConnections: &fakeExecutorConnections{t: t},
 		admin: &fakeAdmin{t: t}, adminAudit: &fakeAdminAudit{t: t}, writeAudit: &fakeWriteAudit{t: t}, metrics: &fakeMetrics{t: t},
 		runtimeObservations: &fakeRuntimeObservations{t: t}, runtimeHistory: &fakeRuntimeHistory{t: t}, installationBindings: &fakeInstallationBindings{t: t},
 		sessionAdmission: &fakeSessionAdmission{t: t},
@@ -103,8 +106,11 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		SessionEvents:   f.sessionEvents,
 		Turns:           f.turns,
 		Items:           f.items,
-		Subagents:       f.subagents, Artifacts: f.artifacts, SessionAdmin: f.sessionAdmin,
-		Environments: f.environments, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
+		Subagents:       f.subagents,
+		Artifacts:       f.artifacts,
+		ArtifactsReader: f.artifactsReader,
+		SessionAdmin:    f.sessionAdmin,
+		Environments:    f.environments, ExecutorConnections: f.executorConnections, Admin: f.admin, AdminAudit: f.adminAudit, WriteAudit: f.writeAudit,
 		Metrics: f.metrics, RuntimeObservations: f.runtimeObservations, RuntimeHistory: f.runtimeHistory,
 	}, f
 }

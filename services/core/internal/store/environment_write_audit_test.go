@@ -81,11 +81,11 @@ func TestArtifactDeleteWriteAuditAndRollback(t *testing.T) {
 			s, _ := testStore(t)
 			tenant, session, env, turn := artifactTurn(t, s, "self_hosted")
 			archive := artifactArchive(t, map[string][]byte{"outputs/private.txt": []byte("secret-file-body")})
-			if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, env, bytes.NewReader(archive)); err != nil {
+			if err := stageTurnArtifacts(t.Context(), s, tenant, session, turn, env, bytes.NewReader(archive)); err != nil {
 				t.Fatal(err)
 			}
 			transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
-			page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
+			page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 			if err != nil || len(page.Artifacts) != 1 {
 				t.Fatal(page, err)
 			}
@@ -94,12 +94,12 @@ func TestArtifactDeleteWriteAuditAndRollback(t *testing.T) {
 			if fail {
 				rejectSessionAudit(t, s, ctx)
 			}
-			err = s.DeleteSessionArtifact(ctx, tenant, session, artifact.ID)
+			err = sessionAdapter(s).DeleteSessionArtifact(ctx, tenant, session, artifact.ID)
 			if fail {
 				if err == nil {
 					t.Fatal("artifact deletion bypassed audit failure")
 				}
-				if err := s.ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ sessions.Artifact, r io.Reader) error {
+				if err := sessionAdapter(s).ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ sessions.Artifact, r io.Reader) error {
 					body, err := io.ReadAll(r)
 					if string(body) != "secret-file-body" {
 						t.Error("large object did not roll back")

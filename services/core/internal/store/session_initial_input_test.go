@@ -123,7 +123,7 @@ func TestInitialInputFailureRollsBackSessionAndWork(t *testing.T) {
 	if err != nil || got.LastTurn == nil {
 		t.Fatal("retry after rollback failed", got, err)
 	}
-	items, err := s.ListItems(ctx, tenant, got.ID, "", 100, true)
+	items, err := sessionAdapter(s).ListItems(ctx, tenant, got.ID, "", 100, true)
 	if err != nil || len(items.Items) != 2 {
 		t.Fatal(items, err)
 	}

@@ -13,7 +13,7 @@ import (
 )
 
 // ListTurns pages a Session's root Turns. Subagent Turns are not Session Turns;
-// ListSubagentTurns reads them.
+// sessionpg.Store.ListSubagentTurns reads them.
 func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (sessions.TurnPage, error) {
 	if limit < 1 || limit > 100 {
 		return sessions.TurnPage{}, fmt.Errorf("%w: page size must be 1..100", sessions.ErrInvalidInput)

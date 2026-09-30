@@ -152,11 +152,11 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 	tenant, session, environment, turn := artifactTurn(t, s, "self_hosted")
 	body := bytes.Repeat([]byte("admin-private-body"), 500)
 	archive := artifactArchive(t, map[string][]byte{"outputs/private.txt": body, "outputs/other.txt": []byte("second body")})
-	if err := s.StageTurnArtifacts(t.Context(), tenant, session, turn, environment, bytes.NewReader(archive)); err != nil {
+	if err := stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, bytes.NewReader(archive)); err != nil {
 		t.Fatal(err)
 	}
 	transition(t, s, tenant, session, turn, sessions.TurnInProgress, sessions.TurnCompleted)
-	page, err := s.ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
+	page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session, "", "", 100, true)
 	if err != nil || len(page.Artifacts) != 2 {
 		t.Fatal("artifact fixture", err)
 	}
@@ -169,7 +169,7 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 			if artifact.Path == "/workspace/outputs/other.txt" {
 				want = []byte("second body")
 			}
-			if err := s.ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ sessions.Artifact, r io.Reader) error {
+			if err := sessionAdapter(s).ReadSessionArtifact(t.Context(), tenant, session, artifact.ID, func(_ sessions.Artifact, r io.Reader) error {
 				got, err := io.ReadAll(r)
 				if !bytes.Equal(got, want) {
 					t.Error("artifact large-object bytes were not restored")
@@ -185,7 +185,7 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 	}
 	artifact := page.Artifacts[0]
 	return tenant, resourceAuditMutation{action: "delete", kind: "artifact", parent: session, run: func(ctx context.Context) (string, error) {
-		return artifact.ID, s.DeleteSessionArtifact(ctx, tenant, session, artifact.ID)
+		return artifact.ID, sessionAdapter(s).DeleteSessionArtifact(ctx, tenant, session, artifact.ID)
 	}}, verify, 1
 }
 
@@ -196,7 +196,7 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 	case "session":
 		_, err = s.GetSession(t.Context(), tenant, id)
 	case "artifact":
-		_, err = s.GetSessionArtifact(t.Context(), tenant, mutation.parent, id)
+		_, err = sessionAdapter(s).GetSessionArtifact(t.Context(), tenant, mutation.parent, id)
 	default:
 		t.Fatal("unsupported delete fixture")
 	}
