@@ -241,15 +241,19 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("  " + line + "\n", output)
 
     def test_a_taken_explicit_port_fails_before_the_bundle_is_hashed(self):
-        self.host.busy.add(18080)
-        with mock.patch.object(install, "verify_bundle", side_effect=AssertionError("bundle hashed")), \
-                self.assertRaisesRegex(install.InstallError, r"^Port 18080 \(--web-port\) is already in use on 127.0.0.1. Free it or "
-                                       r"choose another port; find the process with: sudo ss -ltnp 'sport = :18080'$"):
-            self.install("--web-port", "18080")
-        self.assertFalse(self.root.exists())
+        self.host.busy.update({("127.0.0.1", 18080), ("127.0.0.1", 8080)})
+        # A loopback public URL names Web's port, so that port cannot move either.
+        for flags, port, name in ((("--web-port", "18080"), 18080, "--web-port"),
+                                  (("--public-url", "http://localhost:8080"), 8080, "--web-port and --public-url")):
+            with self.subTest(flags=flags), \
+                    mock.patch.object(install, "verify_bundle", side_effect=AssertionError("bundle hashed")), \
+                    self.assertRaisesRegex(install.InstallError, rf"^Port {port} \({name}\) is already in use on 127.0.0.1. "
+                                           rf"Free it or choose another port; find the process with: sudo ss -ltnp 'sport = :{port}'$"):
+                self.install(*flags)
+            self.assertFalse(self.root.exists())
 
     def test_taken_default_ports_move_to_the_next_free_port(self):
-        self.host.busy.update((8080, 8091))
+        self.host.busy.update({("0.0.0.0", 8080), ("0.0.0.0", 8091)})
         self.install()
         self.assertEqual(self.document("config.json")["ports"], {"core": 8092, "web": 8081})
         output = self.output.getvalue()
@@ -258,7 +262,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("  Port 8091 was in use; Core uses 8092.\n", output)
 
     def test_managed_https_needs_ports_80_and_443(self):
-        self.host.busy.add(80)
+        self.host.busy.add(("0.0.0.0", 80))
         with contextlib.redirect_stdout(self.output), self.assertRaisesRegex(
                 install.InstallError, "^Automatic HTTPS needs ports 80 and 443, and port 80 is already in use on 0.0.0.0. "
                 "Free it, or use an existing reverse proxy with --ingress external; find the process with: "

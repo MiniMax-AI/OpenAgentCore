@@ -207,30 +207,46 @@ def overlaps(first, second):
     return first.is_unspecified or second.is_unspecified or first == second
 
 
-def port_free(host, port):
+def bind_error(host, port):
+    """The errno of binding host:port as the services do, or 0 when the bind succeeds.
+
+    SO_REUSEADDR, which Go and Docker listeners set, lets connections in TIME_WAIT pass.
+    """
+    try:
+        with socket.socket(socket.AF_INET6 if ipaddress.ip_address(host).version == 6 else socket.AF_INET) as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            probe.bind((host, port))
+    except OSError as error:
+        return error.errno
+    return 0
+
+
+def address_available(host):
+    """Whether host is an address of this machine or a wildcard, so services can bind to it."""
+    return bind_error(host, 0) not in (errno.EADDRNOTAVAIL, errno.EAFNOSUPPORT)
+
+
+def port_free(host, port, own=()):
     """Whether a listener could bind host:port now.
 
-    The probe binds with SO_REUSEADDR, as Go and Docker listeners do, so connections
-    in TIME_WAIT do not count. An account without the privilege to bind a port below
-    1024 reads the kernel's table of listening sockets instead.
+    own holds this installation's (address, port) listeners, which do not count. Where
+    one overlaps host:port, or the account may not bind a port below 1024, the kernel's
+    table of listening sockets decides instead of a bind.
     """
     address = ipaddress.ip_address(host)
-    with socket.socket(socket.AF_INET6 if address.version == 6 else socket.AF_INET) as probe:
-        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            probe.bind((host, port))
-            return True
-        except PermissionError:
-            pass
-        except OSError as error:
-            return error.errno != errno.EADDRINUSE
-    return not any(held == port and overlaps(address, other) for other, held in tcp_listeners())
+    own = {(other, held) for other, held in own if held == port and overlaps(address, other)}
+    if not own:
+        error = bind_error(host, port)
+        if error not in (errno.EACCES, errno.EPERM):
+            return error != errno.EADDRINUSE
+    return not any(held == port and overlaps(address, other) and (other, held) not in own
+                   for other, held in tcp_listeners())
 
 
-def port_in_use(listener, name):
+def port_in_use(listener, name, outcome=""):
     """The message for a port that another program holds; name is its flag or config.json key."""
-    return (f"Port {listener.port} ({name}) is already in use on {listener.host}. Free it or choose another port; "
-            f"find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
+    return (f"Port {listener.port} ({name}) is already in use on {listener.host}.{outcome} Free it or choose another "
+            f"port; find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
 
 
 def stale(actual, desired, will_run):
@@ -468,8 +484,7 @@ def render_now(root, config, state):
 
 def old_public_url(root, config, previous, disk, actual):
     """The public URL things are bound to: Core's own answer, else the written core.env."""
-    old_config = {"host": previous["host"], "ingress": previous.get("ingress"),
-                  "ports": {"core": previous["ports.core"]}} if previous else config
+    old_config = applied_view(config, previous) if previous else config
     base = core_base(old_config)
     if actual.get("core", {}).get("running"):
         status, body = http(base + "/core/v1/installation", bearer(configuration.read_core_key(root)))
@@ -566,15 +581,18 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
 
 
 def check_new_listeners(config, previous):
-    """A listener this change adds must be free; the running installation holds the others."""
+    """Each listener this change adds must be free; this installation's own listeners do not count."""
     if previous is None:
         return
-    applied = dict(config, host=previous["host"], public_url=previous.get("public_url"),
-                   ports={name: previous.get("ports." + name) for name in config["ports"]})
-    held = {listener.port for listener in configuration.listeners(applied)}
+    applied = applied_view(config, previous)
+    if config["host"] != applied["host"] and not address_available(config["host"]):
+        raise OacError(f"{config['host']} (host) is not an address of this machine; use one of its addresses. "
+                       "Nothing was applied.")
+    own = {(ipaddress.ip_address(listener.host), listener.port) for listener in configuration.listeners(applied)}
     for listener in configuration.listeners(config):
-        if listener.port not in held and not port_free(listener.host, listener.port):
-            raise OacError(port_in_use(listener, listener.setting) + ". Nothing was applied.")
+        if (ipaddress.ip_address(listener.host), listener.port) not in own and \
+                not port_free(listener.host, listener.port, own):
+            raise OacError(port_in_use(listener, listener.setting, " Nothing was applied."))
 
 
 def finish_apply(root, config, state, gateway_document, will_run):
@@ -719,7 +737,13 @@ def written_view(root, state, config):
         if config is None:
             raise OacError("Neither config.json nor generated/settings.json can be read")
         return config
-    return {"mode": state["mode"], "ingress": values.get("ingress"), "public_url": values.get("public_url"), "host": values["host"],
+    return applied_view(state, values)
+
+
+def applied_view(fixed, values):
+    """The config the settings last written describe; fixed supplies mode and native_core, which never change."""
+    return {"mode": fixed["mode"], "native_core": fixed.get("native_core", False), "ingress": values.get("ingress"),
+            "public_url": values.get("public_url"), "host": values["host"],
             "ports": {name: values[f"ports.{name}"] for name in ("core", "web", "database") if f"ports.{name}" in values},
             "web": {"core_url": values.get("web.core_url")}}
 

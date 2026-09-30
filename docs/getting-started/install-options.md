@@ -80,9 +80,10 @@ The default combined Docker installation selects `--ingress managed` and `--host
 
 ### Ports
 
-Before it verifies the bundle or loads images, the installer checks every port the installation will listen on: Web's and Core's, PostgreSQL's with native Core, and 80 and 443 with managed ingress.
+Before it verifies the bundle or loads images, the installer checks `--host` and every port the installation will listen on: Web's and Core's, PostgreSQL's with native Core, and 80 and 443 with managed ingress.
 
-- A port set with `--web-port`, `--core-port` or in the `--config` file must be free. Otherwise the installer stops, names the port and prints the `ss` command that finds the program holding it.
+- `--host` must be an address of this machine, or a wildcard such as `0.0.0.0`.
+- A port set with `--web-port`, `--core-port` or in the `--config` file must be free, and so must a port that a loopback `--public-url` names, such as 8080 in `http://localhost:8080`. Otherwise the installer stops, names the port and prints the `ss` command that finds the program holding it.
 - A Web or Core port you leave out moves to the first free port above its default, at most 20 above, and never to another port of the same installation. The installer writes the chosen port to `config.json` and names it in the summary, for example `Port 8080 was in use; Web uses 8081.`
 - Managed ingress needs ports 80 and 443 and never moves them. If either is in use, free it, or install with `--ingress external` and use your own [reverse proxy](#https-and-the-reverse-proxy).
 

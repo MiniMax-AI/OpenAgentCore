@@ -236,17 +236,21 @@ def seed_config(args, document):
 def check_listeners(args, document, config):
     """Check every listener of a new installation, before anything slow runs.
 
-    A taken port that the flags or the --config file set fails. An omitted Core or Web
-    port moves to the first free port above its default that no other listener uses.
-    Returns the config and (purpose, taken port, chosen port) for each move.
+    A taken port that the flags or the --config file set fails, and so does one that a
+    loopback public_url names. An omitted Core or Web port moves to the first free port
+    above its default that no other listener uses. Returns the config and
+    (purpose, taken port, chosen port) for each move.
     """
     if document is None:
-        names = {key: flag for flag, (key, _) in SETTING_ARGUMENTS.items()}
+        names, where = {key: flag for flag, (key, _) in SETTING_ARGUMENTS.items()}, ""
         given = {key for key, flag in names.items() if getattr(args, flag.removeprefix("--").replace("-", "_")) is not None}
     else:
-        names = {key: key + " in the --config file" for key in ("ports.core", "ports.web", "ports.database")}
+        names, where = {}, " in the --config file"
         given = {key for key in ("ports.core", "ports.web") if config_model.lookup(document, key) is not None}
-    moved = []
+    if not oac_cli.address_available(config["host"]):
+        raise InstallError(f"{config['host']} ({names.get('host', 'host')}{where}) is not an address of this machine; "
+                           "use one of its addresses")
+    public_url, moved = config["public_url"], []
     for listener in configuration.listeners(config):
         if oac_cli.port_free(listener.host, listener.port):
             continue
@@ -256,14 +260,18 @@ def check_listeners(args, document, config):
                                f"{listener.host}. Free it, or use an existing reverse proxy with {remedy}; "
                                f"find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
         name = names.get(listener.setting, listener.setting)
-        if listener.setting in given or listener.purpose not in ("Core", "Web"):
-            raise InstallError(oac_cli.port_in_use(listener, name))
+        # Moving the port would leave a loopback public_url pointing at the old one.
+        pinned = bool(public_url) and loopback_origin(public_url) and origin_port(public_url) == listener.port
+        if pinned:
+            name += " and " + names.get("public_url", "public_url")
+        if listener.setting in given or pinned or listener.purpose not in ("Core", "Web"):
+            raise InstallError(oac_cli.port_in_use(listener, name + where))
         taken = {other.port for other in configuration.listeners(config)}
         port = next((port for port in range(listener.port + 1, listener.port + AVOID + 1)
                      if port not in taken and oac_cli.port_free(listener.host, port)), None)
         if port is None:
             raise InstallError(f"Ports {listener.port} to {listener.port + AVOID} are in use on {listener.host}; "
-                               f"set a free port with {name}")
+                               f"set a free port with {name}{where}")
         config["ports"][listener.setting.removeprefix("ports.")] = port
         moved.append((listener.purpose, listener.port, port))
     return config, moved

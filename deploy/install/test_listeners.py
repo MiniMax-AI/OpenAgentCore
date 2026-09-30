@@ -1,6 +1,8 @@
 """Installer listener selection and subsequent operator lifecycle behavior."""
 import contextlib
+import errno
 import io
+import ipaddress
 import json
 from pathlib import Path
 import socket
@@ -148,16 +150,39 @@ class ListenerTests(unittest.TestCase):
 
     def test_apply_checks_a_new_listener_before_changing_anything(self):
         self.install("--host", "127.0.0.2", "--public-url", "https://core.example")
+        self.edit(lambda config: config["ports"].update(web=18080))
+        # The installation's own services listen on 8080 and 8091; another program holds 18080.
+        self.host.busy.update({("127.0.0.2", 8080), ("127.0.0.2", 8091), ("127.0.0.2", 18080)})
+        self.assert_refused(r"^Port 18080 \(ports.web\) is already in use on 127.0.0.2. Nothing was applied. Free it or "
+                            r"choose another port; find the process with: sudo ss -ltnp 'sport = :18080'$")
+
+    def test_apply_checks_a_changed_host(self):
+        self.install("--host", "127.0.0.2", "--public-url", "https://core.example")
+        self.host.busy.update({("127.0.0.2", 8080), ("127.0.0.2", 8091), ("127.0.0.3", 8080)})
+        self.host.unassigned.add("192.0.2.10")
+        for host, message in (("192.0.2.10", r"^192.0.2.10 \(host\) is not an address of this machine; use one of its "
+                                             r"addresses. Nothing was applied.$"),
+                              # Another program holds the port on the new address, or on part of the wildcard.
+                              ("127.0.0.3", r"^Port 8080 \(ports.web\) is already in use on 127.0.0.3. Nothing was applied."),
+                              ("0.0.0.0", r"^Port 8080 \(ports.web\) is already in use on 0.0.0.0. Nothing was applied.")):
+            with self.subTest(host=host):
+                self.edit(lambda config: config.update(host=host))
+                self.assert_refused(message)
+        # The installation's own listeners on the old address do not count.
+        self.host.busy.discard(("127.0.0.3", 8080))
+        oac_cli.apply(self.root, interactive=False, out=lambda _: None)
+        self.assertEqual(self.document("generated/compose.json")["services"]["web"]["ports"], ["0.0.0.0:8080:8080"])
+
+    def edit(self, change):
         config = self.document("config.json")
-        config["ports"]["web"] = 18080
+        change(config)
         (self.root / "config.json").write_text(json.dumps(config))
+
+    def assert_refused(self, message):
         generated = {path.name: path.read_bytes() for path in (self.root / "generated").iterdir()}
         containers = json.dumps(self.host.containers, sort_keys=True)
-        # The installation's own services hold 8080 and 8091; another program holds 18080.
-        self.host.busy.update((8080, 8091, 18080))
         self.host.recreated.clear()
-        with self.assertRaisesRegex(oac_cli.OacError, r"^Port 18080 \(ports.web\) is already in use on 127.0.0.2. Free it or "
-                                    r"choose another port; find the process with: sudo ss -ltnp 'sport = :18080'. Nothing was applied.$"):
+        with self.assertRaisesRegex(oac_cli.OacError, message):
             oac_cli.apply(self.root, interactive=False, out=lambda _: None)
         self.assertEqual(generated, {path.name: path.read_bytes() for path in (self.root / "generated").iterdir()})
         self.assertEqual((containers, self.host.recreated), (json.dumps(self.host.containers, sort_keys=True), []))
@@ -169,11 +194,14 @@ class PortProbeTests(unittest.TestCase):
             listener.bind(("127.0.0.2", 0))
             listener.listen()
             port = listener.getsockname()[1]
+            self.assertIn((ipaddress.ip_address("127.0.0.2"), port), set(oac_cli.tcp_listeners()))
             self.assertFalse(oac_cli.port_free("127.0.0.2", port))
             self.assertFalse(oac_cli.port_free("0.0.0.0", port))
             self.assertTrue(oac_cli.port_free("127.0.0.1", port))
+            # The installation's own listener does not count.
+            self.assertTrue(oac_cli.port_free("0.0.0.0", port, {(ipaddress.ip_address("127.0.0.2"), port)}))
             # An account that may not bind the port reads the listening sockets instead.
-            with mock.patch.object(socket.socket, "bind", side_effect=PermissionError):
+            with mock.patch.object(socket.socket, "bind", side_effect=OSError(errno.EACCES, "Permission denied")):
                 self.assertFalse(oac_cli.port_free("0.0.0.0", port))
                 self.assertTrue(oac_cli.port_free("127.0.0.1", port))
         # A connection in TIME_WAIT on a Go or Docker listener, which set SO_REUSEADDR, does not hold the port.
