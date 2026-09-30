@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -154,7 +155,7 @@ func (s *Store) FindSessionCreation(ctx context.Context, tenantID, key string, r
 	if row.CreationRequestHash.String != hash.String {
 		return sessions.Creation{}, sessions.ErrIdempotencyConflict
 	}
-	session, err := sessionFromRow(row)
+	session, err := sessionpg.SessionFromRow(row)
 	session.Environment = environment
 	// The row and cursor share one committed snapshot; later events remain observable.
 	return sessions.Creation{Session: session, Cursor: row.EventSequence}, err

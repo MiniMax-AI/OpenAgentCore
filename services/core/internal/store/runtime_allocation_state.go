@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -64,11 +65,11 @@ func (s *Store) requestRuntimeCleanup(ctx context.Context, owner RuntimeAllocati
 		if err != nil {
 			return sqlc.RuntimeAllocation{}, err
 		}
-		cancel := func() error { return cancelSessionWork(ctx, q, current.SessionID) }
+		session := sessionpg.BindSession(q, current.TenantID, current.SessionID)
 		if current.DeletedAt.Valid {
-			err = cancel()
+			err = sessions.CancelWork(ctx, session)
 		} else {
-			err = terminateRuntimeEnvironment(ctx, q, current, reason, detail, cancel)
+			err = sessions.TerminateEnvironment(ctx, session, current.Expired, reason, detail)
 		}
 		if err != nil {
 			return sqlc.RuntimeAllocation{}, err
@@ -121,7 +122,7 @@ func (s *Store) mutateRuntimeAllocation(ctx context.Context, owner RuntimeAlloca
 	if previous.ID != owner.ID || previous.DeviceID != owner.DeviceID || previous.ProviderKey != owner.ProviderKey || previous.NodeID != owner.NodeID {
 		return RuntimeAllocation{}, sessions.ErrIdempotencyConflict
 	}
-	lookup, _ := deviceLookup(owner.TenantID, owner.EnvironmentID)
+	lookup, _ := sessionpg.DeviceLookup(owner.TenantID, owner.EnvironmentID)
 	var result RuntimeAllocation
 	err = s.withSession(ctx, owner.TenantID, previous.SessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		current, err := q.GetRuntimeAllocation(ctx, sqlc.GetRuntimeAllocationParams{TenantID: lookup.TenantID, EnvironmentID: lookup.ID})

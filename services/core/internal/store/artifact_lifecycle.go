@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,7 +14,7 @@ import (
 // BeginTurnArtifactCapture separates native completion from bounded output publication.
 // Later messages use the existing reservation path instead of the finished executor.
 func (s *Store) BeginTurnArtifactCapture(ctx context.Context, tenantID, sessionID, turnID string, appliedThrough int64) error {
-	lookup, err := turnLookup(tenantID, sessionID, turnID)
+	lookup, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return err
 	}

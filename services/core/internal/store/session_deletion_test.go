@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,8 +23,12 @@ import (
 // the marker together. Upgraded databases can retain such markers, so hidden
 // work must still settle; tests use this to reach that state.
 func (s *Store) commitLegacyDeletion(ctx context.Context, tenantID, sessionID string) error {
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return err
+	}
 	return s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-		if err := cancelSessionWork(ctx, q, session); err != nil {
+		if err := sessions.CancelWork(ctx, sessionpg.BindSession(q, tenant, session)); err != nil {
 			return err
 		}
 		if err := q.DeleteSessionArtifacts(ctx, session); err != nil {

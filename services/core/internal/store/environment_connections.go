@@ -2,10 +2,8 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
@@ -100,12 +98,13 @@ func (s *Store) withEnvironmentConnection(ctx context.Context, tenant, environme
 		if err != nil {
 			return err
 		}
-		return withEnvironmentInputActivity(ctx, q, session, func() error { return apply(ctx, q, row) })
+		return sessions.TrackInputActivity(ctx, sessionpg.BindSession(q, tenantID, session), func(ctx context.Context) error { return apply(ctx, q, row) })
 	})
 }
 
 func recordEnvironmentConnection(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow, status string) error {
-	if _, err := storedEnvironmentType(row); err != nil {
+	kind, err := sessions.EnvironmentType(row.Configuration)
+	if err != nil {
 		return err
 	}
 	if status != "connected" && status != "disconnected" {
@@ -114,35 +113,7 @@ func recordEnvironmentConnection(ctx context.Context, q *sqlc.Queries, row sqlc.
 	if err := q.SetEnvironmentConnectionStatus(ctx, sqlc.SetEnvironmentConnectionStatusParams{ID: row.Environment.ID, Status: status}); err != nil {
 		return err
 	}
-	return recordEnvironmentState(ctx, q, row, status)
-}
-
-// recordEnvironmentState appends the pinned Environment state event for an
-// already committed status. A failure uses the observed official error; the
-// failed step travels only in the separate error event and Session error.
-func recordEnvironmentState(ctx context.Context, q *sqlc.Queries, row sqlc.GetSessionEnvironmentRow, status string) error {
-	kind, err := storedEnvironmentType(row)
-	if err != nil {
-		return err
-	}
-	state := &v1.SessionEnvironmentState{ID: uuid.UUID(row.Environment.ID.Bytes).String(), Type: kind, Status: status}
-	if status == "failed" {
-		state.Error = &v1.StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}
-	}
-	return sessionpg.AppendChanges(ctx, q, row.Environment.SessionID, sessions.SessionChange{Event: v1.SessionEvent{
-		Type:        "agent.session.environment." + status,
-		Environment: state,
-	}})
-}
-
-func storedEnvironmentType(row sqlc.GetSessionEnvironmentRow) (string, error) {
-	var config struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(row.Configuration, &config); err != nil || (config.Type != "self_hosted" && config.Type != "openai_hosted") {
-		return "", errors.New("invalid stored Environment type")
-	}
-	return config.Type, nil
+	return sessionpg.AppendChanges(ctx, q, row.Environment.SessionID, sessions.EnvironmentStateChange(uuid.UUID(row.Environment.ID.Bytes).String(), kind, status))
 }
 
 func parseConnectionGeneration(value string) (pgtype.UUID, error) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -16,7 +17,7 @@ import (
 
 // AppendTurnEvents records an ordered batch atomically, not public SSE replay events.
 func (s *Store) AppendTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, first int32, events []sessions.ExecutionEvent) error {
-	p, err := turnLookup(tenantID, sessionID, turnID)
+	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return err
 	}
@@ -96,7 +97,7 @@ func insertTurnEvent(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn, kind 
 }
 
 func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, after int32, limit int) ([]sessions.TurnEvent, error) {
-	p, err := turnLookup(tenantID, sessionID, turnID)
+	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -40,6 +41,6 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 	if err != nil {
 		return sessions.Session{}, fmt.Errorf("update session metadata: %w", err)
 	}
-	session, decodeErr := sessionFromRow(row)
+	session, decodeErr := sessionpg.SessionFromRow(row)
 	return s.sessionActivity(ctx, session, decodeErr)
 }

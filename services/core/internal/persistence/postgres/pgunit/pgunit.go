@@ -19,6 +19,17 @@ var (
 	snapshot  = pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
 )
 
+// Transactor runs read committed transactions: a Pool on pooled connections,
+// or the Lease on the execution connection.
+type Transactor interface {
+	Transaction(ctx context.Context, apply func(context.Context, pgx.Tx) error) error
+}
+
+var (
+	_ Transactor = (*Pool)(nil)
+	_ Transactor = (*Lease)(nil)
+)
+
 // Pool runs transactions on pooled connections. It grants no execution authority.
 type Pool struct{ pool *pgxpool.Pool }
 

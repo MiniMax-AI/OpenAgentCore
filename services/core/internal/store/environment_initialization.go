@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -106,6 +107,10 @@ func (s *Store) FailEnvironmentInitialization(ctx context.Context, owner session
 		if err := q.FailEnvironmentInitialization(ctx, row.Environment.ID); err != nil {
 			return err
 		}
-		return failEnvironment(ctx, q, row, row.Environment.SessionID, failure.Reason(), failure.Detail(), func() error { return cancelSessionWork(ctx, q, row.Environment.SessionID) })
+		environment, err := sessionpg.EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, nil)
+		if err != nil {
+			return err
+		}
+		return sessions.FailEnvironment(ctx, sessionpg.BindSession(q, row.TenantID, row.Environment.SessionID), environment, failure.Reason(), failure.Detail())
 	})
 }

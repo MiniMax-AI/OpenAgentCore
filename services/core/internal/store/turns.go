@@ -2,11 +2,9 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -31,14 +29,14 @@ func (s *Store) GetTurn(ctx context.Context, tenantID, sessionID, turnID string)
 	if err != nil {
 		return sessions.Turn{}, fmt.Errorf("get turn: %w", err)
 	}
-	return turnFromRow(row), nil
+	return sessionpg.TurnFromRow(row), nil
 }
 
 // TransitionTurn is a compare-and-set for execution callbacks. Once terminal,
 // a Turn cannot be reopened or have its outcome overwritten, including by retries.
 // A dispatcher must claim queued -> in_progress before sending work to a daemon.
 func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID string, input sessions.TurnTransition) (sessions.Turn, error) {
-	params, err := turnLookup(tenantID, sessionID, turnID)
+	params, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
@@ -62,7 +60,7 @@ func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID 
 	if err != nil {
 		return sessions.Turn{}, fmt.Errorf("transition turn: %w", err)
 	}
-	return turnFromRow(row), nil
+	return sessionpg.TurnFromRow(row), nil
 }
 
 func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnParams, input sessions.TurnTransition) (sqlc.Turn, error) {
@@ -72,7 +70,7 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 		return sqlc.Turn{}, err
 	}
 	if input.ExpectedStatus == sessions.TurnQueued && input.Status == sessions.TurnInProgress {
-		if err := checkRuntimeComputeAdmission(ctx, q, params.SessionID); err != nil {
+		if err := sessions.CheckComputeAdmission(ctx, sessionpg.BindSession(q, params.TenantID, params.SessionID)); err != nil {
 			return sqlc.Turn{}, err
 		}
 	}
@@ -87,7 +85,7 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 		return sqlc.Turn{}, err
 	}
 	if !sessions.TerminalStatus(row.Status) {
-		if err := sessionpg.AppendChanges(ctx, q, row.SessionID, sessions.TurnChanges(turnFromRow(row), false)...); err != nil {
+		if err := sessionpg.AppendChanges(ctx, q, row.SessionID, sessions.TurnChanges(sessionpg.TurnFromRow(row), false)...); err != nil {
 			return sqlc.Turn{}, err
 		}
 		return row, nil
@@ -102,7 +100,7 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 	if err != nil {
 		return sqlc.Turn{}, err
 	}
-	if err := sessionpg.ApplyTurnEnd(ctx, q, row.SessionID, row.ID, sessions.EndTurn(turnFromRow(row), ending)); err != nil {
+	if err := sessionpg.ApplyTurnEnd(ctx, q, row.SessionID, row.ID, sessions.EndTurn(sessionpg.TurnFromRow(row), ending)); err != nil {
 		return sqlc.Turn{}, err
 	}
 	return row, nil
@@ -121,31 +119,9 @@ func validTransition(from, to string) bool {
 	}
 }
 
-func turnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) {
-	var p sqlc.GetTurnParams
-	var err error
-	if p.TenantID, err = parseID(tenantID); err != nil {
-		return p, err
-	}
-	if p.SessionID, err = parseID(sessionID); err != nil {
-		return p, err
-	}
-	p.ID, err = parseID(turnID)
-	return p, err
-}
-
 // publicTurnLookup resolves caller-supplied path identifiers for a Turn or a
 // Turn-scoped resource. Unparsable values are indistinguishable from missing ones.
 func publicTurnLookup(tenantID, sessionID, turnID string) (sqlc.GetTurnParams, error) {
 	tenant, err := parseID(tenantID)
 	return sqlc.GetTurnParams{TenantID: tenant, SessionID: pgunit.PathID(sessionID), ID: pgunit.PathID(turnID)}, err
-}
-
-func turnFromRow(row sqlc.Turn) sessions.Turn {
-	return sessions.Turn{
-		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), Status: row.Status,
-		CreatedAt: row.CreatedAt.Time, StartedAt: row.StartedAt.Time, CompletedAt: row.CompletedAt.Time,
-		CancelRequestedAt: row.CancelRequestedAt.Time, Outcome: json.RawMessage(row.Outcome), Usage: json.RawMessage(row.TokenUsage),
-		ArtifactCaptureStarted: row.ArtifactCaptureStarted,
-	}
 }

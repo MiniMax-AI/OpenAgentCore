@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -63,7 +64,7 @@ func (s *Store) GetDeviceCredential(ctx context.Context, deviceID string) (runti
 }
 
 func (s *Store) RevokeDevice(ctx context.Context, tenantID, deviceID string) error {
-	params, err := deviceLookup(tenantID, deviceID)
+	params, err := sessionpg.DeviceLookup(tenantID, deviceID)
 	if err != nil {
 		return err
 	}
@@ -77,7 +78,7 @@ func (s *Store) RevokeDevice(ctx context.Context, tenantID, deviceID string) err
 // BindSessionDevice keeps retries stable and refuses silent filesystem moves.
 // Dispatchers must obtain the full Session binding before delivery.
 func (s *Store) BindSessionDevice(ctx context.Context, tenantID, sessionID, deviceID string) error {
-	params, err := deviceLookup(tenantID, deviceID)
+	params, err := sessionpg.DeviceLookup(tenantID, deviceID)
 	if err != nil {
 		return err
 	}
@@ -96,7 +97,7 @@ func (s *Store) BindSessionDevice(ctx context.Context, tenantID, sessionID, devi
 }
 
 func (s *Store) GetSessionDevice(ctx context.Context, tenantID, sessionID string) (sessions.ExecutionDevice, error) {
-	params, err := deviceLookup(tenantID, sessionID)
+	params, err := sessionpg.DeviceLookup(tenantID, sessionID)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
@@ -109,7 +110,7 @@ func (s *Store) GetSessionDevice(ctx context.Context, tenantID, sessionID string
 // GetSessionRuntimeDevice reports an authorized connection binding. It does not
 // admit native execution or file access before Environment preparation completes.
 func (s *Store) GetSessionRuntimeDevice(ctx context.Context, tenantID, sessionID string) (sessions.ExecutionDevice, error) {
-	params, err := deviceLookup(tenantID, sessionID)
+	params, err := sessionpg.DeviceLookup(tenantID, sessionID)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
@@ -124,7 +125,7 @@ func (s *Store) GetSessionRuntimeDevice(ctx context.Context, tenantID, sessionID
 }
 
 func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenantID, sessionID string) (sessions.ExecutionBinding, error) {
-	params, err := deviceLookup(tenantID, sessionID)
+	params, err := sessionpg.DeviceLookup(tenantID, sessionID)
 	if err != nil {
 		return sessions.ExecutionBinding{}, err
 	}
@@ -151,16 +152,6 @@ func executionDevice(id pgtype.UUID, name string, environmentID pgtype.UUID) ses
 		value.EnvironmentID = uuid.UUID(environmentID.Bytes).String()
 	}
 	return value
-}
-
-func deviceLookup(tenantID, id string) (sqlc.GetDeviceParams, error) {
-	var p sqlc.GetDeviceParams
-	var err error
-	if p.TenantID, err = parseID(tenantID); err != nil {
-		return p, err
-	}
-	p.ID, err = parseID(id)
-	return p, err
 }
 
 func (s *Store) TouchRuntimeHeartbeat(ctx context.Context, deviceID string) (runtimedevice.HeartbeatStatus, error) {

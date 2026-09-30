@@ -22,6 +22,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -34,7 +35,7 @@ type Store struct {
 	// writer runs Session and execution-only transactions, and lease grants
 	// execution authority. New sets writer to pooled and leaves lease nil;
 	// NewExecution sets both to the lease it borrows. Neither changes later.
-	writer           transactor
+	writer           pgunit.Transactor
 	lease            *pgunit.Lease
 	credentialCipher *credentialcrypto.Cipher
 	// publicURL is OAC_PUBLIC_URL. Core derives every address it gives
@@ -156,7 +157,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input sessio
 	if err != nil {
 		return sessions.Creation{}, fmt.Errorf("create session: %w", err)
 	}
-	session, err := sessionFromRow(row)
+	session, err := sessionpg.SessionFromRow(row)
 	session.Environment = environment
 	return sessions.Creation{Session: session, Created: row.ID == params.ID, Cursor: row.EventSequence}, err
 }
@@ -175,7 +176,7 @@ func (s *Store) GetSession(ctx context.Context, tenantID, sessionID string) (ses
 	if err != nil {
 		return sessions.Session{}, fmt.Errorf("get session: %w", err)
 	}
-	session, decodeErr := sessionFromRow(row)
+	session, decodeErr := sessionpg.SessionFromRow(row)
 	return s.sessionActivity(ctx, session, decodeErr)
 }
 
@@ -211,7 +212,7 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 		rows = rows[:limit]
 	}
 	for _, row := range rows {
-		session, err := sessionFromRow(row)
+		session, err := sessionpg.SessionFromRow(row)
 		session, err = s.sessionActivity(ctx, session, err)
 		if err != nil {
 			return sessions.Page{}, err
@@ -230,22 +231,4 @@ func parseID(value string) (pgtype.UUID, error) {
 		return pgtype.UUID{}, fmt.Errorf("%w: %w", sessions.ErrInvalidInput, err)
 	}
 	return id, nil
-}
-
-func sessionFromRow(row sqlc.Session) (sessions.Session, error) {
-	session := sessions.Session{ID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String(), Engine: row.Engine, CreatedAt: row.CreatedAt.Time, RequiredActions: []v1.FunctionCallAction{}}
-	creator, err := sessionCreator(row.CreatorKind, row.CreatorID)
-	if err != nil {
-		return sessions.Session{}, err
-	}
-	session.Creator = creator
-	configuration, err := jsonobject.Normalize(row.Configuration)
-	if err != nil {
-		return sessions.Session{}, fmt.Errorf("decode session configuration: %w: %w", sessions.ErrInvalidInput, err)
-	}
-	session.Configuration = configuration
-	if err := json.Unmarshal(row.Metadata, &session.Metadata); err != nil {
-		return sessions.Session{}, fmt.Errorf("decode session metadata: %w", err)
-	}
-	return session, nil
 }

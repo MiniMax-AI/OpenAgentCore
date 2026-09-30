@@ -40,7 +40,7 @@ func recordFunctionState(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn) e
 		if err != nil {
 			return err
 		}
-		if err := sessionpg.AppendChanges(ctx, q, turn.SessionID, sessions.TurnChanges(turnFromRow(turn), false)...); err != nil {
+		if err := sessionpg.AppendChanges(ctx, q, turn.SessionID, sessions.TurnChanges(sessionpg.TurnFromRow(turn), false)...); err != nil {
 			return err
 		}
 	}
@@ -48,5 +48,5 @@ func recordFunctionState(ctx context.Context, q *sqlc.Queries, turn sqlc.Turn) e
 	if err != nil {
 		return err
 	}
-	return sessionpg.AppendChanges(ctx, q, turn.SessionID, sessions.ActivityChange(turnFromRow(turn), usage, actions))
+	return sessionpg.AppendChanges(ctx, q, turn.SessionID, sessions.ActivityChange(sessionpg.TurnFromRow(turn), usage, actions))
 }

@@ -20,23 +20,23 @@ import (
 // The owner's repeated deletion succeeds without another resource write; foreign and
 // missing Sessions remain not found.
 func (s *Store) DeleteSession(ctx context.Context, tenantID, sessionID string) error {
-	return s.withLockedSession(ctx, tenantID, sessionID, true, func(ctx context.Context, q *sqlc.Queries, session sqlc.LockSessionRow) error {
+	return s.withLockedSession(ctx, tenantID, sessionID, true, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, locked sessions.LockedSession) error {
 		audit := func() error {
-			return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "session", uuid.UUID(session.ID.Bytes).String(), "")
+			return auditpg.RecordWriteAudit(ctx, q, tenantID, "delete", "session", uuid.UUID(session.Bytes).String(), "")
 		}
-		if session.DeletedAt.Valid {
+		if locked.Deleted {
 			return audit()
 		}
-		if err := requireSessionSettled(ctx, q, session.ID); err != nil {
+		if err := requireSessionSettled(ctx, q, session); err != nil {
 			return err
 		}
-		if err := q.DeleteSessionArtifacts(ctx, session.ID); err != nil {
+		if err := q.DeleteSessionArtifacts(ctx, session); err != nil {
 			return err
 		}
-		if err := q.ReleaseUnallocatedRuntimePlacement(ctx, session.ID); err != nil {
+		if err := q.ReleaseUnallocatedRuntimePlacement(ctx, session); err != nil {
 			return err
 		}
-		if err := q.MarkSessionDeleted(ctx, session.ID); err != nil {
+		if err := q.MarkSessionDeleted(ctx, session); err != nil {
 			return err
 		}
 		return audit()
@@ -53,61 +53,12 @@ func requireSessionSettled(ctx context.Context, q *sqlc.Queries, session pgtype.
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	_, pending, err := environmentInputState(ctx, q, session)
+	state, err := sessionpg.LoadEnvironmentInput(ctx, q, session)
 	if err != nil {
 		return err
 	}
-	if pending {
+	if _, pending := sessions.InputActivity(state); pending {
 		return sessions.ErrNotIdle
-	}
-	return nil
-}
-
-// cancelSessionWork requests cancellation of active work for Runtime cleanup.
-func cancelSessionWork(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-	turn, err := q.GetActiveTurn(ctx, session)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if err == nil {
-		if err := requestTurnCancel(ctx, q, session, turn); err != nil {
-			return err
-		}
-	}
-	if err := q.CancelSessionEnvironmentInput(ctx, session); err != nil {
-		return err
-	}
-	return nil
-}
-
-func requestTurnCancel(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, turn sqlc.Turn) error {
-	if err := q.RequestTurnCancel(ctx, sqlc.RequestTurnCancelParams{ID: turn.ID, SessionID: session}); err != nil {
-		return err
-	}
-	if turn.Status == sessions.TurnQueued {
-		cancelled, err := q.SessionEventTurn(ctx, sqlc.SessionEventTurnParams{SessionID: session, ID: turn.ID})
-		if err != nil {
-			return err
-		}
-		ending, err := sessionpg.LoadEnding(ctx, q, session, cancelled.ID)
-		if err != nil {
-			return err
-		}
-		if err := sessionpg.ApplyTurnEnd(ctx, q, session, cancelled.ID, sessions.EndTurn(turnFromRow(cancelled), ending)); err != nil {
-			return err
-		}
-	} else if turn.Status == sessions.TurnWaiting && !turn.CancelRequestedAt.Valid {
-		cancelling, err := q.SessionEventTurn(ctx, sqlc.SessionEventTurnParams{SessionID: session, ID: turn.ID})
-		if err != nil {
-			return err
-		}
-		usage, err := sessionpg.LoadUsage(ctx, q, session)
-		if err != nil {
-			return err
-		}
-		if err := sessionpg.AppendChanges(ctx, q, session, sessions.ActivityChange(turnFromRow(cancelling), usage, nil)); err != nil {
-			return err
-		}
 	}
 	return nil
 }

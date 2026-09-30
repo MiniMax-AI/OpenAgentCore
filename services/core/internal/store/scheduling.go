@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -111,7 +113,7 @@ func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID s
 		if err != nil {
 			return err
 		}
-		if session, err = sessionFromRow(row); err != nil {
+		if session, err = sessionpg.SessionFromRow(row); err != nil {
 			return err
 		}
 		cursor = row.EventSequence
@@ -134,16 +136,17 @@ func readSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 	tenant, _ := parseID(session.TenantID)
 	environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
 	if err == nil {
-		value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
+		value, err := sessionpg.EnvironmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
 		if err != nil {
 			return session, err
 		}
 		session.Environment = &value
 		session.EnvironmentFailure = environmentFailure(environment.Environment)
-		session.EnvironmentInputActivity, session.PendingInput, err = environmentInputState(ctx, q, id)
+		state, err := sessionpg.LoadEnvironmentInput(ctx, q, id)
 		if err != nil {
 			return session, err
 		}
+		session.EnvironmentInputActivity, session.PendingInput = sessions.InputActivity(state)
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return session, err
 	}
@@ -154,7 +157,7 @@ func readSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 	if err != nil {
 		return session, err
 	}
-	turn := turnFromRow(row)
+	turn := sessionpg.TurnFromRow(row)
 	session.LastTurn = &turn
 	session.RequiredActions, err = functionActions(ctx, q, row)
 	if err != nil {
@@ -162,4 +165,16 @@ func readSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 	}
 	session.Usage, err = q.SessionTokenUsage(ctx, id)
 	return session, err
+}
+
+func environmentFailure(row sqlc.Environment) *sessions.EnvironmentFailure {
+	if row.Status != "failed" || !row.FailureReason.Valid || !row.FailedAt.Valid {
+		return nil
+	}
+	failure := &sessions.EnvironmentFailure{Reason: row.FailureReason.String, FailedAt: row.FailedAt.Time}
+	var detail sessions.ProvisioningFailureDetail
+	if json.Unmarshal(row.FailureDetail, &detail) == nil {
+		failure.Detail = sessions.SanitizedProvisioningDetail(detail)
+	}
+	return failure
 }

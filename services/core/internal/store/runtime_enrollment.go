@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -30,7 +31,7 @@ func (s *Store) EnrollRuntime(ctx context.Context, environmentID, credentialHash
 	if err != nil {
 		return RuntimeEnrollment{}, err
 	}
-	lookup, err := deviceLookup(tenant, environmentID)
+	lookup, err := sessionpg.DeviceLookup(tenant, environmentID)
 	if err != nil {
 		return RuntimeEnrollment{}, err
 	}

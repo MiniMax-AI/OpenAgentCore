@@ -1,10 +1,12 @@
-// Package sessionpg writes the Session changes that the sessions and items
-// packages decide to PostgreSQL. Its functions run inside the caller's Session
-// transaction, under the Session lock, on the transaction-bound queries: they
-// load the facts a decision reads, then apply the decision, allocating event
-// sequence positions, event IDs and Item positions, writing the public change
-// journal, Items, Turn usage and Artifacts, and pruning the journal. They decide
-// nothing.
+// Package sessionpg stores Sessions in PostgreSQL and decides nothing.
+// WithSession runs a Session transaction: it locks the Session, runs the
+// operation and prunes the journal. Inside a Session transaction, on its
+// queries, the participants load the facts the sessions and items decisions
+// read and apply what they decide: they lock the Session, allocate event
+// sequence positions, event IDs, Item positions and output indexes, and write
+// the public change journal, Items, Turn usage, Artifact settlement,
+// Environment state, input reservations and devices. SessionTx binds a Session
+// to its caller's transaction for the sessions procedures.
 package sessionpg
 
 import (

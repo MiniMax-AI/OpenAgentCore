@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -116,7 +117,7 @@ func (s *Store) RuntimeActivity(ctx context.Context, owner RuntimeAllocation) (R
 // TouchRuntimeActivity is used only by operations requiring live compute.
 // Public history and published-artifact reads do not call it.
 func (s *Store) TouchRuntimeActivity(ctx context.Context, tenant, environment string) error {
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return err
 	}
@@ -170,14 +171,4 @@ func (s *Store) CountRuntimeRetainedAllocations(ctx context.Context, provider st
 		return 0, err
 	}
 	return s.queries.CountRuntimeRetainedAllocations(ctx, id)
-}
-
-// checkRuntimeComputeAdmission runs under the Session lock before a new durable
-// execution owner is created. Existing receipts remain readable in every phase.
-func checkRuntimeComputeAdmission(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-	blocked, err := q.RuntimeComputeBlocksAdmission(ctx, session)
-	if err == nil && blocked {
-		return sessions.ErrTurnConflict
-	}
-	return err
 }

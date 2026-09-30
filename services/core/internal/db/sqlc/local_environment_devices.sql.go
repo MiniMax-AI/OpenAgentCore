@@ -15,7 +15,7 @@ const createEnvironmentDevice = `-- name: CreateEnvironmentDevice :one
 INSERT INTO devices (id, tenant_id, name, credential_hash, environment_id)
 SELECT $1, s.tenant_id, $2, $3, e.id
 FROM environments e JOIN sessions s ON s.id = e.session_id
-WHERE s.tenant_id = $4 AND e.id = $5
+WHERE s.tenant_id = $4 AND s.id = $5 AND e.id = $6
 AND s.deleted_at IS NULL AND s.configuration->'environment'->>'type' = 'openai_hosted'
 ON CONFLICT (environment_id) DO NOTHING
 RETURNING id
@@ -26,6 +26,7 @@ type CreateEnvironmentDeviceParams struct {
 	Name           string      `json:"name"`
 	CredentialHash pgtype.Text `json:"credential_hash"`
 	TenantID       pgtype.UUID `json:"tenant_id"`
+	SessionID      pgtype.UUID `json:"session_id"`
 	EnvironmentID  pgtype.UUID `json:"environment_id"`
 }
 
@@ -35,6 +36,7 @@ func (q *Queries) CreateEnvironmentDevice(ctx context.Context, arg CreateEnviron
 		arg.Name,
 		arg.CredentialHash,
 		arg.TenantID,
+		arg.SessionID,
 		arg.EnvironmentID,
 	)
 	var id pgtype.UUID

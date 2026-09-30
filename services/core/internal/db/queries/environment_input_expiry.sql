@@ -1,5 +1,5 @@
 -- name: ListDueEnvironmentInputs :many
-SELECT r.id, r.session_id
+SELECT r.id, r.session_id, s.tenant_id
 FROM environment_input_reservations r
 JOIN sessions s ON s.id = r.session_id
 WHERE r.state = 'pending'

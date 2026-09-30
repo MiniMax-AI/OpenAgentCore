@@ -4,18 +4,11 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 )
 
 // ErrExecutionAuthority rejects an execution-only operation on a pooled Store.
 var ErrExecutionAuthority = errors.New("operation requires the execution writer")
-
-// transactor runs one transaction: pgunit's Pool or its execution Lease.
-type transactor interface {
-	Transaction(context.Context, func(context.Context, pgx.Tx) error) error
-}
 
 // NewExecution returns the execution writer built on lease, which the caller
 // acquired and closes. The writer's Session and execution-only transactions run

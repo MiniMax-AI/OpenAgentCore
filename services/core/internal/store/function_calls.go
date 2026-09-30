@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,7 +15,7 @@ import (
 
 // RecordFunctionCall commits an execution callback and its required-action state together.
 func (s *Store) RecordFunctionCall(ctx context.Context, tenantID, sessionID, turnID string, call sessions.FunctionCall) error {
-	p, err := turnLookup(tenantID, sessionID, turnID)
+	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,7 @@ func (s *Store) RecordFunctionCall(ctx context.Context, tenantID, sessionID, tur
 }
 
 func (s *Store) GetFunctionCall(ctx context.Context, tenantID, sessionID, turnID, callID string) (sessions.FunctionCall, error) {
-	p, err := turnLookup(tenantID, sessionID, turnID)
+	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return sessions.FunctionCall{}, err
 	}
@@ -73,7 +74,7 @@ func (s *Store) GetFunctionCall(ctx context.Context, tenantID, sessionID, turnID
 
 // PendingFunctionCalls excludes applied results and cancelling or terminal Turns.
 func (s *Store) PendingFunctionCalls(ctx context.Context, tenantID, sessionID, turnID string) ([]sessions.FunctionCall, error) {
-	p, err := turnLookup(tenantID, sessionID, turnID)
+	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return nil, err
 	}

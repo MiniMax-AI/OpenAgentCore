@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -84,7 +85,7 @@ func readInitialSourceFile(ctx context.Context, tx pgx.Tx, source sqlc.SourceFil
 
 // ReadInitialEnvironmentFile decrypts only the next frozen file, bounding memory per installation.
 func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, session string, position int) (environmentconfig.InitialFileMetadata, []byte, error) {
-	lookup, err := deviceLookup(tenant, session)
+	lookup, err := sessionpg.DeviceLookup(tenant, session)
 	if err != nil {
 		return environmentconfig.InitialFileMetadata{}, nil, err
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -56,7 +57,7 @@ func (s *Store) saveEnvironmentSetup(ctx context.Context, q *sqlc.Queries, tenan
 
 func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string) (environmentconfig.Setup, error) {
 	var result environmentconfig.Setup
-	lookup, err := deviceLookup(tenant, session)
+	lookup, err := sessionpg.DeviceLookup(tenant, session)
 	if err != nil {
 		return result, sessions.ErrNotFound
 	}

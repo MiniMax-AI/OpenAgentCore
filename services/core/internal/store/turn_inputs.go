@@ -46,6 +46,10 @@ func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key strin
 	if err != nil {
 		return nil, err
 	}
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return nil, err
+	}
 	receipts := make([]sessions.InputReceipt, 0, len(batch))
 	err = s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 		previous, err := inputBatchReceipts(ctx, q, session, key, encoded)
@@ -57,7 +61,7 @@ func (s *Store) SubmitInputs(ctx context.Context, tenantID, sessionID, key strin
 			return auditpg.RecordWriteAudit(ctx, q, tenantID, "send_events", "session", uuid.UUID(session.Bytes).String(), "")
 		}
 		if slices.ContainsFunc(batch, func(input sessions.Input) bool { return input.Kind == "message" }) {
-			if err := checkEnvironmentFileWriteGate(ctx, q, session); err != nil {
+			if err := sessions.CheckFileWriteGate(ctx, sessionpg.BindSession(q, tenant, session)); err != nil {
 				return err
 			}
 		}
@@ -134,7 +138,7 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 			turn, err = q.CreateTurn(ctx, sqlc.CreateTurnParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: session})
 			if err == nil {
 				created = true
-				err = sessionpg.AppendChanges(ctx, q, session, sessions.TurnChanges(turnFromRow(turn), true)...)
+				err = sessionpg.AppendChanges(ctx, q, session, sessions.TurnChanges(sessionpg.TurnFromRow(turn), true)...)
 			}
 		} else {
 			err = nil // Retain even an idle cancellation's retry identity.
@@ -150,7 +154,11 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 		return sessions.InputReceipt{}, err
 	}
 	if input.Kind == "cancel" && turn.ID.Valid {
-		if err := requestTurnCancel(ctx, q, session, turn); err != nil {
+		tenant, err := parseID(tenantID)
+		if err != nil {
+			return sessions.InputReceipt{}, err
+		}
+		if err := sessions.CancelTurn(ctx, sessionpg.BindSession(q, tenant, session), sessionpg.TurnFromRow(turn)); err != nil {
 			return sessions.InputReceipt{}, err
 		}
 	}
@@ -164,7 +172,7 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 		if err != nil {
 			return sessions.InputReceipt{}, err
 		}
-		if err := sessionpg.AppendChanges(ctx, q, session, sessions.ActivityChange(turnFromRow(turn), usage, nil)); err != nil {
+		if err := sessionpg.AppendChanges(ctx, q, session, sessions.ActivityChange(sessionpg.TurnFromRow(turn), usage, nil)); err != nil {
 			return sessions.InputReceipt{}, err
 		}
 	}
@@ -173,7 +181,7 @@ func admitInput(ctx context.Context, q *sqlc.Queries, tenantID string, session p
 
 // ListTurnInputs is an internal ordered recovery query, not the public SSE stream.
 func (s *Store) ListTurnInputs(ctx context.Context, tenantID, sessionID, turnID string, after int64, limit int) ([]sessions.TurnInput, error) {
-	params, err := turnLookup(tenantID, sessionID, turnID)
+	params, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return nil, err
 	}

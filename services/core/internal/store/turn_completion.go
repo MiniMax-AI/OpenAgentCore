@@ -17,7 +17,7 @@ import (
 
 // CompleteExecution commits the outcome and native continuity under the admission lock.
 func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turnID, status string, outcome json.RawMessage, nativeID string, appliedThrough int64) (sessions.Turn, error) {
-	p, err := turnLookup(tenantID, sessionID, turnID)
+	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
@@ -95,10 +95,10 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 		if err != nil {
 			return err
 		}
-		return sessionpg.ApplyTurnEnd(ctx, q, session, row.ID, sessions.EndTurn(turnFromRow(row), ending))
+		return sessionpg.ApplyTurnEnd(ctx, q, session, row.ID, sessions.EndTurn(sessionpg.TurnFromRow(row), ending))
 	})
 	if err != nil {
 		return sessions.Turn{}, err
 	}
-	return turnFromRow(row), nil
+	return sessionpg.TurnFromRow(row), nil
 }

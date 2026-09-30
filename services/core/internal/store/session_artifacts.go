@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -111,11 +112,11 @@ func (s *Store) DeleteSessionArtifact(ctx context.Context, tenantID, sessionID, 
 	return s.pooled.Transaction(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := s.queries.WithTx(tx)
 		// Use the same lock order as whole-Session deletion and Turn publication.
-		locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
-		if errors.Is(err, pgx.ErrNoRows) || err == nil && locked.DeletedAt.Valid {
-			return sessions.ErrNotFound
-		}
+		locked, err := sessionpg.LockSession(ctx, q, lookup.TenantID, lookup.SessionID)
 		if err != nil {
+			return err
+		}
+		if err := locked.Public(); err != nil {
 			return err
 		}
 		oid, err := q.DeleteSessionArtifact(ctx, sqlc.DeleteSessionArtifactParams(lookup))

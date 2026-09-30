@@ -129,7 +129,7 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 		key := uuid.NewString()
 		if environment != nil {
 			// Environment input waits for the existing preparation and leased promotion.
-			if err := withEnvironmentInputActivity(ctx, q, row.ID, func() error {
+			if err := sessions.TrackInputActivity(ctx, sessionpg.BindSession(q, row.TenantID, row.ID), func(ctx context.Context) error {
 				_, err := q.CreateEnvironmentInputReservation(ctx, sqlc.CreateEnvironmentInputReservationParams{
 					ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: row.ID,
 					IdempotencyKey: key, Batch: encodedInput, IsInitial: true,

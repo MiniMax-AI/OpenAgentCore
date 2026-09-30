@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -63,7 +64,7 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 		if err != nil {
 			return err
 		}
-		kind, err := storedEnvironmentType(environment)
+		kind, err := sessions.EnvironmentType(environment.Configuration)
 		if err != nil || kind != "openai_hosted" {
 			return sessions.ErrInvalidInput
 		}
@@ -103,13 +104,14 @@ func (s *Store) archiveManagedSession(ctx context.Context, tenantID, sessionID s
 		if allocated && allocation.RuntimeAllocation.State != "released" && allocation.RuntimeAllocation.ProviderKey != current.InstallationID {
 			return deployment.ErrConflict
 		}
-		if err := withEnvironmentInputActivity(ctx, q, session, func() error {
+		bound := sessionpg.BindSession(q, tenant, session)
+		if err := sessions.TrackInputActivity(ctx, bound, func(ctx context.Context) error {
 			if environment.Environment.Status != "failed" && environment.Environment.Status != "expired" {
 				if err := q.SetEnvironmentConnectionStatus(ctx, sqlc.SetEnvironmentConnectionStatusParams{ID: environment.Environment.ID, Status: "expired"}); err != nil {
 					return err
 				}
 			}
-			return cancelSessionWork(ctx, q, session)
+			return sessions.CancelWork(ctx, bound)
 		}); err != nil {
 			return err
 		}

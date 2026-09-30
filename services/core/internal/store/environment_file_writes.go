@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -73,10 +74,11 @@ func (s *Store) ReserveEnvironmentFileWrite(ctx context.Context, tenant, environ
 		if uuid.UUID(device.ID.Bytes).String() != key.DeviceID || device.EnvironmentID != lookup.EnvironmentID {
 			return sessions.ErrDeviceBindingConflict
 		}
-		if err := checkRuntimeComputeAdmission(ctx, q, session); err != nil {
+		bound := sessionpg.BindSession(q, lookup.TenantID, session)
+		if err := sessions.CheckComputeAdmission(ctx, bound); err != nil {
 			return err
 		}
-		if err := environmentInputMayStart(ctx, q, session); err != nil {
+		if err := sessions.CheckInputStart(ctx, bound); err != nil {
 			return err
 		}
 		pending, err := q.EnvironmentFileWriteHasPendingInput(ctx, session)
@@ -189,12 +191,4 @@ func fileWriteFromRow(row sqlc.EnvironmentFileWrite, session pgtype.UUID) sessio
 		result.SettledAt = &row.SettledAt.Time
 	}
 	return result
-}
-
-func checkEnvironmentFileWriteGate(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-	blocked, err := q.EnvironmentFileWriteBlocksSession(ctx, session)
-	if err == nil && blocked {
-		return sessions.ErrTurnConflict
-	}
-	return err
 }

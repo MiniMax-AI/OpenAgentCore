@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -199,7 +200,7 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	if _, err := tx.Exec(ctx, `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, owner.SessionID); err != nil {
 		t.Fatal(err)
 	}
-	params, err := turnLookup(owner.TenantID, owner.SessionID, turn)
+	params, err := sessionpg.TurnLookup(owner.TenantID, owner.SessionID, turn)
 	if err != nil {
 		t.Fatal(err)
 	}

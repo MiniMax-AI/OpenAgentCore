@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -25,7 +26,7 @@ func (s *Store) GetSessionDiagnosticsSnapshot(ctx context.Context, tenantID, ses
 		if err != nil {
 			return err
 		}
-		session, err = sessionFromRow(row)
+		session, err = sessionpg.SessionFromRow(row)
 		if err != nil {
 			return err
 		}
@@ -56,11 +57,11 @@ func (s *Store) GetTurnDiagnosticsSnapshot(ctx context.Context, tenantID, sessio
 		if err != nil {
 			return err
 		}
-		result.Session, err = sessionFromRow(row)
+		result.Session, err = sessionpg.SessionFromRow(row)
 		if err != nil {
 			return err
 		}
-		result.Turn = turnFromRow(turn)
+		result.Turn = sessionpg.TurnFromRow(turn)
 		rows, err := q.ListTurnItemDiagnostics(ctx, sqlc.ListTurnItemDiagnosticsParams{SessionID: params.SessionID, TurnID: params.ID})
 		if err != nil {
 			return err

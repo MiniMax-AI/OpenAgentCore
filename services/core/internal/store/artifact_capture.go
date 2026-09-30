@@ -4,13 +4,13 @@ import (
 	"archive/tar"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"io/fs"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -22,7 +22,7 @@ const MaxArtifactBatchBytes int64 = 500 << 20
 
 // StageTurnArtifacts stores a complete export privately without locking admission during transfer.
 func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, turnID, environmentID string, input io.Reader) error {
-	lookup, err := turnLookup(tenantID, sessionID, turnID)
+	lookup, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return err
 	}
@@ -53,15 +53,12 @@ func (s *Store) StageTurnArtifacts(ctx context.Context, tenantID, sessionID, tur
 			return err
 		}
 		q := s.queries.WithTx(tx)
-		locked, err := q.LockSession(ctx, sqlc.LockSessionParams{TenantID: lookup.TenantID, ID: lookup.SessionID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return sessions.ErrNotFound
-		}
+		locked, err := sessionpg.LockSession(ctx, q, lookup.TenantID, lookup.SessionID)
 		if err != nil {
 			return err
 		}
-		if locked.DeletedAt.Valid {
-			return sessions.ErrNotFound
+		if err := locked.Public(); err != nil {
+			return err
 		}
 		turn, err := q.GetTurn(ctx, lookup)
 		if err != nil {

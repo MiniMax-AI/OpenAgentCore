@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -96,7 +97,7 @@ func (s *Store) ListUnallocatedHostedEnvironmentsForNode(ctx context.Context, no
 // ResolveRuntimeLifecycleNode routes direct provisioning before an allocation
 // exists. An existing allocation must agree with its immutable placement.
 func (s *Store) ResolveRuntimeLifecycleNode(ctx context.Context, tenant, environment string) (string, error) {
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return "", err
 	}

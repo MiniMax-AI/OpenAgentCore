@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -44,7 +45,7 @@ func (s *Store) ConfirmFunctionResult(ctx context.Context, tenantID, sessionID, 
 }
 
 func (s *Store) withFunctionCall(ctx context.Context, tenantID, sessionID, turnID, callID string, fn func(context.Context, *sqlc.Queries, sqlc.Turn, sqlc.FunctionCall) error) error {
-	p, err := turnLookup(tenantID, sessionID, turnID)
+	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return err
 	}

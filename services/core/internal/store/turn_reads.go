@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -42,7 +43,7 @@ func (s *Store) ListTurns(ctx context.Context, tenantID, sessionID, cursor strin
 		rows = rows[:limit]
 	}
 	for _, row := range rows {
-		page.Turns = append(page.Turns, turnFromRow(row))
+		page.Turns = append(page.Turns, sessionpg.TurnFromRow(row))
 	}
 	return page, nil
 }

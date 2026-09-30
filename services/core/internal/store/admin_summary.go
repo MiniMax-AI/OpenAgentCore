@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -48,7 +49,7 @@ func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter Ad
 				return err
 			}
 			for _, row := range rows {
-				session, err := sessionFromRow(row.Session)
+				session, err := sessionpg.SessionFromRow(row.Session)
 				if err != nil {
 					return err
 				}

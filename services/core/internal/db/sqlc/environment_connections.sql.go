@@ -34,6 +34,26 @@ func (q *Queries) DeleteEnvironmentConnection(ctx context.Context, environmentID
 	return err
 }
 
+const expireSessionEnvironment = `-- name: ExpireSessionEnvironment :execrows
+UPDATE environments e SET status = 'expired'
+WHERE e.id = $1 AND e.session_id = $2
+AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = e.session_id AND s.tenant_id = $3)
+`
+
+type ExpireSessionEnvironmentParams struct {
+	ID        pgtype.UUID `json:"id"`
+	SessionID pgtype.UUID `json:"session_id"`
+	TenantID  pgtype.UUID `json:"tenant_id"`
+}
+
+func (q *Queries) ExpireSessionEnvironment(ctx context.Context, arg ExpireSessionEnvironmentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, expireSessionEnvironment, arg.ID, arg.SessionID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getEnvironmentConnection = `-- name: GetEnvironmentConnection :one
 SELECT environment_id, generation, revision FROM environment_connections WHERE environment_id = $1
 `
@@ -82,19 +102,28 @@ func (q *Queries) ListEnvironmentConnections(ctx context.Context, id pgtype.UUID
 }
 
 const recordEnvironmentFailure = `-- name: RecordEnvironmentFailure :one
-UPDATE environments SET status = 'failed', failure_reason = $2, failure_detail = $3, failed_at = clock_timestamp()
-WHERE id = $1 AND status NOT IN ('failed', 'expired')
-RETURNING failed_at
+UPDATE environments e SET status = 'failed', failure_reason = $1, failure_detail = $2, failed_at = clock_timestamp()
+WHERE e.id = $3 AND e.session_id = $4 AND e.status NOT IN ('failed', 'expired')
+AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = e.session_id AND s.tenant_id = $5)
+RETURNING e.failed_at
 `
 
 type RecordEnvironmentFailureParams struct {
-	ID            pgtype.UUID `json:"id"`
 	FailureReason pgtype.Text `json:"failure_reason"`
 	FailureDetail []byte      `json:"failure_detail"`
+	ID            pgtype.UUID `json:"id"`
+	SessionID     pgtype.UUID `json:"session_id"`
+	TenantID      pgtype.UUID `json:"tenant_id"`
 }
 
 func (q *Queries) RecordEnvironmentFailure(ctx context.Context, arg RecordEnvironmentFailureParams) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, recordEnvironmentFailure, arg.ID, arg.FailureReason, arg.FailureDetail)
+	row := q.db.QueryRow(ctx, recordEnvironmentFailure,
+		arg.FailureReason,
+		arg.FailureDetail,
+		arg.ID,
+		arg.SessionID,
+		arg.TenantID,
+	)
 	var failed_at pgtype.Timestamptz
 	err := row.Scan(&failed_at)
 	return failed_at, err

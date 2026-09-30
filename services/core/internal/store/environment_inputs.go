@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -59,7 +60,7 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 			result = sessions.EnvironmentInputReservation{SessionID: sessionID, State: sessions.EnvironmentInputAdmitted, Receipts: receipts}
 			return audit()
 		}
-		if err := checkEnvironmentFileWriteGate(ctx, q, session); err != nil {
+		if err := sessions.CheckFileWriteGate(ctx, sessionpg.BindSession(q, tenant, session)); err != nil {
 			return err
 		}
 		environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: session})
@@ -69,7 +70,7 @@ func (s *Store) ReserveEnvironmentInput(ctx context.Context, tenantID, sessionID
 			return err
 		}
 		if environment.Environment.Status == "failed" {
-			if kind, err := storedEnvironmentType(environment); err == nil && kind == "openai_hosted" {
+			if kind, err := sessions.EnvironmentType(environment.Configuration); err == nil && kind == "openai_hosted" {
 				return sessions.ErrHostedEnvironmentFailed
 			}
 		}
@@ -211,7 +212,11 @@ func settleEnvironmentInput(ctx context.Context, q *sqlc.Queries, tenantID strin
 		return sessions.EnvironmentInputReservation{}, err
 	}
 	if state == sessions.EnvironmentInputAdmitted {
-		if err := environmentInputMayStart(ctx, q, row.SessionID); err != nil {
+		tenant, err := parseID(tenantID)
+		if err != nil {
+			return sessions.EnvironmentInputReservation{}, err
+		}
+		if err := sessions.CheckInputStart(ctx, sessionpg.BindSession(q, tenant, row.SessionID)); err != nil {
 			return sessions.EnvironmentInputReservation{}, err
 		}
 		for position, input := range result.Inputs {
@@ -227,7 +232,7 @@ func settleEnvironmentInput(ctx context.Context, q *sqlc.Queries, tenantID strin
 		return sessions.EnvironmentInputReservation{}, err
 	}
 	if state == sessions.EnvironmentInputAdmitted {
-		params, err := turnLookup(tenantID, result.SessionID, result.Receipts[0].TurnID)
+		params, err := sessionpg.TurnLookup(tenantID, result.SessionID, result.Receipts[0].TurnID)
 		if err != nil {
 			return sessions.EnvironmentInputReservation{}, err
 		}
@@ -240,20 +245,6 @@ func settleEnvironmentInput(ctx context.Context, q *sqlc.Queries, tenantID strin
 	result.State = row.State
 	result.SettledAt = &row.SettledAt.Time
 	return result, nil
-}
-
-func environmentInputMayStart(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-	if err := checkEnvironmentFileWriteGate(ctx, q, session); err != nil {
-		return err
-	}
-	_, err := q.GetActiveTurn(ctx, session)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err == nil {
-		return sessions.ErrTurnConflict
-	}
-	return err
 }
 
 func environmentInputOutcome(ctx context.Context, q *sqlc.Queries, row sqlc.EnvironmentInputReservation) (sessions.EnvironmentInputReservation, error) {

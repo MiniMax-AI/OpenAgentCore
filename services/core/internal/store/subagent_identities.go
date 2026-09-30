@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -50,7 +51,7 @@ func projectSubagentIdentity(ctx context.Context, q *sqlc.Queries, session, turn
 
 // GetSubagentIdentity recovers a binding in its authorized, visible Session.
 func (s *Store) GetSubagentIdentity(ctx context.Context, tenantID, sessionID, nativeID string) (SubagentIdentity, error) {
-	p, err := deviceLookup(tenantID, sessionID)
+	p, err := sessionpg.DeviceLookup(tenantID, sessionID)
 	if err != nil {
 		return SubagentIdentity{}, err
 	}

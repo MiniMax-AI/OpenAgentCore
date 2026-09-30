@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -65,7 +66,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 	if json.Unmarshal(owned.Configuration, &config) != nil || config.Type != "openai_hosted" {
 		return RuntimeAllocation{}, sessions.ErrInvalidInput
 	}
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
@@ -114,7 +115,8 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 			nodeID = placement.NodeID
 			generation = placement.DeploymentGeneration
 		}
-		if err := createEnvironmentDevice(ctx, q, lookup, session, device); err != nil {
+		dedicated := sessions.ExecutionDevice{ID: uuid.UUID(device.ID.Bytes).String(), Name: device.Name, EnvironmentID: owned.ID}
+		if err := sessions.CreateEnvironmentDevice(ctx, sessionpg.BindSession(q, lookup.TenantID, session), dedicated, device.CredentialHash.String); err != nil {
 			return err
 		}
 		row, err := q.CreateRuntimeAllocation(ctx, sqlc.CreateRuntimeAllocationParams{
@@ -134,7 +136,7 @@ func (s *Store) ReserveRuntimeAllocation(ctx context.Context, tenant, environmen
 
 // GetRuntimeAllocation is an internal cleanup lookup, including deleted Sessions.
 func (s *Store) GetRuntimeAllocation(ctx context.Context, tenant, environment string) (RuntimeAllocation, error) {
-	lookup, err := deviceLookup(tenant, environment)
+	lookup, err := sessionpg.DeviceLookup(tenant, environment)
 	if err != nil {
 		return RuntimeAllocation{}, err
 	}
