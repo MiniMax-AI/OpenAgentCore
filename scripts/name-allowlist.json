@@ -547,22 +547,22 @@
   {
     "path": "apps/web/src/features/sessions/items/ItemRenderers.tsx",
     "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by §9."
+    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
   },
   {
     "path": "apps/web/src/features/sessions/items/apply-patch.ts",
     "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by §9."
+    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
   },
   {
     "path": "apps/web/src/features/sessions/items/apply-patch.test.tsx",
     "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by §9."
+    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
   },
   {
     "path": "apps/web/src/features/sessions/trace/TraceView.tsx",
     "regex": "parseParsarApplyPatch|Parsar apply_patch",
-    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by §9."
+    "reason": "The parser identifies the existing product-origin apply_patch event format; renaming private parser symbols is deferred by \u00a79."
   },
   {
     "path": "apps/web/src/features/sandbox/deployment-specification.test.ts",
@@ -878,5 +878,10 @@
     "path": "apps/parsar-daemon/internal/contracttest/wire_test.go",
     "regex": "agents-api-session",
     "reason": "The controlled Runtime fixture uses the existing Core Session state-key prefix required by execution admission."
+  },
+  {
+    "path": "apps/parsar-daemon/internal/agent/mcode/tool_environment_test.go",
+    "regex": "agents-api-",
+    "reason": "The regression fixture uses the existing persisted Session state-key namespace required by Runtime binding validation."
   }
 ]
