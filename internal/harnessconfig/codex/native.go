@@ -1,6 +1,6 @@
 package codex
 
-import "github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+import "github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 
 func validateNativeConfig(config proto.HarnessConfig) bool {
 	for key, value := range config {

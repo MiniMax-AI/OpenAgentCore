@@ -61,10 +61,10 @@ keeps the key out of the process list.
 | [Skills](#skills) | `/skills` | Versioned capability bundles |
 | [Environment Templates](#environment-templates) | `/agents/environments/templates` | Reusable workspace setup |
 | [Vaults](#vaults) | `/vaults` | Write-only credentials for MCP servers |
-| Subagents | `/agents/sessions/{id}/subagents` | Read-only child work; see [subagents](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/subagents.md) |
+| Subagents | `/agents/sessions/{id}/subagents` | Read-only child work; see [subagents](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/subagents.md) |
 
 Core has exactly the routes of the pinned SDK, listed in
-[upstream-routes.json](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/upstream-routes.json). It adds no
+[upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/upstream-routes.json). It adds no
 route; its additions live in [`x_agents_core`](#core-extensions-x_agents_core).
 
 ## Conventions
@@ -305,7 +305,7 @@ oac "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
   Images work with Codex and Claude Code wherever the Runtime supports them;
   MiniMax Code rejects them. The
   whole request is limited to 1 MiB.
-- Full rules: [message input](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/message-input.md).
+- Full rules: [message input](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/message-input.md).
 
 ### Cancel
 
@@ -367,7 +367,7 @@ does both.
 `agent.session.created` first, and the stream ends at the first `idle` or `failed`.
 
 **Reconnecting:** resubscribe, then read Items and drop any you already have by ID.
-Details: [history and events](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/history-events-usage.md).
+Details: [history and events](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/history-events-usage.md).
 
 ## Turns and Items
 
@@ -518,7 +518,7 @@ client.skills.versions.create(skill.id, files=[...], default=True)
 - Attach Skills to a Session through its `environment.skills` or a
   [template](#environment-templates).
 
-Details: [Source Files and Skills](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/source-files.md).
+Details: [Source Files and Skills](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/source-files.md).
 
 ## Environment Templates
 
@@ -535,13 +535,13 @@ template = client.beta.agents.environments.templates.create(
 
 | Field | Meaning |
 | --- | --- |
-| `network` | `access`: `enabled` (default), `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it. Current Runtimes don't enforce `disabled` or `restricted`, so a Session that needs them is rejected; see [restricted network policy](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md#restricted-network-policy) |
+| `network` | `access`: `enabled` (default), `disabled`, or `restricted` to 1–100 exact hosts in `allowed_domains`. A Session can only narrow it. Current Runtimes don't enforce `disabled` or `restricted`, so a Session that needs them is rejected; see [restricted network policy](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md#restricted-network-policy) |
 | `packages` | `npm` and `python` packages. `system` packages are rejected: preinstall them in the image or on the machine |
 | `setup_commands`, `env` | Run and set at preparation. Never returned by reads |
 | `files`, `skills`, `plugins` | Initial content. Up to 50 files, 10 MiB inline in total |
 
 A Session freezes the template when it starts. Details:
-[Environment Templates](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md).
+[Environment Templates](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/environment-templates.md).
 
 ## Vaults
 
@@ -583,7 +583,7 @@ Current rules: [public MCP connection origin](/environments-and-files#public-mcp
 | Packages | `packages.system` rejected |
 
 Per-operation status and harness differences are in the
-[coverage record](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md). The exact schemas are in the
-[public OpenAPI](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/openapi.yaml).
+[coverage record](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/README.md). The exact schemas are in the
+[public OpenAPI](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/contracts/agents-api/openapi.yaml).
 
-[Repository source](https://github.com/MiniMax-AI/parsar-core/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/api/public-agent-api.md)
+[Repository source](https://github.com/MiniMax-AI/OpenAgentCore/blob/f6d258735fc601c521dd990e6f9e1ed261f4ef2d/docs/api/public-agent-api.md)

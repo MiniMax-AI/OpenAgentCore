@@ -95,14 +95,14 @@ qualification limits are recorded in [the coverage note](structured-output.md).
 ## Acceptance
 
 `TestNativeStructuredOutputPublicExecution` and
-`services/agents-api/tests/official_structured_output.py` exercise the pinned SDK,
+`services/core/tests/official_structured_output.py` exercise the pinned SDK,
 raw HTTP, actual PostgreSQL/Worker/gateway/daemon and real model APIs. They require
 explicit private operator options and never supply model responses. The workflow
 covers a function-only random value, unchanged saved configuration, native result
 application receipts, ordered terminal SSE, persisted final JSON, daemon restart
 and same-history continuation, cancellation, text override and tenant isolation.
 
-`services/agents-api/tests/official_hosted_structured_native.py` extends public
+`services/core/tests/official_hosted_structured_native.py` extends public
 acceptance to an independently deployed Core, dedicated PostgreSQL and Docker
 Runtime using the real Kimi API. It covers initial saved configuration and inline
 prepared configuration, function-only random values, active input receipts,

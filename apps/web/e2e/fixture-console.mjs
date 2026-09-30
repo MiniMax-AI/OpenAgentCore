@@ -143,7 +143,7 @@ function send(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 function error(response, status, message, code = null) {
-  // Derive `type` as Core's writeError does (services/agents-api/internal/api/errors.go).
+  // Derive `type` as Core's writeError does (services/core/internal/api/errors.go).
   const type = status >= 500 ? "server_error" : status === 409 ? "conflict_error"
     : code === "not_found_error" || code === "invalid_beta" ? code : "invalid_request_error";
   send(response, status, { error: { message, type, code, param: null } });
@@ -538,7 +538,7 @@ function providerProblem(harness, input) {
 
 /**
  * Harnesses and their deployment default model providers, as Core serves them
- * (services/agents-api/internal/api/harness_model_providers.go): the list
+ * (services/core/internal/api/harness_model_providers.go): the list
  * reflects every write; an unknown harness or an unset provider is 404; PUT
  * takes a JSON object of at most 32 KiB, is a full replacement that needs the
  * key every time (mcode also both limits) and answers with the safe view;

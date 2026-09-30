@@ -3,7 +3,7 @@ import type {
   SavedAgent,
   Vault,
   VaultCredential,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 
 import { listAllCollectionPages } from "../../lib/collection-pagination";
 import i18n from "../../i18n";

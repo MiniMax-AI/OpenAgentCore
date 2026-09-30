@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type {
   AgentSession,
   SelfHostedAgentEnvironment,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 import type { SessionRecord } from "./lib/product";
 import { api } from "./lib/api";
 import { Button } from "./components/ui/button";

@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentbundle"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 func TestInstalledCapabilitiesPreserveSourcesWithoutRescanning(t *testing.T) {

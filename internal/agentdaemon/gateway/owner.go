@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/device"
 )
 
 const defaultOwnerLeaseTTL = 90 * time.Second

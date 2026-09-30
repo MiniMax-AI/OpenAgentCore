@@ -706,9 +706,9 @@ test("fails closed when a network target tries to expand an unrelated secret", a
 test("uses an explicit Parsar checkout only for an allowlisted daemon status command", async (t) => {
   const state = await createLocalState(t);
   const parsarPath = join(state.root, "private-parsar-checkout");
-  await mkdir(join(parsarPath, "apps", "parsar-daemon", "cmd", "parsar-daemon"), { recursive: true });
+  await mkdir(join(parsarPath, "apps", "daemon", "cmd", "oac-daemon"), { recursive: true });
   await writeFile(join(parsarPath, "go.mod"), "module fixture.invalid/parsar\n");
-  await writeFile(join(parsarPath, "apps", "parsar-daemon", "cmd", "parsar-daemon", "main.go"), "package main\n");
+  await writeFile(join(parsarPath, "apps", "daemon", "cmd", "oac-daemon", "main.go"), "package main\n");
   const { fetchImpl } = await successfulFetchRecorder();
   let commandCall;
   const result = await runScenario({
@@ -733,7 +733,7 @@ test("uses an explicit Parsar checkout only for an allowlisted daemon status com
   assert.equal(commandCall.cwd, parsarPath);
   assert.deepEqual(commandCall.args, [
     "run",
-    "./apps/parsar-daemon/cmd/parsar-daemon",
+    "./apps/daemon/cmd/oac-daemon",
     "status",
     "--profile",
     "fixture-profile",

@@ -58,7 +58,7 @@ contracts.
 | Operation | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | Docker hosted text execution, native local tools | Qualified | Qualified | Qualified (Docker `openai_hosted`) |
-| Files, immutable Artifacts, cancellation, restart/history recovery | Qualified | Qualified | Qualified on the dedicated Docker profile; see [MiniMax Code Runtime](../../services/agents-api/deploy/mcode/README.md) |
+| Files, immutable Artifacts, cancellation, restart/history recovery | Qualified | Qualified | Qualified on the dedicated Docker profile; see [MiniMax Code Runtime](../../services/core/deploy/mcode/README.md) |
 | Public functions in `none` | Qualified | Qualified; object-root schemas; text or successful inline PNG/JPEG results | Unsupported |
 | Public functions alongside hosted workspace tools | Qualified | Qualified; object-root schemas and text or successful inline PNG/JPEG results | Unsupported |
 | HTTP MCP and static-bearer Vault credentials in `none` | Qualified | Qualified subset | Unsupported |
@@ -119,7 +119,7 @@ engine is not complete public protocol compatibility.
 
 ## Common contract acceptance
 
-The synthetic [third-harness fixture](../../apps/parsar-daemon/testdata/onboarding/main.go)
+The synthetic [third-harness fixture](../../apps/daemon/testdata/onboarding/main.go)
 implements only the current text execution contract: cancellation, durable active
 input receipts and strict bound-history continuation. It has no workspace, MCP,
 public functions, permissions or user-choice handlers. Its registration is local
@@ -145,7 +145,7 @@ and isolation obligations. These guarantees are independent of feature equality.
 ## Native operation acceptance
 
 Use the pinned official Python SDK, raw HTTP and real model APIs. The common
-`services/agents-api/tests/official_hosted_functions_native.py` assertions exercise
+`services/core/tests/official_hosted_functions_native.py` assertions exercise
 function success/error, native file output and public artifact bytes, same-history
 continuation after restart, foreign result rejection and pending-call cancellation.
 The operator fixture supplies only deployment/restart and model configuration;

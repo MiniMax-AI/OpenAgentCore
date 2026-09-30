@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
-import type { SandboxAllocation, SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxAllocation, SandboxDeployment, SandboxNode } from "@oac/agents-client";
 
 import { expectManagementBoundary, failNext, openConsole, setDeployment, setNode, writes } from "./console";
 

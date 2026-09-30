@@ -1,4 +1,4 @@
-import type { AgentSession } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";

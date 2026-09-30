@@ -344,7 +344,7 @@ reads immediately; physical removal is incremental.
 
 ### 10.3 Backend-neutral history query boundary
 
-`services/agents-api/internal/runtimehistory` defines the server-side query
+`services/core/internal/runtimehistory` defines the server-side query
 contract independently from SQL, OTLP, and the public HTTP shape. Its
 service resolves the authenticated tenant and Session to durable Core identity
 before calling a Reader. Reader queries always carry tenant, Session, and

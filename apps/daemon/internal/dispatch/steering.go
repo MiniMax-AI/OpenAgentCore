@@ -1,0 +1,204 @@
+package dispatch
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+)
+
+// Retain all attempts for the active run; reject overflow rather than evicting
+// receipts and risking a duplicate native input. Durable recovery is server-owned.
+const (
+	maxSteeringInputs   = 256
+	steeringCallTimeout = 10 * time.Second
+	steeringSendTimeout = 5 * time.Second
+)
+
+type steeringReceipt struct {
+	fingerprint [32]byte
+	ack         proto.PromptSteerAckPayload
+	durable     bool
+}
+
+func (r *Router) handlePromptSteer(ctx context.Context, env proto.Envelope) error {
+	var input proto.PromptSteerPayload
+	ack := proto.PromptSteerAckPayload{}
+	if err := env.DecodePayload(&input); err != nil {
+		ack.ErrorCode, ack.Error = "invalid_input", "Invalid steering payload."
+	} else {
+		ack.InputID = input.InputID
+		if env.ID == "" || strings.TrimSpace(input.InputID) == "" || len(input.InputID) > 256 || input.Input.Validate() != nil {
+			ack.ErrorCode, ack.Error = "invalid_input", "Run ID, input ID (up to 256 bytes), and non-empty text are required."
+		} else {
+			pending := r.queueSteering(ctx, env, input)
+			if pending == nil {
+				return nil
+			}
+			ack = *pending
+		}
+	}
+	return r.sendSteeringAck(ctx, env, ack)
+}
+
+func (r *Router) sendSteeringAck(ctx context.Context, env proto.Envelope, ack proto.PromptSteerAckPayload) error {
+	reply, err := proto.NewEnvelopeWithTrace(proto.TypePromptSteerAck, env.ID, ack, env.Trace)
+	if err != nil {
+		return err
+	}
+	return r.sender.Send(ctx, reply)
+}
+
+func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input proto.PromptSteerPayload) *proto.PromptSteerAckPayload {
+	ack := proto.PromptSteerAckPayload{InputID: input.InputID}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	state := r.sessions[env.ID]
+	if state == nil || r.closed {
+		ack.ErrorCode, ack.Error = "run_inactive", "The run is no longer active."
+		return &ack
+	}
+	encoded, _ := json.Marshal(input.Input)
+	fingerprint := sha256.Sum256(encoded)
+	if previous, ok := state.steering[input.InputID]; ok {
+		if previous.fingerprint != fingerprint || previous.durable != input.DurableReceipt {
+			ack.ErrorCode, ack.Error = "input_conflict", "This input ID was already used with different text."
+			return &ack
+		}
+		if state.steeringClosed || previous.ack.ErrorCode != "not_ready" && previous.ack.ErrorCode != "busy" {
+			return &previous.ack
+		}
+	} else if len(state.steering) >= maxSteeringInputs {
+		ack.ErrorCode, ack.Error = "input_limit", "The active run has reached its steering input limit."
+		return &ack
+	}
+	if state.steeringClosed {
+		ack.ErrorCode, ack.Error = "run_inactive", "The run is completing."
+		return &ack
+	}
+	if state.steering == nil {
+		state.steering = make(map[string]steeringReceipt)
+	}
+	ack.ErrorCode, ack.Error = "not_ready", "The run is still starting."
+	// Bind input identity before any retryable state so changed text cannot
+	// slip through a startup or in-flight retry.
+	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
+	if state.session == nil {
+		return &ack
+	}
+	// The admitted declaration is immutable even if discovery changes later.
+	if input.DurableReceipt && !state.capabilities.DurableInputReceipts.IsSupported() || !input.DurableReceipt && !state.capabilities.Steering.IsSupported() {
+		ack.ErrorCode, ack.Error = "unsupported", "The runtime declaration does not support this input operation."
+		return &ack
+	}
+	session := state.session
+	steerer, supportsSteering := session.(agent.Steerer)
+	if input.DurableReceipt {
+		if _, ok := session.(agent.DurableSteerer); !ok || (!state.releaseOnCompletion && state.preparedHandoff == nil) {
+			ack.ErrorCode, ack.Error = "unsupported", "Durable input receipts require a supported Turn settlement contract."
+			return &ack
+		}
+	} else if !supportsSteering {
+		ack.ErrorCode, ack.Error = "unsupported", "This engine does not support active-turn input."
+		return &ack
+	}
+	if state.steerBusy {
+		ack.ErrorCode, ack.Error = "busy", "Another input is awaiting an engine receipt; retry this input later."
+		state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
+		return &ack
+	}
+	session, finishOperation, ready := r.preparedOperationLocked(state)
+	if !ready {
+		ack.ErrorCode, ack.Error = "run_inactive", "The run is completing."
+		return &ack
+	}
+	ack.ErrorCode, ack.Error = "in_flight", "This input is awaiting an engine receipt."
+	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
+	state.steerBusy = true
+	finished := make(chan struct{})
+	state.steeringDone = finished
+	r.shutdownWG.Add(1)
+	go func() {
+		defer r.shutdownWG.Done()
+		defer finishOperation()
+		defer func() {
+			r.mu.Lock()
+			state.steerBusy = false
+			close(finished)
+			r.mu.Unlock()
+		}()
+		ctx, stop := r.shutdownContext(ctx)
+		defer stop()
+		var err error
+		if input.DurableReceipt {
+			err = r.steerDurably(ctx, state, session, env, input, fingerprint)
+		} else {
+			callCtx, cancel := context.WithTimeout(ctx, steeringCallTimeout)
+			err = steerer.Steer(callCtx, input)
+			cancel()
+		}
+		r.publishSteeringReceipt(ctx, state, env, input, fingerprint, steeringResult(input.InputID, err))
+	}()
+	return nil
+}
+
+func steeringResult(inputID string, err error) proto.PromptSteerAckPayload {
+	ack := proto.PromptSteerAckPayload{InputID: inputID}
+	switch {
+	case errors.Is(err, agent.ErrUnsupportedOperation):
+		ack.ErrorCode, ack.Error = "contract_violation", "Declared input capability has no implementation."
+	case errors.Is(err, agent.ErrSteeringNotReady):
+		ack.ErrorCode, ack.Error = "not_ready", err.Error()
+	case errors.Is(err, agent.ErrSteeringInactive):
+		ack.ErrorCode, ack.Error = "run_inactive", err.Error()
+	case errors.Is(err, agent.ErrSteeringRejected):
+		ack.ErrorCode, ack.Error = "rejected", err.Error()
+	case err != nil:
+		// A timeout or broken connection may follow native acceptance. Preserve
+		// the uncertainty and never automatically send this input again.
+		ack.ErrorCode, ack.Error = "outcome_unknown", err.Error()
+	default:
+		ack.Accepted = true
+	}
+	return ack
+}
+
+// shutdownContext releases cooperating work when the router shuts down.
+func (r *Router) shutdownContext(parent context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	go func() {
+		select {
+		case <-r.shutdownCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
+}
+
+// Close admission before taking the last worker: its lifetime includes the
+// receipt send, so a durable Done cannot close the gateway subscription first.
+func (r *Router) finishSteering(state *sessionState) error {
+	r.mu.Lock()
+	state.steeringClosed = true
+	finished := state.steeringDone
+	r.mu.Unlock()
+	if finished == nil {
+		return nil
+	}
+	timer := time.NewTimer(steeringCallTimeout + steeringSendTimeout)
+	defer timer.Stop()
+	select {
+	case <-finished:
+		return nil
+	case <-r.shutdownCh:
+		return context.Canceled
+	case <-timer.C:
+		return context.DeadlineExceeded
+	}
+}

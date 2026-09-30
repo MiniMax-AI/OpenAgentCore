@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { SandboxDeployment } from "@agents-core-web/agents-client";
+import type { SandboxDeployment } from "@oac/agents-client";
 import { describe, expect, it, vi } from "vitest";
 import type { SandboxConsoleConfig } from "./console-config";
 import { SandboxManagerView } from "./SandboxManagerView";

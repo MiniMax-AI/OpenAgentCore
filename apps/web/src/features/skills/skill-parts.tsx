@@ -2,7 +2,7 @@ import { Check, Copy } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { Skill } from "@agents-core-web/agents-client";
+import type { Skill } from "@oac/agents-client";
 
 import { StatusDot } from "../../components/console-ui";
 import { shortId } from "../../lib/format";

@@ -95,10 +95,9 @@ export interface CoreMetrics {
     memory_bytes: number | null;
     goroutines: number | null;
     /**
-     * Requested extension (docs/web/core-process-metrics-requirements.md):
      * CPU used over the last sample interval, in cores; the CPU available to
-     * the process; resident memory; its memory limit; and a series. Null until
-     * Core reports them.
+     * the process; resident memory; its memory limit; and a series
+     * (contracts/agents-api/core-metrics.md). Null when Core cannot measure them.
      */
     cpu_cores: number | null;
     cpu_limit_cores: number | null;

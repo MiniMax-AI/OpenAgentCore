@@ -13,7 +13,7 @@ by `make check-harness-catalog`.
 | `mcode` | MiniMax Code | `mcode.Configuration` | `mcodeProfile` |
 
 Configuration declarations live in `internal/harnessconfig/<package>`;
-qualification constructors live in `services/agents-api/internal/engine`.
+qualification constructors live in `services/core/internal/engine`.
 These registrations describe the build. Deployment enablement, qualified
 operations and a connected Runtime's actual availability remain separate checks.
 See [Harness onboarding](harness-onboarding.md) for adapter and packaging steps.

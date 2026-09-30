@@ -1,4 +1,4 @@
-import { AgentCoreError, type CoreJobStatus, type CoreMetrics, type CoreMetricsRange } from "@agents-core-web/agents-client";
+import { AgentCoreError, type CoreJobStatus, type CoreMetrics, type CoreMetricsRange } from "@oac/agents-client";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Network } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";

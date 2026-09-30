@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	runtimecrypto "github.com/MiniMax-AI-Dev/parsar/internal/runtimecrypto"
+	runtimecrypto "github.com/MiniMax-AI/OpenAgentCore/internal/runtimecrypto"
 	"golang.org/x/crypto/nacl/box"
 )
 

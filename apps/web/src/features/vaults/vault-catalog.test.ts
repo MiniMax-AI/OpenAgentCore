@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { CoreProjectReader, SavedAgent, Vault, VaultCredential } from "@agents-core-web/agents-client";
+import type { CoreProjectReader, SavedAgent, Vault, VaultCredential } from "@oac/agents-client";
 
 import { deriveSessionVaultPlan, loadVaultCatalog, matchingCredentials, type VaultCatalog } from "./vault-catalog";
 

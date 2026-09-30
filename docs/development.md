@@ -26,7 +26,7 @@ Runtime builds have additional prerequisites in their component guides.
 ```sh
 pnpm install --frozen-lockfile
 python3 -m venv .venv
-.venv/bin/python -m pip install -r services/agents-api/tests/requirements.txt
+.venv/bin/python -m pip install -r services/core/tests/requirements.txt
 .venv/bin/python - <<'PYTHON'
 import json
 import subprocess
@@ -55,7 +55,7 @@ relevant native qualification as well as compilation.
 From the repository root:
 
 ```sh
-make build-agents-api
+make build-core
 make build-daemon
 ```
 
@@ -64,7 +64,7 @@ under `~/.oac/build/daemon/` by default. `OAC_DEV_HOME` selects another build ro
 `OAC_DEV_CORE_BUILD_DIR` selects an absolute Core output directory. Building does
 not configure a database, start a deployment or qualify native execution.
 
-Use the [service guide](../services/agents-api/README.md#build-standalone-binaries)
+Use the [service guide](../services/core/README.md#build-standalone-binaries)
 to run the Core migrator and server with a separate development database. The
 [configuration appendix](configuration.md#appendix-core-environment-without-the-installer)
 owns standalone process settings. For a complete operator installation, use the
@@ -81,16 +81,16 @@ site; `pnpm dev:docs` starts its development server.
 
 | Location | Responsibility | Read next |
 | --- | --- | --- |
-| `services/agents-api/internal/api` | Public, administrator and machine HTTP boundaries | [API index](api/README.md) |
-| `services/agents-api/internal/store` and `internal/db` | Core persistence, transactions, queries and migrations | [Service guide](../services/agents-api/README.md#database-ownership) |
-| `services/agents-api/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](runtime-protocol.md) |
-| `services/agents-api/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
+| `services/core/internal/api` | Public, administrator and machine HTTP boundaries | [API index](api/README.md) |
+| `services/core/internal/store` and `internal/db` | Core persistence, transactions, queries and migrations | [Service guide](../services/core/README.md#database-ownership) |
+| `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](runtime-protocol.md) |
+| `services/core/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` and `gateway` | Shared wire types, validators and authenticated Runtime connections | [Runtime protocol](runtime-protocol.md) |
 | `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](runtime-bootstrap.md) |
-| `apps/parsar-daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
-| `apps/parsar-daemon/internal/agent` | Native harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |
-| `services/agents-api/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](sandbox-provider.md) |
-| `services/core-console` | Console login and the server-side management proxy | [Web architecture](web/architecture.md) |
+| `apps/daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
+| `apps/daemon/internal/agent` | Native harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |
+| `services/core/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](sandbox-provider.md) |
+| `services/web` | Console login and the server-side management proxy | [Console server](web/console-server.md) |
 | `apps/web` and `packages/agents-client` | Console UI and typed clients | [Web guide](../apps/web/README.md) |
 | `deploy/install` and `scripts` | Distribution, installation and validation tools | [Maintainers](maintainers.md) |
 | `contracts/agents-api` | Pinned schema, local semantic contracts and qualification evidence | [Coverage ledger](../contracts/agents-api/README.md) |
@@ -118,7 +118,7 @@ only helps you pick the right one.
 ### Add a Harness adapter
 
 Implement the shared `ExecutorFactory`, `Executor` and `Turn` interfaces in
-[`agent/harness.go`](../apps/parsar-daemon/internal/agent/harness.go), register
+[`agent/harness.go`](../apps/daemon/internal/agent/harness.go), register
 the adapter and add its profile/configuration entry to the shared catalog. Follow the numbered steps in
 [Harness onboarding](../contracts/agents-api/harness-onboarding.md); qualification
 evidence belongs in [Harness integration](../contracts/agents-api/harnesses.md).
@@ -126,7 +126,7 @@ evidence belongs in [Harness integration](../contracts/agents-api/harnesses.md).
 ### Add a Sandbox Provider
 
 Implement the five required `SandboxProvider` operations in
-[`sandbox_provider.go`](../services/agents-api/internal/sandbox/sandbox_provider.go),
+[`sandbox_provider.go`](../services/core/internal/sandbox/sandbox_provider.go),
 register the provider kind and pass `make check-sandbox-provider-contract`. Follow
 the numbered steps in the [Sandbox Provider guide](sandbox-provider.md).
 
@@ -145,7 +145,7 @@ Run checks for the affected boundary while developing. The repository
 
 | Change | Focused validation |
 | --- | --- |
-| Core handlers, persistence or clients | `make check-agents-api` |
+| Core handlers, persistence or clients | `make check-core` |
 | SQL queries | `make sqlc-generate`, inspect generated files, then `make check-sqlc` |
 | Handler annotations or API contract | `make openapi`, inspect all three namespace schemas |
 | Shared Runtime protocol | `make check-runtime-contract` |

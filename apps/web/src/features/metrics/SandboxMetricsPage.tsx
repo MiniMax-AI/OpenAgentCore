@@ -52,7 +52,7 @@ import "./MetricsView.css";
 import { RuntimeCharts } from "./RuntimeCharts";
 import { hostedRuntimesQuery } from "./metrics-queries";
 import { SessionRuntimeSection } from "../sessions/SessionRuntimeSection";
-import type { SandboxDeployment, SandboxNode } from "@agents-core-web/agents-client";
+import type { SandboxDeployment, SandboxNode } from "@oac/agents-client";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
 

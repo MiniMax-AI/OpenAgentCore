@@ -1,4 +1,4 @@
-import { AgentCoreError, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@agents-core-web/agents-client";
+import { AgentCoreError, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";

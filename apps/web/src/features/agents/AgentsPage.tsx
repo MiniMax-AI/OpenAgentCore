@@ -1,4 +1,4 @@
-import type { SavedAgent } from "@agents-core-web/agents-client";
+import type { SavedAgent } from "@oac/agents-client";
 import { ArrowLeft, Bot, ListTree, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

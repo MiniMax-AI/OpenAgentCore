@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentbundle"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
 )
 
 const (

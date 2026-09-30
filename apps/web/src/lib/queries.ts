@@ -1,5 +1,5 @@
 import { QueryClient, queryOptions } from "@tanstack/react-query";
-import type { EnvironmentTemplateResource, SavedAgent, Skill, SourceFileListEntry, Vault } from "@agents-core-web/agents-client";
+import type { EnvironmentTemplateResource, SavedAgent, Skill, SourceFileListEntry, Vault } from "@oac/agents-client";
 
 import { readSessionLog, type SessionLogEntry } from "../features/sessions/session-log";
 import { listAllProjects } from "./admin-view";

@@ -1,4 +1,4 @@
-import type { AgentSession } from "@agents-core-web/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";

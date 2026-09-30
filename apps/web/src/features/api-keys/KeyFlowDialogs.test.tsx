@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { AgentCoreError } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@oac/agents-client";
 import { flowError, keyFlowReducer, type KeyFlow } from "./key-flows";
 import { KeyFlowDialogs, PendingKeyNotice } from "./KeyFlowDialogs";
 import type { KeyFlowControls } from "./use-key-flow";

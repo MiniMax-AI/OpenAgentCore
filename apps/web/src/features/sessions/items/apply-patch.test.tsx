@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { SessionItem } from "@agents-core-web/agents-client";
+import type { SessionItem } from "@oac/agents-client";
 
 import { ApplyPatchDiffViewer } from "./ApplyPatchDiffViewer";
 import { parseParsarApplyPatch } from "./apply-patch";

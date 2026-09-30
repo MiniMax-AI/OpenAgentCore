@@ -15,8 +15,8 @@
       <a class="brand" href="#" aria-label="OpenAgentCore home"><img class="brand-mark" src="openagentcore.svg" width="34" height="34" alt="">OpenAgentCore</a>
       <nav aria-label="Main navigation">
         <a href="#architecture">Architecture</a>
-        <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Documentation</a>
-        <a class="nav-github" href="https://github.com/MiniMax-AI/parsar-core">GitHub <span aria-hidden="true">↗</span></a>
+        <a href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/install.md">Documentation</a>
+        <a class="nav-github" href="https://github.com/MiniMax-AI/OpenAgentCore">GitHub <span aria-hidden="true">↗</span></a>
       </nav>
     </header>
 
@@ -28,7 +28,7 @@
           <p class="hero-description">Run your native agent harnesses through one API. Keep execution, files and credentials on infrastructure you control.</p>
           <div class="actions">
             <a class="button primary" href="#install">Get started <span aria-hidden="true">→</span></a>
-            <a class="button secondary" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/quickstart.md">Read the quickstart <span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/quickstart.md">Read the quickstart <span aria-hidden="true">↗</span></a>
           </div>
           <p class="hero-note"><span aria-hidden="true">✓</span> Self-deployed <span class="note-divider" aria-hidden="true">/</span> Core + Web included</p>
         </div>
@@ -46,7 +46,7 @@ client = OpenAI()
     <span class="syntax-function">print</span>(agent.id)</code></pre>
             <div class="code-caption"><span>Official Python client</span><span>3.13.0 <span aria-hidden="true">·</span> agents=v1</span></div>
           </div>
-          <p class="code-footnote">A read-only request. No model call. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md">View protocol coverage <span aria-hidden="true">↗</span></a></p>
+          <p class="code-footnote">A read-only request. No model call. <a href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/README.md">View protocol coverage <span aria-hidden="true">↗</span></a></p>
         </div>
       </section>
 
@@ -74,29 +74,29 @@ client = OpenAI()
           <p class="eyebrow">02 / Get started</p>
           <h2 id="install-title">Install. Sign in.<br> Add a node.</h2>
           <p>Install Core and Web together with one command. Add nodes when you need them.</p>
-          <a class="text-link" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Read the installation guide <span aria-hidden="true">→</span></a>
-          <div class="install-prerequisites"><span class="note-label">BEFORE YOU START</span><p>A Linux amd64 host with Docker and Python 3.9+. For nodes, an HTTPS address behind your reverse proxy; you can add it after installing.</p><p>The command downloads and verifies the latest stable release. Add <code>--version v1.2.3</code> to select a version. For unreleased changes, <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/maintainers.md#build-a-distribution">build a distribution</a>.</p></div>
+          <a class="text-link" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/install.md">Read the installation guide <span aria-hidden="true">→</span></a>
+          <div class="install-prerequisites"><span class="note-label">BEFORE YOU START</span><p>A Linux amd64 host with Docker and Python 3.9+. For nodes, an HTTPS address behind your reverse proxy; you can add it after installing.</p><p>The command downloads and verifies the latest stable release. Add <code>--version v1.2.3</code> to select a version. For unreleased changes, <a href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/maintainers.md#build-a-distribution">build a distribution</a>.</p></div>
         </div>
         <div class="setup-path">
           <ol class="setup-steps">
-            <li class="setup-step"><span class="step-number" aria-hidden="true">01</span><div class="step-content"><div class="step-title"><h3>Install Core + Web</h3><span class="badge">ZERO NODES</span></div><p>Install the latest stable release. Core, Web and PostgreSQL start together. No model key required.</p><pre class="install-command"><code>curl -fsSL https://github.com/MiniMax-AI/parsar-core/releases/latest/download/install.sh | bash</code></pre></div></li>
+            <li class="setup-step"><span class="step-number" aria-hidden="true">01</span><div class="step-content"><div class="step-title"><h3>Install Core + Web</h3><span class="badge">ZERO NODES</span></div><p>Install the latest stable release. Core, Web and PostgreSQL start together. No model key required.</p><pre class="install-command"><code>curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash</code></pre></div></li>
             <li class="setup-step"><span class="step-number" aria-hidden="true">02</span><div class="step-content"><h3>Sign in and issue a key</h3><p>Open the address printed by the installer. Sign in with the Core key in this private file:</p><div class="file-path"><code>~/.oac/core/secrets/core.key</code></div><p class="step-detail">Set a default model on <strong>System</strong>, then create a project and issue a key on <strong>Projects and keys</strong>.</p></div></li>
             <li class="setup-step"><span class="step-number" aria-hidden="true">03</span><div class="step-content"><h3>Add a node</h3><p>Open <strong>Nodes</strong>, choose <strong>Add node</strong>, then <strong>Generate command</strong>. Paste the command on a Linux host with sudo; it prepares the host itself.</p><div class="provider-options"><span>Docker</span><span>microsandbox</span></div><p class="step-detail">Web shows when the node is online and ready. All nodes use the same provider.</p></div></li>
           </ol>
-          <p class="setup-footnote">Installation and enrollment do not call a model. <a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md#installer-options">Other installation options <span aria-hidden="true">↗</span></a></p>
+          <p class="setup-footnote">Installation and enrollment do not call a model. <a href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/install.md#installer-options">Other installation options <span aria-hidden="true">↗</span></a></p>
         </div>
       </section>
 
       <section class="docs-section wrap" aria-labelledby="docs-title">
         <div class="section-heading"><div><p class="eyebrow">03 / Go further</p><h2 id="docs-title">Build with a clear contract.</h2></div><p>The pinned Agents API is the compatibility target. Check verified workflows and native differences before you build.</p></div>
         <div class="docs-grid">
-          <a class="doc-card" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/quickstart.md"><span class="doc-number">QUICKSTART <span aria-hidden="true">↗</span></span><h3>Make your first request</h3><p>Connect the official Python client to your Core. Run a task when your node is ready.</p><span class="doc-link">Start building →</span></a>
-          <a class="doc-card" href="https://github.com/MiniMax-AI/parsar-core/blob/main/contracts/agents-api/README.md"><span class="doc-number">API COVERAGE <span aria-hidden="true">↗</span></span><h3>Know the boundaries</h3><p>Verified operations, harness differences and known gaps. Full compatibility is not claimed.</p><span class="doc-link">Explore the contract →</span></a>
-          <a class="doc-card" href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/operations.md"><span class="doc-number">OPERATIONS <span aria-hidden="true">↗</span></span><h3>Keep your Core running</h3><p>Service health, node readiness, persistent data and recovery for your deployment.</p><span class="doc-link">Open the guide →</span></a>
+          <a class="doc-card" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/quickstart.md"><span class="doc-number">QUICKSTART <span aria-hidden="true">↗</span></span><h3>Make your first request</h3><p>Connect the official Python client to your Core. Run a task when your node is ready.</p><span class="doc-link">Start building →</span></a>
+          <a class="doc-card" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/README.md"><span class="doc-number">API COVERAGE <span aria-hidden="true">↗</span></span><h3>Know the boundaries</h3><p>Verified operations, harness differences and known gaps. Full compatibility is not claimed.</p><span class="doc-link">Explore the contract →</span></a>
+          <a class="doc-card" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/operations.md"><span class="doc-number">OPERATIONS <span aria-hidden="true">↗</span></span><h3>Keep your Core running</h3><p>Service health, node readiness, persistent data and recovery for your deployment.</p><span class="doc-link">Open the guide →</span></a>
         </div>
       </section>
     </main>
 
-    <footer class="site-footer wrap"><div><a class="brand" href="#" aria-label="OpenAgentCore home"><img class="brand-mark" src="openagentcore.svg" width="34" height="34" alt="">OpenAgentCore</a><p>Open infrastructure for native agents.</p></div><div class="footer-links"><a href="https://github.com/MiniMax-AI/parsar-core/blob/main/docs/getting-started/install.md">Documentation</a><a href="https://github.com/MiniMax-AI/parsar-core">View on GitHub <span aria-hidden="true">↗</span></a></div></footer>
+    <footer class="site-footer wrap"><div><a class="brand" href="#" aria-label="OpenAgentCore home"><img class="brand-mark" src="openagentcore.svg" width="34" height="34" alt="">OpenAgentCore</a><p>Open infrastructure for native agents.</p></div><div class="footer-links"><a href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/install.md">Documentation</a><a href="https://github.com/MiniMax-AI/OpenAgentCore">View on GitHub <span aria-hidden="true">↗</span></a></div></footer>
   </body>
 </html>

@@ -3,7 +3,7 @@
 
 The public contract is constrained by its pinned upstream baseline; Core and
 machine contracts are generated from handler annotations. This reads the real
-`chi` route table from services/agents-api/internal/api and compares all three
+`chi` route table from services/core/internal/api and compares all three
 contracts with the registered paths.
 
 Two checks:
@@ -28,7 +28,7 @@ import sys
 
 APP = pathlib.Path(__file__).resolve().parent.parent
 REPO = APP.parent.parent
-API = REPO / "services/agents-api/internal/api"
+API = REPO / "services/core/internal/api"
 
 
 VERBS = ("Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "Trace")

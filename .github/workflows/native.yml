@@ -3,7 +3,7 @@ name: native-check
 on:
   pull_request:
     paths:
-      - 'apps/parsar-daemon/**'
+      - 'apps/daemon/**'
       - 'internal/**'
       - 'contracts/agents-api/**'
       - 'packages/claude-sdk-adapter/**'
@@ -12,7 +12,7 @@ on:
       - 'scripts/build-native-installer*'
       - 'scripts/native-harness-smoke.mjs'
       - 'scripts/native-onboarding-smoke.mjs'
-      - 'services/agents-api/internal/nativeinstaller/**'
+      - 'services/core/internal/nativeinstaller/**'
       - 'scripts/build-mcode-harness.sh'
       - 'go.mod'
       - 'go.sum'
@@ -61,42 +61,42 @@ jobs:
           node-version: '22.22.0'
       - name: Build the native daemon and test bundle boundaries
         run: |
-          go build -ldflags "-X github.com/MiniMax-AI-Dev/parsar/apps/parsar-daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/parsar-daemon/cmd/parsar-daemon
+          go build -ldflags "-X github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/cli.Version=$(git rev-parse HEAD)" -o "$RUNNER_TEMP/oac-daemon${{ runner.os == 'Windows' && '.exe' || '' }}" ./apps/daemon/cmd/oac-daemon
           node --test scripts/build-native-installer.test.mjs
       - name: Native filesystem, authentication and process lifecycle
         run: >-
           go test -race -count=1
           ./internal/runtimefs
-          ./apps/parsar-daemon/internal/auth
-          ./apps/parsar-daemon/internal/paths
-          ./apps/parsar-daemon/internal/daemonize
-          ./apps/parsar-daemon/internal/agent/clirunner
+          ./apps/daemon/internal/auth
+          ./apps/daemon/internal/paths
+          ./apps/daemon/internal/daemonize
+          ./apps/daemon/internal/agent/clirunner
       - name: Native Harness ownership and environment identity
         run: >-
           go test -race -count=1
-          ./apps/parsar-daemon/internal/agent/codex
-          ./apps/parsar-daemon/internal/agent/claudesdk
-          ./apps/parsar-daemon/internal/agent/mcode
+          ./apps/daemon/internal/agent/codex
+          ./apps/daemon/internal/agent/claudesdk
+          ./apps/daemon/internal/agent/mcode
           -run 'TestJSONRPCClientOwnsToolDescendants|TestSelfHostedToolEnvironment'
       - name: Native capability snapshots, files and installation
         run: >-
           go test -race -count=1
-          ./apps/parsar-daemon/internal/localworkspace
-          ./apps/parsar-daemon/internal/cli
+          ./apps/daemon/internal/localworkspace
+          ./apps/daemon/internal/cli
           -run 'TestNative|TestRuntimeInit|TestRuntimePreparationRejects|TestPreparationFreezesLocalContentsAcrossReconnect|TestSnapshotMarker'
       - name: Windows npm and npx stdio launchers without network
         if: runner.os == 'Windows'
         run: >-
           go test -race -count=1 -timeout=2m
-          ./apps/parsar-daemon/internal/localworkspace
-          ./apps/parsar-daemon/internal/cli
+          ./apps/daemon/internal/localworkspace
+          ./apps/daemon/internal/cli
           -run 'TestWindowsPackageManager|TestWindowsRuntimeMCP'
       - name: Build pinned native components
         run: |
           npm install --global pnpm@10.30.3
-          pnpm install --frozen-lockfile --filter @parsar/claude-sdk-adapter...
-          pnpm --filter @parsar/claude-sdk-adapter build --outDir "$RUNNER_TEMP/claude-compiled"
-          pnpm --config.inject-workspace-packages=true --config.extend-node-path=false --filter @parsar/claude-sdk-adapter deploy --prod "$RUNNER_TEMP/claude-runtime"
+          pnpm install --frozen-lockfile --filter @oac/claude-sdk-adapter...
+          pnpm --filter @oac/claude-sdk-adapter build --outDir "$RUNNER_TEMP/claude-compiled"
+          pnpm --config.inject-workspace-packages=true --config.extend-node-path=false --filter @oac/claude-sdk-adapter deploy --prod "$RUNNER_TEMP/claude-runtime"
           rm -rf "$RUNNER_TEMP/claude-runtime/dist"
           mv "$RUNNER_TEMP/claude-compiled" "$RUNNER_TEMP/claude-runtime/dist"
           # Reify the dedicated frozen export lock without pnpm's symlink layout.

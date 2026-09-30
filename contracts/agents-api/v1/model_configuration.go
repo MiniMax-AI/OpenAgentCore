@@ -3,8 +3,8 @@ package v1
 import (
 	"encoding/json"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig"
-	"github.com/MiniMax-AI-Dev/parsar/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 )
 
 // ModelConfigurationInput combines the existing provider contract with a model

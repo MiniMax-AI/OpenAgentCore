@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultSandboxResources, distributionRuntime, sandboxesThatFit, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { isRuntimeReleaseField } from "./runtime-release";
 import standardSizes from "./standard-sizes.json";
-import type { SandboxSpecification } from "@agents-core-web/agents-client";
+import type { SandboxSpecification } from "@oac/agents-client";
 
 const manifest = { platform: "linux/amd64", source_commit: "0".repeat(40), images: { runtime: `sha256:${"a".repeat(64)}` },
   image_manifest_digests: { runtime: `sha256:${"b".repeat(64)}` }, runtime_ref: `oac-runtime@sha256:${"b".repeat(64)}`,

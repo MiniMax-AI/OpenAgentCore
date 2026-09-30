@@ -1,0 +1,147 @@
+package execution
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/google/uuid"
+)
+
+var errPreparationFailed = errors.New("runtime preparation failed before admission")
+
+type preparationRejection struct {
+	code      string
+	operation string
+}
+
+func (e *preparationRejection) Error() string { return "preparation control rejected: " + e.code }
+
+type preparedStart struct {
+	createdAt     time.Time
+	startSentAt   time.Time
+	startObserved bool
+	readyObserved bool
+	peer          *gateway.Session
+	requestID     string
+	handle        string
+	executorID    string
+	sub           *gateway.Subscription
+}
+
+func newPreparedStart(peer *gateway.Session) (*preparedStart, error) {
+	id := uuid.NewString()
+	sub, err := peer.SubscribePreparation(id)
+	if err != nil {
+		return nil, err
+	}
+	return &preparedStart{peer: peer, requestID: id, sub: sub, createdAt: time.Now()}, nil
+}
+
+func (p *preparedStart) close() {
+	if p.handle != "" {
+		_ = send(context.Background(), p.peer, proto.TypeExecutionRelease, p.requestID, proto.ExecutionReleasePayload{Handle: p.handle})
+	}
+	p.peer.UnsubscribePreparation(p.requestID)
+}
+
+func (p *preparedStart) controlStatus(env proto.Envelope) (proto.PreparationStatusPayload, error) {
+	var status proto.PreparationStatusPayload
+	if env.Type != proto.TypePreparationStatus || env.ID != p.requestID || env.DecodePayload(&status) != nil {
+		return status, errors.New("invalid preparation control response")
+	}
+	if status.State == "rejected" {
+		return status, nil
+	}
+	if status.Handle == "" || status.Revision == 0 || (p.handle != "" && p.handle != status.Handle) {
+		return status, errors.New("preparation identity changed")
+	}
+	if p.executorID != "" && status.ExecutorID != p.executorID {
+		return status, errors.New("executor identity changed")
+	}
+	p.handle, p.executorID = status.Handle, status.ExecutorID
+	if status.State == "ready" && status.ExecutorID != "" && !p.readyObserved {
+		p.readyObserved = true
+		recordExecutorReadiness(p, status)
+	}
+	return status, nil
+}
+
+func (p *preparedStart) observation(env proto.Envelope) (proto.PreparationStatusPayload, error) {
+	status, err := p.controlStatus(env)
+	if err != nil {
+		return status, err
+	}
+	if status.State == "rejected" {
+		return status, &preparationRejection{code: status.ErrorCode, operation: status.Operation}
+	}
+	if status.State == "failed" && status.ErrorCode == "preparation_failed" && status.RunID == "" {
+		return status, errPreparationFailed
+	}
+	switch status.State {
+	case "preparing", "ready", "starting", "started":
+		return status, nil
+	default:
+		return status, errors.New("preparation is no longer available")
+	}
+}
+
+func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session string, pending store.EnvironmentInputReservation, prepared *preparedStart) (store.EnvironmentInputReservation, error) {
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return pending, ctx.Err()
+		case <-tick.C:
+			current, err := d.Store.ExpireEnvironmentInput(ctx, tenant, session, pending.ID)
+			if err != nil || current.State != store.EnvironmentInputPending {
+				return current, err
+			}
+		case env, ok := <-prepared.sub.Events:
+			if !ok {
+				return pending, errors.New("preparation control stream closed")
+			}
+			status, err := prepared.observation(env)
+			if err != nil {
+				var rejection *preparationRejection
+				if status.RunID == "" && errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare {
+					switch rejection.code {
+					case "invalid_configuration", "unsupported_configuration", "unsupported_preparation":
+						return pending, errPreparationFailed
+					}
+				}
+				return pending, err
+			}
+			if status.State == "ready" && status.RunID == "" && status.ExecutorID != "" {
+				return pending, nil
+			}
+			if status.State != "preparing" {
+				return pending, errors.New("unexpected preparation state before admission")
+			}
+		}
+	}
+}
+
+func (p *preparedStart) start(ctx context.Context, request proto.PromptRequestPayload) error {
+	p.startSentAt = time.Now()
+	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, ExecutorID: p.executorID, RunID: request.RunID, Input: request.Input})
+}
+
+func (p *preparedStart) started(env proto.Envelope, runID string) (bool, error) {
+	status, err := p.observation(env)
+	if err != nil {
+		return false, err
+	}
+	if status.RunID != runID || (status.State != "starting" && status.State != "started") {
+		return false, errors.New("unexpected preparation state after admission")
+	}
+	if status.State == "started" && !p.startObserved {
+		p.startObserved = true
+		recordExecutorStart(p, runID)
+	}
+	return status.State == "started", nil
+}

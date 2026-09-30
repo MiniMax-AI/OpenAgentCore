@@ -23,7 +23,7 @@ Parsar owns product Agents and Teams. This service owns upstream execution
 resources, including reusable Agents and protocol subagents. The OpenAI Agents
 Python **SDK** is a separate future dependency for business Team orchestration in
 Parsar, not the HTTP contract. Design rules live in
-[CONTRIBUTING.md](../../CONTRIBUTING.md#design-and-compatibility-requirements).
+[AGENTS.md](../../AGENTS.md#public-api).
 
 The [resource selector and error qualification](resource-selector-semantics.md)
 records nullable Skill references and source Files not-found parameter fields,
@@ -31,15 +31,8 @@ with official observations separated from Core acceptance.
 
 ## Implementation direction
 
-Keep the independent service, authentication, PostgreSQL/sqlc persistence,
-transactional admission and official-client test harness. Shared Runtime contracts
-define execution semantics; native representations stay inside adapters.
-
-Concentrate native configuration, structured input/output and Item translation
-in an execution adapter. The application core owns execution state and persistence;
-engine-specific shapes stay at the adapter boundary. Codex uses its native
-app-server; Claude uses the maintained Agent SDK. Reuse native protocols and SDKs
-for further harnesses rather than adding another model/tool loop.
+Adapter and persistence design follows the
+[design rules](../../AGENTS.md#complexity-stays-in-the-adapter).
 The [harness contract and parity baseline](harnesses.md) describes equal-engine
 registration, qualification and shared acceptance.
 Verify configuration against actual execution: response defaults must not merely
@@ -72,7 +65,7 @@ still differ. See the [accepted scope and evidence](#accepted-milestone-and-evid
 The same three harnesses passed historical Core-managed E2B V1 qualification in
 PR #705. That original route is historical evidence; it does not qualify the later
 user-managed enrollment or current deployment-level E2B configuration. See the
-[current hosted provider contract](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
+[current hosted provider contract](sandbox-deployment.md). The [user-managed V1 qualification](user-managed-runtime-v1.md)
 records separate real deployment acceptance and its exact scope.
 Select further work only within current user authorization. Parsar cutover and
 business Team orchestration are separate from protocol coverage.
@@ -175,7 +168,7 @@ new model-issued command after a recovery prompt, not automatic API replay.
 
 This is historical evidence for the original Core-managed E2B route. Current
 deployment-level E2B configuration is documented in the
-[Hosted Sandbox Manager](../../services/agents-api/HOSTED-SANDBOX-MANAGER.md).
+[sandbox deployment contract](sandbox-deployment.md).
 This older run does not qualify later enrollment/configuration changes or transfer
 caller-owned compute to Core.
 
@@ -230,8 +223,8 @@ upgrade the protocol.
   without the encryption key. Missing encryption configuration locally rejects
   creation/replacement with 503. Attached Sessions can use static credentials for
   exact-URL HTTPS MCP. OAuth grants use the same binding plus
-  [scoped refresh and replacement](../../services/agents-api/oauth-credentials.md);
-  storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/agents-api/credentials.md)
+  [scoped refresh and replacement](../../services/core/oauth-credentials.md);
+  storage-key rotation, archive behavior and key scopes remain gaps. See the [credential storage guide](../../services/core/credentials.md)
   for encryption and operational limits; this does not establish complete Credential
   or hosted error/retry compatibility.
 - `GET /vaults/{vault_id}/credentials` lists only safe metadata, with parent and
@@ -495,10 +488,10 @@ and [public qualification](public-mcp-qualification.md).
 The [Docker lifecycle](environments.md#basic-public-docker-hosted-profile) retains
 workspace Files/Artifacts, cancellation and recovery. Managed isolation belongs to
 the outer Environment; native tools use the starting account's permissions.
-Configure immutable Runtime images explicitly: [Codex](../../services/agents-api/deploy/codex/README.md),
-[Claude](../../services/agents-api/deploy/claude/README.md),
-[MiniMax](../../services/agents-api/deploy/mcode/README.md).
-[E2B packaging](../../services/agents-api/deploy/e2b/README.md) reuses the Runtime
+Configure immutable Runtime images explicitly: [Codex](../../services/core/deploy/codex/README.md),
+[Claude](../../services/core/deploy/claude/README.md),
+[MiniMax](../../services/core/deploy/mcode/README.md).
+[E2B packaging](../../services/core/deploy/e2b/README.md) reuses the Runtime
 with the official SDK; the user owns provisioning, renewal and destruction.
 
 The shared initialization path supports env/setup and user-directory npm/Python packages;
@@ -519,7 +512,7 @@ Unsupported configurations fail before Session creation; unsupported results fai
 before a batch write. Native capability claims cannot replace service profile
 qualification, tenant authority or exact binding checks. An existing Session
 never silently changes engine/device. See the
-[HTTP MCP limits](../../services/agents-api/README.md#http-mcp-execution).
+[HTTP MCP limits](../../services/core/README.md#http-mcp-execution).
 
 The Store's internal DTO is not the upstream response model. The API layer must
 validate and resolve the upstream schema before persistence, and report only
@@ -593,7 +586,7 @@ authenticated tenant and may include the command's or tool's own diagnostic text
 Reads use the durable index without reconstructing native journals. Existing
 indexed history is preserved. Migration 15 refuses unindexed historical Turns.
 Historical database conversion is unsupported; preserve the old data and install
-separately. See [historical Item storage](../../services/agents-api/README.md#historical-item-storage).
+separately. See [historical Item storage](../../services/core/README.md#historical-item-storage).
 The retired archive format could not recover unrecorded message boundaries or
 outcomes; those limitations remain in already indexed historical Items.
 Other native variants, full reasoning coverage and Items mutation remain gaps.
@@ -919,7 +912,7 @@ creation; rotation/revocation and current authorization reuse the durable ledger
 and exact Runtime enrollment/gateway binding. Historical keys remain revoked and unclaimed. This
 executor-specific prerequisite does not open public Environment admission or
 establish complete ownership, hosted key lifecycle or error compatibility. See the
-[standalone configuration](../../services/agents-api/README.md#standalone-http-service).
+[standalone configuration](../../services/core/README.md#standalone-http-service).
 
 Core documents its optional [harness selection extension](harness-selection.md) separately from the pinned upstream contract.
 

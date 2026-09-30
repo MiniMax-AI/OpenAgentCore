@@ -1,4 +1,4 @@
-import type { Skill } from "@agents-core-web/agents-client";
+import type { Skill } from "@oac/agents-client";
 import { Puzzle } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

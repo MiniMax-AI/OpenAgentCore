@@ -1,4 +1,4 @@
-import type { ListPage, PageOptions } from "@agents-core-web/agents-client";
+import type { ListPage, PageOptions } from "@oac/agents-client";
 
 const COLLECTION_PAGE_LIMIT = 100;
 const COLLECTION_PAGE_SAFETY_LIMIT = 100;

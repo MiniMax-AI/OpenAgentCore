@@ -1,4 +1,4 @@
-import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxProvider } from "@agents-core-web/agents-client";
+import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxProvider } from "@oac/agents-client";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 
 import { confirmSandboxRead, startSandboxRead } from "./sandbox-write-ownership";

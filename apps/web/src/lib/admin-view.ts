@@ -8,7 +8,7 @@ import {
   type AdminSummaryEntry,
   type AdminWriteOperation,
   type RuntimeObservation,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 
 /**
  * View models over the typed management client (`AdminClient`, `/core/v1`).

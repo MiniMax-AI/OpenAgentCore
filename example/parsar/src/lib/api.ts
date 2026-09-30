@@ -4,7 +4,7 @@ import {
   type AgentTurn,
   type ListPage,
   type PageOptions,
-} from "@agents-core-web/agents-client";
+} from "@oac/agents-client";
 import type { StatusKind } from "../components/ui/status-icon";
 
 export const api = new OpenAIAgentsClient();

@@ -765,7 +765,7 @@ async function validateParsarCheckout(parsarPath) {
     const [rootMetadata, moduleMetadata, commandMetadata] = await Promise.all([
       stat(root),
       stat(join(root, "go.mod")),
-      stat(join(root, "apps/parsar-daemon/cmd/parsar-daemon/main.go")),
+      stat(join(root, "apps/daemon/cmd/oac-daemon/main.go")),
     ]);
     if (!rootMetadata.isDirectory() || !moduleMetadata.isFile() || !commandMetadata.isFile()) return undefined;
     return root;
@@ -786,7 +786,7 @@ export async function inspectDaemon({ parsarPath, profile, timeoutMs, env, runCo
       return { exitCode: CORE_DOCTOR_EXIT_CODES.usageOrInternalError };
     }
     command = "go";
-    args = ["run", "./apps/parsar-daemon/cmd/parsar-daemon", "status", "--profile", profile];
+    args = ["run", "./apps/daemon/cmd/oac-daemon", "status", "--profile", profile];
   } else {
     command = "oac-daemon";
     args = ["status", "--profile", profile];

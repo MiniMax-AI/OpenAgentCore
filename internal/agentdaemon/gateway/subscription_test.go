@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestDurableSubscriptionOverflowIsExplicitAndIsolated(t *testing.T) {

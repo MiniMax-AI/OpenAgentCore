@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	client "github.com/MiniMax-AI-Dev/parsar/packages/agents-client/v1"
+	client "github.com/MiniMax-AI/OpenAgentCore/packages/agents-client/v1"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 )
@@ -19,7 +19,7 @@ import (
 func TestService(t *testing.T) {
 	base, key, otherKey := os.Getenv("OAC_TEST_CLIENT_BASE_URL"), os.Getenv("OAC_TEST_CLIENT_KEY"), os.Getenv("OAC_TEST_CLIENT_OTHER_KEY")
 	if base == "" && key == "" && otherKey == "" {
-		t.Skip("real service test is run by services/agents-api/tests/official_client.py")
+		t.Skip("real service test is run by services/core/tests/official_client.py")
 	}
 	if base == "" || key == "" || otherKey == "" {
 		t.Fatal("all real service test settings are required")

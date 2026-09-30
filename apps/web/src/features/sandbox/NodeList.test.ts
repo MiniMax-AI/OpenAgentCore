@@ -1,4 +1,4 @@
-import type { SandboxAllocation } from "@agents-core-web/agents-client";
+import type { SandboxAllocation } from "@oac/agents-client";
 import { describe, expect, it } from "vitest";
 
 import { node } from "../overview/test-fixtures";

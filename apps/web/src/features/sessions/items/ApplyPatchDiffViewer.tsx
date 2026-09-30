@@ -2,7 +2,7 @@ import { ChevronRight, FileDiff } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { SessionItem } from "@agents-core-web/agents-client";
+import type { SessionItem } from "@oac/agents-client";
 
 import type { ParsedApplyPatch } from "./apply-patch";
 

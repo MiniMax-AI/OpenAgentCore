@@ -1,4 +1,4 @@
-import { AgentCoreError } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@oac/agents-client";
 import { type AdminIssuedKey, type AdminKey, type Project } from "../../lib/admin-view";
 
 /**

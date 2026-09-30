@@ -1,4 +1,4 @@
-import { AgentCoreError } from "@agents-core-web/agents-client";
+import { AgentCoreError } from "@oac/agents-client";
 import { describe, expect, it } from "vitest";
 import i18n from "../i18n";
 import { coreErrors as english } from "../i18n/locales/en/core-errors";

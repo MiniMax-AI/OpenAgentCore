@@ -84,7 +84,7 @@ explicitly unsupported. There is no service-network proxy or model-loop fallback
 
 Focused Core/Runtime tests, 170 Claude adapter tests and the pinned official
 client workflow pass. Full make check, native platform CI and independent review
-results are recorded on [PR #251](https://github.com/MiniMax-AI/parsar-core/pull/251).
+results are recorded on [PR #251](https://github.com/MiniMax-AI/OpenAgentCore/pull/251).
 The first local full run stopped because its new test database did not match the
 required oac_*_tests naming rule. A later run passed Go/database/adapter checks
 but reached an occupied browser fixture port; remaining checks use separate

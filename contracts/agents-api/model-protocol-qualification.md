@@ -47,7 +47,7 @@ The console's three affected browser scenarios passed, including protocol choice
 save/edit/cancel, token limits and write-only credentials.
 
 The real entrypoints are TestNativeModelProtocolPublicExecution and
-services/agents-api/tests/official_model_protocol_native.py. Private model settings
+services/core/tests/official_model_protocol_native.py. Private model settings
 are supplied by OAC_TEST_MODEL_PROTOCOL_OPTIONS; do not commit them or print their
 values. The suite records only controlled checks, IDs and event counts under
 OAC_TEST_NATIVE_PROOF_DIR. Library and product performance evidence are separate:

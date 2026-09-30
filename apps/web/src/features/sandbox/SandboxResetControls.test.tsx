@@ -1,4 +1,4 @@
-import type { SandboxDeployment, SandboxReset } from "@agents-core-web/agents-client";
+import type { SandboxDeployment, SandboxReset } from "@oac/agents-client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { SandboxResetControls } from "./SandboxResetControls";

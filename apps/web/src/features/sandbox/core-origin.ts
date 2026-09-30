@@ -1,4 +1,4 @@
-import type { CoreInstallation } from "@agents-core-web/agents-client";
+import type { CoreInstallation } from "@oac/agents-client";
 
 import { isValidDirectCoreBaseUrl } from "../../lib/connection";
 

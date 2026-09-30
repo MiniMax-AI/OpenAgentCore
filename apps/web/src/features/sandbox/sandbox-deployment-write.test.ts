@@ -1,4 +1,4 @@
-import { AgentCoreError, type SandboxDeployment } from "@agents-core-web/agents-client";
+import { AgentCoreError, type SandboxDeployment } from "@oac/agents-client";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sandboxAdmin, sandboxDeploymentQuery } from "./sandbox-queries";

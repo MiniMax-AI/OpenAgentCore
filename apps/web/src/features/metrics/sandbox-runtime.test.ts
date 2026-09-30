@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { SandboxAllocation } from "@agents-core-web/agents-client";
+import type { SandboxAllocation } from "@oac/agents-client";
 
 import { hostedObservation, node, session } from "../overview/test-fixtures";
 import { hostedRuntimeRows, hostedRuntimeUsage, loadHostedRuntimes, matchesRuntime, runtimeSnapshot } from "./sandbox-runtime";

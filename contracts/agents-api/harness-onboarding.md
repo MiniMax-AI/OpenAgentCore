@@ -10,7 +10,7 @@ Start from two entry points:
 
 - [`internal/harnessconfig/harness.go`](../../internal/harnessconfig/harness.go):
   the shared model configuration contract (declarations and preparation).
-- [`agent/harness.go`](../../apps/parsar-daemon/internal/agent/harness.go): the
+- [`agent/harness.go`](../../apps/daemon/internal/agent/harness.go): the
   execution lifecycle, explicit extension contracts and registration methods.
 
 
@@ -30,12 +30,12 @@ Runtime: Executor preparation, reuse, idle expiry, recovery
 
 | Component | Responsibility | Location |
 | --- | --- | --- |
-| Core | Public API, authority, durable state, scheduling and configuration snapshots | `services/agents-api` |
-| Runtime | Authenticated connection, shared capability preparation and common Executor/Turn lifecycle | `apps/parsar-daemon/internal/dispatch` |
-| Adapter | Native configuration, resources, API calls, event translation and restrictions | `apps/parsar-daemon/internal/agent/<kind>` |
+| Core | Public API, authority, durable state, scheduling and configuration snapshots | `services/core` |
+| Runtime | Authenticated connection, shared capability preparation and common Executor/Turn lifecycle | `apps/daemon/internal/dispatch` |
+| Adapter | Native configuration, resources, API calls, event translation and restrictions | `apps/daemon/internal/agent/<kind>` |
 | Harness | Native model/tool loop and history | Pinned SDK or executable |
-| Service profile | Pure validation of qualified operations and placements | `services/agents-api/internal/engine` |
-| Registration | Installed factories and verified capability declarations | `apps/parsar-daemon/internal/cli` |
+| Service profile | Pure validation of qualified operations and placements | `services/core/internal/engine` |
+| Registration | Installed factories and verified capability declarations | `apps/daemon/internal/cli` |
 
 An Environment supplies execution resources. Managed Docker, E2B and user-managed
 machines differ in provisioning and connection; their connected Runtime uses this
@@ -57,16 +57,16 @@ model communication configuration, not Turn scheduling or native process ownersh
 
 1. **Pin the native source.** Record the upstream package version and source
    revision and document the native entry point next to the adapter.
-2. **Implement the adapter** in `apps/parsar-daemon/internal/agent/<kind>`: an
+2. **Implement the adapter** in `apps/daemon/internal/agent/<kind>`: an
    `ExecutorFactory`, an `Executor` and a `Turn`. See
    [Required adapter interfaces](#required-adapter-interfaces). Reuse shared
    process, credential/configuration and local workspace helpers.
-3. **Register the kind in the Runtime** in `apps/parsar-daemon/internal/cli`.
+3. **Register the kind in the Runtime** in `apps/daemon/internal/cli`.
    See [Register the adapter](#register-the-adapter).
 4. **Add the service profile and one catalog entry.** See
    [Add the engine to Core](#add-the-engine-to-core).
 5. **Package native prerequisites.** Add a Runtime image under
-   `services/agents-api/deploy/<kind>` and, optionally,
+   `services/core/deploy/<kind>` and, optionally,
    [native installer participation](#native-installer-participation).
 6. **Enable and select the engine** through
    [engine selection](#engine-selection).
@@ -115,7 +115,7 @@ supplies one `Configuration` to Core's composition and Runtime's `RegisterKind`.
 All three Runtime entry paths validate through that declaration before native
 side effects: direct factory, preparation and Executor. Registry wrappers retain
 the declaration alongside the factory. Lifecycle and cleanup ownership remain in
-[`agent/harness.go`](../../apps/parsar-daemon/internal/agent/harness.go).
+[`agent/harness.go`](../../apps/daemon/internal/agent/harness.go).
 The shared wire object is `proto.HarnessConfig`.
 
 A supplied `model` must be a nonempty string, and an explicit `model_provider`
@@ -156,7 +156,7 @@ ownership are in the [unified model configuration design](model-configuration-de
 
 ## Required adapter interfaces
 
-[`agent/harness.go`](../../apps/parsar-daemon/internal/agent/harness.go) is the
+[`agent/harness.go`](../../apps/daemon/internal/agent/harness.go) is the
 canonical interface entry point. Its required lifecycle is `ExecutorFactory`,
 `Executor`, `Turn` (including `DurableSteerer`) and `TurnSettlement`. Required
 methods must perform their native obligations; returning Unsupported is not an
@@ -247,8 +247,8 @@ for automatic replay.
 
 Registration is static and requires a build; dynamic plugins are outside this
 contract. The methods live in `agent/harness.go`, and built-in adapters call them
-from [`cli/agent_registration.go`](../../apps/parsar-daemon/internal/cli/agent_registration.go)
-(Codex, MiniMax Code) and [`cli/claude_sdk.go`](../../apps/parsar-daemon/internal/cli/claude_sdk.go)
+from [`cli/agent_registration.go`](../../apps/daemon/internal/cli/agent_registration.go)
+(Codex, MiniMax Code) and [`cli/claude_sdk.go`](../../apps/daemon/internal/cli/claude_sdk.go)
 (Claude Code).
 
 | Order | Method | Registers |
@@ -284,7 +284,7 @@ Runtime registration does not grant Core qualification;
 that belongs to the service profile.
 
 The runnable test-only example is
-[`testdata/onboarding/main.go`](../../apps/parsar-daemon/testdata/onboarding/main.go).
+[`testdata/onboarding/main.go`](../../apps/daemon/testdata/onboarding/main.go).
 It registers a text-only synthetic Harness, demonstrates a Session-owned
 Executor, fresh Turns, durable steering, cancellation and history binding, and is
 never shipped as a real engine.
@@ -296,7 +296,7 @@ Add one entry to `internal/harnessconfig/builtin/catalog.json` with:
 
 - the public `kind` and display `label`;
 - the model `configuration` package under `internal/harnessconfig`;
-- the `profile` constructor under `services/agents-api/internal/engine`.
+- the `profile` constructor under `services/core/internal/engine`.
 
 Implement the profile constructor, then run `make generate-harness-catalog`.
 This generates the model configuration registry, Core profile catalog, client
@@ -404,7 +404,7 @@ adapter tests must cover actual native semantics, not only method presence.
 | MiniMax native history binding | `mcode/session_test.go` |
 | Explicit refusals without native effects or fabricated results | Each adapter's `unsupported_test.go` |
 
-These paths are relative to `apps/parsar-daemon/internal/agent`. Controlled native
+These paths are relative to `apps/daemon/internal/agent`. Controlled native
 transport fixtures establish failure and ownership behavior; they are not live model
 qualification. Preserve the separate native acceptance requirements in
 [Harness integration](harnesses.md#acceptance-checklist).
@@ -456,6 +456,6 @@ Use these adapters as implementation references after choosing a native API:
 
 | Harness | Adapter | Native transport | Runtime guide |
 | --- | --- | --- | --- |
-| Codex | [`agent/codex`](../../apps/parsar-daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](../../services/agents-api/deploy/codex/README.md) |
-| Claude Code | [`agent/claudesdk`](../../apps/parsar-daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](../../packages/claude-sdk-adapter/README.md) | [Claude Runtime](../../services/agents-api/deploy/claude/README.md) |
-| MiniMax Code | [`agent/mcode`](../../apps/parsar-daemon/internal/agent/mcode) | ACP and native workspace companion | [MiniMax Code Runtime](../../services/agents-api/deploy/mcode/README.md) |
+| Codex | [`agent/codex`](../../apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](../../services/core/deploy/codex/README.md) |
+| Claude Code | [`agent/claudesdk`](../../apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](../../packages/claude-sdk-adapter/README.md) | [Claude Runtime](../../services/core/deploy/claude/README.md) |
+| MiniMax Code | [`agent/mcode`](../../apps/daemon/internal/agent/mcode) | ACP and native workspace companion | [MiniMax Code Runtime](../../services/core/deploy/mcode/README.md) |

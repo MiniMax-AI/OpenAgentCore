@@ -1,5 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
-import type { SandboxDeployment, SandboxReset } from "@agents-core-web/agents-client";
+import type { SandboxDeployment, SandboxReset } from "@oac/agents-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { node } from "../overview/test-fixtures";
 import { sandboxAdmin, sandboxDeploymentQuery, sandboxResetPollInterval, sandboxSnapshotQuery, sandboxScope } from "./sandbox-queries";
