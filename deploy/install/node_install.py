@@ -453,79 +453,6 @@ def register_node(root, args, token, helper_archive=None):
         raise InstallError("Registered node identity differs; refusing to replace it")
 
 
-# These paths are inspected only to refuse an unremoved node from an older
-# release. They are never adopted, rewritten or removed by this installer.
-LEGACY_RECORDS = Path("/etc/parsar-node")
-LEGACY_SERVICE_HOME = Path("/var/lib/parsar-node")
-
-
-def legacy_path_present(path):
-    """Inspect only metadata, without following links in user-controlled directories."""
-    descriptors = []
-    try:
-        descriptors.append(os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
-        for part in path.parts[1:-1]:
-            descriptors.append(os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                                       dir_fd=descriptors[-1]))
-        os.stat(path.name, dir_fd=descriptors[-1], follow_symlinks=False)
-        return True
-    except FileNotFoundError:
-        return False
-    finally:
-        for descriptor in reversed(descriptors):
-            os.close(descriptor)
-
-
-def refuse_legacy_node(args):
-    """Reject pre-rename resources for this installation, leaving every other one alone."""
-    installation = args.installation_id
-    unit = "parsar-node-" + installation + ".service"
-    homes = {Path.home()}
-    if os.geteuid() == 0:
-        sudo_user = os.environ.get("SUDO_USER", "")
-        if sudo_user and sudo_user != "root":
-            try:
-                home = Path(pwd.getpwnam(sudo_user).pw_dir)
-                if home.is_absolute():
-                    homes.add(home)
-            except KeyError:
-                pass
-    paths = [LEGACY_RECORDS / (installation + ".json"), SYSTEM_UNITS / unit]
-    paths += [home / ".parsar/nodes" / installation for home in homes]
-    paths += [home / ".config/systemd/user" / unit for home in homes]
-    # Non-root users cannot inspect the old mode-0700 service home; its matching
-    # root-owned record and system unit above remain observable without reading it.
-    if os.geteuid() == 0 or os.access(LEGACY_SERVICE_HOME, os.R_OK | os.X_OK):
-        paths.append(LEGACY_SERVICE_HOME / ".parsar/nodes" / installation)
-    found = []
-    for path in paths:
-        try:
-            if legacy_path_present(path):  # A dangling final symlink is still retained state.
-                found.append(str(path))
-        except OSError:
-            raise InstallError("Cannot inspect possible legacy node state at " + str(path)
-                               + "; check this path before installing." + NOTHING_CHANGED) from None
-    if not found and shutil.which("systemctl") is not None:
-        result = subprocess.run(["systemctl", "show", unit, "--property=LoadState", "--value"],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10)
-        if result.returncode == 0 and result.stdout.strip() not in ("", "not-found"):
-            found.append(unit)
-    # Inspect only the fixed local engine. A microsandbox user without Docker
-    # access does not need that unrelated host capability to install its node.
-    if not found and shutil.which("docker") is not None and DOCKER_SOCKET.exists() and (
-            getattr(args, "provider", None) == "docker" or os.access(DOCKER_SOCKET, os.R_OK | os.W_OK)):
-        network = "parsar-node-" + installation
-        networks = checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"],
-                           "Cannot inspect legacy node networks; check the local Docker engine." + NOTHING_CHANGED).splitlines()
-        if network in networks:
-            found.append("Docker network " + network)
-    if found:
-        raise InstallError("This host still has a node for this installation from before the OpenAgentCore rename ("
-                           + ", ".join(found) + "). Remove it on the Nodes page, then uninstall it with the previous "
-                           "release's node-install.pyz --uninstall --installation-id " + installation
-                           + ", or follow \"Remove a node added before the rename\" in the node guide." + NOTHING_CHANGED)
-
-
 def prepare_service_node(args, token, helper_archive):
     """Sudo mode, as the service user: everything but the root-owned system unit."""
     root = open_node(args, token)
@@ -1052,7 +979,6 @@ def install_system(args, token):
     """Sudo mode: prepare the host, then run the node as a root-owned system service."""
     os.environ["PATH"] = SAFE_PATH
     host_checks()
-    refuse_legacy_node(args)
     # Checks that change nothing run first, so a refusal leaves no trace, not even a lock.
     record = node_record(args.installation_id)
     configuration = None
@@ -1203,7 +1129,6 @@ def uninstall_system(args):
     os.environ["PATH"] = SAFE_PATH
     if shutil.which("systemctl") is None:
         raise InstallError("systemctl is required." + NOTHING_CHANGED)
-    refuse_legacy_node(args)
     record = node_record(args.installation_id)
     unit = SYSTEM_UNITS / unit_name(args.installation_id)
     # Only root-owned files decide whether a node is installed; the service home is not read here.
@@ -1321,11 +1246,6 @@ def wait_ready(root, args, timeout=60):
     raise InstallError(detail + "; state and service are retained. Inspect " + journal + ", then rerun the installation command")
 
 
-# A token in the environment could reach sudo's log (`sudo VAR=... python3`) and every
-# program the installer starts; it is refused rather than read.
-RETIRED_TOKEN_VARIABLE = "PARSAR_NODE_ENROLLMENT_TOKEN"
-
-
 def read_token(args):
     """The one-time token comes on standard input, never in argv, the environment or a sudo command line."""
     if not args.enrollment_token_stdin:
@@ -1354,9 +1274,6 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.no_color:
         os.environ["NO_COLOR"] = "1"
-    if RETIRED_TOKEN_VARIABLE in os.environ:
-        parser.exit(2, RETIRED_TOKEN_VARIABLE + " is retired: pass the enrollment token on standard input with "
-                       "--enrollment-token-stdin.\n")
     if str(uuid.UUID(args.installation_id)) != args.installation_id:
         raise InstallError("Installation ID must be a canonical UUID")
     if args.update:

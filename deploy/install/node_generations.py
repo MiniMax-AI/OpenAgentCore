@@ -516,9 +516,6 @@ def collect(args, installer):
         if (value["installation_id"] != args.installation_id
                 or installer.node_spec.digest(value["provider"], value["specification"]) != args.specification_digest):
             raise installer.InstallError("Collection grant does not match the local generation")
-        marker = root / "state/node/generations" / (str(args.generation) + ".legacy-unfenced")
-        if marker.exists() or marker.is_symlink():
-            raise installer.InstallError("The original v1 generation retains unfenced legacy helpers; its local payload is kept")
         source = value["specification"]["runtime"]["source_commit"]
         if not re.fullmatch(r"[a-f0-9]{40}", source):
             raise installer.InstallError("Invalid retained release identity")
