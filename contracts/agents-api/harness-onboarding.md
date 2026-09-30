@@ -84,7 +84,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 
 The reason is a fixed safe string, never submitted content, a credential or raw native diagnostics. Unsupported guarantees no native side effect and is not a successful empty operation. Installation unavailability, unknown interaction IDs, native failures and uncertain outcomes keep their own errors and ownership. A nil `Turn` still means that no input was submitted and the output stays with the caller; never use it as an Unsupported marker.
 
-An Environment execution request carries `LocalEnvironment.WorkspaceRoot`, the Runtime's bound workspace directory; run the native Harness there. The wire request carries no path.
+The wire request carries no working directory. The Runtime checks `local_environment.workspace_directory` against its binding and gives the Harness its bound workspace directory in `LocalEnvironment.WorkspaceRoot`; run the native Harness there.
 
 Workspace capability describes the actual Runtime and resource-owner combination. The Codex and MiniMax resource objects reject native workspace access while the common authorized `localworkspace` owner provides it; Claude can expose native read and list access, and the common owner provides writes. Interface presence alone never selects a resource or advertises support.
 

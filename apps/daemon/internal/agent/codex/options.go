@@ -17,7 +17,8 @@ import (
 // the daemon's PromptRequestPayload.
 type SessionPlan struct {
 	// Cwd is the working directory passed to codex and the spawned
-	// app-server: the bound workspace root for an Environment request.
+	// app-server: the bound workspace root for an Environment request. For
+	// environment:none it is empty, or CODEX_HOME when MCP is configured.
 	Cwd string
 
 	// Env is the full environment slice (KEY=value) to layer onto

@@ -1,6 +1,7 @@
 package localworkspace
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -70,6 +71,29 @@ func TestDirectoryValidatesRelativePaths(t *testing.T) {
 		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 2); err == nil {
 			t.Fatalf("invalid path accepted: %q", path)
 		}
+	}
+}
+
+func TestBindingPrepareRejectsOtherWorkspaceRoot(t *testing.T) {
+	b, req := testBinding(t)
+	configured, err := b.Configure(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, root := range []string{"", t.TempDir()} {
+		local := *configured.LocalEnvironment
+		local.WorkspaceRoot = root
+		other := configured
+		other.LocalEnvironment = &local
+		if _, err := b.Prepare(t.Context(), other); !errors.Is(err, agentcapabilities.ErrInvalid) {
+			t.Fatalf("workspace root %q: %v", root, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(b.capabilityRoot, agentcapabilities.ManifestName)); !os.IsNotExist(err) {
+		t.Fatal("rejected preparation installed capabilities")
+	}
+	if _, err := b.Prepare(t.Context(), configured); err != nil {
+		t.Fatal("bound workspace root rejected", err)
 	}
 }
 
