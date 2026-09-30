@@ -245,8 +245,9 @@ def port_free(host, port, own=()):
 
 def port_in_use(listener, name, outcome=""):
     """The message for a port that another program holds; name is its flag or config.json key."""
-    return (f"Port {listener.port} ({name}) is already in use on {listener.host}.{outcome} Free it or choose another "
-            f"port; find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
+    remedy = "Free it" if listener.purpose == "HTTPS" else "Free it or choose another port"
+    return (f"Port {listener.port} ({name}) is already in use on {listener.host}.{outcome} {remedy}; "
+            f"find the process with: sudo ss -ltnp 'sport = :{listener.port}'")
 
 
 def stale(actual, desired, will_run):
@@ -467,16 +468,16 @@ def disk_view(disk):
     return values, document.get("applied_at")
 
 
-def render_now(root, config, state):
+def render_now(root, config, state, candidate=None):
     """The render of config.json, keeping the written stamp unless something changed."""
     names = set((state.get("generated") or {}))
     disk = read_generated(root, names | {"settings.json", "runtime-history.json"})
     previous, stamp = disk_view(disk)
-    rendered = configuration.render(root, config, state, stamp or now())
+    rendered = configuration.render(root, config, state, stamp or now(), candidate)
     disk = read_generated(root, names | set(rendered.files) | {"runtime-history.json"})
     if any(comparable(name, disk.get(name)) != comparable(name, text) for name, text in rendered.files.items()) \
             or any(disk.get(name) is not None for name in names - set(rendered.files)):
-        rendered = configuration.render(root, config, state, now())
+        rendered = configuration.render(root, config, state, now(), candidate)
     return rendered, disk, previous
 
 
@@ -580,7 +581,22 @@ def check_paired_core(root, config, state, previous, args, interactive, out):
     return installation
 
 
-def check_new_listeners(config, previous):
+def own_listeners(config, previous, disk):
+    """(address, port) of this installation's listeners: those of the settings last written, and
+    those of the written gateway, which domain setup widens before public_url changes."""
+    applied = applied_view(config, previous)
+    return ({(ipaddress.ip_address(listener.host), listener.port) for listener in configuration.listeners(applied)}
+            | ingress_config.written_listeners(disk.get("compose.json")))
+
+
+def taken_listeners(config, own, candidate=None):
+    """The listeners of config, and of a domain candidate, that another program holds."""
+    return [listener for listener in configuration.listeners(config, candidate)
+            if (ipaddress.ip_address(listener.host), listener.port) not in own
+            and not port_free(listener.host, listener.port, own)]
+
+
+def check_new_listeners(config, previous, disk, candidate=None):
     """Each listener this change adds must be free; this installation's own listeners do not count."""
     if previous is None:
         return
@@ -588,23 +604,22 @@ def check_new_listeners(config, previous):
     if config["host"] != applied["host"] and not address_available(config["host"]):
         raise OacError(f"{config['host']} (host) is not an address of this machine; use one of its addresses. "
                        "Nothing was applied.")
-    own = {(ipaddress.ip_address(listener.host), listener.port) for listener in configuration.listeners(applied)}
-    for listener in configuration.listeners(config):
-        if (ipaddress.ip_address(listener.host), listener.port) not in own and \
-                not port_free(listener.host, listener.port, own):
-            raise OacError(port_in_use(listener, listener.setting, " Nothing was applied."))
+    taken = taken_listeners(config, own_listeners(config, previous, disk), candidate)
+    if taken:
+        raise OacError(port_in_use(taken[0], taken[0].setting, " Nothing was applied."))
 
 
-def finish_apply(root, config, state, gateway_document, will_run):
+def finish_apply(root, config, state, gateway_document, will_run, candidate=None):
+    """With a candidate, domain setup verifies it and records its own status."""
     managed = ingress_config.enabled(config) and "gateway" in will_run
     if managed:
         import ingress
         # Container input labels cannot prove which configuration Caddy loaded.
         ingress_config.reload(root, gateway_document)
-        if config["public_url"]:
+        if config["public_url"] and not candidate:
             ingress.verify(config["public_url"], state["installation_id"])
     health(root, config, will_run)
-    if managed:
+    if managed and not candidate:
         ingress.save(root, {"state": "ready" if config["public_url"] else "unconfigured",
                             "public_url": config["public_url"], "target_url": config["public_url"], "message": None})
 
@@ -618,20 +633,21 @@ def apply(root, dry_run=False, yes=False, discard_edits=False, confirm_public_ur
         return _apply(root, args, discard_edits, start, interactive, out, retry=retry)
 
 
-def _apply(root, args, discard_edits, start, interactive, out, rollback=True, retry=None):
+def _apply(root, args, discard_edits, start, interactive, out, rollback=True, retry=None, candidate=None):
+    """candidate: see configuration.render."""
     retry = retry or f"run {root / 'oac'} apply again"
     check_directories(root)
     config = load_config(root)
     state = load_state(root)
     check_fixed(config, state)
     check_secrets(root, config, state)
-    rendered, disk, previous = render_now(root, config, state)
+    rendered, disk, previous = render_now(root, config, state, candidate)
     edited = edited_files(state, disk, rendered)
     if edited and not discard_edits:
         raise OacError("\n".join(f"generated/{name} was edited by hand." for name in edited)
                           + "\nPut the change in config.json and run oac apply --discard-edits, which keeps the"
                           " edited copy as generated/<file>.edited-<time>. Nothing was applied.")
-    check_new_listeners(config, previous)
+    check_new_listeners(config, previous, disk, candidate)
     changed = [name for name, text in rendered.files.items() if disk.get(name) != text.encode()]
     removed = [name for name in (state.get("generated") or {}) if name not in rendered.files and disk.get(name) is not None]
 
@@ -677,7 +693,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         (root / "secrets/core.key.new").unlink(missing_ok=True)
     if not (changed or removed or restarts or edited):
         if ingress_config.enabled(config):
-            finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run)
+            finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run, candidate)
         state = dict(state, core_installation_id=core_installation_id)
         if record_digests(state, rendered.files) != load_state(root):
             save_state(root, record_digests(state, rendered.files))
@@ -695,7 +711,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         (root / "generated" / name).unlink()
     try:
         converge(root, state, rendered.services, will_run, force)
-        finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run)
+        finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run, candidate)
     except (OacError, RuntimeError, subprocess.CalledProcessError) as error:
         line = core_error_line(root, state)
         if line:

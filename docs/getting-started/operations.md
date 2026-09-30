@@ -155,7 +155,7 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `Docker Compose 2.26.0 or newer is required …` | Update the Docker Compose plugin |
 | `Port N (…) is already in use on ADDRESS …` | Another program holds a port the installation needs. Find it with the printed `ss` command and stop it, or choose another port: `--web-port` or `--core-port` at [installation](install-options.md#ports), or the port in `config.json` before `oac apply` |
 | `ADDRESS (…) is not an address of this machine …` | Set `--host`, or `host` in `config.json`, to one of the machine's IP addresses or a wildcard such as `0.0.0.0` |
-| `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
+| `Automatic HTTPS needs ports 80 and 443 …` | Free the port the message names, install without `--public-url` and set up the domain later, or install with `--ingress external` and use your own [reverse proxy](install-options.md#https-and-the-reverse-proxy) |
 | `Installation directory is not empty …` | Use an empty `--install-dir` |
 | `This installation is configured by …/config.json …` | Flags only seed a new installation: edit `config.json` and run `oac apply` |
 | `This installation version or historical conversion is not supported …` | The target directory holds an installation of another release, or a default install found one at `~/.parsar/core`. Keep it, and install into another empty `--install-dir` ([version policy](#installation-version-policy)) |
@@ -163,7 +163,8 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 | `config.json has changes that are not applied` | Run `oac apply` |
 | `Core rejects secrets/core.key …` | Run `oac apply`, which restarts Core with the key's digest |
 | `config.json not applied: …` | `oac apply` printed Core's startup error above; fix `config.json` and apply again |
-| `HTTPS verification failed …` during domain setup | See [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
+| `Port 80 is already in use on this server …` during domain setup | Another program holds port 80 or 443. Stop it, using the printed `ss` command to find it, and retry; automatic HTTPS cannot share [these ports](install-options.md#ports) |
+| `HTTPS verification failed …` during domain setup | DNS points elsewhere, a firewall or NAT blocks inbound ports 80 and 443, or the certificate request failed; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https) |
 | Web answers 403 `Forbidden` | Open exactly the console address `oac status` prints; a reverse proxy must pass the original Host |
 | `/v1` or `/api/v1` answers 404 | Those paths reach Web; route them to Core ([reverse proxy](install-options.md#https-and-the-reverse-proxy)) |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `oac status`, then Core's log |
@@ -175,7 +176,7 @@ The installer and mutating `oac` commands hold the same installation lock, `.oac
 
 | Listener | Managed ingress (default) | External ingress |
 | --- | --- | --- |
-| Web | Reached only through the `gateway` service, which publishes `ports.web` (8080), 80 and 443 on `host` (all IPv4 interfaces by default) | `host:ports.web` (loopback by default), behind your reverse proxy |
+| Web | Reached only through the `gateway` service, which publishes `ports.web` (8080) on `host` (all IPv4 interfaces by default), plus [80 and 443](install-options.md#ports) once HTTPS is on | `host:ports.web` (loopback by default), behind your reverse proxy |
 | Core | `127.0.0.1:ports.core` (8091); the gateway routes `/v1` and `/api/v1` to it | `host:ports.core`, behind your reverse proxy |
 | PostgreSQL | No published port | No published port, or a loopback port with native Core |
 

@@ -16,6 +16,7 @@ from unittest import mock
 
 import config_model
 import distribution
+import ingress_config
 import install
 import node_spec
 from installer_fakes import MANIFEST, STANDARD_SIZES, FakeHost, make_bundle, run_installer
@@ -261,13 +262,20 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("  Port 8080 was in use; Web uses 8081.\n", output)
         self.assertIn("  Port 8091 was in use; Core uses 8092.\n", output)
 
+    def test_managed_ingress_without_https_leaves_ports_80_and_443_alone(self):
+        self.host.busy.add(("0.0.0.0", 80))
+        with mock.patch.object(ingress_config, "preflight", return_value={"docker_socket": "/var/run/docker.sock", "docker_gid": 999}), \
+                mock.patch.object(ingress_config, "reload"), contextlib.redirect_stdout(self.output):
+            run_installer(install, self.bundle, ["--install-dir", self.root, "--sandbox", "none"])
+        self.assertEqual(self.document("generated/compose.json")["services"]["gateway"]["ports"], ["0.0.0.0:8080:8080"])
+
     def test_managed_https_needs_ports_80_and_443(self):
         self.host.busy.add(("0.0.0.0", 80))
         with contextlib.redirect_stdout(self.output), self.assertRaisesRegex(
                 install.InstallError, "^Automatic HTTPS needs ports 80 and 443, and port 80 is already in use on 0.0.0.0. "
                 "Free it, or use an existing reverse proxy with --ingress external; find the process with: "
                 "sudo ss -ltnp 'sport = :80'$"):
-            run_installer(install, self.bundle, ["--install-dir", self.root])
+            run_installer(install, self.bundle, ["--install-dir", self.root, "--public-url", "https://core.example"])
         self.assertFalse(self.root.exists())
 
     def test_output_labels_public_and_local_addresses(self):
@@ -285,6 +293,7 @@ class InstallerTests(unittest.TestCase):
         }
         for name, (flags, expected) in cases.items():
             with self.subTest(name=name):
+                self.host.containers.clear()  # Each case installs on a host of its own.
                 self.root, self.output = self.work / name, io.StringIO()
                 self.install(*flags)
                 output = " ".join(self.output.getvalue().split())

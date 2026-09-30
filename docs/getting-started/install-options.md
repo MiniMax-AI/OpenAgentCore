@@ -46,7 +46,7 @@ These options choose an installation location or perform initial setup; they are
 | `--e2b-domain DOMAIN` | With E2B: sandbox data-plane DNS suffix; use together with `--e2b-api-url` |
 | `--core-key-file FILE` | With Web-only: absolute path to a private file containing the existing Core key, at least 32 characters |
 
-Several installations can share a machine when they use distinct installation directories and ports. Only one managed gateway can own ports 80 and 443 on an IP address; use distinct IP addresses or an external shared proxy for more. Each installation has its own database, Core key and nodes.
+Several installations can share a machine when they use distinct installation directories and ports. Only one installation with managed HTTPS can hold [ports 80 and 443](#ports) on an IP address; use distinct IP addresses or an external shared proxy for more. Each installation has its own database, Core key and nodes.
 
 ## Sandbox backend
 
@@ -72,7 +72,7 @@ Docker and microsandbox start at the Standard size in Web's [`standard-sizes.jso
 
 ## Listeners and access
 
-The default combined Docker installation selects `--ingress managed` and `--host 0.0.0.0`. Its gateway publishes Web on `--web-port` (8080 by default) and uses ports 80 and 443 for automatic HTTPS. Core's `--core-port` stays on loopback and PostgreSQL stays private. `--host` accepts IPv4 or IPv6, without a port, scheme or zone. Use a concrete server IP in the browser, not a wildcard. Managed ingress needs a local Docker Unix socket and Docker's ability to publish ports 80 and 443.
+The default combined Docker installation selects `--ingress managed` and `--host 0.0.0.0`. Its gateway publishes Web on `--web-port` (8080 by default), and [ports 80 and 443](#ports) once HTTPS is on. Core's `--core-port` stays on loopback and PostgreSQL stays private. `--host` accepts IPv4 or IPv6, without a port, scheme or zone. Use a concrete server IP in the browser, not a wildcard. Managed ingress needs a local Docker Unix socket.
 
 `--ingress external` uses your own reverse proxy instead. It is the only choice for Core-only, Web-only and native Core installations, and their default. Core and Web then listen on `--host`, loopback by default. External non-loopback listeners require an HTTPS `public_url` and a [reverse proxy](#https-and-the-reverse-proxy), and Web's domain setup is unavailable: set `public_url` in `config.json` and run `oac apply`.
 
@@ -80,14 +80,14 @@ The default combined Docker installation selects `--ingress managed` and `--host
 
 ### Ports
 
-Before it verifies the bundle or loads images, the installer checks `--host` and every port the installation will listen on: Web's and Core's, PostgreSQL's with native Core, and 80 and 443 with managed ingress.
+Before it verifies the bundle or loads images, the installer checks `--host` and every port the installation will listen on: Web's and Core's, PostgreSQL's with native Core, and 80 and 443 with managed ingress and `--public-url`.
 
 - `--host` must be an address of this machine, or a wildcard such as `0.0.0.0`.
 - A port set with `--web-port`, `--core-port` or in the `--config` file must be free, and so must a port that a loopback `--public-url` names, such as 8080 in `http://localhost:8080`. Otherwise the installer stops, names the port and prints the `ss` command that finds the program holding it.
 - A Web or Core port you leave out moves to the first free port above its default, at most 20 above, and never to another port of the same installation. The installer writes the chosen port to `config.json` and names it in the summary, for example `Port 8080 was in use; Web uses 8081.`
-- Managed ingress needs ports 80 and 443 and never moves them. If either is in use, free it, or install with `--ingress external` and use your own [reverse proxy](#https-and-the-reverse-proxy).
+- Managed ingress uses ports 80 and 443 only for HTTPS and never moves them. The gateway publishes them once `public_url` is set, from `--public-url` or [domain setup in Web](install.md#configure-the-domain-and-https), and no other program on the host may use them. If either is in use at installation, free it, install without `--public-url` and set up the domain later, or install with `--ingress external` and use your own [reverse proxy](#https-and-the-reverse-proxy).
 
-After installation, `oac apply` [checks the ports](../configuration.md#how-oac-apply-works) of a changed `host` or port.
+After installation, `oac apply` [checks the ports](../configuration.md#how-oac-apply-works) of a changed `host` or port, and 80 and 443 when `public_url` turns HTTPS on. Domain setup in Web and `oac domain` check, before they start, that the hostname resolves and that no other program holds port 80 or 443, and name the port that is in use.
 
 ## HTTPS and the reverse proxy
 

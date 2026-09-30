@@ -6,6 +6,7 @@ from contextlib import closing
 from http.server import BaseHTTPRequestHandler
 import json
 from pathlib import Path
+import socket
 import socketserver
 import ssl
 import threading
@@ -84,6 +85,14 @@ def prepare(root, name, confirmation):
     rendered, disk, old_settings = oac_cli.render_now(root, config, state)
     if oac_cli.edited_files(state, disk, rendered):
         raise DomainError("generated_files_edited", "Resolve hand-edited generated files with oac apply before configuring the domain", 409)
+    host = urlsplit(target).hostname
+    if not resolves(host):
+        raise DomainError("hostname_unresolved", f"{host} does not resolve. Add A/AAAA records for it that point at this server, then retry when DNS returns them.", 409)
+    # The gateway publishes 80 and 443 only for HTTPS; the ports it already publishes are its own.
+    busy = [str(listener.port) for listener in oac_cli.taken_listeners(candidate, oac_cli.own_listeners(config, old_settings, disk))]
+    if busy:
+        named = f"Port {busy[0]} is" if len(busy) == 1 else "Ports " + " and ".join(busy) + " are"
+        raise DomainError("https_ports_unavailable", f"{named} already in use on this server. Automatic HTTPS cannot run beside another program on ports 80 and 443: free both and retry. Find the program with: sudo ss -ltnp '( sport = :80 or sport = :443 )'", 409)
     old, base, answered = oac_cli.old_public_url(root, config, old_settings, disk, actual)
     args = argparse.Namespace(dry_run=False, yes=False, confirm_public_url_change=confirmation)
     try:
@@ -93,6 +102,14 @@ def prepare(root, name, confirmation):
     job = {"state": "checking", "target_url": target, "public_url": config["public_url"], "message": None}
     save(root, job)
     return config, state, candidate, args, job
+
+
+def resolves(host):
+    """Whether DNS answers with an A or AAAA record."""
+    try:
+        return bool(socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM))
+    except (OSError, UnicodeError):
+        return False
 
 
 def verify(target, installation_id, timeout=180):
@@ -111,14 +128,18 @@ def verify(target, installation_id, timeout=180):
         except (OSError, http.client.HTTPException):
             pass
         if time.monotonic() >= deadline:
-            raise DomainError("https_not_ready", "HTTPS verification failed. Point this hostname's A/AAAA records at the server, allow inbound ports 80 and 443, and check gateway logs. The previous address is kept; retry after correcting DNS or connectivity.")
+            raise DomainError("https_not_ready", f"HTTPS verification failed: {host} did not reach this installation with a trusted certificate. Check that its A/AAAA records point at this server, that no firewall or NAT blocks inbound ports 80 and 443, and the gateway logs for certificate errors. The previous address is kept; retry after the fix.")
         time.sleep(2)
 
 
 def execute(root, prepared):
     config, state, candidate, args, job = prepared
+    # Core and Web keep the applied address until the candidate is verified.
+    keep = argparse.Namespace(dry_run=False, yes=False, confirm_public_url_change=configuration.local_public_url(config))
     try:
-        gateway.reload(root, gateway.caddyfile(config, state, candidate=candidate["public_url"]))
+        # Through common apply, the gateway publishes 80 and 443 and serves the candidate.
+        oac_cli.write_private(Path(root) / "config.json", json.dumps(config, indent=2) + "\n")
+        oac_cli._apply(Path(root), keep, False, False, False, lambda _: None, candidate=candidate["public_url"])
         verify(candidate["public_url"], state["installation_id"])
         job["state"] = "applying"
         save(root, job)
@@ -131,12 +152,10 @@ def execute(root, prepared):
     except Exception as error:
         recovery_failed = False
         try:
-            # A retry may inherit partially applied services from an interrupted
-            # attempt. Restore through common apply even if this attempt only probed TLS.
+            # Restore through common apply: the gateway without the candidate, and without
+            # 80 and 443 unless HTTPS was already on, and any partially applied services.
             oac_cli.write_private(Path(root) / "config.json", json.dumps(config, indent=2) + "\n")
-            restore = argparse.Namespace(dry_run=False, yes=False,
-                                         confirm_public_url_change=configuration.local_public_url(config))
-            oac_cli._apply(Path(root), restore, False, False, False, lambda _: None)
+            oac_cli._apply(Path(root), keep, False, False, False, lambda _: None)
             gateway.reload(root, gateway.caddyfile(config, state))
         except Exception:
             recovery_failed = True
@@ -232,14 +251,14 @@ class Handler(BaseHTTPRequestHandler):
 
 def serve(root):
     root = Path(root)
-    socket = Path("/control/api.sock")
-    socket.unlink(missing_ok=True)
+    path = Path("/control/api.sock")
+    path.unlink(missing_ok=True)
     import os
     previous = os.umask(0o077)
     try:
-        with Server(str(socket), Handler) as server:
+        with Server(str(path), Handler) as server:
             server.root = root
-            os.chmod(socket, 0o600)
+            os.chmod(path, 0o600)
             server.serve_forever()
     finally:
         os.umask(previous)

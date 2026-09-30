@@ -2,9 +2,9 @@
 
 Compose is modelled by its observable contract: `up` recreates a container exactly
 when its resolved configuration (including env_file content) changed, each container
-keeps the labels it was created with, and Core loads its Core key digests when it
-starts. systemd runs the unit it last loaded; its process keeps the environment it
-started with.
+keeps the labels it was created with and holds the host ports it publishes while it
+runs, and Core loads its Core key digests when it starts. systemd runs the unit it
+last loaded; its process keeps the environment it started with.
 """
 import errno
 import hashlib
@@ -49,13 +49,13 @@ class FakeHost:
         self.deployment = {"provider": "", "generation": 0, "reset": None, "resources": {"allocations": 0, "pending": 0}}  # what sandbox_setup reads and posts
         self.deployment_posts = []
         self.deployment_refusal = None  # Core's message when it refuses the POST
-        self.busy = set()  # (address, port) of every listening socket, the installation's own included
+        self.busy = set()  # (address, port) of listening sockets besides the ports running containers publish
         self.unassigned = set()  # addresses this host does not have
         for target, name, value in ((subprocess, "run", mock.Mock(side_effect=self.run)),
                                     (oac_cli, "http", self.http),
                                     (oac_cli, "bind_error", self.bind_error),
                                     (oac_cli, "tcp_listeners", lambda: [(ipaddress.ip_address(host), port)
-                                                                        for host, port in self.busy]),
+                                                                        for host, port in self.listening()]),
                                     (oac_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
                                     (native_service, "_process_environment", self.process_environment),
                                     (sandbox_setup, "send", self.sandbox_send)):
@@ -68,10 +68,15 @@ class FakeHost:
             return errno.EADDRNOTAVAIL
         address = ipaddress.ip_address(host)
         return errno.EADDRINUSE if any(held == port and oac_cli.overlaps(address, ipaddress.ip_address(other))
-                                       for other, held in self.busy) else 0
+                                       for other, held in self.listening()) else 0
 
     def running(self):
         return {name for name, item in self.containers.items() if item["running"]}
+
+    def listening(self):
+        """(address, port) of every listening socket: busy, and the ports running containers publish."""
+        return self.busy | {tuple(pair) for item in self.containers.values() if item["running"]
+                            for pair in item.get("ports", ())}
 
     def run_container(self, name, port=None, digests=None):
         """A container of an installation made outside the test, such as an earlier release."""
@@ -144,7 +149,9 @@ class FakeHost:
                 current = self.containers.get(name)
                 if current is None or current["hash"] != digest:
                     self.containers[name] = {"hash": digest, "inputs": services[name].get("labels", {}).get(LABEL),
-                                             "running": False}
+                                             "running": False,
+                                             "ports": [[host.strip("[]"), int(port)] for host, port, _ in
+                                                       (item.rsplit(":", 2) for item in services[name].get("ports", []))]}
                     self.recreated.append(name)
                     if name == "core":
                         self.load_core(path.parent.parent, services[name])

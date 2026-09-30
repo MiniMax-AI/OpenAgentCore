@@ -56,7 +56,7 @@ def summary(root, config, addresses, fresh, selection, deployment, reachable, in
         paragraph("Use this key for the Core management API. Keep it private.")
     heading("Next")
     if ingress_config.enabled(config) and not config["public_url"]:
-        paragraph("Open Web at the server IP and sign in. In System → Domain and HTTPS, enter your DNS hostname; the installation requests and renews its certificate. DNS must point to this server and ports 80 and 443 must be reachable.")
+        paragraph("Open Web at the server IP and sign in. In System → Domain and HTTPS, enter your DNS hostname; the installation requests and renews its certificate. HTTPS then uses ports 80 and 443: DNS must point to this server, no other program on it may use those ports, and they must be reachable from the internet. Web checks DNS and the ports before it starts.")
     if mode != "core-only":
         paragraph("Create a Project and its API key on the Projects and keys page.")
     else:

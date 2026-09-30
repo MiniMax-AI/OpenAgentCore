@@ -17,7 +17,7 @@ This page follows the default path. Every flag, existing reverse proxies, split 
 - Linux amd64 with Python 3.9 or newer, and curl. No GitHub account or CLI is needed.
 - Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
 - An account that can run `docker` and write to its home directory. Ordinary users and root both work; the installer never calls sudo.
-- Free ports 80 and 443 for HTTPS, and a port each for initial Web access (8080) and Core (8091, on loopback); see [ports](install-options.md#ports). Docker must be able to publish them; the installer does not change host policy.
+- A free port each for initial Web access (8080) and Core (8091, on loopback), and free ports 80 and 443 once you turn on HTTPS; see [ports](install-options.md#ports). Docker must be able to publish them; the installer does not change host policy.
 - A DNS hostname that points to this host, before you connect applications, nodes, E2B or self-hosted machines. You can install and sign in first.
 
 The Core host needs no KVM; nodes that run microsandbox do.
@@ -56,10 +56,10 @@ It creates no Project or key and makes no model request. It ends by printing the
 
 Applications, nodes and sandboxes reach Core at one HTTPS address, the public URL. The initial HTTP address serves only Web.
 
-1. Point the hostname's A/AAAA records to this host, and allow inbound ports 80 and 443 from the internet.
+1. Point the hostname's A/AAAA records to this host, allow inbound ports 80 and 443 from the internet, and keep other programs off [those ports](install-options.md#ports).
 2. In Web, open **System**, choose **Configure domain and HTTPS**, enter the hostname, such as `core.example.com`, and choose **Apply**.
 
-The installation requests a certificate and checks that the HTTPS address reaches this installation before switching Core and Web to it. Then open the HTTPS address and sign in again; the initial HTTP address redirects there. Certificates renew automatically. If DNS or the certificate fails, the previous address stays in use: correct the reported problem and retry. Retry an interrupted switch with the same hostname, or check it with `oac status` and finish it with `oac apply`.
+The installation checks DNS and the ports, requests a certificate and checks that the HTTPS address reaches this installation before switching Core and Web to it. Then open the HTTPS address and sign in again; the initial HTTP address redirects there. Certificates renew automatically. If DNS or the certificate fails, the previous address stays in use: correct the reported problem and retry. Retry an interrupted switch with the same hostname, or check it with `oac status` and finish it with `oac apply`.
 
 The same operation from a terminal:
 

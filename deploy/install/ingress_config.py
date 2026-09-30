@@ -107,12 +107,27 @@ def reload(root, document):
         raise RuntimeError("HTTPS gateway is unavailable; inspect gateway logs and retry") from None
 
 
-def published(config):
-    """(host port, gateway port) of each port the gateway publishes on config["host"]."""
-    return [(config["ports"]["web"], 8080), (80, 80), (443, 443)]
+def published(config, candidate=None):
+    """(host port, gateway port) of each port the gateway publishes on config["host"].
+
+    Automatic HTTPS needs ports 80 and 443, so the gateway publishes them only once
+    public_url is set, or while domain setup verifies a candidate address.
+    """
+    https = [(80, 80), (443, 443)] if config["public_url"] or candidate else []
+    return [(config["ports"]["web"], 8080)] + https
 
 
-def services(root, config, state, bind):
+def written_listeners(compose):
+    """(address, port) of each host port the gateway publishes in a written compose.json."""
+    try:
+        ports = json.loads(compose)["services"]["gateway"]["ports"]
+        return {(ipaddress.ip_address(host.strip("[]")), int(port))
+                for host, port, _ in (item.rsplit(":", 2) for item in ports)}
+    except (TypeError, ValueError, KeyError, AttributeError):
+        return set()
+
+
+def services(root, config, state, bind, candidate=None):
     root = Path(root)
     identity = f'{state["uid"]}:{state["gid"]}'
     common = {"image": state["images"]["ingress"], "user": identity, "restart": "unless-stopped",
@@ -121,7 +136,7 @@ def services(root, config, state, bind):
     if ":" in host:
         host = "[" + host + "]"
     gateway = dict(common, command=["caddy", "run", "--config", "/generated/Caddyfile", "--adapter", "caddyfile"],
-                   ports=[f"{host}:{port}:{target}" for port, target in published(config)],
+                   ports=[f"{host}:{port}:{target}" for port, target in published(config, candidate)],
                    environment={"XDG_DATA_HOME": "/data", "XDG_CONFIG_HOME": "/data/config",
                                 "NO_PROXY": "core,web,localhost,127.0.0.1,::1",
                                 "no_proxy": "core,web,localhost,127.0.0.1,::1"},
