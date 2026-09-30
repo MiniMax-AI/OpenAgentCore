@@ -175,7 +175,7 @@ Enabling the daemon gateway with `OAC_PUBLIC_URL` also starts the execution Work
 
 Sandbox reset snapshots bind the deployment relation explicitly to its single row before joining resources, so that even on a fresh database without statistics an inflated join estimate cannot trigger JIT compilation inside the lease deadline.
 
-At startup the Worker fails previously claimed work, keeps queued input and never replays uncertain execution. Shutdown cancels active dispatch and attempts terminal persistence before releasing the lease; a lost owner cannot commit. Closing the lease invalidates its writer and waits for pgx cleanup within the caller's deadline; a later close can resume that wait. Tests that transfer ownership immediately must observe the previous owner's advisory lock disappear before starting the next, with a bounded wait that fails on query errors. The lease fences database writes, not already queued daemon commands or native effects.
+At startup the Worker fails previously claimed work, keeps queued input and never replays uncertain execution. Shutdown cancels active dispatch and attempts terminal persistence before releasing the lease; a lost owner cannot commit. Closing the lease invalidates its writer and waits for pgx cleanup within the caller's deadline; a later close can resume that wait. Tests that transfer ownership immediately use `pgtest.ObserveExecutionLeaseRelease` to observe the previous owner's advisory lock disappear before starting the next, with a bounded wait that fails on query errors. The lease fences database writes, not already queued daemon commands or native effects.
 
 ## Hosted sandboxes
 

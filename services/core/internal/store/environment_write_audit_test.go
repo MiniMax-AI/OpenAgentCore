@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -22,9 +23,11 @@ func TestEnvironmentUploadWriteAuditSurvivesRequestAndLeaseContext(t *testing.T)
 	cancel()
 	sessionAuditCount(t, f.s, f.tenant, 0)
 	// Neither the settlement caller nor the newly acquired execution lease owns the request context.
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, f.writer.pool)
 	if err := f.writer.lease.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease()
 	next := executionWriter(t, f.s)
 	var group sync.WaitGroup
 	for range 4 {

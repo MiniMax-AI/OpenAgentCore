@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -166,9 +167,11 @@ func TestEnvironmentInputReservationPromotionAndDirectRetries(t *testing.T) {
 	if err != nil || len(retry) != 2 || !retry[0].Replayed || retry[0].Sequence != promoted.Receipts[0].Sequence {
 		t.Fatal("direct retry after promotion", retry, err)
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, writer.pool)
 	if err := writer.lease.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease()
 	pool.Close()
 	restarted, pool := testStore(t)
 	after, err := executionWriter(t, restarted).PromoteEnvironmentInput(ctx, tenant, session.ID, first.ID)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -32,7 +33,7 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
-	awaitRelease := observeExecutionLeaseRelease(t, db.pool)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 	if err := owner.Lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}

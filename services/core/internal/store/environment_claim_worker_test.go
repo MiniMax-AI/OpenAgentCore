@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -37,7 +38,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal("promotion did not retain the active claim", turn, err)
 			}
 			// Simulate owner loss after commit, without sending any daemon Start.
-			awaitRelease := observeExecutionLeaseRelease(t, db.pool)
+			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 			if err := owner.Lease.Close(t.Context()); err != nil {
 				t.Fatal(err)
 			}
@@ -45,7 +46,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			restarted := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
 			stopped, cancel := context.WithCancel(t.Context())
 			cancel()
-			awaitRelease = observeExecutionLeaseRelease(t, db.pool)
+			awaitRelease = pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 			if err := restarted.Run(stopped); !errors.Is(err, context.Canceled) {
 				t.Fatal(err)
 			}

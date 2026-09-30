@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -99,9 +100,11 @@ func TestEnvironmentInputPromotionUsesCurrentExecutionWriter(t *testing.T) {
 		t.Fatal("pooled Store promoted input without execution ownership")
 	}
 	closed := executionWriter(t, s)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, closed.pool)
 	if err := closed.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease()
 	if _, err := closed.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
 		t.Fatal("closed execution writer promoted pending input")
 	}

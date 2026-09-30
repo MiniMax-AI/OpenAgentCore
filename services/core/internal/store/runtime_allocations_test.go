@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
@@ -31,9 +32,11 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, uuid.NewString(), runtimedevice.HashCredential(secret)); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("provider target changed: %v", err)
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, w.pool)
 	if err := w.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease()
 	if _, err := w.ObserveRuntimeRunning(t.Context(), owner); err == nil {
 		t.Fatal("lost writer changed allocation")
 	}

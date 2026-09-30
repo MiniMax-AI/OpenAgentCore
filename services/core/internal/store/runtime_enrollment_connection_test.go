@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -145,7 +146,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	second := connect(rotated.Token)
 	await("connected")
 	assertConnection(environment.ID, rotated.Token, "connected", 200)
-	awaitRelease := observeExecutionLeaseRelease(t, db.pool)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 	stop()
 	stop = nil
 	awaitRelease()

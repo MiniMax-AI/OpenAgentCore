@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
 	"github.com/google/uuid"
@@ -70,9 +71,11 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT (SELECT count(*) FROM sessions)+(SELECT count(*) FROM runtime_nodes)+(SELECT count(*) FROM runtime_allocations)+(SELECT count(*) FROM runtime_placements)").Scan(&sideEffects); err != nil || sideEffects != 0 {
 		t.Fatal("setup or rejected admission created execution state", sideEffects, err)
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, w.pool)
 	if err := w.lease.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	awaitRelease()
 	restarted := executionWriter(t, s)
 	if err := restarted.ClaimWebSandboxDeployment(t.Context(), id); err != nil {
 		t.Fatal(err)
