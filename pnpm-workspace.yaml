@@ -1,5 +1,4 @@
 packages:
   - "apps/web"
-  - "apps/docs"
   - "packages/*"
   - "example/parsar"

@@ -322,8 +322,8 @@ upgrade the protocol.
   reads, live streams, metadata updates and new input exclude the resource.
   Existing streams close on observing removal without an invented deletion event.
   Creation keys remain reserved (local 409); the owner's repeated deletion returns
-  the same confirmation and missing or foreign deletion returns 404 ([batch
-  record](official-semantics-alignment.md#session-deletion-lifecycle--september-23)).
+  the same confirmation and missing or foreign deletion returns 404
+  ([batch record](official-semantics-alignment.md#session-deletion-lifecycle--september-23)).
   Qualified managed Docker deletion also reclaims its owned Runtime;
   broader physical SQL/native history cleanup, immediate native quiescence and
   exact hosted error/retry/overlapping-stream semantics remain unverified or

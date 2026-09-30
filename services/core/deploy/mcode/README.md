@@ -158,8 +158,8 @@ daemon does not protect it from other tools running as the same user.
 Multi-agent workspace execution installs only the existing authorized workspace
 MCP entry in that private native configuration so children inherit the same
 tools; public MCP and Environment-origin MCP combinations remain separately
-qualified. Complete the hosted [acceptance
-checklist](../../../../contracts/agents-api/harnesses.md#acceptance-checklist)
+qualified. Complete the hosted
+[acceptance checklist](../../../../contracts/agents-api/harnesses.md#acceptance-checklist)
 before enabling hosted execution. The standalone companion uses its own npm
 lock; `make check` runs its lifecycle tests and script checks, while its
 exact-source Linux build and native qualification for the actual supported

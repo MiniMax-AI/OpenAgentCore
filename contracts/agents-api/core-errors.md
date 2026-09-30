@@ -54,8 +54,8 @@ from a missing console sign-in. `/console/auth` keeps its existing
 become proxyable operations. Host, origin, authentication, credential stripping,
 path checks and the no-retry rule are unchanged.
 
-Existing operation-specific codes remain documented in the [administrator
-contract](admin-api.md), [sandbox deployment contract](sandbox-deployment.md),
+Existing operation-specific codes remain documented in the
+[administrator contract](admin-api.md), [sandbox deployment contract](sandbox-deployment.md),
 [executor credential contract](environment-executor-credentials.md) and related
 resource contracts. The following validators refine Core operation failures only.
 

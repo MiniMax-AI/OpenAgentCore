@@ -8,7 +8,7 @@ SWAG_VERSION ?= v1.16.4
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-harness-catalog check-docs check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
+check: check-harness-catalog check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
 	@printf 'OpenAgentCore checks passed.\n'
 
 .PHONY: generate-harness-catalog check-harness-catalog
@@ -165,10 +165,6 @@ build-e2b-provider:
 check-e2b-provider:
 	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/core/deploy/e2b -p '*_test.py'
 	PYTHONDONTWRITEBYTECODE=1 $${OAC_TEST_E2B_SDK_PYTHON:-python3} -m unittest discover -s services/core/tools/e2b-provider -p '*_test.py'
-
-.PHONY: check-docs
-check-docs: node-deps
-	pnpm check:docs
 
 # These packages are also exercised by check-core in the full gate.
 .PHONY: check-sandbox-provider-contract
