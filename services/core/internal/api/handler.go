@@ -235,7 +235,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		case errors.As(err, &required):
 			writeError(w, http.StatusBadRequest, "model_provider_required", required.message, "x_agents_core.model_provider")
 		case errors.As(err, &defaults):
-			writeStoreError(w, r, defaults.err)
+			writeModelConfigurationError(w, r, defaults.err)
 		case !writeFieldError(w, err):
 			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
 		}

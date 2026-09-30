@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,7 +11,11 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -22,6 +27,7 @@ type finishObservationFixture struct {
 	writer     *store.Store
 	lease      Ownership
 	pool       *pgxpool.Pool
+	defaults   *modelconfigurationpg.Store
 	tenant     string
 	session    store.Session
 	dispatcher Dispatcher
@@ -41,12 +47,21 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-	provider := v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://fixture.example/v1", APIKey: "fixture-only"}
-	if _, err = s.SetDeploymentModelProvider(admin, "codex", v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}); err != nil {
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
+	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := s.DeploymentModelProvider(t.Context(), "codex")
+	defaults := modelconfigurationpg.New(pgunit.NewPool(pool))
+	service, err := modelconfiguration.NewService(defaults, cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
+	provider := v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://fixture.example/v1", APIKey: "fixture-only"}
+	if _, err = service.Replace(admin, modelconfiguration.Replacement{Harness: "codex", Configuration: v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := service.Resolve(t.Context(), "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +73,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	if err != nil {
 		t.Fatal(err)
 	}
-	return finishObservationFixture{s, owner.Store, owner.Lease, pool, tenant, session, Dispatcher{Store: owner.Store}}
+	return finishObservationFixture{s, owner.Store, owner.Lease, pool, defaults, tenant, session, Dispatcher{Store: owner.Store, Observer: defaults}}
 }
 func (f finishObservationFixture) start(t *testing.T) store.InputReceipt {
 	t.Helper()
@@ -73,7 +88,7 @@ func (f finishObservationFixture) start(t *testing.T) store.InputReceipt {
 }
 func (f finishObservationFixture) fields(t *testing.T) (*time.Time, *string) {
 	t.Helper()
-	rows, err := f.s.ListDeploymentModelProviders(t.Context())
+	rows, err := f.defaults.List(t.Context())
 	if err != nil || len(rows) != 1 {
 		t.Fatal(err)
 	}
@@ -179,7 +194,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				d := Dispatcher{Store: store.New(pool)}
+				d := Dispatcher{Observer: modelconfigurationpg.New(pgunit.NewPool(pool))}
 				started := time.Now()
 				d.observeDeploymentProvider(f.tenant, f.session.ID, turn)
 				if elapsed := time.Since(started); elapsed < 900*time.Millisecond || elapsed > 2*time.Second {

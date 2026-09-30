@@ -38,10 +38,12 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
@@ -129,6 +131,11 @@ func run() error {
 	}
 	templateStore := templatepg.New(units, credentialKey)
 	environmentTemplates, err := environmenttemplates.NewService(templateStore)
+	if err != nil {
+		return err
+	}
+	modelConfigurationStore := modelconfigurationpg.New(units)
+	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore, credentialKey)
 	if err != nil {
 		return err
 	}
@@ -251,7 +258,8 @@ func run() error {
 		}
 	}
 	if registry != nil {
-		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry, Credentials: vaultService,
+		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
+			Credentials: vaultService, Observer: modelConfigurationStore,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
 		lease, err := pgunit.AcquireLease(ctx, pool)
 		if err != nil {
@@ -323,7 +331,8 @@ func run() error {
 	deps := api.Dependencies{
 		Engine: engine, Harnesses: kinds, CoreKeys: keyAdmin,
 		Installation: installation, InstallationBindings: executionStore,
-		Projects: executionStore, ModelProviders: executionStore,
+		Projects:       executionStore,
+		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
 		Skills:               executionStore,
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templateStore,

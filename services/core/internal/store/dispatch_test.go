@@ -14,6 +14,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -112,7 +114,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	h.d = &execution.Dispatcher{Store: s, Registry: h.registry}
+	h.d = &execution.Dispatcher{Store: s, Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool))}
 	return h
 }
 

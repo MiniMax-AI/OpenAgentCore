@@ -12,8 +12,8 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -78,8 +78,8 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
 	providerRevision := uuid.New()
-	handler, err := publicHandler(t, h.s, h.db, auth, options.Engine, workerExecution(worker), withPolicy(h.d.Policy), modelProviderDefaults(h.s, func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
-		return &store.DeploymentModelProviderSnapshot{Model: options.Model, HarnessConfig: options.HarnessConfig, Provider: &options.Provider, Revision: providerRevision}, nil
+	handler, err := publicHandler(t, h.s, h.db, auth, options.Engine, workerExecution(worker), withPolicy(h.d.Policy), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+		return &modelconfiguration.Snapshot{Model: options.Model, HarnessConfig: options.HarnessConfig, Provider: &options.Provider, Revision: providerRevision}, nil
 	}))
 	if err != nil {
 		t.Fatal("cannot create public API handler")

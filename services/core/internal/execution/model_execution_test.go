@@ -19,7 +19,7 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	// Hosted and self-hosted Runtimes have no model configuration of their own.
 	for _, environment := range []string{"openai_hosted", "self_hosted"} {
 		snapshot := Snapshot{Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); !errors.Is(err, store.ErrModelProviderRequired) {
+		if _, err := d.executionRequest(t.Context(), store.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, store.SessionExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
 			t.Fatal("provider-free Session dispatched", environment, err)
 		}
 	}

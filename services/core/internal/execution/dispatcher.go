@@ -10,6 +10,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -32,6 +33,9 @@ type Dispatcher struct {
 	Registry *runtimegateway.Registry
 	// Credentials opens the bearer tokens of authenticated MCP servers.
 	Credentials Credentials
+	// Observer records which deployment default model configurations committed
+	// root Turns used. It is required.
+	Observer modelconfiguration.Observer
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.

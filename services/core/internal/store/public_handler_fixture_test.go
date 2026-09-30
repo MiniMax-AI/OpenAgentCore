@@ -13,9 +13,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -54,9 +56,15 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 	if err != nil {
 		return nil, err
 	}
+	modelConfigurationStore := modelconfigurationpg.New(pgunit.NewPool(db.pool))
+	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore, db.cipher)
+	if err != nil {
+		return nil, err
+	}
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: s,
-		Projects: fixtureProjects{Store: s, keys: keys}, ModelProviders: s, Skills: s,
+		Projects: fixtureProjects{Store: s, keys: keys}, Skills: s,
+		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
 		Files: fileService, FilesReader: fileStore,
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templates,
@@ -155,17 +163,19 @@ func managedSandboxes(t testing.TB, s *store.Store) func(*api.Dependencies) {
 }
 
 // modelProviderDefaults resolves deployment model provider defaults with
-// resolve instead of the Store's deployment configuration.
-func modelProviderDefaults(s *store.Store, resolve func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error)) func(*api.Dependencies) {
-	return func(d *api.Dependencies) { d.ModelProviders = resolvedModelProviders{Store: s, resolve: resolve} }
+// resolve instead of the stored deployment configuration.
+func modelProviderDefaults(resolve func(context.Context, string) (*modelconfiguration.Snapshot, error)) func(*api.Dependencies) {
+	return func(d *api.Dependencies) {
+		d.ModelProviders = resolvedModelProviders{ModelProviders: d.ModelProviders, resolve: resolve}
+	}
 }
 
 type resolvedModelProviders struct {
-	*store.Store
-	resolve func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error)
+	api.ModelProviders
+	resolve func(context.Context, string) (*modelconfiguration.Snapshot, error)
 }
 
-func (p resolvedModelProviders) DeploymentModelProvider(ctx context.Context, harness string) (*store.DeploymentModelProviderSnapshot, error) {
+func (p resolvedModelProviders) Resolve(ctx context.Context, harness string) (*modelconfiguration.Snapshot, error) {
 	return p.resolve(ctx, harness)
 }
 

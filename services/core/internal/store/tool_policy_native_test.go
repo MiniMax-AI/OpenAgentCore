@@ -50,7 +50,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	handler, err := publicHandler(t, h.s, h.db, auth, kind, workerExecution(worker), withPolicy(h.d.Policy), nativeDeploymentDefaults(h.s, model, provider))
+	handler, err := publicHandler(t, h.s, h.db, auth, kind, workerExecution(worker), withPolicy(h.d.Policy), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}

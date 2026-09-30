@@ -67,7 +67,7 @@ func testHandler(t *testing.T, configure ...func(*Dependencies, *testFakes)) (ht
 	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: hex.EncodeToString(hash[:]), TenantID: tenant}).ResolveProjectAPIKey
 	s := &recordingStore{}
 	s.record(fakes)
-	fakes.modelProviders.deploymentModelProvider = noDeploymentModelProvider
+	fakes.modelProviders.resolve = noDeploymentModelProvider
 	for _, c := range configure {
 		c(&deps, fakes)
 	}

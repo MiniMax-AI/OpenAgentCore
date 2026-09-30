@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -28,7 +29,7 @@ type sessionRequest struct {
 	initialization        environmentconfig.Setup
 	originalEnvironment   json.RawMessage
 	modelProviderNull     bool
-	deploymentDefaults    *store.DeploymentModelProviderSnapshot
+	deploymentDefaults    *modelconfiguration.Snapshot
 	modelSource           string
 	harnessConfigSource   string
 	resolvedHarnessConfig json.RawMessage

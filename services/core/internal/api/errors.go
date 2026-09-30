@@ -190,7 +190,7 @@ func writeStoreError(w http.ResponseWriter, r *http.Request, err error, notFound
 
 	case errors.Is(err, store.ErrDefaultSkillVersion):
 		writeError(w, http.StatusBadRequest, "invalid_value", "Cannot delete the default skill version.", "version")
-	case errors.Is(err, store.ErrModelProviderRequired):
+	case errors.Is(err, execution.ErrModelProviderRequired):
 		writeError(w, http.StatusBadRequest, "model_provider_required", "This Session was created without a model provider and cannot run. Create a new Session with x_agents_core.model_provider or an Agent that has one saved.")
 	case errors.Is(err, store.ErrHostedEnvironmentFailed):
 		// Observed official status, type, code, null param and message.

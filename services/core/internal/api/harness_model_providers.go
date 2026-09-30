@@ -9,19 +9,23 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/go-chi/chi/v5"
 )
 
-// ModelProviders holds one deployment default model provider per harness. Keys
-// are write-only and encrypted. DeploymentModelProvider decrypts a harness's
-// default at Session creation, before the encrypted Session snapshot is
-// committed; it returns nil when the harness has no default.
+// ModelProviders replaces and removes each harness's deployment default
+// model configuration. Resolve opens a harness's default at Session creation,
+// before the encrypted Session snapshot is committed; it returns nil when the
+// harness has none.
 type ModelProviders interface {
-	ListDeploymentModelProviders(context.Context) ([]store.DeploymentModelProvider, error)
-	SetDeploymentModelProvider(context.Context, string, v1.ModelConfigurationInput) (store.DeploymentModelProvider, error)
-	DeleteDeploymentModelProvider(context.Context, string) error
-	DeploymentModelProvider(context.Context, string) (*store.DeploymentModelProviderSnapshot, error)
+	Replace(context.Context, modelconfiguration.Replacement) (modelconfiguration.Configuration, error)
+	Delete(context.Context, string) error
+	Resolve(context.Context, string) (*modelconfiguration.Snapshot, error)
+}
+
+// ModelProvidersReader lists the deployment defaults' safe views.
+type ModelProvidersReader interface {
+	List(context.Context) ([]modelconfiguration.Configuration, error)
 }
 
 // HarnessModelConfiguration is a harness's deployment default model provider. It
@@ -53,7 +57,7 @@ type CoreHarnessList struct {
 	Data   []CoreHarness `json:"data" binding:"required"`
 }
 
-func harnessModelConfiguration(value store.DeploymentModelProvider) *HarnessModelConfiguration {
+func harnessModelConfiguration(value modelconfiguration.Configuration) *HarnessModelConfiguration {
 	return &HarnessModelConfiguration{Object: "core.model_configuration", Harness: value.Harness,
 		ModelConfigurationView: v1.ModelConfigurationView{ModelProvider: &value.Provider, Model: value.Model, HarnessConfig: value.HarnessConfig}, UpdatedAt: value.UpdatedAt.UTC(), LastUsedAt: value.LastUsedAt, LastErrorCode: value.LastErrorCode, LastErrorAt: value.LastErrorAt}
 }
@@ -86,9 +90,9 @@ func knownHarness(w http.ResponseWriter, r *http.Request) (string, bool) {
 // @Failure 401,500 {object} CoreErrorResponse
 // @Router /core/v1/harnesses [get]
 func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request) {
-	providers, err := h.ModelProviders.ListDeploymentModelProviders(r.Context())
+	providers, err := h.ModelProvidersReader.List(r.Context())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeModelConfigurationError(w, r, err)
 		return
 	}
 	list := CoreHarnessList{Object: "list", Data: []CoreHarness{}}
@@ -124,9 +128,9 @@ func (h *Handler) getHarnessModelConfiguration(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	providers, err := h.ModelProviders.ListDeploymentModelProviders(r.Context())
+	providers, err := h.ModelProvidersReader.List(r.Context())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeModelConfigurationError(w, r, err)
 		return
 	}
 	for _, provider := range providers {
@@ -181,20 +185,13 @@ func (h *Handler) setHarnessModelConfiguration(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusBadRequest, "invalid_model_provider", "The body requires model_provider, model and optional harness_config.")
 		return
 	}
-	if err := input.ValidateHarness(harness); err != nil {
-		if writeCoreModelProviderError(w, err, harness) {
-			return
-		}
-		writeError(w, http.StatusBadRequest, "invalid_request_error", err.Error())
-		return
-	}
 	setAdminAuditSource(r, "")
-	provider, err := h.ModelProviders.SetDeploymentModelProvider(r.Context(), harness, input)
+	configuration, err := h.ModelProviders.Replace(r.Context(), modelconfiguration.Replacement{Harness: harness, Configuration: input})
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeModelConfigurationError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, harnessModelConfiguration(provider))
+	writeJSON(w, http.StatusOK, harnessModelConfiguration(configuration))
 }
 
 // @Summary Remove a harness's deployment default model provider
@@ -211,8 +208,8 @@ func (h *Handler) deleteHarnessModelConfiguration(w http.ResponseWriter, r *http
 		return
 	}
 	setAdminAuditSource(r, "")
-	if err := h.ModelProviders.DeleteDeploymentModelProvider(r.Context(), harness); err != nil {
-		writeStoreError(w, r, err)
+	if err := h.ModelProviders.Delete(r.Context(), harness); err != nil {
+		writeModelConfigurationError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

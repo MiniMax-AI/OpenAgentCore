@@ -64,7 +64,7 @@ func environmentCreationHandler(t *testing.T, engine string, configure ...func(*
 	}).ResolveProjectAPIKey
 	fixture.serve(fakes)
 	fakes.sessions.findSessionCreation, fakes.sessions.createSession, fakes.sessions.createSessionStream = fixture.FindSessionCreation, fixture.CreateSession, fixture.CreateSessionStream
-	fakes.modelProviders.deploymentModelProvider = fixtureDeploymentProvider
+	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	for _, c := range configure {
 		c(&deps, fakes)
 	}

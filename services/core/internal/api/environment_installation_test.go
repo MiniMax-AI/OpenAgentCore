@@ -37,7 +37,7 @@ func TestSelfHostedCreationReturnsInstallationWithoutWebCredential(t *testing.T)
 	deps, fakes := testDependencies(t)
 	fakes.projects.resolveProjectAPIKey = projectKeys(t, APIKey{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential("project-key"), TenantID: uuid.NewString()}).ResolveProjectAPIKey
 	fakes.sessions.findSessionCreation, fakes.sessions.createSession = f.FindSessionCreation, f.CreateSession
-	fakes.modelProviders.deploymentModelProvider = fixtureDeploymentProvider
+	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	fakes.environments.authorizeEnvironmentInstallation, fakes.environments.validateEnvironmentInstallation = f.AuthorizeEnvironmentInstallation, f.ValidateEnvironmentInstallation
 	deps.Execution = fakes.execution()
 	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Catalog: &nativeinstaller.Catalog{Version: "build"}}

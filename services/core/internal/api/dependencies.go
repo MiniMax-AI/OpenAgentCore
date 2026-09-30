@@ -33,6 +33,7 @@ type Dependencies struct {
 	Vaults               Vaults
 	VaultsReader         VaultsReader
 	ModelProviders       ModelProviders
+	ModelProvidersReader ModelProvidersReader
 	Files                Files
 	FilesReader          FilesReader
 	Skills               Skills
@@ -116,7 +117,8 @@ func (d Dependencies) validate() error {
 	if err := required(
 		field{"InstallationBindings", d.InstallationBindings}, field{"Projects", d.Projects},
 		field{"Vaults", d.Vaults}, field{"VaultsReader", d.VaultsReader},
-		field{"ModelProviders", d.ModelProviders}, field{"Skills", d.Skills},
+		field{"ModelProviders", d.ModelProviders}, field{"ModelProvidersReader", d.ModelProvidersReader},
+		field{"Skills", d.Skills},
 		field{"Files", d.Files}, field{"FilesReader", d.FilesReader},
 		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"EnvironmentTemplatesReader", d.EnvironmentTemplatesReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},

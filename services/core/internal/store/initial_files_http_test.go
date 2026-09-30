@@ -24,7 +24,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	// Exercise HTTP parsing and durable storage without starting a Runtime.
-	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), managedSandboxes(t, s), fixtureDeploymentProvider(s))
+	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), managedSandboxes(t, s), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}

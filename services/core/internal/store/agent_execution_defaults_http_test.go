@@ -10,6 +10,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -23,10 +24,10 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	deployment := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: "deployment-canary"}
 	defaultsCalls := 0
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withHarnesses([]string{"codex", "claude_sdk", "mcode"}), modelProviderDefaults(st, func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withHarnesses([]string{"codex", "claude_sdk", "mcode"}), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 		defaultsCalls++
 		copy := *deployment
-		return &store.DeploymentModelProviderSnapshot{Model: "fixture", Provider: &copy, Revision: uuid.New()}, nil
+		return &modelconfiguration.Snapshot{Model: "fixture", Provider: &copy, Revision: uuid.New()}, nil
 	}))
 	if err != nil {
 		t.Fatal(err)

@@ -15,7 +15,7 @@ import (
 // testHandler serves, so any access fails the test.
 func forbidSessionAccess(_ *Dependencies, f *testFakes) {
 	f.sessions.createSession, f.sessions.getSession, f.sessions.findSessionCreation, f.sessions.listSessions = nil, nil, nil, nil
-	f.modelProviders.deploymentModelProvider = nil
+	f.modelProviders.resolve = nil
 }
 
 func TestSessionAdmissionRejectsBeforeResourceOrExecutionAccess(t *testing.T) {

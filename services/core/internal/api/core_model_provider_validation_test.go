@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -8,26 +9,46 @@ import (
 	"strings"
 	"testing"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 )
 
-// coreProviderValidationStore counts deployment model provider writes.
+// coreProviderValidationStore serves the real model configuration rules over
+// storage that counts the deployment defaults reaching it.
 type coreProviderValidationStore struct {
+	t      testing.TB
 	writes int
 }
 
-func (s *coreProviderValidationStore) SetDeploymentModelProvider(context.Context, string, v1.ModelConfigurationInput) (store.DeploymentModelProvider, error) {
+func (s *coreProviderValidationStore) Replace(context.Context, modelconfiguration.Record) (modelconfiguration.Configuration, error) {
 	s.writes++
-	return store.DeploymentModelProvider{}, nil
+	return modelconfiguration.Configuration{}, nil
 }
 
-func (s *coreProviderValidationStore) configure(_ *Dependencies, f *testFakes) {
-	f.modelProviders.setDeploymentModelProvider = s.SetDeploymentModelProvider
+func (s *coreProviderValidationStore) Delete(context.Context, string) error {
+	unexpectedCall(s.t, "Delete")
+	return nil
+}
+
+func (s *coreProviderValidationStore) LoadSealed(context.Context, string) (modelconfiguration.Sealed, error) {
+	unexpectedCall(s.t, "LoadSealed")
+	return modelconfiguration.Sealed{}, nil
+}
+
+func (s *coreProviderValidationStore) configure(d *Dependencies, _ *testFakes) {
+	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{3}, 32))
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	service, err := modelconfiguration.NewService(s, cipher)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	d.ModelProviders = service
 }
 
 func TestCoreModelProviderValidationFields(t *testing.T) {
-	s := &coreProviderValidationStore{}
+	s := &coreProviderValidationStore{t: t}
 	h, _, _ := adminTestHandler(t, s.configure)
 	for _, tc := range []struct {
 		name, harness, body, code, param string

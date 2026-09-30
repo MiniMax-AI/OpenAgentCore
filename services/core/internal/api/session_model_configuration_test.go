@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 )
 
 func TestSessionNativeConfigurationSources(t *testing.T) {
@@ -41,9 +41,9 @@ func TestSessionNativeConfigurationSources(t *testing.T) {
 			}
 			calls := 0
 			deps, fakes := testDependencies(t)
-			fakes.modelProviders.deploymentModelProvider = func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
+			fakes.modelProviders.resolve = func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 				calls++
-				return &store.DeploymentModelProviderSnapshot{Provider: provider, Model: "deployment-model", HarnessConfig: json.RawMessage(`{"model_reasoning_effort":"high"}`)}, nil
+				return &modelconfiguration.Snapshot{Provider: provider, Model: "deployment-model", HarnessConfig: json.RawMessage(`{"model_reasoning_effort":"high"}`)}, nil
 			}
 			h := &Handler{Dependencies: deps}
 			err = h.prepareSessionModelConfiguration(t.Context(), &input, tc.saved, nil)

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/google/uuid"
@@ -51,6 +52,15 @@ func (l *closeCountingLease) Close(ctx context.Context) error {
 	return l.inner.Close(ctx)
 }
 
+// unusedObserver fails the test on any observation. The Workers it serves run
+// no Turn.
+type unusedObserver struct{ t *testing.T }
+
+func (o unusedObserver) ObserveDeploymentModelProvider(context.Context, modelconfiguration.Observation) (int64, error) {
+	o.t.Error("unexpected call to ObserveDeploymentModelProvider")
+	return 0, errors.New("unexpected call to ObserveDeploymentModelProvider")
+}
+
 func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 	if _, err := StartWorker(t.Context(), &Dispatcher{}, Owner{}); err == nil {
 		t.Fatal("worker started without an execution lease")
@@ -67,19 +77,23 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			_, err := StartWorker(canceled, &Dispatcher{MaxConcurrentExecutions: 1025}, Owner{Lease: lease})
 			return err
 		},
-		"missing Store": func(t *testing.T, lease *closeCountingLease) error {
+		"missing Credentials": func(t *testing.T, lease *closeCountingLease) error {
+			_, err := StartWorker(canceled, &Dispatcher{Observer: unusedObserver{t}}, Owner{Lease: lease})
+			return err
+		},
+		"missing observer": func(t *testing.T, lease *closeCountingLease) error {
 			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}}, Owner{Lease: lease})
 			return err
 		},
-		"missing Credentials": func(t *testing.T, lease *closeCountingLease) error {
-			_, err := StartWorker(canceled, &Dispatcher{}, Owner{Lease: lease})
+		"missing Store": func(t *testing.T, lease *closeCountingLease) error {
+			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}}, Owner{Lease: lease})
 			return err
 		},
 		"deployment claim": func(t *testing.T, lease *closeCountingLease) error {
 			s, owner := resetManagerStore(t)
 			lease.inner = owner.Lease
 			id := uuid.NewString()
-			dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+			dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
 			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Store: owner.Store})
 			if ping := owner.Lease.CheckOwnership(t.Context()); !errors.Is(ping, pgunit.ErrLeaseClosed) {
 				t.Error("failed start kept the database lease", ping)
@@ -104,7 +118,7 @@ func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
 	s, owner := resetManagerStore(t)
 	lease := &closeCountingLease{t: t, inner: owner.Lease}
 	id := uuid.NewString()
-	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
+	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
 	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Store: owner.Store})
 	if err != nil {
 		t.Fatal(err)

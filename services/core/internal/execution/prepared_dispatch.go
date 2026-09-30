@@ -41,7 +41,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	}
 	if !snapshot.ModelProviderConfigured && snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
 		// Reserved before providers were required; the caller settles it as failed.
-		return run, store.ErrModelProviderRequired
+		return run, ErrModelProviderRequired
 	}
 	bound, err := d.Store.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {

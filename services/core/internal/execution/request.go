@@ -12,6 +12,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
+// ErrModelProviderRequired reports a hosted or self-hosted Session that has no
+// frozen model provider and therefore cannot run.
+var ErrModelProviderRequired = errors.New("the Session has no model provider")
+
 func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session, snapshot Snapshot, caps runtimedevice.KindCapabilities, bound store.SessionExecutionBinding) (proto.PromptRequestPayload, error) {
 	recoverNativeSession := bound.HasStartedTurn && bound.NativeSessionID == ""
 	if recoverNativeSession && !caps.NativeSessionRecovery {
@@ -30,7 +34,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session store.Session
 	} else if snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
 		// Require the frozen bundle before dispatch so the harness cannot
 		// select an implicit provider endpoint.
-		return proto.PromptRequestPayload{}, store.ErrModelProviderRequired
+		return proto.PromptRequestPayload{}, ErrModelProviderRequired
 	}
 	options["model"], options["system_prompt"] = snapshot.Agent.Model, snapshot.Agent.Instructions
 	if snapshot.Agent.XAgentsCore != nil && len(snapshot.Agent.XAgentsCore.HarnessConfig) > 0 {

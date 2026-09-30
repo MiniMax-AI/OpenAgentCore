@@ -36,7 +36,7 @@ func verifyNativePublicExecution(t *testing.T, h *dispatchHarness, parent contex
 	}()
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
-	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(worker), nativeDeploymentDefaults(h.s, "gpt-5.5", provider))
+	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(worker), nativeDeploymentDefaults("gpt-5.5", provider))
 	if err != nil {
 		t.Fatal(err)
 	}

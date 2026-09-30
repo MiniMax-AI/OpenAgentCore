@@ -24,7 +24,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/google/uuid"
 )
 
@@ -150,10 +150,10 @@ func nativeModelProvider(model *httptest.Server) *v1.ModelProviderInput {
 
 // nativeDeploymentDefaults makes provider the deployment default model provider,
 // which public environment:none Sessions freeze at creation.
-func nativeDeploymentDefaults(s *store.Store, model string, provider *v1.ModelProviderInput) func(*api.Dependencies) {
+func nativeDeploymentDefaults(model string, provider *v1.ModelProviderInput) func(*api.Dependencies) {
 	revision := uuid.New()
-	return modelProviderDefaults(s, func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
-		return &store.DeploymentModelProviderSnapshot{Model: model, Provider: provider, Revision: revision}, nil
+	return modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+		return &modelconfiguration.Snapshot{Model: model, Provider: provider, Revision: revision}, nil
 	})
 }
 

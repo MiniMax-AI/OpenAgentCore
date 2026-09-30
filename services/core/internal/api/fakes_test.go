@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -548,39 +549,43 @@ func (f *fakeMetrics) RecordUnavailable() {
 }
 
 type fakeModelProviders struct {
-	t                             testing.TB
-	listDeploymentModelProviders  func(context.Context) ([]store.DeploymentModelProvider, error)
-	setDeploymentModelProvider    func(context.Context, string, v1.ModelConfigurationInput) (store.DeploymentModelProvider, error)
-	deleteDeploymentModelProvider func(context.Context, string) error
-	deploymentModelProvider       func(context.Context, string) (*store.DeploymentModelProviderSnapshot, error)
+	t       testing.TB
+	replace func(context.Context, modelconfiguration.Replacement) (modelconfiguration.Configuration, error)
+	delete  func(context.Context, string) error
+	resolve func(context.Context, string) (*modelconfiguration.Snapshot, error)
 }
 
-func (f *fakeModelProviders) ListDeploymentModelProviders(a0 context.Context) ([]store.DeploymentModelProvider, error) {
-	if f.listDeploymentModelProviders == nil {
-		unexpectedCall(f.t, "ListDeploymentModelProviders")
+func (f *fakeModelProviders) Replace(a0 context.Context, a1 modelconfiguration.Replacement) (modelconfiguration.Configuration, error) {
+	if f.replace == nil {
+		unexpectedCall(f.t, "Replace")
 	}
-	return f.listDeploymentModelProviders(a0)
+	return f.replace(a0, a1)
 }
 
-func (f *fakeModelProviders) SetDeploymentModelProvider(a0 context.Context, a1 string, a2 v1.ModelConfigurationInput) (store.DeploymentModelProvider, error) {
-	if f.setDeploymentModelProvider == nil {
-		unexpectedCall(f.t, "SetDeploymentModelProvider")
+func (f *fakeModelProviders) Delete(a0 context.Context, a1 string) error {
+	if f.delete == nil {
+		unexpectedCall(f.t, "Delete")
 	}
-	return f.setDeploymentModelProvider(a0, a1, a2)
+	return f.delete(a0, a1)
 }
 
-func (f *fakeModelProviders) DeleteDeploymentModelProvider(a0 context.Context, a1 string) error {
-	if f.deleteDeploymentModelProvider == nil {
-		unexpectedCall(f.t, "DeleteDeploymentModelProvider")
+func (f *fakeModelProviders) Resolve(a0 context.Context, a1 string) (*modelconfiguration.Snapshot, error) {
+	if f.resolve == nil {
+		unexpectedCall(f.t, "Resolve")
 	}
-	return f.deleteDeploymentModelProvider(a0, a1)
+	return f.resolve(a0, a1)
 }
 
-func (f *fakeModelProviders) DeploymentModelProvider(a0 context.Context, a1 string) (*store.DeploymentModelProviderSnapshot, error) {
-	if f.deploymentModelProvider == nil {
-		unexpectedCall(f.t, "DeploymentModelProvider")
+type fakeModelProvidersReader struct {
+	t    testing.TB
+	list func(context.Context) ([]modelconfiguration.Configuration, error)
+}
+
+func (f *fakeModelProvidersReader) List(a0 context.Context) ([]modelconfiguration.Configuration, error) {
+	if f.list == nil {
+		unexpectedCall(f.t, "List")
 	}
-	return f.deploymentModelProvider(a0, a1)
+	return f.list(a0)
 }
 
 type fakeProjects struct {

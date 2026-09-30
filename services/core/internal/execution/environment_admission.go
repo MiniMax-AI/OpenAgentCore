@@ -92,7 +92,7 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session store.Sess
 	// its harness cannot run. Cancellation and results above stay available.
 	var snapshot Snapshot
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || !snapshot.ModelProviderConfigured {
-		return nil, store.ErrModelProviderRequired
+		return nil, ErrModelProviderRequired
 	}
 	changed, unsubscribe := w.dispatcher.notifications.subscribe(session.TenantID, session.ID)
 	defer unsubscribe()

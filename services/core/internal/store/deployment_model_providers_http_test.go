@@ -15,7 +15,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -42,6 +45,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defaults := deploymentDefaults(t, db)
 	call := func(method, path, key, body string, status int) map[string]json.RawMessage {
 		t.Helper()
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -153,7 +157,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		if !strings.Contains(string(failure["error"]), "model_provider_protocol_unsupported") {
 			t.Fatal("unsupported native protocol not explained")
 		}
-		provider, err := st.DeploymentModelProvider(t.Context(), "codex")
+		provider, err := defaults.Resolve(t.Context(), "codex")
 		if err != nil || provider == nil || provider.Provider.Protocol != "responses" || provider.Provider.APIKey != "deployment-canary" {
 			t.Fatal("rejected protocol changed the stored default", err)
 		}
@@ -255,7 +259,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	}
 	before := reservations()
 	message := []store.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"start"}`)}}
-	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, store.ErrModelProviderRequired) {
+	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, execution.ErrModelProviderRequired) {
 		t.Fatal("provider-free Session accepted work", err)
 	}
 	if after := reservations(); after != before {
@@ -296,9 +300,10 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "abcd1234", RequestID: "none-retry", TraceID: "none-retry"})
+	defaults := deploymentDefaults(t, db)
 	setDefault := func(key string) {
 		t.Helper()
-		if _, err := st.SetDeploymentModelProvider(admin, "codex", v1.ModelConfigurationInput{ModelProvider: v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: key}, Model: "fixture"}); err != nil {
+		if _, err := defaults.Replace(admin, modelconfiguration.Replacement{Harness: "codex", Configuration: v1.ModelConfigurationInput{ModelProvider: v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: key}, Model: "fixture"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -322,7 +327,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 		return session.ID
 	}
 	setDefault("first-default-key")
-	snapshot, err := st.DeploymentModelProvider(t.Context(), "codex")
+	snapshot, err := defaults.Resolve(t.Context(), "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +340,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	if create(key) != original || create(key, `{"model":"m","text":{"verbosity":"medium"}}`) != original {
 		t.Fatal("retry after rotation created another Session")
 	}
-	if err := st.DeleteDeploymentModelProvider(admin, "codex"); err != nil {
+	if err := defaults.Delete(admin, "codex"); err != nil {
 		t.Fatal(err)
 	}
 	if create(key) != original {
@@ -356,26 +361,27 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tuple-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
 	provider := v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://original.example/v1", APIKey: "original-fixture-key"}
-	if _, err := st.SetDeploymentModelProvider(admin, "codex", v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}); err != nil {
+	defaults := deploymentDefaults(t, db)
+	if _, err := defaults.Replace(admin, modelconfiguration.Replacement{Harness: "codex", Configuration: v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}}); err != nil {
 		t.Fatal(err)
 	}
-	original, err := st.DeploymentModelProvider(t.Context(), "codex")
+	original, err := defaults.Resolve(t.Context(), "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Replacement after the atomic tuple read but before API resolution returns
 	// must never pair the old ciphertext with the replacement's revision.
-	resolver := func(ctx context.Context, harness string) (*store.DeploymentModelProviderSnapshot, error) {
-		snapshot, err := st.DeploymentModelProvider(ctx, harness)
+	resolver := func(ctx context.Context, harness string) (*modelconfiguration.Snapshot, error) {
+		snapshot, err := defaults.Resolve(ctx, harness)
 		if err != nil {
 			return nil, err
 		}
 		replacement := provider
 		replacement.APIKey = "replacement-fixture-key"
-		_, err = st.SetDeploymentModelProvider(admin, harness, v1.ModelConfigurationInput{ModelProvider: replacement, Model: "fixture"})
+		_, err = defaults.Replace(admin, modelconfiguration.Replacement{Harness: harness, Configuration: v1.ModelConfigurationInput{ModelProvider: replacement, Model: "fixture"}})
 		return snapshot, err
 	}
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), modelProviderDefaults(st, resolver))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), modelProviderDefaults(resolver))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,4 +427,15 @@ func TestDeploymentProviderResolutionFixtureIsolation(t *testing.T) {
 	if revisions() != before {
 		t.Fatal("deployment provider fixture changed the shared test database")
 	}
+}
+
+// deploymentDefaults serves deployment default model configurations from db,
+// as the Core routes do.
+func deploymentDefaults(t *testing.T, db fixtureDB) *modelconfiguration.Service {
+	t.Helper()
+	service, err := modelconfiguration.NewService(modelconfigurationpg.New(pgunit.NewPool(db.pool)), db.cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
 }

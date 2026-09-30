@@ -52,6 +52,9 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if dispatcher.Credentials == nil {
 		return nil, errors.New("execution worker requires MCP Credentials")
 	}
+	if dispatcher.Observer == nil {
+		return nil, errors.New("execution requires a model configuration observer")
+	}
 	if owner.Store == nil {
 		return nil, errors.New("execution worker requires the execution Store")
 	}
@@ -359,7 +362,7 @@ func (w *Worker) runClaim(ctx context.Context, item store.ExecutionWork) error {
 	var rejection *preparationRejection
 	capacityRejected := errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare && rejection.code == "preparation_capacity"
 	outcome := json.RawMessage(`{"error_code":"execution_unavailable"}`)
-	if errors.Is(err, store.ErrModelProviderRequired) {
+	if errors.Is(err, ErrModelProviderRequired) {
 		outcome = json.RawMessage(`{"error_code":"model_provider_required"}`)
 	}
 	finish, cancel := context.WithTimeout(context.Background(), 10*time.Second)

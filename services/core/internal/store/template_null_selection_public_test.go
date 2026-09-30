@@ -41,7 +41,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 	})
 	serve := func(current *store.Store) *httptest.Server {
 		t.Helper()
-		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, current), fixtureDeploymentProvider(current))
+		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, current), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}

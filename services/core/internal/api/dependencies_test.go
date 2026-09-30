@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // testExecutorURL is the daemon URL self-hosted Sessions report in tests.
@@ -19,6 +19,7 @@ type testFakes struct {
 	vaults                 *fakeVaults
 	vaultsReader           *fakeVaultsReader
 	modelProviders         *fakeModelProviders
+	modelProvidersReader   *fakeModelProvidersReader
 	files                  *fakeFiles
 	filesReader            *fakeFilesReader
 	skills                 *fakeSkills
@@ -58,7 +59,8 @@ type testFakes struct {
 func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	t.Helper()
 	f := &testFakes{
-		projects: &fakeProjects{t: t}, modelProviders: &fakeModelProviders{t: t},
+		projects:       &fakeProjects{t: t},
+		modelProviders: &fakeModelProviders{t: t}, modelProvidersReader: &fakeModelProvidersReader{t: t},
 		vaults: &fakeVaults{t: t}, vaultsReader: &fakeVaultsReader{t: t},
 		skills:               &fakeSkills{t: t},
 		environmentTemplates: &fakeEnvironmentTemplates{t: t}, environmentTemplatesReader: &fakeEnvironmentTemplatesReader{t: t},
@@ -74,7 +76,8 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 	}
 	return Dependencies{
 		Engine: "codex", CoreKeys: coreKeys(t, "admin"), InstallationBindings: f.installationBindings,
-		Projects: f.projects, ModelProviders: f.modelProviders, Skills: f.skills,
+		Projects: f.projects, Skills: f.skills,
+		ModelProviders: f.modelProviders, ModelProvidersReader: f.modelProvidersReader,
 		Vaults: f.vaults, VaultsReader: f.vaultsReader,
 		Files: f.files, FilesReader: f.filesReader,
 		EnvironmentTemplates: f.environmentTemplates, EnvironmentTemplatesReader: f.environmentTemplatesReader,
@@ -124,7 +127,7 @@ func newTestHandler(t testing.TB, deps Dependencies) http.Handler {
 }
 
 // noDeploymentModelProvider is a deployment without a default model provider.
-func noDeploymentModelProvider(context.Context, string) (*store.DeploymentModelProviderSnapshot, error) {
+func noDeploymentModelProvider(context.Context, string) (*modelconfiguration.Snapshot, error) {
 	return nil, nil
 }
 
