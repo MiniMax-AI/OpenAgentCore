@@ -1,92 +1,49 @@
-# Claude Code on the dedicated Runtime
+# Claude Code Runtime
 
-Core is independently deployed. Each managed Session receives one Docker Runtime
-containing the daemon, pinned Claude Agent SDK/native harness and local workspace.
-The SDK owns the model/tool loop. Public clients use the same Agents API contract.
+The Claude adapter runs Claude Code through the pinned Claude Agent SDK. The SDK owns the model and tool loop. Two parts make up the adapter: the private TypeScript bridge in [`packages/claude-sdk-adapter`](../../../../packages/claude-sdk-adapter/README.md), which owns the bridge protocol and native SDK configuration, and the Go adapter in [`agent/claudesdk`](../../../../apps/daemon/internal/agent/claudesdk), which owns the bridge process. This page holds the Runtime-level rules and the Claude Runtime image. [Harness onboarding](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
-## Build and configure
+Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/design-principles.md#runtime-and-outer-isolation)).
 
-The [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers)
-builds the image. The bundle pins SDK `0.3.269` and native Claude Code `2.1.269`. The Dockerfile pins
-Node's Linux amd64 manifest. Keep the exported SDK bundle immutable. Configure
-Core's database-owned managed deployment with the resulting immutable Runtime
-image. Existing Docker outer security settings are unchanged; the daemon and
-native adapter do not add an inner sandbox. Tools run as UID/GID 1000 and can
-access files available to that user.
+## Native pin and readiness
 
-Install required system dependencies while building the image/template. Runtime
-has no automatic apt installation, sudo or elevated daemon permissions;
-`system_packages` is unsupported and missing dependencies cause operation failure.
-npm/Python package and setup commands run directly with the existing user's
-permissions. The packaged image no longer needs bubblewrap or socat for an inner
-sandbox. For native self-hosting and platform limits, see the
-[self-hosted guide](../../../../docs/getting-started/self-hosted.md#platforms).
+The bundle pins Claude Agent SDK `0.3.269` ([`package.json`](../../../../packages/claude-sdk-adapter/package.json)), which reports native Claude Code `2.1.269`. The bridge uses protocol 3 for a prepared Executor with separately identified Turns; the Go adapter's readiness and Executor checks reject any other protocol version ([`readiness.go`](../../../../apps/daemon/internal/agent/claudesdk/readiness.go), [`executor.go`](../../../../apps/daemon/internal/agent/claudesdk/executor.go)).
 
-Set `OAC_DEFAULT_HARNESS=claude_sdk`. Configure the deployment default model provider
-with the Core key, in Web or through Core's API:
+Workspace execution requires the bundle to report the `workspace_tools`, `workspace_prepare`, `workspace_command_observations` and `local_runtime_v2` features; matching SDK versions alone do not establish compatibility. Function tools in workspace execution additionally require `workspace_functions`. The native installer rejects a bundle that lacks the workspace features ([`installation.go`](../../../../apps/daemon/internal/agent/claudesdk/installation.go)).
 
-```sh
-curl -fsS -X PUT http://127.0.0.1:8091/core/v1/harnesses/claude_sdk/model-provider \
-  -H "Authorization: Bearer $CORE_KEY" -H "Content-Type: application/json" \
-  -d '{"protocol":"anthropic","base_url":"https://api.anthropic.com","api_key":"REPLACE_WITH_OPERATOR_SECRET"}'
-```
+Claude accepts only the `anthropic` model protocol ([`harnessconfig/claudesdk`](../../../../internal/harnessconfig/claudesdk/configuration.go)). [Model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults) owns provider selection.
 
-A Session may instead supply its own `x_agents_core.model_provider`. Use the
-endpoint and model supported by your actual provider. Do not bake keys into the
-image. Core freezes the bundle in the Session's encrypted snapshot and delivers it
-to the adapter; it is not a public Agent field. Ordinary environment projection
-does not isolate locally stored credentials from tools running as the same user.
-Follow the existing Core setup for independent PostgreSQL credentials, migrations,
-API authentication and managed Runtime enrollment. Parsar is not a dependency.
+## Native state and recovery
 
-The supported hosted profile accepts text execution with medium verbosity and
-native Bash/Read/Edit and declared public functions with text results. Files and Artifacts use the shared public interfaces.
-Check the current qualified engine profile for MCP, subagents and structured
-output combinations. Historical hosted-profile acceptance does not qualify native
-self-hosted platforms or every feature combination. The existing
-`environment:none` function/MCP profile is separate. This is not complete upstream
-protocol compatibility.
+With a workspace binding, the SDK's history, home and scratch directories are `history`, `home` and `scratch` under `$OAC_RUNTIME_HOME/runtime/claude-sdk/` (mode 0700; `OAC_RUNTIME_HOME` defaults to `~/.oac`). The daemon's authentication stays under `$OAC_RUNTIME_HOME/daemon/`. These locations keep Session state apart; they do not restrict the tools.
 
-## Runtime and adapter rules
+Recovery uses the SDK's history APIs ([`recovery.ts`](../../../../packages/claude-sdk-adapter/src/recovery.ts)). An explicitly supplied native Session ID must exist. When Core requires existing history but has no recorded ID, the adapter accepts only a single native Session whose recorded cwd equals the bound workspace and which has at least one message. Missing, foreign, ambiguous or empty history is rejected before any model input.
 
-Native self-hosted installations use the same bundle and daemon protocol.
-The shared local binding selects the actual workspace. SDK history, home and
-scratch remain under `OAC_RUNTIME_HOME/runtime/claude-sdk` for session ownership,
-without restricting tools. Authentication remains under `OAC_RUNTIME_HOME/daemon`.
-The daemon requires neither nested sandbox privileges nor host security changes.
+## Native failure classification
 
-The `local_runtime_v2` capability identifies the current workspace and direct MCP
-launcher contract. Reject earlier workspace bundles; matching SDK versions alone
-do not establish adapter compatibility.
-The adapter advertises `local_runtime_v2` after checking the installed bridge and
-native binary. Windows additionally needs Git Bash for its Bash tool. Registration
-combines that check with the local binding; Core consumes the same readiness
-contract on every platform. The profile supports Bash/Read/Edit, preparation,
-shared Files/Artifacts, cancellation and history continuation. Other capabilities
-remain subject to their actual engine qualification; bypass execution does not
-silently qualify a new MCP or function combination.
+The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/native_failure.ts)) classifies a failure only from root assistant messages (no parent tool use) of the same native Session that answer Core-submitted inputs not yet completed; replayed and synthetic messages are ignored. A classification is committed only when the matching native result is an error; a successful result clears it. The [Runtime protocol](../../../../docs/runtime-protocol.md#native-failure-classification) defines the codes.
 
-Recovery uses the SDK's history APIs. An explicitly supplied native identity must
-exist. If Core requires existing history without having recorded an identity, the
-adapter accepts only one nonempty native history for the exact bound cwd. Missing,
-foreign, ambiguous or metadata-only history rejects before model input. The Runtime
-volume and shared Environment/Session binding establish ownership; this lookup
-cannot select another Session's home or infer ownership from a model response.
+| SDK assistant error | Code |
+| --- | --- |
+| `authentication_failed`, `oauth_org_not_allowed`, `account_on_hold`, `verification_required`, `cloud_credential_error` | `authentication_error` |
+| `billing_error` | `usage_limit_exceeded` |
+| `rate_limit` | `rate_limit_exceeded` |
+| `overloaded` | `server_overloaded` |
+| `invalid_request` | `invalid_request` |
+| `model_not_found` | `resource_not_found` |
+| `server_error` | `server_error` |
 
-Claude hosted functions compose the existing SDK function bridge with the common
-workspace execution profile. Only declared function tools and the verified native tool
-inventory are available. The bundle advertises this combination separately from
-basic workspace execution; function preparations require that verified combination.
-Service-origin hosted MCP remains unqualified; Environment Plugin declarations
-use the separately qualified initialization path above. Function callbacks do not change file,
-credential, history, subagent or network authority.
+`unknown`, `max_output_tokens` and other results stay unclassified. The bridge drops the classification when any other error ends the Turn, when cleanup fails or when no native process ran. The Go adapter keeps it only for the reported failed result of the same native Session, and only after it received the Turn settlement ([`executor_turn.go`](../../../../apps/daemon/internal/agent/claudesdk/executor_turn.go)).
 
-## Adding another native engine
+## Runtime image
 
-Follow [Add a native Harness](../../../../contracts/agents-api/harness-onboarding.md).
-The Claude adapter is one of its [native references](../../../../contracts/agents-api/harness-onboarding.md#native-references):
-it implements the shared `agent.ExecutorFactory`, `Executor` and `Turn`
-interfaces and registers them in
-[`cli/claude_sdk.go`](../../../../apps/daemon/internal/cli/claude_sdk.go).
-Acceptance requirements are in
-[Harness onboarding](../../../../contracts/agents-api/harness-onboarding.md#qualify-the-adapter).
+[`Dockerfile`](Dockerfile) builds the Claude Runtime image from a prepared context that holds only `oac-daemon` and the exported SDK bundle; the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers) builds it. Keep the exported bundle unchanged.
+
+| Item | Value |
+| --- | --- |
+| Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep` |
+| Programs | `/usr/local/bin/oac-daemon` and the SDK bundle at `/opt/claude-sdk` |
+| User | UID/GID 1000 with `HOME=/home/runtime` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node`, `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
+| Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
+
+The build runs the bundle's `runtime_check.js` against its entry point. The distribution copies `/opt/claude-sdk` into the combined Runtime image. Sandboxes run the image with the [Docker sandbox settings](../codex/README.md#docker-sandbox-settings).
