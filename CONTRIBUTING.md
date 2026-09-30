@@ -201,6 +201,8 @@ The Runtime is not a sandbox; see
 - Keep component boundaries explicit through shared interfaces and versioned
   protocols. Register implementations behind those interfaces. Adding an
   implementation must not require a new orchestration path selected by its name.
+  Sandbox configuration semantics belong to typed adapter codecs: Core transports
+  only their safe public projection, observations and separately encrypted secrets.
   Sandbox registration, configuration adaptation and persistence boundaries follow
   the [Sandbox Provider guide](docs/sandbox-provider.md#register-the-provider-kind).
   Resource operation declarations are exhaustive and validated against the existing

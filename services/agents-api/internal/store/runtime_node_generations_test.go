@@ -3,11 +3,10 @@ package store
 import (
 	"database/sql"
 	"errors"
-	"os"
-	"testing"
-
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"os"
+	"testing"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"

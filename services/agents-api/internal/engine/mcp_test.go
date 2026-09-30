@@ -1,10 +1,9 @@
 package engine
 
 import (
-	"testing"
-
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"testing"
 )
 
 func TestMCPOriginQualification(t *testing.T) {

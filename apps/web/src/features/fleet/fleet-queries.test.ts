@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { sandboxAdmin, sandboxDeploymentQuery, sandboxScope } from "../sandbox/sandbox-queries";
 import { fleetQuery } from "./fleet-queries";
 
-const deployment: SandboxDeployment = { rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 1, pending: 0 }, suspension: null,
+const deployment: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 1, pending: 0 }, suspension: null,
   reset: { clear: "auto", requested_at: "2026-09-27T10:00:00Z", deadline_at: "2026-09-27T11:00:00Z", forced_at: null, remaining: { busy: 1, idle: 0, cleanup: 0, on_offline_nodes: 0, offline_nodes: [] } } };
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });

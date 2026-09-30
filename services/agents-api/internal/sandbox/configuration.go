@@ -84,8 +84,8 @@ func DecodeConfigurationObject(raw json.RawMessage, target any, allowed ...strin
 	if json.Unmarshal(raw, &fields) != nil || fields == nil {
 		return ErrInvalid
 	}
-	for field := range fields {
-		if !slices.Contains(allowed, field) {
+	for field, value := range fields {
+		if !slices.Contains(allowed, field) || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 			return ErrInvalid
 		}
 	}

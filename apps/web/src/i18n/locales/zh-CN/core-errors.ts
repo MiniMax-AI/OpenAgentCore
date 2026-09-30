@@ -37,9 +37,9 @@ export const coreErrors = {
   "runtime_node_in_use": "节点仍有活跃分配或保留资源。请先清理资源分配、快照、预留资源和待清理项，再移除节点。",
   "runtime_node_unavailable": "所选沙箱节点不可用或容量不足。",
   "sandbox_admin_not_configured": "此控制台尚未配置沙箱管理权限。",
-  "e2b_team_mismatch": "此 E2B 密钥无法管理当前保留的部署。更换团队前请先重置。",
-  "e2b_api_key_invalid": "E2B API 密钥被拒绝。已保存的配置未改变。",
-  "e2b_template_build_invalid": "请选择已就绪且资源匹配的不可变 E2B 模板构建。",
-  "e2b_request_unconfirmed": "无法确认 E2B 验证结果。请刷新后再提交。",
+  "sandbox_credential_ownership": "此 E2B 密钥无法管理当前保留的部署。更换团队前请先重置。",
+  "sandbox_credential_invalid": "E2B API 密钥被拒绝。已保存的配置未改变。",
+  "sandbox_configuration_invalid": "请选择已就绪且资源匹配的不可变 E2B 模板构建。",
+  "sandbox_verification_unconfirmed": "无法确认 E2B 验证结果。请刷新后再提交。",
   "sandbox_configuration_error": "E2B 沙箱需要可从互联网访问的 HTTPS 地址，请在系统中配置域名与 HTTPS。"
 } as const;

@@ -5,7 +5,7 @@ import { sandboxConfigurationRejection, sandboxRequestError, sandboxWriteUncerta
 
 describe("sandbox write outcome", () => {
   it("uses fixed bilingual E2B errors without reflecting provider text or secrets", () => {
-    for (const [code, status] of [["e2b_team_mismatch", 409], ["e2b_api_key_invalid", 400], ["e2b_template_build_invalid", 400], ["e2b_request_unconfirmed", 503]] as const) {
+    for (const [code, status] of [["sandbox_credential_ownership", 409], ["sandbox_credential_invalid", 400], ["sandbox_configuration_invalid", 400], ["sandbox_verification_unconfirmed", 503]] as const) {
       const error = new AgentCoreError("secret-provider-response", status, code);
       for (const locale of ["en", "zh"] as const) {
         expect(sandboxRequestError(error, locale)).not.toContain("secret-provider-response");

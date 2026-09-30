@@ -1,9 +1,8 @@
 package store_test
 
 import (
-	"testing"
-
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"testing"
 )
 
 func inputTextForTest(t *testing.T, input proto.MessageInput) string {

@@ -6,13 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
 	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentplugin"
 
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"

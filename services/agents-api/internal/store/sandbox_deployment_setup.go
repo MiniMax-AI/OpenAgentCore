@@ -13,7 +13,6 @@ import (
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/providers"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrSandboxDeploymentConflict = errors.New("sandbox deployment is already configured differently")
@@ -192,11 +191,4 @@ func runtimeDeploymentView(d sqlc.RuntimeDeployment, publicURL string) (RuntimeD
 		result.Suspension = &SandboxSuspensionView{IdleSeconds: d.IdleSeconds, RetentionSeconds: d.RetentionSeconds}
 	}
 	return result, nil
-}
-
-func optionalInt32(value pgtype.Int4) *int32 {
-	if !value.Valid {
-		return nil
-	}
-	return &value.Int32
 }

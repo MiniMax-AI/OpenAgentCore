@@ -7,10 +7,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"io"
 	"time"
-
-	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"

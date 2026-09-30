@@ -261,13 +261,10 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
   await page.getByRole("button", { name: "Save configuration" }).click();
   await expect(page.getByRole("heading", { name: "Sandbox configuration", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  expect(submitted).toMatchObject({ provider: "e2b", e2b: {
-    api_key: "fixture-private-key", template: "template:94be54a1-138c-4f30-bc87-b13686272dbe",
-    api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai",
-  } });
+  expect(submitted).toMatchObject({ provider: "e2b", configuration: { template: "template:94be54a1-138c-4f30-bc87-b13686272dbe", api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai" } , credential: { api_key: "fixture-private-key" } });
   expect(await writes(request)).toEqual([
-    "POST /core/v1/sandbox/e2b/templates",
-    "POST /core/v1/sandbox/e2b/templates/template/builds",
+    "POST /core/v1/sandbox/providers/e2b/discovery",
+    "POST /core/v1/sandbox/providers/e2b/discovery",
     "POST /core/v1/sandbox/deployment",
   ]);
 });

@@ -21,16 +21,16 @@ func reserveRuntimePlacement(ctx context.Context, q *sqlc.Queries, session pgtyp
 	if d.ResetClear.Valid {
 		return ErrSandboxResetAdmission
 	}
+	// A changed installation address cannot admit guests that require a public
+	// origin. Existing owned resources remain available for cleanup.
+	if d.ProviderKind != "" && providers.RequiresPublicOrigin(d.ProviderKind) && LoopbackOrigin(publicURL) {
+		return ErrSandboxPublicURLUnreachable
+	}
 	if d.Mode == "direct" {
 		if d.AdmissionPaused {
 			return ErrRuntimeNodeUnavailable
 		}
-		// E2B guests reach Core over the internet. A selection saved before the
-		// public URL became loopback admits nothing, while its existing sandboxes
-		// stay reachable for cleanup through the loaded provider.
-		if providers.RequiresPublicOrigin(d.ProviderKind) && LoopbackOrigin(publicURL) {
-			return ErrSandboxPublicURLUnreachable
-		}
+
 		return nil
 	}
 	if d.ProviderKind == "" {

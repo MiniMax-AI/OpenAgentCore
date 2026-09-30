@@ -3,10 +3,9 @@ package sandbox
 import (
 	"errors"
 	"fmt"
-	"reflect"
-
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/providercontract"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/runtimeobs"
+	"reflect"
 )
 
 // These existing interfaces are the canonical operation inventory. Declarations

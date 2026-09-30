@@ -1,9 +1,8 @@
 package execution
 
 import (
-	"testing"
-
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
+	"testing"
 )
 
 func TestExecutionEnvironmentDoesNotDefaultToLocal(t *testing.T) {

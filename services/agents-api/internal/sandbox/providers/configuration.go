@@ -59,6 +59,9 @@ func ResolveChange(next, previous sandbox.Selection) (sandbox.Selection, error) 
 	return a.Configuration.ResolveChange(next, previous)
 }
 func WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, error) {
+	if owner.Provider != candidate.Provider {
+		return owner, sandbox.ErrInvalid
+	}
 	a, e := Lookup(owner.Provider)
 	if e != nil {
 		return owner, e

@@ -234,10 +234,10 @@ function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
   const { navigate } = useConsoleNavigation();
   // An E2B selection may adopt its template build's size instead of saving one.
   const resources = sandboxSize(deployment);
-  const build = deployment.e2b?.template_build;
+  const build = deployment.metadata?.template_build;
   const disk = build?.resources.root_disk_mib ?? null;
   const status = templateBuildStatus(build);
-  const template = deployment.e2b?.template;
+  const template = deployment.configuration?.template;
   return (
     <Section
       headingId="cloud-heading"

@@ -1,7 +1,7 @@
 {
   "sources": {
     "contracts/agents-api/openapi.yaml": "bdda1027eb0e7d2e8ccc5dba3ed3e2dbb6d447e9ab2c5b571fe4056fa7596eec",
-    "contracts/agents-api/core.openapi.yaml": "f1b9278c3a4b1cb55127cf9471583d00f1ab13b6ceb64f8693a01c4cf03674eb",
+    "contracts/agents-api/core.openapi.yaml": "d43ae9654213d2b457a01ac0e470a0fba356c5a50052ea57e6dd51518355f81e",
     "contracts/agents-api/runtime.openapi.yaml": "505286d5eacf94a14f9527fcf4e7beb4fba4f792681be26ba966254cbf49b4aa"
   },
   "outputs": {
@@ -40,8 +40,8 @@
     "content/docs/api-reference/core/skills.mdx": "ed899ade7b032b1732b3097d81419a8fdbb9ead0594fca9f2107da644b97031f",
     "content/docs/api-reference/core/vaults.mdx": "12d0aac96cd4a3472ef4eaa287f7945f78862017956e79bfc3ed0ef8e772e78a",
     "content/docs/api-reference/core/credentials.mdx": "27d586b9a8fd738b9947802f32c80458195370252886bc26abedccf2125ee981",
-    "content/docs/api-reference/core/sandbox-manager.mdx": "45e65afffb25e5b6ee2ab0853d7a84dee164e0d44ea384675fbd7ffcbd6c1a58",
-    "openapi/core-api.yaml": "dc8e80ada4ef8bd93635cab2c5d337b9d7661991a6baa1f69dc4258ebe434ef9",
+    "content/docs/api-reference/core/sandbox-manager.mdx": "ca91a5976b6ff134d29aba226b5e078af4ec9fa7ba67d9a2365664a61c8a8b45",
+    "openapi/core-api.yaml": "0489659a5afe542e0df25347d4d73a71b6c63d4b5460b533a3332e67db7e0591",
     "content/docs/api-reference/core/meta.json": "d0aef1f54c4cfc30b4e1d974119ae1cdce1c87d5ecba723afbeb4599119482a7",
     "content/docs/api-reference/core/index.mdx": "57cf9ea947ef45e79575c25a0a3d4e5e856dde6d14698ccc2c51b86201c249e9",
     "content/docs/api-reference/machine/native-installation.mdx": "421a858685b79fdcf8d7eff308c5768d1b62385c3988c6089f380afe80aaed69",

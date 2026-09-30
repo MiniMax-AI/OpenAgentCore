@@ -1,10 +1,9 @@
 package api
 
 import (
-	"testing"
-
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/store"
+	"testing"
 )
 
 func TestSandboxNodeDetailValidationAndAuthentication(t *testing.T) {

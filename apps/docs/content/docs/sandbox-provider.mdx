@@ -205,7 +205,7 @@ A provider must not implement a competing preparation path.
 ## Register the provider kind
 
 `sandbox/providers/registry.go` is the sole registration table. Each entry binds
-an adapter's specification/resource validators, selection normalization, deployment
+an adapter's specification/resource validators, the required `ConfigurationAdapter`, deployment
 mode, defaults, the adapter-owned operation declaration, and local or direct constructor.
 `providers.Build` constructs node-local adapters; `providers.BuildDirect` constructs
 direct adapters. Neither allocates compute. There is no init-time registration or
@@ -216,7 +216,7 @@ For a new implementation:
 1. Implement the operation contracts above in the adapter package and add native contract tests.
 2. Add its configuration validators and optional read-only `SelectionDiscoverer`
    for native resource discovery. Normalization must copy input before changing it.
-   `RestoreSelection` must retain access to owned resources without requiring new
+   `ConfigurationAdapter.Decode` must retain access to owned resources without requiring new
    template validation. Put native credential verification behind
    `CredentialVerifier` when needed.
 3. Register its constructor, policies, operation declaration and defaults in `providers/registry.go`.
@@ -224,18 +224,31 @@ For a new implementation:
    The installer projection uses those registered policies and the common field
    bounds in `sandbox/deployment_contract.go`; regenerate it with
    `go run ./services/agents-api/cmd/specification-contract -write`.
-4. If new configuration fields are necessary, extend the typed `sandbox.Selection`
-   envelope and its dedicated encrypted persistence fields, API DTO and operator
-   client. Do not replace typed configuration with unrestricted JSON. Field codecs
-   may map columns; Store must not parse native endpoints, templates or defaults.
+4. Implement `sandbox.ConfigurationAdapter` with a typed native configuration.
+   `DecodeInput` strictly parses separate `configuration` and write-only `credential`
+   objects. `Encode` creates whitelisted public selectors, read-only observations
+   and separate secret bytes; it must never pass request JSON through. `Decode`
+   restores stored selectors without remote admission. `ResolveChange`, `Equal`
+   and `WithCredential` own inheritance, identity and credential composition.
+   `Requirements` explicitly declares credential and public-origin needs plus
+   discovery support. Node providers accept only an empty public object, reject
+   credentials and explicitly return Unsupported for discovery and replacement.
+   Implement the separate `ConfigurationDiscoverer` interface even when unsupported.
+   Discovery owns query validation and safe catalog results, never mutations or
+   deployment admission. Core keeps admin authorization, input limits and deadlines.
+   A new kind requires no vendor column, API field or Store branch.
 5. Supply required installer/distribution artifacts and operator labels. A new
    provider must not add a Session/Turn scheduling path or a Store vendor switch.
 
 Preview and persistence use `providers.Normalize` and `providers.Describe`.
 `SelectionDiscoverer` resolves omitted native resource values before commit; the
 complete specification is validated again at persistence. Store owns transactions,
-credential encryption, generation fencing, resource ownership and typed column
-mapping. Database constraints validate structure, not the registration list.
+credential encryption, generation fencing, resource ownership and generic object storage. The adapter alone interprets
+`provider_config` and `provider_metadata`; `provider_credential` holds ciphertext
+bound to the installation and generation. Retained generations store their original
+public configuration and metadata, and compose the current credential through the
+adapter. No retained selector is rewritten by a credential replacement. Database
+constraints validate object structure, not the registration list.
 `providers.ResolveChange` owns configuration inheritance and comparison uses
 normalized selectors, so preview, retry and commit share the same defaults.
 

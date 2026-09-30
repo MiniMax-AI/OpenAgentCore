@@ -3,14 +3,13 @@ package runtimeenrollment
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
+	"github.com/gorilla/websocket"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/proto"
-	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/device"
 	"github.com/MiniMax-AI-Dev/parsar/internal/agentdaemon/gateway"

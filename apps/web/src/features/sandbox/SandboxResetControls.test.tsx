@@ -5,7 +5,7 @@ import { SandboxResetControls } from "./SandboxResetControls";
 
 const reset: SandboxReset = { clear: "auto", requested_at: "2020-01-01T10:00:00Z", deadline_at: "2020-01-01T11:00:00Z", forced_at: null,
   remaining: { busy: 2, idle: 1, cleanup: 3, on_offline_nodes: 2, offline_nodes: [{ node_id: "offline-a", name: "Offline A", resources: 2 }] } };
-const deployment = (value: SandboxReset | null): SandboxDeployment => ({ rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "https://core.example", reset: value, owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 5, pending: 1 }, suspension: null });
+const deployment = (value: SandboxReset | null): SandboxDeployment => ({ credential_configured: false, configuration: {}, metadata: {}, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "https://core.example", reset: value, owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 5, pending: 1 }, suspension: null });
 const render = (value: SandboxReset | null, stale = false) => renderToStaticMarkup(<SandboxResetControls deployment={deployment(value)} disabled={stale} stale={stale} onStart={async () => true} onCancel={async () => true} />);
 
 describe("authoritative reset progress", () => {

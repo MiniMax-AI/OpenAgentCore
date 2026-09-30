@@ -2,10 +2,9 @@ package store
 
 import (
 	"errors"
+	"github.com/google/uuid"
 	"sync"
 	"testing"
-
-	"github.com/google/uuid"
 )
 
 func TestEnvironmentTemplatesDurabilityIsolationAndConcurrentUpdates(t *testing.T) {

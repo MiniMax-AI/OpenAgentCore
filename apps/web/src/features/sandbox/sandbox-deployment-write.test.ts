@@ -5,7 +5,7 @@ import { sandboxAdmin, sandboxDeploymentQuery } from "./sandbox-queries";
 import { writeSandboxDeployment } from "./sandbox-deployment-write";
 import { sandboxWriteOwnershipQuery } from "./sandbox-write-ownership";
 
-const deployment: SandboxDeployment = { rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", owner_epoch: 1, generation: 1, provider: "docker", core_url: "http://core", mode: "nodes", reset: null, resources: { allocations: 0, pending: 0 }, suspension: null };
+const deployment: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", owner_epoch: 1, generation: 1, provider: "docker", core_url: "http://core", mode: "nodes", reset: null, resources: { allocations: 0, pending: 0 }, suspension: null };
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: Error) => void;

@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"testing"
-
 	v1 "github.com/MiniMax-AI-Dev/parsar/contracts/agents-api/v1"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/credentialcrypto"
 	"github.com/google/uuid"
+	"testing"
 )
 
 func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {

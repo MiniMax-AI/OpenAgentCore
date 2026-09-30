@@ -9,7 +9,7 @@
     "docs/configuration.md": "7dc0031145bb5811bf22cab15270b511b1c43b1bd1ee2b71175d3bc848751bd6",
     "docs/web/core-connection.md": "861c75c32676fd17b84eb356b263096703af5750c1ceb71bb339e84607fffc56",
     "docs/getting-started/quickstart.md": "b989682ac2e58d59a794118fd371b37d1ea64c957d3512ff53739458a95d0f9a",
-    "docs/api/README.md": "faada41906e584a2dfcd1efb0af893e6039cd456eff989f019e0dd816dc419ff",
+    "docs/api/README.md": "90076c55b1a03f0f1cfd9373a6d005c8caa3c4e58359e9e865ee2c13c8dbe9ec",
     "contracts/agents-api/execution-tools.md": "fe1e3cf471fe9c7ef04afa7230e6b7742fbf2146c74bd944a7a22d5d4d4197da",
     "docs/api/public-agent-api.md": "e1111aaf5215392178246969e281b930374b22ee380d529b08b2482836d6333d",
     "docs/examples.md": "c12c34adc5b2fa57c81602b23d8ecc8317596f9c5a4aedbf1f1fe934a08a94f5",
@@ -18,7 +18,7 @@
     "docs/getting-started/self-hosted.md": "653a9132ea6bbc39186f7917fa1596027d091071172e6a6afd9f618fc1dab725",
     "apps/web/public/onboarding/monitor-en.webp": "29dc220cb1250c7016b7c4bf7f30e9510b07c07b814a48c3aa9303b2d76f20b2",
     "docs/web/README.md": "47159689b2488f0a94a1af8488bcf98b465e0cca4003d64a4699d7b4db24e086",
-    "docs/api/web-management.md": "fc064c53874ca2aa6d17e5265763a4a4c744860062c27353cfafe74d3e6ac790",
+    "docs/api/web-management.md": "18b8e32898bf5dcfab3407377292393cf290ffc3432ab075ff1c980f9b3c383e",
     "contracts/agents-api/runtime-observability-api.md": "cd46e777fe716a7e76374f4655c96dfbad9d8be1bfca6203ed6118ab87874c2b",
     "docs/getting-started/operations.md": "4069e89deed7ef619f28cc8d9779055669246eabe322089113ac3a786c3cb2d5",
     "docs/user-guide.md": "078ad930003dd333e65beb152dab11809b08d58dcc9d5d108c61f60dc3a320e2",
@@ -27,7 +27,7 @@
     "contracts/agents-api/harness-onboarding.md": "03b069b0c2ae18248cf6b1d1c82b6c3a6cd74719746bd343acb128a86d2c67a2",
     "docs/runtime-bootstrap.md": "0d49aed73b298039e04453e6f465b0e925fb2227fa35d4206820bb3acbd8df39",
     "docs/runtime-protocol.md": "4bce016e8ec239281969c84c8483044cf3247051eb062ec30d3effa00b661001",
-    "docs/sandbox-provider.md": "a1323c7f6a28a4f5f0e823274c08422707a5dab85b11e008ccb28a3aafc02058",
+    "docs/sandbox-provider.md": "5e0ff707a50f12eaa367dc9f45e0f956526548c865baa96e0254044cde94c698",
     "apps/docs/scripts/guides.json": "19265370dbcb8e30b125079d0d25fad05b6f783ec368b7ebb6e81389b7853342"
   },
   "outputs": {
@@ -39,7 +39,7 @@
     "content/docs/configure.mdx": "02d1eee789646fdf65ed2ec48b6fe954c81107d6ff5891536ec6ac2df0a8c4dc",
     "content/docs/bootstrap-projects-keys.mdx": "91a6f62cbe41737adfce9e8ec56e6dc3e2fb0ec8f6b677576f941cdfb378dc47",
     "content/docs/quickstart.mdx": "d0ab9537ab68f6dd3109353e937a29c5d58ec3894b56a52873c9a1d79dfa60a6",
-    "content/docs/public-api.mdx": "cc0bad7611eb2c4f1d7ec231a3f77c37989e268b76423f292eee88ccf25eb892",
+    "content/docs/public-api.mdx": "6b275f846289442c37a0a6f5d3a0501af3c6fa42556aef665864f24055cb603b",
     "content/docs/agents-and-tools.mdx": "3ca16d2e2ff1c759251fbdf6e071ff09a93d5efc7acaca36a48854597d4f9576",
     "content/docs/sessions.mdx": "e8693563738f690c21be92e0ea09e925528bc85bea2c0fb4799c3f1c4074cfba",
     "content/docs/examples.mdx": "5f1dde8043695c40edf775345159d93b2444d5ce6a109829b78678b0b5de0d46",
@@ -48,7 +48,7 @@
     "content/docs/self-hosted-execution.mdx": "a8e6500e41c666eacb2c75882b2b8ee0cf122fe19ea36f39ef89f5dcf17b68e1",
     "public/images/source/apps/web/public/onboarding/monitor-en.webp": "29dc220cb1250c7016b7c4bf7f30e9510b07c07b814a48c3aa9303b2d76f20b2",
     "content/docs/console.mdx": "a930ce36035de74f0c2bef71bed067fc2287ba1c70a485758bf100d484f6adfd",
-    "content/docs/admin-api.mdx": "6fcfe4c5b5b70d5322c131ce4ab70f1a7ea8b0033a5f500b20cf27abb338236e",
+    "content/docs/admin-api.mdx": "7b34a3658b4ddd17be5712bfad35eb39813b05c97b1732077bfb4132a50c7441",
     "content/docs/observability.mdx": "c81214e1865517a9163c48c7ce7c396f5490c9d162080dfa05fa5ebc147f6c8b",
     "content/docs/troubleshooting.mdx": "bccd725d2389a80b66caf1a1da80532bd68dd3d470bf851799d0114f84e0af25",
     "content/docs/user-guide.mdx": "92b839c8d1a2fbf4d35388c414c4524734f32724c30c07395edc994fa11cf702",
@@ -57,6 +57,6 @@
     "content/docs/harness-onboarding.mdx": "e434d62bd0b558745774c8d729e4d86d2b40ed3026e3d77b777c48aef141c659",
     "content/docs/runtime-bootstrap.mdx": "58982955811c9ad46a9fc04d8d2aef5a762fc9d25d5833f88aa75ee3fc46523f",
     "content/docs/runtime-protocol.mdx": "560f887d5fc9fa673275a6481220f5fb997c4ece30c09384b81b14dbc7aa0dd4",
-    "content/docs/sandbox-provider.mdx": "83a6244fb2140836aa6746c990c9cd04d04e58d5b3a52faf1a84e5e846dfd99f"
+    "content/docs/sandbox-provider.mdx": "a52a6e7f9b55864363b96eed08d8feb0e2b67276884b800699c9217e699d7b7c"
   }
 }

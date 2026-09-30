@@ -69,7 +69,7 @@ function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   const { deployment, nodes } = fleet.snapshot;
   if (!deployment.provider) return { state: "todo", action: "setup", cloud: false };
   if (deployment.provider === "e2b") {
-    return { state: templateBuildStatus(deployment.e2b?.template_build) === "notReady" ? "todo" : "done", action: "nodes", cloud: true };
+    return { state: templateBuildStatus(deployment.metadata?.template_build) === "notReady" ? "todo" : "done", action: "nodes", cloud: true };
   }
   if (nodes.some(nodeServingReady)) return { state: "done", action: "nodes", cloud: false };
   return { state: "todo", action: nodes.length ? "nodes" : "add-node", cloud: false };

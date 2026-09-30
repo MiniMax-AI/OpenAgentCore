@@ -233,8 +233,8 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
         ...(sized ? { resources } : {}),
         ...(needsRuntime ? { runtime: release as SandboxRuntimeRelease } : {}),
       };
-      if (editing) await onSubmit({ ...selection, ...(provider === "e2b" ? { e2b: { ...e2bUpdateSelection(template, apiKey), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
-      else await onSubmit({ ...selection, ...(provider === "e2b" ? { e2b: { api_key: apiKey.trim(), template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
+      if (editing) await onSubmit({ ...selection, ...(provider === "e2b" ? { ...e2bUpdateSelection(template, apiKey), configuration: { template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
+      else await onSubmit({ ...selection, ...(provider === "e2b" ? { credential: { api_key: apiKey.trim() }, configuration: { template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
     } catch (error) {
       // A configuration Core rejected is explained here; the page reports every other failure.
       const reason = sandboxConfigurationRejection(error, i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en");
@@ -242,10 +242,10 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       setRejection(reason);
       setFieldRejection(error);
       if (error instanceof AgentCoreError && error.param) {
-        if (["e2b.api_key", "e2b.template", "e2b.api_url", "e2b.domain"].includes(error.param) && error.code !== "e2b_team_mismatch") setStep("e2b");
+        if (["credential", "configuration", "e2b.api_url", "e2b.domain"].includes(error.param) && error.code !== "sandbox_credential_ownership") setStep("e2b");
         else if (error.param === "runtime" || error.param.startsWith("resources.")) setStep("advanced");
       }
-      setResetRequired(error instanceof AgentCoreError && ["e2b_team_mismatch", "sandbox_reset_required"].includes(error.code ?? ""));
+      setResetRequired(error instanceof AgentCoreError && ["sandbox_credential_ownership", "sandbox_reset_required"].includes(error.code ?? ""));
       setAddressRejected(error instanceof AgentCoreError && error.code === "sandbox_configuration_error");
     } finally {
       setApiKey("");
@@ -292,7 +292,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
               <option value="custom">{t("Other E2B-compatible provider")}</option>
             </select>
           </Field>
-          <Field id={`${id}-key`} label={t("E2B API key")} error={fieldError("e2b.api_key")} help={t(editing ? "Leave blank to keep the saved key. Any key you enter is verified as a replacement, even if unchanged." : "The key is write-only: Core encrypts it and never shows it again.")} afterHelp={keyConsoleURL ? (
+          <Field id={`${id}-key`} label={t("E2B API key")} error={fieldError("credential")} help={t(editing ? "Leave blank to keep the saved key. Any key you enter is verified as a replacement, even if unchanged." : "The key is write-only: Core encrypts it and never shows it again.")} afterHelp={keyConsoleURL ? (
             <a className="wizard-key-console" href={keyConsoleURL} target="_blank" rel="noopener noreferrer">
               {t("Console → API Keys")} <ExternalLink size={11} aria-hidden="true" />
             </a>
@@ -302,7 +302,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           {discovery === "loading" ? <p role="status">{t("Loading templates…")}</p> : null}
           {discovery === "error" ? <p role="alert">{t("Could not load templates. Check the key and provider connection.")} <button type="button" className="wizard-link" onClick={() => setDiscoveryRetry((value) => value + 1)}>{t("Try again")}</button></p> : null}
           {discovery === "ready" && templates.length === 0 ? <p role="status">{t("No templates are visible to this key.")}</p> : null}
-          {editing && !apiKey.trim() ? <Field id={`${id}-saved-template`} label={t("Template build")} error={fieldError("e2b.template")}><input id={`${id}-saved-template`} value={template} onChange={(event) => setTemplate(event.target.value)} /></Field> : <>
+          {editing && !apiKey.trim() ? <Field id={`${id}-saved-template`} label={t("Template build")} error={fieldError("configuration")}><input id={`${id}-saved-template`} value={template} onChange={(event) => setTemplate(event.target.value)} /></Field> : <>
           <Field id={`${id}-template`} label={t("Template")}>
             <select id={`${id}-template`} value={selectedTemplate} disabled={discovery !== "ready"} onChange={(event) => { setSelectedTemplate(event.target.value); setTemplate(""); }}>
               <option value="">{t("Select a template")}</option>
@@ -438,7 +438,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             </fieldset>
           ) : null}
           {provider === "e2b" ? (
-            <Field id={`${id}-template-advanced`} label={t("Template build")} error={fieldError("e2b.template") ?? (template && !validTemplate(template.trim()) ? t("Enter a template ID and build UUID separated by a colon.") : null)}>
+            <Field id={`${id}-template-advanced`} label={t("Template build")} error={fieldError("configuration") ?? (template && !validTemplate(template.trim()) ? t("Enter a template ID and build UUID separated by a colon.") : null)}>
               <input id={`${id}-template-advanced`} value={template} onChange={(event) => { setTemplate(event.target.value); setFieldRejection(null); }} autoComplete="off" spellCheck={false} />
             </Field>
           ) : null}

@@ -82,7 +82,7 @@ func (s *managedSetup) load(ctx context.Context) (*execution.RuntimeProvider, er
 }
 
 func (s *managedSetup) prepare(ctx context.Context, setup store.SandboxSetup) (execution.PreparedRuntimeDeployment, error) {
-	// E2B guests reach Core from E2B's cloud, over the internet.
+	// Adapters declare whether their guests require a public Core origin.
 	adapter, err := providers.Lookup(setup.Provider)
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err

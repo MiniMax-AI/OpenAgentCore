@@ -3,11 +3,10 @@ package microsandbox
 import (
 	"context"
 	"errors"
-	"testing"
-
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox"
 	"github.com/MiniMax-AI-Dev/parsar/services/agents-api/internal/sandbox/contracttest"
 	"github.com/google/uuid"
+	"testing"
 )
 
 func TestProviderContract(t *testing.T) {
