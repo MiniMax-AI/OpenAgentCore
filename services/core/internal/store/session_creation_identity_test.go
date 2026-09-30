@@ -163,8 +163,8 @@ func TestSessionCreationKeepsItsResolvedDeploymentRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaults := modelconfigurationpg.New(pgunit.NewPool(pool))
-	service, err := modelconfiguration.NewService(defaults, cipher)
+	defaults := modelconfigurationpg.New(pgunit.NewPool(pool), cipher)
+	service, err := modelconfiguration.NewService(defaults)
 	if err != nil {
 		t.Fatal(err)
 	}

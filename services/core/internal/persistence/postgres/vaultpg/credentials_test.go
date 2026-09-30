@@ -23,7 +23,7 @@ func TestStaticCredentialsPersistEncryptedAndRemainScoped(t *testing.T) {
 	store, pool := openStore(t)
 	ctx := t.Context()
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
-	keyless := newService(t, store, nil, nil)
+	keyless := newService(t, pool, nil, nil)
 	var owned []vaults.Vault
 	for _, owner := range []string{tenant, tenant, foreignTenant} {
 		owned = append(owned, createVault(t, keyless, owner))
@@ -35,7 +35,7 @@ func TestStaticCredentialsPersistEncryptedAndRemainScoped(t *testing.T) {
 	if _, err := rand.Read(randomToken); err != nil {
 		t.Fatal(err)
 	}
-	service := newService(t, store, newCipher(t, key), nil)
+	service := newService(t, pool, newCipher(t, key), nil)
 	canary := hex.EncodeToString(randomToken)
 	opaque := " \t" + canary + " 凭据\n" + strings.Repeat("x", 300) + " "
 	tokens := []string{opaque, opaque, ""}
@@ -141,7 +141,7 @@ func TestCredentialListFilteringOwnershipAndKeylessReconnect(t *testing.T) {
 	store, pool := openStore(t)
 	ctx := t.Context()
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	service := newService(t, store, newCipher(t, make([]byte, 32)), nil)
+	service := newService(t, pool, newCipher(t, make([]byte, 32)), nil)
 	var owned []vaults.Vault
 	for _, owner := range []string{tenant, tenant, foreign, tenant} {
 		owned = append(owned, createVault(t, service, owner))
@@ -267,7 +267,7 @@ func TestStaticCredentialUpdatePreservesBindingsAndReplacesCurrentSecret(t *test
 		t.Fatal(err)
 	}
 	cipher := newCipher(t, key)
-	service := newService(t, store, cipher, nil)
+	service := newService(t, pool, cipher, nil)
 	var owned []vaults.Vault
 	for _, owner := range []string{tenant, tenant, foreign} {
 		owned = append(owned, createVault(t, service, owner))
@@ -337,19 +337,19 @@ func TestStaticCredentialUpdatePreservesBindingsAndReplacesCurrentSecret(t *test
 		assertUnchanged()
 	}
 	for _, unusable := range []*credentialcrypto.Cipher{nil, {}} {
-		if _, err := update(newService(t, store, unusable, nil), tenant, original.VaultID, original.ID, "rejected"); err == nil {
+		if _, err := update(newService(t, pool, unusable, nil), tenant, original.VaultID, original.ID, "rejected"); err == nil {
 			t.Fatal("missing or unusable cipher admitted replacement")
 		}
 		assertUnchanged()
 	}
 	// A real PostgreSQL mutation failure must preserve both ciphertext and time.
-	_, updateErr := update(newService(t, readOnlyStore(t, pool), cipher, nil), tenant, original.VaultID, original.ID, "rejected")
+	_, updateErr := update(newService(t, readOnlyPool(t, pool), cipher, nil), tenant, original.VaultID, original.ID, "rejected")
 	if !isReadOnlyFailure(updateErr) {
 		t.Fatal("database write failure was accepted or translated", updateErr)
 	}
 	assertUnchanged()
 	// A stale destination from a prior metadata read cannot authorize the write.
-	_, err = store.ReplaceStaticToken(t.Context(), vaults.StaticTokenReplacement{CredentialKey: vaults.CredentialKey{TenantID: tenant, VaultID: original.VaultID, CredentialID: original.ID}, MCPServerURL: endpoint + "/other", Ciphertext: prior})
+	_, err = keyedStore(pool, cipher).ReplaceStaticToken(t.Context(), vaults.StaticTokenReplacement{CredentialKey: vaults.CredentialKey{TenantID: tenant, VaultID: original.VaultID, CredentialID: original.ID}, MCPServerURL: endpoint + "/other", Token: "rejected"})
 	if !errors.Is(err, vaults.ErrNotFound) {
 		t.Fatal("mutation failed to recheck immutable destination", err)
 	}
@@ -363,7 +363,7 @@ func TestStaticCredentialUpdatePreservesBindingsAndReplacesCurrentSecret(t *test
 	}
 	pool.Close()
 	store, pool = openStore(t)
-	service = newService(t, store, newCipher(t, bytes.Clone(key)), nil)
+	service = newService(t, pool, newCipher(t, bytes.Clone(key)), nil)
 	for _, binding := range bindings {
 		current, err := bearerToken(t.Context(), service, tenant, attached, binding)
 		if err != nil || current != lastToken {
@@ -399,8 +399,8 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 	store, pool := openStore(t)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	key := bytes.Repeat([]byte{41}, 32)
-	service := newService(t, store, newCipher(t, key), nil)
-	keyless := newService(t, store, nil, nil)
+	service := newService(t, pool, newCipher(t, key), nil)
+	keyless := newService(t, pool, nil, nil)
 	vault, wrong := createVault(t, service, tenant), createVault(t, service, tenant)
 	original := createStatic(t, service, tenant, vault.ID, "original", "https://mcp.example/tools", "original-secret")
 	attached := []string{vault.ID}
@@ -422,7 +422,7 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 		}
 	}
 	// An actual database write failure must leave the resource and token intact.
-	_, deletionErr := remove(newService(t, readOnlyStore(t, pool), nil, nil), tenant, vault.ID, original.ID)
+	_, deletionErr := remove(newService(t, readOnlyPool(t, pool), nil, nil), tenant, vault.ID, original.ID)
 	if !isReadOnlyFailure(deletionErr) {
 		t.Fatal("failed mutation was accepted or translated", deletionErr)
 	}
@@ -444,8 +444,8 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 		t.Fatal("deleted row or ciphertext remains")
 	}
 	pool.Close()
-	store, _ = openStore(t)
-	service = newService(t, store, newCipher(t, bytes.Clone(key)), nil)
+	store, pool = openStore(t)
+	service = newService(t, pool, newCipher(t, bytes.Clone(key)), nil)
 	if _, err := remove(service, tenant, vault.ID, original.ID); !errors.Is(err, vaults.ErrNotFound) {
 		t.Fatal("repeat deletion did not stay absent")
 	}
@@ -472,9 +472,9 @@ func TestCredentialDeletionScopeBindingAndRestart(t *testing.T) {
 }
 
 func TestCredentialDeletionConcurrentReplacementCannotResurrect(t *testing.T) {
-	store, _ := openStore(t)
+	store, pool := openStore(t)
 	tenant := uuid.NewString()
-	service := newService(t, store, newCipher(t, bytes.Repeat([]byte{42}, 32)), nil)
+	service := newService(t, pool, newCipher(t, bytes.Repeat([]byte{42}, 32)), nil)
 	vault := createVault(t, service, tenant)
 	for range 8 {
 		value := createStatic(t, service, tenant, vault.ID, "competing", "https://mcp.example/tools", "before")

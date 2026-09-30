@@ -433,7 +433,7 @@ func TestDeploymentProviderResolutionFixtureIsolation(t *testing.T) {
 // as the Core routes do.
 func deploymentDefaults(t *testing.T, db fixtureDB) *modelconfiguration.Service {
 	t.Helper()
-	service, err := modelconfiguration.NewService(modelconfigurationpg.New(pgunit.NewPool(db.pool)), db.cipher)
+	service, err := modelconfiguration.NewService(modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher))
 	if err != nil {
 		t.Fatal(err)
 	}

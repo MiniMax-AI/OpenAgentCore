@@ -27,8 +27,7 @@ func validName(name string) bool {
 	return len(name) >= 1 && len(name) <= 256 && utf8.ValidString(name)
 }
 
-// canonicalID returns the canonical form of a nonzero UUID. Credential
-// secrets are sealed to canonical IDs, so every ID in a binding goes through it.
+// canonicalID returns the canonical form of a nonzero UUID.
 func canonicalID(value string) (string, bool) {
 	id, err := uuid.Parse(value)
 	if err != nil || id == uuid.Nil {

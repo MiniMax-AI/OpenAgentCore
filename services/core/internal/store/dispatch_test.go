@@ -114,7 +114,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	h.d = &execution.Dispatcher{Store: s, Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool))}
+	h.d = &execution.Dispatcher{Store: s, Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher)}
 	return h
 }
 

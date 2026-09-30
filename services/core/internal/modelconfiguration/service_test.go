@@ -1,10 +1,9 @@
 package modelconfiguration
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -17,7 +16,7 @@ type fakeStorage struct {
 	t          *testing.T
 	replace    func(context.Context, Record) (Configuration, error)
 	delete     func(context.Context, string) error
-	loadSealed func(context.Context, string) (Sealed, error)
+	loadBundle func(context.Context, string) (Bundle, error)
 }
 
 func (f *fakeStorage) Replace(ctx context.Context, record Record) (Configuration, error) {
@@ -34,29 +33,20 @@ func (f *fakeStorage) Delete(ctx context.Context, harness string) error {
 	return f.delete(ctx, harness)
 }
 
-func (f *fakeStorage) LoadSealed(ctx context.Context, harness string) (Sealed, error) {
-	if f.loadSealed == nil {
-		f.t.Fatal("unexpected call to LoadSealed")
+func (f *fakeStorage) LoadBundle(ctx context.Context, harness string) (Bundle, error) {
+	if f.loadBundle == nil {
+		f.t.Fatal("unexpected call to LoadBundle")
 	}
-	return f.loadSealed(ctx, harness)
-}
-
-func testCipher(t *testing.T, fill byte) *credentialcrypto.Cipher {
-	t.Helper()
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{fill}, 32))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return cipher
+	return f.loadBundle(ctx, harness)
 }
 
 func validConfiguration() v1.ModelConfigurationInput {
 	return v1.ModelConfigurationInput{ModelProvider: v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.example/v1", APIKey: "secret-key"}, Model: "fixture-model"}
 }
 
-func newService(t *testing.T, storage Storage, cipher *credentialcrypto.Cipher) *Service {
+func newService(t *testing.T, storage Storage) *Service {
 	t.Helper()
-	service, err := NewService(storage, cipher)
+	service, err := NewService(storage)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,20 +54,19 @@ func newService(t *testing.T, storage Storage, cipher *credentialcrypto.Cipher) 
 }
 
 func TestNewServiceRequiresStorage(t *testing.T) {
-	if _, err := NewService(nil, testCipher(t, 1)); err == nil {
+	if _, err := NewService(nil); err == nil {
 		t.Fatal("nil storage accepted")
 	}
 }
 
-func TestReplaceSealsTheCompleteBundleForItsHarness(t *testing.T) {
-	cipher := testCipher(t, 1)
+func TestReplacePassesTheCompleteBundleWithItsSafeColumns(t *testing.T) {
 	stored := Configuration{Harness: "codex", Model: "fixture-model"}
 	var record Record
 	storage := &fakeStorage{t: t, replace: func(_ context.Context, r Record) (Configuration, error) {
 		record = r
 		return stored, nil
 	}}
-	result, err := newService(t, storage, cipher).Replace(t.Context(), Replacement{Harness: "codex", Configuration: validConfiguration()})
+	result, err := newService(t, storage).Replace(t.Context(), Replacement{Harness: "codex", Configuration: validConfiguration()})
 	if err != nil || result.Harness != stored.Harness || result.Model != stored.Model {
 		t.Fatal(result, err)
 	}
@@ -85,16 +74,14 @@ func TestReplaceSealsTheCompleteBundleForItsHarness(t *testing.T) {
 		record.Provider != (v1.ModelProviderView{Protocol: "responses", BaseURL: "https://model.example/v1", APIKeyConfigured: true}) {
 		t.Fatalf("safe columns: %+v", record)
 	}
-	if bytes.Contains(record.Sealed, []byte("secret-key")) {
-		t.Fatal("key stored in plaintext")
+	if !reflect.DeepEqual(record.Configuration, validConfiguration()) {
+		t.Fatalf("bundle: %+v", record.Configuration)
 	}
-	if _, err := cipher.OpenDeploymentModelProvider(record.Sealed, "claude_code"); err == nil {
-		t.Fatal("bundle opens for another harness")
+	storage.replace = func(context.Context, Record) (Configuration, error) {
+		return Configuration{}, credentialcrypto.ErrUnavailable
 	}
-	raw, err := cipher.OpenDeploymentModelProvider(record.Sealed, "codex")
-	var opened v1.ModelConfigurationInput
-	if err != nil || json.Unmarshal(raw, &opened) != nil || opened.ModelProvider.APIKey != "secret-key" || opened.Model != "fixture-model" {
-		t.Fatal("sealed bundle incomplete", err)
+	if _, err := newService(t, storage).Replace(t.Context(), Replacement{Harness: "codex", Configuration: validConfiguration()}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+		t.Fatal("missing credential key", err)
 	}
 }
 
@@ -102,11 +89,8 @@ func TestReplaceRejectsBeforeStorage(t *testing.T) {
 	invalid := validConfiguration()
 	invalid.ModelProvider.Protocol = "anthropic-unknown"
 	var field *v1.ModelProviderError
-	if _, err := newService(t, &fakeStorage{t: t}, testCipher(t, 1)).Replace(t.Context(), Replacement{Harness: "codex", Configuration: invalid}); !errors.As(err, &field) || field.Param != "protocol" {
+	if _, err := newService(t, &fakeStorage{t: t}).Replace(t.Context(), Replacement{Harness: "codex", Configuration: invalid}); !errors.As(err, &field) || field.Param != "protocol" {
 		t.Fatal("invalid configuration", err)
-	}
-	if _, err := newService(t, &fakeStorage{t: t}, nil).Replace(t.Context(), Replacement{Harness: "codex", Configuration: validConfiguration()}); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-		t.Fatal("missing credential key", err)
 	}
 }
 
@@ -118,55 +102,37 @@ func TestDeletePassesTheHarness(t *testing.T) {
 		}
 		return failure
 	}}
-	if err := newService(t, storage, nil).Delete(t.Context(), "codex"); !errors.Is(err, failure) {
+	if err := newService(t, storage).Delete(t.Context(), "codex"); !errors.Is(err, failure) {
 		t.Fatal(err)
 	}
 }
 
-func TestResolveOpensTheStoredBundle(t *testing.T) {
-	cipher := testCipher(t, 1)
-	seal := func(harness string, configuration any) []byte {
-		raw, _ := json.Marshal(configuration)
-		sealed, err := cipher.SealDeploymentModelProvider(raw, harness)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return sealed
-	}
+func TestResolveValidatesTheOpenedBundle(t *testing.T) {
 	revision := uuid.New()
-	loaded := func(bundle []byte, err error) *fakeStorage {
-		return &fakeStorage{t: t, loadSealed: func(_ context.Context, harness string) (Sealed, error) {
+	loaded := func(configuration v1.ModelConfigurationInput, err error) *fakeStorage {
+		return &fakeStorage{t: t, loadBundle: func(_ context.Context, harness string) (Bundle, error) {
 			if harness != "codex" {
 				t.Fatal(harness)
 			}
-			return Sealed{Bundle: bundle, Revision: revision}, err
+			return Bundle{Configuration: configuration, Revision: revision}, err
 		}}
 	}
-	snapshot, err := newService(t, loaded(seal("codex", validConfiguration()), nil), cipher).Resolve(t.Context(), "codex")
+	snapshot, err := newService(t, loaded(validConfiguration(), nil)).Resolve(t.Context(), "codex")
 	if err != nil || snapshot == nil || snapshot.Revision != revision || snapshot.Provider.APIKey != "secret-key" || snapshot.Model != "fixture-model" || string(snapshot.HarnessConfig) != "{}" {
 		t.Fatal("snapshot", snapshot, err)
 	}
-	if snapshot, err := newService(t, loaded(nil, ErrNotFound), cipher).Resolve(t.Context(), "codex"); snapshot != nil || err != nil {
+	if snapshot, err := newService(t, loaded(v1.ModelConfigurationInput{}, ErrNotFound)).Resolve(t.Context(), "codex"); snapshot != nil || err != nil {
 		t.Fatal("missing default", snapshot, err)
 	}
-	failure := errors.New("storage failed")
-	if _, err := newService(t, loaded(nil, failure), cipher).Resolve(t.Context(), "codex"); !errors.Is(err, failure) {
-		t.Fatal("storage failure", err)
+	for _, failure := range []error{errors.New("storage failed"), credentialcrypto.ErrUnavailable} {
+		if _, err := newService(t, loaded(v1.ModelConfigurationInput{}, failure)).Resolve(t.Context(), "codex"); !errors.Is(err, failure) {
+			t.Fatal("storage failure", err)
+		}
 	}
 	invalid := validConfiguration()
 	invalid.Model = ""
 	var field *v1.ModelProviderError
-	if _, err := newService(t, loaded(seal("codex", invalid), nil), cipher).Resolve(t.Context(), "codex"); !errors.As(err, &field) {
+	if _, err := newService(t, loaded(invalid, nil)).Resolve(t.Context(), "codex"); !errors.As(err, &field) {
 		t.Fatal("unsupported stored configuration", err)
-	}
-	for name, service := range map[string]*Service{
-		"no key":        newService(t, loaded(seal("codex", validConfiguration()), nil), nil),
-		"wrong key":     newService(t, loaded(seal("codex", validConfiguration()), nil), testCipher(t, 2)),
-		"other harness": newService(t, loaded(seal("claude_code", validConfiguration()), nil), cipher),
-		"not JSON":      newService(t, loaded(seal("codex", "not an object"), nil), cipher),
-	} {
-		if _, err := service.Resolve(t.Context(), "codex"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
-			t.Fatal(name, err)
-		}
 	}
 }

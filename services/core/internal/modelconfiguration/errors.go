@@ -4,9 +4,9 @@ import "errors"
 
 // Replace and Resolve report a configuration the Harness declaration rejects
 // with the contract's *v1.ModelProviderError, which names the field, and a
-// bundle they cannot seal or open with credentialcrypto.ErrUnavailable. Storage
-// passes textvalue.ErrUnstorable and adminaudit.ErrInvalidSource through
-// unchanged.
+// missing credential key with credentialcrypto.ErrUnavailable. A bundle that
+// fails to open is an internal error. Storage passes textvalue.ErrUnstorable
+// and adminaudit.ErrInvalidSource through unchanged.
 var (
 	// ErrNotFound reports a Harness without a deployment default.
 	ErrNotFound = errors.New("the harness has no deployment default model configuration")

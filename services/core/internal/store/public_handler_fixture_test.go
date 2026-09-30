@@ -58,8 +58,8 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 	if err != nil {
 		return nil, err
 	}
-	modelConfigurationStore := modelconfigurationpg.New(pgunit.NewPool(db.pool))
-	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore, db.cipher)
+	modelConfigurationStore := modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher)
+	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore)
 	if err != nil {
 		return nil, err
 	}

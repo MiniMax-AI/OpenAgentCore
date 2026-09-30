@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 )
 
@@ -30,17 +28,13 @@ func (s *coreProviderValidationStore) Delete(context.Context, string) error {
 	return nil
 }
 
-func (s *coreProviderValidationStore) LoadSealed(context.Context, string) (modelconfiguration.Sealed, error) {
-	unexpectedCall(s.t, "LoadSealed")
-	return modelconfiguration.Sealed{}, nil
+func (s *coreProviderValidationStore) LoadBundle(context.Context, string) (modelconfiguration.Bundle, error) {
+	unexpectedCall(s.t, "LoadBundle")
+	return modelconfiguration.Bundle{}, nil
 }
 
 func (s *coreProviderValidationStore) configure(d *Dependencies, _ *testFakes) {
-	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{3}, 32))
-	if err != nil {
-		s.t.Fatal(err)
-	}
-	service, err := modelconfiguration.NewService(s, cipher)
+	service, err := modelconfiguration.NewService(s)
 	if err != nil {
 		s.t.Fatal(err)
 	}

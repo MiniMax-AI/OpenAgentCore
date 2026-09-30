@@ -4,7 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 )
 
@@ -18,16 +17,16 @@ type OAuthRefreshUpdate struct {
 	ClientSecret          *string
 }
 
-// oauthSecret is the sealed plaintext of an mcp_oauth Credential. The
-// encrypted copy authenticates every public setting used for refresh,
-// including the token endpoint, so substituting stored metadata can never
+// OAuthGrant is an mcp_oauth Credential's secret with the metadata it is
+// refreshed by. Storage keeps the metadata readable and seals the whole grant,
+// so the sealed copy authenticates every public setting used for refresh,
+// including the token endpoint, and substituting stored metadata can never
 // redirect a grant.
-type oauthSecret struct {
-	Version      int           `json:"version"`
-	Metadata     OAuthMetadata `json:"metadata"`
-	AccessToken  string        `json:"access_token"`
-	RefreshToken string        `json:"refresh_token"`
-	ClientSecret string        `json:"client_secret"`
+type OAuthGrant struct {
+	Metadata     OAuthMetadata
+	AccessToken  string
+	RefreshToken string
+	ClientSecret string
 }
 
 func validOAuthMetadata(metadata OAuthMetadata) bool {
@@ -62,17 +61,10 @@ func validOAuthCreation(command CreateOAuthCredential) bool {
 	return refresh.TokenEndpointAuth != "none" || command.ClientSecret == ""
 }
 
-// oauthBinding seals an OAuth secret to its tenant, Vault, Credential and
-// destination.
-func oauthBinding(tenantID string, credential Credential) credentialcrypto.Binding {
-	return credentialcrypto.Binding{TenantID: tenantID, VaultID: credential.VaultID,
-		CredentialID: credential.ID, AuthType: AuthMCPOAuth, Destination: credential.MCPServerURL}
-}
-
 // applyOAuthUpdate patches a stored grant. A new access token clears an
 // omitted expiry. A refresh patch cannot add configuration or change the
 // authentication method, and a client secret needs a method that uses one.
-func applyOAuthUpdate(secret oauthSecret, update UpdateOAuthCredential) (oauthSecret, error) {
+func applyOAuthUpdate(secret OAuthGrant, update UpdateOAuthCredential) (OAuthGrant, error) {
 	if update.AccessToken != nil {
 		secret.AccessToken = *update.AccessToken
 		secret.Metadata.ExpiresAt = nil
@@ -85,15 +77,15 @@ func applyOAuthUpdate(secret oauthSecret, update UpdateOAuthCredential) (oauthSe
 		return secret, nil
 	}
 	if secret.Metadata.Refresh == nil {
-		return oauthSecret{}, ErrInvalidInput
+		return OAuthGrant{}, ErrInvalidInput
 	}
 	refresh := *secret.Metadata.Refresh
 	if patch.TokenEndpointAuthType != "" && patch.TokenEndpointAuthType != refresh.TokenEndpointAuth {
-		return oauthSecret{}, ErrInvalidInput
+		return OAuthGrant{}, ErrInvalidInput
 	}
 	if patch.ClientSecret != nil {
 		if refresh.TokenEndpointAuth == "none" {
-			return oauthSecret{}, ErrInvalidInput
+			return OAuthGrant{}, ErrInvalidInput
 		}
 		secret.ClientSecret = *patch.ClientSecret
 	}
@@ -110,7 +102,7 @@ func applyOAuthUpdate(secret oauthSecret, update UpdateOAuthCredential) (oauthSe
 // currentAccessToken returns the stored access token while it is usable at
 // now. expired reports that the grant must be refreshed first; a grant without
 // an expiry never expires.
-func currentAccessToken(secret oauthSecret, now time.Time) (token string, expired bool, err error) {
+func currentAccessToken(secret OAuthGrant, now time.Time) (token string, expired bool, err error) {
 	if secret.Metadata.ExpiresAt != nil {
 		expiry, err := time.Parse(time.RFC3339Nano, *secret.Metadata.ExpiresAt)
 		if err != nil {
@@ -127,7 +119,7 @@ func currentAccessToken(secret oauthSecret, now time.Time) (token string, expire
 }
 
 // refreshRequest is the exchange that renews an expired grant.
-func refreshRequest(secret oauthSecret) (oauthrefresh.Request, error) {
+func refreshRequest(secret OAuthGrant) (oauthrefresh.Request, error) {
 	refresh := secret.Metadata.Refresh
 	if refresh == nil || secret.RefreshToken == "" {
 		return oauthrefresh.Request{}, errors.New("expired OAuth credential cannot be refreshed")
@@ -141,9 +133,9 @@ func refreshRequest(secret oauthSecret) (oauthrefresh.Request, error) {
 
 // applyRefreshedToken stores a refresh result that is usable at now. An
 // omitted refresh token keeps the stored one.
-func applyRefreshedToken(secret oauthSecret, token oauthrefresh.Token, now time.Time) (oauthSecret, error) {
+func applyRefreshedToken(secret OAuthGrant, token oauthrefresh.Token, now time.Time) (OAuthGrant, error) {
 	if token.AccessToken == "" || token.ExpiresAt != nil && !now.Before(*token.ExpiresAt) {
-		return oauthSecret{}, errors.New("OAuth refresh returned an unusable token")
+		return OAuthGrant{}, errors.New("OAuth refresh returned an unusable token")
 	}
 	secret.AccessToken = token.AccessToken
 	if token.RefreshToken != "" {
