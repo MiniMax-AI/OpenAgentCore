@@ -336,7 +336,7 @@ connections alone do not start a Turn. Submit text, cancellation or function res
 through the official Session events endpoint; the worker assigns a same-tenant host and preserves that
 binding. Managed Docker has three-harness evidence. This generic device provisioning path
 is for `none`; self-hosted Sessions require the dedicated enrollment below.
-User-managed enrollment has a separate [qualification record](../../contracts/agents-api/user-managed-runtime-v1.md); complete protocol semantics remain partial. See the [ownership rules](../../CONTRIBUTING.md#product-and-execution-service-separation).
+User-managed enrollment has a separate [qualification record](../../contracts/agents-api/user-managed-runtime-v1.md); complete protocol semantics remain partial. See the [ownership rules](../../AGENTS.md#public-api).
 
 ### Enable Claude SDK execution
 

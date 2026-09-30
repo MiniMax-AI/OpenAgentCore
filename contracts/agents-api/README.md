@@ -23,7 +23,7 @@ Parsar owns product Agents and Teams. This service owns upstream execution
 resources, including reusable Agents and protocol subagents. The OpenAI Agents
 Python **SDK** is a separate future dependency for business Team orchestration in
 Parsar, not the HTTP contract. Design rules live in
-[CONTRIBUTING.md](../../CONTRIBUTING.md#design-and-compatibility-requirements).
+[AGENTS.md](../../AGENTS.md#public-api).
 
 The [resource selector and error qualification](resource-selector-semantics.md)
 records nullable Skill references and source Files not-found parameter fields,
@@ -31,15 +31,8 @@ with official observations separated from Core acceptance.
 
 ## Implementation direction
 
-Keep the independent service, authentication, PostgreSQL/sqlc persistence,
-transactional admission and official-client test harness. Shared Runtime contracts
-define execution semantics; native representations stay inside adapters.
-
-Concentrate native configuration, structured input/output and Item translation
-in an execution adapter. The application core owns execution state and persistence;
-engine-specific shapes stay at the adapter boundary. Codex uses its native
-app-server; Claude uses the maintained Agent SDK. Reuse native protocols and SDKs
-for further harnesses rather than adding another model/tool loop.
+Adapter and persistence design follows the
+[design rules](../../AGENTS.md#complexity-stays-in-the-adapter).
 The [harness contract and parity baseline](harnesses.md) describes equal-engine
 registration, qualification and shared acceptance.
 Verify configuration against actual execution: response defaults must not merely

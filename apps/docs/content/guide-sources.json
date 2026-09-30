@@ -2,7 +2,7 @@
   "revision": "f6d258735fc601c521dd990e6f9e1ed261f4ef2d",
   "sources": {
     "docs/getting-started/README.md": "7b7f82e484a20d7847e970c2192709091107b6acc253709c9f38ef91caeabcf1",
-    "docs/design-principles.md": "21a05fb089804db6fab5674ec9a6cf849a3affedad2ca927a38d9b46eeec9a50",
+    "docs/design-principles.md": "334e0d477c255552f874f3ca8a2db603d0d07892ad7d58930bf8e3d06b86c636",
     "docs/web/architecture.md": "cf694aa624cf6078a154c2f8fdd67055d41dea0c0bb80b8dc8f0cdbc5d572fb1",
     "docs/getting-started/install.md": "84b21002136acd4f006392685b7a071323336e87c1aac6e3c23ca56acb40833c",
     "docs/getting-started/install-options.md": "e03487bb6d978f84c596467028e25fd99fdc21cf2060af24ceb68df885084798",
@@ -32,7 +32,7 @@
   },
   "outputs": {
     "content/docs/index.mdx": "bf78e8aab0a834fb62ee7287fef3e29363b7384e63ec61aefcf7448f65a71a80",
-    "content/docs/concepts.mdx": "88ba65e1ba902921d6cd5da2866620a6dbef52c041db991312a138884fb43a4e",
+    "content/docs/concepts.mdx": "b9aceda2f72f3f1239e5518c3cecff8c9c0aa11a3eb622ddf9db6af2984a1abc",
     "content/docs/execution-model.mdx": "7b8d8498a1b157270f00a8c370c9a86547fa481df9ffa8904c810946b1626b38",
     "content/docs/install.mdx": "6c3ec01d1b80cbce35d58e3f141b0fa832d6294a2ecc07c3b286ecc56ba66919",
     "content/docs/install-options.mdx": "aaafc209293a905d5b433511149aa1f0cc422bd31d5bb5b6cd7eec0d532ab8eb",

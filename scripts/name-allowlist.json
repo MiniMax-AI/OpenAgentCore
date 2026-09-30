@@ -525,19 +525,9 @@
     "reason": "The literal is a rejected legacy Runtime prefix fixture, not an accepted deployment reference."
   },
   {
-    "path": "AGENTS.md",
-    "regex": "behind Parsar",
-    "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
     "path": "CONTRIBUTING.md",
-    "regex": "copied from Parsar at|in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|Parsar uses|Parsar owns|Parsar marketplace|belong to Parsar|Parsar retains|Parsar Agents|`parsar` provider slug",
+    "regex": "copied from Parsar at|in Parsar\\.|apps/parsar/|Parsar is an ordinary client|Parsar integration|Parsar owns|`parsar` provider slug",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."
-  },
-  {
-    "path": "CONTRIBUTING.md",
-    "regex": "`parsar_hosted`",
-    "reason": "This explicitly unsupported alternative enum is documented to prevent changing the pinned public value."
   },
   {
     "path": "contracts/agents-api/README.md",
@@ -633,11 +623,6 @@
     "path": "services/agents-api/deploy/microsandbox/README.md",
     "regex": "(?:AGENTS_API_|CORE_CONSOLE_|PARSAR_)[A-Z0-9_]*\\*?|X-Parsar-Node-ID",
     "reason": "These names appear in retirement documentation or instructions for an explicitly pinned historical release; current configuration uses OAC settings."
-  },
-  {
-    "path": "CONTRIBUTING.md",
-    "regex": "~?/\\.parsar/self-hosted/",
-    "reason": "Documents refusal of the retained legacy self-hosted installation path, not a new default."
   },
   {
     "path": "contracts/agents-api/sandbox-deployment.md",
