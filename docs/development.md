@@ -58,7 +58,7 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | Location | Responsibility | Read next |
 | --- | --- | --- |
 | `services/core/internal/api` | Public, administrator and machine HTTP boundaries | [API index](api/README.md) |
-| `services/core/internal/store` and `internal/db` | Core persistence, transactions, queries and migrations | [Service guide](../services/core/README.md#database) |
+| `services/core/internal/store` and `services/core/internal/db` | Core persistence, transactions, queries and migrations | [Service guide](../services/core/README.md#database) |
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](runtime-protocol.md) |
 | `services/core/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire types and validators | [Runtime protocol](runtime-protocol.md) |
