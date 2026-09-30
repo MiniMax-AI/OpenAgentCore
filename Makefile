@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core build-core-release check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -66,9 +66,6 @@ build-daemon:
 
 build-core:
 	./scripts/build-core.sh
-
-build-core-release:
-	./scripts/build-core-release.sh
 
 check-core: build-core
 	# Persistence integration tests include bounded lifecycle waits that together exceed Go's 10m default.

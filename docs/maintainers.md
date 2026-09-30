@@ -111,8 +111,6 @@ The helper is written to `~/.oac/build/microsandbox-provider/oac-microsandbox-pr
 
 `make docker-build-core` builds the image `oac-core:dev` (`OAC_DEV_CORE_IMAGE` selects another name) from those five commands and the E2B helper. The base is the digest-pinned `debian:bookworm-slim` with CA certificates and the glibc runtime the helper needs; the default user is UID/GID 65532 and Core listens on `:8091`. The image is Linux amd64 only and is not pushed to a registry. Changes to the image or its build need `make check-core-container` in addition to `make check`: it runs the official-client suite against the image with a read-only root filesystem and needs Linux Docker, a non-root user, and the [test database and pinned SDK](../services/core/README.md#official-client-verification) of the service checks (`OAC_TEST_DATABASE_URL` naming an `oac_*_tests` database with the migrations applied, and `OAC_TEST_OFFICIAL_SDK_PYTHON`).
 
-`make build-core-release` packages the same five commands into `oac-core-<commit>-linux-amd64.tar.gz` and its `.sha256` under `~/.oac/build/oac-core-release` (`OAC_DEV_RELEASE_DIR`). Beside `bin/`, the archive holds the [archive README](../services/core/RELEASE.md), the license, `manifest.json` (commit, tree, platform, Go version, upstream protocol and binary hashes) and `SHA256SUMS`, which lists every packaged file. The build needs clean committed source and Python 3.9 or newer, and packages deterministically. It carries no configuration, credentials, Web or Runtime. Test archive changes by extracting a fresh copy and running its commands.
-
 ## Publish a version
 
 Push a version tag on the reviewed commit to run the `core-release` workflow:
@@ -180,9 +178,8 @@ gh variable set OAC_USE_GITHUB_RUNNERS --body true --repo MiniMax-AI/OpenAgentCo
 This is an explicit operator switch, not an automatic billing balance probe. Runner selection applies to newly scheduled runs. Check current allowance and platform conversion rates in [Blacksmith's runner documentation](https://docs.blacksmith.sh/blacksmith-runners/overview) before treating 2-vCPU usage as free; Windows minutes consume more allowance than Linux minutes. Standard GitHub runner usage follows the repository's visibility and GitHub plan. These workflows request no Blacksmith runner larger than 2 vCPU and no paid cache add-on.
 ## Run Core without the installer
 
-The standalone archive and container give you Core alone: no Web, no `oac` command and no `config.json`. They suit development, testing and operators who supervise Core themselves. Core reads only its environment; the [configuration appendix](configuration.md#appendix-core-environment-without-the-installer) lists the variables. `OAC_DATABASE_URL` and `OAC_CORE_KEY_DIGESTS_FILE` are required; set `OAC_PUBLIC_URL` to the origin machines use to reach Core, or Core runs without the daemon transport.
+The standalone container gives you Core alone: no Web, no `oac` command and no `config.json`. It suits development, testing and operators who supervise Core themselves. Core reads only its environment; the [configuration appendix](configuration.md#appendix-core-environment-without-the-installer) lists the variables. `OAC_DATABASE_URL` and `OAC_CORE_KEY_DIGESTS_FILE` are required; set `OAC_PUBLIC_URL` to the origin machines use to reach Core, or Core runs without the daemon transport.
 
-- The [archive README](../services/core/RELEASE.md) covers the standalone archive.
 - The [service guide](../services/core/README.md) covers building and running Core from source.
 
 To run the container, create a private directory (mode 0700) with `api.env` (`OAC_DATABASE_URL` for a dedicated database, reachable from the container, `OAC_CORE_KEY_DIGESTS_FILE=/run/core-key-digests.json`, and `OAC_PUBLIC_URL`) and `core-key-digests.json`, a JSON array with the lowercase hex SHA-256 digest of your Core key. Keep both files mode 0600 and the Core key itself elsewhere. Run the migrations, then start Core:
