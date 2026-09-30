@@ -3,8 +3,7 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 
 export const pins = { node: '22.22.0', codex: '0.153.4', claude: '0.3.269', minimax: '0.4.12' };
@@ -178,21 +177,4 @@ export async function buildBundle(options) {
     await rename(staging, output);
     return manifest;
   } finally { await rm(staging, { recursive: true, force: true }); }
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    const options = {};
-    for (let i = 2; i < process.argv.length; i += 2) {
-      const key = process.argv[i].replace(/^--/, '');
-      if (!process.argv[i].startsWith('--') || !['daemon', 'node', 'codex', 'claude', 'minimax', 'output'].includes(key) || options[key] || !process.argv[i + 1]) throw new Error('Expected --daemon, --node, --codex, --claude, --minimax or --output with an absolute path');
-      options[key] = process.argv[i + 1];
-    }
-    const manifest = await buildBundle(options);
-    console.log(JSON.stringify({ status: 'built', os: manifest.os, arch: manifest.arch, components: Object.keys(manifest.components), model_requests: 0 }));
-  } catch (error) {
-    // Native output and environment values are never printed by the packager.
-    console.error(error.code ? 'Native bundle source is unavailable' : error instanceof SyntaxError ? 'Native component metadata is invalid' : error.message);
-    process.exitCode = 1;
-  }
 }

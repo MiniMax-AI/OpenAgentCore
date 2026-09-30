@@ -9,10 +9,10 @@ export GOMODCACHE="${GOMODCACHE:-$runtime_root/cache/go-mod}"
 for directory in "$runtime_root" "$output_dir" "$GOCACHE" "$GOMODCACHE"; do
   case "$directory" in
     "$HOME/.oac"|"$HOME/.oac/"*) ;;
-    *) printf 'Core console build directories must be absolute and under ~/.oac\n' >&2; exit 1 ;;
+    *) printf 'Web build directories must be absolute and under ~/.oac\n' >&2; exit 1 ;;
   esac
   case "/$directory/" in
-    */../*|*/./*) printf 'Core console build directories must not contain dot segments\n' >&2; exit 1 ;;
+    */../*|*/./*) printf 'Web build directories must not contain dot segments\n' >&2; exit 1 ;;
   esac
 done
 
@@ -32,4 +32,4 @@ tar -C "$repo_root" -cf - go.mod go.sum internal/obs/log services/web \
 )
 mkdir -p "$output_dir"
 mv -f "$build_context/oac-web" "$output_dir/oac-web"
-printf 'Core console binary: %s/oac-web\n' "$output_dir"
+printf 'Web binary: %s/oac-web\n' "$output_dir"
