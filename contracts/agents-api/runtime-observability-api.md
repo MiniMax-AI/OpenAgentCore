@@ -1,40 +1,25 @@
-# Runtime observation API
+# Runtime telemetry API
 
-Status: Phase 2 and initial Core Web consumption implemented. The current-snapshot routes, strict
-`packages/agents-client` projection, and generated `core.openapi.yaml` contract are
-implemented and consumed by the Dashboard through complete Session/observation
-identity joins. Durable history uses the separate optional
-[Runtime history API](runtime-history-api.md); lifecycle controls remain outside
-this phase.
+Core reports what hosted Runtimes and sandbox nodes consume through read-only administrator routes under `/core/v1`: current Runtime observations, the stored Runtime history of one Session, and the host observations and history of a sandbox node. Reads never create, wake, renew or change compute and never add samples to history. [Runtime observability](runtime-observability.md) defines how Core collects and keeps these values; [Console API usage](../../docs/web/console-api-usage.md) lists the Web pages that read them.
 
-These are administrator reads under `/core/v1`, authenticated by the Core key,
-not upstream OpenAI Agents resources. The
-former project routes `GET /v1/agents/runtime-observations` and
-`GET /v1/agents/sessions/{session_id}/runtime-observation` are removed.
+Every route requires the Core key as the bearer credential; a missing or invalid key returns 401 `invalid_admin_key`. A Project ID in a path selects the target Project and does not authenticate. Responses carry `Cache-Control: no-store`, use the Core error envelope and never contain provider responses, native identifiers, paths or credentials.
 
-## Routes
+## Current Runtime observations
 
-### List current Runtime observations
+### List observations of every Project
 
 ```http
 GET /core/v1/sandbox/runtime-observations?after={session_id}&limit=20&order=desc
-Authorization: Bearer ...
+Authorization: Bearer <Core key>
 ```
 
-| Field | Rules |
+| Parameter | Rules |
 | --- | --- |
-| `after` | Observation ID from the previous page. Optional, supplied once. |
-| `limit` | Integer 1–100, default 20. |
-| `order` | `asc` or `desc`, default `desc`. |
+| `after` | Observation ID (a Session ID) that ended the previous page. |
+| `limit` | 1 to 100, default 20. |
+| `order` | `asc` or `desc` by Session creation time, default `desc`. |
 
-The list contains one current Runtime context for every Session of every managed
-Project, labelled with its owning `project_id`, including explicit `none`,
-unsupported `self_hosted`, and released managed contexts. Ordering uses the same Session creation-time and ID
-keyset as the Session list. An observation ID is the Session UUID, so pagination
-does not change when the underlying Runtime incarnation changes. Pages are not an
-atomic telemetry snapshot; every row has its own `resolved_at`, and a successful
-provider sample has its own `observed_at`. A client completes the entire page chain
-before publishing a new Dashboard snapshot.
+The list has one row for every Session of every Project that is not deleted, including `none`, `self_hosted` and released managed Sessions. Each row carries the owning `project_id` and an `observation`: the [`RuntimeObservation`](#runtimeobservation) plus [`disk`](#disk). Pages use the Session list's creation-time and ID keyset. The observation ID is the Session ID, so page boundaries do not move when the Runtime behind a Session changes. A page is not an atomic snapshot: each row has its own `resolved_at` and, when sampled, `observed_at`. Unknown query keys are ignored.
 
 ```json
 {
@@ -55,6 +40,7 @@ before publishing a new Dashboard snapshot.
           "device_id": "2e434f4f-76aa-4e54-a707-4757036d90ef",
           "connection_generation": null
         },
+        "lifecycle_state": "active",
         "status": "observed",
         "reason": null,
         "allocation_created_at": 1789951200,
@@ -81,197 +67,218 @@ before publishing a new Dashboard snapshot.
 }
 ```
 
-### Retrieve one Session's current Runtime observation
+### Retrieve one Session's observation
 
 ```http
 GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-observation
-Authorization: Bearer ...
+Authorization: Bearer <Core key>
 ```
 
-This returns the same object shape as a list item's `observation`, without the
-administrator list's `disk` (see the [administrator contract](admin-api.md)). It never starts a Turn, creates
-an Environment, provisions compute, renews a lease, or changes lifecycle state.
-
-A valid `environment:none` Session returns `200` with status `unsupported`; the
-Session exists but has no attributable Runtime instance. A missing Session, or one
-outside the Project, returns the existing indistinguishable not-found error.
-
-## Resource schema
+This returns one `RuntimeObservation`, without `disk`. It accepts no query parameters. An `environment:none` Session returns 200 with status `unsupported`.
 
 ### `RuntimeObservation`
 
-| Field | Type | Required | Semantics |
-| --- | --- | --- | --- |
-| `id` | string | yes | Session UUID; stable identity of this current-observation resource and its list cursor. |
-| `object` | literal | yes | `agent.runtime_observation`. |
-| `session_id` | string | yes | Authorized Core Session. |
-| `environment_id` | string or null | yes | Null only for mode `none`. |
-| `mode` | enum | yes | `none`, `self_hosted`, `openai_hosted`. |
-| `provider_type` | string or null | yes | Forward-compatible safe source kind such as `docker` or `microsandbox`; null when no provider applies. Clients must not treat an unknown nonempty value as an error. |
-| `instance` | object | yes | Provider-neutral current incarnation identity; explicit `kind=none` when no compute applies. |
-| `status` | enum | yes | `observed`, `unsupported`, `unavailable`. |
-| `reason` | enum or null | yes | Safe reason when status is not `observed`. |
-| `allocation_created_at` | integer or null | yes | Unix seconds for managed allocation age. |
-| `resolved_at` | integer | yes | Unix seconds when Core resolved identity and status for this row. |
-| `observed_at` | integer or null | yes | Provider sample time; null without a sample. |
-| `started_at` | integer or null | yes | Current compute incarnation start time. |
-| `cpu` | object or null | yes | Null when no CPU fields were observed. |
-| `memory` | object or null | yes | Null when no memory fields were observed. |
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | The Session ID; the stable identity of this resource and its list cursor. |
+| `object` | string | `agent.runtime_observation`. |
+| `session_id` | string | The Session. |
+| `environment_id` | string or null | Null only for mode `none`. |
+| `mode` | enum | `none`, `self_hosted` or `openai_hosted`. |
+| `provider_type` | string or null | Source kind, such as `docker`, `microsandbox` or `e2b`; null when no provider was read. Treat an unknown value as a new kind, not an error. |
+| `instance` | object | The current compute identity; see [`RuntimeInstance`](#runtimeinstance). |
+| `lifecycle_state` | enum or null | Core's own lifecycle view of a managed allocation; null for `none` and `self_hosted`. See below. |
+| `status` | enum | `observed`, `unsupported` or `unavailable`. |
+| `reason` | enum or null | Why the row has no sample; see [Status and reason](#status-and-reason). |
+| `allocation_created_at` | integer or null | Unix seconds when the managed allocation was created. |
+| `resolved_at` | integer | Unix seconds when Core resolved this row. |
+| `observed_at` | integer or null | Unix seconds of the provider sample; null without a sample. |
+| `started_at` | integer or null | Unix seconds when the current compute incarnation started. |
+| `cpu` | object or null | Null when no CPU value was observed. |
+| `memory` | object or null | Null when no memory value was observed. |
+
+`lifecycle_state` comes from Core's allocation records, never from the sample:
+
+| Value | Allocation |
+| --- | --- |
+| `pending` | Not created yet, or being created |
+| `active` | Running |
+| `sleeping` | Suspended |
+| `transitioning` | Quiescing, suspending, restoring or waking |
+| `stopped` | Cleanup pending, or released |
 
 ### `RuntimeInstance`
 
-```json
-{
-  "kind": "managed_allocation",
-  "allocation_id": "alloc_...",
-  "device_id": "device_...",
-  "connection_generation": null
-}
-```
-
-`kind` is `managed_allocation`, `self_hosted_connection`, or `none`. For a managed
-context, `allocation_id` is the incarnation key; for self-hosted, the current
-`connection_generation` is the incarnation key. Fields that do not apply are
-explicit nulls. Provider-native container IDs, pod names, host paths, credentials,
-and raw labels are not public fields.
-
-### `RuntimeCPUObservation`
-
-```json
-{
-  "usage_seconds_total": 482.75,
-  "capacity_cores": 2.0,
-  "usage_cores": 1.42,
-  "utilization_ratio": 0.71
-}
-```
-
-All fields are `number | null`. Values are finite and nonnegative;
-`capacity_cores`, when present, is greater than zero. Numeric zero is observed
-zero. Null is unavailable. `usage_cores` is the cumulative CPU delta divided by
-the observation-time delta for two ordered samples of the same incarnation.
-`utilization_ratio` is `usage_cores / capacity_cores`. It is not clamped: a value
-above 1 is retained as provider/accounting evidence and is not interpreted as a
-lifecycle signal. Both derived fields are null after a cache restart or whenever
-either source sample is absent or invalid. The API never derives CPU rate from a
-single sample of cumulative time. A provider that reports only a current share
-of its CPU capacity (E2B) fills `utilization_ratio` with that report and leaves
-`usage_seconds_total` and `usage_cores` null.
-
-### `RuntimeMemoryObservation`
-
-```json
-{
-  "usage_bytes": 805306368,
-  "limit_bytes": 2147483648
-}
-```
-
-Both fields are `integer | null`. Values are nonnegative and safe JSON integers.
-Zero usage is observed zero. A missing or unlimited provider limit is null.
-
-## Status and reason matrix
-
-| Status | Allowed reason |
+| Field | Meaning |
 | --- | --- |
-| `observed` | null |
-| `unsupported` | `runtime_mode_not_observable` |
-| `unavailable` | `allocation_pending`, `runtime_not_running`, `source_not_configured`, `sample_timeout`, `sample_unavailable` |
+| `kind` | `managed_allocation`, `self_hosted_connection` or `none`. |
+| `allocation_id` | The managed allocation, which identifies the compute of a managed Session; null otherwise. |
+| `device_id` | The Runtime device bound to the managed allocation, when there is one; null otherwise. |
+| `connection_generation` | Always null: Core does not observe self-hosted connections. |
 
-Ownership mismatch, malformed durable identity, corrupt provider evidence, and
-authorization failure are not downgraded to unavailable rows.
+### `cpu`
 
-## Error responses
+All fields are finite nonnegative numbers or null. Zero is an observed zero; null is unavailable.
 
-Use the existing Agents API error envelope.
+| Field | Meaning |
+| --- | --- |
+| `usage_seconds_total` | Cumulative CPU seconds of the current compute incarnation (Docker, microsandbox). |
+| `capacity_cores` | Configured CPU capacity, greater than zero. |
+| `usage_cores` | Always null. |
+| `utilization_ratio` | Provider-reported share of `capacity_cores` (E2B), not clamped; null for providers that report cumulative CPU time. |
 
-| HTTP | Type / code | When |
+### `memory`
+
+`usage_bytes` and `limit_bytes` are safe JSON integers or null. Zero usage is observed zero; `limit_bytes` is at least 1, and an unknown or unlimited limit is null.
+
+### `disk`
+
+Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rules of `memory`. E2B fills it when the sandbox reports both its disk usage and a nonzero capacity. Docker and microsandbox return null. A non-null `disk` appears only on an `observed` row.
+
+### Status and reason
+
+| Status | Reason | When |
 | --- | --- | --- |
-| 400 | `invalid_request_error` / `invalid_request_error` | List: a repeated supported query key, or an empty or invalid limit or order, with the shared Beta list messages. Unknown list query keys are ignored. |
-| 400 | `invalid_request_error` / `unsupported_parameter` | Single-Session retrieval with any query parameter. |
-| 401 | `invalid_request_error` / `invalid_admin_key` | Missing or invalid Core key. |
-| 404 | `not_found_error` / `not_found_error` | Missing, malformed or foreign Session/cursor, indistinguishably, as for the [Session list cursor](wire-semantics.md#cursors). |
-| 500 | `server_error` / `internal_error` | Integrity, ownership, or invalid provider evidence. |
-| 503 | `server_error` / `execution_unavailable` | Required Runtime observation service is not configured, or list collection exceeded its request budget. |
+| `observed` | null | The provider returned a sample. |
+| `unsupported` | `runtime_mode_not_observable` | `none` and `self_hosted` Sessions. |
+| `unavailable` | `allocation_pending` | The managed allocation does not exist yet or is being created. |
+| `unavailable` | `runtime_not_running` | The allocation is being cleaned up or is released, or the provider reports the Runtime absent, stopped or suspended. |
+| `unavailable` | `source_not_configured` | No observation source serves the allocation's provider. |
+| `unavailable` | `sample_timeout` | The provider read exceeded its deadline. |
+| `unavailable` | `sample_unavailable` | The provider could not produce a current sample. |
 
-Errors never include provider raw responses or credentials.
+An ownership mismatch, malformed durable identity or invalid provider evidence fails the request instead of becoming an `unavailable` row. The generated `core.openapi.yaml` records each field's type, nullability and enum but cannot express which combinations of status, mode and fields are valid; this table and the field rules above are normative.
 
-## Freshness and caching
+### Errors
 
-- Return `Cache-Control: no-store`.
-- The Phase 2 implementation performs bounded direct reads and has no observation
-  cache. A later internal cache may coalesce reads for at most five seconds.
-- `observed_at` is authoritative for freshness; HTTP response time is not.
-- Clients mark samples stale according to their own explicit threshold.
-- `ETag` is not proposed because observations change independently.
+| HTTP | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_request_error` | List: a repeated `after`, `limit` or `order`, or an invalid `limit` or `order`. |
+| 400 | `unsupported_parameter` | Single read: any query parameter. |
+| 404 | `not_found_error` | A missing Project; a missing, malformed or foreign Session or list cursor. |
+| 500 | `internal_error` | Inconsistent identity or invalid provider evidence. |
+| 503 | `execution_unavailable` | The list exceeded its collection budget. |
 
-## Client contract
+### Client
 
-`packages/agents-client` exposes:
+`packages/agents-client` exposes `AdminClient.listRuntimeObservations({after, limit, order})` and `AdminClient.retrieveRuntimeObservation(projectId, sessionId, options)`. `RuntimeObservation` in `src/types.ts` is a union discriminated by `status` and `mode`; `AdminRuntimeObservation` adds `disk`. The client checks every field, enum, nullability rule, timestamp and number and rejects unknown fields. A malformed observation rejects with a 502 `invalid_runtime_observation` error and a malformed page with `invalid_admin_response`; one bad row rejects the whole page.
 
-```ts
-type RuntimeObservationStatus = "observed" | "unsupported" | "unavailable";
-type RuntimeObservationReason =
-  | "runtime_mode_not_observable"
-  | "allocation_pending"
-  | "runtime_not_running"
-  | "source_not_configured"
-  | "sample_timeout"
-  | "sample_unavailable";
+## Session Runtime history
 
-type RuntimeObservation =
-  | RuntimeObservedObservation
-  | RuntimeUnavailableObservation
-  | RuntimeNoneObservation
-  | RuntimeSelfHostedObservation;
+```http
+GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history?start=1789951200&end=1789954800&max_points=120
+Authorization: Bearer <Core key>
+```
 
-interface AdminRuntimeObservation {
-  project_id: string;
-  observation: RuntimeObservation & { disk: RuntimeDiskObservation | null };
-}
+| Parameter | Rules |
+| --- | --- |
+| `start` | Required. Inclusive Unix second, 0 or more. |
+| `end` | Required. Exclusive Unix second, after `start`, at most 24 hours after it and at most one second in the future. |
+| `max_points` | Optional. Buckets per array, 2 to 1000; default 120. |
 
-class AdminClient {
-  listRuntimeObservations(options?: {
-    after?: string;
-    limit?: number;
-    order?: "asc" | "desc";
-  }): Promise<ListPage<AdminRuntimeObservation>>;
+Each parameter may appear once. Core chooses the bucket width: the range divided by `max_points`, rounded up to whole seconds, and at least 30 seconds or the sampling interval, whichever is longer. Buckets start at `start`; the last one ends at `end`.
 
-  retrieveRuntimeObservation(projectId: string, sessionId: string): Promise<RuntimeObservation>;
+Core resolves the Project, then the Session and its Environment, before it reads storage; allocation and provider identities are results, never query inputs. History exists only for `openai_hosted` Sessions.
+
+```json
+{
+  "object": "agent.runtime_history",
+  "source": "durable",
+  "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
+  "requested_range": { "start": 1789951200, "end": 1789954800 },
+  "resolution_seconds": 60,
+  "generated_at": 1789954801,
+  "coverage": {
+    "retained_start": 1789951200,
+    "first_sample_at": 1789951210,
+    "last_sample_at": 1789954750,
+    "sample_count": 118,
+    "expected_sample_count": 120,
+    "buckets": []
+  },
+  "series": [],
+  "token_usage": []
 }
 ```
 
-These exported variants discriminate on `status` and `mode`; their instance,
-reason, timestamps, CPU, and memory fields narrow accordingly. The exact variant
-definitions live in `packages/agents-client/src/types.ts` and mirror the status
-and reason matrix above.
+`source` is always `durable`. `resolution_seconds` is the bucket width and `generated_at` the read time. Only buckets that hold at least one sample appear in `coverage.buckets`, `series[].points` and `token_usage`; a gap stays a gap, never a zero.
 
-The client validates every required field, enum, nullability rule, timestamp, and
-finite number. The current pinned contract rejects unknown additive fields so an
-unreviewed server expansion cannot silently cross the browser boundary. Malformed
-data rejects the whole page; Web does not publish a partial snapshot.
+### Coverage
 
-The generated OpenAPI 2 schema records field-level required/nullability rules,
-UUID formats, reason enums, and numeric minima. OpenAPI 2
-cannot encode the complete cross-field discriminated union. The matrix above is
-normative for wire consumers; the server projection and strict TypeScript
-projector enforce it, and the exported TypeScript type prevents invalid
-status/mode combinations in typed consumers.
+`coverage` counts every stored sample of the Session in the range, including unavailable ones that belong to no allocation. `retained_start` is the later of `start` and seven days before `generated_at`. `expected_sample_count` is the number of sampling intervals between `retained_start` and `end`, rounded up. Each bucket has `start`, `end`, `first_observed_at`, `last_observed_at`, `observation_count`, `observed_count` and `unavailable_count`.
 
-Web also applies a configured whole-refresh budget. If `has_more` remains true
-when that budget is exhausted, it retains the prior complete snapshot and marks
-the refresh incomplete; it does not publish partial values as global totals.
-After both Runtime-observation and Session traversals complete, Web also requires
-their Session ID sets to be identical. A mismatch caused by concurrent creation or
-deletion makes the candidate incomplete and prevents publication.
+### Series
 
-## Deliberately excluded
+There is one series per managed allocation, keyed by `allocation_id`, so a provider that pauses, restores or replaces compute under the same allocation keeps one series. `environment_id` and `provider_type` identify its source. `started_at` is the earliest retained start of the allocation's compute, as JSON-safe `{seconds, nanoseconds}` with nanoseconds 0 to 999,999,999; it is not a per-bucket start, and compute uptime comes only from current observations.
 
-- Token usage: use existing Session/Turn Usage.
-- Billing and cost: product/backend concern.
-- Historical series in these routes: the optional capability uses the separate
-  [Runtime history API](runtime-history-api.md).
-- Container logs and command output.
-- Provider credentials or native configuration.
-- Start, stop, pause, resume, restart, renew, or delete operations.
-- Idle classification and automatic shutdown.
+Each point has the bucket bounds, the coverage counts of the allocation's samples, and nullable `cpu` and `memory` objects with a `contributor_count` of at least 1:
+
+- `cpu.utilization_ratio` comes from consecutive cumulative CPU counters of one compute incarnation: the CPU seconds consumed divided by the elapsed time multiplied by the capacity, over the intervals that end in the bucket. The baseline resets when the incarnation changes or a counter decreases. E2B reports no cumulative CPU time; its bucket value is the mean of the ratios sampled in it. `cpu.capacity_cores` is the last capacity in the bucket.
+- `memory.usage_bytes` and `memory.limit_bytes` are the last values observed in the bucket.
+
+Disk is not kept in history.
+
+### Token usage
+
+`token_usage` belongs to the Session, not to an allocation. Each point holds the last cumulative measured Session usage sampled in its bucket: `start`, `end`, `sampled_at`, `input_tokens` and `output_tokens`. Measured Session usage is a Core extension that sums every recorded root Turn snapshot, active Turns included. It differs from [public Session usage](history-events-usage.md), which is null while a root Turn runs or after one ends unmeasured. These counters are measured model tokens, not prices or billing records.
+
+### Errors and bounds
+
+| HTTP | Code | When |
+| --- | --- | --- |
+| 400 | `unsupported_parameter` | A parameter other than `start`, `end` and `max_points`, or one supplied twice. |
+| 400 | `invalid_request` | An invalid range or `max_points`. |
+| 404 | `not_found_error` | A missing Project, or a Session missing from it. |
+| 409 | `runtime_history_unsupported` | The Session is not `openai_hosted`. |
+| 500 | `internal_error` | Inconsistent stored identity. |
+| 503 | `runtime_history_unavailable` | Core collects no periodic history (it runs without the execution worker), or the read failed, timed out or produced a result outside the bounds. |
+
+A response holds at most `max_points` buckets per array, 64 series and 10,000 coverage and series points in total. Storage error text is neither returned nor logged.
+
+### Client
+
+`AdminClient.retrieveRuntimeHistory(projectId, sessionId, {start, end, maxPoints, signal})` validates the query before sending it. It then checks the exact fields, the echoed range and Session, bucket order within the range, coverage totals, allocation identity, contributor counts, token usage order, nullability, numbers and response size. Any violation rejects the whole response with a 502 `invalid_admin_response` error.
+
+## Node host observations and history
+
+```http
+GET /core/v1/sandbox/nodes/{node_id}?range=1h
+Authorization: Bearer <Core key>
+```
+
+`range` is `1h` (the default), `6h` or `24h`. Another parameter, a repeated or invalid `range`, or a malformed node ID returns 400 `invalid_request`; a missing or removed node returns 404 `not_found_error`. The response is the node object of the [node list](sandbox-deployment.md) plus `host` and `history`:
+
+```json
+{
+  "host": {
+    "effective_cpu_cores": 4,
+    "cpu_utilization": 0.35,
+    "total_memory_bytes": 17179869184,
+    "available_memory_bytes": 8589934592,
+    "available_disk_bytes": 107374182400,
+    "observed_at": "2026-09-25T09:00:00Z"
+  },
+  "history": {
+    "resolution_seconds": 60,
+    "points": [{
+      "start": "2026-09-25T08:59:00Z",
+      "cpu_utilization_max": 0.4,
+      "memory_used_bytes_max": 8589934592,
+      "available_disk_bytes_min": 107374182400
+    }]
+  }
+}
+```
+
+`host` is the node's last received heartbeat observation; every unavailable value, including an unobserved `observed_at`, is null. An offline node keeps its last values and their original time, so judge freshness by the node's `online` and `host.observed_at`.
+
+- `cpu_utilization` is the share of busy ticks in the host's aggregate `/proc/stat` counters between two heartbeats, 0 to 1. Idle and I/O-wait ticks are not busy, and guest time is not counted twice. The first heartbeat of a connection, a counter reset and an unreadable baseline give null. It measures the whole visible host, not the node process or its sandboxes.
+- `effective_cpu_cores` accounts for the node process's CPU affinity and cgroup limits; null when those cannot be established.
+- `total_memory_bytes` and `available_memory_bytes` are `MemTotal` and `MemAvailable`.
+- `available_disk_bytes` is the free space of the node's state filesystem, not a sandbox quota.
+
+The node measures what its namespaces can see, so run it on the host it reports on.
+
+`history` covers the range in complete UTC buckets: 60 seconds for `1h`, 300 for `6h` and 900 for `24h`. Every bucket of the range is present, and the bucket in progress is left out. `cpu_utilization_max` and `memory_used_bytes_max` are the maxima of the recorded observations, where used memory is total minus available memory of the same observation; `available_disk_bytes_min` is the minimum. Each metric is null for a bucket without a recorded value, including offline periods. Core never interpolates or backfills.
+
+`SandboxAdminClient.retrieveNode(nodeId, range, options)` in `packages/agents-client` reads this route and validates the response.
