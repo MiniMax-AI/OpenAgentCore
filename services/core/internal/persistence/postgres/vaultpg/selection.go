@@ -1,0 +1,64 @@
+package vaultpg
+
+import (
+	"context"
+	"errors"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
+)
+
+func (s *Store) CountOwnedVaults(ctx context.Context, tenantID string, vaultIDs []string) (int, error) {
+	owned, err := s.pool.Queries().GetAttachedVaultIDs(ctx, sqlc.GetAttachedVaultIDsParams{TenantID: pgunit.PathID(tenantID), VaultIds: pathIDs(vaultIDs)})
+	if err != nil {
+		return 0, errors.New("cannot resolve attached Vaults")
+	}
+	return len(owned), nil
+}
+
+func (s *Store) FindMCPCredentials(ctx context.Context, query vaults.MCPCredentialQuery) ([]vaults.MCPCredentialMatch, error) {
+	var credential pgtype.UUID
+	if query.CredentialID != "" {
+		credential = pgunit.PathID(query.CredentialID)
+	}
+	rows, err := s.pool.Queries().FindMCPCredentials(ctx, sqlc.FindMCPCredentialsParams{TenantID: pgunit.PathID(query.TenantID),
+		VaultIds: pathIDs(query.VaultIDs), McpServerUrl: query.ServerURL, CredentialID: credential})
+	if err != nil {
+		return nil, errors.New("cannot resolve MCP credential")
+	}
+	matches := make([]vaults.MCPCredentialMatch, 0, len(rows))
+	for _, row := range rows {
+		matches = append(matches, vaults.MCPCredentialMatch{VaultID: uuid.UUID(row.VaultID.Bytes).String(), CredentialID: uuid.UUID(row.ID.Bytes).String(),
+			AuthType: row.AuthType, MCPServerURL: row.McpServerUrl})
+	}
+	return matches, nil
+}
+
+// StaticTokenCiphertext is the only read of a static token. Resource reads
+// never select ciphertext.
+func (s *Store) StaticTokenCiphertext(ctx context.Context, query vaults.StaticTokenQuery) ([]byte, error) {
+	ciphertext, err := s.pool.Queries().GetMCPStaticCredentialCiphertext(ctx, sqlc.GetMCPStaticCredentialCiphertextParams{
+		TenantID: pgunit.PathID(query.TenantID), VaultIds: pathIDs(query.VaultIDs), VaultID: pgunit.PathID(query.VaultID),
+		CredentialID: pgunit.PathID(query.CredentialID), McpServerUrl: query.MCPServerURL,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, vaults.ErrNotFound
+	}
+	if err != nil {
+		return nil, errors.New("cannot read MCP credential")
+	}
+	return ciphertext, nil
+}
+
+func pathIDs(ids []string) []pgtype.UUID {
+	result := make([]pgtype.UUID, 0, len(ids))
+	for _, id := range ids {
+		result = append(result, pgunit.PathID(id))
+	}
+	return result
+}
