@@ -74,11 +74,11 @@ The default output is `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`:
 Use these executables in place of the corresponding `go run` commands below.
 The build needs Go and access to its pinned module dependencies; it does not need
 Node, Docker, the product service or frontend. An isolated source context enforces
-that boundary on every build. [Contributor rules](../../docs/maintainers.md#independent-core-build-artifacts)
+that boundary on every build. [Contributor rules](../../docs/maintainers.md#standalone-core-builds)
 define the allowed shared packages and required checks. Runtime database/key
 configuration and a separately installed execution daemon are still required;
 these binaries do not establish full protocol coverage. For a standalone Linux
-container, see [Container deployment](CONTAINER.md).
+container, see [Run Core without the installer](../../docs/maintainers.md#run-core-without-the-installer).
 
 `make build-agents-api-release` packages these commands and `oac-node` in a versioned
 Linux amd64 archive, with source/protocol identity, checksums, a license and
@@ -502,7 +502,7 @@ management ID and full principal; neither changes the key's restriction. Unknown
 historical creators cannot enroll. API bearer keys and executor keys are separate.
 
 On the executor host, save that JSON as a private
-`$OAC_RUNTIME_HOME/daemon/executor-key.json`, outside the tool workspace. Use the [native installer](../../docs/self-hosted-native.md) to prepare the selected
+`$OAC_RUNTIME_HOME/daemon/executor-key.json`, outside the tool workspace. Use the [native installer](../../docs/getting-started/self-hosted.md) to prepare the selected
 Harnesses. Managed images preinstall them. A preconfigured Runtime can connect
 with the values returned by Session creation:
 

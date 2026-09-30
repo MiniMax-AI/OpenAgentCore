@@ -22,25 +22,15 @@ Set `OAC_RUNTIME_MCODE_BIN` to that absolute executable and `OAC_RUNTIME_MCODE_A
 for the daemon. The opt-in only advertises the profile for the qualified version.
 Use the existing authenticated daemon connection and operator device enrollment;
 native self-hosted installation uses the same Runtime protocol. See the
-[native guide](../../../../docs/self-hosted-native.md); MiniMax on Windows remains
+[self-hosted guide](../../../../docs/getting-started/self-hosted.md#platforms); MiniMax on Windows remains
 unsupported.
 Set `OAC_DEFAULT_HARNESS=mcode` in the independent Core deployment. Existing Sessions
 retain their engine. Do not expose a new public harness selector.
 
 ## Docker workspace
 
-Build the shared workspace helpers and the single CLI/companion artifact from
-the pinned native source. Supply the matching npm package only for its native
-runtime dependencies:
-
-```sh
-MCODE_NATIVE_SOURCE=/absolute/minimax-code \
-MCODE_CLI_DIR=/absolute/pinned-package bash scripts/build-mcode-harness.sh
-MCODE_HARNESS_BUILD_DIR=/absolute/built-companion \
-bash scripts/build-mcode-runtime.sh
-docker build --platform linux/amd64 -t agents-runtime:mcode \
-  "${OAC_DEV_HOME:-$HOME/.oac}/build/mcode-runtime"
-```
+The [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers)
+builds the companion from the pinned native source and the Runtime image.
 
 Configure Core's existing managed Docker provider with the immutable image ID,
 `deploy/codex/seccomp.json` and `nested_sandbox: true`. Core, database ownership,
