@@ -345,11 +345,6 @@
     "reason": "Historical migration commentary records the environment name used when this migration was written."
   },
   {
-    "path": "deploy/install/installer_fakes.py",
-    "regex": "(?i:parsar)(?:[A-Za-z0-9_.*/-]*)|\\bagents-api(?:-(?:migrate|e2b-provider))?\\b|\\bAGENTS_API_[A-Z0-9_]+",
-    "reason": "These matched legacy identifiers identify and validate old installation inputs, ownership, service files, backups or resumable conversion fixtures."
-  },
-  {
     "path": "deploy/install/node_install.py",
     "regex": "parsar-node(?:-)?|\\.parsar(?:/nodes)?|PARSAR_NODE_ENROLLMENT_TOKEN",
     "reason": "Only the old node service/state paths and retired enrollment variable are recognized for scoped refusal and uninstall guidance."

@@ -51,7 +51,7 @@ def _checked(arguments, failure):
     return result.stdout.strip()
 
 
-def _files(native, required=REQUIRED):
+def _files(native):
     if native.is_symlink() or not native.is_dir():
         raise RuntimeError("The distribution is missing its native Core payload")
     files = {}
@@ -59,9 +59,9 @@ def _files(native, required=REQUIRED):
         if path.is_symlink() or not (path.is_dir() or path.is_file()):
             raise RuntimeError("The distribution requires regular native Core executables")
         name = str(path.relative_to(native))
-        if name in required and path.is_file():
+        if name in REQUIRED and path.is_file():
             files[name] = path
-    if not set(required).issubset(files):
+    if not set(REQUIRED).issubset(files):
         raise RuntimeError("The distribution is missing a required native Core executable")
     return files
 
