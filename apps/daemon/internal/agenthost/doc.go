@@ -3,18 +3,24 @@
 // Session's Link attachment. It needs Linux; elsewhere Run returns
 // ErrUnsupported.
 //
-// Run runs one Session. It admits the Session before any effect: the kind
-// must declare an agent.View, and the request must use only what a view runs
-// and no function tools, whose results Input cannot carry. It then allocates
-// the Session uid, skipping each uid that a running thread holds as its real,
-// effective, saved or file-system uid; this check only detects a conflict and
-// never ends a process. It creates the Session directory under
-// Config.StateDir, rewrites the request so the model provider and HTTP MCP
-// reach the network only through the Session's gateway, and calls the view's
-// Executor factory. The first ViewSession.Launch starts the process broker;
-// each Launch builds one sessionview view, of which one at a time is live,
-// over the world that worldfs serves from the attachment's File service, with
-// the gateway listening in the view's network namespace.
+// Run runs one Session. It admits the Session before any effect: the kind must
+// declare an agent.View, the request must use only what a view runs and no
+// function tools, whose results Input cannot carry, and when the view declares
+// shim names, which run on the sandbox PATH, the Session's Environment must
+// set PATH. It then allocates the Session uid, skipping each uid that a
+// running thread holds as its real, effective, saved or file-system uid; this
+// check only detects a conflict and never ends a process. It creates the
+// Session directory under Config.StateDir, rewrites the request so the model
+// provider and HTTP MCP reach the network only through the Session's gateway,
+// and calls the view's Executor factory. Each ViewSession.Launch builds one
+// sessionview view, of which one at a time is live, over the world that
+// worldfs serves from the attachment's File service, with the gateway
+// listening in the view's network namespace. A view with a shim gets its own
+// process broker, started once the view runs and closed once it has ended. The
+// broker runs the shims' commands over the attachment's Process service in the
+// strongest scope the service declares, with the view's ForwardEnv and the
+// Session's Environment, and cancels a forwarded process whose shim is lost
+// with the launch's kill timeout as its grace.
 //
 // Each view presents the closure directories read-only and executable, the
 // Session home read-write and noexec, the agent host's /etc/passwd, group,
@@ -25,11 +31,13 @@
 // The agent host owns the Session's Link attachment: it opens each stream
 // with the Session's binding, renews the lease and fails the Session when the
 // relay closes the attachment, a Link request fails in a way that is not
-// retryable, or the world is lost or did not stop cleanly, which leaves what
-// the attachment holds uncertain. A failure cancels the running Turn and
-// closes the live view. A view's end is settled before its clirunner.Process
-// reports it: the gateway has stopped, the world's end is recorded and the
-// view slot is free. Teardown releases, in order, the Executor, the view, the
+// retryable, the world is lost or did not stop cleanly, which leaves what the
+// attachment holds uncertain, a view's process relay is lost while the view
+// runs, or a view's teardown does not finish within sessionview's bound. A
+// failure cancels the running Turn and closes the live view. A view's end is
+// settled before its clirunner.Process reports it: the gateway and the
+// process broker have stopped, the world's end is recorded and the view slot
+// is free. Teardown releases, in order, the Executor, the view with its
 // process broker, the Link attachment, the Session directory and the uid;
 // Run decides its result only afterwards, so a failure recorded during
 // teardown counts, and from the close of the attachment on, what the Link
@@ -37,7 +45,8 @@
 // views, which kills their processes, and retries Close once. If Close
 // fails again, the Executor may still use the Session directory: Run returns
 // ErrTeardown and keeps the directory, and the uid stays in use until the
-// agent host exits.
+// agent host exits. A view whose teardown did not finish keeps both the same
+// way, because its processes may still run.
 //
 // Run drives each Turn as the daemon's dispatch drives a prepared execution.
 // One output consumer starts before StartTurn and forwards the Turn's

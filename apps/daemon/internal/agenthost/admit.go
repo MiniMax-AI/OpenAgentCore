@@ -15,6 +15,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/gateway"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
@@ -38,6 +39,9 @@ type plan struct {
 	// mcp and proxy are ViewSession.MCP and ViewSession.Proxy.
 	mcp   []agent.MCPBinding
 	proxy string
+	// executables is each view's process broker table: each shim name runs
+	// that name on the sandbox PATH, and each shim path the same path.
+	executables processbroker.Executables
 }
 
 // checkConfig validates cfg and loads the roots in its CA directory.
@@ -115,6 +119,8 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 	case len(req.FunctionTools) > 0 || req.ToolSearch:
 		// A function call waits for a result that Input cannot deliver.
 		return nil, unsupported("function tools and their discovery")
+	case len(view.Shims) > 0 && !hasPATH(s.Environment):
+		return nil, invalidSession("the view's shims run names on the sandbox PATH, and the Environment sets no PATH")
 	}
 	raw, ok := req.AgentOptions["model_provider"]
 	if !ok {
@@ -148,7 +154,8 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 	if err != nil {
 		return nil, &Error{Kind: ErrInvalidSession, Op: "gateway", Err: err}
 	}
-	p := &plan{view: view, gateway: gw, proxy: endpoints.Proxy}
+	p := &plan{view: view, gateway: gw, proxy: endpoints.Proxy,
+		executables: processbroker.Executables{Names: identity(view.Shims), Paths: identity(view.ShimPaths)}}
 	if p.request, err = handoff(req, provider, endpoints); err != nil {
 		return nil, err
 	}
@@ -226,6 +233,22 @@ func checkSession(s Session) error {
 		}
 	}
 	return nil
+}
+
+// hasPATH reports whether a forwarded process receives PATH.
+func hasPATH(env Environment) bool {
+	_, sandbox := env.Sandbox["PATH"]
+	_, tool := env.Tool["PATH"]
+	return sandbox || tool
+}
+
+// identity maps each of keys to itself.
+func identity(keys []string) map[string]string {
+	m := make(map[string]string, len(keys))
+	for _, k := range keys {
+		m[k] = k
+	}
+	return m
 }
 
 // valid reports whether r is a nonempty range of nonzero uids.

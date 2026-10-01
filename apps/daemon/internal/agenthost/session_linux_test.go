@@ -54,7 +54,7 @@ func TestViewEndReleasesTheSlotBeforeTheProcessEnds(t *testing.T) {
 		}
 		ends.closeChild()
 		v := &fakeView{exit: make(chan struct{})}
-		p, err := s.own(lv, v, fakeWorld{stop: stop}, func() {}, clirunner.StartOptions{Parent: context.Background(), KillTimeout: time.Second}, ends)
+		p, err := s.own(lv, v, fakeWorld{stop: stop}, func() {}, clirunner.StartOptions{Parent: context.Background(), KillTimeout: time.Second}, ends, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -341,6 +341,8 @@ type fakeView struct {
 }
 
 func (v *fakeView) Signal(syscall.Signal) error { return nil }
+
+func (v *fakeView) Relay() *os.File { return nil }
 
 func (v *fakeView) Wait() (sessionview.Exit, error) {
 	<-v.exit

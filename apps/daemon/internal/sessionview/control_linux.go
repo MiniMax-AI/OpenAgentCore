@@ -169,6 +169,12 @@ func (c *control) recv() (message, []*os.File, error) {
 	return m, files, nil
 }
 
+// interrupt shuts the daemon's end down in both directions, so that a pending recv returns io.EOF and every later send fails.
+func (c *control) interrupt() {
+	c.conn.CloseRead()
+	c.conn.CloseWrite()
+}
+
 func (c *control) close() error {
 	return c.conn.Close()
 }
