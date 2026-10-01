@@ -32,7 +32,7 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 		dials  int32
 	}{{"service", service, 0}, {"environment", environment, 1}} {
 		before := sb.dials.Load()
-		eps := serveOnLoopback(t, Config{MCP: []proto.MCPHTTPServer{binding(c.origin)}, Prompt: c.prompt, OpenNetwork: sb.open, TLS: trust(srv)})
+		eps := serveOnLoopback(t, Config{MCP: []proto.MCPHTTPServer{binding(c.origin)}, Prompt: c.prompt, OpenNetwork: sb.open, RootCAs: trust(srv)})
 		if !strings.HasPrefix(eps.MCP["tools"], "http://127.0.0.1:") || !strings.HasSuffix(eps.MCP["tools"], "/mcp") {
 			t.Fatalf("%s: Harness URL %q", c.origin, eps.MCP["tools"])
 		}

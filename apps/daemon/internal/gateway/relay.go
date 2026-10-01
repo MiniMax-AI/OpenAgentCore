@@ -3,10 +3,15 @@ package gateway
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/http/httputil"
+	"net/textproto"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,18 +30,21 @@ const (
 	// connectTimeout bounds the sandbox's resolution and dial for one
 	// Connect.
 	connectTimeout = 30 * time.Second
+	// connectMargin is how long the gateway waits beyond connectTimeout for
+	// the stream to open and the sandbox's answer to arrive.
+	connectMargin = 5 * time.Second
 )
+
+type dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
 // newTransport returns an upstream transport that relays requests as they
 // are: no proxy from the environment, no added compression and no redirects,
-// which http.Transport never follows.
-func newTransport(tlsConfig *tls.Config, dial func(context.Context, string, string) (net.Conn, error)) *http.Transport {
-	if tlsConfig != nil {
-		tlsConfig = tlsConfig.Clone()
-	}
+// which http.Transport never follows. TLS trusts roots, or the system roots
+// when roots is nil, and always verifies the destination's hostname.
+func newTransport(roots *x509.CertPool, dial dialFunc) *http.Transport {
 	return &http.Transport{
 		DialContext:           dial,
-		TLSClientConfig:       tlsConfig,
+		TLSClientConfig:       &tls.Config{RootCAs: roots},
 		ForceAttemptHTTP2:     true,
 		DisableCompression:    true,
 		TLSHandshakeTimeout:   10 * time.Second,
@@ -46,9 +54,22 @@ func newTransport(tlsConfig *tls.Config, dial func(context.Context, string, stri
 	}
 }
 
+// sessionDial binds each dial to the Session as well as to its own context.
+// http.Transport detaches a dial from the request that started it, and
+// CloseIdleConnections cancels only dials that no request waits for.
+func sessionDial(session context.Context, dial dialFunc) dialFunc {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stop := context.AfterFunc(session, cancel)
+		defer stop()
+		return dial(ctx, network, addr)
+	}
+}
+
 // sandboxDialer connects through a new Network stream for each connection, so
 // the sandbox resolves the name and the connection has sandbox origin.
-func sandboxDialer(open func(context.Context) (sandboxlink.Stream, error)) func(context.Context, string, string) (net.Conn, error) {
+func sandboxDialer(open func(context.Context) (sandboxlink.Stream, error)) dialFunc {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		if network != "tcp" && network != "tcp4" && network != "tcp6" {
 			return nil, &sandboxnet.Error{Code: sandboxnet.CodeUnsupportedNetwork, Effect: sandboxwire.EffectNone}
@@ -61,7 +82,12 @@ func sandboxDialer(open func(context.Context) (sandboxlink.Stream, error)) func(
 	}
 }
 
+// connectSandbox opens a Network stream and connects through it. A local
+// deadline bounds both, so a sandbox that never answers cannot hold the
+// connection open; the returned Conn outlives it.
 func connectSandbox(ctx context.Context, open func(context.Context) (sandboxlink.Stream, error), host string, port uint16) (*sandboxnet.Conn, error) {
+	ctx, cancel := context.WithTimeout(ctx, connectTimeout+connectMargin)
+	defer cancel()
 	s, err := open(ctx)
 	if err != nil {
 		return nil, err
@@ -114,6 +140,70 @@ func statusOf(err error) int {
 		return http.StatusGatewayTimeout
 	}
 	return http.StatusBadGateway
+}
+
+// withhold returns t, or, when secret is set, a transport that keeps secret
+// out of the response headers the Harness receives.
+func withhold(t http.RoundTripper, secret string) http.RoundTripper {
+	if secret == "" {
+		return t
+	}
+	return withholding{next: t, secret: secret}
+}
+
+// withholding removes every header and trailer value that contains secret
+// from each response, informational ones included, so an upstream that echoes
+// the injected credential in a header does not disclose it. Bodies pass
+// unchanged.
+type withholding struct {
+	next   http.RoundTripper
+	secret string
+}
+
+func (t withholding) RoundTrip(r *http.Request) (*http.Response, error) {
+	// The newest trace's hooks run first, so each informational response is
+	// cleaned before the reverse proxy relays it.
+	r = r.WithContext(httptrace.WithClientTrace(r.Context(), &httptrace.ClientTrace{
+		Got1xxResponse: func(_ int, h textproto.MIMEHeader) error {
+			t.remove(http.Header(h))
+			return nil
+		},
+	}))
+	resp, err := t.next.RoundTrip(r)
+	if err != nil {
+		return nil, err
+	}
+	t.remove(resp.Header)
+	// An upgraded response's body is the connection itself, without
+	// trailers, and must stay one.
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		resp.Body = &withheldTrailers{ReadCloser: resp.Body, resp: resp, t: t}
+	}
+	return resp, nil
+}
+
+// remove deletes each value that contains the secret. A name whose values
+// are all removed stays with none, so an announced trailer stays announced.
+func (t withholding) remove(h http.Header) {
+	for name, values := range h {
+		h[name] = slices.DeleteFunc(values, func(v string) bool { return strings.Contains(v, t.secret) })
+	}
+}
+
+// withheldTrailers cleans the response's trailers when the body ends: they
+// have arrived by then, and the reverse proxy relays them only afterwards.
+type withheldTrailers struct {
+	io.ReadCloser
+	resp *http.Response
+	t    withholding
+}
+
+func (b *withheldTrailers) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err == io.EOF {
+		b.t.remove(b.resp.Trailer)
+	}
+	return n, err
 }
 
 // stripCredentials removes every value of each header in

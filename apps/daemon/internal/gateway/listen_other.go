@@ -8,4 +8,4 @@ import (
 )
 
 // listen needs Linux network namespaces.
-func listen(*os.File, []int) ([]net.Listener, error) { return nil, ErrUnsupported }
+func listen(*os.File, []int) ([]*net.TCPListener, error) { return nil, ErrUnsupported }

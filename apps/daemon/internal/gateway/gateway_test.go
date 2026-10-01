@@ -1,17 +1,22 @@
 package gateway
 
 import (
+	"bufio"
 	"context"
-	"crypto/tls"
 	"crypto/x509"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
@@ -21,33 +26,50 @@ import (
 
 const wait = 5 * time.Second
 
-// serveOnLoopback serves cfg on host loopback listeners at free ports, as
-// Start serves it in the Session's namespace, until the test ends.
-func serveOnLoopback(t *testing.T, cfg Config) Endpoints {
+// loopback is a gateway served on host loopback listeners at free ports, as
+// Start serves it in the Session's namespace.
+type loopback struct {
+	Endpoints
+	// end ends the Session.
+	end context.CancelFunc
+	// handlers counts the requests being handled.
+	handlers sync.WaitGroup
+}
+
+// serveOnLoopback serves cfg until the test ends.
+func serveOnLoopback(t *testing.T, cfg Config) *loopback {
 	t.Helper()
-	g, err := build(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	g, err := build(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lns := make([]net.Listener, len(g.listeners))
+	l := &loopback{end: cancel}
+	lns := make([]*net.TCPListener, len(g.listeners))
 	ports := make([]int, len(lns))
 	for i := range lns {
-		if lns[i], err = net.Listen("tcp4", "127.0.0.1:0"); err != nil {
+		if lns[i], err = net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)}); err != nil {
 			t.Fatal(err)
 		}
 		ports[i] = lns[i].Addr().(*net.TCPAddr).Port
+		h := g.listeners[i].handler
+		g.listeners[i].handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			l.handlers.Add(1)
+			defer l.handlers.Done()
+			h.ServeHTTP(w, r)
+		})
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	g.serve(ctx, lns)
-	return g.endpoints(ports)
+	l.Endpoints = g.endpoints(ports)
+	return l
 }
 
-// trust returns a TLS configuration that trusts srv.
-func trust(srv *httptest.Server) *tls.Config {
+// trust returns roots that trust srv.
+func trust(srv *httptest.Server) *x509.CertPool {
 	roots := x509.NewCertPool()
 	roots.AddCert(srv.Certificate())
-	return &tls.Config{RootCAs: roots}
+	return roots
 }
 
 // noRedirects is a Harness-side client that shows each answer as it is.
@@ -133,4 +155,66 @@ func startSandbox(t *testing.T) *sandbox {
 		return s, err
 	}
 	return sb
+}
+
+func TestSessionEndEndsBlockedRelays(t *testing.T) {
+	// The upstream upgrades the connection and writes until the Harness's
+	// side is full, then reads until the gateway closes its side.
+	flooded, closed := make(chan struct{}), make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, rw, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n")
+		rw.Flush()
+		chunk := make([]byte, 64<<10)
+		for {
+			c.SetWriteDeadline(time.Now().Add(time.Second))
+			if _, err := c.Write(chunk); err != nil {
+				break
+			}
+		}
+		close(flooded)
+		c.SetWriteDeadline(time.Time{})
+		io.Copy(io.Discard, c)
+		close(closed)
+	}))
+	defer srv.Close()
+	gw := serveOnLoopback(t, Config{
+		MCP:    []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: srv.URL + "/mcp"}},
+		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
+	})
+
+	u, _ := url.Parse(gw.MCP["tools"])
+	harness, err := net.Dial("tcp", u.Host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer harness.Close()
+	fmt.Fprintf(harness, "GET /mcp HTTP/1.1\r\nHost: %s\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n", u.Host)
+	if resp, err := http.ReadResponse(bufio.NewReader(harness), nil); err != nil || resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("upgrade: %v %v", resp, err)
+	}
+	// The Harness reads nothing more, so the gateway's write to it blocks.
+	select {
+	case <-flooded:
+	case <-time.After(2 * wait):
+		t.Fatal("the upstream never filled the Harness's side")
+	}
+
+	gw.end()
+	returned := make(chan struct{})
+	go func() {
+		gw.handlers.Wait()
+		close(returned)
+	}()
+	for what, done := range map[string]chan struct{}{"the relay": returned, "the upstream connection": closed} {
+		select {
+		case <-done:
+		case <-time.After(wait):
+			t.Fatalf("%s is still open after the Session ended", what)
+		}
+	}
 }

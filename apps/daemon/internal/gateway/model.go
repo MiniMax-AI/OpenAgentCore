@@ -10,8 +10,8 @@ import (
 )
 
 // modelRelay serves one frozen model upstream. It relays only the routes the
-// protocol declares, injects the declared credential and keeps the base URL's
-// path.
+// protocol declares, injects the declared credential, keeps the base URL's
+// path and withholds the key from response headers and trailers.
 type modelRelay struct {
 	protocol   modelprovider.Protocol
 	scheme     string
@@ -35,7 +35,7 @@ func newModelRelay(p modelprovider.Provider, t http.RoundTripper) (*modelRelay, 
 		return nil, err
 	}
 	m := &modelRelay{protocol: p.Protocol, scheme: base.Scheme, host: base.Host, targets: map[string]*url.URL{},
-		credential: credential, key: p.APIKey, transport: t}
+		credential: credential, key: p.APIKey, transport: withhold(t, p.APIKey)}
 	for _, route := range modelprovider.Routes(p.Protocol) {
 		raw := modelprovider.UpstreamPath(base.EscapedPath(), route.Path)
 		path, err := url.PathUnescape(raw)

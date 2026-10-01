@@ -13,12 +13,15 @@
 // the gateway does the TLS either way. The generic proxy carries HTTP CONNECT
 // tunnels and plain-HTTP forward requests, and connects only through the
 // sandbox's Network service. Redirects reach the Harness unchanged and are
-// never followed. The gateway logs nothing.
+// never followed. Response headers and trailers that carry an injected
+// credential are withheld; bodies pass unchanged. The end of the Session
+// closes every connection, tunnels and upgraded ones included. The gateway
+// logs nothing.
 package gateway
 
 import (
 	"context"
-	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -51,8 +54,9 @@ type Config struct {
 	// network: the generic proxy then refuses every request, and an
 	// environment-origin binding is invalid.
 	OpenNetwork func(context.Context) (sandboxlink.Stream, error)
-	// TLS configures the gateway's upstream TLS. Nil uses the system roots.
-	TLS *tls.Config
+	// RootCAs are the roots the gateway trusts for upstream TLS. Nil means
+	// the system roots. The server name is always the destination's hostname.
+	RootCAs *x509.CertPool
 }
 
 // Model is one frozen model upstream.
@@ -107,7 +111,7 @@ var (
 // Plan validates cfg and returns the Endpoints that Start serves for it, so
 // the Harness's environment can be built before the view starts.
 func Plan(cfg Config) (Endpoints, error) {
-	g, err := build(cfg)
+	g, err := build(context.Background(), cfg)
 	if err != nil {
 		return Endpoints{}, err
 	}
@@ -120,7 +124,7 @@ func Plan(cfg Config) (Endpoints, error) {
 // hook; nothing listens outside the namespace. The end of ctx closes the
 // listeners and every connection.
 func Start(ctx context.Context, n SessionNetwork, cfg Config) (Endpoints, error) {
-	g, err := build(cfg)
+	g, err := build(ctx, cfg)
 	if err != nil {
 		return Endpoints{}, err
 	}
@@ -170,16 +174,17 @@ func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrInvalidConfig}, args...)...)
 }
 
-// build validates cfg and makes each listener's handler.
-func build(cfg Config) (*gateway, error) {
+// build validates cfg and makes each listener's handler. Every upstream dial
+// ends with session.
+func build(session context.Context, cfg Config) (*gateway, error) {
 	if n := 1 + len(cfg.Models) + len(cfg.MCP); n > maxListeners {
 		return nil, invalid("%d listeners, at most %d", n, maxListeners)
 	}
-	host := newTransport(cfg.TLS, (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext)
+	host := newTransport(cfg.RootCAs, sessionDial(session, (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext))
 	g := &gateway{transports: []*http.Transport{host}}
 	var sandbox *http.Transport
 	if cfg.OpenNetwork != nil {
-		sandbox = newTransport(cfg.TLS, sandboxDialer(cfg.OpenNetwork))
+		sandbox = newTransport(cfg.RootCAs, sessionDial(session, sandboxDialer(cfg.OpenNetwork)))
 		g.transports = append(g.transports, sandbox)
 	}
 	g.listeners = append(g.listeners, listener{role: roleProxy, handler: newProxy(cfg.OpenNetwork, sandbox)})
@@ -242,20 +247,24 @@ func (g *gateway) endpoints(ports []int) Endpoints {
 // could carry more than the gateway chooses to reveal.
 var quiet = log.New(io.Discard, "", 0)
 
-// serve serves each listener with its handler until ctx ends.
-func (g *gateway) serve(ctx context.Context, lns []net.Listener) {
+// serve serves each listener with its handler until ctx ends. The end of ctx
+// cancels every request, which closes its upstream side, and aborts every
+// connection the listeners accepted, which ends a relay blocked on a Harness
+// that does not read.
+func (g *gateway) serve(ctx context.Context, lns []*net.TCPListener) {
+	conns := &sessionConns{open: map[*sessionConn]struct{}{}}
 	for i, ln := range lns {
 		srv := &http.Server{
 			Handler:           g.listeners[i].handler,
 			ReadHeaderTimeout: 30 * time.Second,
 			ErrorLog:          quiet,
-			// Requests, hijacked tunnels and upgraded connections end with ctx.
-			BaseContext: func(net.Listener) context.Context { return ctx },
+			BaseContext:       func(net.Listener) context.Context { return ctx },
 		}
-		go srv.Serve(ln)
+		go srv.Serve(sessionListener{TCPListener: ln, conns: conns})
 		context.AfterFunc(ctx, func() { srv.Close() })
 	}
 	context.AfterFunc(ctx, func() {
+		conns.abort()
 		for _, t := range g.transports {
 			t.CloseIdleConnections()
 		}

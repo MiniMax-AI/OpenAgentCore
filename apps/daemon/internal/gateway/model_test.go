@@ -2,9 +2,12 @@ package gateway
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
+	"net/textproto"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,8 +25,8 @@ func startModel(t *testing.T, handler http.HandlerFunc) (string, *httptest.Serve
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 	eps := serveOnLoopback(t, Config{
-		Models: []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: srv.URL + "/anthropic", APIKey: upstreamKey}}},
-		TLS:    trust(srv),
+		Models:  []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: srv.URL + "/anthropic", APIKey: upstreamKey}}},
+		RootCAs: trust(srv),
 	})
 	return eps.Models["main"], srv
 }
@@ -68,6 +71,50 @@ func TestModelInjectsTheKeyAndNeverThePlaceholder(t *testing.T) {
 	}
 	if body, _ := io.ReadAll(r.Body); string(body) != `{"model":"m"}` {
 		t.Errorf("upstream body %q", body)
+	}
+}
+
+func TestModelWithholdsTheKeyFromResponseHeaders(t *testing.T) {
+	// The upstream echoes the key it received in an informational response,
+	// in headers and in a trailer.
+	base, _ := startModel(t, func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get("X-Api-Key")
+		w.Header().Set("Link", "<https://cdn.invalid/"+key+">; rel=preload")
+		w.WriteHeader(http.StatusEarlyHints)
+		w.Header().Del("Link")
+		w.Header().Set("Trailer", "X-Echo, X-Done")
+		w.Header().Set("X-Echo", "key="+key)
+		w.Header().Set("Location", "https://elsewhere.invalid/?key="+key)
+		w.Header().Set("X-Native", "kept")
+		io.WriteString(w, "answer")
+		w.Header().Set("X-Echo", key)
+		w.Header().Set("X-Done", "yes")
+	})
+	var informational []http.Header
+	ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+		Got1xxResponse: func(_ int, h textproto.MIMEHeader) error {
+			informational = append(informational, http.Header(h).Clone())
+			return nil
+		},
+	})
+	req, _ := http.NewRequestWithContext(ctx, "POST", base+"/v1/messages", strings.NewReader("{}"))
+	resp, err := noRedirects.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || string(body) != "answer" || resp.Header.Get("X-Native") != "kept" || resp.Trailer.Get("X-Done") != "yes" || len(informational) != 1 {
+		t.Fatalf("answer %d %q, header %v, trailer %v, %d informational", resp.StatusCode, body, resp.Header, resp.Trailer, len(informational))
+	}
+	for _, h := range append(informational, resp.Header, resp.Trailer) {
+		for name, values := range h {
+			for _, v := range values {
+				if strings.Contains(v, upstreamKey) {
+					t.Errorf("the Harness received the key in %s", name)
+				}
+			}
+		}
 	}
 }
 

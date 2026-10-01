@@ -25,8 +25,12 @@ func newProxy(open func(context.Context) (sandboxlink.Stream, error), sandbox *h
 	p := &proxy{open: open}
 	if sandbox != nil {
 		// The request is relayed as the Harness addressed it; the reverse
-		// proxy drops hop-by-hop headers, Proxy-Authorization among them.
-		p.forward = reverseProxy(sandbox, func(*httputil.ProxyRequest) {})
+		// proxy drops hop-by-hop headers, Proxy-Authorization among them. It
+		// also drops query parameters it cannot parse, so the query is
+		// restored as sent.
+		p.forward = reverseProxy(sandbox, func(pr *httputil.ProxyRequest) {
+			pr.Out.URL.RawQuery = pr.In.URL.RawQuery
+		})
 	}
 	return p
 }
@@ -83,8 +87,8 @@ func splice(ctx context.Context, client net.Conn, pending []byte, remote *sandbo
 	abort := func() {
 		end.Do(func() {
 			remote.Reset()
-			if tcp, ok := client.(*net.TCPConn); ok {
-				tcp.SetLinger(0)
+			if l, ok := client.(interface{ SetLinger(int) error }); ok {
+				l.SetLinger(0)
 			}
 			client.Close()
 		})

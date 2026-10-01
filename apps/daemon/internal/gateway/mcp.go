@@ -10,8 +10,9 @@ import (
 )
 
 // mcpRelay serves one MCP HTTP binding: it relays each request to the
-// server's origin with the same path and query, and injects the binding's
-// bearer token when it has one.
+// server's origin with the same path and query. When the binding has a bearer
+// token, it injects the token and withholds it from response headers and
+// trailers.
 type mcpRelay struct {
 	scheme    string
 	host      string
@@ -33,6 +34,7 @@ func newMCPRelay(s proto.MCPHTTPServer, t http.RoundTripper) (*mcpRelay, string,
 		}
 		token := *s.BearerToken
 		m.token = &token
+		m.transport = withhold(t, token)
 	}
 	suffix := u.EscapedPath()
 	if u.RawQuery != "" || u.ForceQuery {

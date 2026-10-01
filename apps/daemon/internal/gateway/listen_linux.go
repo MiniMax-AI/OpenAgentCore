@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"runtime"
-	"strconv"
 
 	"golang.org/x/sys/unix"
 )
@@ -16,9 +15,9 @@ import (
 // namespace ns. A socket stays in the namespace it was created in, so the
 // listeners are opened on a thread that joined ns and then served from the
 // daemon's own threads.
-func listen(ns *os.File, ports []int) ([]net.Listener, error) {
+func listen(ns *os.File, ports []int) ([]*net.TCPListener, error) {
 	type result struct {
-		lns []net.Listener
+		lns []*net.TCPListener
 		err error
 	}
 	done := make(chan result, 1)
@@ -30,9 +29,9 @@ func listen(ns *os.File, ports []int) ([]net.Listener, error) {
 			done <- result{err: fmt.Errorf("%w: join: %w", ErrNetwork, err)}
 			return
 		}
-		var lns []net.Listener
+		var lns []*net.TCPListener
 		for _, port := range ports {
-			ln, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+			ln, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port})
 			if err != nil {
 				for _, l := range lns {
 					l.Close()
