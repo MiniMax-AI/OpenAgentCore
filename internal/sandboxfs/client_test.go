@@ -31,3 +31,27 @@ func TestCancelAfterWriteKeepsStream(t *testing.T) {
 		t.Fatalf("describe after the cancellation: %v; stream: %v", err, c.Err())
 	}
 }
+
+// finisher completes Describe after its request is cancelled, as a lock
+// acquired just before CancelRequest arrives does.
+type finisher struct{ Service }
+
+func (finisher) Describe(ctx context.Context, _ Attachment, _ *DescribeRequest) (*DescribeResponse, error) {
+	<-ctx.Done()
+	return &DescribeResponse{ServerInstanceID: testInstance, Capabilities: testCaps}, nil
+}
+
+// An interrupt cancels the request and still returns its own outcome.
+func TestInterruptReturnsOutcome(t *testing.T) {
+	cc, sc := net.Pipe()
+	a := Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: "world"}}}
+	go Serve(context.Background(), sc, finisher{}, a)
+	c := NewClient(cc)
+	defer c.Close()
+
+	interrupt := make(chan struct{})
+	close(interrupt)
+	if _, err := c.Describe(WithInterrupt(context.Background(), interrupt), &DescribeRequest{}); err != nil {
+		t.Fatalf("interrupted describe that completed: %v", err)
+	}
+}

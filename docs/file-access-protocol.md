@@ -24,6 +24,8 @@ The Go client is `sandboxfs.NewClient(stream)`. It has one method per operation,
 
 Cancelling a call's context returns at once with `Cancelled` or `DeadlineExceeded`. A call cancelled before its request is written fails with `EffectNone`. After the request is written, the client sends `CancelRequest` for it and discards the late response, and the failure is `EffectNone` for a [side-effect-free request](#effects-and-cancellation) and `EffectPossible` for every other one. Cancelling a call while its request is being written fails the stream instead, because a partial frame cannot be withdrawn. A cancel that races the completion of a write may still fail the stream, and the requests in flight then fail with `EffectPossible`.
 
+To learn what a cancelled request did, interrupt it instead: a call whose context comes from `sandboxfs.WithInterrupt` sends `CancelRequest` when the interrupt channel closes and keeps waiting for the request's own response, so it returns the request's result or the service's failure with its effect. A FUSE frontend uses this for a waiting lock, which may be acquired just before the cancellation arrives.
+
 When the stream fails, every request in flight fails with `Unknown` and `EffectPossible`, and later calls fail with `EffectNone`; `errors.Is(err, sandboxfs.ErrTransport)` matches both. `Client.Done` closes and `Client.Err` returns the cause. To continue, open a new stream for the same attachment with `ExpectedServerInstanceID` set, as the [Sandbox link protocol](sandbox-link-protocol.md) describes. `InstanceChanged` then means every node, handle and lock of the attachment is gone.
 
 ## Implement a service
