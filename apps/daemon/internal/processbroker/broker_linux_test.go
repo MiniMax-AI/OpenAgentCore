@@ -810,12 +810,33 @@ func TestUnresolvedStdinEndsTheInvocation(t *testing.T) {
 	await(t, "the program's cancel", func() bool { return svc.counts().cancels == 1 })
 }
 
+// A background process outlives the leader, which exits as it takes a stdin
+// write whose response is lost. Inspect shows the leader exited, perhaps
+// before its Exited event arrives: stdin closes after the bytes the service
+// took, the background process gets end of file, and the operation settles.
+func TestBackgroundReaderGetsEOFAfterUncertainWrite(t *testing.T) {
+	svc := newFakeService()
+	svc.leaderExits = true
+	f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpWriteStdin }))
+	const in = "stdin for a background reader\n"
+	out, stderr, err := runFor(t, f.command("sh", "-c", "cat"), in)
+	if err != nil || out != in {
+		t.Fatalf("Run = %v; stdout %q, stderr %q", err, out, stderr)
+	}
+	await(t, "the operation's release", func() bool { return svc.counts().released })
+	if c := svc.counts(); c.closedAt != uint64(len(in)) {
+		t.Fatalf("stdin closed at %d, not %d", c.closedAt, len(in))
+	}
+}
+
 // runFor runs cmd with stdin in and returns its stdout, stderr and error. It
-// fails the test when cmd still runs after 10s.
+// fails the test when cmd still runs after 10s; output the relay still
+// holds open 5s after cmd exits is an exec.ErrWaitDelay error.
 func runFor(t *testing.T, cmd *exec.Cmd, in string) (string, string, error) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = strings.NewReader(in), &stdout, &stderr
+	cmd.WaitDelay = 5 * time.Second
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}

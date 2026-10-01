@@ -287,7 +287,10 @@ func (inv *invocation) stdinStopped() {
 // an offset conflict, the accepted offset is uncertain: the broker learns it
 // with Inspect, on the next stream when the stream ended, and writes only
 // the bytes of data after it. WriteStdin succeeds only at the current
-// offset, so no byte reaches the program twice. When the offset cannot be
+// offset, so no byte reaches the program twice. When Inspect shows that the
+// leader exited, even before its Exited event arrives, pipe stdin closes at
+// that offset, as it does after the exit: a background process may still
+// read it, and gets end of file. When the offset cannot be
 // learned, lies outside data, or shows that a stream that is still up
 // failed the write without taking it, the program would wait for input
 // that never comes: stdinLost ends the invocation.
@@ -331,8 +334,13 @@ func (inv *invocation) writeStdin(data []byte) bool {
 		case err != nil:
 			inv.stdinLost(fmt.Sprintf("stdin could not be resumed: %s", asFailure(err).Message))
 			return false
-		case st.State != sp.StateRunning || st.StdinClosed:
-			return false // nothing reads stdin any more
+		case st.StdinClosed:
+			return false
+		case st.State != sp.StateRunning:
+			if inv.term == nil {
+				inv.request(h, true, func(h handle) error { return h.op.CloseStdin(inv.b.ctx) })
+			}
+			return false
 		case off < at || off-at > uint64(len(data)):
 			inv.stdinLost(fmt.Sprintf("stdin could not be resumed: the service accepted %d bytes, outside %d to %d", off, at, at+uint64(len(data))))
 			return false

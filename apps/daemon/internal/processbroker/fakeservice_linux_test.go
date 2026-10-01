@@ -30,6 +30,10 @@ type fakeService struct {
 	partialFirst bool
 	// inspectFails refuses Inspect for good.
 	inspectFails bool
+	// leaderExits exits the leader with 0 as it takes the first stdin
+	// write. A background process it leaves copies the rest of stdin to
+	// stdout until end of file.
+	leaderExits bool
 
 	mu        sync.Mutex
 	ops       map[sandboxwire.ID]*fakeOp
@@ -49,6 +53,7 @@ type fakeOp struct {
 	stdout      uint64 // the stdout offset
 	exit        *sp.ExitStatus
 	failure     *sp.Failure
+	background  bool // a background process outlives the leader
 	released    bool
 }
 
@@ -140,12 +145,22 @@ func (s *fakeService) run(op *fakeOp) {
 	s.emit(op, func(h sp.EventHeader) sp.Event { return sp.StartedEvent{EventHeader: h} })
 }
 
-// exited ends the program with status; s.mu is held.
+// exited ends the program with status, or only its background process
+// when the leader already exited; s.mu is held.
 func (s *fakeService) exited(op *fakeOp, status sp.ExitStatus) {
-	if op.state != sp.StateRunning {
-		return
+	switch {
+	case op.background:
+		op.background = false
+		s.drained(op, nil)
+	case op.state == sp.StateRunning:
+		op.state, op.exit = sp.StateExited, &status
+		s.drained(op, &status)
 	}
-	op.state, op.exit = sp.StateExited, &status
+}
+
+// drained closes the output and the scope, with the leader's exit between
+// them when it exits now; s.mu is held.
+func (s *fakeService) drained(op *fakeOp, exit *sp.ExitStatus) {
 	out := op.stdout
 	s.emit(op, func(h sp.EventHeader) sp.Event {
 		return sp.StreamClosedEvent{EventHeader: h, Stream: sp.StreamStdout, Offset: out, Disposition: sp.OutputDrained}
@@ -153,7 +168,9 @@ func (s *fakeService) exited(op *fakeOp, status sp.ExitStatus) {
 	s.emit(op, func(h sp.EventHeader) sp.Event {
 		return sp.StreamClosedEvent{EventHeader: h, Stream: sp.StreamStderr, Disposition: sp.OutputDrained}
 	})
-	s.emit(op, func(h sp.EventHeader) sp.Event { return sp.ExitedEvent{EventHeader: h, Status: status} })
+	if exit != nil {
+		s.emit(op, func(h sp.EventHeader) sp.Event { return sp.ExitedEvent{EventHeader: h, Status: *exit} })
+	}
 	s.emit(op, func(h sp.EventHeader) sp.Event {
 		return sp.OutputClosedEvent{EventHeader: h, Disposition: sp.OutputDrained}
 	})
@@ -167,7 +184,7 @@ func (s *fakeService) status(op *fakeOp) sp.OperationStatus {
 		Scope: sp.ScopeStateActive, Released: op.released,
 		FirstRetained: 1, LastSequence: uint64(len(op.events)),
 	}
-	if op.state == sp.StateExited || op.state == sp.StateStartFailed {
+	if op.state == sp.StateExited && !op.background || op.state == sp.StateStartFailed {
 		d := sp.OutputDrained
 		st.Output, st.Scope = &d, sp.ScopeStateClosed
 	}
@@ -246,16 +263,14 @@ func (s *fakeService) Inspect(_ context.Context, _ *sp.Conn, req sp.InspectReque
 // stdinRefused refuses stdin while the operation starts, which also ends a
 // late start; s.mu is held.
 func (s *fakeService) stdinRefused(op *fakeOp) error {
-	switch op.state {
-	case sp.StateStarting:
+	switch {
+	case op.state == sp.StateStarting:
 		s.refusedIn++
 		s.run(op)
 		return sp.Fail(sp.CodeNotRunning, sandboxwire.EffectNone, "the operation is starting")
-	case sp.StateRunning:
-	default:
+	case op.state != sp.StateRunning && !op.background:
 		return sp.Fail(sp.CodeNotRunning, sandboxwire.EffectNone, "the operation is not running")
-	}
-	if op.stdinClosed {
+	case op.stdinClosed:
 		return sp.Fail(sp.CodeStdinClosed, sandboxwire.EffectNone, "stdin is closed")
 	}
 	return nil
@@ -284,6 +299,11 @@ func (s *fakeService) WriteStdin(_ context.Context, _ *sp.Conn, req sp.WriteStdi
 		s.emit(op, func(h sp.EventHeader) sp.Event {
 			return sp.OutputEvent{EventHeader: h, Stream: sp.StreamStdout, Offset: out, Data: echo}
 		})
+	}
+	if s.leaderExits && op.state == sp.StateRunning {
+		status := sp.ExitStatus{Kind: sp.ExitCode}
+		op.state, op.exit, op.background = sp.StateExited, &status, true
+		s.emit(op, func(h sp.EventHeader) sp.Event { return sp.ExitedEvent{EventHeader: h, Status: status} })
 	}
 	return sp.WriteStdinResponse{Accepted: uint32(len(data))}, nil
 }
@@ -354,7 +374,7 @@ func (s *fakeService) Release(_ context.Context, _ *sp.Conn, req sp.ReleaseReque
 		return sp.ReleaseResponse{}, err
 	}
 	defer s.mu.Unlock()
-	if op.state != sp.StateExited && op.state != sp.StateStartFailed {
+	if op.state != sp.StateExited && op.state != sp.StateStartFailed || op.background {
 		return sp.ReleaseResponse{}, sp.Fail(sp.CodeBusy, sandboxwire.EffectNone, "not settled")
 	}
 	op.released = true
@@ -366,6 +386,7 @@ type fakeCounts struct {
 	writes, cancels, refusedIn int
 	stdin                      []byte // the only operation's accepted stdin
 	closedAt                   uint64 // and its CloseStdin offset
+	released                   bool   // and whether it was released
 }
 
 func (s *fakeService) counts() fakeCounts {
@@ -373,7 +394,7 @@ func (s *fakeService) counts() fakeCounts {
 	defer s.mu.Unlock()
 	c := fakeCounts{writes: s.writes, cancels: s.cancels, refusedIn: s.refusedIn}
 	for _, op := range s.ops {
-		c.stdin, c.closedAt = slices.Clone(op.stdin), op.closedAt
+		c.stdin, c.closedAt, c.released = slices.Clone(op.stdin), op.closedAt, op.released
 	}
 	return c
 }
