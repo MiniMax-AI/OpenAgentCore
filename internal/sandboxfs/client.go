@@ -246,22 +246,41 @@ func roundTrip[R message](ctx context.Context, c *Client, q Request) (R, error) 
 		return zero, fail
 	}
 	var out outcome
-	select {
-	case out = <-cl.ch:
-	case <-ctx.Done():
-		if c.abandon(id, cl) {
-			effect := sandboxwire.EffectPossible
-			if sideEffectFree(q) {
-				effect = sandboxwire.EffectNone
+	interrupt, _ := ctx.Value(interruptKey{}).(<-chan struct{})
+wait:
+	for {
+		select {
+		case out = <-cl.ch:
+			break wait
+		case <-interrupt:
+			interrupt = nil
+			go c.cancel(id)
+		case <-ctx.Done():
+			if c.abandon(id, cl) {
+				effect := sandboxwire.EffectPossible
+				if sideEffectFree(q) {
+					effect = sandboxwire.EffectNone
+				}
+				return zero, contextFailure(ctx.Err(), effect)
 			}
-			return zero, contextFailure(ctx.Err(), effect)
+			out = <-cl.ch
+			break wait
 		}
-		out = <-cl.ch
 	}
 	if out.fail != nil {
 		return zero, out.fail
 	}
 	return out.msg.(R), nil
+}
+
+type interruptKey struct{}
+
+// WithInterrupt returns a context whose calls send CancelRequest once
+// interrupt closes and keep waiting for the request's own response, so a call
+// returns the request's real outcome: its result, or the service's failure
+// with its effect. Ending the context still abandons the call.
+func WithInterrupt(ctx context.Context, interrupt <-chan struct{}) context.Context {
+	return context.WithValue(ctx, interruptKey{}, interrupt)
 }
 
 func contextFailure(err error, effect sandboxwire.Effect) *Failure {
