@@ -86,7 +86,13 @@ func launch(ctx context.Context, config Config, start startRequest, env []string
 	if binary == "" {
 		binary = "node"
 	}
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{config.Entrypoint}, Dir: start.Cwd, Env: env, NeedStdin: true, OwnProcessGroup: true})
+	return startSession(clirunner.Start, clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{config.Entrypoint}, Dir: start.Cwd, Env: env, NeedStdin: true, OwnProcessGroup: true})
+}
+
+// startSession runs the bridge through start: clirunner.Start, or an agent-host
+// view's Launch.
+func startSession(start func(clirunner.StartOptions) (*clirunner.Process, error), options clirunner.StartOptions) (*session, error) {
+	process, err := start(options)
 	if err != nil {
 		return nil, err
 	}

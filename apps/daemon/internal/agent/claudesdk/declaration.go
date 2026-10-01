@@ -148,6 +148,12 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		out.Preparation = NewPreparationFactory(config)
 		out.WorkspaceReadPreparation = true
 	}
+	// The view runs the same install; its probe stays on this host.
+	if view, err := newView(Config{Node: node, Entrypoint: entrypoint}, info); err != nil {
+		fmt.Fprintf(options.Stderr, "oac-daemon: Claude SDK agent-host view unavailable: %v\n", err)
+	} else {
+		out.View = view
+	}
 
 	fmt.Fprintf(options.Stdout, "Claude SDK preflight ok (SDK %s, %s)\n", info.SDK, info.Native)
 	return out

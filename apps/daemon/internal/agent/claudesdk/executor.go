@@ -36,46 +36,59 @@ func NewExecutorFactory(config Config) agent.ExecutorFactory {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
-			return nil, errors.New("claudesdk: Executor preparation cannot submit input")
+		if err := preparationOnly(req); err != nil {
+			return nil, err
 		}
 		start, env, err := prepareConfiguration(config, req)
 		if err != nil {
 			return nil, err
 		}
-		info, err := checked.check(ctx, config)
-		if err != nil {
-			return nil, err
-		}
-		if err = validateExecutorFeatures(info, start); err != nil {
-			return nil, err
-		}
-		start.Type = "executor_prepare"
-		base, err := launch(ctx, config, start, env)
-		if err != nil {
-			return nil, err
-		}
-		base.reads.supported = slices.Contains(info.Features, "workspace_read")
-		base.directories.supported = slices.Contains(info.Features, "workspace_directory")
-		e := &executor{base: base, start: start, ready: make(chan error, 1), done: make(chan struct{}), nativeID: start.Resume}
-		go e.read()
-		if err = e.write(start); err == nil {
-			select {
-			case err = <-e.ready:
-			case <-ctx.Done():
-				err = ctx.Err()
-			}
-		}
-		if err != nil {
-			closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if closeErr := e.Close(closeCtx); closeErr != nil {
-				return e, errors.Join(err, closeErr)
-			}
-			return nil, err
-		}
-		return e, nil
+		return startExecutor(ctx, checked, config, start, func() (*session, error) { return launch(ctx, config, start, env) })
 	}
+}
+
+func preparationOnly(req proto.PromptRequestPayload) error {
+	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+		return errors.New("claudesdk: Executor preparation cannot submit input")
+	}
+	return nil
+}
+
+// startExecutor checks the installed bridge against probe, starts it through
+// run and waits until it is ready for Turns.
+func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config, start startRequest, run func() (*session, error)) (agent.Executor, error) {
+	info, err := checked.check(ctx, probe)
+	if err != nil {
+		return nil, err
+	}
+	if err = validateExecutorFeatures(info, start); err != nil {
+		return nil, err
+	}
+	start.Type = "executor_prepare"
+	base, err := run()
+	if err != nil {
+		return nil, err
+	}
+	base.reads.supported = slices.Contains(info.Features, "workspace_read")
+	base.directories.supported = slices.Contains(info.Features, "workspace_directory")
+	e := &executor{base: base, start: start, ready: make(chan error, 1), done: make(chan struct{}), nativeID: start.Resume}
+	go e.read()
+	if err = e.write(start); err == nil {
+		select {
+		case err = <-e.ready:
+		case <-ctx.Done():
+			err = ctx.Err()
+		}
+	}
+	if err != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if closeErr := e.Close(closeCtx); closeErr != nil {
+			return e, errors.Join(err, closeErr)
+		}
+		return nil, err
+	}
+	return e, nil
 }
 
 func validateExecutorFeatures(info RuntimeInfo, start startRequest) error {

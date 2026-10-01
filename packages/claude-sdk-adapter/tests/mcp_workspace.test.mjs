@@ -47,6 +47,10 @@ test("installed MCP projection uses the common Runtime launcher", t => {
     }
   }
   assert.throws(() => parseStart(JSON.stringify({ ...request, workspace: { ...request.workspace, network_access: "disabled" } })), /invalid_request/);
+  // HTTP MCP needs no installed Capabilities.
+  const { capability_root: _, ...uninstalled } = request.workspace;
+  const http = { server_label: "docs", server_url: "http://127.0.0.1:4100/mcp/docs", allowed_tools: null };
+  assert.doesNotThrow(() => parseStart(JSON.stringify({ ...request, workspace: { ...uninstalled, mcp: [http] } })));
 });
 
 test("combined inventory admits exact MCP identities with host file authority", async t => {

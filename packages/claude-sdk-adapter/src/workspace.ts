@@ -53,7 +53,7 @@ export function parseWorkspace(value: unknown, cwd: string): Workspace | undefin
   if (config.tool_env !== undefined && (!config.tool_env || typeof config.tool_env !== "object" || Array.isArray(config.tool_env) || Object.values(config.tool_env).some(value => typeof value !== "string"))) throw new Error("invalid_request");
   const mcp = parseEnvironmentMCP(config.mcp);
   if (config.capability_root !== undefined) directory(config.capability_root, false);
-  if ((Array.isArray(config.skills) && config.skills.length || mcp?.length) && !config.capability_root) throw new Error("invalid_request");
+  if (Array.isArray(config.skills) && config.skills.length && !config.capability_root) throw new Error("invalid_request");
   if (mcp?.length && config.network_access !== "enabled") throw new Error("invalid_request");
   const domains = config.allowed_domains ?? [];
   if (!Array.isArray(domains) || domains.length !== 0) throw new Error("invalid_request");

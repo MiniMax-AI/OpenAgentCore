@@ -16,13 +16,15 @@ import (
 // RuntimeInfo describes a successful local probe, not provider authentication or
 // execution capability. Versions are checked against the installed pinned manifest.
 type RuntimeInfo struct {
-	Type     string   `json:"type"`
-	Protocol int      `json:"protocol"`
-	Node     string   `json:"node"`
-	SDK      string   `json:"sdk"`
-	MCP      string   `json:"mcp"`
-	Native   string   `json:"native"`
-	Features []string `json:"features"`
+	Type     string `json:"type"`
+	Protocol int    `json:"protocol"`
+	Node     string `json:"node"`
+	SDK      string `json:"sdk"`
+	MCP      string `json:"mcp"`
+	Native   string `json:"native"`
+	// NativePath is the SDK's native Claude Code binary, relative to the bundle root.
+	NativePath string   `json:"native_path"`
+	Features   []string `json:"features"`
 }
 
 func (info RuntimeInfo) SupportsFunctionResultImages() bool {
