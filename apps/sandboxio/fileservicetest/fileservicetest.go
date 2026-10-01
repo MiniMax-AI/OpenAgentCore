@@ -24,9 +24,10 @@ type Server struct {
 	dir string
 	id  sandboxwire.ID
 
-	mu    sync.Mutex
-	svc   *fileservice.Service
-	conns []net.Conn
+	mu      sync.Mutex
+	svc     *fileservice.Service
+	conns   []net.Conn
+	stalled bool
 }
 
 // New serves the absolute directory dir. The file service sets the process umask to zero.
@@ -38,9 +39,14 @@ func New(dir string) (*Server, error) {
 	return &Server{dir: dir, id: sandboxwire.NewID(), svc: svc}, nil
 }
 
-// Dial opens a stream to the current service incarnation.
-func (s *Server) Dial(context.Context) (io.ReadWriteCloser, error) {
+// Dial opens a stream to the current service incarnation. While the server is stalled it waits for ctx to end.
+func (s *Server) Dial(ctx context.Context) (io.ReadWriteCloser, error) {
 	s.mu.Lock()
+	if s.stalled {
+		s.mu.Unlock()
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 	defer s.mu.Unlock()
 	if s.svc == nil {
 		return nil, errors.New("fileservicetest: closed")
@@ -62,6 +68,14 @@ func (s *Server) Break() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.breakLocked()
+}
+
+// Stall closes every open stream and leaves the service unreachable: every later Dial waits for its context to end.
+func (s *Server) Stall() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.breakLocked()
+	s.stalled = true
 }
 
 func (s *Server) breakLocked() {

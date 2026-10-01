@@ -1,4 +1,4 @@
-// Package worldfs serves a Session's world, the sandbox file system, as the FUSE file system a sessionview launcher mounts at the view's root. Every kernel request becomes at most one File request (see internal/sandboxfs), so processes in the view read and write sandbox files natively; nothing on the agent host shows through, and nothing is created in the sandbox to support the view.
+// Package worldfs serves a Session's world, the sandbox file system, as the FUSE file system a sessionview launcher mounts at the view's root. Every kernel request becomes at most one File request (see internal/sandboxfs), apart from the redial and lock recovery described below, so processes in the view read and write sandbox files natively; nothing on the agent host shows through, and nothing is created in the sandbox to support the view.
 //
 // [World.Serve] implements [sessionview.World]. It dials the attachment's File stream, checks Describe, attaches the export, presents the view's mountpoints and serves the launcher's /dev/fuse connection with go-fuse's raw API.
 //
@@ -25,7 +25,7 @@
 //	OPENDIR, READDIR         OpenDir, ReadDir
 //	STATFS                   StatFS
 //	GETLK                    GetLock
-//	SETLK, SETLKW            SetLock, POSIX or flock; SETLKW waits and an interrupt is EINTR
+//	SETLK, SETLKW            SetLock, POSIX or flock; SETLKW waits (see Locks)
 //	MKNOD                    EOPNOTSUPP
 //	GETXATTR, LISTXATTR      ENOSYS: the kernel stops asking and answers EOPNOTSUPP
 //	SETXATTR, REMOVEXATTR    ENOSYS, as above
@@ -36,11 +36,15 @@
 //	IOCTL                    ENOTTY
 //	READDIRPLUS              never negotiated
 //
-// Lock requests the service does not declare fail with ENOLCK, so the kernel never locks only within the view. FIFOs and device nodes in the world are opened by the kernel itself and never reach the sandbox; the world is mounted nodev.
+// FIFOs and device nodes in the world are opened by the kernel itself and never reach the sandbox; the world is mounted nodev.
+//
+// # Locks
+//
+// Lock requests the service does not declare fail with ENOLCK, so the kernel never locks only within the view. A lock request reports what the service did. When the kernel interrupts one, the frontend sends CancelRequest and waits for the request's own response: a lock acquired before the cancellation arrived is reported acquired, and a cancelled request is EINTR. When the service answers that a failed request may have changed the lock (EffectPossible), the frontend unlocks the same owner and range before it reports the failure. When it cannot learn what the request did, because the stream failed, or the unlock fails, it fails the handle: every later request on it fails with EIO, and its Release drops any lock the service holds on it.
 //
 // # Uncached profile
 //
-// Entry, attribute and negative timeouts are zero, every open returns FOPEN_DIRECT_IO, and the frontend never asks for the writeback cache, KEEP_CACHE or CACHE_DIR. mmap of a world file therefore fails as FOPEN_DIRECT_IO makes it fail. default_permissions stays off: the service decides access. The frontend negotiates only BIG_WRITES, MAX_PAGES (requests up to the service's read and write limit), PARALLEL_DIROPS, ATOMIC_O_TRUNC, POSIX_LOCKS and FLOCK_LOCKS.
+// Entry, attribute and negative timeouts are zero, every open returns FOPEN_DIRECT_IO, and the frontend never asks for the writeback cache, KEEP_CACHE or CACHE_DIR. A private mapping of a world file works, and the kernel reads its pages with READ when they fault; a shared mapping fails with ENODEV, since the frontend does not negotiate DIRECT_IO_ALLOW_MMAP. default_permissions stays off: the service decides access. The frontend negotiates only BIG_WRITES, MAX_PAGES (requests up to the service's read and write limit), PARALLEL_DIROPS, ATOMIC_O_TRUNC, POSIX_LOCKS and FLOCK_LOCKS.
 //
 // # Errors
 //
@@ -56,12 +60,14 @@
 //
 //   - The mountpoint itself is a synthetic empty read-only directory or regular file that hides any sandbox entry of that name.
 //   - A missing ancestor, confirmed by NotFound, is a synthetic directory, 0555 and root-owned, holding only synthetic children.
-//   - An existing ancestor directory stays the sandbox directory, with the synthetic children added to Lookup and ReadDir and sandbox entries of the same names hidden.
+//   - An existing ancestor directory stays the sandbox directory, and Lookup of a presented name returns the presented node. ReadDir lists every sandbox entry at its own position, a presented name as the presented node, and then the presented names the sandbox does not list.
 //   - An ancestor symlink, such as /bin -> usr/bin, stays a symlink. The frontend resolves it with Walk and Readlink inside the world root, at most 40 hops, and presents the mountpoint at the resolved target: a shim declared at /bin/sh is mounted at /usr/bin/sh.
 //
-// Every entry on the way to a mountpoint is pinned for the view's lifetime: Lookup returns the same node ID, a pinned symlink is read from its pinned target, and creating, removing or renaming a presented name returns EPERM. When the sandbox replaces or removes a pinned entry, found on Lookup or ReadDir, the view keeps the pinned entry and [World.Lost] reports [ErrTopologyChanged]. A loop, a permission failure, a non-directory ancestor or two mountpoints that meet fail Serve with [ErrMountpoint]. Serve returns the resolved, symlink-free path of each mountpoint and the links and directories it presented. Synthetic nodes have frontend-local node IDs and never reach the service.
+// Every entry on the way to a mountpoint is pinned for the view's lifetime: Lookup returns the same node ID, a pinned symlink is read from its pinned target, and creating, removing or renaming a presented name returns EPERM. When the sandbox replaces or removes a pinned entry, the view keeps the pinned entry and [World.Lost] reports [ErrTopologyChanged]. Lookup finds any replacement or removal by its node. ReadDir finds an entry listed with another type, and a removal when an enumeration from offset 0 reaches the end without the name; it compares no inode numbers, so a replacement of the same type is found on Lookup. A loop, a permission failure, a non-directory ancestor or two mountpoints that meet fail Serve with [ErrMountpoint]. Serve returns the resolved, symlink-free path of each mountpoint and the links and directories it presented. Synthetic nodes have frontend-local node IDs and never reach the service.
 //
 // # Link loss
 //
-// When the stream fails, requests in flight fail with EIO. The next request redials, sends Describe and continues with the same node and handle tables only when ServerInstanceID is unchanged; a request is sent again only when the stream never sent it. A new incarnation or an ended attachment marks the world lost: every later request fails with EIO and [World.Lost] closes.
+// When the stream fails, requests in flight fail with EIO. The next request redials, sends Describe and continues with the same node and handle tables only when ServerInstanceID is unchanged; a request is sent again only when the stream never sent it. A Forget, Release or ReleaseDir the stream never sent is queued and sent after the next redial. A new incarnation or an ended attachment marks the world lost: every later request fails with EIO and [World.Lost] closes. The attachment has ended when the service answers StaleAttachment, or when the redial fails with a Link failure that is not retryable (sandboxlink.Code.Retryable), such as LeaseExpired or StaleGeneration; a redial refused with InstanceChanged is a new incarnation.
+//
+// An Attach whose outcome is unknown may have attached, so a Serve that fails after it detaches the same attachment and never attaches again. [World.Stop] detaches without sending what is queued, since Detach drops every reference and handle the attachment holds.
 package worldfs

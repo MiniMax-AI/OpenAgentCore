@@ -5,6 +5,7 @@ package worldfs_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"maps"
@@ -104,6 +105,88 @@ func TestPresentation(t *testing.T) {
 	if after := snapshot(t, backing); !maps.Equal(before, after) {
 		t.Errorf("sandbox changed:\nbefore %v\nafter  %v", before, after)
 	}
+}
+
+// A directory with presented children lists every name once, sends at most one ReadDir per READDIR, and keeps its offsets across a rewind. In hidden every sandbox entry is a mountpoint; paged has one mountpoint, which the sandbox lacks.
+func TestPresentedPaging(t *testing.T) {
+	requireFUSE(t)
+	backing := t.TempDir()
+	dirs := []string{"hidden", "paged"}
+	var mps []sessionview.Mountpoint
+	want := map[string][]string{}
+	for _, dir := range dirs {
+		if err := os.Mkdir(filepath.Join(backing, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for i := range 120 {
+			name := fmt.Sprintf("%s-%03d-%s", dir, i, strings.Repeat("x", 60))
+			writeFile(t, filepath.Join(backing, dir, name), "")
+			want[dir] = append(want[dir], name)
+			if dir == "hidden" {
+				mps = append(mps, sessionview.Mountpoint{Path: "/hidden/" + name})
+			}
+		}
+		mps = append(mps, sessionview.Mountpoint{Path: "/" + dir + "/absent"})
+		want[dir] = append(want[dir], "absent")
+		slices.Sort(want[dir])
+	}
+	m, err := serve(t, backing, 0, mps...)
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	for _, dir := range dirs {
+		fd, err := unix.Open(filepath.Join(m.dir, dir), unix.O_RDONLY|unix.O_DIRECTORY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer unix.Close(fd)
+		var pages [][]string
+		var offs []int64
+		for {
+			// Each getdents is one READDIR.
+			before := m.readDirs.Load()
+			names := getdents(t, fd)
+			if n := m.readDirs.Load() - before; n > 1 {
+				t.Errorf("%s: a READDIR sent %d ReadDir requests", dir, n)
+			}
+			if len(names) == 0 {
+				break
+			}
+			pages = append(pages, names)
+			off, err := unix.Seek(fd, 0, io.SeekCurrent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			offs = append(offs, off)
+		}
+		if got := slices.Sorted(slices.Values(slices.Concat(pages...))); !slices.Equal(got, want[dir]) {
+			t.Errorf("%s lists %d names, want each of %d once", dir, len(got), len(want[dir]))
+		}
+		if len(pages) < 3 {
+			t.Fatalf("%s lists in %d pages, want at least 3", dir, len(pages))
+		}
+		if _, err := unix.Seek(fd, 0, io.SeekStart); err != nil {
+			t.Fatal(err)
+		}
+		getdents(t, fd)
+		if _, err := unix.Seek(fd, offs[1], io.SeekStart); err != nil {
+			t.Fatal(err)
+		}
+		if got := getdents(t, fd); !slices.Equal(got, pages[2]) {
+			t.Errorf("%s: after a rewind, the offset of the second page lists %d names, want the %d of the third page", dir, len(got), len(pages[2]))
+		}
+	}
+}
+
+func getdents(t *testing.T, fd int) []string {
+	t.Helper()
+	buf := make([]byte, 64<<10)
+	n, err := unix.Getdents(fd, buf)
+	if err != nil {
+		t.Fatalf("getdents: %v", err)
+	}
+	_, _, names := unix.ParseDirent(buf[:n], -1, nil)
+	return names
 }
 
 func TestPresentationLoop(t *testing.T) {

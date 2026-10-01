@@ -158,7 +158,7 @@ func (r *resolver) walk(name string) {
 // dropAhead releases the entries walked for names the resolution no longer reaches.
 func (r *resolver) dropAhead() {
 	for _, e := range r.ahead {
-		r.f.release(e.Node, 1)
+		r.f.unref(e.Node, 1)
 	}
 	r.ahead, r.aheadErr = nil, nil
 }
@@ -167,7 +167,7 @@ func (r *resolver) dropAhead() {
 func (r *resolver) pin(cur *inode, name string, e sandboxfs.Entry) (*inode, error) {
 	n := r.f.byRef[e.Node]
 	if n != nil {
-		r.f.release(e.Node, 1)
+		r.f.unref(e.Node, 1)
 	} else {
 		n = r.f.newInode(e.Node)
 		n.attr, n.path = e.Attr, r.at(name)

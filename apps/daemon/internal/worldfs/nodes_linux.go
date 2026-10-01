@@ -4,6 +4,7 @@ package worldfs
 
 import (
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
@@ -42,8 +43,10 @@ type handle struct {
 	node   *inode
 	server sandboxfs.HandleID // zero for a synthetic node
 
-	mu      sync.Mutex
-	cookies []uint64 // a presented directory's server cookie after each server entry listed
+	failed atomic.Bool // the service may hold a lock on the handle that no request reported: every request but Release fails
+
+	mu   sync.Mutex
+	list listing // a presented directory's offsets
 }
 
 // newInode registers a node for ref, or a synthetic node when ref is zero. The caller holds mu, or Serve has not returned.
@@ -136,7 +139,7 @@ func (f *frontend) Forget(id, count uint64) {
 	n.lookups -= min(count, n.lookups)
 	if r := min(count, n.refs); r > 0 {
 		n.refs -= r
-		f.release(n.ref, r)
+		f.unref(n.ref, r)
 	}
 	if n.lookups == 0 && !n.held {
 		delete(f.nodes, id)
@@ -144,13 +147,10 @@ func (f *frontend) Forget(id, count uint64) {
 	}
 }
 
-// release queues count server references of ref for a Forget request. The caller holds mu, or Serve has not returned.
-func (f *frontend) release(ref sandboxfs.NodeRef, count uint64) {
+// unref queues count server references of ref for a Forget request. The caller holds mu, or Serve has not returned.
+func (f *frontend) unref(ref sandboxfs.NodeRef, count uint64) {
 	f.forgets[ref] += count
-	select {
-	case f.kick <- struct{}{}:
-	default:
-	}
+	f.wake()
 }
 
 func (f *frontend) newHandle(h *handle) uint64 {
@@ -167,10 +167,14 @@ func (f *frontend) handle(fh uint64) (*handle, fuse.Status) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if h := f.handles[fh]; h != nil {
+	switch h := f.handles[fh]; {
+	case h == nil:
+		return nil, fuse.EBADF
+	case h.failed.Load():
+		return nil, fuse.EIO
+	default:
 		return h, fuse.OK
 	}
-	return nil, fuse.EBADF
 }
 
 func (f *frontend) dropHandle(fh uint64) *handle {

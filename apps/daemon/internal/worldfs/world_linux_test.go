@@ -3,11 +3,15 @@
 package worldfs_test
 
 import (
+	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -15,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/worldfs"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/fileservicetest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/hanwen/go-fuse/v2/posixtest"
 	"golang.org/x/sys/unix"
 )
@@ -70,10 +75,25 @@ func requireFUSE(t *testing.T) {
 }
 
 type mounted struct {
-	dir     string
-	world   *worldfs.World
-	srv     *fileservicetest.Server
-	present sessionview.Presentation
+	dir      string
+	world    *worldfs.World
+	srv      *fileservicetest.Server
+	present  sessionview.Presentation
+	readDirs atomic.Int64 // ReadDir requests the world sent
+	stopped  bool         // the test unmounted and stopped the world itself
+}
+
+// counted counts the ReadDir requests written to a stream, one frame per write.
+type counted struct {
+	io.ReadWriteCloser
+	readDirs *atomic.Int64
+}
+
+func (c counted) Write(b []byte) (int, error) {
+	if len(b) >= 6 && binary.BigEndian.Uint16(b[4:6]) == uint16(sandboxfs.OpReadDir) {
+		c.readDirs.Add(1)
+	}
+	return c.ReadWriteCloser.Write(b)
 }
 
 // serve mounts a FUSE connection the way the sessionview launcher does and serves the world over backing on it, as view identity id with the given mountpoints.
@@ -94,20 +114,30 @@ func serve(t *testing.T, backing string, id uint32, mps ...sessionview.Mountpoin
 		dev.Close()
 		t.Fatalf("mount: %v", err)
 	}
-	w := worldfs.New(fileservicetest.Export, srv.Dial)
-	ws, p, err := w.Serve(dev, sessionview.WorldMount{UID: id, GID: id, Mountpoints: mps})
-	t.Cleanup(func() {
-		if err := unix.Unmount(mnt, unix.MNT_DETACH); err != nil {
-			t.Errorf("unmount: %v", err)
+	m := &mounted{dir: mnt, srv: srv}
+	m.world = worldfs.New(fileservicetest.Export, func(ctx context.Context) (io.ReadWriteCloser, error) {
+		rw, err := srv.Dial(ctx)
+		if err != nil {
+			return nil, err
 		}
-		if ws != nil {
-			if err := ws.Stop(); err != nil {
-				t.Errorf("Stop: %v", err)
+		return counted{rw, &m.readDirs}, nil
+	})
+	ws, p, err := m.world.Serve(dev, sessionview.WorldMount{UID: id, GID: id, Mountpoints: mps})
+	m.present = p
+	t.Cleanup(func() {
+		if !m.stopped {
+			if err := unix.Unmount(mnt, unix.MNT_DETACH); err != nil {
+				t.Errorf("unmount: %v", err)
+			}
+			if ws != nil {
+				if err := ws.Stop(); err != nil {
+					t.Errorf("Stop: %v", err)
+				}
 			}
 		}
 		dev.Close()
 	})
-	return &mounted{dir: mnt, world: w, srv: srv, present: p}, err
+	return m, err
 }
 
 // posixSkips are the posixtest cases outside phase 1, each with the reason.
@@ -177,6 +207,20 @@ func TestInstanceChanged(t *testing.T) {
 	if _, err := os.ReadFile(f); err != nil {
 		t.Fatal(err)
 	}
+	// A private mapping reads the file through READ when it faults; a shared one is refused.
+	mf, err := os.Open(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := unix.Mmap(int(mf.Fd()), 0, len("before"), unix.PROT_READ, unix.MAP_PRIVATE); err != nil || string(b) != "before" {
+		t.Errorf("private mapping = %q, %v", b, err)
+	} else {
+		unix.Munmap(b)
+	}
+	if _, err := unix.Mmap(int(mf.Fd()), 0, len("before"), unix.PROT_READ, unix.MAP_SHARED); !errors.Is(err, syscall.ENODEV) {
+		t.Errorf("shared mapping: %v, want ENODEV", err)
+	}
+	mf.Close()
 
 	// A lost stream to the same incarnation redials. A request that raced the break may fail; the next one must succeed.
 	m.srv.Break()
@@ -200,6 +244,76 @@ func TestInstanceChanged(t *testing.T) {
 	waitLost(t, m.world, worldfs.ErrInstanceChanged)
 	if _, err := os.Stat(filepath.Join(m.dir, "g")); !errors.Is(err, syscall.EIO) {
 		t.Errorf("lookup after restart = %v, want EIO", err)
+	}
+}
+
+// Stop returns within its bound when the service has become unreachable, although Detach must redial.
+func TestStopUnreachable(t *testing.T) {
+	requireFUSE(t)
+	m, err := serve(t, t.TempDir(), 0)
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	m.stopped = true
+	m.srv.Stall()
+	if err := unix.Unmount(m.dir, unix.MNT_DETACH); err != nil {
+		t.Fatal(err)
+	}
+	stopped := make(chan error, 1)
+	go func() { stopped <- m.world.Stop() }()
+	select {
+	case err := <-stopped:
+		if !errors.Is(err, worldfs.ErrConnect) {
+			t.Errorf("Stop = %v, want ErrConnect", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("Stop did not return within its 15-second bound")
+	}
+}
+
+// An interrupted flock fails with EINTR and leaves no lock on the view's handle. flock(1) waits with a timer whose signal handler does not restart the call, and it locks the descriptor the test keeps open.
+func TestLockInterrupted(t *testing.T) {
+	requireFUSE(t)
+	flock, err := exec.LookPath("flock")
+	if err != nil {
+		t.Skip("needs flock(1) from util-linux")
+	}
+	backing := t.TempDir()
+	writeFile(t, filepath.Join(backing, "f"), "")
+	m, err := serve(t, backing, 0)
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	holder, err := os.Open(filepath.Join(backing, "f"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	if err := unix.Flock(int(holder.Fd()), unix.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(m.dir, "f"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	cmd := exec.Command(flock, "--exclusive", "--timeout", "0.5", "3")
+	cmd.ExtraFiles = []*os.File{f}
+	var exit *exec.ExitError
+	if err := cmd.Run(); !errors.As(err, &exit) || exit.ExitCode() != 1 {
+		t.Fatalf("flock(1) = %v, want exit status 1: the timer interrupted the wait", err)
+	}
+	if err := unix.Flock(int(holder.Fd()), unix.LOCK_UN); err != nil {
+		t.Fatal(err)
+	}
+	other, err := os.Open(filepath.Join(backing, "f"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	if err := unix.Flock(int(other.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		t.Errorf("the view's handle kept a lock after the interrupted flock: %v", err)
 	}
 }
 

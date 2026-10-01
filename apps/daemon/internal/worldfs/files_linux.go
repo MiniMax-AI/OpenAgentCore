@@ -4,9 +4,11 @@ package worldfs
 
 import (
 	"context"
+	"errors"
 	"syscall"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
 
@@ -134,9 +136,10 @@ func (f *frontend) Fsync(_ <-chan struct{}, in *fuse.FsyncIn) fuse.Status {
 	return status(err)
 }
 
+// Release releases a failed handle too, which drops any lock the service holds on it.
 func (f *frontend) Release(_ <-chan struct{}, in *fuse.ReleaseIn) {
 	if h := f.dropHandle(in.Fh); h != nil && h.server != 0 && !f.closed.Load() {
-		_, _ = call(f, f.ctx, (*sandboxfs.Client).Release, &sandboxfs.ReleaseRequest{Handle: h.server})
+		f.release(f.ctx, cleanup{handle: h.server})
 	}
 }
 
@@ -192,7 +195,7 @@ func (f *frontend) SetLkw(cancel <-chan struct{}, in *fuse.LkIn) fuse.Status {
 	return f.setLock(cancel, in, true)
 }
 
-// setLock acquires or releases a POSIX or flock lock. A waiting request ends with EINTR when the kernel interrupts it.
+// setLock acquires or releases a POSIX or flock lock and reports what the service did, even when the kernel interrupted the request. A request that may have changed the lock but failed is undone with an unlock of the same owner and range; when its outcome cannot be learned, the handle fails.
 func (f *frontend) setLock(cancel <-chan struct{}, in *fuse.LkIn, wait bool) fuse.Status {
 	h, st := f.handle(in.Fh)
 	if !st.Ok() {
@@ -209,26 +212,53 @@ func (f *frontend) setLock(cancel <-chan struct{}, in *fuse.LkIn, wait bool) fus
 	if h.server == 0 || !supported {
 		return errno(syscall.ENOLCK)
 	}
-	ctx := f.ctx
-	if wait {
-		var stop context.CancelFunc
-		ctx, stop = context.WithCancel(f.ctx)
-		defer stop()
-		go func() {
-			select {
-			case <-cancel:
-				stop()
-			case <-ctx.Done():
-			}
-		}()
-	}
-	_, err := call(f, ctx, (*sandboxfs.Client).SetLock, &sandboxfs.SetLockRequest{
+	q := &sandboxfs.SetLockRequest{
 		Handle: h.server, Kind: kind, Owner: sandboxfs.LockOwner(in.Owner), Lock: sandboxfs.Lock{Mode: mode, Start: in.Lk.Start, End: in.Lk.End}, Wait: wait,
-	})
-	if wait && ctx.Err() != nil && f.ctx.Err() == nil {
+	}
+	_, err := call(f, sandboxfs.WithInterrupt(f.ctx, cancel), (*sandboxfs.Client).SetLock, q)
+	if err == nil {
+		return fuse.OK
+	}
+	if !noEffect(err) {
+		f.undoLock(h, q, answered(err))
+	}
+	var fail *sandboxfs.Failure
+	if errors.As(err, &fail) && fail.Code == sandboxfs.CodeCancelled || interrupted(cancel) && !answered(err) {
 		return fuse.EINTR
 	}
 	return status(err)
+}
+
+// undoLock unlocks the owner's range after a lock request that may have changed it failed. Only an unlock the service runs after that request can undo it, so when the request's outcome is unknown, or the unlock fails, the handle fails instead.
+func (f *frontend) undoLock(h *handle, q *sandboxfs.SetLockRequest, ordered bool) {
+	if ordered {
+		unlock := *q
+		unlock.Lock.Mode, unlock.Wait = sandboxfs.LockUnlock, false
+		if _, err := call(f, f.ctx, (*sandboxfs.Client).SetLock, &unlock); err == nil {
+			return
+		}
+	}
+	h.failed.Store(true)
+}
+
+// noEffect reports whether a request certainly changed nothing.
+func noEffect(err error) bool {
+	var fail *sandboxfs.Failure
+	return unsent(err) || errors.Is(err, errDead) || errors.As(err, &fail) && fail.Effect == sandboxwire.EffectNone
+}
+
+// answered reports whether a failure came in the service's response, so a later request on the handle runs after the failed one. After a stream or context failure the request may still be running.
+func answered(err error) bool {
+	return !errors.Is(err, sandboxfs.ErrTransport) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+func interrupted(cancel <-chan struct{}) bool {
+	select {
+	case <-cancel:
+		return true
+	default:
+		return false
+	}
 }
 
 // Lseek has no File request. ENOSYS makes the kernel seek itself; SEEK_DATA and SEEK_HOLE then treat the file as one data extent.

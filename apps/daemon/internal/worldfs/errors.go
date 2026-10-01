@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Dial opens a new File stream to the attachment's service.
+// Dial opens a new File stream to the attachment's service. It returns once ctx ends; ctx bounds the open, not the stream.
 type Dial func(ctx context.Context) (io.ReadWriteCloser, error)
 
 // Error kinds. Every error the package returns, and every reason [World.Err] reports, matches one of them with errors.Is.

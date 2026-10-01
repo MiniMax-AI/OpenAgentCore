@@ -24,28 +24,26 @@ func (f *frontend) OpenDir(_ <-chan struct{}, in *fuse.OpenIn, out *fuse.OpenOut
 	return fuse.OK
 }
 
-// ReadDir lists a directory without "." and "..". A plain sandbox directory uses the service's cookies as offsets. A directory with presented children lists those first, at offsets 1 to k, and then the sandbox entries it does not hide, at offsets k+1 onwards, remembering each one's cookie.
+// ReadDir lists a directory without "." and "..". A plain sandbox directory uses the service's cookies as offsets, and a synthetic directory lists its children at offsets 1 to k. A directory with presented children is a [listing].
 func (f *frontend) ReadDir(_ <-chan struct{}, in *fuse.ReadIn, out *fuse.DirEntryList) fuse.Status {
 	h, st := f.handle(in.Fh)
 	if !st.Ok() {
 		return st
 	}
 	n := h.node
-	k := uint64(len(n.order))
-	if h.server != 0 && k == 0 {
+	switch {
+	case h.server == 0:
+		for off := in.Offset; off < uint64(len(n.order)); off++ {
+			c := n.fixed[n.order[off]]
+			if !out.AddDirEntry(fuse.DirEntry{Mode: c.fileType(), Name: n.order[off], Ino: f.ino(c), Off: off + 1}) {
+				break
+			}
+		}
+		return fuse.OK
+	case len(n.order) == 0:
 		return f.readPlain(h, in, out)
 	}
-	off := in.Offset
-	for ; off < k; off++ {
-		c := n.fixed[n.order[off]]
-		if !out.AddDirEntry(fuse.DirEntry{Mode: c.fileType(), Name: n.order[off], Ino: f.ino(c), Off: off + 1}) {
-			return fuse.OK
-		}
-	}
-	if h.server == 0 {
-		return fuse.OK
-	}
-	return f.readPresented(h, off-k, in.Offset < k, in, out)
+	return f.readPresented(h, in, out)
 }
 
 func (f *frontend) readPlain(h *handle, in *fuse.ReadIn, out *fuse.DirEntryList) fuse.Status {
@@ -64,47 +62,6 @@ func (f *frontend) readPlain(h *handle, in *fuse.ReadIn, out *fuse.DirEntryList)
 	return fuse.OK
 }
 
-// readPresented lists sandbox entries from the j-th one not hidden. A hidden pinned entry whose type changed is reported as a topology change.
-func (f *frontend) readPresented(h *handle, j uint64, listed bool, in *fuse.ReadIn, out *fuse.DirEntryList) fuse.Status {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if j > uint64(len(h.cookies)) {
-		return fuse.EINVAL
-	}
-	h.cookies = h.cookies[:j]
-	var cookie uint64
-	if j > 0 {
-		cookie = h.cookies[j-1]
-	}
-	n, k := h.node, uint64(len(h.node.order))
-	for {
-		r, err := call(f, f.ctx, (*sandboxfs.Client).ReadDir, &sandboxfs.ReadDirRequest{Handle: h.server, Cookie: cookie, Limit: min(in.Size, f.caps.MaxReadDirBytes)})
-		switch {
-		case err != nil:
-			return status(err)
-		case len(r.Entries) == 0 && !r.End:
-			return fuse.EIO
-		}
-		for _, e := range r.Entries {
-			if c := n.fixed[string(e.Name)]; c != nil {
-				if !c.synthetic() && e.Type != c.fileType() {
-					f.lose(&Error{Kind: ErrTopologyChanged, Op: "readdir", Path: c.path}, false)
-				}
-				cookie = e.Cookie
-				continue
-			}
-			if !out.AddDirEntry(fuse.DirEntry{Mode: e.Type, Name: string(e.Name), Ino: e.Ino, Off: k + uint64(len(h.cookies)) + 1}) {
-				return fuse.OK
-			}
-			h.cookies = append(h.cookies, e.Cookie)
-			cookie, listed = e.Cookie, true
-		}
-		if r.End || listed {
-			return fuse.OK
-		}
-	}
-}
-
 func (f *frontend) ino(n *inode) uint64 {
 	if n.synthetic() {
 		return f.attrOf(n).Ino
@@ -114,7 +71,7 @@ func (f *frontend) ino(n *inode) uint64 {
 
 func (f *frontend) ReleaseDir(in *fuse.ReleaseIn) {
 	if h := f.dropHandle(in.Fh); h != nil && h.server != 0 && !f.closed.Load() {
-		_, _ = call(f, f.ctx, (*sandboxfs.Client).ReleaseDir, &sandboxfs.ReleaseDirRequest{Handle: h.server})
+		f.release(f.ctx, cleanup{handle: h.server, dir: true})
 	}
 }
 

@@ -48,7 +48,7 @@ func (f *frontend) lookupPinned(p *inode, name string, c *inode, out *fuse.Entry
 		return fuse.OK
 	case err == nil:
 		f.mu.Lock()
-		f.release(r.Entry.Node, 1)
+		f.unref(r.Entry.Node, 1)
 		f.mu.Unlock()
 	case !isErrno(err, sandboxfs.ErrnoNotFound):
 		return status(err)
@@ -72,7 +72,10 @@ func (f *frontend) GetAttr(_ <-chan struct{}, in *fuse.GetAttrIn, out *fuse.Attr
 		f.fill(n, n.attr, &out.Attr)
 		return fuse.OK
 	}
-	t := f.target(n, in.Flags()&fuse.FUSE_GETATTR_FH != 0, in.Fh())
+	t, st := f.target(n, in.Flags()&fuse.FUSE_GETATTR_FH != 0, in.Fh())
+	if !st.Ok() {
+		return st
+	}
 	r, err := call(f, f.ctx, (*sandboxfs.Client).GetAttr, &sandboxfs.GetAttrRequest{Target: t})
 	if err != nil {
 		return status(err)
@@ -81,14 +84,18 @@ func (f *frontend) GetAttr(_ <-chan struct{}, in *fuse.GetAttrIn, out *fuse.Attr
 	return fuse.OK
 }
 
-// target addresses the open handle when the kernel names one, and the node otherwise.
-func (f *frontend) target(n *inode, useFh bool, fh uint64) sandboxfs.Target {
+// target addresses the open handle when the kernel names one, and the node otherwise. A failed handle fails the request.
+func (f *frontend) target(n *inode, useFh bool, fh uint64) (sandboxfs.Target, fuse.Status) {
 	if useFh {
-		if h, st := f.handle(fh); st.Ok() && h.server != 0 {
-			return sandboxfs.Target{Kind: sandboxfs.TargetHandle, Handle: h.server}
+		h, st := f.handle(fh)
+		switch {
+		case st == fuse.EIO:
+			return sandboxfs.Target{}, st
+		case st.Ok() && h.server != 0:
+			return sandboxfs.Target{Kind: sandboxfs.TargetHandle, Handle: h.server}, fuse.OK
 		}
 	}
-	return sandboxfs.Target{Kind: sandboxfs.TargetNode, Node: n.ref}
+	return sandboxfs.Target{Kind: sandboxfs.TargetNode, Node: n.ref}, fuse.OK
 }
 
 func (f *frontend) SetAttr(_ <-chan struct{}, in *fuse.SetAttrIn, out *fuse.AttrOut) fuse.Status {
@@ -99,7 +106,11 @@ func (f *frontend) SetAttr(_ <-chan struct{}, in *fuse.SetAttrIn, out *fuse.Attr
 	if n.synthetic() || n.link != nil {
 		return fuse.EPERM
 	}
-	q := &sandboxfs.SetAttrRequest{Target: f.target(n, in.Valid&fuse.FATTR_FH != 0, in.Fh)}
+	t, st := f.target(n, in.Valid&fuse.FATTR_FH != 0, in.Fh)
+	if !st.Ok() {
+		return st
+	}
+	q := &sandboxfs.SetAttrRequest{Target: t}
 	if in.Valid&fuse.FATTR_MODE != 0 {
 		q.Set |= sandboxfs.AttrMode
 		q.Mode = in.Mode & sandboxfs.ModePerm
