@@ -115,6 +115,9 @@ const (
 	ViewHomeName = "home"
 	// ViewRunName is the process relay's socket directory under ViewPrivateRoot.
 	ViewRunName = "run"
+	// ViewRelayName is the process relay's name in the shim directory, which
+	// no shim takes.
+	ViewRelayName = "oac-process-shim"
 	// ViewProcRoot and ViewDevRoot are the view's own /proc and minimal /dev.
 	ViewProcRoot = "/proc"
 	ViewDevRoot  = "/dev"
@@ -335,7 +338,7 @@ func (v View) Validate() error {
 		}
 	}
 	for i, n := range v.Shims {
-		if !isPathComponent(n) || slices.Contains(v.Shims[:i], n) {
+		if !isPathComponent(n) || n == ViewRelayName || slices.Contains(v.Shims[:i], n) {
 			return invalidView("shim %q", n)
 		}
 	}

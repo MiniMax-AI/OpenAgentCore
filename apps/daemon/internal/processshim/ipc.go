@@ -104,10 +104,10 @@ const (
 	SocketPath = "/.oac/run/" + SocketName
 
 	// RelayName is the relay's name in the view's shim directory, which no
-	// declared shim may take.
+	// declared shim takes, and RelayPath is where sessionview executes the
+	// relay, with argv RelayArgs. Like SocketPath they are literals that a
+	// test checks against the layout.
 	RelayName = "oac-process-shim"
-	// RelayPath is where sessionview executes the relay, with argv
-	// RelayArgs.
 	RelayPath = "/.oac/bin/" + RelayName
 	// RelayBrokerFD is the relay's end of the broker connection, and
 	// RelayListenerFD the listening socket bound at SocketPath, when the

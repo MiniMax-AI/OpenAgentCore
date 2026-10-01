@@ -14,6 +14,9 @@ func TestSocketPathFollowsTheViewLayout(t *testing.T) {
 }
 
 func TestRelayPathFollowsTheViewLayout(t *testing.T) {
+	if RelayName != agent.ViewRelayName {
+		t.Fatalf("RelayName = %q, want %q", RelayName, agent.ViewRelayName)
+	}
 	if want := path.Join(agent.ViewPrivateRoot, agent.ViewShimName, RelayName); RelayPath != want {
 		t.Fatalf("RelayPath = %q, want %q", RelayPath, want)
 	}

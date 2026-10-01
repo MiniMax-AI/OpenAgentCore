@@ -32,6 +32,7 @@ func TestViewValidate(t *testing.T) {
 		"mask in /proc":               func(v *agent.View) { v.Masks[0].Path = "/proc/cpuinfo" },
 		"unclean view path":           func(v *agent.View) { v.Masks[0].Path = "/etc/../etc/harness" },
 		"duplicate shim":              func(v *agent.View) { v.Shims = append(v.Shims, "git") },
+		"shim named as the relay":     func(v *agent.View) { v.Shims = append(v.Shims, agent.ViewRelayName) },
 		"forwarded assignment":        func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "A=B") },
 		"forwarded broker variable":   func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "PATH") },
 		"forwarded proxy variable":    func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "https_proxy") },
