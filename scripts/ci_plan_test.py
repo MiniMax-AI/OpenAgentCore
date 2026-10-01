@@ -26,6 +26,7 @@ class SelectionTests(unittest.TestCase):
         plan = ci.select(["services/core/internal/store/sessions.go"])
         self.assertEqual(set(plan["jobs"]), {"hygiene", "backend", "api"})
         self.assertFalse(plan["image"])
+        self.assertEqual(self.jobs("apps/sandboxio/cmd/oac-sandbox-io/main.go"), {"hygiene", "backend"})
 
     def test_image_and_native_inputs_keep_their_acceptance(self):
         self.assertTrue(ci.select(["deploy/distribution/Dockerfile"])["image"])

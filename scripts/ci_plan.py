@@ -22,6 +22,7 @@ RULES = (
     (("services/core/internal/nativeinstaller/",), ("native", "distribution")),
     (("services/core/deploy/", "services/core/tools/"), ("distribution",)),
     (("apps/daemon/",), ("backend", "native")),
+    (("apps/sandboxio/",), ("backend",)),
     (("internal/",), ("backend", "api", "native", "distribution")),
     (("internal/harnessconfig/",), ("web", "web-acceptance", "example", "harness")),
     (("contracts/",), ("backend", "api", "native", "web", "web-acceptance", "example", "distribution")),

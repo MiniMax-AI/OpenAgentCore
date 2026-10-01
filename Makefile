@@ -3,10 +3,10 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-sandbox-io build-core check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
-	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
+	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make build-sandbox-io  Build the Sandbox I/O service for Linux' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
 check: check-ci check-harness-catalog check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
 	@printf 'OpenAgentCore checks passed.\n'
@@ -47,7 +47,7 @@ check-sqlc:
 	python3 scripts/check-sqlc.py
 
 check-go:
-	go test ./apps/daemon/... ./internal/... ./contracts/agents-api/... ./scripts/openapi-split -count=1
+	go test ./apps/daemon/... ./apps/sandboxio/... ./internal/... ./contracts/agents-api/... ./scripts/openapi-split -count=1
 
 .PHONY: check-runtime-contract
 check-runtime-contract:
@@ -60,6 +60,12 @@ build-daemon:
 	[[ "$$output" == /* ]] || { echo 'Daemon output directory must be absolute' >&2; exit 1; }; \
 	mkdir -p "$$output"; \
 	CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$$output/oac-daemon" ./apps/daemon/cmd/oac-daemon
+
+build-sandbox-io:
+	@set -e; output="$${OAC_DEV_HOME:-$$HOME/.oac}/build/sandbox-io"; \
+	[[ "$$output" == /* ]] || { echo 'Sandbox I/O output directory must be absolute' >&2; exit 1; }; \
+	mkdir -p "$$output"; \
+	GOOS=linux CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$$output/oac-sandbox-io" ./apps/sandboxio/cmd/oac-sandbox-io
 
 build-core:
 	./scripts/build-core.sh

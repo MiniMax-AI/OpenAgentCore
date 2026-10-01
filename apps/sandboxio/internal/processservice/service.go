@@ -322,6 +322,24 @@ func (s *Service) AttachmentRevoked(id sandboxwire.ID) {
 	s.cancelAll(ops)
 }
 
+// Shutdown ends the incarnation's operations when the service stops: it
+// cancels every operation as ownership cleanup does, with TERM, then KILL
+// after the grace limit, and returns once every operation's scope has closed
+// or ctx ends. The binary calls it after its streams have ended, so no Start
+// arrives during or after it; Reap must still be running.
+func (s *Service) Shutdown(ctx context.Context) {
+	s.mu.Lock()
+	ops := make([]*operation, 0, len(s.ops))
+	for _, op := range s.ops {
+		ops = append(ops, op)
+	}
+	s.mu.Unlock()
+	s.cancelAll(ops)
+	for _, op := range ops {
+		op.awaitScope(ctx)
+	}
+}
+
 func (s *Service) stopGraceLocked(id sandboxwire.ID) {
 	if t := s.owners[id]; t != nil {
 		t.Stop()
