@@ -367,7 +367,7 @@ Environment MCP needs enabled network. Duplicate server identities are rejected.
 
 ### Effective bindings
 
-The Runtime resolves public HTTP declarations and installed Plugin MCP through `agent.ResolveMCPBindings` before adapter projection. Each transient binding keeps its connection origin, transport, nullable tool allowlist, required flag, credential authority and installed stdio identity. Bindings are never persisted or logged; duplicate identities and unavailable selected credentials are rejected. MiniMax reads its session-private native runtime-name registry for exact first-frame identities and cross-checks completed native results for both transports; adapters never fabricate a delayed start event or guess identities.
+The Runtime resolves public HTTP declarations and installed Plugin MCP through `agent.ResolveMCPBindings` before adapter projection. Each transient binding keeps its connection origin, transport, nullable tool allowlist, required flag, credential authority and installed stdio identity. Bindings are never persisted or logged; duplicate identities and unavailable selected credentials are rejected. MiniMax reads its session-private native runtime-name registry for exact first-frame identities and cross-checks completed native results for both transports; adapters never fabricate a delayed start event or guess identities. In an agent-host view, the Session's [credential gateway](model-execution.md#credential-gateway) holds each HTTP binding's bearer token and headers, and the Harness receives credential-free loopback URLs ([Endpoints and proxy](harness-onboarding.md#endpoints-and-proxy)).
 
 ### Public MCP connection origin
 
