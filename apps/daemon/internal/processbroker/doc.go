@@ -9,13 +9,28 @@
 // sends the shim the remote exit. The broker does all protocol work; the shim
 // holds no credentials.
 //
-// The broker authenticates each connection with SO_PEERCRED, accepts only the
-// view's uid, and never reads an identity from the payload. It never changes
-// the flags of a passed descriptor, whose open file description the Harness
-// shares. It reopens a pipe, FIFO or character device through /proc/self/fd
-// as its own non-blocking description, uses a socket with MSG_DONTWAIT, and
-// uses a regular file or block device as it is, so it waits on a peer only in
-// a poll that ending the invocation interrupts.
+// The broker runs as root and treats the view as untrusted. It listens in a
+// run directory that its own user owns and no one else can write, and does
+// every name operation relative to that directory, so nothing in the view
+// can redirect the socket; the view mounts the directory read-only, because
+// a shim only connects. The broker authenticates each connection with
+// SO_PEERCRED, accepts only the view's uid, and never reads an identity from
+// the payload.
+//
+// The broker never changes the flags of a passed descriptor, whose open file
+// description the Harness shares. It reopens a pipe, FIFO or terminal
+// through /proc/self/fd as its own non-blocking description, uses a socket
+// with MSG_DONTWAIT, and uses a regular file, block device or memory device
+// (/dev/null, /dev/zero, /dev/full, /dev/random, /dev/urandom) as it is, so
+// it waits on a peer only in a poll that ending the invocation interrupts. A
+// terminal is accepted only as a pty slave of the view's devpts instance,
+// because reopening any other character device as root could grant access
+// its description lacks, such as a terminal revoked by vhangup. Output on an
+// AF_UNIX socket carries SCM_CREDENTIALS with the shim's pid, uid and gid, so
+// a receiver with SO_PASSCRED never sees the broker's root credentials.
+//
+// Invocations on one terminal share its saved mode: the first saves it, each
+// runs the terminal raw, and the last to finish restores it.
 //
 // Each output descriptor closes after its stream's last byte, so a remote
 // background job that keeps its output open keeps the Harness's pipe open
@@ -45,11 +60,15 @@
 //   - A broker lost after the acknowledgement makes the shim exit with 255
 //     and no message, because the shim no longer holds its stderr.
 //   - Descriptors 0, 1 and 2 must each be a pipe, FIFO, socket, regular
-//     file, block device, or character device other than /dev/tty,
-//     /dev/console and /dev/ptmx, and a pipe, FIFO or character device must
-//     be open for the direction the program uses it in. The shim fails with
-//     126 otherwise. Reads and writes of a regular file or block device
-//     block, as a native program's do.
+//     file, block device, memory device or pty slave of the view's devpts
+//     instance, and a pipe, FIFO or terminal must be open for the direction
+//     the program uses it in. The shim fails with 126 otherwise, for
+//     /dev/tty, /dev/ptmx and every other character device too. Reads and
+//     writes of a regular file or block device block, as a native program's
+//     do.
+//   - Output on an AF_UNIX socket written after the shim exited names the
+//     broker's pid, which is pid 0 in the view, because the shim's pid may
+//     already belong to another process.
 //   - A signal sent to the shim reaches the remote program only when the
 //     process service declares it. The shim catches every signal a Go
 //     program can catch except CHLD, PIPE, URG and PROF, and the broker drops

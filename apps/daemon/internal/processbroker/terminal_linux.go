@@ -10,34 +10,72 @@ import (
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 )
 
+// terminals coordinates the invocations that share a local terminal: the
+// first one saves the terminal's settings, each one runs it raw from those
+// settings, and the last one to leave restores them.
+type terminals struct {
+	mu sync.Mutex
+	m  map[termKey]*sharedTerminal
+}
+
+// termKey identifies a terminal device.
+type termKey struct{ dev, rdev uint64 }
+
+type sharedTerminal struct {
+	saved unix.Termios // fixed once created
+	users int
+	raw   bool
+}
+
+func (ts *terminals) init() { ts.m = map[termKey]*sharedTerminal{} }
+
 // terminal is the local terminal on descriptor 0 of a PTY invocation. It is
 // raw while the operation runs and restored on every path. It keeps its own
 // descriptor, so it outlives the stdin pump's; holding a terminal open has
 // no end-of-file effect.
 type terminal struct {
-	fd    int
-	saved unix.Termios
+	fd     int
+	reg    *terminals
+	key    termKey
+	shared *sharedTerminal
 
 	mu     sync.Mutex
-	raw    bool
+	left   bool // the invocation no longer uses the terminal
 	closed bool
 }
 
-// openTerminal returns the terminal when in and out are both terminals.
-func openTerminal(in, out int) (*terminal, error) {
-	t, err := unix.IoctlGetTermios(in, unix.TCGETS)
+// openTerminal returns the terminal when in and out are both terminals, and
+// counts the invocation as one of its users.
+func openTerminal(reg *terminals, in, out int) (*terminal, error) {
+	cur, err := unix.IoctlGetTermios(in, unix.TCGETS)
 	if err != nil {
 		return nil, nil
 	}
 	if _, err := unix.IoctlGetTermios(out, unix.TCGETS); err != nil {
 		return nil, nil
 	}
+	var st unix.Stat_t
+	if err := unix.Fstat(in, &st); err != nil {
+		return nil, err
+	}
 	fd, err := unix.FcntlInt(uintptr(in), unix.F_DUPFD_CLOEXEC, 3)
 	if err != nil {
 		return nil, err
 	}
-	return &terminal{fd: fd, saved: *t}, nil
+	key := termKey{dev: st.Dev, rdev: st.Rdev}
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	s := reg.m[key]
+	if s == nil {
+		s = &sharedTerminal{saved: *cur}
+		reg.m[key] = s
+	}
+	s.users++
+	return &terminal{fd: fd, reg: reg, key: key, shared: s}, nil
 }
+
+// saved is the terminal's mode before any invocation made it raw.
+func (t *terminal) saved() *unix.Termios { return &t.shared.saved }
 
 func (t *terminal) size() sp.WindowSize {
 	t.mu.Lock()
@@ -57,32 +95,46 @@ func (t *terminal) size() sp.WindowSize {
 func (t *terminal) makeRaw() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.closed {
+	if t.left {
 		return nil
 	}
-	raw := t.saved
+	raw := t.shared.saved
 	raw.Iflag &^= unix.IGNBRK | unix.BRKINT | unix.PARMRK | unix.ISTRIP | unix.INLCR | unix.IGNCR | unix.ICRNL | unix.IXON
 	raw.Oflag &^= unix.OPOST
 	raw.Lflag &^= unix.ECHO | unix.ECHONL | unix.ICANON | unix.ISIG | unix.IEXTEN
 	raw.Cflag &^= unix.CSIZE | unix.PARENB
 	raw.Cflag |= unix.CS8
 	raw.Cc[unix.VMIN], raw.Cc[unix.VTIME] = 1, 0
+	t.reg.mu.Lock()
+	defer t.reg.mu.Unlock()
 	if err := unix.IoctlSetTermios(t.fd, unix.TCSETS, &raw); err != nil {
 		return err
 	}
-	t.raw = true
+	t.shared.raw = true
 	return nil
 }
 
+// restore ends the invocation's use of the terminal. The last user restores
+// the saved mode.
 func (t *terminal) restore() {
 	if t == nil {
 		return
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.raw {
-		unix.IoctlSetTermios(t.fd, unix.TCSETS, &t.saved)
-		t.raw = false
+	if t.left {
+		return
+	}
+	t.left = true
+	t.reg.mu.Lock()
+	defer t.reg.mu.Unlock()
+	s := t.shared
+	if s.users--; s.users > 0 {
+		return
+	}
+	delete(t.reg.m, t.key)
+	if s.raw {
+		unix.IoctlSetTermios(t.fd, unix.TCSETS, &s.saved)
 	}
 }
 

@@ -254,10 +254,12 @@ func (inv *invocation) exitDecided() bool {
 }
 
 // ackLoop acknowledges each delivered prefix, letting the service reclaim
-// its replay and keep reading output.
+// its replay and keep reading output. A Busy refusal is retried until the
+// invocation halts.
 func (inv *invocation) ackLoop() {
 	defer inv.helpers.Done()
 	var acked uint64
+	backoff := minBackoff
 	for {
 		prefix, changed := inv.acks.state()
 		if prefix > acked {
@@ -265,12 +267,18 @@ func (inv *invocation) ackLoop() {
 			err := h.op.Ack(inv.b.ctx, prefix)
 			switch {
 			case err == nil:
-				acked = prefix
+				acked, backoff = prefix, minBackoff
 				continue
 			case h.s.ended():
 				if _, ok := inv.relink(h); !ok {
 					return
 				}
+				continue
+			case asFailure(err).Code == sp.CodeBusy:
+				if !inv.sleep(backoff) {
+					return
+				}
+				backoff = min(2*backoff, maxBackoff)
 				continue
 			default:
 				return // released, or the operation is gone

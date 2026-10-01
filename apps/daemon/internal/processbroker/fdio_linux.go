@@ -6,7 +6,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -15,9 +17,25 @@ import (
 // pipeBuf is PIPE_BUF, the most a short status message writes at once.
 const pipeBuf = 4096
 
-// ttyAuxMajor is the major number of /dev/tty, /dev/console and /dev/ptmx:
-// reopening one of them opens another terminal.
-const ttyAuxMajor = 5
+// Character devices. The memory devices never block, so the broker uses
+// their passed descriptions as they are; a terminal is accepted only as a
+// pty slave of the view's devpts instance.
+var memoryDevices = []uint64{
+	unix.Mkdev(1, 3), // null
+	unix.Mkdev(1, 5), // zero
+	unix.Mkdev(1, 7), // full
+	unix.Mkdev(1, 8), // random
+	unix.Mkdev(1, 9), // urandom
+}
+
+const (
+	ptySlaveMajor  = 136 // UNIX98_PTY_SLAVE_MAJOR
+	ptySlaveMajors = 8   // UNIX98_PTY_MAJOR_COUNT
+)
+
+// brokerPID names the broker as the sender of socket output. In the view's
+// PID namespace it is no process: the receiver sees pid 0.
+var brokerPID = int32(unix.Getpid())
 
 var errStopped = errors.New("stopped")
 
@@ -69,23 +87,53 @@ func (s *stopFlag) close() {
 type ioKind uint8
 
 const (
-	ioReopened ioKind = iota // pipe, FIFO or character device
-	ioSocket
-	ioFile // regular file or block device
+	ioReopened ioKind = iota // pipe, FIFO or view terminal
+	ioSocket                 // a socket of another family than AF_UNIX
+	ioUnix                   // an AF_UNIX socket
+	ioFile                   // regular file, block device or memory device
 )
 
 // endpoint is a passed descriptor and the descriptor its I/O uses.
 type endpoint struct {
-	fd   int // the passed descriptor; -1 once closed
-	io   int // fd, an independent description, or -1 for a pipe without a reader
-	kind ioKind
+	fd     int // the passed descriptor; -1 once closed
+	io     int // fd, an independent description, or -1 for a pipe without a reader
+	kind   ioKind
+	sender *sender // for ioUnix
 }
 
 var closedEndpoint = endpoint{fd: -1, io: -1}
 
+// sender is the identity that output on an AF_UNIX socket carries as
+// SCM_CREDENTIALS, so a receiver with SO_PASSCRED never sees the broker's
+// root credentials: the shim's pid, uid and gid while the shim runs, then
+// the broker's pid with the shim's uid and gid.
+type sender struct {
+	pid      atomic.Int32
+	uid, gid uint32
+}
+
+// shimGone stops naming the shim, whose pid may be reused.
+func (s *sender) shimGone() { s.pid.Store(brokerPID) }
+
+func (s *sender) send(fd int, data []byte) (int, error) {
+	if len(data) == 0 {
+		return 0, nil // an empty sendmsg with control data sends a byte
+	}
+	for {
+		pid := s.pid.Load()
+		oob := unix.UnixCredentials(&unix.Ucred{Pid: pid, Uid: s.uid, Gid: s.gid})
+		n, err := unix.SendmsgN(fd, data, oob, nil, unix.MSG_DONTWAIT|unix.MSG_NOSIGNAL)
+		if err == unix.ESRCH && pid != brokerPID {
+			s.shimGone() // the shim exited before the broker saw it go
+			continue
+		}
+		return n, err
+	}
+}
+
 // openEndpoint prepares passed descriptor fd for reading or writing, as the
-// package documentation describes.
-func openEndpoint(fd int, write bool) (endpoint, error) {
+// package documentation describes. pts is the view's devpts device.
+func openEndpoint(fd int, write bool, pts uint64, snd *sender) (endpoint, error) {
 	var st unix.Stat_t
 	if err := unix.Fstat(fd, &st); err != nil {
 		return closedEndpoint, err
@@ -94,10 +142,22 @@ func openEndpoint(fd int, write bool) (endpoint, error) {
 	case unix.S_IFREG, unix.S_IFBLK:
 		return endpoint{fd: fd, io: fd, kind: ioFile}, nil
 	case unix.S_IFSOCK:
+		domain, err := unix.GetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_DOMAIN)
+		if err != nil {
+			return closedEndpoint, err
+		}
+		if domain == unix.AF_UNIX {
+			return endpoint{fd: fd, io: fd, kind: ioUnix, sender: snd}, nil
+		}
 		return endpoint{fd: fd, io: fd, kind: ioSocket}, nil
 	case unix.S_IFCHR, unix.S_IFIFO:
-		if typ == unix.S_IFCHR && unix.Major(st.Rdev) == ttyAuxMajor {
-			return closedEndpoint, errors.New("an indirect terminal device such as /dev/tty is not supported")
+		if typ == unix.S_IFCHR {
+			if slices.Contains(memoryDevices, st.Rdev) {
+				return endpoint{fd: fd, io: fd, kind: ioFile}, nil
+			}
+			if major := unix.Major(st.Rdev); major < ptySlaveMajor || major >= ptySlaveMajor+ptySlaveMajors || st.Dev != pts {
+				return closedEndpoint, fmt.Errorf("character device %d:%d is neither a terminal of the view nor a memory device", unix.Major(st.Rdev), unix.Minor(st.Rdev))
+			}
 		}
 		mode, use := unix.O_RDONLY, "reading"
 		if write {
@@ -139,7 +199,7 @@ func (e endpoint) close() {
 }
 
 func (e endpoint) read(buf []byte) (int, error) {
-	if e.kind == ioSocket {
+	if e.kind == ioSocket || e.kind == ioUnix {
 		n, _, errno := unix.Syscall6(unix.SYS_RECVFROM, uintptr(e.io), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), unix.MSG_DONTWAIT, 0, 0)
 		if errno != 0 {
 			return 0, errno
@@ -155,6 +215,8 @@ func (e endpoint) write(data []byte) (int, error) {
 		return 0, unix.EPIPE
 	case e.kind == ioSocket:
 		return unix.SendmsgN(e.io, data, nil, nil, unix.MSG_DONTWAIT|unix.MSG_NOSIGNAL)
+	case e.kind == ioUnix:
+		return e.sender.send(e.io, data)
 	}
 	return unix.Write(e.io, data)
 }

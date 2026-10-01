@@ -26,7 +26,7 @@ func TestWritersSharingAFullPipeStop(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ep, err := openEndpoint(fd, true)
+		ep, err := openEndpoint(fd, true, 0, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

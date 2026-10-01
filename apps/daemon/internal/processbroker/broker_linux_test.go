@@ -339,6 +339,133 @@ func TestGoneReaderDoesNotHoldExit(t *testing.T) {
 	}
 }
 
+// A receiver with SO_PASSCRED sees the shim's credentials on its output,
+// never the root broker's.
+func TestUnixSocketOutputNamesTheShim(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("naming the shim's credentials needs root; run the test binary as root, as the comment at the top of this file describes")
+	}
+	f := newFixtureFor(t, viewID, nil)
+	sv, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(sv[0])
+	if err := unix.SetsockoptInt(sv[0], unix.SOL_SOCKET, unix.SO_PASSCRED, 1); err != nil {
+		t.Fatal(err)
+	}
+	out := os.NewFile(uintptr(sv[1]), "output")
+	cmd := f.command("sh", "-c", "echo hi")
+	cmd.Stdout = out
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: viewID, Gid: viewID}}
+	err = cmd.Start()
+	out.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	buf, oob := make([]byte, 64), make([]byte, unix.CmsgSpace(unix.SizeofUcred))
+	n, oobn, _, _, err := unix.Recvmsg(sv[0], buf, oob, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("Wait = %v", err)
+	}
+	msgs, err := unix.ParseSocketControlMessage(oob[:oobn])
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("control messages %v, %v", msgs, err)
+	}
+	cred, err := unix.ParseUnixCredentials(&msgs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(buf[:n]) != "hi\n" || cred.Uid != viewID || cred.Gid != viewID || int(cred.Pid) != cmd.Process.Pid {
+		t.Fatalf("read %q from %+v; the shim was pid %d", buf[:n], *cred, cmd.Process.Pid)
+	}
+}
+
+// A Busy acknowledgement is retried, or output past the replay limit would
+// never arrive.
+func TestBusyAckIsRetried(t *testing.T) {
+	f := newFixture(t, func(c net.Conn) io.ReadWriteCloser { return &busyAck{Conn: c} })
+	cmd := f.command("seq", "1", "2000000")
+	var out countWriter
+	cmd.Stdout = &out
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	wait := make(chan error, 1)
+	go func() { wait <- cmd.Wait() }()
+	select {
+	case err := <-wait:
+		if err != nil || out.n != 14888896 {
+			t.Fatalf("Wait = %v after %d bytes", err, out.n)
+		}
+	case <-time.After(30 * time.Second):
+		cmd.Process.Kill()
+		t.Fatal("output stalled after a Busy acknowledgement")
+	}
+}
+
+// Concurrent invocations on one terminal leave it as it was: the first saves
+// its mode and the last restores it.
+func TestSharedTerminalRestoredByLastUser(t *testing.T) {
+	f := newFixture(t, nil)
+	ptm, pts, err := pty.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ptm.Close()
+	defer pts.Close()
+	go io.Copy(io.Discard, ptm)
+	mode := func() *unix.Termios {
+		tio, err := unix.IoctlGetTermios(int(pts.Fd()), unix.TCGETS)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tio
+	}
+	raw := func() bool { return mode().Lflag&unix.ICANON == 0 }
+	await := func(what string, done func() bool) {
+		for deadline := time.Now().Add(10 * time.Second); !done(); time.Sleep(10 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %s", what)
+			}
+		}
+	}
+	file := func(name string) string { return filepath.Join(f.dir, name) }
+	exists := func(name string) func() bool {
+		return func() bool { _, err := os.Stat(file(name)); return err == nil }
+	}
+	before := mode()
+	run := func(script string) *exec.Cmd {
+		cmd := f.command("bash", "-c", script)
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = pts, pts, pts
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		return cmd
+	}
+	a := run("until [ -e a.done ]; do sleep 0.05; done")
+	await("the first invocation to make the terminal raw", raw)
+	b := run("touch b.up; until [ -e b.done ]; do sleep 0.05; done")
+	await("the second invocation to run", exists("b.up"))
+	os.WriteFile(file("a.done"), nil, 0o644)
+	if err := a.Wait(); err != nil {
+		t.Fatalf("first Wait = %v", err)
+	}
+	if !raw() {
+		t.Fatal("the first invocation to leave restored the terminal under the second")
+	}
+	os.WriteFile(file("b.done"), nil, 0o644)
+	if err := b.Wait(); err != nil {
+		t.Fatalf("second Wait = %v", err)
+	}
+	if after := mode(); *after != *before {
+		t.Fatalf("terminal mode not restored:\nbefore %+v\nafter  %+v", *before, *after)
+	}
+}
+
 func TestViewRunsRemoteShell(t *testing.T) {
 	if os.Getenv(viewGateEnv) != "1" {
 		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see the comment at the top of this file", viewGateEnv)
@@ -360,12 +487,15 @@ func TestViewRunsRemoteShell(t *testing.T) {
 	if err := os.Mkdir(run, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chown(run, viewID, viewID); err != nil {
+	pts, err := sessionview.NewPTS()
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer pts.Close()
 	b, err := Start(Config{
 		RunDir:      run,
 		UID:         viewID,
+		PTSDevice:   pts.Device(),
 		Executables: Executables{Paths: map[string]string{"/bin/sh": "/bin/sh"}},
 		Environment: Environment{Sandbox: map[string]string{"PATH": "/usr/bin:/bin"}},
 		Scope:       sp.ScopePOSIXSession,
@@ -381,9 +511,10 @@ func TestViewRunsRemoteShell(t *testing.T) {
 	w := &loopbackWorld{dir: world}
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
 		World:   w.serve,
-		Private: []sessionview.PrivateDir{{Name: "run", HostDir: run, Writable: true}},
+		Private: []sessionview.PrivateDir{{Name: "run", HostDir: run}},
 		Shim:    sessionview.Shim{Binary: shimBinary(t), Paths: []string{"/bin/sh"}},
 		Process: sessionview.Process{Path: "/bin/sh", Args: []string{"sh", "-c", "echo $0"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr},
+		PTS:     pts,
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -410,12 +541,30 @@ type fixture struct {
 // bash, sh, env and seq. A non-nil wrap wraps the first stream to the
 // service.
 func newFixture(t *testing.T, wrap func(net.Conn) io.ReadWriteCloser) *fixture {
+	return newFixtureFor(t, os.Getuid(), wrap)
+}
+
+// newFixtureFor starts the broker for shims running as uid, in a run
+// directory that uid can reach and only this process can change.
+func newFixtureFor(t *testing.T, uid int, wrap func(net.Conn) io.ReadWriteCloser) *fixture {
 	t.Helper()
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{dir: t.TempDir(), service: service.socket(t), wrap: wrap}
+	dir, err := os.MkdirTemp("", "processbroker-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var pts unix.Stat_t
+	if err := unix.Stat("/dev/pts", &pts); err != nil {
+		t.Fatal(err)
+	}
+	f := &fixture{dir: dir, service: service.socket(t), wrap: wrap}
 	f.bin = filepath.Join(f.dir, "bin")
 	if err := os.Mkdir(f.bin, 0o755); err != nil {
 		t.Fatal(err)
@@ -430,7 +579,8 @@ func newFixture(t *testing.T, wrap func(net.Conn) io.ReadWriteCloser) *fixture {
 	}
 	b, err := Start(Config{
 		RunDir:      f.dir,
-		UID:         os.Getuid(),
+		UID:         uid,
+		PTSDevice:   pts.Dev, // where pty.Open makes terminals
 		Executables: Executables{Paths: paths},
 		Environment: Environment{
 			Pass:    []string{"KEEP", "LEAK"},
@@ -515,6 +665,38 @@ func (c *holdEvents) Read(p []byte) (int, error) {
 		}
 	}
 	return c.out.Read(p)
+}
+
+// busyAck answers the first acknowledgement with Busy after the service
+// applied it.
+type busyAck struct {
+	net.Conn
+	out  bytes.Buffer
+	sent bool
+}
+
+func (c *busyAck) Read(p []byte) (int, error) {
+	for c.out.Len() == 0 {
+		fr, err := sandboxwire.ReadFrame(c.Conn, sandboxwire.MaxPayload)
+		if err != nil {
+			return 0, err
+		}
+		if !c.sent && fr.Type == sandboxwire.ResponseType(sp.OpAckEvents) {
+			c.sent = true
+			fr.Payload = sp.Encode(sp.ResponseFailure{Request: sp.OpAckEvents, Failure: *sp.Fail(sp.CodeBusy, sandboxwire.EffectNone, "busy")})
+		}
+		if err := sandboxwire.WriteFrame(&c.out, fr); err != nil {
+			return 0, err
+		}
+	}
+	return c.out.Read(p)
+}
+
+type countWriter struct{ n int }
+
+func (w *countWriter) Write(p []byte) (int, error) {
+	w.n += len(p)
+	return len(p), nil
 }
 
 func start(t *testing.T, cmd *exec.Cmd) io.Reader {

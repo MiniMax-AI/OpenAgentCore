@@ -20,9 +20,14 @@ import (
 // Config configures one Session's broker.
 type Config struct {
 	// RunDir is the host directory bound at processshim.RunDir in the view.
+	// It must be owned by the broker's user and writable by no one else, and
+	// the view needs no write access to it: a shim only connects.
 	RunDir string
 	// UID is the view's uid; only its processes may connect.
 	UID int
+	// PTSDevice is the device number of the view's devpts instance,
+	// sessionview.PTS.Device. A terminal is accepted only from it.
+	PTSDevice uint64
 	// Executables is the declared executable table.
 	Executables Executables
 	// Environment is the declared environment policy.
@@ -74,6 +79,8 @@ func (c *Config) validate() error {
 		return invalid("run directory %q is not absolute", c.RunDir)
 	case c.UID < 0:
 		return invalid("uid %d", c.UID)
+	case c.PTSDevice == 0:
+		return invalid("no devpts device")
 	case !c.Scope.Valid():
 		return invalid("scope %d", c.Scope)
 	case c.Dial == nil:

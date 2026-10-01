@@ -29,6 +29,8 @@ type invocation struct {
 	spec sp.ProcessSpec
 	id   sandboxwire.ID
 	term *terminal // nil for pipes
+	// sender is what output on a Unix socket names as its sender.
+	sender *sender
 
 	// eps are the passed descriptors 0, 1 and 2; fd is -1 once closed.
 	fdMu sync.Mutex
@@ -98,7 +100,7 @@ func (b *Broker) serve(uc *net.UnixConn, unwatch func() bool) {
 		c.Close()
 		return
 	}
-	inv, refusal := b.prepare(req, fds, log)
+	inv, refusal := b.prepare(req, fds, cred, log)
 	if refusal != nil {
 		closeAll(fds[:])
 		c.Send(*refusal)
@@ -126,7 +128,7 @@ func refuse(code uint8, format string, args ...any) *processshim.Result {
 // prepare checks the request and builds the spec. Every refusal happens
 // here, before the shim gives up its descriptors; the caller then closes
 // them.
-func (b *Broker) prepare(req processshim.Request, fds [3]int, log *slog.Logger) (*invocation, *processshim.Result) {
+func (b *Broker) prepare(req processshim.Request, fds [3]int, cred unix.Ucred, log *slog.Logger) (*invocation, *processshim.Result) {
 	if req.Version != processshim.Version {
 		return nil, refuse(processshim.ExitCannotRun, "IPC version %d is not %d", req.Version, processshim.Version)
 	}
@@ -150,7 +152,7 @@ func (b *Broker) prepare(req processshim.Request, fds [3]int, log *slog.Logger) 
 		IOMode:     sp.IOPipes,
 		Scope:      b.cfg.Scope,
 	}
-	term, err := openTerminal(fds[0], fds[1])
+	term, err := openTerminal(&b.terms, fds[0], fds[1])
 	if err != nil {
 		return nil, refuse(processshim.ExitCannotRun, "terminal: %v", err)
 	}
@@ -165,8 +167,10 @@ func (b *Broker) prepare(req processshim.Request, fds [3]int, log *slog.Logger) 
 	}
 	inv := &invocation{
 		b: b, log: log.With("executable", remote), spec: spec, id: sandboxwire.NewID(), term: term,
-		eps: [3]endpoint{closedEndpoint, closedEndpoint, closedEndpoint},
+		sender: &sender{uid: cred.Uid, gid: cred.Gid},
+		eps:    [3]endpoint{closedEndpoint, closedEndpoint, closedEndpoint},
 	}
+	inv.sender.pid.Store(cred.Pid)
 	if err := inv.open(fds); err != nil {
 		inv.release()
 		return nil, refuse(processshim.ExitCannotRun, "%v", err)
@@ -196,7 +200,7 @@ func (inv *invocation) open(fds [3]int) error {
 		return err
 	}
 	for i, fd := range fds {
-		ep, err := openEndpoint(fd, i > 0)
+		ep, err := openEndpoint(fd, i > 0, inv.b.cfg.PTSDevice, inv.sender)
 		if err != nil {
 			return fmt.Errorf("descriptor %d: %w", i, err)
 		}
@@ -264,90 +268,162 @@ func (inv *invocation) run() {
 // resolved before the shim gets 255.
 const resolveWindow = 30 * time.Second
 
+// startNext says what follows one Start attempt.
+type startNext int
+
+const (
+	startDone  startNext = iota // the operation is observed
+	startEnded                  // the invocation ended
+	startNow                    // start again on the next stream
+	startLater                  // start again after a backoff
+)
+
 // start starts the operation. A Start that may have taken effect is retried
-// with the same ID and spec until the outcome is definite: the service then
-// answers with the existing operation, or refuses after finding none. A Start
-// that had no effect may move to a new service incarnation.
+// with the same ID and spec until its outcome is definite: the service then
+// answers with the existing operation, or refuses in a way that proves none
+// exists. One deadline, set by the first Start that may have taken effect,
+// bounds every later link wait, Start, implicit Attach and backoff; when it
+// passes, the shim gets 255. A Start that had no effect may move to a new
+// service incarnation.
 func (inv *invocation) start() (handle, sp.Capabilities, bool) {
-	var uncertain time.Time // when a Start first may have taken effect
+	var deadline time.Time // set once a Start may have taken effect
+	exists := false        // a Start found the operation
 	backoff := minBackoff
 	for {
-		ctx, cancel := inv.b.ctx, context.CancelFunc(func() {})
-		if !uncertain.IsZero() {
-			ctx, cancel = context.WithDeadline(inv.b.ctx, uncertain.Add(resolveWindow))
-		}
-		s, err := inv.b.link.get(ctx)
-		cancel()
-		switch {
-		case inv.b.ctx.Err() != nil:
-			inv.fail("the process broker stopped")
-			return handle{}, sp.Capabilities{}, false
-		case err != nil:
+		if !deadline.IsZero() && !time.Now().Before(deadline) {
 			inv.unconfirmed()
 			return handle{}, sp.Capabilities{}, false
 		}
-		if inv.lost() && uncertain.IsZero() {
-			return handle{}, sp.Capabilities{}, false // nothing started
-		}
-		if inv.inst != s.instance {
-			if !uncertain.IsZero() {
-				inv.fail("the sandbox process service restarted while the program was starting")
-				return handle{}, sp.Capabilities{}, false
-			}
-			inv.inst = s.instance
-		}
-		if inv.spec.PTY != nil && inv.spec.PTY.Modes == nil {
-			inv.spec.PTY.Modes = sp.ReadModes(&inv.term.saved, s.caps.PTYModes)
-		}
-		if f := s.caps.CheckStart(inv.spec); f != nil {
-			inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
+		h, caps, next := inv.startOnce(&deadline, &exists)
+		switch next {
+		case startDone:
+			return h, caps, true
+		case startEnded:
 			return handle{}, sp.Capabilities{}, false
+		case startNow:
+			continue
 		}
-		req := sp.StartRequest{OperationRef: sp.OperationRef{ServerInstanceID: inv.inst, OperationID: inv.id}, Spec: inv.spec}
-		if n := len(sp.Encode(req)); n > int(s.caps.MaxStartBytes) {
-			inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: argument list and environment of %d bytes exceed %d", inv.spec.Executable, n, s.caps.MaxStartBytes))
-			return handle{}, sp.Capabilities{}, false
+		wait := backoff
+		if !deadline.IsZero() {
+			wait = min(wait, time.Until(deadline))
 		}
-		op, _, err := s.client.Start(inv.b.ctx, inv.inst, inv.id, inv.spec)
-		if err == nil {
-			h := handle{op: op, s: s, relinked: make(chan struct{})}
-			inv.mu.Lock()
-			inv.cur = h
-			inv.mu.Unlock()
-			return h, s.caps, true
-		}
-		f := asFailure(err)
-		switch {
-		case inv.b.ctx.Err() != nil:
-			inv.fail("the process broker stopped")
-			return handle{}, sp.Capabilities{}, false
-		case f.Effect == sandboxwire.EffectPossible:
-			if uncertain.IsZero() {
-				uncertain = time.Now()
-			}
-		case f.Code == sp.CodeInstanceChanged && !uncertain.IsZero():
-			inv.fail("the sandbox process service restarted while the program was starting")
-			return handle{}, sp.Capabilities{}, false
-		case !s.ended():
-			// The service looks for the operation before refusing, so a
-			// refusal without effect means none exists.
-			inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
-			return handle{}, sp.Capabilities{}, false
-		}
-		if uncertain.IsZero() {
-			continue // no effect on an ended stream: start on the next one
-		}
-		if time.Since(uncertain) >= resolveWindow {
-			inv.unconfirmed()
-			return handle{}, sp.Capabilities{}, false
-		}
-		select {
-		case <-time.After(backoff):
-		case <-inv.halt:
+		if !inv.sleep(wait) {
 			inv.fail("the process broker stopped")
 			return handle{}, sp.Capabilities{}, false
 		}
 		backoff = min(2*backoff, maxBackoff)
+	}
+}
+
+// startOnce makes one Start attempt. A deadline it sets or finds bounds the
+// attempt, including the Start's implicit Attach.
+func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sp.Capabilities, startNext) {
+	ctx, cancel := inv.b.ctx, context.CancelFunc(func() {})
+	if !deadline.IsZero() {
+		ctx, cancel = context.WithDeadline(inv.b.ctx, *deadline)
+	}
+	defer cancel()
+	s, err := inv.b.link.get(ctx)
+	switch {
+	case inv.b.ctx.Err() != nil:
+		inv.fail("the process broker stopped")
+		return handle{}, sp.Capabilities{}, startEnded
+	case err != nil:
+		return handle{}, sp.Capabilities{}, startLater // the deadline passed
+	}
+	if inv.lost() && deadline.IsZero() {
+		return handle{}, sp.Capabilities{}, startEnded // nothing started
+	}
+	if inv.inst != s.instance {
+		if !deadline.IsZero() {
+			inv.fail("the sandbox process service restarted while the program was starting")
+			return handle{}, sp.Capabilities{}, startEnded
+		}
+		inv.inst = s.instance
+	}
+	if inv.spec.PTY != nil && inv.spec.PTY.Modes == nil {
+		inv.spec.PTY.Modes = sp.ReadModes(inv.term.saved(), s.caps.PTYModes)
+	}
+	if f := s.caps.CheckStart(inv.spec); f != nil {
+		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
+		return handle{}, sp.Capabilities{}, startEnded
+	}
+	req := sp.StartRequest{OperationRef: sp.OperationRef{ServerInstanceID: inv.inst, OperationID: inv.id}, Spec: inv.spec}
+	if n := len(sp.Encode(req)); n > int(s.caps.MaxStartBytes) {
+		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: argument list and environment of %d bytes exceed %d", inv.spec.Executable, n, s.caps.MaxStartBytes))
+		return handle{}, sp.Capabilities{}, startEnded
+	}
+	began := time.Now()
+	if deadline.IsZero() {
+		var cancelStart context.CancelFunc
+		ctx, cancelStart = context.WithDeadline(inv.b.ctx, began.Add(resolveWindow))
+		defer cancelStart()
+	}
+	op, disp, err := s.client.Start(ctx, inv.inst, inv.id, inv.spec)
+	if err == nil {
+		h := handle{op: op, s: s, relinked: make(chan struct{})}
+		inv.mu.Lock()
+		inv.cur = h
+		inv.mu.Unlock()
+		return h, s.caps, startDone
+	}
+	f := asFailure(err)
+	if inv.b.ctx.Err() != nil {
+		inv.fail("the process broker stopped")
+		return handle{}, sp.Capabilities{}, startEnded
+	}
+	if disp == sp.StartExisting {
+		*exists = true // its implicit Attach failed; the next Start attaches again
+	}
+	if deadline.IsZero() && (*exists || f.Effect == sandboxwire.EffectPossible) {
+		*deadline = began.Add(resolveWindow)
+	}
+	if deadline.IsZero() { // nothing has started
+		switch {
+		case s.ended():
+			return handle{}, sp.Capabilities{}, startNow
+		case f.Code == sp.CodeBusy:
+			return handle{}, sp.Capabilities{}, startLater
+		}
+		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
+		return handle{}, sp.Capabilities{}, startEnded
+	}
+	switch {
+	case f.Code == sp.CodeInstanceChanged:
+		inv.fail("the sandbox process service restarted while the program was starting")
+		return handle{}, sp.Capabilities{}, startEnded
+	case f.Code == sp.CodeReleased || f.Code == sp.CodeOperationConflict:
+		inv.fail(fmt.Sprintf("the program's start could not be resolved: %s", f.Message))
+		return handle{}, sp.Capabilities{}, startEnded
+	case !*exists && f.Effect == sandboxwire.EffectNone && provesAbsence(f.Code):
+		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
+		return handle{}, sp.Capabilities{}, startEnded
+	}
+	return handle{}, sp.Capabilities{}, startLater
+}
+
+// provesAbsence reports whether a Start refusal shows that the ID has no
+// operation. A service answers a Start of an existing ID and spec with
+// Existing, so a refusal its Start handling makes after that lookup proves
+// absence. Busy, InvalidArgument from decoding, and the failures of the
+// client and the stream come before the lookup and prove nothing.
+func provesAbsence(c sp.ErrorCode) bool {
+	switch c {
+	case sp.CodeStaleAttachment, sp.CodeResourceExhausted, sp.CodeUnsupported:
+		return true
+	}
+	return false
+}
+
+// sleep waits for d and reports false when the invocation halts first.
+func (inv *invocation) sleep(d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-inv.halt:
+		return false
 	}
 }
 
@@ -532,21 +608,27 @@ func (inv *invocation) settle(h handle, seq uint64) bool {
 	return inv.releaseOp(h)
 }
 
-// releaseOp releases the settled operation. It reports false when the
-// stream ended first.
+// releaseOp releases the settled operation. A Busy refusal is retried
+// until the invocation halts. It reports false when the stream ended first.
 func (inv *invocation) releaseOp(h handle) bool {
-	err := h.op.Release(inv.b.ctx)
-	if err == nil {
+	for backoff := minBackoff; ; backoff = min(2*backoff, maxBackoff) {
+		err := h.op.Release(inv.b.ctx)
+		if err == nil {
+			return true
+		}
+		if h.s.ended() && inv.b.ctx.Err() == nil {
+			return false
+		}
+		f := asFailure(err)
+		if f.Code == sp.CodeBusy && inv.sleep(backoff) {
+			continue
+		}
+		if f.Code != sp.CodeReleased && f.Code != sp.CodeBusy {
+			inv.log.Warn("operation release failed", "error", err)
+		}
+		h.op.Detach()
 		return true
 	}
-	if h.s.ended() && inv.b.ctx.Err() == nil {
-		return false
-	}
-	if f := asFailure(err); f.Code != sp.CodeReleased {
-		inv.log.Warn("operation release failed", "error", err)
-	}
-	h.op.Detach()
-	return true
 }
 
 func (inv *invocation) decideExit() {
@@ -594,6 +676,7 @@ func (inv *invocation) reply(r processshim.Result, msg string) {
 		inv.writeStderr(msg)
 	}
 	inv.term.restore()
+	inv.sender.shimGone() // the shim exits on the Result
 	inv.conn.Send(r)
 	inv.conn.Close()
 }
@@ -629,6 +712,7 @@ func (inv *invocation) shimGone() {
 	cancel := !inv.exited
 	inv.mu.Unlock()
 	inv.log.Info("process shim lost", "cancel", cancel)
+	inv.sender.shimGone()
 	inv.stopIn.set()
 	inv.term.restore()
 	if cancel {
