@@ -26,10 +26,14 @@ import (
 
 // These tests drive the frontend's FUSE methods directly, without a mount, so they need no privileges.
 
-// counts records what the service ran and refuses Releases while refuse is positive.
+// counts records what the service ran. It refuses Releases while refuse is positive, and when held is set it closes held once a waiting lock request arrives and ends that request Cancelled with EffectPossible once it is cancelled.
 type counts struct {
 	refuse   atomic.Int32
 	released atomic.Int32
+	held     chan struct{}
+
+	mu    sync.Mutex
+	tries []time.Time // when each Release arrived
 }
 
 type counting struct {
@@ -38,6 +42,9 @@ type counting struct {
 }
 
 func (c counting) Release(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.ReleaseRequest) (*sandboxfs.ReleaseResponse, error) {
+	c.mu.Lock()
+	c.tries = append(c.tries, time.Now())
+	c.mu.Unlock()
 	if c.refuse.Add(-1) >= 0 {
 		return nil, sandboxfs.NewFailure(sandboxfs.CodeResourceExhausted, sandboxwire.EffectNone, "too many requests in flight")
 	}
@@ -46,6 +53,15 @@ func (c counting) Release(ctx context.Context, a sandboxfs.Attachment, q *sandbo
 		c.released.Add(1)
 	}
 	return r, err
+}
+
+func (c counting) SetLock(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.SetLockRequest) (*sandboxfs.SetLockResponse, error) {
+	if c.held == nil || !q.Wait {
+		return c.Service.SetLock(ctx, a, q)
+	}
+	close(c.held)
+	<-ctx.Done()
+	return nil, sandboxfs.NewFailure(sandboxfs.CodeCancelled, sandboxwire.EffectPossible, "cancelled after it may have locked")
 }
 
 // newServer serves a directory holding the empty file f and returns the file's path.
@@ -164,6 +180,32 @@ func TestRefusedReleaseIsRetried(t *testing.T) {
 	eventually(t, "the refused Release", func() bool { return c.released.Load() == 1 })
 }
 
+// A Release the service refuses right after the drainer redialed to send it waits for the backoff before it goes again.
+func TestRefusalAfterOwnRedialWaits(t *testing.T) {
+	srv, c, _ := newServer(t)
+	var down atomic.Bool
+	f := attached(t, func(ctx context.Context) (io.ReadWriteCloser, error) {
+		if down.Load() {
+			return nil, errors.New("unreachable")
+		}
+		return srv.Dial(ctx)
+	})
+	fh := open(t, f, "f")
+	down.Store(true)
+	srv.Break()
+	<-f.conn.Done()
+	f.Release(nil, &fuse.ReleaseIn{Fh: fh}) // never sent: queued
+	c.refuse.Store(2)
+	down.Store(false)
+	draining(t, f)
+	eventually(t, "the refused Release", func() bool { return c.released.Load() == 1 })
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if gap := c.tries[1].Sub(c.tries[0]); gap < retryMin {
+		t.Errorf("sent again after %v, want at least %v", gap, retryMin)
+	}
+}
+
 // A Release queued just after another request redialed, once the drainer has taken that redial's wakeup, is still sent.
 func TestReleaseQueuedAfterRedial(t *testing.T) {
 	srv, c, _ := newServer(t)
@@ -190,35 +232,87 @@ func TestReleaseQueuedAfterRedial(t *testing.T) {
 	eventually(t, "the queued Release", func() bool { return c.released.Load() == 1 })
 }
 
-// A waiting lock blocked on redialing an unreachable service returns EINTR once interrupted.
-func TestLockInterruptedWhileRedialing(t *testing.T) {
+// stalled returns a frontend whose stream has failed and whose service is unreachable, with fh open, and a channel closed once a redial waits.
+func stalled(t *testing.T) (f *frontend, fh uint64, dialing chan struct{}) {
 	srv, _, _ := newServer(t)
-	var stalled atomic.Bool
-	dialing := make(chan struct{})
+	var stall atomic.Bool
 	var once sync.Once
-	f := attached(t, func(ctx context.Context) (io.ReadWriteCloser, error) {
-		if stalled.Load() {
+	dialing = make(chan struct{})
+	f = attached(t, func(ctx context.Context) (io.ReadWriteCloser, error) {
+		if stall.Load() {
 			once.Do(func() { close(dialing) })
 		}
 		return srv.Dial(ctx)
 	})
-	fh := open(t, f, "f")
-	stalled.Store(true)
+	fh = open(t, f, "f")
+	stall.Store(true)
 	srv.Stall()
 	<-f.conn.Done()
+	return f, fh, dialing
+}
+
+func wantStatus(t *testing.T, got <-chan fuse.Status, want fuse.Status) {
+	t.Helper()
+	select {
+	case st := <-got:
+		if st != want {
+			t.Fatalf("status %v, want %v", st, want)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("no status within 2s, want %v", want)
+	}
+}
+
+// A waiting lock blocked on redialing an unreachable service returns EINTR once interrupted.
+func TestLockInterruptedWhileRedialing(t *testing.T) {
+	f, fh, dialing := stalled(t)
 	cancel := make(chan struct{})
 	got := make(chan fuse.Status, 1)
 	go func() { got <- flock(f, cancel, fh, 1, syscall.F_WRLCK, true) }()
 	<-dialing
 	close(cancel)
-	select {
-	case st := <-got:
-		if st != fuse.EINTR {
-			t.Fatalf("SETLKW = %v, want EINTR", st)
+	wantStatus(t, got, fuse.EINTR)
+}
+
+// An interrupted waiting lock that was never sent returns at once, although a non-blocking request of its owner holds the turn while it waits for the stream.
+func TestUnsentLockInterruptedBehindTurn(t *testing.T) {
+	f, fh, dialing := stalled(t)
+	go f.client(f.ctx, nil) // another request redials and holds the stream
+	<-dialing
+	h, _ := f.handle(fh)
+	o := h.order(1)
+	registered := func(n uint64) func() bool {
+		return func() bool {
+			o.mu.Lock()
+			defer o.mu.Unlock()
+			return o.acquired == n
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("SETLKW still blocked 2s after the interrupt")
 	}
+	cancel := make(chan struct{})
+	got := make(chan fuse.Status, 1)
+	go func() { got <- flock(f, cancel, fh, 1, syscall.F_WRLCK, true) }()
+	eventually(t, "the waiting lock's registration", registered(1))
+	go flock(f, nil, fh, 1, syscall.F_RDLCK, false)
+	eventually(t, "the non-blocking lock's turn", registered(2))
+	close(cancel)
+	wantStatus(t, got, fuse.EINTR)
+}
+
+// A waiting lock cancelled after it may have locked, once another acquisition of its owner has completed, cannot be undone safely: it returns EIO.
+func TestUnsafeLockRecoveryFails(t *testing.T) {
+	srv, c, _ := newServer(t)
+	c.held = make(chan struct{})
+	f := attached(t, srv.Dial)
+	fh := open(t, f, "f")
+	cancel := make(chan struct{})
+	got := make(chan fuse.Status, 1)
+	go func() { got <- flock(f, cancel, fh, 1, syscall.F_WRLCK, true) }()
+	<-c.held
+	if st := flock(f, nil, fh, 1, syscall.F_RDLCK, false); st != fuse.OK {
+		t.Fatalf("read lock: %v", st)
+	}
+	close(cancel)
+	wantStatus(t, got, fuse.EIO)
 }
 
 // Serve gives up when Start's context ends, even while Describe gets no answer, and Stop then returns at once.

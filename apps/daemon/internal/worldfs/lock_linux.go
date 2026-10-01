@@ -5,6 +5,7 @@ package worldfs
 import (
 	"context"
 	"errors"
+	"sync"
 	"syscall"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
@@ -63,11 +64,19 @@ func (f *frontend) SetLkw(cancel <-chan struct{}, in *fuse.LkIn) fuse.Status {
 	return f.setLock(cancel, in, true)
 }
 
-// lockOrder orders one lock owner's requests on one handle, so that a recovery unlock never removes a lock another request reported. A non-blocking request holds the turn from before it is sent until its recovery is done. A waiting request takes the turn only to register and, once answered, to recover, so interrupts and unlocks get through while it waits.
+// lockOrder orders one lock owner's requests on one handle, so that a recovery unlock never removes a lock another request reported. A non-blocking request holds the turn from before it is sent until its recovery is done. A waiting request holds it only to register and, when it must recover, to recover: it waits without it, so interrupts and unlocks get through, and an outcome that needs no recovery returns without it.
 type lockOrder struct {
-	turn     chan struct{}
-	waiting  int    // waiting requests in flight, guarded by turn
-	acquired uint64 // acquisitions sent, guarded by turn
+	turn chan struct{}
+
+	mu       sync.Mutex
+	acquired uint64 // acquisitions registered
+	waiting  int    // waiting requests registered and not yet answered
+}
+
+// place is where a request registered.
+type place struct {
+	acquired uint64 // acquisitions registered up to and including the request
+	busy     bool   // a waiting request was out
 }
 
 func (o *lockOrder) take(interrupt <-chan struct{}) bool {
@@ -80,6 +89,35 @@ func (o *lockOrder) take(interrupt <-chan struct{}) bool {
 }
 
 func (o *lockOrder) give() { <-o.turn }
+
+// register records a request. The caller holds the turn.
+func (o *lockOrder) register(acquire, wait bool) place {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	p := place{busy: o.waiting > 0}
+	if acquire {
+		o.acquired++
+	}
+	if wait {
+		o.waiting++
+	}
+	p.acquired = o.acquired
+	return p
+}
+
+// answered records that a waiting request ended.
+func (o *lockOrder) answered() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.waiting--
+}
+
+// alone reports whether no other request of the owner may have locked after the request at p was sent: none registered since, and none was waiting when it registered. The caller holds the turn.
+func (o *lockOrder) alone(p place) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return !p.busy && o.acquired == p.acquired
+}
 
 func (h *handle) order(owner sandboxfs.LockOwner) *lockOrder {
 	h.locksMu.Lock()
@@ -95,7 +133,7 @@ func (h *handle) order(owner sandboxfs.LockOwner) *lockOrder {
 	return o
 }
 
-// setLock acquires or releases a POSIX or flock lock and reports what the service did, even when the kernel interrupted the request. A request that may have changed the lock but failed is undone with an unlock of the same owner and range, unless another request of the owner may have locked since; then, or when its outcome cannot be learned, the handle fails.
+// setLock acquires or releases a POSIX or flock lock and reports what the service did, even when the kernel interrupted the request. A request that may have changed the lock but failed is undone with an unlock of the same owner and range, unless another request of the owner may have locked since; then, or when its outcome cannot be learned or the unlock fails, the handle fails and the request returns EIO.
 func (f *frontend) setLock(cancel <-chan struct{}, in *fuse.LkIn, wait bool) fuse.Status {
 	h, st := f.handle(in.Fh)
 	if !st.Ok() {
@@ -119,47 +157,52 @@ func (f *frontend) setLock(cancel <-chan struct{}, in *fuse.LkIn, wait bool) fus
 	if !o.take(cancel) {
 		return fuse.EINTR
 	}
-	if mode != sandboxfs.LockUnlock {
-		o.acquired++
-	}
-	acquired := o.acquired
+	p := o.register(mode != sandboxfs.LockUnlock, wait)
+	held := !wait
 	if wait {
-		o.waiting++
 		o.give()
 	}
 	_, err := callUntil(f, f.ctx, cancel, (*sandboxfs.Client).SetLock, q)
 	if wait {
-		o.take(nil)
-		o.waiting--
+		o.answered()
 	}
-	defer o.give()
-	if err == nil {
-		return fuse.OK
-	}
-	if !noEffect(err) {
+	recovered := true
+	if err != nil && !noEffect(err) {
+		if !held {
+			o.take(nil)
+			held = true
+		}
 		if f.seams.undo != nil {
 			f.seams.undo()
 		}
-		alone := o.waiting == 0 && o.acquired == acquired
-		f.undoLock(h, q, answered(err) && alone)
+		recovered = f.undoLock(h, q, answered(err) && o.alone(p))
+	}
+	if held {
+		o.give()
 	}
 	var fail *sandboxfs.Failure
-	if errors.Is(err, errInterrupted) || errors.As(err, &fail) && fail.Code == sandboxfs.CodeCancelled || interrupted(cancel) && !answered(err) {
+	switch {
+	case err == nil:
+		return fuse.OK
+	case !recovered:
+		return fuse.EIO
+	case errors.Is(err, errInterrupted) || errors.As(err, &fail) && fail.Code == sandboxfs.CodeCancelled || interrupted(cancel) && !answered(err):
 		return fuse.EINTR
 	}
 	return status(err)
 }
 
-// undoLock unlocks the owner's range after a lock request that may have changed it failed. The unlock is safe only when the service runs it after that request and no other request of the owner may have locked in between, which safe says; otherwise, or when the unlock fails, the handle fails instead.
-func (f *frontend) undoLock(h *handle, q *sandboxfs.SetLockRequest, safe bool) {
+// undoLock unlocks the owner's range after a lock request that may have changed it failed, and reports whether it did. The unlock is safe only when the service runs it after that request and no other request of the owner may have locked in between, which safe says; otherwise, or when the unlock fails, the handle fails instead.
+func (f *frontend) undoLock(h *handle, q *sandboxfs.SetLockRequest, safe bool) bool {
 	if safe {
 		unlock := *q
 		unlock.Lock.Mode, unlock.Wait = sandboxfs.LockUnlock, false
 		if _, err := call(f, f.ctx, (*sandboxfs.Client).SetLock, &unlock); err == nil {
-			return
+			return true
 		}
 	}
 	h.failed.Store(true)
+	return false
 }
 
 // answered reports whether a failure came in the service's response, so a later request on the handle runs after the failed one. After a stream or context failure the request may still be running.

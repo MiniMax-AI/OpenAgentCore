@@ -271,6 +271,44 @@ func TestStopUnreachable(t *testing.T) {
 	}
 }
 
+// unanswered never answers Attach; it closes attaching once Attach arrives.
+type unanswered struct {
+	sandboxfs.Service
+	attaching chan struct{}
+}
+
+func (u unanswered) Attach(ctx context.Context, _ sandboxfs.Attachment, _ *sandboxfs.AttachRequest) (*sandboxfs.AttachResponse, error) {
+	close(u.attaching)
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// A Start that ends while Attach is unanswered keeps the world's report that the attachment must be ended.
+func TestStartEndsDuringAttach(t *testing.T) {
+	requireFUSE(t)
+	srv, err := fileservicetest.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	attaching := make(chan struct{})
+	srv.Intercept(func(s sandboxfs.Service) sandboxfs.Service { return unanswered{s, attaching} })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-attaching
+		cancel()
+	}()
+	_, err = sessionview.Start(ctx, sessionview.Spec{
+		World:         worldfs.New(fileservicetest.Export, srv.Dial).Serve,
+		StagingParent: t.TempDir(),
+		Process:       sessionview.Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: 1000, GID: 1000, Stderr: os.Stderr},
+	})
+	if !errors.Is(err, worldfs.ErrAttachmentDirty) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("Start = %v, want ErrAttachmentDirty with the cancellation", err)
+	}
+}
+
 // An interrupted flock fails with EINTR and leaves no lock on the view's handle. flock(1) waits with a timer whose signal handler does not restart the call, and it locks the descriptor the test keeps open.
 func TestLockInterrupted(t *testing.T) {
 	requireFUSE(t)

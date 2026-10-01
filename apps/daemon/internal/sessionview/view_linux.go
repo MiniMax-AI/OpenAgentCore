@@ -68,7 +68,8 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	stop := context.AfterFunc(ctx, func() { _ = v.cmd.Process.Kill() })
 	err := v.handshake(ctx, &spec)
 	if !stop() {
-		err = &Error{Kind: ErrLauncher, Op: "start", Err: ctx.Err()}
+		// The world's own error stays: it may say that the attachment must be ended.
+		err = errors.Join(&Error{Kind: ErrLauncher, Op: "start", Err: ctx.Err()}, err)
 	}
 	if err != nil {
 		v.abort()

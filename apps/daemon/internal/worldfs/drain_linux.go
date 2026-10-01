@@ -28,7 +28,7 @@ func (f *frontend) drain() {
 	defer close(f.drained)
 	var retry <-chan time.Time
 	var backoff time.Duration
-	var failedOn uint64 // the stream generation of the last pass that left work queued
+	var failedOn uint64 // the stream generation the last pass that left work queued failed on
 	for {
 		select {
 		case <-f.drainCtx.Done():
@@ -39,12 +39,12 @@ func (f *frontend) drain() {
 				continue // no new stream: newly queued work waits for the retry with the rest
 			}
 		}
-		gen := f.gen.Load()
 		if f.flush() {
 			retry, backoff = nil, 0
 			continue
 		}
-		failedOn, backoff = gen, min(max(2*backoff, retryMin), retryMax)
+		// f.gen now counts every redial up to the failure, the pass's own included, so only a stream opened after the failure ends the wait early.
+		failedOn, backoff = f.gen.Load(), min(max(2*backoff, retryMin), retryMax)
 		retry = time.After(backoff)
 	}
 }
