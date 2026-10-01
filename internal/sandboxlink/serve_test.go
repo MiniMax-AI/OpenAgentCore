@@ -19,7 +19,7 @@ func TestCloseBeforeBind(t *testing.T) {
 	s := testServer(&lost)
 	id := sandboxwire.NewID()
 	s.closed(AttachmentClosed{AttachmentID: id, Reason: CloseRevoked})
-	if a := s.track(context.Background(), id); a != nil {
+	if a, _ := s.track(context.Background(), id); a != nil {
 		t.Fatal("a Bind after AttachmentClosed was tracked")
 	}
 }
@@ -30,10 +30,13 @@ func TestReleaseOfClosedAttachment(t *testing.T) {
 	var lost []sandboxwire.ID
 	s := testServer(&lost)
 	id := sandboxwire.NewID()
-	old := s.track(context.Background(), id)
+	old, oldSeq := s.track(context.Background(), id)
 	s.closed(AttachmentClosed{AttachmentID: id, Reason: CloseRequested})
 	s.closedIDs[id] = time.Now() // let the tombstone lapse
-	current := s.track(context.Background(), id)
+	current, seq := s.track(context.Background(), id)
+	if seq <= oldSeq {
+		t.Fatalf("bind sequence %d after %d; want it to increase", seq, oldSeq)
+	}
 	s.release(old)
 	if current.streams != 1 || len(lost) != 0 {
 		t.Fatalf("after the old stream ended: %d streams, lost %v; want 1 stream and none lost", current.streams, lost)
