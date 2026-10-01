@@ -204,7 +204,7 @@ Run the `engine` and `execution` tests for omission, policy, combination and err
 
 A supplied `model` must be a nonempty string, and an explicit `model_provider` requires it. The native-owned connection path may omit both; explicit null is invalid. An explicitly empty declaration accepts no provider or nonempty native parameters and advertises no provider support. Unknown protocol formats and duplicate protocol declarations fail at registration.
 
-The declaration's ordered `protocols` list is the only source of accepted protocols and the default (the first entry); it also feeds Core's configuration-support descriptor, and Core and Runtime reject unsupported combinations through it. Adapters connect directly through native configuration; they never introduce a model API proxy or protocol converter, a second model capability registry, or capabilities inferred from model names. Claude's private bridge receives compiled native options and performs structural checks only, not a second copy of the declaration's rules.
+The declaration's ordered `protocols` list is the only source of accepted protocols and the default (the first entry); it also feeds Core's configuration-support descriptor, and Core and Runtime reject unsupported combinations through it. Adapters connect through native configuration and the [credential gateway](model-execution.md#credential-gateway); they never introduce their own model API proxy or protocol converter, a second model capability registry, or capabilities inferred from model names. Claude's private bridge receives compiled native options and performs structural checks only, not a second copy of the declaration's rules.
 
 ## Qualify the adapter
 
