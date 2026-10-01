@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -18,6 +19,7 @@ func mcpObservationSession(t *testing.T) (*Session, chan proto.Envelope) {
 		req: proto.PromptRequestPayload{RunID: "run", ObserveToolObservations: true,
 			LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
 		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, active: true, sessionID: "native-session"}
+	resolveTestBindings(s)
 	if err := writeMCPRegistry(s.opts.DataDir, mcpRegistryEntry("proof.server", "proof_server_2", "read.status", "read_status_2")); err != nil {
 		t.Fatal(err)
 	}
@@ -200,4 +202,10 @@ func usePublicMCP(s *Session) {
 	s.req.MCPHTTPServers = &[]proto.MCPHTTPServer{{
 		ConnectionOrigin: "environment", ServerLabel: "proof.server", ServerURL: "https://mcp.example.test",
 	}}
+	resolveTestBindings(s)
+}
+
+// resolveTestBindings records the request's bindings as preparation does.
+func resolveTestBindings(s *Session) {
+	s.opts.bindings, _ = agent.ResolveMCPBindings(s.req)
 }

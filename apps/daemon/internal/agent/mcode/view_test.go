@@ -1,0 +1,149 @@
+package mcode
+
+import (
+	"encoding/json"
+	"errors"
+	"io/fs"
+	"os"
+	"path"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+)
+
+const viewRealKey = "sk-view-real-key-sentinel"
+
+// viewFixture registers a view over a fake install and returns it with a
+// request as the agent host hands it over.
+func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayload) {
+	t.Helper()
+	harness, bin, libs := t.TempDir(), t.TempDir(), t.TempDir()
+	for _, file := range []string{"bridge.mjs", "native/cli.js", "native/assets/skills/.keep", "native/assets/agents/.keep", filepath.Join(bin, "node")} {
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(harness, file)
+		}
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lib := agent.ViewMount{Name: viewloader.MountName, HostDir: libs}
+	loader := viewloader.Fragment{Closure: []agent.ViewMount{lib}, LibraryPath: lib.Path(),
+		Overlays: []agent.ViewOverlay{{Path: "/lib64/ld-linux-x86-64.so.2", Source: filepath.Join(libs, "ld.so"), Exec: true}}}
+	install, err := newViewInstall(filepath.Join(bin, "node"), filepath.Join(harness, "native/cli.js"), filepath.Join(harness, "bridge.mjs"), loader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := install.view()
+	registry := agent.NewRegistry()
+	info := Declaration.Info
+	info.Available = true
+	registry.Register(Declaration, agent.Runtime{Info: info, Session: Factory, View: &declared})
+	view, err := registry.ResolveView("mcode")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("OAC_TEST_VIEW_SENTINEL", "daemon-only")
+	t.Setenv("ANTHROPIC_API_KEY", viewRealKey)
+	req := executionRequest(t)
+	req.RunID, req.Input, req.ConversationID = "", nil, ""
+	req.DisableExecutionEnvironment = false
+	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled"}
+	req.AgentOptions["model_provider"] = map[string]any{"protocol": "anthropic", "base_url": "http://127.0.0.1:4101", "api_key": modelprovider.Placeholder, "context_window": 64000, "max_output_tokens": 4096}
+	return install, view, req
+}
+
+func viewSession(launched *clirunner.StartOptions) agent.ViewSession {
+	return agent.ViewSession{Launch: func(options clirunner.StartOptions) (*clirunner.Process, error) {
+		*launched = options
+		return nil, errors.New("launch recorded")
+	}}
+}
+
+func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
+	install, view, req := viewFixture(t)
+	var launched clirunner.StartOptions
+	session := viewSession(&launched)
+	session.Home = agent.ViewDir{Host: t.TempDir(), View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}
+	subagents := req
+	subagents.DisableSubagents, subagents.MaxConcurrentSubagents = false, new(2)
+	if _, err := view.Executor(t.Context(), subagents, session); !errors.Is(err, agent.ErrUnsupportedOperation) || launched.Binary != "" {
+		t.Fatalf("Executor with Subagents = %v, launched %q", err, launched.Binary)
+	}
+	if _, err := view.Executor(t.Context(), req, session); err == nil || err.Error() != "launch recorded" {
+		t.Fatalf("Executor = %v", err)
+	}
+
+	if !slices.Contains(view.LocalExec, launched.Binary) || !slices.Equal(launched.Args, []string{install.cli, "acp"}) || path.Base(install.cli) != "cli.js" || launched.Dir != "/workspace" {
+		t.Fatalf("launched %s %q in %s", launched.Binary, launched.Args, launched.Dir)
+	}
+	env := strings.Join(launched.Env, "\n")
+	if strings.Contains(env, "OAC_TEST_VIEW_SENTINEL") || strings.Contains(env, viewRealKey) || !slices.Contains(launched.Env, "HOME="+path.Join(session.Home.View, viewDataName)) ||
+		!slices.Contains(launched.Env, "LD_LIBRARY_PATH="+install.loader.LibraryPath) {
+		t.Fatalf("environment is not closed: %q", launched.Env)
+	}
+	config, err := os.ReadFile(filepath.Join(session.Home.Host, viewDataName, "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var native struct {
+		Provider struct {
+			OAC struct {
+				Options struct{ BaseURL, APIKey string }
+			} `json:"oac"`
+		} `json:"custom_provider"`
+	}
+	if err := json.Unmarshal(config, &native); err != nil || native.Provider.OAC.Options.BaseURL != "http://127.0.0.1:4101" || native.Provider.OAC.Options.APIKey != modelprovider.Placeholder {
+		t.Fatalf("native provider = %+v (%v)", native.Provider.OAC.Options, err)
+	}
+	profile, err := os.ReadFile(filepath.Join(session.Home.Host, viewDataName, "workspace-profile.json"))
+	if err != nil || strings.Contains(string(profile), "toolEnvFile") {
+		t.Fatalf("profile = %s (%v)", profile, err)
+	}
+	err = filepath.WalkDir(session.Home.Host, func(file string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		if raw, err := os.ReadFile(file); err != nil || strings.Contains(string(raw), viewRealKey) {
+			t.Errorf("%s holds the real key (%v)", file, err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestViewDoesNotFollowHomeLinks(t *testing.T) {
+	_, view, req := viewFixture(t)
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, []byte("unchanged"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	if err := os.Mkdir(filepath.Join(home, viewDataName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(home, viewDataName, "config.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	var launched clirunner.StartOptions
+	session := viewSession(&launched)
+	session.Home = agent.ViewDir{Host: home, View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}
+	if _, err := view.Executor(t.Context(), req, session); err == nil || launched.Binary != "" {
+		t.Fatalf("Executor = %v, launched %q", err, launched.Binary)
+	}
+	if raw, err := os.ReadFile(outside); err != nil || string(raw) != "unchanged" {
+		t.Fatalf("outside file = %q (%v)", raw, err)
+	}
+}

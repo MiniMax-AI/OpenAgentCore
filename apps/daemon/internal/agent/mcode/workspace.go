@@ -57,7 +57,7 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if !req.StrictResume || req.LocalEnvironment == nil || req.LocalEnvironment.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
-	servers, err := runtimeMCP(req)
+	servers, bindings, err := runtimeMCP(req)
 	if err != nil {
 		return launchOptions{}, err
 	}
@@ -71,7 +71,8 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if err != nil {
 		return opts, err
 	}
-	opts.Dir = c.Directory
+	opts.Dir, opts.bindings = c.Directory, bindings
+	var skills []string
 	if len(req.LocalEnvironment.Skills) > 0 {
 		root := filepath.Join(opts.DataDir, "skills")
 		if err := os.MkdirAll(root, 0700); err != nil {
@@ -89,59 +90,63 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 			} else if err := os.Symlink(target, link); err != nil {
 				return opts, err
 			}
+			skills = append(skills, skill.Metadata.Name)
 		}
 	}
-
-	raw, err := os.ReadFile(filepath.Join(opts.DataDir, "config.yaml"))
+	profile := map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": c.Directory, "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(skills) > 0}
+	file, err := localworkspace.ToolEnvironmentFile()
 	if err != nil {
 		return opts, err
 	}
+	if file != "" {
+		profile["toolEnvFile"] = file
+	}
+	data, err := os.OpenRoot(opts.DataDir)
+	if err != nil {
+		return opts, err
+	}
+	defer data.Close()
+	return opts, writeWorkspaceTools(&opts, data, req, workspaceTools{node: c.Node, bridge: c.Bridge, profile: filepath.Join(opts.DataDir, "workspace-profile.json")}, profile, skills, servers)
+}
+
+// workspaceTools are the workspace bridge as the native process runs it, and
+// the bridge's profile path.
+type workspaceTools struct{ node, bridge, profile string }
+
+// writeWorkspaceTools turns the native configuration in data over to the
+// workspace bridge: native permissions and sandbox are off, the bridge's
+// profile is written, and oac_workspace precedes the Session's servers.
+func writeWorkspaceTools(opts *launchOptions, data *os.Root, req proto.PromptRequestPayload, tools workspaceTools, profile map[string]any, skills []string, servers []map[string]any) error {
+	raw, err := data.ReadFile("config.yaml")
+	if err != nil {
+		return err
+	}
 	var config map[string]any
 	if err = json.Unmarshal(raw, &config); err != nil {
-		return opts, err
+		return err
 	}
 	config["permissionMode"] = "bypassPermissions"
 	config["sandbox"] = map[string]bool{"enabled": false}
-	if len(req.LocalEnvironment.Skills) > 0 {
+	if len(skills) > 0 {
 		selected := config["agents"].(map[string]any)["default"].(map[string]any)
-		names := make([]string, 0, len(req.LocalEnvironment.Skills))
-		for _, skill := range req.LocalEnvironment.Skills {
-			names = append(names, skill.Metadata.Name)
-		}
-		selected["skills"] = names
+		selected["skills"] = skills
 		for _, key := range []string{"tools", "builtinTools"} {
 			selected[key] = append(selected[key].([]any), "skill")
 		}
 	}
-	raw, err = json.Marshal(config)
-	if err != nil {
-		return opts, err
+	if raw, err = json.Marshal(config); err != nil {
+		return err
 	}
-	if err = os.WriteFile(filepath.Join(opts.DataDir, "config.yaml"), raw, 0600); err != nil {
-		return opts, err
+	if err = data.WriteFile("config.yaml", raw, 0600); err != nil {
+		return err
 	}
-	profile := map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": "/workspace", "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(req.LocalEnvironment.Skills) > 0}
-
-	profile["workspace"] = c.Directory
-	{
-		file, err := localworkspace.ToolEnvironmentFile()
-		if err != nil {
-			return opts, err
-		}
-		if file != "" {
-			profile["toolEnvFile"] = file
-		}
+	if raw, err = json.Marshal(profile); err != nil {
+		return err
 	}
-
-	raw, err = json.Marshal(profile)
-	if err != nil {
-		return opts, err
+	if err = data.WriteFile("workspace-profile.json", raw, 0600); err != nil {
+		return err
 	}
-	path := filepath.Join(opts.DataDir, "workspace-profile.json")
-	if err = os.WriteFile(path, raw, 0600); err != nil {
-		return opts, err
-	}
-	opts.MCP = []map[string]any{{"name": "oac_workspace", "command": c.Node, "args": []string{c.Bridge, path}, "env": []map[string]string{}}}
+	opts.MCP = []map[string]any{{"name": "oac_workspace", "command": tools.node, "args": []string{tools.bridge, tools.profile}, "env": []map[string]string{}}}
 	opts.MCP = append(opts.MCP, servers...)
 	if !req.DisableSubagents {
 		// This native data directory belongs to one public Session and its
@@ -153,11 +158,11 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 		}
 		raw, err := json.Marshal(map[string]any{"mcpServers": configured})
 		if err != nil {
-			return opts, err
+			return err
 		}
-		if err := os.WriteFile(filepath.Join(opts.DataDir, "mcp.json"), raw, 0o600); err != nil {
-			return opts, err
+		if err := data.WriteFile("mcp.json", raw, 0o600); err != nil {
+			return err
 		}
 	}
-	return opts, nil
+	return nil
 }

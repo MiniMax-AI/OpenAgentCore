@@ -36,30 +36,37 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		frozen = &value
 	}
 	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
-			return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
-		}
-		var err error
-		var opts launchOptions
 		binary := defaultBinary()
-		if frozen == nil {
-			opts, err = prepareOptions(ctx, req)
-		} else {
+		if frozen != nil {
 			binary = frozen.Binary
-			opts, err = prepareWorkspaceOptions(ctx, *frozen, req)
 		}
-		if err != nil {
-			return nil, err
-		}
-		resource, err := newExecutor(ctx, req, opts, binary)
-		if resource == nil {
-			return nil, err
-		}
-		return resource, err
+		return startExecutor(ctx, req, binary, func(ctx context.Context) (launchOptions, error) {
+			if frozen == nil {
+				return prepareOptions(ctx, req)
+			}
+			return prepareWorkspaceOptions(ctx, *frozen, req)
+		})
 	}
+}
+
+// startExecutor prepares the native owner for req, which carries no Turn
+// input, and starts binary.
+func startExecutor(ctx context.Context, req proto.PromptRequestPayload, binary string, prepare func(context.Context) (launchOptions, error)) (agent.Executor, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" {
+		return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
+	}
+	opts, err := prepare(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resource, err := newExecutor(ctx, req, opts, binary)
+	if resource == nil {
+		return nil, err
+	}
+	return resource, err
 }
 
 func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*executor, error) {

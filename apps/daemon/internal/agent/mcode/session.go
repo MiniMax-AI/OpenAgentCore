@@ -80,7 +80,14 @@ func newSession(ctx context.Context, req proto.PromptRequestPayload, out chan<- 
 }
 
 func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string, out chan<- proto.Envelope) (*Session, error) {
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{"acp"}, Dir: opts.Dir, Env: opts.Env, NeedStdin: true, OwnProcessGroup: req.StrictResume})
+	start, args := opts.start, []string{"acp"}
+	if start == nil {
+		start = clirunner.Start
+	}
+	if opts.script != "" {
+		args = []string{opts.script, "acp"}
+	}
+	process, err := start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: args, Dir: opts.Dir, Env: opts.Env, NeedStdin: true, OwnProcessGroup: req.StrictResume})
 	if err != nil {
 		return nil, err
 	}

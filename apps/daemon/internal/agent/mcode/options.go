@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/managedskills"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
@@ -21,6 +22,17 @@ type launchOptions struct {
 	Dir, DataDir, Model string
 	Env                 []string
 	MCP                 []map[string]any
+	// bindings are the effective MCP bindings rendered into MCP; native MCP
+	// tool calls are observed against them.
+	bindings []agent.MCPBinding
+	// start runs the native process; nil selects clirunner.Start. script is
+	// the CLI entry when the binary is node rather than the CLI itself.
+	start  func(clirunner.StartOptions) (*clirunner.Process, error)
+	script string
+	// home is an agent-host view's Session home on the host. It contains
+	// DataDir and belongs to the Session user, so the daemon reads DataDir
+	// only within it.
+	home string
 }
 
 func prepareOptions(ctx context.Context, req proto.PromptRequestPayload) (launchOptions, error) {
@@ -29,16 +41,8 @@ func prepareOptions(ctx context.Context, req proto.PromptRequestPayload) (launch
 
 func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayload, managedSkills bool) (launchOptions, error) {
 	var result launchOptions
-	if _, err := harnessconfiguration.Configuration().PrepareHarnessConfig(req.AgentOptions); err != nil {
+	if err := validateOptions(req); err != nil {
 		return result, err
-	}
-	if req.StrictResume {
-		if err := validateExecutionRequest(req); err != nil {
-			return result, err
-		}
-	}
-	if req.Input.HasImages() {
-		return result, fmt.Errorf("mcode: ACP does not support attachments")
 	}
 	root, err := agent.ManagedSkillsRoot("mcode", req.AgentStateKey, req.ConversationID, req.RunID)
 	if err != nil {
@@ -61,25 +65,74 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 			return result, fmt.Errorf("mcode: one or more configured Skills could not be installed")
 		}
 	}
+	data, err := os.OpenRoot(result.DataDir)
+	if err != nil {
+		return result, err
+	}
+	defer data.Close()
+	if result.Model, err = writeNativeConfig(req, data); err != nil {
+		return result, err
+	}
+	opts := req.AgentOptions
+	result.Env = append([]string{}, os.Environ()...)
+	if req.StrictResume {
+		result.Env = executionEnvironment()
+	}
+	if raw := opts["env"]; raw != nil && !req.StrictResume {
+		env, ok := raw.(map[string]any)
+		if !ok {
+			return result, fmt.Errorf("mcode: env must be an object")
+		}
+		for key, rawValue := range env {
+			value, ok := rawValue.(string)
+			if !ok || key == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, 0) {
+				return result, fmt.Errorf("mcode: invalid environment entry")
+			}
+			result.Env = append(result.Env, key+"="+value)
+		}
+	}
+	result.Env = append(result.Env, nativeEnvironment(req, result.DataDir)...)
+	result.MCP, err = mcpServers(opts["mcp_servers"])
+	return result, err
+}
+
+func validateOptions(req proto.PromptRequestPayload) error {
+	if _, err := harnessconfiguration.Configuration().PrepareHarnessConfig(req.AgentOptions); err != nil {
+		return err
+	}
+	if req.StrictResume {
+		if err := validateExecutionRequest(req); err != nil {
+			return err
+		}
+	}
+	if req.Input.HasImages() {
+		return fmt.Errorf("mcode: ACP does not support attachments")
+	}
+	return nil
+}
+
+// writeNativeConfig writes the instructions and native configuration into the
+// data directory and returns the model.
+func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root) (string, error) {
 	opts := req.AgentOptions
 	prompt := optionString(opts, "system_prompt")
 	if override := optionString(opts, "override_system_prompt"); override != "" {
 		prompt = override
 	}
 	if len(prompt) > 32*1024 {
-		return result, fmt.Errorf("mcode: combined instructions exceed the CLI's 32 KiB limit")
+		return "", fmt.Errorf("mcode: combined instructions exceed the CLI's 32 KiB limit")
 	}
-	if err := os.WriteFile(filepath.Join(result.DataDir, "AGENTS.md"), []byte(prompt), 0o600); err != nil {
-		return result, err
+	if err := data.WriteFile("AGENTS.md", []byte(prompt), 0o600); err != nil {
+		return "", err
 	}
 	config := map[string]any{"logLevel": "error", "skills": map[string]any{"external": map[string]any{"enabled": false}}}
-	result.Model = optionString(opts, "model")
-	if result.Model == "" {
-		return result, fmt.Errorf("mcode: model is required")
+	model := optionString(opts, "model")
+	if model == "" {
+		return "", fmt.Errorf("mcode: model is required")
 	}
-	provider, err := modelProviderConfig(opts["model_provider"], result.Model)
+	provider, err := modelProviderConfig(opts["model_provider"], model)
 	if err != nil {
-		return result, err
+		return "", err
 	}
 	config["custom_provider"] = map[string]any{"oac": provider}
 	if req.StrictResume {
@@ -97,48 +150,61 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 		mode = "auto"
 	}
 	if mode != "auto" && mode != "default" && mode != "bypassPermissions" {
-		return result, fmt.Errorf("mcode: unsupported permission mode")
+		return "", fmt.Errorf("mcode: unsupported permission mode")
 	}
 	config["permissionMode"] = mode
-	data, err := json.Marshal(config)
+	raw, err := json.Marshal(config)
 	if err != nil {
-		return result, err
+		return "", err
 	}
-	if err := os.WriteFile(filepath.Join(result.DataDir, "config.yaml"), data, 0o600); err != nil {
-		return result, err
+	if err := data.WriteFile("config.yaml", raw, 0o600); err != nil {
+		return "", err
 	}
-	result.Env = append([]string{}, os.Environ()...)
 	if req.StrictResume {
-		result.Env = append(executionEnvironment(), "OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1")
-		if err := os.WriteFile(filepath.Join(result.DataDir, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
-			return result, err
+		if err := data.WriteFile("mcp.json", []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+			return "", err
 		}
+	}
+	return model, nil
+}
+
+// nativeEnvironment is the adapter's own native environment, with dataDir as
+// the native process sees its data directory. The adapter owns the native
+// state location, including after cold resume.
+func nativeEnvironment(req proto.PromptRequestPayload, dataDir string) []string {
+	var env []string
+	if req.StrictResume {
+		env = append(env, "OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1")
 		if !req.DisableSubagents {
-			result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
+			env = append(env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
 		} else {
-			result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS=0")
+			env = append(env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS=0")
 		}
 	}
-	if raw := opts["env"]; raw != nil && !req.StrictResume {
-		env, ok := raw.(map[string]any)
-		if !ok {
-			return result, fmt.Errorf("mcode: env must be an object")
-		}
-		for key, rawValue := range env {
-			value, ok := rawValue.(string)
-			if !ok || key == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, 0) {
-				return result, fmt.Errorf("mcode: invalid environment entry")
-			}
-			result.Env = append(result.Env, key+"="+value)
-		}
-	}
-	// The adapter owns the native state location, including after cold resume.
-	result.Env = append(result.Env, "MINIMAX_DATA_DIR="+result.DataDir)
+	env = append(env, "MINIMAX_DATA_DIR="+dataDir)
 	if req.StrictResume {
-		result.Env = append(result.Env, "HOME="+result.DataDir, "USERPROFILE="+result.DataDir)
+		env = append(env, "HOME="+dataDir, "USERPROFILE="+dataDir)
 	}
-	result.MCP, err = mcpServers(opts["mcp_servers"])
-	return result, err
+	return env
+}
+
+// readData reads a file the native process wrote in its data directory,
+// without leaving the Session home in a view.
+func (o launchOptions) readData(name string) ([]byte, error) {
+	trusted := o.home
+	if trusted == "" {
+		trusted = o.DataDir
+	}
+	rel, err := filepath.Rel(trusted, filepath.Join(o.DataDir, name))
+	if err != nil {
+		return nil, err
+	}
+	root, err := os.OpenRoot(trusted)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.ReadFile(rel)
 }
 
 func optionString(options map[string]any, key string) string {
