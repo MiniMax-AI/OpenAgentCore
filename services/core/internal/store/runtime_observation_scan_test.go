@@ -3,8 +3,6 @@ package store_test
 import (
 	"slices"
 	"testing"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *testing.T) {
@@ -15,7 +13,7 @@ func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *test
 		expected = append(expected, session.ID)
 	}
 	slices.Sort(expected)
-	if err := s.DeleteSession(t.Context(), sessionTenant(t, s, expected[2]), expected[2]); err != nil {
+	if err := s.DeleteSession(t.Context(), sessionTenant(t, db, expected[2]), expected[2]); err != nil {
 		t.Fatal(err)
 	}
 	expected = append(expected[:2], expected[3:]...)
@@ -23,7 +21,7 @@ func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *test
 	var got []string
 	cursor := ""
 	for {
-		page, err := s.ListRuntimeObservationSessions(t.Context(), cursor, 2)
+		page, err := fixtureReader(db).ObservationSessions(t.Context(), cursor, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -47,16 +45,16 @@ func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *test
 	if !slices.Equal(got, expected) {
 		t.Fatalf("observation scan = %v, want %v", got, expected)
 	}
-	if _, err := s.ListRuntimeObservationSessions(t.Context(), "", 0); err == nil {
+	if _, err := fixtureReader(db).ObservationSessions(t.Context(), "", 0); err == nil {
 		t.Fatal("zero observation page size was accepted")
 	}
 }
 
-func sessionTenant(t *testing.T, s *store.Store, sessionID string) string {
+func sessionTenant(t *testing.T, db fixtureDB, sessionID string) string {
 	t.Helper()
 	// The deployment-wide scan intentionally discovers tenant identity without
 	// enumerating configured API keys. Use that same read to locate this fixture.
-	page, err := s.ListRuntimeObservationSessions(t.Context(), "", 100)
+	page, err := fixtureReader(db).ObservationSessions(t.Context(), "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}

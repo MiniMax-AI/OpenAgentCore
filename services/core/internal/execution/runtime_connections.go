@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // Access is serialized by the existing lifecycle gate. Durable generations fence
@@ -20,7 +20,7 @@ type runtimeConnection struct {
 	connected  bool
 }
 
-func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner store.RuntimeAllocation) error {
+func (r *runtimeLifecycle) observeConnection(ctx context.Context, owner deployment.Allocation) error {
 	bound, err := r.sessions.GetSessionRuntimeDevice(ctx, owner.TenantID, owner.SessionID)
 	if errors.Is(err, sessions.ErrNotFound) {
 		return nil

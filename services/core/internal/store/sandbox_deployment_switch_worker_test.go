@@ -25,6 +25,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	_, pool := store.NewManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
 	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s.SetPlacement(fixtureRules(t, db))
 	deployments := fixtureDeployment(t, db)
 	id := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
@@ -157,7 +158,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
+	reconcileManagedState(t, w, db, tenant, environment.ID, "released")
 	empty = reset(4)
 	next.ExpectedGeneration = empty.Generation
 	if _, err := w.InitializeSandboxDeployment(t.Context(), next); err != nil {

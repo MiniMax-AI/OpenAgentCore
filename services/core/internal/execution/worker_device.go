@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -81,8 +82,8 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 		if _, err := parseEnvironmentPlacement(environment.Configuration); err != nil {
 			return false, nil
 		}
-		allocation, err := w.dispatcher.Store.GetRuntimeAllocation(ctx, session.TenantID, environment.ID)
-		if errors.Is(err, sessions.ErrNotFound) {
+		allocation, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: environment.ID})
+		if errors.Is(err, deployment.ErrNotFound) {
 			if snapshot.Environment.Type == "openai_hosted" {
 				return false, nil
 			}

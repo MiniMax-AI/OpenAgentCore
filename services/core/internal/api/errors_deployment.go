@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -85,7 +86,7 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusConflict, "sandbox_not_configured", "The sandbox deployment is not configured.")
 	case errors.As(err, &deploymentConfiguration):
 		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", deploymentConfiguration.Message)
-	case errors.Is(err, deployment.ErrPublicURLUnreachable):
+	case errors.Is(err, placement.ErrPublicURLUnreachable):
 		writeError(w, http.StatusConflict, "sandbox_configuration_error", err.Error())
 	case errors.Is(err, deployment.ErrNodeAddressMismatch):
 		writeError(w, http.StatusConflict, "sandbox_node_address_mismatch", "This node uses a different Core address than the installation public URL. Generate a new command on the Nodes page and run it on the host.")
@@ -101,9 +102,9 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusConflict, "runtime_node_in_use", "The sandbox node retains allocations, snapshots, reservations or pending cleanup.")
 	case errors.Is(err, deployment.ErrLocalNodeConfigured):
 		writeError(w, http.StatusConflict, "runtime_local_node_configured", "The local sandbox node is enabled in deployment configuration. Drain it with the previous release and remove its file-managed configuration before replacing it.")
-	case errors.Is(err, deployment.ErrNodesPreparing):
+	case errors.Is(err, placement.ErrNodesPreparing):
 		writeError(w, http.StatusServiceUnavailable, "sandbox_nodes_preparing", "Sandbox nodes are preparing the requested Runtime.")
-	case errors.Is(err, deployment.ErrNodeUnavailable):
+	case errors.Is(err, placement.ErrNodeUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "runtime_node_unavailable", "The selected sandbox node is unavailable or has no capacity.")
 	default:
 		return false

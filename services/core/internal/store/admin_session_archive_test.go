@@ -23,7 +23,7 @@ func managedArchiveFixture(t *testing.T) (*Store, *Store, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	installation := uuid.NewString()
 	changes := deploymentExecution(t, w)
@@ -52,9 +52,9 @@ func managedArchiveSession(t *testing.T, s *Store, input sessions.CreateSession)
 	return tenant, session
 }
 
-func archiveAllocation(t *testing.T, w *Store, tenant string, session sessions.Session, installation string) RuntimeAllocation {
+func archiveAllocation(t *testing.T, w *Store, tenant string, session sessions.Session, installation string) deployment.Allocation {
 	t.Helper()
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	if status, err := s.GetManagedSessionArchive(ctx, tenant, session.ID); err != nil || status != result {
 		t.Fatal("status differs from committed archive", status, err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrInvalidInput) {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("archived Environment allocated after archive", err)
 	}
 	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
@@ -157,24 +157,24 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("archive retained runtime authority", err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("archive discarded unknown Create ownership", err)
 	}
-	replay, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString()))
+	replay, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !replay.Replayed || replay.ID != owner.ID || replay.DeviceID != owner.DeviceID || replay.State != "cleanup_pending" {
 		t.Fatal("late provisioning retry replaced archived allocation", replay, err)
 	}
-	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	current, err := s.GetSession(t.Context(), tenant, session.ID)
 	if err != nil || current.EnvironmentFailure != nil || current.LastTurn == nil || current.LastTurn.Status != sessions.TurnCompleted || current.Environment.Status != "expired" {
 		t.Fatal("cleanup rewrote completed outcome", current, err)
 	}
-	if _, err := w.SettleRuntimeCreation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	if result, err := s.GetManagedSessionArchive(t.Context(), tenant, session.ID); err != nil || result.State != "released" {

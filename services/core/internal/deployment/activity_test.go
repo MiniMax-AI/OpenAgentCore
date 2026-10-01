@@ -1,4 +1,4 @@
-package store
+package deployment
 
 import (
 	"testing"
@@ -28,7 +28,7 @@ func TestRuntimeIdleAdmissionUsesDatabaseClock(t *testing.T) {
 				{"invalid_policy", timeout + time.Second, false, false, true, -time.Second, false},
 			} {
 				t.Run(test.name, func(t *testing.T) {
-					activity := RuntimeActivity{ObservedAt: observed, LastActivity: observed.Add(-test.age), Busy: test.busy, WakeRequested: test.wake, HasCompletedTurn: test.completed}
+					activity := Activity{ObservedAt: observed, LastActivity: observed.Add(-test.age), Busy: test.busy, WakeRequested: test.wake, HasCompletedTurn: test.completed}
 					if got := activity.ReadyToSuspend(test.timeout); got != test.want {
 						t.Fatalf("suspension admission = %v, want %v with database clock skew %s", got, test.want, skew)
 					}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
@@ -64,11 +65,11 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			secret := uuid.NewString()
-			owner, err := writer.ReserveRuntimeAllocation(t.Context(), project.TenantID, session.Environment.ID, installation, runtimedevice.HashCredential(secret))
+			owner, err := leased.Deployment.ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(secret))
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, step := range []func(context.Context, store.RuntimeAllocation) (store.RuntimeAllocation, error){writer.ObserveRuntimeRunning, writer.SettleRuntimeCreation} {
+			for _, step := range []func(context.Context, deployment.Allocation) (deployment.Allocation, error){leased.Deployment.ObserveRunning, leased.Deployment.SettleCreation} {
 				owner, err = step(t.Context(), owner)
 				if err != nil {
 					t.Fatal(err)
@@ -177,7 +178,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if _, err := writer.ArchiveManagedSession(repeatAudit, h.tenant, session.ID, 1); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+			if _, err := leased.Deployment.RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
 
@@ -315,7 +316,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 			// The original cleanup owner survives every delivery outcome; only
 			// provider receipts can release its resources.
-			allocation, err := s.GetRuntimeAllocation(t.Context(), h.tenant, session.Environment.ID)
+			allocation, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: h.tenant, EnvironmentID: session.Environment.ID})
 			if err != nil || allocation.State != "cleanup_pending" {
 				t.Fatal(allocation, err)
 			}

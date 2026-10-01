@@ -106,7 +106,9 @@ func hostedFailureStore(t *testing.T) (*store.Store, fixtureDB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s.SetPlacement(fixtureRules(t, db))
+	return s, db
 }
 
 func hostedFailureSession(t *testing.T, s *store.Store, db fixtureDB, tenant string, input sessions.CreateSession) (sessions.Session, sessions.Environment) {

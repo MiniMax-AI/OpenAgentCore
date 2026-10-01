@@ -17,7 +17,7 @@ func TestSessionModelExecutionStoresOnlyProviderBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := NewWithCredentialCipher(pool, cipher)
+	st := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	ctx, tenant := t.Context(), uuid.NewString()
 	provider := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://example.com/v1", APIKey: "provider-key-canary"}
 	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: []byte(`{"agent":{"model":"actual-model"},"environment":{"type":"openai_hosted"}}`), ModelProvider: provider}

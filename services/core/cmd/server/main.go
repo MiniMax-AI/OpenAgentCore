@@ -36,6 +36,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
@@ -125,7 +126,6 @@ func run() error {
 		return err
 	}
 	executionStore := store.NewWithCredentialCipher(pool, credentialKey)
-	executionStore.SetPublicURL(public)
 	units := pgunit.NewPool(pool)
 	auditStore := auditpg.New(units)
 	agentStore := agentpg.New(units, credentialKey)
@@ -159,8 +159,17 @@ func run() error {
 		return err
 	}
 	sandboxProviders := providers.Builtin()
+	// The placement rules are built once: the provider declarations and the
+	// public URL never change while Core runs.
+	placementRules, err := placement.NewRules(sandboxProviders, public)
+	if err != nil {
+		return err
+	}
+	// Session creation in store still decides admission and placement until
+	// it moves to sessions.
+	executionStore.SetPlacement(placementRules)
 	deploymentStore := deploymentpg.New(units, credentialKey)
-	deploymentService, err := deployment.NewService(deploymentStore, deploymentStore, sandboxProviders, public)
+	deploymentService, err := deployment.NewService(deploymentStore, deploymentStore, sandboxProviders, placementRules)
 	if err != nil {
 		return err
 	}
@@ -188,7 +197,7 @@ func run() error {
 	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
 	var worker *execution.Worker
-	managedNodes, err := configureManagedNodes(executionStore, deploymentService, deploymentStore, sandboxProviders, public, func(ctx context.Context) error {
+	managedNodes, err := configureManagedNodes(deploymentService, deploymentStore, sandboxProviders, public, func(ctx context.Context) error {
 		if worker == nil {
 			return errors.New("sandbox execution owner is unavailable")
 		}
@@ -204,7 +213,7 @@ func run() error {
 		managed = managedNodes.runtime
 		observationSources[managed.InstallationID] = managedNodes.setup
 	}
-	observationResolver, err := observationstoreresolver.NewResolver(executionStore)
+	observationResolver, err := observationstoreresolver.NewResolver(executionStore, deploymentStore)
 	if err != nil {
 		return err
 	}
@@ -409,7 +418,7 @@ func run() error {
 	if managedNodes != nil {
 		deps.Sandboxes = &api.Sandboxes{
 			Deployment:             deploymentService,
-			NodeAllocations:        executionStore,
+			NodeAllocations:        deploymentStore,
 			DeploymentChanges:      worker,
 			DeploymentReset:        worker,
 			ConfigurationDiscovery: managedNodes.setup,

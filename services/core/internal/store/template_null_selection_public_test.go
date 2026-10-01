@@ -35,6 +35,8 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 	}
 	s, reopenedStore := store.NewWithCredentialCipher(pool, cipher), store.NewWithCredentialCipher(pool, cipher)
 	db := fixtureDB{pool: pool, cipher: cipher} // built both Stores
+	s.SetPlacement(fixtureRules(t, db))
+	reopenedStore.SetPlacement(fixtureRules(t, db))
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
@@ -42,7 +44,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 	})
 	serve := func(current *store.Store) *httptest.Server {
 		t.Helper()
-		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, current, db), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, db), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -19,7 +19,7 @@ import (
 func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.Open(t)
-	return New(pool), pool
+	return withPlacement(t, New(pool)), pool
 }
 
 // sessionAdapter is the Session adapter on s's database with s's credential

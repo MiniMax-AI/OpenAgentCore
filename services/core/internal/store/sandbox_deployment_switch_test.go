@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
@@ -36,7 +37,7 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
@@ -77,7 +78,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
@@ -110,11 +111,11 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := session.Environment.ID
-	nodes, err := w.ListRuntimeLifecycleNodes(t.Context())
+	nodes, err := deploymentStore(w).LifecycleNodes(t.Context())
 	if err != nil || len(nodes) != 1 || nodes[0] != "" {
 		t.Fatal("cloud lifecycle requires node", nodes, err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment, id, runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}, id, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || owner.NodeID != "" {
 		t.Fatal(owner, err)
 	}
@@ -125,7 +126,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '2 hours' WHERE id=$1", owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	observed, err := w.GetRuntimeAllocation(t.Context(), tenant, environment)
+	observed, err := deploymentStore(w).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 	if err != nil || observed.Expired {
 		t.Fatal("cloud inherited legacy node-less expiry", err)
 	}
@@ -136,16 +137,16 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if _, err := changes.Update(SandboxResetTestContext(t.Context()), id, update); !errors.Is(err, deployment.ErrResetInProgress) {
 		t.Fatal("reset allowed switch", err)
 	}
-	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("unsettled create released", err)
 	}
-	if _, err := w.SettleRuntimeCreation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	changed, err := resetAndSelect(t, w, id, update.ExpectedGeneration, update)
@@ -163,7 +164,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{5}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	nodes := deploymentService(t, s)
@@ -238,7 +239,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
@@ -255,7 +256,7 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString()))
-			if err != nil && !errors.Is(err, ErrSandboxResetAdmission) && !errors.Is(err, deployment.ErrNodeUnavailable) {
+			if err != nil && !errors.Is(err, placement.ErrResetAdmission) && !errors.Is(err, placement.ErrNodeUnavailable) {
 				t.Error(err)
 			}
 		}()
@@ -265,7 +266,7 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 	}
 	wg.Wait()
 	for range 3 {
-		if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, ErrSandboxResetAdmission) {
+		if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrResetAdmission) {
 			t.Fatal("fresh creation bypassed reset", err)
 		}
 	}
@@ -282,7 +283,7 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
@@ -298,11 +299,11 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseAbsentRuntimeCreation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).ReleaseAbsentCreation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	// A separate completed Session supplies public Items without calling a model.
@@ -367,7 +368,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	nodes := deploymentService(t, s)
@@ -404,7 +405,7 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	if _, err := nodes.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 0); !errors.Is(err, deployment.ErrSpecificationMismatch) {
 		t.Fatal("node configuration served without a specification", err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
 	}
 	if _, err := nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, deployment.ErrConflict) {

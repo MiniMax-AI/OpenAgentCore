@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -25,7 +26,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
 			writer := executionWriter(t, s)
-			owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+			owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -34,7 +35,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 					t.Fatal(err)
 				}
 			}
-			if _, err := writer.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+			if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
 			ended, err := s.GetSession(t.Context(), tenant, session.ID)
@@ -93,7 +94,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 				t.Fatal("expiry recorded a provisioning failure", last)
 			}
 			cursor, _ := s.SessionEventCursor(t.Context(), tenant, session.ID)
-			if _, err := writer.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+			if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
 			if next, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
@@ -102,7 +103,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, uuid.NewString()); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("late connection revived terminal environment", err)
 			}
-			if _, err := writer.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
+			if _, err := deploymentExecution(t, writer).ReleaseAllocation(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
 				t.Fatal("unknown creation was forgotten", err)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)
@@ -120,7 +121,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer := executionWriter(t, s)
-	owner, err := writer.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +132,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), "ALTER TABLE session_events DROP CONSTRAINT IF EXISTS "+constraint)
 	})
-	if _, err := writer.RequestRuntimeCleanup(t.Context(), owner); err == nil {
+	if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err == nil {
 		t.Fatal("cleanup committed without failure event")
 	}
 	current, err := s.GetSession(t.Context(), tenant, session.ID)
@@ -141,7 +142,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	if reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID); reservation.State != sessions.EnvironmentInputPending {
 		t.Fatal("partial input failure", reservation)
 	}
-	allocation, err := s.GetRuntimeAllocation(t.Context(), tenant, session.Environment.ID)
+	allocation, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || allocation.State != "creating" {
 		t.Fatal("partial allocation transition", err)
 	}

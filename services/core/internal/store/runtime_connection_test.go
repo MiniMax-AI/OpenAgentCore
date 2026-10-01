@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -106,14 +107,14 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	stop(w)
 	w = start()
 	assertStatus("connected")
-	retained, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	retained, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || retained.ID != owner.ID || retained.DeviceID != owner.DeviceID || p.creates != 1 {
 		t.Fatal("restart replaced Runtime identity", err)
 	}
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
+	reconcileManagedState(t, w, db, tenant, environment.ID, "released")
 	if conn, err := dial(p.credential); err == nil {
 		conn.Close()
 		t.Fatal("released Runtime reconnected")

@@ -22,7 +22,7 @@ import (
 type fixtureDB struct {
 	pool      *pgxpool.Pool
 	cipher    *credentialcrypto.Cipher // nil for a keyless Store
-	publicURL string                   // the value given to the Store's SetPublicURL, if any
+	publicURL string                   // the public URL of the Store's placement rules, if any
 }
 
 // newTestStoreDB is store.NewTestStore with the fixtureDB that built it.

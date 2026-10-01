@@ -21,7 +21,7 @@ func TestSoleSkillVersionDeletionKeepsFrozenSetup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	skillService := SkillService(t, pool, cipher)
 	tenant := uuid.NewString()
 	archive := skillArchive(t, "sole-version-frozen")

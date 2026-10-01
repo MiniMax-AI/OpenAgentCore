@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestSandboxDeploymentChangesAuthenticateAndDecode(t *testing.T) {
@@ -89,7 +89,7 @@ func TestSandboxMutationErrorsExposeOnlyTypedCoreFacts(t *testing.T) {
 		{&deployment.ResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`, false},
 		{&deployment.InUseError{Resources: deployment.Resources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`, false},
 		{deployment.ErrResetInProgress, "sandbox_reset_in_progress", 409, "", false},
-		{store.ErrSandboxResetAdmission, "sandbox_reset_in_progress", 503, "", true},
+		{placement.ErrResetAdmission, "sandbox_reset_in_progress", 503, "", true},
 	} {
 		for name, write := range writers {
 			if tc.admission && name != "store" {

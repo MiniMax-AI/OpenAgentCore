@@ -42,7 +42,7 @@ func TestInitialFilesFrozenEncryptedIsolatedAndRetryable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	canary := []byte("private-initial-file-canary\x00\xff")
 	sourceFiles, _ := testFiles(t, pool)

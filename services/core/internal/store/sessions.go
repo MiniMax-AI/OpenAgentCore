@@ -18,6 +18,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
@@ -38,10 +39,14 @@ type Store struct {
 	writer           pgunit.Transactor
 	lease            *pgunit.Lease
 	credentialCipher *credentialcrypto.Cipher
-	// publicURL is OAC_PUBLIC_URL. Core derives every address it gives
-	// nodes, sandboxes and administrators from it.
-	publicURL string
+	// placement admits and places hosted Session creation. It is nil until
+	// SetPlacement, and hosted creation fails without it.
+	placement *placement.Rules
 }
+
+// SetPlacement records the installation's placement rules, built once in the
+// composition root. Call it once, before serving requests.
+func (s *Store) SetPlacement(rules *placement.Rules) { s.placement = rules }
 
 func New(pool *pgxpool.Pool) *Store {
 	pooled := pgunit.NewPool(pool)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -20,11 +21,22 @@ const testPublicURL = "https://core.example"
 
 func newService(t *testing.T, storage *fakeStorage, reader *fakeReader, publicURL string) *Service {
 	t.Helper()
-	service, err := NewService(storage, reader, providers.Builtin(), publicURL)
+	registry := providers.Builtin()
+	service, err := NewService(storage, reader, registry, newRules(t, registry, publicURL))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return service
+}
+
+// newRules builds the placement rules as cmd/server does.
+func newRules(t *testing.T, registry *providers.Registry, publicURL string) *placement.Rules {
+	t.Helper()
+	rules, err := placement.NewRules(registry, publicURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rules
 }
 
 // operations builds execution operations whose every transaction runs on tx.
@@ -65,10 +77,12 @@ func webDeployment(t *testing.T, installation, provider string, generation uint6
 
 func TestNewServiceAndOperationsRejectNilDependencies(t *testing.T) {
 	storage, reader, registry := &fakeStorage{t: t}, &fakeReader{t: t}, providers.Builtin()
+	rules := newRules(t, registry, testPublicURL)
 	for name, build := range map[string]func() (*Service, error){
-		"storage":  func() (*Service, error) { return NewService(nil, reader, registry, testPublicURL) },
-		"reader":   func() (*Service, error) { return NewService(storage, nil, registry, testPublicURL) },
-		"registry": func() (*Service, error) { return NewService(storage, reader, nil, testPublicURL) },
+		"storage":  func() (*Service, error) { return NewService(nil, reader, registry, rules) },
+		"reader":   func() (*Service, error) { return NewService(storage, nil, registry, rules) },
+		"registry": func() (*Service, error) { return NewService(storage, reader, nil, rules) },
+		"rules":    func() (*Service, error) { return NewService(storage, reader, registry, nil) },
 	} {
 		if service, err := build(); service != nil || err == nil {
 			t.Errorf("NewService without %s = %v, %v", name, service, err)
@@ -89,7 +103,7 @@ func TestSetupForSelectionRequiresAReachablePublicURL(t *testing.T) {
 	id := uuid.NewString()
 	e2bSelection := sandbox.Selection{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}}
 	for _, publicURL := range []string{"http://127.0.0.1:8091", "http://localhost:8091", "http://[::1]:8091"} {
-		if _, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL).SetupForSelection(id, e2bSelection); !errors.Is(err, ErrPublicURLUnreachable) {
+		if _, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL).SetupForSelection(id, e2bSelection); !errors.Is(err, placement.ErrPublicURLUnreachable) {
 			t.Errorf("E2B accepted the loopback public URL %s: %v", publicURL, err)
 		}
 	}
@@ -291,8 +305,8 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 		{"consumed token before setup", Record{}, consumed, nil, valid, ErrNodeCredential},
 		{"expired token while paused", paused, expired, nil, valid, ErrNodeCredential},
 		{"token of another installation while resetting", resetting, foreign, nil, valid, ErrNodeCredential},
-		{"token store failure", current, EnrollmentRecord{}, errors.New("database down"), valid, ErrNodeUnavailable},
-		{"no provider selected", unselected, receipt, nil, valid, ErrNodeUnavailable},
+		{"token store failure", current, EnrollmentRecord{}, errors.New("database down"), valid, placement.ErrNodeUnavailable},
+		{"no provider selected", unselected, receipt, nil, valid, placement.ErrNodeUnavailable},
 		{"reset in progress", resetting, receipt, nil, valid, ErrResetInProgress},
 		{"admission paused", paused, receipt, nil, valid, ErrInvalidInput},
 		{"stale generation", current, receipt, nil, stale, ErrSpecificationMismatch},
@@ -349,7 +363,7 @@ func TestAuthenticateNodeChecksTheCredentialFirst(t *testing.T) {
 		want       error
 	}{
 		{"unknown node", StoredNode{}, ErrNotFound, credential, ErrNodeCredential},
-		{"node store failure", StoredNode{}, errors.New("database down"), credential, ErrNodeUnavailable},
+		{"node store failure", StoredNode{}, errors.New("database down"), credential, placement.ErrNodeUnavailable},
 		{"wrong credential", stored, nil, strings.Repeat("x", 64), ErrNodeCredential},
 	} {
 		reads := &fakeNodeReads{t: t, loadNode: func(id string) (StoredNode, error) {

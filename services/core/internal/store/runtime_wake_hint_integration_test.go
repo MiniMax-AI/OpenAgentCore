@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type wakeHintScanProvider struct {
@@ -42,7 +42,7 @@ type wakeHintIntegrationTarget struct {
 	tenant      string
 	session     sessions.Session
 	environment sessions.Environment
-	owner       store.RuntimeAllocation
+	owner       deployment.Allocation
 }
 
 type wakeHintIntegration struct {
@@ -166,7 +166,7 @@ func TestRuntimeWakeHintCommittedSubmitResumesBeforeNormalTick(t *testing.T) {
 	}
 	f.release()
 	awaitDaemonRemoteCondition(t, t.Context(), 2*time.Second, "hint restored retained compute", func() bool {
-		owner, err := f.fixture.store.GetRuntimeAllocation(t.Context(), f.target.tenant, f.target.environment.ID)
+		owner, err := fixtureReader(f.fixture.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: f.target.tenant, EnvironmentID: f.target.environment.ID})
 		return err == nil && owner.ComputePhase == "running"
 	})
 	if elapsed := time.Since(f.started); elapsed >= 3*time.Second {

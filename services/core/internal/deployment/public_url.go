@@ -49,19 +49,6 @@ func ValidateCoreURL(value string) error {
 	return nil
 }
 
-// LoopbackOrigin reports whether a validated origin names a loopback host, which
-// nothing outside the Core host can reach.
-func LoopbackOrigin(value string) bool {
-	u, err := url.Parse(value)
-	if err != nil {
-		return false
-	}
-	if ip := net.ParseIP(u.Hostname()); ip != nil {
-		return ip.IsLoopback()
-	}
-	return u.Hostname() == "localhost"
-}
-
 // AddressBindings counts what is bound to an installation address: nodes
 // connect to the address they enrolled with, hosted sandboxes were started with
 // the address current at the time, and self-hosted executors were installed
@@ -75,5 +62,5 @@ type AddressBindings struct {
 
 // AddressBindings counts what is bound to the installation public URL.
 func (s *Service) AddressBindings(ctx context.Context) (AddressBindings, error) {
-	return s.reader.AddressBindings(ctx, s.publicURL)
+	return s.reader.AddressBindings(ctx, s.rules.PublicURL())
 }

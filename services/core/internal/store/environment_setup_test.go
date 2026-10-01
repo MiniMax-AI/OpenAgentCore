@@ -20,7 +20,7 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	setup := environmentconfig.Setup{Env: map[string]string{"SECRET": "session-env-canary"}, Commands: []environmentconfig.SetupCommand{{Command: "printf session-command-canary > result"}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}}}
 	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup}

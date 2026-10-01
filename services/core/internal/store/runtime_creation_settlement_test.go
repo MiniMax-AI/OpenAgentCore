@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -56,7 +57,7 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 			if p.kills != 0 || p.creates != 1 {
 				t.Fatal("absence proof still called external cleanup", p.kills, p.creates)
 			}
-			stored, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+			stored, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 			if err != nil || stored.State != "released" || !stored.CreateSettled {
 				t.Fatal("release not durable", err)
 			}
@@ -85,7 +86,7 @@ func TestManagedRuntimeForeignAbsenceCannotReleaseCreation(t *testing.T) {
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err == nil {
 		t.Fatal("foreign absence accepted")
 	}
-	owner, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	owner, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || owner.CreateSettled || owner.State == "released" {
 		t.Fatal("foreign proof settled original attempt", owner, err)
 	}
@@ -102,7 +103,7 @@ func TestManagedRuntimeObservedSettlementAllowsOwnedCleanup(t *testing.T) {
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
+	reconcileManagedState(t, w, db, tenant, environment.ID, "released")
 	if p.kills != 1 || p.creates != 1 {
 		t.Fatal("settled observation replayed Create or skipped cleanup", p.creates, p.kills)
 	}

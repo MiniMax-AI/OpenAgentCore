@@ -227,6 +227,7 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s.SetPlacement(fixtureRules(t, db))
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{

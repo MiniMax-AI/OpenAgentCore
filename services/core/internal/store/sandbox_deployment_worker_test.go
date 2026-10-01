@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -50,7 +51,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: store.SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, deployment.ErrNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), input); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("zero-node deployment admitted Session", err)
 	}
 	token, err := store.EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 16}))

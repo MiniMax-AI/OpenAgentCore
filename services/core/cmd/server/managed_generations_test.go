@@ -14,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -151,7 +150,7 @@ print(json.dumps(result))
 			committed := current
 			setups := &fakeDeploymentSetups{t: t, setup: committedSetup(&committed), withCredential: credentialService(t),
 				generationPage: func(context.Context, int64) ([]deployment.Setup, error) { return nil, nil }}
-			allocations := &fakeGenerationAllocations{t: t, sandboxCredentialAllocationPage: func(context.Context, string) ([]store.RuntimeAllocation, error) { return nil, nil }}
+			allocations := &fakeGenerationAllocations{t: t, credentialAllocations: func(context.Context, string) ([]deployment.Allocation, error) { return nil, nil }}
 			s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: setups, allocations: allocations}
 			loaded, err := s.load(t.Context())
 			if err != nil {

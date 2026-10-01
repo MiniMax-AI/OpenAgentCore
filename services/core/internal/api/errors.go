@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -89,8 +90,12 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 // reset or the sandbox deployment, then the Session errors.
 func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	// Admission paused by a reset is Session admission's.
-	if errors.Is(err, store.ErrSandboxResetAdmission) {
+	if errors.Is(err, placement.ErrResetAdmission) {
 		writeError(w, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
+		return
+	}
+	if errors.Is(err, placement.ErrAdmissionClosed) {
+		writeError(w, http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input.")
 		return
 	}
 	if writeSandboxError(w, err) {

@@ -63,7 +63,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		}
 		touch, stop := context.WithTimeout(context.WithoutCancel(owner), 5*time.Second)
 		defer stop()
-		if err := w.dispatcher.Store.TouchRuntimeActivity(touch, request.environment.TenantID, request.environment.ID); err != nil {
+		if err := w.dispatcher.Deployment.TouchActivity(touch, request.environment.TenantID, request.environment.ID); err != nil {
 			result.err = err
 		}
 	}()

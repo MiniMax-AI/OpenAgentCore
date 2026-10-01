@@ -16,7 +16,7 @@ func TestSandboxDeploymentMutationViewsIncludeActualResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
@@ -32,7 +32,7 @@ func TestSandboxDeploymentMutationViewsIncludeActualResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, installation, runtimedevice.HashCredential(uuid.NewString())); err != nil {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); err != nil {

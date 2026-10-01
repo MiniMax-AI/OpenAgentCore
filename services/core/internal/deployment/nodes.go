@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -79,7 +80,7 @@ func (s *Service) withManager(ctx context.Context, apply func(NodeTx, Record) er
 			return err
 		}
 		if !initialized(d) {
-			return ErrNodeUnavailable
+			return placement.ErrNodeUnavailable
 		}
 		return apply(tx, d)
 	})
@@ -199,7 +200,7 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 			return ErrNodeCredential
 		}
 		if err != nil {
-			return ErrNodeUnavailable
+			return placement.ErrNodeUnavailable
 		}
 		if receipt.Consumed || !receipt.ExpiresAt.After(time.Now()) {
 			return ErrNodeCredential
@@ -208,7 +209,7 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 			return ErrNodeCredential
 		}
 		if !initialized(d) {
-			return ErrNodeUnavailable
+			return placement.ErrNodeUnavailable
 		}
 		if d.Reset != nil {
 			return ErrResetInProgress
@@ -223,7 +224,7 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 		// The node must use the address Core advertises now. It read that address
 		// from its configuration, but the public URL may have changed since, or an
 		// operator may have registered by hand with another origin.
-		if input.CoreURL != s.publicURL {
+		if input.CoreURL != s.rules.PublicURL() {
 			return ErrNodeAddressMismatch
 		}
 		retained, err := s.registry.RetainedLimit(d.Provider, receipt.MaxActive, receipt.MaxRetained)
@@ -271,14 +272,14 @@ func (s *Service) AuthenticateNode(ctx context.Context, nodeID, credential strin
 			return ErrNodeCredential
 		}
 		if err != nil {
-			return ErrNodeUnavailable
+			return placement.ErrNodeUnavailable
 		}
 		if n.CredentialDigest != tokenDigest(credential) {
 			return ErrNodeCredential
 		}
 		d, err := tx.LoadDeployment()
 		if err != nil {
-			return ErrNodeUnavailable
+			return placement.ErrNodeUnavailable
 		}
 		if n.InstallationID != d.InstallationID || d.Mode != "nodes" {
 			return ErrNodeCredential
@@ -394,7 +395,7 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 			return ErrNodeCredential
 		}
 		if !initialized(d) {
-			return ErrNodeUnavailable
+			return placement.ErrNodeUnavailable
 		}
 		if node == nil && d.Reset != nil {
 			return ErrResetInProgress
@@ -432,7 +433,7 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		if err != nil {
 			return err
 		}
-		result = NodeConfiguration{MaxActive: active, MaxRetained: limit, InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.publicURL, Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.Provider)}
+		result = NodeConfiguration{MaxActive: active, MaxRetained: limit, InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.Provider)}
 		return nil
 	})
 	if err != nil {

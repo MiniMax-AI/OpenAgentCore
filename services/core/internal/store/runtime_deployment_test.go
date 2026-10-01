@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -73,7 +74,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	old := deploymentSelection()
 	tenant := uuid.NewString()
 	session, environment := localEnvironment(t, s, tenant)
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,24 +84,24 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("unknown creation lost cleanup ownership", err)
 	}
 	if err := deploymentExecution(t, w).ConfigureProcess(t.Context(), &old); err == nil {
 		t.Fatal("deleted unknown allocation did not block adoption")
 	}
-	if _, err := w.SettleRuntimeCreation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	deploymentConfigure(t, w, &old)
 	_, environment = localEnvironment(t, s, tenant)
-	owner, err = w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+	owner, err = deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,11 +115,11 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	if err := deploymentExecution(t, w).ConfigureProcess(t.Context(), nil); err == nil {
 		t.Fatal("removing adapter orphaned unknown creation")
 	}
-	replay, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+	replay, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil || !replay.Replayed || replay.ID != owner.ID {
 		t.Fatal("maintenance blocked receipt replay", replay, err)
 	}
-	if _, err := w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal("maintenance blocked cleanup", err)
 	}
 }
@@ -141,14 +142,14 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 		t.Fatal("creation retry lost identity", err)
 	}
 	input.IdempotencyKey = uuid.NewString()
-	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("maintenance created hosted Session", err)
 	}
 	var count int
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM sessions WHERE tenant_id=$1", tenant).Scan(&count); err != nil || count != 1 {
 		t.Fatal("rejection left partial Session", count, err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("maintenance reserved new allocation", err)
 	}
 	for _, kind := range []string{"none", "self_hosted"} {
@@ -160,10 +161,10 @@ func TestRuntimeDeploymentMaintenancePreservesCreationRetriesAndOtherPlacements(
 	}
 	old.AdmissionPaused = false
 	deploymentConfigure(t, w, &old)
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("wrong installation reserved resource", err)
 	}
-	if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, existing.Environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
+	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: existing.Environment.ID}, old.InstallationID, runtimedevice.HashCredential(uuid.NewString())); err != nil {
 		t.Fatal("resume did not reopen allocation", err)
 	}
 }
@@ -197,7 +198,7 @@ func TestRuntimeDeploymentMaintenanceSerializesHostedCreation(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-done; !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if err := <-done; !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("creation bypassed committed maintenance", err)
 	}
 	var count int
@@ -215,7 +216,7 @@ func TestRuntimeDeploymentRetainedResourcesBlockSwitchWithoutMutation(t *testing
 			deploymentConfigure(t, w, &old)
 			tenant := uuid.NewString()
 			_, environment := localEnvironment(t, s, tenant)
-			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, environment.ID, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+			owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, old.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -274,7 +275,7 @@ func TestRuntimeDeploymentAllocationBeforeMaintenanceRetainsOwnership(t *testing
 	}
 	allocated := make(chan error, 1)
 	go func() {
-		_, err := w.ReserveRuntimeAllocation(ctx, tenant, environment.ID, config.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+		_, err := deploymentExecution(t, w).ReserveAllocation(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, config.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 		allocated <- err
 	}()
 	runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, allocated)
@@ -292,7 +293,7 @@ func TestRuntimeDeploymentAllocationBeforeMaintenanceRetainsOwnership(t *testing
 	if err := <-maintaining; err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.GetRuntimeAllocation(ctx, tenant, environment.ID)
+	owner, err := deploymentStore(w).EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || owner.State != "creating" || owner.CreateSettled {
 		t.Fatal("maintenance changed uncertain receipt", owner, err)
 	}

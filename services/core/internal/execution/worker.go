@@ -76,7 +76,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if owner.Deployment == nil {
 		return nil, errors.New("execution worker requires the deployment execution operations")
 	}
-	if err := owned.Store.CheckRuntimeComputeProtocol(ctx, sandbox.SuspensionStateVersion); err != nil {
+	if err := owner.Deployment.CheckRuntimeComputeProtocol(ctx, sandbox.SuspensionStateVersion); err != nil {
 		return nil, err
 	}
 	owned.notifications = &executionNotifications{}

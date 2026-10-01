@@ -17,6 +17,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -52,6 +53,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+			s.SetPlacement(fixtureRules(t, db))
 			tenant := uuid.NewString()
 			input := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), InitialFiles: []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/a", Data: []byte("first")}, {Type: "inline", Path: "/workspace/b", Data: []byte("second")}}}
 			if setupOnly {
@@ -193,7 +195,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	if !reflect.DeepEqual(actions, expected) || provider.commandCalls.Load() != 0 {
 		t.Fatal("typed ordering or provider isolation", actions, provider.commandCalls.Load())
 	}
-	allocation, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	allocation, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || initializationState(t, db.pool, allocation.TenantID, allocation.EnvironmentID) != "complete" {
 		t.Fatal("initialization incomplete", allocation, err)
 	}
