@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+// DefaultKillTimeout is the KillTimeout that a zero or negative StartOptions
+// or HandleOptions KillTimeout selects.
+const DefaultKillTimeout = 3 * time.Second
+
 type StartOptions struct {
 	Parent      context.Context
 	Binary      string
@@ -52,7 +56,7 @@ func Start(opts StartOptions) (*Process, error) {
 		return nil, fmt.Errorf("clirunner: binary required")
 	}
 	if opts.KillTimeout <= 0 {
-		opts.KillTimeout = 3 * time.Second
+		opts.KillTimeout = DefaultKillTimeout
 	}
 
 	if opts.OwnProcessGroup || runtime.GOOS == "windows" {
