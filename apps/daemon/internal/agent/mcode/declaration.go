@@ -77,7 +77,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 	if runtime.Info.Available {
 		runtime.Executor = NewExecutorFactory(workspace)
 		if SupportsExecution(version) {
-			runtime.View = discoverView(parent, options)
+			runtime.View = discoverView(options)
 		}
 	}
 	if workspace != nil {

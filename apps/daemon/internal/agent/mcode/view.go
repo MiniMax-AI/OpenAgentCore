@@ -7,13 +7,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"slices"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -25,7 +22,6 @@ import (
 const (
 	viewNodeMount    = "node"
 	viewHarnessMount = "mcode-harness"
-	viewLibraryMount = "node-lib"
 	viewDataName     = "data"
 	viewTempName     = "tmp"
 	viewPIName       = "pi-agent"
@@ -33,52 +29,51 @@ const (
 
 // viewInstall is the trusted MiniMax Code install as a view presents it.
 type viewInstall struct {
-	closure  []agent.ViewMount
-	overlays []agent.ViewOverlay
-	masks    []agent.ViewMask
-	// libraryPath is LD_LIBRARY_PATH in the view; empty for a static node.
-	libraryPath string
+	closure []agent.ViewMount
+	loader  viewloader.Fragment
 	// node, cli, bridge and assets are view paths: assets holds the CLI's
 	// builtin skills and agents.
 	node, cli, bridge, assets string
 }
 
-func discoverView(parent context.Context, options agent.DiscoveryOptions) *agent.View {
-	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
-	defer cancel()
-	install, err := findViewInstall(ctx)
+func discoverView(options agent.DiscoveryOptions) *agent.View {
+	view, err := findView()
 	if err != nil {
 		fmt.Fprintf(options.Stderr, "oac-daemon: mcode agent-host view unavailable: %v\n", err)
 		return nil
 	}
-	view := install.view()
-	return &view
+	return view
 }
 
-func findViewInstall(ctx context.Context) (viewInstall, error) {
-	if runtime.GOOS != "linux" {
-		return viewInstall{}, errors.New("agent-host views run on Linux")
-	}
+func findView() (*agent.View, error) {
 	programs, err := findPrograms()
 	if err != nil {
-		return viewInstall{}, err
+		return nil, err
 	}
 	node, err := filepath.EvalSymlinks(programs.node)
 	if err != nil {
-		return viewInstall{}, err
+		return nil, err
 	}
-	loader, err := findLoader(ctx, node) // TODO(viewloader)
+	loader, err := viewloader.For(node)
 	if err != nil {
-		return viewInstall{}, err
+		return nil, err
 	}
-	return newViewInstall(node, programs.binary, programs.bridge, loader)
+	install, err := newViewInstall(node, programs.binary, programs.bridge, loader)
+	if err != nil {
+		return nil, err
+	}
+	view := install.view()
+	if err := view.Validate(); err != nil {
+		return nil, err
+	}
+	return &view, nil
 }
 
-// newViewInstall presents node's directory, the harness directory holding the
-// bridge and the CLI, and node's library directories as the closure. node is
-// a resolved host path.
-func newViewInstall(node, cli, bridge string, loader nodeLoader) (viewInstall, error) {
-	var i viewInstall
+// newViewInstall presents node's directory and the harness directory holding
+// the bridge and the CLI as the closure, with loader for a dynamic node. node
+// is a resolved host path.
+func newViewInstall(node, cli, bridge string, loader viewloader.Fragment) (viewInstall, error) {
+	i := viewInstall{loader: loader}
 	if !filepath.IsAbs(bridge) {
 		return i, errors.New("the workspace bridge is not configured")
 	}
@@ -114,55 +109,29 @@ func newViewInstall(node, cli, bridge string, loader nodeLoader) (viewInstall, e
 			return i, fmt.Errorf("the CLI's builtin %s are missing", dir)
 		}
 	}
-	// TODO(viewloader): take the loader's overlay, closure, masks and
-	// LD_LIBRARY_PATH from the shared view loader.
-	if loader.interp == "" {
-		return i, nil
-	}
-	i.overlays = []agent.ViewOverlay{{Path: loader.interp, Source: loader.source, Exec: true}}
-	// The loader reads both from the sandbox's /etc otherwise.
-	i.masks = []agent.ViewMask{{Path: "/etc/ld.so.cache"}, {Path: "/etc/ld.so.preload"}}
-	mounts := map[string]string{nodeMount.HostDir: nodeMount.Path(), harnessMount.HostDir: harnessMount.Path()}
-	var libraryPath []string
-	for _, dir := range loader.libraries {
-		mount, ok := mounts[dir]
-		if !ok {
-			name := viewLibraryMount
-			if n := len(i.closure) - 1; n > 1 {
-				name += "-" + strconv.Itoa(n)
-			}
-			m := agent.ViewMount{Name: name, HostDir: dir}
-			i.closure = append(i.closure, m)
-			mount, mounts[dir] = m.Path(), m.Path()
-		}
-		if !slices.Contains(libraryPath, mount) {
-			libraryPath = append(libraryPath, mount)
-		}
-	}
-	i.libraryPath = strings.Join(libraryPath, ":")
 	return i, nil
 }
 
 func (i viewInstall) view() agent.View {
-	masks := append([]agent.ViewMask{
-		// The CLI probes these for builtin assets and its install receipt
-		// before its own copy.
-		{Path: "/assets", Dir: true}, {Path: "/opt/assets", Dir: true}, {Path: "/install.json"}, {Path: "/opt/install.json"},
-		// Node resolves a package the closure lacks, such as the worker's
-		// optional ripgrep, from /node_modules.
-		{Path: "/node_modules", Dir: true},
-	}, i.masks...)
 	// No forwarded tool needs a Harness variable, so ForwardEnv is empty.
-	return agent.View{
-		Closure:   slices.Clone(i.closure),
-		Overlays:  slices.Clone(i.overlays),
-		Masks:     masks,
+	view := agent.View{
+		Closure: slices.Clone(i.closure),
+		Masks: []agent.ViewMask{
+			// The CLI probes these for builtin assets and its install
+			// receipt before its own copy.
+			{Path: "/assets", Dir: true}, {Path: "/opt/assets", Dir: true}, {Path: "/install.json"}, {Path: "/opt/install.json"},
+			// Node resolves a package the closure lacks, such as the
+			// worker's optional ripgrep, from /node_modules.
+			{Path: "/node_modules", Dir: true},
+		},
 		LocalExec: []string{i.node},
 		Shims:     []string{"git", "rg"},
 		ShimPaths: []string{"/bin/bash"},
 		Proxy:     agent.ViewProxyNone,
 		Executor:  i.executor,
 	}
+	i.loader.AddTo(&view)
+	return view
 }
 
 func (i viewInstall) executor(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
@@ -236,8 +205,8 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 		"MAVIS_BUILTIN_AGENTS_DIR=" + path.Join(i.assets, "agents"),
 		"MAVIS_BUILTIN_AGENTS_V2_DIR=" + path.Join(i.assets, "agents"),
 	}
-	if i.libraryPath != "" {
-		opts.Env = append(opts.Env, "LD_LIBRARY_PATH="+i.libraryPath)
+	if i.loader.LibraryPath != "" {
+		opts.Env = append(opts.Env, "LD_LIBRARY_PATH="+i.loader.LibraryPath)
 	}
 	opts.Env = append(opts.Env, nativeEnvironment(private, dataDir)...)
 	profile := map[string]any{"workspace": workspace, "scratch": tempDir, "network": "enabled"}

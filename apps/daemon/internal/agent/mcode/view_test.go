@@ -5,16 +5,15 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -37,8 +36,10 @@ func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayl
 			t.Fatal(err)
 		}
 	}
-	install, err := newViewInstall(filepath.Join(bin, "node"), filepath.Join(harness, "native/cli.js"), filepath.Join(harness, "bridge.mjs"),
-		nodeLoader{interp: "/lib64/ld-linux-x86-64.so.2", source: filepath.Join(libs, "ld.so"), libraries: []string{libs}})
+	lib := agent.ViewMount{Name: viewloader.MountName, HostDir: libs}
+	loader := viewloader.Fragment{Closure: []agent.ViewMount{lib}, LibraryPath: lib.Path(),
+		Overlays: []agent.ViewOverlay{{Path: "/lib64/ld-linux-x86-64.so.2", Source: filepath.Join(libs, "ld.so"), Exec: true}}}
+	install, err := newViewInstall(filepath.Join(bin, "node"), filepath.Join(harness, "native/cli.js"), filepath.Join(harness, "bridge.mjs"), loader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +88,8 @@ func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
 		t.Fatalf("launched %s %q in %s", launched.Binary, launched.Args, launched.Dir)
 	}
 	env := strings.Join(launched.Env, "\n")
-	if strings.Contains(env, "OAC_TEST_VIEW_SENTINEL") || strings.Contains(env, viewRealKey) || !slices.Contains(launched.Env, "HOME="+path.Join(session.Home.View, viewDataName)) {
+	if strings.Contains(env, "OAC_TEST_VIEW_SENTINEL") || strings.Contains(env, viewRealKey) || !slices.Contains(launched.Env, "HOME="+path.Join(session.Home.View, viewDataName)) ||
+		!slices.Contains(launched.Env, "LD_LIBRARY_PATH="+install.loader.LibraryPath) {
 		t.Fatalf("environment is not closed: %q", launched.Env)
 	}
 	config, err := os.ReadFile(filepath.Join(session.Home.Host, viewDataName, "config.yaml"))
@@ -143,25 +145,5 @@ func TestViewDoesNotFollowHomeLinks(t *testing.T) {
 	}
 	if raw, err := os.ReadFile(outside); err != nil || string(raw) != "unchanged" {
 		t.Fatalf("outside file = %q (%v)", raw, err)
-	}
-}
-
-func TestViewLoaderListsHostNode(t *testing.T) {
-	node, err := exec.LookPath("node")
-	if runtime.GOOS != "linux" || err != nil {
-		t.Skip("needs node on Linux")
-	}
-	if node, err = filepath.EvalSymlinks(node); err != nil {
-		t.Fatal(err)
-	}
-	loader, err := findLoader(t.Context(), node)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loader.interp == "" {
-		t.Skip("node is static")
-	}
-	if loader.source == "" || len(loader.libraries) == 0 {
-		t.Fatalf("loader = %+v", loader)
 	}
 }
