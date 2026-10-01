@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
@@ -112,6 +113,11 @@ func (op *operation) spawn(spec sp.ProcessSpec) (l launched, f *sp.Failure) {
 				return l, f
 			}
 			l.streams = append(l.streams, &stream{name: name, f: r})
+		}
+	}
+	for _, st := range l.streams {
+		if err := watch(st.f); err != nil {
+			return l, ioFail("watch output", err)
 		}
 	}
 
@@ -225,22 +231,46 @@ func openPTY(spec sp.PTYSpec) (master, tty *os.File, err error) {
 	return os.NewFile(uintptr(fd), "/dev/ptmx"), tty, nil
 }
 
+// watch makes f non-blocking and checks that the runtime poller watches it,
+// so a read of f under op.mu never blocks. Registering f fails, for example,
+// at the epoll watch limit.
+func watch(f *os.File) error {
+	rc, err := f.SyscallConn()
+	if err != nil {
+		return err
+	}
+	if cerr := rc.Control(func(fd uintptr) { err = unix.SetNonblock(int(fd), true) }); cerr != nil {
+		return cerr
+	}
+	if err != nil {
+		return err
+	}
+	return f.SetReadDeadline(time.Time{}) // os.ErrNoDeadline when the poller does not watch f
+}
+
+// minRead is the least room a read has under the replay limit. A pipe in
+// packet mode (O_DIRECT) holds packets of up to a page, and a shorter read
+// discards the rest of the packet.
+var minRead = os.Getpagesize()
+
 // read captures one stream until end of file, a read error, or CloseOutput.
-// It reads only while the retained output is below the replay limit, and at
-// most the space left, so the streams together never exceed it. Each read
-// and the push of what it read happen under op.mu, so every byte is either
-// still in the kernel's buffer or in an event; markLocked relies on that.
+// It reads only while minRead bytes remain under the replay limit, and at
+// most the room left, so the streams together never exceed it. Each read and
+// the push of what it read happen under op.mu, so every byte is either still
+// in the kernel's buffer or in an event; markLocked relies on that.
 func (op *operation) read(st *stream) {
-	limit := int(op.s.caps.MaxReplayBytesPerOperation)
 	buf := make([]byte, op.s.caps.MaxDataBytes)
 	var disp sp.OutputDisposition
 	rc, err := st.f.SyscallConn()
 	for err == nil && disp == 0 {
 		op.mu.Lock()
-		for op.retained >= limit && !st.abandoned {
+		for op.room() < minRead && !st.abandoned {
 			op.cond.Wait()
 		}
 		op.mu.Unlock()
+		if op.s.beforeRead != nil {
+			op.s.beforeRead()
+		}
 		// The callback returns false to wait until the stream is readable.
 		err = rc.Read(func(fd uintptr) bool {
 			op.mu.Lock()
@@ -280,11 +310,11 @@ func (op *operation) read(st *stream) {
 // limit stops it, and pushes what it read. It returns the disposition once
 // the stream ends, and empty when nothing is buffered.
 func (op *operation) readLocked(st *stream, fd int, buf []byte) (disp sp.OutputDisposition, empty bool) {
-	room := int(op.s.caps.MaxReplayBytesPerOperation) - op.retained
+	room := op.room()
 	switch {
 	case st.abandoned:
 		return sp.OutputAbandoned, false
-	case room <= 0:
+	case room < minRead:
 		return 0, false
 	}
 	buf = buf[:min(len(buf), room)]

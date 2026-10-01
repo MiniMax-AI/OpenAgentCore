@@ -187,14 +187,14 @@ func (op *operation) markLocked() {
 }
 
 // exitWhenDrainedLocked reports the reaped leader's exit once every stream
-// has delivered its mark or closed. At the replay limit no stream is read
-// until the client acknowledges, so the exit is reported then: it never
-// waits for an acknowledgement.
+// has delivered its mark or closed. With less than minRead of room under the
+// replay limit no stream is read until the client acknowledges, so the exit
+// is reported then: it never waits for an acknowledgement.
 func (op *operation) exitWhenDrainedLocked() {
 	if !op.leaderGone || op.state != sp.StateRunning {
 		return
 	}
-	if op.retained < int(op.s.caps.MaxReplayBytesPerOperation) {
+	if op.room() >= minRead {
 		for _, st := range op.streams {
 			if !st.closed && !st.abandoned && st.offset < st.mark {
 				return
@@ -202,6 +202,11 @@ func (op *operation) exitWhenDrainedLocked() {
 		}
 	}
 	op.exitedLocked()
+}
+
+// room is how much more output the replay limit lets the operation retain.
+func (op *operation) room() int {
+	return int(op.s.caps.MaxReplayBytesPerOperation) - op.retained
 }
 
 // exitedLocked reports the reaped leader's exit and starts watching the scope.
