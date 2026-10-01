@@ -26,7 +26,7 @@ const viewRealKey = "sk-view-real-key-sentinel"
 func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayload) {
 	t.Helper()
 	harness, bin, libs := t.TempDir(), t.TempDir(), t.TempDir()
-	for _, file := range []string{"bridge.mjs", "subagent-snapshot.mjs", "native/cli.js", "native/assets/skills/.keep", "native/assets/agents/.keep", filepath.Join(bin, "node")} {
+	for _, file := range []string{"bridge.mjs", "native/cli.js", "native/assets/skills/.keep", "native/assets/agents/.keep", filepath.Join(bin, "node")} {
 		if !filepath.IsAbs(file) {
 			file = filepath.Join(harness, file)
 		}
@@ -56,7 +56,7 @@ func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayl
 	t.Setenv("ANTHROPIC_API_KEY", viewRealKey)
 	req := executionRequest(t)
 	req.RunID, req.Input, req.ConversationID = "", nil, ""
-	req.DisableExecutionEnvironment, req.DisableSubagents, req.MaxConcurrentSubagents = false, false, new(2)
+	req.DisableExecutionEnvironment = false
 	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled"}
 	req.AgentOptions["model_provider"] = map[string]any{"protocol": "anthropic", "base_url": "http://127.0.0.1:4101", "api_key": modelprovider.Placeholder, "context_window": 64000, "max_output_tokens": 4096}
 	return install, view, req
@@ -74,6 +74,11 @@ func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
 	var launched clirunner.StartOptions
 	session := viewSession(&launched)
 	session.Home = agent.ViewDir{Host: t.TempDir(), View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}
+	subagents := req
+	subagents.DisableSubagents, subagents.MaxConcurrentSubagents = false, new(2)
+	if _, err := view.Executor(t.Context(), subagents, session); !errors.Is(err, agent.ErrUnsupportedOperation) || launched.Binary != "" {
+		t.Fatalf("Executor with Subagents = %v, launched %q", err, launched.Binary)
+	}
 	if _, err := view.Executor(t.Context(), req, session); err == nil || err.Error() != "launch recorded" {
 		t.Fatalf("Executor = %v", err)
 	}

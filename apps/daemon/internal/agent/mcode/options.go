@@ -31,10 +31,8 @@ type launchOptions struct {
 	script string
 	// home is an agent-host view's Session home on the host. It contains
 	// DataDir and belongs to the Session user, so the daemon reads DataDir
-	// only within it. reader is that view's Subagent history reader; nil
-	// selects the deployment's.
-	home   string
-	reader *historyReader
+	// only within it.
+	home string
 }
 
 func prepareOptions(ctx context.Context, req proto.PromptRequestPayload) (launchOptions, error) {
@@ -45,11 +43,6 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	var result launchOptions
 	if err := validateOptions(req); err != nil {
 		return result, err
-	}
-	if req.StrictResume && !req.DisableSubagents {
-		if _, err := deploymentHistoryReader(); err != nil {
-			return result, err
-		}
 	}
 	root, err := agent.ManagedSkillsRoot("mcode", req.AgentStateKey, req.ConversationID, req.RunID)
 	if err != nil {

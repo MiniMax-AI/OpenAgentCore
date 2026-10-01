@@ -52,52 +52,28 @@ type nativeSubagentTask struct {
 	Metadata                                   struct{ ChildSessionID, ParentSessionID, ParentTurnID, SubTurnID, ExecutionMode string }
 }
 
-// historyReader runs the pinned Subagent history reader on the daemon host.
-type historyReader struct {
-	node, script string
-	// home, when set, is an agent-host view's Session home. The reader then
-	// runs as the home's owner, the Session user, with an empty environment.
-	home string
-}
-
-func deploymentHistoryReader() (historyReader, error) {
+func subagentReader() (string, string, error) {
 	node, bridge := os.Getenv("OAC_RUNTIME_MCODE_NODE"), os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE")
 	reader := filepath.Join(filepath.Dir(bridge), "subagent-snapshot.mjs")
 	for _, path := range []string{node, bridge, reader} {
 		resolved, err := filepath.EvalSymlinks(path)
 		if err != nil || !filepath.IsAbs(path) || resolved != path {
-			return historyReader{}, fmt.Errorf("mcode: protected Subagent reader is unavailable")
+			return "", "", fmt.Errorf("mcode: protected Subagent reader is unavailable")
 		}
 	}
-	return historyReader{node: node, script: reader}, nil
-}
-
-func (r historyReader) command(ctx context.Context, dataDir, session string) (*exec.Cmd, error) {
-	command := exec.CommandContext(ctx, r.node, "--disable-warning=ExperimentalWarning", r.script, dataDir, session)
-	if r.home == "" {
-		command.Env = executionEnvironment()
-		return command, nil
-	}
-	command.Env = []string{}
-	return command, runAsOwner(command, r.home)
+	return node, reader, nil
 }
 
 func (s *Session) readSubagents(ctx context.Context) (nativeSubagentSnapshot, error) {
 	var snapshot nativeSubagentSnapshot
-	reader := s.opts.reader
-	if reader == nil {
-		deployment, err := deploymentHistoryReader()
-		if err != nil {
-			return snapshot, err
-		}
-		reader = &deployment
+	node, reader, err := subagentReader()
+	if err != nil {
+		return snapshot, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	command, err := reader.command(ctx, s.opts.DataDir, s.sessionID)
-	if err != nil {
-		return snapshot, fmt.Errorf("mcode: child history reader is unavailable")
-	}
+	command := exec.CommandContext(ctx, node, "--disable-warning=ExperimentalWarning", reader, s.opts.DataDir, s.sessionID)
+	command.Env = executionEnvironment()
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return snapshot, fmt.Errorf("mcode: child history reader is unavailable")

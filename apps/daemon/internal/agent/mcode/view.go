@@ -41,7 +41,6 @@ type viewInstall struct {
 	// node, cli, bridge and assets are view paths: assets holds the CLI's
 	// builtin skills and agents.
 	node, cli, bridge, assets string
-	reader                    historyReader
 }
 
 func discoverView(parent context.Context, options agent.DiscoveryOptions) *agent.View {
@@ -115,11 +114,6 @@ func newViewInstall(node, cli, bridge string, loader nodeLoader) (viewInstall, e
 			return i, fmt.Errorf("the CLI's builtin %s are missing", dir)
 		}
 	}
-	i.reader = historyReader{node: node, script: filepath.Join(harness, "subagent-snapshot.mjs")}
-	if info, err := os.Lstat(i.reader.script); err != nil || !info.Mode().IsRegular() {
-		return i, errors.New("the Subagent history reader is missing")
-	}
-
 	// TODO(viewloader): take the loader's overlay, closure, masks and
 	// LD_LIBRARY_PATH from the shared view loader.
 	if loader.interp == "" {
@@ -191,6 +185,11 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 	if len(local.Skills) != 0 {
 		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view does not install Capabilities", agent.ErrUnsupportedOperation)
 	}
+	// Subagent settlement reads native history with a second process while
+	// the CLI runs, and a Session has one live view, which runs only the CLI.
+	if !req.DisableSubagents {
+		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view does not run Subagents", agent.ErrUnsupportedOperation)
+	}
 	workspace := local.WorkspaceRoot
 	if !path.IsAbs(workspace) || path.Clean(workspace) != workspace || workspace == "/" {
 		return launchOptions{}, errors.New("mcode: the workspace is not a canonical absolute path")
@@ -241,11 +240,6 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 		opts.Env = append(opts.Env, "LD_LIBRARY_PATH="+i.libraryPath)
 	}
 	opts.Env = append(opts.Env, nativeEnvironment(private, dataDir)...)
-	if !req.DisableSubagents {
-		reader := i.reader
-		reader.home = session.Home.Host
-		opts.reader = &reader
-	}
 	profile := map[string]any{"workspace": workspace, "scratch": tempDir, "network": "enabled"}
 	tools := workspaceTools{node: i.node, bridge: i.bridge, profile: path.Join(dataDir, "workspace-profile.json")}
 	return opts, writeWorkspaceTools(&opts, data, req, tools, profile, nil, servers)
