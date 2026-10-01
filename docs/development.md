@@ -95,6 +95,8 @@ Fixture browser acceptance uses loopback ports 18092 and 4174. Select unused por
 
 ## Change documentation
 
+The repository-root `docs.json` configures the Mintlify site and references the existing Markdown sources. Connect Mintlify to the repository root on the default branch. Run `mint dev` from the repository root to preview the site and `mint validate` to check it before publishing. Install the CLI with `npm install -g mint`.
+
 Find the owning source in the [documentation ownership map](../CONTRIBUTING.md#documentation-ownership) and follow the [documentation rules](../AGENTS.md#documentation). Readers use the authored Markdown in the repository. Generated OpenAPI schemas and the Harness catalog have their own generators; see [Contract and schema rules](../CONTRIBUTING.md#contract-and-schema-rules).
 
 The distribution has an explicit documentation list in `scripts/core-distribution-manifest.py`. When you move a bundled file or change a heading, update its inbound links and run the [distribution documentation checks](maintainers.md#build-a-distribution).

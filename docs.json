@@ -1,0 +1,63 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "OpenAgentCore",
+  "colors": {
+    "primary": "#2563EB"
+  },
+  "favicon": "/docs/assets/openagentcore-logo.svg",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": [
+          "docs/getting-started/README",
+          "docs/getting-started/install",
+          "docs/getting-started/quickstart",
+          "docs/examples"
+        ]
+      },
+      {
+        "group": "Operate",
+        "pages": [
+          "docs/getting-started/install-options",
+          "docs/getting-started/nodes",
+          "docs/getting-started/self-hosted",
+          "docs/getting-started/operations",
+          "docs/configuration"
+        ]
+      },
+      {
+        "group": "API guides",
+        "pages": [
+          "docs/api/README",
+          "docs/api/public-agent-api",
+          "contracts/agents-api/admin-api",
+          "contracts/agents-api/machine-api",
+          "contracts/agents-api/harness-capabilities"
+        ]
+      },
+      {
+        "group": "Architecture and extensions",
+        "pages": [
+          "docs/concepts",
+          "docs/architecture",
+          "docs/runtime-protocol",
+          "docs/runtime-bootstrap",
+          "docs/sandbox-provider",
+          "contracts/agents-api/harness-onboarding",
+          "docs/development",
+          "CONTRIBUTING"
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/MiniMax-AI/OpenAgentCore"
+      }
+    ]
+  }
+}
