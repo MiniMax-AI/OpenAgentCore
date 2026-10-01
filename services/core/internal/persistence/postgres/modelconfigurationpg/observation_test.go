@@ -84,7 +84,7 @@ func TestObservationExcludesOtherSourcesAndHistoricalSessions(t *testing.T) {
 		if source == "deployment" {
 			input.DeploymentProviderRevision = uuid.Nil
 		} else {
-			input.Configuration = json.RawMessage(`{"agent":{"model":"frozen-model"},"environment":{"type":"openai_hosted"}}`)
+			input.Configuration = json.RawMessage(`{"agent":{"model":"frozen-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)
 			if source == "unknown" {
 				input.ModelProviderSource = "session"
 			}
