@@ -23,9 +23,6 @@ func validateExecutionRequest(req proto.PromptRequestPayload) error {
 		if req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1 {
 			return fmt.Errorf("mcode: Subagent concurrency limit is required")
 		}
-		if _, _, err := subagentReader(); err != nil {
-			return err
-		}
 	}
 	if mode := optionString(req.AgentOptions, "mode"); mode != "" {
 		return fmt.Errorf("mcode: text execution uses default native permissions")

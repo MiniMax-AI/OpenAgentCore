@@ -38,6 +38,11 @@ writeFileSync(catalogPath, withWorkspace.replace(gate, `  if (process.env.OAC_RU
     if (source === 'builtin-matrix') return false;
   }
 ${gate}`));
+const projectPath = join(root, 'packages/local-runtime-v2/src/service/mcp/project-mcp.service.ts');
+const project = readFileSync(projectPath, 'utf8');
+const projectGate = '    if (!context?.workspaceRoot || !context.sessionId) return {};';
+if (project.split(projectGate).length !== 2) throw new Error('Pinned native project MCP source changed');
+writeFileSync(projectPath, project.replace(projectGate, "    if (process.env.OAC_RUNTIME_MCODE_TOOL_POLICY === 'protected-mcp-v1' || !context?.workspaceRoot || !context.sessionId) return {};"));
 copyFileSync(join(here, 'native-subagent-admission.mjs'), join(root, 'packages/local-runtime/src/background-task/oac-subagent-admission.mjs'));
 const digest = name => createHash('sha256').update(readFileSync(join(here, name))).digest('hex');
 writeFileSync(join(root, '.oac-native-patch.json'), JSON.stringify({ revision: pin.revision,

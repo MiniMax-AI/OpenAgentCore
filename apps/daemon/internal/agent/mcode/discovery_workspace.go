@@ -36,31 +36,12 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		fail(err)
 		return nil
 	}
-	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
-	if node == "" {
-		node = "node"
-	}
-	node, err = exec.LookPath(node)
+	programs, err := findPrograms()
 	if err != nil {
 		fail(err)
 		return nil
 	}
-	node, err = filepath.Abs(node)
-	if err != nil {
-		fail(err)
-		return nil
-	}
-	binary, err := exec.LookPath(binpath.MCode())
-	if err != nil {
-		fail(err)
-		return nil
-	}
-	binary, err = filepath.Abs(binary)
-	if err != nil {
-		fail(err)
-		return nil
-	}
-	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE"), root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+	c, err := ConfigureLocal(programs.binary, programs.node, programs.bridge, root, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
 	if err == nil {
 		err = CheckWorkspace(parent, c)
 	}
@@ -74,4 +55,30 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 	caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
 	caps.WorkspaceReadPreparation = proto.CapabilitySupported
 	return &c
+}
+
+// programs are the installed node, CLI entry and workspace bridge, as absolute
+// host paths.
+type programs struct{ node, binary, bridge string }
+
+func findPrograms() (programs, error) {
+	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
+	if node == "" {
+		node = "node"
+	}
+	node, err := exec.LookPath(node)
+	if err != nil {
+		return programs{}, err
+	}
+	if node, err = filepath.Abs(node); err != nil {
+		return programs{}, err
+	}
+	binary, err := exec.LookPath(binpath.MCode())
+	if err != nil {
+		return programs{}, err
+	}
+	if binary, err = filepath.Abs(binary); err != nil {
+		return programs{}, err
+	}
+	return programs{node: node, binary: binary, bridge: os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE")}, nil
 }

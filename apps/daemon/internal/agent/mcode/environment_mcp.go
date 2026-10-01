@@ -10,26 +10,35 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, error) {
+func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, []agent.MCPBinding, error) {
 	bindings, err := agent.ResolveMCPBindings(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	servers, err := workspaceMCP(bindings, func(binding agent.MCPBinding) (map[string]any, error) {
+		command, args := localworkspace.MCPStdioCommand(*binding.Stdio)
+		return map[string]any{"name": binding.ServerLabel, "command": command, "args": args, "env": []map[string]string{}}, nil
+	})
+	return servers, bindings, err
+}
+
+// workspaceMCP renders the Session's MCP bindings as ACP servers; stdio
+// renders a stdio binding.
+func workspaceMCP(bindings []agent.MCPBinding, stdio func(agent.MCPBinding) (map[string]any, error)) ([]map[string]any, error) {
 	var servers []map[string]any
 	for _, binding := range bindings {
 		if binding.ServerLabel == "oac_workspace" || binding.ConnectionOrigin != "environment" || binding.AllowedTools != nil || binding.Required {
 			return nil, fmt.Errorf("mcode: unsupported MCP binding")
 		}
-		if binding.Transport == "http" {
-			server, err := environmentHTTPMCP(binding)
-			if err != nil {
-				return nil, err
-			}
-			servers = append(servers, server)
-		} else {
-			command, args := localworkspace.MCPStdioCommand(*binding.Stdio)
-			servers = append(servers, map[string]any{"name": binding.ServerLabel, "command": command, "args": args, "env": []map[string]string{}})
+		render := environmentHTTPMCP
+		if binding.Transport != "http" {
+			render = stdio
 		}
+		server, err := render(binding)
+		if err != nil {
+			return nil, err
+		}
+		servers = append(servers, server)
 	}
 	return servers, nil
 }
