@@ -101,10 +101,13 @@ func contextCode(err error) Code {
 type Conn struct {
 	s      sandboxlink.Stream
 	remote Addr
-	// rmu and wmu serialize reads and writes, which the stream does not.
+	// rmu and wmu serialize reads and writes, which the stream does not. wmu
+	// also orders an orderly end after every write.
 	rmu, wmu sync.Mutex
 	// rdl and wdl hold the deadlines, so a passed one fails a call even when
-	// the stream could complete it from its buffer.
+	// the stream could complete it from its buffer. dmu keeps them and the
+	// stream's deadlines in agreement under concurrent setters.
+	dmu      sync.Mutex
 	rdl, wdl atomic.Pointer[time.Time]
 	closed   atomic.Bool
 	failed   atomic.Bool // a Read or Write failed for a reason other than a deadline
@@ -158,22 +161,27 @@ func (c *Conn) note(err error) error {
 }
 
 // CloseWrite ends the write direction in order: the destination reads EOF
-// after every byte written before it. Reading carries on.
+// after every byte written before it. It waits for a Write in progress.
+// Reading carries on.
 func (c *Conn) CloseWrite() error {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
 	if c.closed.Load() {
 		return net.ErrClosed
 	}
 	return c.s.CloseWrite()
 }
 
-// Close ends the connection. After Read returned io.EOF and with no failed
-// Read or Write, it ends the write direction in order. Otherwise it aborts the
-// connection like Reset, because input may remain unread.
+// Close ends the connection. After Read returned io.EOF, with no failed Read
+// or Write and no Write in progress, it ends the write direction in order.
+// Otherwise it aborts the connection like Reset, because input may remain
+// unread or a Write may be waiting; the abort ends any pending call.
 func (c *Conn) Close() error {
 	if c.closed.Swap(true) {
 		return net.ErrClosed
 	}
-	if c.eof.Load() && !c.failed.Load() {
+	if c.eof.Load() && !c.failed.Load() && c.wmu.TryLock() {
+		defer c.wmu.Unlock()
 		return c.s.Close()
 	}
 	return c.s.Reset()
@@ -199,17 +207,23 @@ func (c *Conn) RemoteAddr() net.Addr { return c.remote }
 // deadline has passed, Read or Write fails with os.ErrDeadlineExceeded until
 // the deadline is extended, and a zero time removes it.
 func (c *Conn) SetDeadline(t time.Time) error {
+	c.dmu.Lock()
+	defer c.dmu.Unlock()
 	c.rdl.Store(&t)
 	c.wdl.Store(&t)
 	return c.s.SetDeadline(t)
 }
 
 func (c *Conn) SetReadDeadline(t time.Time) error {
+	c.dmu.Lock()
+	defer c.dmu.Unlock()
 	c.rdl.Store(&t)
 	return c.s.SetReadDeadline(t)
 }
 
 func (c *Conn) SetWriteDeadline(t time.Time) error {
+	c.dmu.Lock()
+	defer c.dmu.Unlock()
 	c.wdl.Store(&t)
 	return c.s.SetWriteDeadline(t)
 }

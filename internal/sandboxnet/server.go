@@ -134,14 +134,17 @@ func connect(dialCtx context.Context, req ConnectRequest, egress []sandboxlink.E
 	return nil, &Error{Code: CodeDenied, Effect: sandboxwire.EffectNone}
 }
 
-// outcome types a Service error: a valid *Error stands; otherwise the end of
-// dialCtx decides, and any other error becomes code.
+// outcome types a Service error: a valid *Error stands; otherwise a passed
+// deadline or the end of dialCtx decides, and any other error becomes code.
+// The deadline is read from the clock, because a socket deadline set from it
+// can fire before dialCtx reports its end.
 func outcome(dialCtx context.Context, err error, code Code, effect sandboxwire.Effect) *Error {
 	var e *Error
+	deadline, ok := dialCtx.Deadline()
 	switch {
 	case errors.As(err, &e) && e.Code.Valid() && e.Effect.Valid():
 		return e
-	case errors.Is(dialCtx.Err(), context.DeadlineExceeded):
+	case ok && !time.Now().Before(deadline):
 		return &Error{Code: CodeTimedOut, Effect: effect, Cause: err}
 	case dialCtx.Err() != nil:
 		return &Error{Code: CodeCancelled, Effect: effect, Cause: err}

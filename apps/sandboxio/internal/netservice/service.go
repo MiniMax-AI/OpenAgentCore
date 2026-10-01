@@ -65,10 +65,16 @@ func (s *Service) Dial(ctx context.Context, addr netip.AddrPort) (*net.TCPConn, 
 // connect itself returned proves that no connection was made, so only that
 // carries EffectNone. A kernel connect timeout, and any errno from a later
 // step, such as registering the socket with the poller after connect was
-// issued, carry EffectPossible.
+// issued, carry EffectPossible. Without an errno, the socket deadline Go sets
+// from the Connect's timeout is TimedOut: it can fire before the context
+// reports its end.
 func dialError(err error) error {
 	var errno syscall.Errno
 	if !errors.As(err, &errno) {
+		var ne net.Error
+		if errors.Is(err, os.ErrDeadlineExceeded) || errors.As(err, &ne) && ne.Timeout() {
+			return &sandboxnet.Error{Code: sandboxnet.CodeTimedOut, Effect: sandboxwire.EffectPossible, Cause: err}
+		}
 		return err
 	}
 	effect := sandboxwire.EffectPossible
