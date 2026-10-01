@@ -396,7 +396,7 @@ func (rl *Relay) admitServe(l *link, id uint64, hello sandboxlink.ServeHello) (*
 		ctx, cancel := rl.authorityContext()
 		peer, err := rl.cfg.Authority.AuthenticateServe(ctx, hello)
 		cancel()
-		if err == nil && peer != (sandboxlink.ServePeer{PeerID: hello.PeerID, Resource: hello.Resource}) {
+		if err == nil && peer.Resource != hello.Resource {
 			err = sandboxlink.Fail(sandboxlink.PermissionDenied)
 		}
 		if err != nil {
