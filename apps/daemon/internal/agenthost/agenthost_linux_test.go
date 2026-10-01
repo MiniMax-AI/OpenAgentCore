@@ -24,11 +24,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-// The test binary is also the privileged suite's Harness inside the view.
+// The test binary is also the privileged suite's Harness inside the view and
+// its process with a zombie leader.
 func TestMain(m *testing.M) {
 	sessionview.Init()
 	if os.Getenv(harnessEnv) != "" {
 		os.Exit(runHarness(os.Args[1:]))
+	}
+	if os.Getenv(zombieLeaderEnv) != "" {
+		runZombieLeader()
 	}
 	os.Exit(m.Run())
 }
@@ -115,23 +119,23 @@ func leftSessions(t *testing.T, cfg Config) []os.DirEntry {
 // they are stubborn.
 type fakeProcesses struct {
 	mu       sync.Mutex
-	procs    []hostProcess
+	list     []task
 	stubborn bool
-	killed   []int
+	ended    []int
 }
 
-func (f *fakeProcesses) list() ([]hostProcess, error) {
+func (f *fakeProcesses) tasks() ([]task, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return slices.Clone(f.procs), nil
+	return slices.Clone(f.list), nil
 }
 
-func (f *fakeProcesses) kill(p hostProcess, r UIDRange) error {
+func (f *fakeProcesses) end(t task, r UIDRange) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.killed = append(f.killed, p.pid)
+	f.ended = append(f.ended, t.tgid)
 	if !f.stubborn {
-		f.procs = slices.DeleteFunc(f.procs, func(q hostProcess) bool { return q.pid == p.pid })
+		f.list = slices.DeleteFunc(f.list, func(q task) bool { return q.tgid == t.tgid })
 	}
 	return nil
 }

@@ -23,43 +23,43 @@ const (
 	sweepPoll = 50 * time.Millisecond
 )
 
-// hostProcess is one process /proc lists, with its real, effective, saved and
-// file-system uids.
-type hostProcess struct {
-	pid  int
-	uids [4]uint32
+// task is one running task, a thread of a process, as /proc lists it.
+type task struct {
+	tgid, tid int
+	uids      [4]uint32 // real, effective, saved and file-system
 }
 
-// in reports whether p holds a uid in r.
-func (p hostProcess) in(r UIDRange) bool {
-	for _, id := range p.uids {
-		if id >= r.First && id-r.First < r.Count {
-			return true
-		}
-	}
-	return false
+// in reports whether t holds a uid in r.
+func (t task) in(r UIDRange) bool { return holds(t.uids, r) }
+
+func holds(uids [4]uint32, r UIDRange) bool {
+	return r.has(uids[0]) || r.has(uids[1]) || r.has(uids[2]) || r.has(uids[3])
 }
 
-// processTable lists and kills the host's processes. Tests replace it.
+func (r UIDRange) has(id uint32) bool { return id >= r.First && id-r.First < r.Count }
+
+// processTable lists the host's tasks and ends them. Tests replace it.
 type processTable interface {
-	// list returns every process that still runs; a zombie runs nothing and
-	// is left out.
-	list() ([]hostProcess, error)
-	// kill sends SIGKILL to the process p names when it still holds a uid in
-	// r, and never to a process that reused p's pid.
-	kill(p hostProcess, r UIDRange) error
+	// tasks returns every task that runs, each thread of each process; a
+	// zombie runs nothing and is left out.
+	tasks() ([]task, error)
+	// end kills, while t still holds a uid in r, the init of t's PID
+	// namespace when that is a view's, which ends every process in it, and
+	// t's process when t is in the agent host's own namespace. It never
+	// signals a process that reused a pid.
+	end(t task, r UIDRange) error
 }
 
-// heldUIDs returns the uids in r that a running process holds.
+// heldUIDs returns the uids in r that a running task holds.
 func heldUIDs(procs processTable, r UIDRange) (map[uint32]bool, error) {
-	list, err := procs.list()
+	tasks, err := procs.tasks()
 	if err != nil {
 		return nil, err
 	}
 	held := map[uint32]bool{}
-	for _, p := range list {
-		for _, id := range p.uids {
-			if id >= r.First && id-r.First < r.Count {
+	for _, t := range tasks {
+		for _, id := range t.uids {
+			if r.has(id) {
 				held[id] = true
 			}
 		}
@@ -67,31 +67,34 @@ func heldUIDs(procs processTable, r UIDRange) (map[uint32]bool, error) {
 	return held, nil
 }
 
-// endProcesses kills every process that holds a uid in r, scanning again
-// until none remains or bound passes. A process in r can only fork processes
-// of its own uid, so each scan finds what the previous round's processes
-// started.
+// endProcesses ends every task that holds a uid in r and scans again until
+// none runs or bound passes.
 func endProcesses(procs processTable, r UIDRange, bound time.Duration) error {
 	deadline := time.Now().Add(bound)
 	for {
-		list, err := procs.list()
+		tasks, err := procs.tasks()
 		if err != nil {
 			return err
 		}
-		var held []hostProcess
-		for _, p := range list {
-			if p.in(r) {
-				held = append(held, p)
+		var held []task
+		for _, t := range tasks {
+			if t.in(r) {
+				held = append(held, t)
 			}
 		}
 		if len(held) == 0 {
 			return nil
 		}
 		if !time.Now().Before(deadline) {
-			return fmt.Errorf("%d processes still hold Session uids after %s", len(held), bound)
+			return fmt.Errorf("%d tasks still hold Session uids after %s", len(held), bound)
 		}
-		for _, p := range held {
-			if err := procs.kill(p, r); err != nil {
+		ended := map[int]bool{}
+		for _, t := range held {
+			if ended[t.tgid] {
+				continue
+			}
+			ended[t.tgid] = true
+			if err := procs.end(t, r); err != nil {
 				return err
 			}
 		}
@@ -99,85 +102,210 @@ func endProcesses(procs processTable, r UIDRange, bound time.Duration) error {
 	}
 }
 
-// procfs is the host's /proc.
+// procfs is the host's /proc, which must be the agent host's own PID
+// namespace's.
 type procfs struct{}
 
-func (procfs) list() ([]hostProcess, error) {
-	entries, err := os.ReadDir("/proc")
+// errGone is a process or task that has ended.
+var errGone = errors.New("ended")
+
+func (procfs) tasks() ([]task, error) {
+	self, err := readStatus("/proc/self/status")
 	if err != nil {
 		return nil, err
 	}
-	var list []hostProcess
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
+	if len(self.nspid) != 1 {
+		return nil, errors.New("/proc is not the agent host's PID namespace's")
+	}
+	pids, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, err
+	}
+	var list []task
+	for _, p := range pids {
+		pid, err := strconv.Atoi(p.Name())
 		if err != nil || pid <= 0 {
 			continue
 		}
-		p, running, err := readProcess(pid)
+		tids, err := os.ReadDir(procPath(pid, "task"))
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ESRCH) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
-		if running {
-			list = append(list, p)
+		for _, e := range tids {
+			tid, err := strconv.Atoi(e.Name())
+			if err != nil {
+				continue
+			}
+			s, err := readStatus(procPath(pid, "task", e.Name(), "status"))
+			if errors.Is(err, errGone) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if s.running() {
+				list = append(list, task{tgid: pid, tid: tid, uids: s.uids})
+			}
 		}
 	}
 	return list, nil
 }
 
-func (procfs) kill(p hostProcess, r UIDRange) error {
-	fd, err := unix.PidfdOpen(p.pid, 0)
+func (procfs) end(t task, r UIDRange) error {
+	fd, err := unix.PidfdOpen(t.tgid, 0)
 	if errors.Is(err, unix.ESRCH) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("pidfd of %d: %w", p.pid, err)
+		return fmt.Errorf("pidfd of %d: %w", t.tgid, err)
 	}
-	defer unix.Close(fd)
-	// The pid may name another process since the scan. The uids read after
-	// the pidfd opened are its process's while it runs; once it has ended,
-	// the signal reaches nothing.
-	q, running, err := readProcess(p.pid)
-	if err != nil || !running || !q.in(r) {
+	// The pid may name another process since the scan. What /proc shows under
+	// it belongs to the process fd pins while that process exists, which each
+	// read confirms afterwards; once it has ended, the signal reaches nothing.
+	s, err := readStatus(procPath(t.tgid, "task", strconv.Itoa(t.tid), "status"))
+	if err == nil {
+		err = exists(fd)
+	}
+	if err == nil && (!s.running() || !holds(s.uids, r)) {
+		err = errGone
+	}
+	if err == nil && len(s.nspid) > 1 {
+		fd, err = namespaceInit(fd, t.tgid, len(s.nspid))
+	}
+	if errors.Is(err, errGone) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
+	defer unix.Close(fd)
 	if err := unix.PidfdSendSignal(fd, unix.SIGKILL, nil, 0); err != nil && !errors.Is(err, unix.ESRCH) {
-		return fmt.Errorf("kill %d: %w", p.pid, err)
+		return fmt.Errorf("kill: %w", err)
 	}
 	return nil
 }
 
-// readProcess reads pid's uids from /proc/<pid>/status. running is false when
-// the process has ended or is a zombie.
-func readProcess(pid int) (p hostProcess, running bool, err error) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
+// namespaceInit takes fd, the pidfd of process pid, and returns a pidfd of the
+// init of its PID namespace, depth namespaces below /proc's. On an error it
+// closes every pidfd. The init is the process's nearest ancestor whose pid in
+// its own namespace is 1: no process in a view can enter another namespace,
+// so every ancestor up to the init shares the namespace. Each step pins the
+// parent and then confirms that the child still exists and still has that
+// parent, so the walk never follows a reused pid.
+func namespaceInit(fd, pid, depth int) (int, error) {
+	for {
+		s, err := readStatus(procPath(pid, "status"))
+		if err == nil {
+			err = exists(fd)
+		}
+		if err == nil && (len(s.nspid) != depth || s.ppid <= 0) {
+			err = fmt.Errorf("process %d is outside its view's PID namespace", pid)
+		}
+		if err != nil {
+			unix.Close(fd)
+			return -1, err
+		}
+		if s.nspid[depth-1] == 1 {
+			return fd, nil
+		}
+		parent, err := unix.PidfdOpen(s.ppid, 0)
+		if errors.Is(err, unix.ESRCH) {
+			continue // the parent has ended and the process has a new one
+		}
+		if err != nil {
+			unix.Close(fd)
+			return -1, fmt.Errorf("pidfd of %d: %w", s.ppid, err)
+		}
+		again, err := readStatus(procPath(pid, "status"))
+		if err == nil {
+			err = exists(fd)
+		}
+		if err != nil {
+			unix.Close(parent)
+			unix.Close(fd)
+			return -1, err
+		}
+		if again.ppid != s.ppid {
+			unix.Close(parent)
+			continue
+		}
+		unix.Close(fd)
+		fd, pid = parent, s.ppid
+	}
+}
+
+// exists returns nil while the process fd pins exists, as a zombie too, and
+// errGone once it has been reaped.
+func exists(fd int) error {
+	err := unix.PidfdSendSignal(fd, 0, nil, 0)
+	if errors.Is(err, unix.ESRCH) {
+		return errGone
+	}
+	return err
+}
+
+func procPath(pid int, name ...string) string {
+	return "/proc/" + strconv.Itoa(pid) + "/" + strings.Join(name, "/")
+}
+
+// status is what a status file in /proc reports.
+type status struct {
+	state string
+	ppid  int
+	uids  [4]uint32
+	nspid []int // the pid in each PID namespace, from /proc's to the task's own
+}
+
+func (s status) running() bool {
+	return !strings.HasPrefix(s.state, "Z") && !strings.HasPrefix(s.state, "X")
+}
+
+// readStatus reads a status file in /proc. It returns errGone when the
+// process or task has ended.
+func readStatus(path string) (status, error) {
+	var s status
+	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ESRCH) {
-		return p, false, nil
+		return s, errGone
 	}
 	if err != nil {
-		return p, false, err
+		return s, err
 	}
-	p.pid = pid
-	var state string
 	var uids []string
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
 		key, value, _ := strings.Cut(sc.Text(), ":")
 		switch key {
 		case "State":
-			state = strings.TrimSpace(value)
+			s.state = strings.TrimSpace(value)
+		case "PPid":
+			if s.ppid, err = strconv.Atoi(strings.TrimSpace(value)); err != nil {
+				return s, fmt.Errorf("%s: PPid %q", path, value)
+			}
 		case "Uid":
 			uids = strings.Fields(value)
+		case "NSpid":
+			for _, f := range strings.Fields(value) {
+				n, err := strconv.Atoi(f)
+				if err != nil {
+					return s, fmt.Errorf("%s: NSpid %q", path, value)
+				}
+				s.nspid = append(s.nspid, n)
+			}
 		}
 	}
-	if len(uids) != 4 {
-		return p, false, fmt.Errorf("/proc/%d/status has no uids", pid)
+	if len(uids) != 4 || len(s.nspid) == 0 {
+		return s, fmt.Errorf("%s has no uids or NSpid", path)
 	}
-	for i, s := range uids {
-		id, err := strconv.ParseUint(s, 10, 32)
+	for i, f := range uids {
+		id, err := strconv.ParseUint(f, 10, 32)
 		if err != nil {
-			return p, false, fmt.Errorf("/proc/%d/status uid %q", pid, s)
+			return s, fmt.Errorf("%s: uid %q", path, f)
 		}
-		p.uids[i] = uint32(id)
+		s.uids[i] = uint32(id)
 	}
-	return p, !strings.HasPrefix(state, "Z") && !strings.HasPrefix(state, "X"), nil
+	return s, nil
 }

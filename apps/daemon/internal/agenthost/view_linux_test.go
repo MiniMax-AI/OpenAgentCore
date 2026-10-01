@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -24,6 +25,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
@@ -191,6 +193,155 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			t.Fatal("the process with a Session uid still runs after Sweep")
 		}
 	})
+
+	t.Run("Sweep ends a view whose leader thread has exited", func(t *testing.T) {
+		id := cfg.UIDs.First + 2
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := inPIDNamespace(id, exe)
+		cmd.Env = append(os.Environ(), zombieLeaderEnv+"=1")
+		done := startView(t, cmd)
+		until(t, "a zombie leader with a running thread", func() bool { return zombieLeaderHolds(id) })
+		if got, err := allocUID(UIDRange{First: id, Count: 1}, procfs{}); !errors.Is(err, ErrCapacity) {
+			freeUID(got)
+			t.Errorf("allocUID beside a running thread = %d, %v", got, err)
+		}
+		sweepEnds(t, cfg, id, done)
+	})
+
+	t.Run("Sweep ends a view whose processes fork", func(t *testing.T) {
+		id := cfg.UIDs.First + 3
+		// Each subshell forks a sleep and exits at once.
+		done := startView(t, inPIDNamespace(id, "/bin/sh", "-c", "while :; do (sleep 60 &); sleep 0.01; done"))
+		until(t, "forked processes", func() bool { return processesHolding(id) >= 3 })
+		sweepEnds(t, cfg, id, done)
+	})
+}
+
+// inPIDNamespace returns a command that runs argv with uid under a root init
+// in a new PID namespace, as a view does. The init starts argv again whenever
+// it ends, so only ending the namespace ends it.
+func inPIDNamespace(uid uint32, argv ...string) *exec.Cmd {
+	script := `while :; do setpriv --reuid="$0" --regid="$0" --clear-groups -- "$@"; done`
+	cmd := exec.Command("/bin/sh", append([]string{"-c", script, strconv.Itoa(int(uid))}, argv...)...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID}
+	return cmd
+}
+
+// startView starts cmd and returns its end.
+func startView(t *testing.T, cmd *exec.Cmd) <-chan error {
+	t.Helper()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	t.Cleanup(func() { cmd.Process.Kill() })
+	return done
+}
+
+// sweepEnds checks that Sweep ends the view whose init done reports and every
+// process that holds id.
+func sweepEnds(t *testing.T, cfg Config, id uint32, done <-chan error) {
+	t.Helper()
+	if err := Sweep(cfg); err != nil {
+		t.Fatalf("Sweep = %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(wait):
+		t.Fatal("the view's init still runs after Sweep")
+	}
+	if n := processesHolding(id); n != 0 {
+		t.Errorf("%d processes hold uid %d after Sweep", n, id)
+	}
+}
+
+func until(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(wait)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// processesHolding counts the processes with a running thread whose real uid
+// is id.
+func processesHolding(id uint32) int {
+	procs := map[int]bool{}
+	for _, t := range threads() {
+		if t.running && t.uids[0] == id {
+			procs[t.tgid] = true
+		}
+	}
+	return len(procs)
+}
+
+// zombieLeaderHolds reports whether a process whose leader thread is a zombie
+// runs a thread whose real uid is id.
+func zombieLeaderHolds(id uint32) bool {
+	zombie, holding := map[int]bool{}, map[int]bool{}
+	for _, t := range threads() {
+		switch {
+		case t.tid == t.tgid && !t.running:
+			zombie[t.tgid] = true
+		case t.running && t.uids[0] == id:
+			holding[t.tgid] = true
+		}
+	}
+	for tgid := range holding {
+		if zombie[tgid] {
+			return true
+		}
+	}
+	return false
+}
+
+type thread struct {
+	tgid, tid int
+	uids      [4]uint32
+	running   bool
+}
+
+// threads lists every thread in /proc, zombies included.
+func threads() []thread {
+	var list []thread
+	pids, _ := os.ReadDir("/proc")
+	for _, p := range pids {
+		tgid, err := strconv.Atoi(p.Name())
+		if err != nil {
+			continue
+		}
+		tids, _ := os.ReadDir(procPath(tgid, "task"))
+		for _, e := range tids {
+			tid, _ := strconv.Atoi(e.Name())
+			if s, err := readStatus(procPath(tgid, "task", e.Name(), "status")); err == nil {
+				list = append(list, thread{tgid: tgid, tid: tid, uids: s.uids, running: s.running()})
+			}
+		}
+	}
+	return list
+}
+
+// zombieLeaderEnv makes the test binary a process whose leader thread exits
+// while another thread runs on.
+const zombieLeaderEnv = "OAC_AGENTHOST_ZOMBIE_LEADER"
+
+func runZombieLeader() {
+	runtime.LockOSThread()
+	started := make(chan struct{})
+	go func() {
+		runtime.LockOSThread()
+		close(started)
+		time.Sleep(time.Hour)
+	}()
+	<-started
+	unix.RawSyscall(unix.SYS_EXIT, 0, 0, 0) // ends this thread only
 }
 
 // sandbox is a relay and the oac-sandbox-io serving its one resource.

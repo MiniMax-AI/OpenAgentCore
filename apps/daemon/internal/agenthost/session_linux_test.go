@@ -34,13 +34,14 @@ func TestSweepEndsSessionProcessesBeforeRemovingDirectories(t *testing.T) {
 		}
 	}
 	leave()
-	// Any of the four uids places a process in the range.
-	procs := &fakeProcesses{procs: []hostProcess{{pid: 10, uids: [4]uint32{1000, 1000, 1000, 70003}}, {pid: 11, uids: [4]uint32{1000, 1000, 1000, 1000}}}}
-	if err := sweep(cfg, procs, time.Second); err != nil || !reflect.DeepEqual(procs.killed, []int{10}) || len(leftSessions(t, cfg)) != 0 {
-		t.Fatalf("Sweep = %v, killed %v, %d Session directories left", err, procs.killed, len(leftSessions(t, cfg)))
+	// Any of the four uids of any thread places a process in the range.
+	outside := [4]uint32{1000, 1000, 1000, 1000}
+	procs := &fakeProcesses{list: []task{{tgid: 10, tid: 10, uids: outside}, {tgid: 10, tid: 12, uids: [4]uint32{1000, 1000, 1000, 70003}}, {tgid: 11, tid: 11, uids: outside}}}
+	if err := sweep(cfg, procs, time.Second); err != nil || !reflect.DeepEqual(procs.ended, []int{10}) || len(leftSessions(t, cfg)) != 0 {
+		t.Fatalf("Sweep = %v, ended %v, %d Session directories left", err, procs.ended, len(leftSessions(t, cfg)))
 	}
 	leave()
-	procs = &fakeProcesses{procs: []hostProcess{{pid: 12, uids: [4]uint32{70000, 70000, 70000, 70000}}}, stubborn: true}
+	procs = &fakeProcesses{list: []task{{tgid: 12, tid: 12, uids: [4]uint32{70000, 70000, 70000, 70000}}}, stubborn: true}
 	if err := sweep(cfg, procs, 100*time.Millisecond); !errors.Is(err, ErrTeardown) || len(leftSessions(t, cfg)) != 1 {
 		t.Fatalf("Sweep with a process that outlives the bound = %v, %d Session directories left", err, len(leftSessions(t, cfg)))
 	}
@@ -48,7 +49,8 @@ func TestSweepEndsSessionProcessesBeforeRemovingDirectories(t *testing.T) {
 
 func TestAllocationSkipsUIDsThatProcessesHold(t *testing.T) {
 	r := UIDRange{First: 71000, Count: 2}
-	procs := &fakeProcesses{procs: []hostProcess{{pid: 10, uids: [4]uint32{1000, 71000, 1000, 1000}}}}
+	// A thread holds the uid; its process's leader does not.
+	procs := &fakeProcesses{list: []task{{tgid: 10, tid: 10, uids: [4]uint32{1000, 1000, 1000, 1000}}, {tgid: 10, tid: 11, uids: [4]uint32{1000, 71000, 1000, 1000}}}}
 	id, err := allocUID(r, procs)
 	if err != nil || id != 71001 {
 		t.Fatalf("allocUID = %d, %v; want 71001", id, err)

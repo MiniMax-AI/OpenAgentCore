@@ -47,10 +47,11 @@ func Run(ctx context.Context, cfg Config, s Session) error {
 	return run(ctx, cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return unavailableBroker{} }, procs: procfs{}})
 }
 
-// Sweep ends every process that holds a uid in cfg.UIDs, then removes every
-// Session directory under cfg.StateDir. Run's owner calls it at startup,
-// before any Session runs. It returns ErrTeardown when a process still holds
-// a Session uid after a bounded wait.
+// Sweep ends every process that holds a uid in cfg.UIDs, with its view's PID
+// namespace, then removes every Session directory under cfg.StateDir. Run's
+// owner calls it at startup, before any Session runs, with /proc showing the
+// agent host's own PID namespace. It returns ErrTeardown when a task still
+// holds a Session uid after a bounded wait.
 func Sweep(cfg Config) error {
 	return sweep(cfg, procfs{}, sweepBound)
 }
