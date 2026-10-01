@@ -31,7 +31,7 @@ const bufferSize = 32 << 10
 func Serve(ctx context.Context, s sandboxlink.Stream, egress []sandboxlink.EgressRule, svc Service) error {
 	dialCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	x := &splice{s: s, cancel: cancel, decided: make(chan struct{})}
+	x := &splice{s: s, cancel: cancel, settled: make(chan struct{})}
 	stop := context.AfterFunc(ctx, func() { x.abort(ctx.Err()) })
 	defer stop()
 
@@ -63,19 +63,22 @@ func Serve(ctx context.Context, s sandboxlink.Stream, egress []sandboxlink.Egres
 	defer cancelTimeout()
 	conn, failure := connect(dialCtx, req, egress, svc)
 	if failure != nil {
-		if x.decide(answered, nil) {
+		if x.advance(dialing, answered, nil) {
 			answerFailure(s, f.RequestID, failure)
 			return failure
 		}
 		return x.result()
 	}
-	if !x.decide(connected, conn) {
+	if !x.advance(dialing, connecting, conn) {
 		conn.SetLinger(0)
 		conn.Close()
 		return x.result()
 	}
 	if err := WriteMessage(s, f.RequestID, ConnectResponse{Result: ResultConnected}); err != nil {
 		x.abort(err)
+		return x.result()
+	}
+	if !x.advance(connecting, connected, nil) {
 		return x.result()
 	}
 	_, err = io.CopyBuffer(struct{ io.Writer }{s}, struct{ io.Reader }{conn}, make([]byte, bufferSize))
@@ -146,13 +149,15 @@ func outcome(dialCtx context.Context, err error, code Code, effect sandboxwire.E
 	return &Error{Code: code, Effect: effect, Cause: err}
 }
 
-// phase is where a splice stands. It leaves dialing exactly once.
+// phase is where a splice stands. It moves from dialing to answered, or
+// through connecting to connected, and to aborted from any phase.
 type phase uint8
 
 const (
-	dialing   phase = iota
-	connected       // Connected is being or was answered
-	answered        // a failure is being or was answered
+	dialing    phase = iota
+	connecting       // the dial succeeded and Connected is being written
+	connected        // Connected was written
+	answered         // a failure is being or was answered
 	aborted
 )
 
@@ -162,22 +167,29 @@ const (
 type splice struct {
 	s       sandboxlink.Stream
 	cancel  context.CancelFunc // cancels the dial
-	decided chan struct{}      // closed when the phase leaves dialing
+	settled chan struct{}      // closed when the phase becomes connected, answered or aborted
 	mu      sync.Mutex
 	phase   phase
 	conn    *net.TCPConn
 	err     error
 }
 
-// decide leaves dialing for p. It fails when the splice was aborted.
-func (x *splice) decide(p phase, conn *net.TCPConn) bool {
+// advance moves the splice from one phase to the next, recording conn when it
+// is not nil. It fails when the splice is no longer in from, which only an
+// abort causes.
+func (x *splice) advance(from, to phase, conn *net.TCPConn) bool {
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	if x.phase != dialing {
+	if x.phase != from {
 		return false
 	}
-	x.phase, x.conn = p, conn
-	close(x.decided)
+	x.phase = to
+	if conn != nil {
+		x.conn = conn
+	}
+	if to != connecting {
+		close(x.settled)
+	}
 	return true
 }
 
@@ -201,8 +213,8 @@ func (x *splice) abort(cause error) {
 		x.mu.Unlock()
 		return
 	}
-	if x.phase == dialing {
-		close(x.decided)
+	if x.phase == dialing || x.phase == connecting {
+		close(x.settled)
 	}
 	x.phase, x.err = aborted, cause
 	conn := x.conn
@@ -215,30 +227,32 @@ func (x *splice) abort(cause error) {
 	}
 }
 
-// pumpIn copies the stream to the connection. Bytes before Connected break the
-// protocol. The stream's orderly end becomes the connection's CloseWrite once
-// the dial is decided.
+// pumpIn copies the stream to the connection. Bytes while dialing break the
+// protocol; bytes after a successful dial wait until Connected is written, so
+// nothing reaches the destination before the answer is out. The stream's
+// orderly end becomes the connection's CloseWrite once Connected is written.
 func (x *splice) pumpIn() {
 	buf := make([]byte, bufferSize)
 	for {
 		n, err := x.s.Read(buf)
 		if n > 0 {
-			switch p, conn := x.state(); p {
-			case dialing:
-				x.abort(fmt.Errorf("%w: bytes before Connected", ErrProtocolViolation))
+			if p, _ := x.state(); p == dialing {
+				x.abort(fmt.Errorf("%w: bytes before the dial succeeded", ErrProtocolViolation))
 				return
-			case connected:
-				if _, werr := conn.Write(buf[:n]); werr != nil {
-					x.abort(werr)
-					return
-				}
-			default:
+			}
+			<-x.settled
+			p, conn := x.state()
+			if p != connected {
+				return
+			}
+			if _, werr := conn.Write(buf[:n]); werr != nil {
+				x.abort(werr)
 				return
 			}
 		}
 		switch {
 		case err == io.EOF:
-			<-x.decided
+			<-x.settled
 			if p, conn := x.state(); p == connected {
 				if err := conn.CloseWrite(); err != nil {
 					x.abort(err)

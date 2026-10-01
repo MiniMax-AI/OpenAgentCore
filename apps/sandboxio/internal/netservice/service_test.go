@@ -10,7 +10,9 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -274,12 +276,69 @@ func TestDestinationResetAborts(t *testing.T) {
 	}
 }
 
+// Concurrent writes and reads each arrive whole, and a passed read deadline
+// fails a Read even with input buffered.
+func TestConcurrentCallsAndDeadline(t *testing.T) {
+	f := newFixture(t)
+	ln, port := listen(t)
+	go func() {
+		if c, err := ln.Accept(); err == nil {
+			io.Copy(c, c)
+			c.Close()
+		}
+	}()
+	conn, err := f.connect(nil, "127.0.0.1", port, wait)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	// Writers race one another while a reader drains the echo.
+	const writers, size = 4, 256 << 10
+	var wg sync.WaitGroup
+	for range writers {
+		wg.Go(func() {
+			if _, err := conn.Write(random(size)); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	if _, err := io.ReadFull(conn, make([]byte, writers*size)); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+
+	if _, err := conn.Write([]byte("ab")); err != nil {
+		t.Fatal(err)
+	}
+	b := make([]byte, 1)
+	if _, err := io.ReadFull(conn, b); err != nil {
+		t.Fatal(err)
+	}
+	conn.SetReadDeadline(time.Now().Add(-time.Second))
+	if _, err := conn.Read(b); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("read after the deadline: %v, want os.ErrDeadlineExceeded", err)
+	}
+	conn.SetReadDeadline(time.Time{})
+	if _, err := io.ReadFull(conn, b); err != nil || b[0] != 'b' {
+		t.Fatalf("read after clearing the deadline: %q, %v", b, err)
+	}
+}
+
 func TestConnectFailures(t *testing.T) {
 	f := newFixture(t)
-	ln, open := listen(t)
+	// The destination listens on every local address, so a dial to an
+	// unspecified address, which means this host, would reach it.
+	ln, err := net.ListenTCP("tcp", &net.TCPAddr{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	open := uint16(ln.Addr().(*net.TCPAddr).Port)
 	refused, closedPort := listen(t)
 	refused.Close()
-	tenOnly := []sandboxlink.EgressRule{{Prefix: netip.MustParsePrefix("10.0.0.0/8"), PortFirst: 1, PortLast: 65535}}
+	only := func(prefix string) []sandboxlink.EgressRule {
+		return []sandboxlink.EgressRule{{Prefix: netip.MustParsePrefix(prefix), PortFirst: 1, PortLast: 65535}}
+	}
 	for _, tc := range []struct {
 		name    string
 		egress  []sandboxlink.EgressRule
@@ -288,7 +347,9 @@ func TestConnectFailures(t *testing.T) {
 		timeout time.Duration
 		code    sandboxnet.Code
 	}{
-		{"denied", tenOnly, "echo.test", open, wait, sandboxnet.CodeDenied},
+		{"denied", only("10.0.0.0/8"), "echo.test", open, wait, sandboxnet.CodeDenied},
+		{"unspecified IPv6", only("::/0"), "::", open, wait, sandboxnet.CodeDenied},
+		{"unspecified IPv4", only("0.0.0.0/8"), "0.0.0.0", open, wait, sandboxnet.CodeDenied},
 		{"not resolved", nil, "missing.test", open, wait, sandboxnet.CodeNameNotResolved},
 		{"refused", nil, "127.0.0.1", closedPort, wait, sandboxnet.CodeConnectionRefused},
 		{"timed out", nil, "blackhole.test", open, 200 * time.Millisecond, sandboxnet.CodeTimedOut},

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"os"
 	"syscall"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -46,23 +47,35 @@ func (s *Service) Resolve(ctx context.Context, host string) ([]netip.Addr, error
 	return addrs, err
 }
 
-// Dial connects to addr. The address is a literal, so nothing is resolved.
+// Dial connects to addr. The address is a literal and the network names its
+// family, so nothing is resolved and no other address is tried.
 func (s *Service) Dial(ctx context.Context, addr netip.AddrPort) (*net.TCPConn, error) {
-	c, err := s.dialer.DialContext(ctx, "tcp", addr.String())
+	network := "tcp4"
+	if addr.Addr().Is6() {
+		network = "tcp6"
+	}
+	c, err := s.dialer.DialContext(ctx, network, addr.String())
 	if err != nil {
 		return nil, dialError(err)
 	}
 	return c.(*net.TCPConn), nil
 }
 
-// dialError types the errno of a failed connect. Every typed outcome but a
-// kernel timeout means no connection was made.
+// dialError types a failed dial by its errno. Only an errno that socket or
+// connect itself returned proves that no connection was made, so only that
+// carries EffectNone. A kernel connect timeout, and any errno from a later
+// step, such as registering the socket with the poller after connect was
+// issued, carry EffectPossible.
 func dialError(err error) error {
 	var errno syscall.Errno
 	if !errors.As(err, &errno) {
 		return err
 	}
-	effect := sandboxwire.EffectNone
+	effect := sandboxwire.EffectPossible
+	var sys *os.SyscallError
+	if errors.As(err, &sys) && (sys.Syscall == "socket" || sys.Syscall == "connect") {
+		effect = sandboxwire.EffectNone
+	}
 	var code sandboxnet.Code
 	switch errno {
 	case syscall.ECONNREFUSED:

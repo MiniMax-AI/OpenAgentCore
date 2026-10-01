@@ -47,7 +47,7 @@ const (
 
 // ErrProtocolViolation ends a stream whose peer broke the protocol: a frame
 // that is not a Connect, a request ID that does not increase, a second
-// Connect, or bytes before Connected.
+// Connect, or bytes that arrive before the dial succeeds.
 var ErrProtocolViolation = errors.New("sandbox network: protocol violation")
 
 // Network is the transport a Connect asks for.
@@ -178,8 +178,9 @@ type Service interface {
 	// *Error; Serve answers any other error NameResolutionFailed, or
 	// TimedOut when the Connect's timeout passed.
 	Resolve(ctx context.Context, host string) ([]netip.Addr, error)
-	// Dial connects to addr without resolving anything. A typed outcome is an
-	// *Error; Serve answers any other error IO with EffectPossible, or
+	// Dial connects to exactly addr, in its address family, without
+	// resolving anything or falling back to another address. A typed outcome
+	// is an *Error; Serve answers any other error IO with EffectPossible, or
 	// TimedOut with EffectPossible when the Connect's timeout passed.
 	Dial(ctx context.Context, addr netip.AddrPort) (*net.TCPConn, error)
 }
@@ -348,10 +349,14 @@ func checkHost(host string) error {
 
 // permits reports whether egress admits a connection to addr: some rule's
 // prefix contains the address and its port range contains the port. An
-// IPv4-mapped IPv6 address is checked as IPv4, and an address with a zone is
-// never admitted.
+// IPv4-mapped IPv6 address is checked as IPv4. An address with a zone, and an
+// unspecified address, which a TCP stack connects to this host, are never
+// admitted.
 func permits(egress []sandboxlink.EgressRule, addr netip.AddrPort) bool {
 	a := addr.Addr().Unmap()
+	if a.IsUnspecified() {
+		return false
+	}
 	for _, r := range egress {
 		if r.Prefix.Contains(a) && addr.Port() >= r.PortFirst && addr.Port() <= r.PortLast {
 			return true

@@ -85,7 +85,7 @@ Decoding rules:
 - Reject unknown tags, nonzero flags, unknown enum values, duplicate entries, overflow and trailing payload bytes. Every such error wraps `sandboxwire.ErrMalformed`.
 - There are no maps and no implicit defaults.
 - A file or process data chunk is at most 64 KiB (`sandboxwire.MaxChunk`).
-- Each sender's request IDs on a stream strictly increase in wire order, so a receiver checks uniqueness in constant memory. A sender takes each ID from `sandboxwire.RequestSequence.Next` in the critical section that writes the frame. A receiver checks each ID with `Admit` and answers an ID that does not increase as a protocol violation, without dispatching the request.
+- Each sender's request IDs on a stream strictly increase in wire order, so a receiver checks uniqueness in constant memory. A sender takes each ID from `sandboxwire.RequestSequence.Next` in the critical section that writes the frame. A receiver checks each ID with `Admit` and answers an ID that does not increase as a protocol violation, without dispatching the request. A service stream carries two sequences in turn: the Link exchange that opens it, `Open` and `Opened` on the attach side or `Bind` and `Bound` on the serve side, then the service protocol's own sequence, which starts after that exchange, so the first service request may use ID 1 again.
 - A failed request states whether it may have taken effect: `EffectNone` or `EffectPossible`. Transport loss after dispatch is `EffectPossible` unless the server later establishes the result.
 
 Each protocol keeps annotated golden frames under its package's `testdata` and a decoder fuzz target.
@@ -251,7 +251,7 @@ Losing a link resets the streams it carries and keeps its attachments until thei
 
 ## Stream ends
 
-The streams handed to service handlers and returned by `OpenService` implement `sandboxlink.Stream`: `Read`, `Write`, `CloseWrite`, `Close`, which ends writing in order and discards further input, `Reset`, and `SetDeadline`, `SetReadDeadline` and `SetWriteDeadline`, which bound reads and writes as a `net.Conn`'s do and leave the stream usable when they pass.
+The streams handed to service handlers and returned by `OpenService` implement `sandboxlink.Stream`: `Read`, `Write`, `CloseWrite`, `Close`, which ends writing in order and discards further input, `Reset`, and `SetDeadline`, `SetReadDeadline` and `SetWriteDeadline`. The deadlines bound how long a `Read` or `Write` waits, as yamux's do: a call that would wait past its deadline fails with an error whose `Timeout` is true and leaves the stream usable, and a `Read` still returns input already buffered. One goroutine may read while another writes; concurrent reads, or concurrent writes, need the caller's own lock.
 
 The relay copies each direction through a 32 KiB buffer and holds at most one 256 KiB yamux window per stream:
 

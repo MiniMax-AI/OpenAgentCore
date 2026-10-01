@@ -20,7 +20,9 @@ import (
 // an abort: after the other end's CloseWrite, Read returns io.EOF once every
 // byte written before it has been read; after a Reset anywhere on the path,
 // including the relay's for lease expiry, revocation or link loss, Read and
-// Write return an error that is not io.EOF.
+// Write return an error that is not io.EOF. One goroutine may read while
+// another writes; concurrent reads, or concurrent writes, need the caller's
+// own serialization.
 type Stream interface {
 	io.Reader
 	io.Writer
@@ -30,10 +32,11 @@ type Stream interface {
 	Close() error
 	// Reset aborts both directions.
 	Reset() error
-	// SetDeadline, SetReadDeadline and SetWriteDeadline bound pending and
-	// future reads and writes as net.Conn's do; a zero time removes the bound.
-	// A passed deadline fails the call with an error whose Timeout is true and
-	// leaves the stream usable.
+	// SetDeadline, SetReadDeadline and SetWriteDeadline bound how long
+	// pending and future reads and writes wait, as yamux's do; a zero time
+	// removes the bound. A call that would wait past the deadline fails with
+	// an error whose Timeout is true and leaves the stream usable. A Read
+	// still returns input already buffered after its deadline has passed.
 	SetDeadline(t time.Time) error
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error

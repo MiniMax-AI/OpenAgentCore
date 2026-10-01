@@ -130,6 +130,8 @@ func TestEgress(t *testing.T) {
 	egress := []sandboxlink.EgressRule{
 		{Prefix: netip.MustParsePrefix("10.0.0.0/8"), PortFirst: 443, PortLast: 443},
 		{Prefix: netip.MustParsePrefix("2001:db8::/32"), PortFirst: 1, PortLast: 65535},
+		{Prefix: netip.MustParsePrefix("::/0"), PortFirst: 22, PortLast: 22},
+		{Prefix: netip.MustParsePrefix("0.0.0.0/8"), PortFirst: 443, PortLast: 443},
 	}
 	for addr, want := range map[string]bool{
 		"10.1.2.3:443":          true,
@@ -138,6 +140,9 @@ func TestEgress(t *testing.T) {
 		"10.1.2.3:80":           false,
 		"11.0.0.1:443":          false,
 		"[fe80::1%eth0]:443":    false,
+		"[::1]:22":              true,
+		"[::]:22":               false,
+		"[::ffff:0.0.0.0]:443":  false,
 	} {
 		if got := permits(egress, netip.MustParseAddrPort(addr)); got != want {
 			t.Errorf("permits %s = %v, want %v", addr, got, want)

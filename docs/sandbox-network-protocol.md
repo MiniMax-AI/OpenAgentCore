@@ -13,7 +13,7 @@ The Network protocol is how the agent host opens a TCP connection that originate
 
 Each direction ends on its own. The client's orderly end (`CloseWrite`, a FIN) reaches the destination as a TCP half-close after every byte before it, and the destination's half-close reaches the client as EOF after every byte before it. A half-close starts no timeout, and the other direction carries on.
 
-Anything else aborts both directions: a reset from the destination, a failed read or write on either side, the end of the attachment or the loss of a link. The client then reads an error that is never EOF, and the service resets the socket. After `Connected` a failure is never reported as a frame.
+Anything else aborts both directions: a reset from the destination, a failed read or write on either side, the end of the attachment or the loss of a link. The client then reads an error that is never EOF, and the service resets the socket. After `Connected` a failure is never reported as a frame. The service learns of a reset only when it next reads or writes the stream, as [Stream ends](sandbox-link-protocol.md#stream-ends) describes: if the serve link drops after the client's half-close while the destination stays silent, the socket stays open until the destination sends or ends, or the attachment closes.
 
 A stream carries one connection. There is no replay or resumption: a lost answer leaves the attempt uncertain, and nothing retries it automatically.
 
@@ -24,7 +24,7 @@ The Go client is `sandboxnet.Connect(ctx, stream, host, port, timeout)`. It take
 - A failure is a `*sandboxnet.Error` with a `Code` and an `Effect`, and `errors.Is(err, sandboxnet.CodeDenied)` matches its code. Arguments that fail validation fail with `InvalidArgument`, and a context that ended before the request was sent fails with `Cancelled` or `TimedOut`, both with `EffectNone`. Once the request may have been sent, a lost answer (`IO`), a malformed answer (`Unknown`) or the end of the context (`Cancelled` or `TimedOut`) fails with `EffectPossible`: the sandbox may have connected. `Connect` never retries.
 - `timeout` is rounded up to whole milliseconds and must be from 1 ms to 60 s. The context bounds the wait for the answer.
 - `Conn.CloseWrite` ends the write direction in order. `Conn.Close` ends in order only after `Read` returned `io.EOF` with no failed read or write; otherwise it aborts, so unread input never holds the Link's flow-control window. `Conn.Reset` aborts explicitly.
-- Deadlines apply to the stream, and a passed deadline returns `os.ErrDeadlineExceeded`. `RemoteAddr` is the requested host and port. `LocalAddr` is empty, because the protocol does not report the sandbox's local endpoint.
+- Deadlines follow `net.Conn`: once a deadline has passed, `Read` or `Write` returns `os.ErrDeadlineExceeded`, even with input buffered, until the deadline is extended. Methods may be called concurrently. `RemoteAddr` is the requested host and port. `LocalAddr` is empty, because the protocol does not report the sandbox's local endpoint.
 
 A client in another language follows the same rules: one `Connect` per stream, no bytes before the answer, and no automatic retry of a failure with `EffectPossible`.
 
@@ -33,12 +33,12 @@ A client in another language follows the same rules: one `Connect` per stream, n
 Implement `sandboxnet.Service` and serve each Network stream with `sandboxnet.Serve(ctx, stream, bind.Egress, service)`, where `ctx` is the attachment's. `Serve` owns the protocol:
 
 - It reads one frame. A frame that is not a `Connect`, or whose request ID is zero, resets the stream. A `Connect` that fails validation is answered `InvalidArgument`.
-- It keeps reading the stream while it resolves and dials. Any byte before `Connected`, including a second `Connect`, is a protocol violation: it cancels the dial and resets the stream.
-- It runs the [egress check](#egress-check) and calls `Resolve` and `Dial`. `Dial` connects to the address it is given and never resolves.
+- It keeps reading the stream while it resolves and dials. Any byte that arrives before the dial succeeds, including a second `Connect`, is a protocol violation: it cancels the dial and resets the stream. Bytes that arrive later wait until `Connected` is written, so nothing reaches the destination before the answer.
+- It runs the [egress check](#egress-check) and calls `Resolve` and `Dial`. `Dial` connects to exactly the address it is given, in that address's family, and never resolves or tries another address.
 - It answers an `*Error` from `Resolve` or `Dial` as is. Any other error becomes `TimedOut` when the timeout passed, `NameResolutionFailed` with `EffectNone` from `Resolve`, and `IO` with `EffectPossible` from `Dial`.
 - After `Connected` it splices the stream and the socket. The end of `ctx` aborts both at any point.
 
-`netservice.New()` returns the Linux service. It resolves with the sandbox's system resolver, which reads the sandbox's `/etc/hosts` and `/etc/resolv.conf`, and dials from the sandbox's network namespace. `Service.Handle` is the `Serve` function of the `sandboxlink.ServiceNetwork` handler. It types a failed dial by its errno as the [failure table](#failures) lists.
+`netservice.New()` returns the Linux service. It resolves with the sandbox's system resolver, which reads the sandbox's `/etc/hosts` and `/etc/resolv.conf`, and dials from the sandbox's network namespace over `tcp4` or `tcp6`, matching the address. `Service.Handle` is the `Serve` function of the `sandboxlink.ServiceNetwork` handler. It types a failed dial by its errno as the [failure table](#failures) lists.
 
 ## Reference
 
@@ -77,7 +77,7 @@ The service checks a `Connect` against the stream's [`Egress`](sandbox-link-prot
 
 1. When no rule admits the port, the answer is `Denied` and nothing is resolved.
 2. An IP literal is the only candidate address. Otherwise the service resolves the name, and each address it returns is a candidate.
-3. Each candidate is checked with the port. An IPv4-mapped IPv6 address is checked and dialed as IPv4, and an address with a zone is never permitted.
+3. Each candidate is checked with the port. An IPv4-mapped IPv6 address is checked and dialed as IPv4. An address with a zone is never permitted, and neither is an unspecified address (`0.0.0.0`, `::`), because a TCP stack connects it to the sandbox itself whatever the rules say. Every other address, multicast and broadcast included, is checked as written: TCP cannot connect to those, so permitting one only leads to a dial failure.
 4. The service dials the first permitted candidate once, at that address, without resolving again. When no candidate is permitted, the answer is `Denied`.
 
 ### Failures
@@ -86,17 +86,19 @@ The service checks a `Connect` against the stream's [`Egress`](sandbox-link-prot
 | --- | --- | --- | --- |
 | 1 | `InvalidArgument` | None | The `Connect` is malformed, or its host, port or timeout is out of range |
 | 2 | `UnsupportedNetwork` | None | The service does not serve the requested network |
-| 3 | `Denied` | None | The egress admits neither the port nor any candidate address, or the sandbox refused the connect (`EACCES`, `EPERM`) |
+| 3 | `Denied` | None, except as below | The egress admits neither the port nor any candidate address, or the sandbox refused the connect (`EACCES`, `EPERM`) |
 | 4 | `NameNotResolved` | None | The name does not exist or has no address |
 | 5 | `NameResolutionFailed` | None | Resolution failed for another reason |
-| 6 | `ConnectionRefused` | None | The destination refused the connection (`ECONNREFUSED`) |
-| 7 | `Unreachable` | None | The sandbox has no route to the destination (`ENETUNREACH`, `EHOSTUNREACH`, `ENETDOWN`, `EHOSTDOWN`, `EAFNOSUPPORT`) |
+| 6 | `ConnectionRefused` | None, except as below | The destination refused the connection (`ECONNREFUSED`) |
+| 7 | `Unreachable` | None, except as below | The sandbox has no route to the destination (`ENETUNREACH`, `EHOSTUNREACH`, `ENETDOWN`, `EHOSTDOWN`, `EAFNOSUPPORT`) |
 | 8 | `TimedOut` | None during resolution or before the client sent the request, Possible after | `TimeoutMillis` passed or the kernel gave up the connect (`ETIMEDOUT`); for the client, its context's deadline passed |
-| 9 | `ResourceExhausted` | None | The sandbox ran out of ports, descriptors or memory (`EADDRNOTAVAIL`, `EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`, `EAGAIN`) |
+| 9 | `ResourceExhausted` | None, except as below | The sandbox ran out of ports, descriptors or memory (`EADDRNOTAVAIL`, `EMFILE`, `ENFILE`, `ENOBUFS`, `ENOMEM`, `EAGAIN`) |
 | 10 | `Cancelled` | None before the request is sent, Possible after | The client's context was cancelled, or the attachment ended |
 | 11 | `IO` | Possible | The dial failed for another reason; for the client, the stream failed before the answer arrived |
 | 12 | `Unknown` | Possible | For the client, the answer broke the protocol |
 
+A code typed from an errno has `EffectNone` only when `socket` or `connect` itself returned the errno. The same errno from a later step of the dial, such as registering the socket with the poller after `connect` was issued, has `EffectPossible`, because the connection may have been made.
+
 ## Verification
 
-`go test ./internal/sandboxnet/ ./apps/sandboxio/internal/netservice/` covers the golden frames, decode rejection, the host grammar and the egress rule, and, over a test relay, bytes in both directions, a half-close from each side, a destination reset, `Denied` without a dial, `NameNotResolved`, `ConnectionRefused`, `TimedOut`, a second `Connect` and a lost answer. `go test -run '^$' -fuzz FuzzDecode ./internal/sandboxnet` fuzzes the decoder.
+`go test ./internal/sandboxnet/ ./apps/sandboxio/internal/netservice/` covers the golden frames, decode rejection, the host grammar, the egress rule and bytes held until `Connected` is written, and, over a test relay, bytes in both directions, a half-close from each side, a destination reset, concurrent writes, a passed read deadline, `Denied` without a dial, including for unspecified addresses, `NameNotResolved`, `ConnectionRefused`, `TimedOut`, a second `Connect` and a lost answer. `go test -run '^$' -fuzz FuzzDecode ./internal/sandboxnet` fuzzes the decoder.

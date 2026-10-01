@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -95,20 +96,31 @@ func contextCode(err error) Code {
 // Conn is a connection the sandbox made. Read returns io.EOF only after the
 // destination ended its write side and every byte before that arrived; an
 // abort anywhere on the path, such as a reset from the destination or the end
-// of the attachment, is an error that is not io.EOF.
+// of the attachment, is an error that is not io.EOF. Its methods may be called
+// concurrently, as net.Conn's may.
 type Conn struct {
 	s      sandboxlink.Stream
 	remote Addr
-	closed atomic.Bool
-	failed atomic.Bool // a Read or Write failed for a reason other than a deadline
-	eof    atomic.Bool // Read returned io.EOF
+	// rmu and wmu serialize reads and writes, which the stream does not.
+	rmu, wmu sync.Mutex
+	// rdl and wdl hold the deadlines, so a passed one fails a call even when
+	// the stream could complete it from its buffer.
+	rdl, wdl atomic.Pointer[time.Time]
+	closed   atomic.Bool
+	failed   atomic.Bool // a Read or Write failed for a reason other than a deadline
+	eof      atomic.Bool // Read returned io.EOF
 }
 
 var _ net.Conn = (*Conn)(nil)
 
 func (c *Conn) Read(b []byte) (int, error) {
+	c.rmu.Lock()
+	defer c.rmu.Unlock()
 	if c.closed.Load() {
 		return 0, net.ErrClosed
+	}
+	if passed(&c.rdl) {
+		return 0, os.ErrDeadlineExceeded
 	}
 	n, err := c.s.Read(b)
 	if err == io.EOF {
@@ -119,8 +131,13 @@ func (c *Conn) Read(b []byte) (int, error) {
 }
 
 func (c *Conn) Write(b []byte) (int, error) {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
 	if c.closed.Load() {
 		return 0, net.ErrClosed
+	}
+	if passed(&c.wdl) {
+		return 0, os.ErrDeadlineExceeded
 	}
 	n, err := c.s.Write(b)
 	return n, c.note(err)
@@ -178,9 +195,30 @@ func (c *Conn) LocalAddr() net.Addr { return Addr{} }
 // RemoteAddr returns the host and port the Conn was asked to reach.
 func (c *Conn) RemoteAddr() net.Addr { return c.remote }
 
-func (c *Conn) SetDeadline(t time.Time) error      { return c.s.SetDeadline(t) }
-func (c *Conn) SetReadDeadline(t time.Time) error  { return c.s.SetReadDeadline(t) }
-func (c *Conn) SetWriteDeadline(t time.Time) error { return c.s.SetWriteDeadline(t) }
+// SetDeadline, SetReadDeadline and SetWriteDeadline follow net.Conn: once a
+// deadline has passed, Read or Write fails with os.ErrDeadlineExceeded until
+// the deadline is extended, and a zero time removes it.
+func (c *Conn) SetDeadline(t time.Time) error {
+	c.rdl.Store(&t)
+	c.wdl.Store(&t)
+	return c.s.SetDeadline(t)
+}
+
+func (c *Conn) SetReadDeadline(t time.Time) error {
+	c.rdl.Store(&t)
+	return c.s.SetReadDeadline(t)
+}
+
+func (c *Conn) SetWriteDeadline(t time.Time) error {
+	c.wdl.Store(&t)
+	return c.s.SetWriteDeadline(t)
+}
+
+// passed reports whether the deadline in d is set and has passed.
+func passed(d *atomic.Pointer[time.Time]) bool {
+	t := d.Load()
+	return t != nil && !t.IsZero() && !time.Now().Before(*t)
+}
 
 // Addr is a destination as the Connect named it.
 type Addr struct {
