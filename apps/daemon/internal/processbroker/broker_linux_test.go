@@ -758,6 +758,51 @@ func TestShimLossEndsWaitForStream(t *testing.T) {
 	}
 }
 
+// A Start retried after its response was lost finds the operation still
+// starting. The program runs, and gets stdin, only once Started arrives: it
+// reads all of its input and then end of file. A StartFailed event instead
+// is the typed start failure.
+func TestRetriedStartWaitsForStarted(t *testing.T) {
+	for _, fails := range []bool{false, true} {
+		t.Run(fmt.Sprintf("start fails %v", fails), func(t *testing.T) {
+			svc := newFakeService()
+			svc.startLate, svc.startDelay, svc.startFails = true, 300*time.Millisecond, fails
+			f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpStart }))
+			const in = "stdin for a program that was still starting\n"
+			out, stderr, err := runFor(t, f.command("sh", "-c", "cat"), in)
+			refused := svc.counts().refusedIn
+			switch {
+			case fails && (exitCode(err) != processshim.ExitNotFound || !strings.Contains(stderr, "no such file")):
+				t.Fatalf("Run = %v; stderr %q", err, stderr)
+			case !fails && (err != nil || out != in || refused != 0):
+				t.Fatalf("Run = %v after %d stdin requests refused while starting; stdout %q, stderr %q", err, refused, out, stderr)
+			}
+		})
+	}
+}
+
+// runFor runs cmd with stdin in and returns its stdout, stderr and error. It
+// fails the test when cmd still runs after 10s.
+func runFor(t *testing.T, cmd *exec.Cmd, in string) (string, string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = strings.NewReader(in), &stdout, &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return stdout.String(), stderr.String(), err
+	case <-time.After(10 * time.Second):
+		cmd.Process.Kill()
+		<-done
+		t.Fatalf("%s still ran after 10s; stdout %q, stderr %q", cmd.Args, stdout.String(), stderr.String())
+		return "", "", nil
+	}
+}
+
 type fixture struct {
 	dir, bin string
 	uid, gid int // the relay's
