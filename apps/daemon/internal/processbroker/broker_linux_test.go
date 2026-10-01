@@ -53,8 +53,8 @@ const (
 	viewID        = 1000
 )
 
-// The test binary is also the relay, and the shim through links named after
-// the commands.
+// The test binary is also the relay, the shim through links named after the
+// commands, and a Harness in the view.
 func TestMain(m *testing.M) {
 	sessionview.Init()
 	if os.Getenv(relayEnv) == "1" {
@@ -62,6 +62,9 @@ func TestMain(m *testing.M) {
 	}
 	if sock := os.Getenv(shimSocketEnv); sock != "" {
 		os.Exit(processshim.Run(sock))
+	}
+	if os.Getenv(harnessEnv) == "1" {
+		os.Exit(runHarness())
 	}
 	code := m.Run()
 	service.stop()

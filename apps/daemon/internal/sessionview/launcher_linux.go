@@ -8,12 +8,15 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 )
 
 // Init runs the launcher when the process was started as one, and then never returns. The daemon calls it first thing in main.
@@ -32,6 +35,9 @@ type launcher struct {
 	proceed     chan struct{}
 	proceedOnce sync.Once
 	targets     map[string]string // set before proceed closes
+
+	proc  int // the view's /proc
+	relay int // the relay's pid, or 0
 
 	// mu orders signals against the process's exit. running holds from the process's start until it is reaped; termAt is when TERM first went to the view.
 	mu      sync.Mutex
@@ -70,18 +76,28 @@ func (l *launcher) run() (int, error) {
 		return 0, err
 	}
 	<-l.proceed
-	b := &builder{root: -1, targets: l.targets}
+	b := &builder{root: -1, proc: -1, listener: -1, targets: l.targets}
 	defer b.close()
 	if err := b.build(spec); err != nil {
 		return 0, err
 	}
+	l.proc = b.proc
 	if err := switchRoot(b.root); err != nil {
 		return 0, err
 	}
 	if err := restrict(); err != nil {
 		return 0, err
 	}
-	b.close()
+	b.closeBuild()
+	if b.listener >= 0 {
+		// The launcher keeps neither the listener nor the broker connection, so the relay's end is theirs alone.
+		l.relay, err = startRelay(spec, b.listener)
+		b.closeListener()
+		unix.Close(relayFD)
+		if err != nil {
+			return 0, err
+		}
+	}
 	pid, err := startProcess(spec)
 	if err != nil {
 		return 0, err
@@ -157,7 +173,7 @@ func (l *launcher) forwardSignals() {
 	}()
 }
 
-// drain gives the processes left after the process exits TERM and up to grace from that TERM to exit, reaping them. When TERM already went to the view, they keep what remains of the grace and get no second TERM. The launcher's exit then kills whatever remains.
+// drain gives the processes left after the process exits TERM and up to grace from that TERM to exit, reaping them, and ends once only the relay remains. When TERM already went to the view, they keep what remains of the grace and get no second TERM. The launcher's exit then kills whatever remains, the relay too.
 func (l *launcher) drain(grace time.Duration) {
 	l.mu.Lock()
 	termAt := l.termAt
@@ -171,7 +187,8 @@ func (l *launcher) drain(grace time.Duration) {
 	reaped := make(chan struct{})
 	go func() {
 		defer close(reaped)
-		for {
+		// The last process other than the relay to exit is a child of the launcher by then, so its exit ends the Wait4.
+		for l.othersRemain() {
 			if _, err := unix.Wait4(-1, nil, 0, nil); err != nil && err != unix.EINTR {
 				return
 			}
@@ -183,6 +200,26 @@ func (l *launcher) drain(grace time.Duration) {
 	case <-reaped:
 	case <-timer.C:
 	}
+}
+
+// othersRemain reports whether a process other than the launcher and the relay remains in the view. It errs on yes.
+func (l *launcher) othersRemain() bool {
+	fd, err := unix.Openat(l.proc, ".", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return true
+	}
+	dir := os.NewFile(uintptr(fd), "proc")
+	defer dir.Close()
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return true
+	}
+	for _, n := range names {
+		if pid, err := strconv.Atoi(n); err == nil && pid != 1 && pid != l.relay {
+			return true
+		}
+	}
+	return false
 }
 
 // reap collects every child, since orphans in the view reparent to PID 1, until the process exits.
@@ -251,6 +288,28 @@ func loopbackUp() error {
 	}
 	ifr.SetUint16(ifr.Uint16() | unix.IFF_UP)
 	return unix.IoctlIfreq(fd, unix.SIOCSIFFLAGS, ifr)
+}
+
+// startRelay starts the Session's process relay as the process's user, with the broker connection and the listening socket at the descriptors processshim gives them, no standard descriptors and an empty environment.
+func startRelay(spec *launchSpec, listener int) (int, error) {
+	files := make([]uintptr, max(processshim.RelayBrokerFD, processshim.RelayListenerFD)+1)
+	for i := range files {
+		files[i] = ^uintptr(0) // closed
+	}
+	files[processshim.RelayBrokerFD], files[processshim.RelayListenerFD] = relayFD, uintptr(listener)
+	pid, err := syscall.ForkExec(processshim.RelayPath, processshim.RelayArgs, &syscall.ProcAttr{
+		Dir:   "/",
+		Env:   []string{},
+		Files: files,
+		Sys: &syscall.SysProcAttr{
+			Setsid:     true,
+			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID, Groups: spec.Groups},
+		},
+	})
+	if err != nil {
+		return 0, &Error{Kind: ErrExec, Op: "exec relay", Path: processshim.RelayPath, Err: err}
+	}
+	return pid, nil
 }
 
 func startProcess(spec *launchSpec) (int, error) {

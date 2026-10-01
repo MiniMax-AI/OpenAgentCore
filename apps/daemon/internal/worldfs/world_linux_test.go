@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/worldfs"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/fileservicetest"
@@ -35,9 +36,12 @@ const (
 	shimMarker = "oac-test-shim"
 )
 
-// The test binary is also the launcher, the Harness and the shim inside the view.
+// The test binary is also the launcher, the Harness, the shim and the relay inside the view.
 func TestMain(m *testing.M) {
 	sessionview.Init()
+	if processshim.Relaying() {
+		os.Exit(processshim.Relay())
+	}
 	if filepath.Base(os.Args[0]) == "sh" {
 		fmt.Println(shimMarker)
 		os.Exit(0)

@@ -6,5 +6,9 @@
 //
 // The daemon calls [Init] first thing in main. [Start] re-executes the daemon binary as the launcher, which becomes PID 1 of the view: it builds the view, starts the process, delivers signals to every process in the view, reaps orphans and exits with the process status. Once the process has exited, Signal reports [ErrExited] and delivers nothing. When the process exits while others remain, the launcher sends them TERM unless one already went to the view, and waits for them up to [Process].Grace from the first TERM. Its exit kills what remains and tears the view down.
 //
+// A view that declares a [Shim] also runs the Session's process relay, the shim binary in relay mode (package processshim). The launcher starts it before the process, under the same restrictions and as the same user, with a listening socket at processshim.SocketPath on a read-only mount and its end of a socket pair whose other end is [View.Relay]. The relay is the only process that receives the descriptors a shim hands over; the broker outside the view holds only its end of the pair. The launcher's drain ignores the relay, which ends with the view.
+//
+// Teardown never waits unconditionally. Once the launcher has exited, the view shuts its end of the relay connection down, stops the world server, which ends the requests still pending on the view's FUSE connection so that a process blocked on the world can exit, and waits for the world server and the view's processes together for up to 30 seconds. Past that, Wait and Close report [ErrCleanup].
+//
 // The package works only on Linux. Elsewhere [Start] returns [ErrUnsupported].
 package sessionview

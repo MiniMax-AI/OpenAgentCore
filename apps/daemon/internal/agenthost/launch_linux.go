@@ -243,7 +243,7 @@ func (s *session) startBroker(grace time.Duration) error {
 		paths[p] = p
 	}
 	b := s.deps.broker()
-	err := b.Start(brokerConfig{RunDir: s.dir.entry(runEntry), UID: s.uid, GID: s.uid, Names: names, Paths: paths,
+	err := b.Start(brokerConfig{UID: s.uid, GID: s.uid, Names: names, Paths: paths,
 		Pass: slices.Clone(view.ForwardEnv), Sandbox: s.in.Environment.Sandbox, Tool: s.in.Environment.Tool,
 		Dial: s.openProcess, CancelGrace: grace})
 	if err != nil {
@@ -255,7 +255,7 @@ func (s *session) startBroker(grace time.Duration) error {
 	return nil
 }
 
-// spec builds the view: the closure, home and run directories, the agent
+// spec builds the view: the closure and home directories, the agent
 // host's /etc files and CA directory, the adapter's overlays and masks, the
 // shim and the gateway in the view's network namespace.
 func (s *session) spec(viewCtx context.Context, world *worldfs.World, opts clirunner.StartOptions, ends *stdio) sessionview.Spec {
@@ -264,9 +264,7 @@ func (s *session) spec(viewCtx context.Context, world *worldfs.World, opts cliru
 	for _, m := range view.Closure {
 		private = append(private, sessionview.PrivateDir{Name: m.Name, HostDir: m.HostDir, Exec: true})
 	}
-	private = append(private,
-		sessionview.PrivateDir{Name: agent.ViewHomeName, HostDir: s.dir.entry(homeEntry), Writable: true},
-		sessionview.PrivateDir{Name: agent.ViewRunName, HostDir: s.dir.entry(runEntry)})
+	private = append(private, sessionview.PrivateDir{Name: agent.ViewHomeName, HostDir: s.dir.entry(homeEntry), Writable: true})
 	var overlays []sessionview.Overlay
 	for _, name := range etcFiles {
 		overlays = append(overlays, sessionview.Overlay{Path: "/etc/" + name, Source: s.dir.entry(etcEntry, name)})

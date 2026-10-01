@@ -27,3 +27,4 @@ func (*View) Close() error                { return nil }
 func (*View) Stdin() *os.File             { return nil }
 func (*View) Stdout() *os.File            { return nil }
 func (*View) Stderr() *os.File            { return nil }
+func (*View) Relay() *os.File             { return nil }

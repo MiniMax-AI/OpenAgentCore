@@ -47,7 +47,6 @@ func freeUID(id uint32) {
 // The entries of a Session directory.
 const (
 	homeEntry    = agent.ViewHomeName // the Session home, owned by the Session uid
-	runEntry     = agent.ViewRunName  // the process broker's run directory
 	etcEntry     = "etc"              // the /etc files
 	maskEntry    = "mask"             // an empty file and an empty directory that masks present
 	stagingEntry = "staging"          // sessionview's staging parent
@@ -62,8 +61,8 @@ func (d sessionDir) entry(name ...string) string {
 	return filepath.Join(append([]string{string(d)}, name...)...)
 }
 
-// createSessionDir creates the Session directory with its home, run, etc,
-// mask and staging entries.
+// createSessionDir creates the Session directory with its home, etc, mask
+// and staging entries.
 func createSessionDir(stateDir string, id sandboxwire.ID, uid uint32) (sessionDir, error) {
 	parent := sessionsDir(stateDir)
 	if err := os.MkdirAll(parent, 0o700); err != nil {
@@ -86,7 +85,7 @@ func (d sessionDir) populate(uid uint32) error {
 	dirs := []struct {
 		name string
 		mode fs.FileMode
-	}{{homeEntry, 0o700}, {runEntry, 0o755}, {etcEntry, 0o755}, {maskEntry, 0o755}, {filepath.Join(maskEntry, "dir"), 0o555}, {stagingEntry, 0o700}}
+	}{{homeEntry, 0o700}, {etcEntry, 0o755}, {maskEntry, 0o755}, {filepath.Join(maskEntry, "dir"), 0o555}, {stagingEntry, 0o700}}
 	for _, e := range dirs {
 		if err := os.Mkdir(d.entry(e.name), e.mode); err != nil {
 			return err
