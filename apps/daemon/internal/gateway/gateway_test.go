@@ -117,7 +117,7 @@ func startSandbox(t *testing.T) *sandbox {
 		sandboxlink.Serve(ctx, sandboxlink.ServeConfig{URL: srv.URL, TLS: srv.TLS, Credential: []byte("serve credential"),
 			Resource: resource, ServerInstanceID: sandboxwire.NewID(),
 			Services: []sandboxlink.ServiceHandler{{Service: sandboxlink.ServiceNetwork, Version: sandboxnet.Version,
-				Serve: func(ctx context.Context, b sandboxlink.Bind, s sandboxlink.Stream) {
+				Serve: func(ctx context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 					sandboxnet.Serve(ctx, s, b.Egress, sb)
 				}}},
 			OnConnected: func(sandboxlink.HelloAccepted) {

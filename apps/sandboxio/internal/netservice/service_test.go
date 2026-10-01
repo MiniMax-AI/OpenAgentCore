@@ -78,7 +78,7 @@ func newFixture(t *testing.T) *fixture {
 		sandboxlink.Serve(ctx, sandboxlink.ServeConfig{URL: f.srv.URL, TLS: f.srv.TLS, Credential: []byte("serve credential"),
 			Resource: resource, ServerInstanceID: sandboxwire.NewID(),
 			Services: []sandboxlink.ServiceHandler{{Service: sandboxlink.ServiceNetwork, Version: sandboxnet.Version,
-				Serve: func(ctx context.Context, b sandboxlink.Bind, s sandboxlink.Stream) {
+				Serve: func(ctx context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 					f.served <- sandboxnet.Serve(ctx, s, b.Egress, svc)
 				}}},
 			OnConnected: func(sandboxlink.HelloAccepted) {

@@ -147,7 +147,7 @@ func (f *fixture) startServe(generation uint64) *servePeer {
 	p := &servePeer{instance: sandboxwire.NewID(), connected: make(chan sandboxlink.HelloAccepted, 16), conns: make(chan net.Conn, 16),
 		lost: make(chan sandboxwire.ID, 16), restored: make(chan sandboxwire.ID, 16), closed: make(chan sandboxlink.CloseReason, 128),
 		binds: make(chan sandboxlink.Bind, 16), echoed: make(chan error, 16), done: make(chan struct{})}
-	echo := func(_ context.Context, b sandboxlink.Bind, s sandboxlink.Stream) {
+	echo := func(_ context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 		put(p.binds, b)
 		_, err := io.Copy(s, s)
 		if err == nil {
@@ -155,7 +155,7 @@ func (f *fixture) startServe(generation uint64) *servePeer {
 		}
 		put(p.echoed, err)
 	}
-	resetAfterOne := func(_ context.Context, _ sandboxlink.Bind, s sandboxlink.Stream) {
+	resetAfterOne := func(_ context.Context, _ sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 		s.Read(make([]byte, 1))
 		s.Reset()
 	}

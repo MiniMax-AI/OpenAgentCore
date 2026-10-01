@@ -15,10 +15,14 @@ import (
 // ServiceHandler serves one service. Serve owns the stream and returns when
 // it is done with it. ctx ends when the attachment closes or Serve returns.
 // The Bind carries the authorized binding, including a File stream's exports.
+// seq orders the streams of an attachment by bind: the serve peer assigns it
+// before it answers Bound, and a stream bound later gets a larger one however
+// late its handler runs. A service may rely on that order to fence a stream's
+// successor.
 type ServiceHandler struct {
 	Service Service
 	Version uint16
-	Serve   func(ctx context.Context, b Bind, s Stream)
+	Serve   func(ctx context.Context, b Bind, seq uint64, s Stream)
 }
 
 // ServeConfig configures a serve peer. Dial replaces the WebSocket dial to URL
@@ -119,6 +123,7 @@ type server struct {
 
 	mu          sync.Mutex
 	attachments map[sandboxwire.ID]*served
+	binds       uint64 // bind sequence of the last stream bound
 	// closedIDs holds recently closed attachment IDs until the time given. A
 	// Bind the relay sent before a close can reach bind after the close.
 	closedIDs map[sandboxwire.ID]time.Time
@@ -199,6 +204,7 @@ func (s *server) bind(ctx context.Context, st *yamux.Stream) {
 	}
 	var refuse Code
 	var a *served
+	var seq uint64
 	switch {
 	case err != nil || !ok:
 		refuse = ProtocolViolation
@@ -209,7 +215,7 @@ func (s *server) bind(ctx context.Context, st *yamux.Stream) {
 	case b.ExpectedServerInstanceID != s.cfg.ServerInstanceID:
 		refuse = InstanceChanged
 	default:
-		if a = s.track(ctx, b.AttachmentID); a == nil {
+		if a, seq = s.track(ctx, b.AttachmentID); a == nil {
 			refuse = LeaseExpired
 		}
 	}
@@ -228,16 +234,16 @@ func (s *server) bind(ctx context.Context, st *yamux.Stream) {
 		return
 	}
 	st.SetDeadline(time.Time{})
-	h.Serve(a.ctx, b, st)
+	h.Serve(a.ctx, b, seq, st)
 }
 
-// track counts a bound stream of attachment id. It returns nil for a recently
-// closed attachment.
-func (s *server) track(ctx context.Context, id sandboxwire.ID) *served {
+// track counts a bound stream of attachment id and returns its bind sequence.
+// It returns nil for a recently closed attachment.
+func (s *server) track(ctx context.Context, id sandboxwire.ID) (*served, uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if until, closed := s.closedIDs[id]; closed && time.Now().Before(until) {
-		return nil
+		return nil, 0
 	}
 	a := s.attachments[id]
 	if a == nil {
@@ -252,7 +258,8 @@ func (s *server) track(ctx context.Context, id sandboxwire.ID) *served {
 			s.cfg.OnAttachmentRestored(id)
 		}
 	}
-	return a
+	s.binds++
+	return a, s.binds
 }
 
 // release ends one bound stream of a. Only the current attachment of its ID

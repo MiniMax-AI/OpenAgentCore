@@ -32,7 +32,7 @@ func New() *Service { return &Service{resolver: net.DefaultResolver} }
 
 // Handle serves one Network stream under the egress its Bind carries. It is
 // the Serve function of the sandboxlink.ServiceNetwork handler.
-func (s *Service) Handle(ctx context.Context, b sandboxlink.Bind, st sandboxlink.Stream) {
+func (s *Service) Handle(ctx context.Context, b sandboxlink.Bind, _ uint64, st sandboxlink.Stream) {
 	sandboxnet.Serve(ctx, st, b.Egress, s)
 }
 
