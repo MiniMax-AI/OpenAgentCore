@@ -68,8 +68,10 @@ type relay struct {
 	gone   bool           // the broker's connection ended
 	live   sync.WaitGroup // the invocations' control goroutines
 
-	// publishing, a test seam, runs before an invocation gets its ID.
+	// Test seams: publishing runs before an invocation gets its ID, and
+	// makingRaw before the control goroutine makes a terminal raw.
 	publishing func(Request)
+	makingRaw  func()
 }
 
 func newRelay() (*relay, error) {
@@ -276,8 +278,8 @@ type invocation struct {
 	out  [3]*output // 1 and 2
 	// end is set by End or the broker's loss; it stops every pump and wait.
 	end *stopFlag
-	// raw closes once stdin may be read: the terminal is raw, or there is
-	// none.
+	// raw closes once stdin may be read and output written: the terminal
+	// is raw, or there is none.
 	raw     chan struct{}
 	rawOnce sync.Once
 	pumps   sync.WaitGroup // the output pumps
@@ -366,6 +368,9 @@ func (inv *invocation) run() {
 			inv.conn.Send(Ack{}) // a failure means the shim is gone; readShim reports it
 		case Started:
 			if inv.term != nil {
+				if inv.r.makingRaw != nil {
+					inv.r.makingRaw()
+				}
 				inv.term.makeRaw() // a terminal that stays cooked still works
 			}
 			inv.rawOnce.Do(func() { close(inv.raw) })
@@ -610,6 +615,13 @@ func (o *output) run() {
 		}
 		if o.isBroken() || o.isClosed() {
 			continue
+		}
+		// Until the terminal is raw, its output processing would translate
+		// the remote terminal's output a second time.
+		select {
+		case <-o.inv.raw:
+		case <-o.inv.end.c:
+			return
 		}
 		err := writeFD(o.ep, it.data, o.inv.end)
 		switch {

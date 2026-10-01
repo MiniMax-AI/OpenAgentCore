@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
@@ -191,5 +192,86 @@ func TestOpensReachTheBrokerInIDOrder(t *testing.T) {
 	case err := <-broken:
 		t.Fatal(err)
 	default:
+	}
+}
+
+// Output for a terminal is written only once the terminal is raw, so the
+// local terminal never processes the remote terminal's output again, even
+// when the output reaches its pump before the control goroutine takes
+// Started.
+func TestTerminalOutputWaitsForRawMode(t *testing.T) {
+	ptm, pts, err := pty.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ptm.Close()
+	defer pts.Close()
+	fd := int(pts.Fd())
+	tio, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tio.Oflag |= unix.OPOST | unix.ONLCR // cooked output turns \n into \r\n
+	if err := unix.IoctlSetTermios(fd, unix.TCSETS, tio); err != nil {
+		t.Fatal(err)
+	}
+	written := make(chan struct{})
+	r := startTestRelay(t, func(r *relay) {
+		// Hold the control goroutine in Started until the output is
+		// written, or long enough for a pump that does not wait to write it.
+		r.makingRaw = func() {
+			select {
+			case <-written:
+			case <-time.After(300 * time.Millisecond):
+			}
+		}
+	})
+	const out = "a\r\nb\r\n" // the remote terminal's output
+	go func() {
+		for {
+			m, err := r.read()
+			if err != nil {
+				return
+			}
+			switch m := m.(type) {
+			case Open:
+				id := m.ID
+				r.send(Accept{ID: id}, Started{ID: id}, Output{ID: id, FD: 1, Seq: 1, Data: []byte(out)})
+			case Written:
+				close(written)
+				r.send(Exit{ID: m.ID, Result: Result{Code: 0}, Marks: []Mark{{FD: 1, Seq: 1}}}, End{ID: m.ID})
+			}
+		}
+	}()
+	conn := r.shim(t, "sh", [3]int{fd, fd, fd})
+	if res, err := finished(conn); err != nil || res.Code != 0 {
+		t.Fatalf("Result %+v, %v", res, err)
+	}
+	if got := drain(t, int(ptm.Fd())); string(got) != out {
+		t.Fatalf("the terminal got %q, want %q", got, out)
+	}
+}
+
+// drain reads what the terminal's master side holds until it stays empty
+// for 100ms.
+func drain(t *testing.T, fd int) []byte {
+	t.Helper()
+	var got []byte
+	buf := make([]byte, 256)
+	for {
+		n, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 100)
+		switch {
+		case err == unix.EINTR:
+			continue
+		case err != nil:
+			t.Fatal(err)
+		case n == 0:
+			return got
+		}
+		m, err := unix.Read(fd, buf)
+		if err != nil || m == 0 {
+			return got
+		}
+		got = append(got, buf[:m]...)
 	}
 }
