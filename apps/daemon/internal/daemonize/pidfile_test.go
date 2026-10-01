@@ -66,7 +66,8 @@ func TestProcessRecordRejectsOldAndMalformed(t *testing.T) {
 func TestStopTimeoutRetainsProcessRecord(t *testing.T) {
 	dir := privateTempDir(t)
 	path := filepath.Join(dir, "connect.pid")
-	pid, err := Spawn([]string{"daemon", "child"}, ReExecOptions{LogPath: filepath.Join(dir, "log"), PIDPath: path, ExtraEnv: []string{spawnTestChildEnv + "=ignore"}})
+	t.Setenv(spawnTestChildEnv, "ignore")
+	pid, err := Spawn([]string{"daemon", "child"}, ReExecOptions{LogPath: filepath.Join(dir, "log"), PIDPath: path})
 	if err != nil {
 		t.Fatal(err)
 	}

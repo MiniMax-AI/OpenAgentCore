@@ -19,7 +19,7 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 
 The decoder rejects unknown, duplicate, missing and case-aliased fields, other versions and documents larger than `runtimebootstrap.MaxBytes` (16 KiB). Errors never include submitted values. A missing or malformed file fails before the daemon connects.
 
-The file is the only authentication input for this launch: the daemon refuses to combine it with pairing or self-hosted enrollment options, and reads the credential into memory without saving it to a stored profile. Credentials never go in command arguments, environment variables or receipts. The provider keeps the file for process restarts and removes it only during explicit cleanup of the resources it owns.
+The file is the only authentication input for this launch: the daemon refuses to combine it with self-hosted enrollment options, and reads the credential into memory without saving it to a stored profile. Credentials never go in command arguments, environment variables or receipts. The provider keeps the file for process restarts and removes it only during explicit cleanup of the resources it owns.
 
 ## Responsibilities and readiness
 
