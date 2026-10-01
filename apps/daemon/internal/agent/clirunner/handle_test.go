@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -76,14 +77,30 @@ func TestHandleProcessCancelAfterExit(t *testing.T) {
 	}
 }
 
+// TestHandleProcessCancelAfterLeaderExit checks that a cancel that finds the process exited 0 while its descendants still end leaves the success.
+func TestHandleProcessCancelAfterLeaderExit(t *testing.T) {
+	h := newFakeHandle(-1)
+	h.leaderExited = true
+	p, err := FromHandle(h, HandleOptions{Stdout: emptyReader(), Stderr: emptyReader()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Cancel()
+	h.exit <- 0
+	if err := p.Wait(); err != nil {
+		t.Fatalf("Wait = %v, want success", err)
+	}
+}
+
 type fakeHandle struct {
-	termExit  int
-	exit      chan int
-	closed    chan struct{}
-	closeOnce sync.Once
-	closedAt  time.Time
-	mu        sync.Mutex
-	signals   []syscall.Signal
+	termExit     int
+	leaderExited bool
+	exit         chan int
+	closed       chan struct{}
+	closeOnce    sync.Once
+	closedAt     time.Time
+	mu           sync.Mutex
+	signals      []syscall.Signal
 }
 
 func newFakeHandle(termExit int) *fakeHandle {
@@ -91,6 +108,9 @@ func newFakeHandle(termExit int) *fakeHandle {
 }
 
 func (h *fakeHandle) Signal(sig syscall.Signal) error {
+	if h.leaderExited {
+		return os.ErrProcessDone
+	}
 	h.mu.Lock()
 	h.signals = append(h.signals, sig)
 	h.mu.Unlock()

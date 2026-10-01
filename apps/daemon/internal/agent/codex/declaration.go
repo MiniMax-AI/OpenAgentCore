@@ -45,7 +45,7 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 		MCPHTTPRequired:                proto.CapabilityUnsupported,
 		MCPHTTPBearerAuth:              proto.CapabilitySupported,
 	},
-}, Configuration: configuration.Configuration(), Discover: discover}
+}, Configuration: configuration.Configuration(), ConnectionOptions: []string{"mcp_servers", "env"}, Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)

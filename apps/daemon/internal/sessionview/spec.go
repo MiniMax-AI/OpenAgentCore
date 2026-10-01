@@ -81,7 +81,7 @@ type Process struct {
 	Groups []uint32
 	// A nil Stdin, Stdout or Stderr is a pipe whose other end the View exposes.
 	Stdin, Stdout, Stderr *os.File
-	// Grace is how long processes left in the view when the process exits have, after TERM, before the view ends. Zero ends the view at once.
+	// Grace is how long processes left in the view when the process exits have to exit, counted from the first TERM the view sent them, before the view ends. Zero ends the view at once.
 	Grace time.Duration
 }
 

@@ -147,7 +147,7 @@ A Harness that supports the Subagent reads implements the [neutral observation c
 
 ## Register the adapter
 
-Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](../../apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
+Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](../../apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration`, the `ConnectionOptions` an agent-host view rejects ([Endpoints and proxy](#endpoints-and-proxy)) and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
 
 `Runtime.SessionCapabilityContext` and `Runtime.ExecutorCapabilityContext` explicitly request capability-download URL resolution and scoped product-upload context for the corresponding execution factory. Preparation never receives those effects. An adapter that supports product workspace authoring declares `WorkspaceAuthoring` itself; common registration does not grant it.
 
@@ -158,7 +158,7 @@ Registration is static and requires a build. Export one `agent.Declaration` from
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration, agent.Factory)` | Kind, availability, version, `AgentKindCapabilities`, the model configuration declaration and the direct-call factory. It resets the other registrations, so call it first. |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | The Executor and Turn lifecycle used for execution; derives the `Preparation` capability |
 | 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | Optional: separate read-only workspace preparation for qualified workspace operations |
-| 4 | `RegisterView(kind, agent.View)` | Optional: the agent-host view declaration from `Runtime.View`. It panics with `ErrInvalidView` when `View.Validate` fails. Its Executor factory validates the model configuration like `RegisterExecutor` and enforces the [MCP rule](#endpoints-and-proxy). |
+| 4 | `RegisterView(kind, connectionOptions, agent.View)` | Optional: the agent-host view declaration from `Runtime.View`, with the declaration's `ConnectionOptions`. It panics with `ErrInvalidView` when `View.Validate` fails. Its Executor factory validates the model configuration like `RegisterExecutor` and enforces the [gateway rule](#endpoints-and-proxy). |
 
 The direct-call `agent.Factory` delegates to the same Executor implementation.
 
@@ -301,7 +301,9 @@ The agent host derives the process broker's table from the declaration: `/.oac/b
 
 ### Endpoints and proxy
 
-Before it calls the factory, the agent host points the request's `model_provider` at the Session's [credential gateway](model-execution.md#credential-gateway), with the placeholder in place of the key. It resolves the Session's MCP once, from the public declarations and the installed Environment MCP, into `ViewSession.MCP`, and removes both from the request. Each HTTP binding points at its gateway URL and carries no bearer and no headers; the gateway adds the declared credential and headers. A stdio binding is as resolved and runs in the sandbox through the declared shims. A view Executor takes MCP only from `ViewSession.MCP` and never resolves the request, and the Registry rejects a request or HTTP binding that breaks this rule. The adapter renders the provider and the bindings as it does for a local Harness and never sees a real credential.
+Before it calls the factory, the agent host points the request's `model_provider` at the Session's [credential gateway](model-execution.md#credential-gateway): `base_url` is `http://127.0.0.1:<port>` with no path and `api_key` is `modelprovider.Placeholder`. It resolves the Session's MCP once, from the public declarations and the installed Environment MCP, into `ViewSession.MCP`, and removes both from the request. Each HTTP binding points at its gateway URL and carries no bearer and no headers; the gateway adds the declared credential and headers. A stdio binding is as resolved and runs in the sandbox through the declared shims. A view Executor takes MCP only from `ViewSession.MCP` and never resolves the request. The adapter renders the provider and the bindings as it does for a local Harness and never sees a real credential.
+
+An adapter whose Harness reads MCP servers, endpoints, credentials or environment values from other `AgentOptions` keys lists those keys in `Declaration.ConnectionOptions`. The Registry checks each view request once, before the factory, and rejects it with `ErrViewHandoff` when its model provider is missing or is not the gateway with the placeholder, when it sets a connection option, when it carries MCP outside `ViewSession.MCP`, or when an HTTP binding is not a credential-free loopback endpoint.
 
 With `ViewProxyEnv`, `ViewSession.Proxy` is the gateway's proxy URL. The adapter sets `HTTPS_PROXY` and `HTTP_PROXY` to it and `NO_PROXY` to `127.0.0.1,localhost`, each in upper and lower case. Declare `ViewProxyEnv` only after qualifying that every request the Harness makes locally honours these variables. A request that ignores them fails to connect, because the view has no route out.
 
@@ -315,9 +317,9 @@ With `ViewProxyNone`, `ViewSession.Proxy` is empty and the view has no generic p
 
 `ViewSession.Launch` replaces `clirunner.Start`. Each call builds one view and runs `Binary` in it, and at most one view per Session is live at a time. `Dir` is a path in the sandbox, `OwnProcessGroup` is true and `Env` is the complete environment. The returned `clirunner.Process` follows [Native process ownership](#native-process-ownership):
 
-- Cancel sends TERM to every process in the view and closes the view after `KillTimeout`. Cancelling a Harness that has exited does nothing.
-- When the Harness exits while other processes remain, the view sends them TERM and ends once they exit or `KillTimeout` passes.
-- `Wait` closes the stdio ends, returns the context error when cancellation interrupted a Harness that then exited 0, and `ExitCode` reports the exit once `Done` closes.
+- Cancel sends TERM to every process in the view and closes the view after `KillTimeout`. A Cancel that finds the Harness exited leaves its exit as it was, even while the processes it left still end.
+- When the Harness exits while other processes remain, the view sends them TERM unless Cancel already did, and ends once they exit or `KillTimeout` passes from the first TERM.
+- `Wait` closes the stdio ends, returns the context error when Cancel's TERM reached the running Harness and it then exited 0, and `ExitCode` reports the exit once `Done` closes.
 
 ### Qualify the view
 

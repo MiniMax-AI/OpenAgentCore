@@ -41,6 +41,9 @@ type View struct {
 
 	reapOnce  sync.Once
 	reapErr   error
+	signalMu  sync.Mutex
+	signaled  chan bool
+	exited    atomic.Bool
 	closing   atomic.Bool
 	closeOnce sync.Once
 	done      chan struct{}
@@ -56,7 +59,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	if err := Probe(); err != nil {
 		return nil, err
 	}
-	v := &View{done: make(chan struct{})}
+	v := &View{done: make(chan struct{}), signaled: make(chan bool, 1)}
 	if err := v.launch(&spec); err != nil {
 		v.abort()
 		return nil, err
@@ -269,6 +272,9 @@ func (v *View) watch() {
 		switch m.Kind {
 		case msgExited:
 			exit = &m.Exit
+			v.exited.Store(true)
+		case msgSignaled:
+			v.signaled <- m.Delivered
 		case msgFailed:
 			failed = m.Fail.err()
 		}
@@ -296,8 +302,14 @@ func (v *View) Wait() (Exit, error) {
 	return v.exit, v.err
 }
 
-// Signal delivers sig to every process in the view.
+// Signal delivers sig to every process in the view while the process runs. Once the process has exited it delivers nothing and returns ErrExited, even while the processes it left still drain.
 func (v *View) Signal(sig syscall.Signal) error {
+	v.signalMu.Lock()
+	defer v.signalMu.Unlock()
+	exited := &Error{Kind: ErrExited, Op: "signal", Err: os.ErrProcessDone}
+	if v.exited.Load() {
+		return exited
+	}
 	select {
 	case <-v.done:
 		return ErrClosed
@@ -306,7 +318,18 @@ func (v *View) Signal(sig syscall.Signal) error {
 	if err := v.ctl.send(message{Kind: msgSignal, Signal: sig}); err != nil {
 		return &Error{Kind: ErrLauncher, Op: "signal", Err: err}
 	}
-	return nil
+	select {
+	case delivered := <-v.signaled:
+		if !delivered {
+			return exited
+		}
+		return nil
+	case <-v.done:
+		if v.exited.Load() {
+			return exited
+		}
+		return ErrClosed
+	}
 }
 
 // Close kills the view, waits for its teardown and closes the pipes it created.

@@ -9,6 +9,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestViewValidate(t *testing.T) {
@@ -58,18 +60,31 @@ func TestRegistryResolvesOnlyDeclaredViews(t *testing.T) {
 	}
 }
 
-func TestViewExecutorReceivesOnlyCredentialFreeMCP(t *testing.T) {
+func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 	reg := agent.NewRegistry()
 	declared := validView(t)
 	declared.Executor = func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
 		return nil, errReached
 	}
 	info := proto.SupportedAgentKind{Kind: "viewed", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
-	reg.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, Session: stubFactory("viewed"), View: &declared})
+	declaration := agent.Declaration{
+		Info:              info,
+		Configuration:     harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Responses)}}},
+		ConnectionOptions: []string{"mcp_servers"},
+	}
+	reg.Register(declaration, agent.Runtime{Info: info, Session: stubFactory("viewed"), View: &declared})
 	view, err := reg.ResolveView("viewed")
 	if err != nil {
 		t.Fatal(err)
 	}
+	options := func(baseURL, key string, extra map[string]any) map[string]any {
+		o := map[string]any{"model": "m", "model_provider": map[string]any{"protocol": "responses", "base_url": baseURL, "api_key": key}}
+		for k, v := range extra {
+			o[k] = v
+		}
+		return o
+	}
+	gatewayOptions := options("http://127.0.0.1:4101", modelprovider.Placeholder, nil)
 	token := "secret"
 	gateway := agent.MCPBinding{ServerLabel: "docs", Transport: "http", ServerURL: "http://127.0.0.1:4100/mcp/docs"}
 	withBearer, withHeaders, remote := gateway, gateway, gateway
@@ -77,20 +92,25 @@ func TestViewExecutorReceivesOnlyCredentialFreeMCP(t *testing.T) {
 	withHeaders.HTTPHeaders = map[string]string{"X-Api-Key": token}
 	remote.ServerURL = "https://mcp.example.com/docs"
 	for name, c := range map[string]struct {
-		req  proto.PromptRequestPayload
-		mcp  []agent.MCPBinding
-		want error
+		req proto.PromptRequestPayload
+		mcp []agent.MCPBinding
 	}{
-		"gateway binding":    {mcp: []agent.MCPBinding{gateway}, want: errReached},
-		"request MCP":        {req: proto.PromptRequestPayload{MCPHTTPServers: &[]proto.MCPHTTPServer{}}},
-		"installed MCP":      {req: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{}}}}},
-		"bearer":             {mcp: []agent.MCPBinding{withBearer}},
-		"credential headers": {mcp: []agent.MCPBinding{withHeaders}},
-		"direct endpoint":    {mcp: []agent.MCPBinding{remote}},
+		"gateway":            {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{gateway}},
+		"model key":          {req: proto.PromptRequestPayload{AgentOptions: options("http://127.0.0.1:4101", token, nil)}},
+		"model endpoint":     {req: proto.PromptRequestPayload{AgentOptions: options("https://api.example.com", modelprovider.Placeholder, nil)}},
+		"connection option":  {req: proto.PromptRequestPayload{AgentOptions: options("http://127.0.0.1:4101", modelprovider.Placeholder, map[string]any{"mcp_servers": map[string]any{}})}},
+		"request MCP":        {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions, MCPHTTPServers: &[]proto.MCPHTTPServer{}}},
+		"installed MCP":      {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions, LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{}}}}},
+		"bearer":             {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{withBearer}},
+		"credential headers": {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{withHeaders}},
+		"direct MCP":         {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{remote}},
 	} {
-		_, err := view.Executor(context.Background(), c.req, agent.ViewSession{MCP: c.mcp})
-		if c.want != nil && !errors.Is(err, c.want) || c.want == nil && (err == nil || errors.Is(err, errReached)) {
-			t.Errorf("%s: Executor = %v, want %v", name, err, c.want)
+		want := agent.ErrViewHandoff
+		if name == "gateway" {
+			want = errReached
+		}
+		if _, err := view.Executor(context.Background(), c.req, agent.ViewSession{MCP: c.mcp}); !errors.Is(err, want) {
+			t.Errorf("%s: Executor = %v, want %v", name, err, want)
 		}
 	}
 }

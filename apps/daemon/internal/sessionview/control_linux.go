@@ -45,20 +45,22 @@ type launchSpec struct {
 type msgKind uint8
 
 const (
-	msgMounted msgKind = iota + 1 // launcher: the world is mounted; carries the /dev/fuse and netns fds
-	msgProceed                    // daemon: the world serves and the network is set up
-	msgStarted                    // launcher: the process runs
-	msgFailed                     // launcher: construction failed
-	msgExited                     // launcher: the process ended
-	msgSignal                     // daemon: signal the process
+	msgMounted  msgKind = iota + 1 // launcher: the world is mounted; carries the /dev/fuse and netns fds
+	msgProceed                     // daemon: the world serves and the network is set up
+	msgStarted                     // launcher: the process runs
+	msgFailed                      // launcher: construction failed
+	msgExited                      // launcher: the process ended
+	msgSignal                      // daemon: signal the process
+	msgSignaled                    // launcher: whether msgSignal reached the running process
 )
 
 type message struct {
-	Kind   msgKind
-	Pid    int
-	Signal syscall.Signal
-	Exit   Exit
-	Fail   failure
+	Kind      msgKind
+	Pid       int
+	Signal    syscall.Signal
+	Delivered bool
+	Exit      Exit
+	Fail      failure
 }
 
 // failure carries a launcher *Error across the control socket.

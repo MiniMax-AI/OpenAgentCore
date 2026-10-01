@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -13,7 +14,7 @@ import (
 
 // Handle is a running process that clirunner did not start, such as a Harness in an agent-host Session view. Its end also ends every descendant.
 type Handle interface {
-	// Signal delivers sig to the process and every descendant it still has.
+	// Signal delivers sig to the process and every descendant it still has. Once the process itself has exited it delivers nothing and returns an error that matches os.ErrProcessDone, even while its descendants are still ending.
 	Signal(syscall.Signal) error
 	// Wait returns once the process and its descendants have ended. The code is -1 when a signal ended the process. An error means the exit is unknown.
 	Wait() (int, error)
@@ -31,7 +32,7 @@ type HandleOptions struct {
 	KillTimeout time.Duration
 }
 
-// FromHandle returns a Process that owns h. Cancel, or cancelling Parent, sends TERM and closes h after KillTimeout; cancelling a process that has ended does nothing. Wait closes the stdio ends and h, and returns the context error when cancellation interrupted a process that then exited 0, as exec.CommandContext does.
+// FromHandle returns a Process that owns h. Cancel, or cancelling Parent, sends TERM and closes h after KillTimeout; cancelling a process that has ended does nothing. Wait closes the stdio ends and h, and returns the context error when the TERM reached the running process and it then exited 0, as exec.CommandContext does. A TERM that finds the process exited, which Signal reports with os.ErrProcessDone, leaves its result as it was.
 func FromHandle(h Handle, opts HandleOptions) (*Process, error) {
 	if h == nil || opts.Stdout == nil || opts.Stderr == nil {
 		return nil, errors.New("clirunner: handle, stdout and stderr required")
@@ -48,15 +49,10 @@ func FromHandle(h Handle, opts HandleOptions) (*Process, error) {
 	var interrupted atomic.Bool
 	p.cancelProcess = func() error {
 		terminateOnce.Do(func() {
-			select {
-			case <-p.done:
-				return
-			default:
-			}
-			interrupted.Store(true)
 			err := h.Signal(syscall.SIGTERM)
+			interrupted.Store(err == nil)
 			go func() {
-				if err == nil {
+				if err == nil || errors.Is(err, os.ErrProcessDone) {
 					timer := time.NewTimer(p.killAfter)
 					defer timer.Stop()
 					select {
@@ -75,6 +71,8 @@ func FromHandle(h Handle, opts HandleOptions) (*Process, error) {
 	go func() {
 		code, err := h.Wait()
 		stop()
+		// A cancel in progress settles whether it interrupted the process, and none starts after the end.
+		terminateOnce.Do(func() {})
 		switch {
 		case err != nil:
 			waitErr = fmt.Errorf("clirunner: wait: %w", err)

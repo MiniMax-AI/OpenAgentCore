@@ -147,6 +147,16 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	if err := v.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("Signal: %v", err)
 	}
+	// The Harness's exit shows while its helper still cleans up.
+	for err := v.Signal(0); !errors.Is(err, os.ErrProcessDone); err = v.Signal(0) {
+		if err != nil || time.Since(started) > 5*time.Second {
+			t.Fatalf("Signal after the Harness exited = %v, want os.ErrProcessDone", err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := os.Stat(filepath.Join(f.world, "data", "cleaned")); err == nil {
+		t.Error("Signal reported the exit only after the helper finished")
+	}
 	if exit, err := v.Wait(); err != nil || exit != (Exit{Code: 7}) {
 		t.Fatalf("Wait = %+v, %v; want exit code 7", exit, err)
 	}
@@ -447,10 +457,12 @@ func runHelper(mode string) int {
 		<-sigs
 		return 7
 	case "slow-term":
-		sigs := make(chan os.Signal, 2)
+		// A second TERM ends it before the cleanup finishes.
+		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGTERM)
 		fmt.Println("ready")
 		<-sigs
+		signal.Reset(syscall.SIGTERM)
 		time.Sleep(300 * time.Millisecond)
 		if err := os.WriteFile("/data/cleaned", []byte("done"), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, err)

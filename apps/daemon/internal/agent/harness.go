@@ -40,6 +40,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 // Declaration is the complete startup contract for a Harness implementation.
@@ -49,7 +50,11 @@ import (
 type Declaration struct {
 	Info          proto.SupportedAgentKind
 	Configuration harnessconfig.Configuration
-	Discover      func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
+	// ConnectionOptions lists the AgentOptions keys whose values carry MCP
+	// servers, endpoints, credentials or environment values. An agent-host
+	// view rejects a request that sets any of them with ErrViewHandoff.
+	ConnectionOptions []string
+	Discover          func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
 }
 
 // DiscoveryOptions provides process context without naming an implementation.
@@ -88,7 +93,7 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 		r.RegisterPreparation(runtime.Info.Kind, runtime.WorkspaceReadPreparation, runtime.Preparation)
 	}
 	if runtime.View != nil {
-		r.RegisterView(runtime.Info.Kind, *runtime.View)
+		r.RegisterView(runtime.Info.Kind, declaration.ConnectionOptions, *runtime.View)
 	}
 }
 
@@ -136,6 +141,11 @@ var (
 
 // ErrInvalidView marks a View declaration that View.Validate rejects.
 var ErrInvalidView = errors.New("agent: invalid view declaration")
+
+// ErrViewHandoff rejects a view request that carries a model provider other
+// than the Session's gateway, MCP outside ViewSession.MCP, an MCP credential or
+// a connection option.
+var ErrViewHandoff = errors.New("agent: view request carries a connection outside the Session's gateway")
 
 // View declares how the Harness runs in an agent-host Session view. View
 // paths are absolute and clean. The closure, Exec overlays and the shim are
@@ -232,29 +242,42 @@ type ViewSession struct {
 	// Binary, which must be a LocalExec path, in it. Dir is a world path,
 	// OwnProcessGroup is true, and Env is the complete Harness environment.
 	// Cancel sends TERM to every process in the view and closes the view after
-	// KillTimeout. When the Harness exits while other processes remain, the
-	// view sends them TERM and ends once they exit or KillTimeout passes.
+	// KillTimeout; a Cancel after the Harness exited leaves its exit as it was.
+	// When the Harness exits while other processes remain, the view sends them
+	// TERM unless Cancel already did, and ends once they exit or KillTimeout
+	// passes from the first TERM.
 	Launch func(clirunner.StartOptions) (*clirunner.Process, error)
 }
 
-// checkViewMCP enforces that the factory receives MCP only in session.MCP and
-// no MCP credential at all.
-func checkViewMCP(req proto.PromptRequestPayload, session ViewSession) error {
+// checkViewHandoff enforces, before the factory runs, that the view request
+// reaches the network only through the Session's gateway: the model provider
+// is the gateway with the placeholder key, MCP arrives only in session.MCP and
+// without credentials, and no connection option is set.
+func checkViewHandoff(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, connection []string, session ViewSession) error {
+	if provider := prepared.Provider; provider == nil || provider.APIKey != modelprovider.Placeholder || !isGatewayURL(provider.BaseURL, false) {
+		return fmt.Errorf("%w: the model provider is not the Session's gateway", ErrViewHandoff)
+	}
+	for _, key := range connection {
+		if _, set := req.AgentOptions[key]; set {
+			return fmt.Errorf("%w: option %q", ErrViewHandoff, key)
+		}
+	}
 	if req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) > 0) {
-		return errors.New("agent: a view request carries MCP outside ViewSession.MCP")
+		return fmt.Errorf("%w: MCP outside ViewSession.MCP", ErrViewHandoff)
 	}
 	for _, binding := range session.MCP {
-		if binding.BearerToken != nil || len(binding.HTTPHeaders) > 0 || (binding.Transport == "http" && !isGatewayURL(binding.ServerURL)) {
-			return fmt.Errorf("agent: view MCP binding %q is not a credential-free gateway endpoint", binding.ServerLabel)
+		if binding.BearerToken != nil || len(binding.HTTPHeaders) > 0 || (binding.Transport == "http" && !isGatewayURL(binding.ServerURL, true)) {
+			return fmt.Errorf("%w: MCP binding %q is not a credential-free gateway endpoint", ErrViewHandoff, binding.ServerLabel)
 		}
 	}
 	return nil
 }
 
-// isGatewayURL reports whether raw is a plain HTTP URL on a loopback address.
-func isGatewayURL(raw string) bool {
+// isGatewayURL reports whether raw is a plain HTTP URL on a loopback address
+// and port, with a path only when withPath is set.
+func isGatewayURL(raw string, withPath bool) bool {
 	endpoint, err := url.Parse(raw)
-	if err != nil || endpoint.Scheme != "http" {
+	if err != nil || endpoint.Scheme != "http" || endpoint.User != nil || endpoint.Port() == "" || endpoint.RawQuery != "" || endpoint.Fragment != "" || (!withPath && endpoint.Path != "") {
 		return false
 	}
 	addr, err := netip.ParseAddr(endpoint.Hostname())
@@ -375,9 +398,10 @@ func isWithin(p, dir string) bool {
 }
 
 // RegisterView validates and installs the kind's agent-host view after
-// RegisterKind. Its Executor factory validates the model configuration like
-// RegisterExecutor.
-func (r *Registry) RegisterView(kind string, view View) {
+// RegisterKind. connection is the declaration's ConnectionOptions. Its
+// Executor factory validates the model configuration like RegisterExecutor and
+// then checks the request against the view's gateway rule.
+func (r *Registry) RegisterView(kind string, connection []string, view View) {
 	if err := view.Validate(); err != nil {
 		panic(err)
 	}
@@ -388,12 +412,14 @@ func (r *Registry) RegisterView(kind string, view View) {
 		panic("agent.Registry.RegisterView: registered kind required")
 	}
 	view = view.clone()
+	connection = slices.Clone(connection)
 	factory := view.Executor
 	view.Executor = func(ctx context.Context, req proto.PromptRequestPayload, session ViewSession) (Executor, error) {
-		if _, err := configuration.Prepare(req.AgentOptions); err != nil {
+		prepared, err := configuration.Prepare(req.AgentOptions)
+		if err != nil {
 			return nil, err
 		}
-		if err := checkViewMCP(req, session); err != nil {
+		if err := checkViewHandoff(req, prepared, connection, session); err != nil {
 			return nil, err
 		}
 		return factory(ctx, req, session)
