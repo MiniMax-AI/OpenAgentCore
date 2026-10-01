@@ -1,0 +1,20 @@
+# A Start request for a piped process. Hex bytes; text after # is a comment.
+00000070                             # PayloadLength 112
+0002                                 # MessageType: Start
+0000                                 # Flags
+0000000000000001                     # RequestID 1
+101112131415161718191a1b1c1d1e1f     # ServerInstanceID
+202122232425262728292a2b2c2d2e2f     # OperationID
+00000002 7368                        # Executable "sh"
+00000003                             # Argv count 3
+00000002 7368                        # Argv "sh"
+00000002 2d63                        # Argv "-c"
+00000007 6563686f206869              # Argv "echo hi"
+00000001                             # Env count 1
+00000004 50415448                    # Env name "PATH"
+0000000d 2f7573722f62696e3a2f62696e  # Env value "/usr/bin:/bin"
+00000005 2f776f726b                  # Cwd "/work"
+00000012                             # Umask 0o022
+0001                                 # IOMode IOPipes
+00                                   # PTY absent
+0001                                 # Scope ScopePOSIXSession

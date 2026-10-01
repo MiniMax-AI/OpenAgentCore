@@ -1,0 +1,10 @@
+# An Output event. Hex bytes; text after # is a comment.
+00000029                          # PayloadLength 41
+4003                              # MessageType: Output event
+0000                              # Flags
+0000000000000000                  # RequestID 0
+202122232425262728292a2b2c2d2e2f  # OperationID
+0000000000000003                  # Sequence 3
+0001                              # Stream StreamStdout
+0000000000000000                  # Offset 0
+00000003 68690a                   # Data "hi\n"
