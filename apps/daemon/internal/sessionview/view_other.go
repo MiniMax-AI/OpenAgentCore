@@ -27,3 +27,12 @@ func (*View) Close() error                { return nil }
 func (*View) Stdin() *os.File             { return nil }
 func (*View) Stdout() *os.File            { return nil }
 func (*View) Stderr() *os.File            { return nil }
+
+// PTS is a view's devpts instance. Outside Linux none exists.
+type PTS struct{}
+
+// NewPTS reports that views need Linux.
+func NewPTS() (*PTS, error) { return nil, ErrUnsupported }
+
+func (*PTS) Device() uint64 { return 0 }
+func (*PTS) Close() error   { return nil }
