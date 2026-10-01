@@ -286,7 +286,7 @@ test("uses the official E2B preset and clears a selected build when the key chan
   await expect(page.getByRole("button", { name: "Next" })).toBeEnabled();
   await page.getByLabel("E2B API key").fill("changed-fixture-key");
   await expect(page.getByLabel("Template", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("Template build")).toHaveValue("");
+  await expect(page.getByLabel("Template build", { exact: true })).toHaveValue("");
   await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
 });
 
@@ -295,9 +295,9 @@ test("shows the retained E2B build while a replacement key is checked", async ({
   await page.getByRole("button", { name: "Change resources" }).click();
   const edit = page.getByRole("dialog", { name: "Change resources" });
   const saved = "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b";
-  await expect(edit.getByLabel("Template build")).toHaveValue(saved);
+  await expect(edit.getByLabel("Template build", { exact: true })).toHaveValue(saved);
   await edit.getByLabel("E2B API key").fill("replacement-fixture-key");
-  await expect(edit.getByLabel("Template build")).toHaveValue(saved);
+  await expect(edit.getByLabel("Template build", { exact: true })).toHaveValue(saved);
   await expect(edit.getByRole("button", { name: "Next" })).toBeEnabled();
 });
 

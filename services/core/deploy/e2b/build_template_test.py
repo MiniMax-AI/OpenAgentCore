@@ -27,13 +27,13 @@ class BundlePermissionsTest(unittest.TestCase):
                                 'codex-resources': 0o755, 'codex': 0o700,
                                 'codex/config': 0o600, 'opt': 0o755,
                                 'opt/private': 0o700, 'opt/private/key': 0o600}
-                image = {'Architecture': 'amd64', 'Os': 'linux', 'Id': 'sha256:fixture',
+                image = {'Architecture': 'amd64', 'Os': 'linux', 'Id': 'sha256:' + 'a' * 64,
                          'Config': {'Env': ['OAC_RUNTIME_WORKSPACE=/environment/workspace']}}
 
                 def check_output(argv, **kwargs):
-                    if argv == ['docker', 'image', 'inspect', 'sha256:fixture']:
+                    if argv == ['docker', 'image', 'inspect', 'sha256:' + 'a' * 64]:
                         return json.dumps([image]).encode()
-                    self.assertEqual(argv, ['docker', 'create', 'sha256:fixture'])
+                    self.assertEqual(argv, ['docker', 'create', 'sha256:' + 'a' * 64])
                     return 'fixture-container\n'
 
                 def run(argv, **kwargs):
@@ -62,6 +62,13 @@ class BundlePermissionsTest(unittest.TestCase):
 
                 def build(instance, **kwargs):
                     self.assertIs(instance, template)
+                    expected_url = 'https://api.sand.example' if mask == 0o077 else 'https://api.e2b.app'
+                    expected_domain = 'sand.example' if mask == 0o077 else 'e2b.app'
+                    self.assertEqual(kwargs['api_url'], expected_url)
+                    self.assertEqual(kwargs['domain'], expected_domain)
+                    self.assertEqual(kwargs['api_key'], 'fixture-only')
+                    self.assertFalse(kwargs['debug'])
+                    self.assertFalse(any(key.startswith('E2B_') for key in os.environ))
                     context = Path(factory.call_args.kwargs['file_context_path'])
                     self.assertEqual(stat.S_IMODE(context.stat().st_mode), 0o700)
                     with tarfile.open(context / 'runtime.tar.gz') as archive:
@@ -79,16 +86,16 @@ class BundlePermissionsTest(unittest.TestCase):
                         template.copy.assert_any_call(source, '/opt/oac-e2b/' + source, user='root')
                     self.assertTrue(any('chmod 0555' in call.args[0] and '/opt/oac-e2b/' + projection in call.args[0]
                                         for call in template.run_cmd.call_args_list))
-                    return SimpleNamespace(template_id='fixture', build_id='build')
+                    return SimpleNamespace(template_id='fixture', build_id='94be54a1-138c-4f30-bc87-b13686272dbe')
 
                 factory = Mock(return_value=template)
                 factory.build.side_effect = build
                 original_mask = os.umask(mask)
                 try:
                     with patch.dict(sys.modules, {'e2b': SimpleNamespace(Template=factory)}), \
-                            patch.dict(os.environ, {'OAC_DEV_HOME': str(root / 'state')}), \
-                            patch.object(sys, 'argv', ['build-template.py', '--image', 'sha256:fixture',
-                                '--name', 'fixture', '--api-key-file', str(key), '--output', str(output)]), \
+                            patch.dict(os.environ, {'OAC_DEV_HOME': str(root / 'state'), 'E2B_API_URL': 'https://ambient.invalid', 'E2B_API_KEY': 'ambient-secret', 'E2B_DEBUG': 'true'}), \
+                            patch.object(sys, 'argv', ['build-template.py', '--image', 'sha256:' + 'a' * 64,
+                                '--name', 'fixture', '--api-key-file', str(key), '--output', str(output)] + (['--api-url', 'https://api.sand.example', '--domain', 'sand.example'] if mask == 0o077 else [])), \
                             patch('subprocess.check_output', side_effect=check_output), \
                             patch('subprocess.run', side_effect=run), contextlib.redirect_stdout(io.StringIO()):
                         runpy.run_path(str(Path(__file__).with_name('build-template.py')), run_name='__main__')
@@ -97,6 +104,12 @@ class BundlePermissionsTest(unittest.TestCase):
                     self.assertEqual(stat.S_IMODE(output.parent.stat().st_mode), 0o777 & ~mask)
                     self.assertEqual(key.read_text(), 'fixture-only')
                     factory.build.assert_called_once()
+                    report = json.loads(output.read_text())
+                    from template_manifest import validate_manifest
+                    validate_manifest(report)
+                    self.assertEqual(report['domain'], 'sand.example' if mask == 0o077 else 'e2b.app')
+                    self.assertNotIn('fixture-only', output.read_text())
+                    self.assertNotIn('ambient-secret', output.read_text())
                 finally:
                     os.umask(original_mask)
 

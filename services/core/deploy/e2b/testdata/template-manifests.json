@@ -1,0 +1,229 @@
+[
+  {
+    "name": "custom",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": true
+  },
+  {
+    "name": "official",
+    "value": {
+      "api_url": "https://api.e2b.app",
+      "domain": "e2b.app",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": true
+  },
+  {
+    "name": "key",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "api_key": "fixture-secret"
+    },
+    "valid": false
+  },
+  {
+    "name": "credential",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "credential": {
+        "api_key": "fixture"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "old_output",
+    "value": {
+      "api_url": null,
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "foreign_domain",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "other.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "unpinned",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:latest",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "version": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "bad_image",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "latest",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "bad_base",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22"
+    },
+    "valid": false
+  },
+  {
+    "name": "bad_hash",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "null_domain",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": null,
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "empty_selectors",
+    "value": {
+      "api_url": "",
+      "domain": "",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing_api_url",
+    "value": {
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing_domain",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing_template",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing_image",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing_runtime_sha256",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "base": "node:22@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing_base",
+    "value": {
+      "api_url": "https://api.sand.example",
+      "domain": "sand.example",
+      "template": "oac:94be54a1-138c-4f30-bc87-b13686272dbe",
+      "image": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "runtime_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "valid": false
+  }
+]

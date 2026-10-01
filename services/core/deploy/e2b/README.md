@@ -23,7 +23,46 @@ python -m venv "$HOME/.oac/build/e2b-sdk"
 
 [`build-template.py`](build-template.py) requires a `sha256:` image ID, a Linux amd64 image and the Runtime layout (`OAC_RUNTIME_WORKSPACE=/environment/workspace`). It copies the image's `/usr/local/bin`, `/opt` and, when present, `/usr/local/codex-resources` and `/etc/codex`, together with its `HOME` and `OAC_*` environment, onto a digest-pinned `node:22.23.1-bookworm-slim` base with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip`, `ripgrep` and `util-linux`. It installs [`init.py`](init.py) and [`managed_init.py`](managed_init.py) read-only under `/opt/oac-e2b`, runs the daemon as UID/GID 1000 (`runtime`, home `/home/runtime`) and builds with 2 vCPUs and 2048 MiB. Only the `usr`, `usr/local` and `etc` archive ancestors it creates get traversable modes; Runtime file modes, private build contexts, key inputs and the output's umask stay unchanged.
 
-The output file records `template` (the immutable `templateID:build_UUID`), the source `image`, the packaged `runtime_sha256` and the `base`. Use that exact `template` value. The template must qualify every Harness its image advertises. Install system dependencies into the image; the daemon runs as UID/GID 1000. No E2B account key, executor key or model credential belongs in a build, template environment, metadata, command argument or log.
+The output is a non-secret template build file for [import into Web](#import-a-build-into-web). Use its exact `template` value. The template must qualify every Harness its image advertises. Install system dependencies into the image; the daemon runs as UID/GID 1000. No E2B account key, executor key or model credential belongs in a build, template environment, metadata, command argument or log.
+
+### Build for an E2B-compatible service
+
+Pass the API origin and sandbox domain supplied by the service together:
+
+```sh
+"$HOME/.oac/build/e2b-sdk/bin/python" services/core/deploy/e2b/build-template.py \
+  --image sha256:QUALIFIED_RUNTIME_IMAGE_DIGEST \
+  --name your-runtime-build \
+  --api-url https://api.sandbox.example.com \
+  --domain sandbox.example.com \
+  --api-key-file "$HOME/.oac/secrets/e2b.key" \
+  --output "$HOME/.oac/build/e2b-template.json"
+```
+
+Omitting both selectors uses the official E2B endpoints. The builder removes ambient `E2B_*` variables and passes the selected endpoints and key explicitly to the SDK. [E2B configuration](../../../../contracts/agents-api/sandbox-deployment.md#e2b-configuration) owns endpoint restrictions. [SandBase](https://www.sandbase.ai/docs/sandbox/quickstart) documents SDK 2.51.0 support; [Alibaba Cloud Agent Sandbox Flash Edition](https://www.alibabacloud.com/help/en/agent-sandbox/build-a-custom-image-template) documents E2B template builds. Each service still needs acceptance against this builder, the pinned SDK and the managed Runtime lifecycle before it can be considered qualified. A cloud's default code-interpreter template does not establish OAC Runtime readiness.
+
+## Import a build into Web
+
+1. Open **System → Sandbox configuration**, choose **E2B cloud**, and use **Import template build** to select the builder's JSON output.
+2. Review **Sandbox API URL**, **Sandbox data-plane domain** and **Template build**, then enter the API key for that service. Importing a file or editing its endpoint clears any previously entered key.
+3. Choose **Next**, review the selection and choose **Save configuration**. Core validates the exact ready build and its resources before saving. Import and template discovery create no sandboxes and do not establish daemon connectivity or successful execution.
+
+Without a build file, enter the connection settings and key, then choose a template and ready build. **Build an OpenAgentCore template** opens this guide when a template needs preparing. **Enter an exact template build** accepts the immutable selector directly, including when catalog discovery is unavailable; saving still requires Core's build validation. Discovery failures identify template or build lookup, and display a known Core error when one is available.
+
+### Build file contract
+
+[`template_manifest.py`](template_manifest.py) owns the build handoff contract. Web's reader is checked against the same [fixtures](testdata/template-manifests.json), and both languages check selectors against the Provider's shared fixtures. The file is a UTF-8 JSON object up to 16 KiB with exactly these required string fields:
+
+| Field | Meaning |
+| --- | --- |
+| `api_url` | Explicit HTTPS API origin |
+| `domain` | Explicit sandbox DNS suffix |
+| `template` | Immutable `templateID:build_UUID` |
+| `image` | Source Docker image ID, `sha256:` followed by 64 lowercase hex digits |
+| `runtime_sha256` | SHA-256 of the packaged Runtime archive, 64 lowercase hex digits |
+| `base` | Digest-pinned base image reference |
+
+The file contains no credentials. Unknown fields, missing selectors, mutable templates and malformed provenance are rejected. Import reads the file locally and copies only the endpoint and template selectors into the configuration draft; provenance is build evidence, not a signature or proof of remote contents. Saving writes the validated configuration to Core's database; Core never rereads the file. The file cannot replace remote template validation, ownership checks or live provider acceptance.
 
 ## Launch an application-managed Runtime
 

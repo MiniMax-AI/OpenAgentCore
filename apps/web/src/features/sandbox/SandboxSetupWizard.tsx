@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 import { HelpTip } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { useConsoleNavigation } from "../../lib/console-navigation";
-import { coreFieldError } from "../../lib/core-error";
+import { coreFieldError, knownCoreError } from "../../lib/core-error";
 import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
 import type { MessageKey } from "../../lib/locale-strings";
@@ -19,6 +19,7 @@ import { defaultSandboxResources, distributionRuntime, savedSpecification, valid
 import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
 import { isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS } from "./runtime-release";
 import { sandboxAdmin } from "./sandbox-queries";
+import { MAX_MANIFEST_BYTES, parseTemplateManifest, validEndpoint, validTemplate } from "./e2b-template-manifest";
 import "./sandbox-wizard.css";
 
 type Where = "nodes" | "direct";
@@ -42,28 +43,6 @@ function e2bService(apiURL?: string): E2BService {
 
 const MIB = 2 ** 20;
 const EASE = [0.16, 1, 0.3, 1] as const;
-// Core accepts a template ID of up to 128 characters and a canonical, non-nil build UUID.
-const TEMPLATE = /^[a-zA-Z0-9_-]{1,128}:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
-function validTemplate(value: string): boolean {
-  const build = TEMPLATE.exec(value)?.[1];
-  return build !== undefined && /[^0-]/.test(build);
-}
-
-export function validEndpoint(apiURL: string, domain: string): boolean {
-  const publicName = (host: string) => host.length <= 253 && host.includes(".") && !/^[0-9.]+$/.test(host) &&
-    !host.endsWith(".local") && !host.endsWith(".localhost") &&
-    host.split(".").every((label) => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
-  if (!apiURL && !domain) return true;
-  if (!apiURL || !domain || apiURL.length > 512 || !publicName(domain)) return false;
-  try {
-    const url = new URL(apiURL);
-    return url.protocol === "https:" && url.origin === apiURL && !url.username && !url.password &&
-      !url.port && publicName(url.hostname) && (url.hostname === domain || url.hostname.endsWith(`.${domain}`));
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Per-sandbox presets around the deployment default: half and double of it.
  * Disks apply to microsandbox only, the one provider that enforces them.
@@ -134,6 +113,13 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const [domain, setDomain] = useState(current?.e2bDomain ?? E2B_PRESETS[e2bService(current?.e2bAPIURL) as keyof typeof E2B_PRESETS]?.domain ?? "");
   const keyConsoleURL = service !== "custom" && apiURL === E2B_PRESETS[service].apiURL && domain === E2B_PRESETS[service].domain
     ? E2B_KEY_CONSOLES[service] : null;
+  const [importError, setImportError] = useState(false);
+  const [imported, setImported] = useState(false);
+  const [manualTemplate, setManualTemplate] = useState(false);
+  const importRevision = useRef(0);
+  useEffect(() => () => { importRevision.current++; }, []);
+  const [discoveryError, setDiscoveryError] = useState<unknown>(null);
+  const [buildError, setBuildError] = useState<unknown>(null);
   const [templates, setTemplates] = useState<SandboxE2BTemplate[]>([]);
   const [builds, setBuilds] = useState<SandboxE2BReadyBuild[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState(current?.e2bTemplate?.split(":")[0] ?? "");
@@ -156,14 +142,14 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const { navigate } = useConsoleNavigation();
 
   useEffect(() => {
-    setTemplates([]); setBuilds([]); setDiscovery("idle"); setBuildDiscovery("idle");
+    setTemplates([]); setBuilds([]); setDiscovery("idle"); setBuildDiscovery("idle"); setDiscoveryError(null); setBuildError(null);
     if (provider !== "e2b" || !apiKey.trim() || !validEndpoint(apiURL.trim(), domain.trim())) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setDiscovery("loading");
       void sandboxAdmin.listE2BTemplates({ api_key: apiKey.trim(), api_url: apiURL.trim(), domain: domain.trim() }, { signal: controller.signal })
         .then((items) => { if (!controller.signal.aborted) { setTemplates(items); setDiscovery("ready"); } })
-        .catch(() => { if (!controller.signal.aborted) setDiscovery("error"); });
+        .catch((error: unknown) => { if (!controller.signal.aborted) { setDiscovery("error"); setDiscoveryError(error); } });
     }, 500);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [provider, apiKey, apiURL, domain, discoveryRetry]);
@@ -175,13 +161,36 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
     setBuildDiscovery("loading");
     void sandboxAdmin.listE2BReadyBuilds(selectedTemplate, { api_key: apiKey.trim(), api_url: apiURL.trim(), domain: domain.trim() }, { signal: controller.signal })
       .then((items) => { if (!controller.signal.aborted) { setBuilds(items); setBuildDiscovery("ready"); } })
-      .catch(() => { if (!controller.signal.aborted) setBuildDiscovery("error"); });
+      .catch((error: unknown) => { if (!controller.signal.aborted) { setBuildDiscovery("error"); setBuildError(error); } });
     return () => controller.abort();
   }, [discovery, selectedTemplate, templates, apiKey, apiURL, domain, discoveryRetry]);
 
   function changeConnection(key: string, url: string, dataDomain: string) {
-    setApiKey(key); setAPIURL(url); setDomain(dataDomain);
+    importRevision.current++;
+    setImported(false); setImportError(false);
+    setApiKey(key); setReplacementRequested(Boolean(key.trim())); setAPIURL(url); setDomain(dataDomain);
     setTemplate(""); setSelectedTemplate(""); setTemplates([]); setBuilds([]);
+  }
+
+  async function importBuild(file: File) {
+    const revision = ++importRevision.current;
+    setImportError(false);
+    try {
+      if (file.size > MAX_MANIFEST_BYTES) throw new Error("Invalid template build file");
+      const manifest = parseTemplateManifest(await file.text());
+      if (revision !== importRevision.current) return;
+      // Never send an already-entered credential to an imported endpoint.
+      changeConnection("", manifest.api_url, manifest.domain);
+      setReplacementRequested(false);
+      setService(e2bService(manifest.api_url));
+      setTemplate(manifest.template);
+      setSelectedTemplate(manifest.template.split(":")[0]!);
+      setManualTemplate(true);
+      setImported(true);
+      setRejection(null); setFieldRejection(null);
+    } catch {
+      if (revision === importRevision.current) setImportError(true);
+    }
   }
 
   // A release the administrator entered comes first, then the saved one of the same backend,
@@ -202,10 +211,11 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
 
   const order: Step[] = editing ? where === "direct" ? ["e2b", "review"] : ["size", "review"] : where === "direct" ? ["where", "e2b", "review"] : ["where", "backend", "size", "review"];
   const index = Math.max(0, order.indexOf(step === "advanced" ? "review" : step));
-  const back = () => setStep(step === "advanced" ? "review" : order[Math.max(0, index - 1)]!);
+  const back = () => { importRevision.current++; setStep(step === "advanced" ? "review" : order[Math.max(0, index - 1)]!); };
 
   // The saved backend keeps its size and Runtime; another starts from its standard size and this console's Runtime.
   function choose(next: SandboxProvider) {
+    importRevision.current++;
     if (next !== provider) {
       setRejection(null);
       const kept = current ? savedSpecification(next, current.provider, current.specification) : null;
@@ -280,6 +290,14 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
     page = (
       <Question title={t("Connect E2B")}>
         <div className="wizard-fields">
+          <Field id={`${id}-import`} label={t("Import template build")} help={t("Choose the JSON output from the OpenAgentCore template builder. Review the imported address before entering its API key.")} error={importError ? t("Choose a valid OpenAgentCore template build JSON file, up to 16 KiB, without credentials.") : null}>
+            <input id={`${id}-import`} type="file" accept=".json,application/json" onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void importBuild(file);
+            }} />
+          </Field>
+          {imported ? <p role="status">{t("Build imported. Enter the API key for this service; Core validates the build when you save.")}</p> : null}
           <Field id={`${id}-service`} label={t("E2B provider")}>
             <select id={`${id}-service`} value={service} onChange={(event) => {
               const next = event.target.value as E2BService;
@@ -292,43 +310,45 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
               <option value="custom">{t("Other E2B-compatible provider")}</option>
             </select>
           </Field>
+          <Field id={`${id}-api-url`} label={t("Sandbox API URL")} help={t("The selected provider supplies a default. You can edit it for a compatible endpoint.")}>
+            <input id={`${id}-api-url`} type="url" value={apiURL} onChange={(event) => changeConnection("", event.target.value, domain)} placeholder="https://sandbox.example.com" autoComplete="off" spellCheck={false} />
+          </Field>
+          <Field id={`${id}-domain`} label={t("Sandbox data-plane domain")} error={(apiURL || domain) && !validEndpoint(apiURL.trim(), domain.trim()) ? t("Enter both a public HTTPS API origin and a domain.") : null}>
+            <input id={`${id}-domain`} value={domain} onChange={(event) => changeConnection("", apiURL, event.target.value)} placeholder="sandbox.example.com" autoComplete="off" spellCheck={false} />
+          </Field>
           <Field id={`${id}-key`} label={t("E2B API key")} error={fieldError("credential")} help={t(editing ? "Leave blank to keep the saved key. Any key you enter is verified as a replacement, even if unchanged." : "The key is write-only: Core encrypts it and never shows it again.")} afterHelp={keyConsoleURL ? (
             <a className="wizard-key-console" href={keyConsoleURL} target="_blank" rel="noopener noreferrer">
               {t("Console → API Keys")} <ExternalLink size={11} aria-hidden="true" />
             </a>
           ) : null}>
-            <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => { if (editing) { setApiKey(event.target.value); setTemplates([]); setBuilds([]); } else changeConnection(event.target.value, apiURL, domain); setReplacementRequested(Boolean(event.target.value.trim())); setFieldRejection(null); }} />
+            <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => { importRevision.current++; setApiKey(event.target.value); setTemplates([]); setBuilds([]); if (!editing && !manualTemplate) { setTemplate(""); setSelectedTemplate(""); } setReplacementRequested(Boolean(event.target.value.trim())); setFieldRejection(null); }} />
           </Field>
-          {discovery === "loading" ? <p role="status">{t("Loading templates…")}</p> : null}
-          {discovery === "error" ? <p role="alert">{t("Could not load templates. Check the key and provider connection.")} <button type="button" className="wizard-link" onClick={() => setDiscoveryRetry((value) => value + 1)}>{t("Try again")}</button></p> : null}
+          {discovery === "loading" ? <div role="status" aria-label={t("Loading templates…")} aria-busy="true"><span className="skeleton-bar" /></div> : null}
+          {discovery === "error" ? <p role="alert">{t("Template discovery failed. Check the service connection and its E2B template API support.")}{discoveryError ? <> {knownCoreError(discoveryError, tCommon)}</> : null} <button type="button" className="wizard-link" onClick={() => setDiscoveryRetry((value) => value + 1)}>{t("Try again")}</button></p> : null}
           {discovery === "ready" && templates.length === 0 ? <p role="status">{t("No templates are visible to this key.")}</p> : null}
-          {editing && !apiKey.trim() ? <Field id={`${id}-saved-template`} label={t("Template build")} error={fieldError("configuration")}><input id={`${id}-saved-template`} value={template} onChange={(event) => setTemplate(event.target.value)} /></Field> : <>
+          {manualTemplate || (editing && !apiKey.trim()) ? <Field id={`${id}-saved-template`} label={t("Template build")} help={t("Core validates the exact ready build again when you save.")} error={fieldError("configuration")}><input id={`${id}-saved-template`} value={template} onChange={(event) => { importRevision.current++; setImported(false); setTemplate(event.target.value); }} /></Field> : <>
           <Field id={`${id}-template`} label={t("Template")}>
-            <select id={`${id}-template`} value={selectedTemplate} disabled={discovery !== "ready"} onChange={(event) => { setSelectedTemplate(event.target.value); setTemplate(""); }}>
+            <select id={`${id}-template`} value={selectedTemplate} disabled={discovery !== "ready"} onChange={(event) => { importRevision.current++; setImported(false); setSelectedTemplate(event.target.value); setTemplate(""); }}>
               <option value="">{t("Select a template")}</option>
               {editing && selectedTemplate && !templates.some((item) => item.id === selectedTemplate) ? <option value={selectedTemplate}>{t("Current")} · {selectedTemplate}</option> : null}
               {templates.map((item) => <option key={item.id} value={item.id}>{item.names[0] ? `${item.names[0]} · ` : ""}{item.id}</option>)}
             </select>
           </Field>
-          {buildDiscovery === "loading" ? <p role="status">{t("Loading ready builds…")}</p> : null}
-          {buildDiscovery === "error" ? <p role="alert">{t("Could not load builds.")} <button type="button" className="wizard-link" onClick={() => setDiscoveryRetry((value) => value + 1)}>{t("Try again")}</button></p> : null}
+          {buildDiscovery === "loading" ? <div role="status" aria-label={t("Loading ready builds…")} aria-busy="true"><span className="skeleton-bar" /></div> : null}
+          {buildDiscovery === "error" ? <p role="alert">{t("Build discovery failed. Check that this service exposes immutable E2B builds.")}{buildError ? <> {knownCoreError(buildError, tCommon)}</> : null} <button type="button" className="wizard-link" onClick={() => setDiscoveryRetry((value) => value + 1)}>{t("Try again")}</button></p> : null}
           {buildDiscovery === "ready" && builds.length === 0 ? <p role="status">{t("This template has no ready builds.")}</p> : null}
           <Field id={`${id}-build`} label={t("Template build")} help={t("Core validates the exact ready build again when you save.")}>
-            <select id={`${id}-build`} value={template} disabled={buildDiscovery !== "ready"} onChange={(event) => setTemplate(event.target.value)}>
+            <select id={`${id}-build`} value={template} disabled={buildDiscovery !== "ready"} onChange={(event) => { importRevision.current++; setImported(false); setTemplate(event.target.value); }}>
               <option value="">{t("Select a ready build")}</option>
               {editing && template && !builds.some((item) => `${selectedTemplate}:${item.id}` === template) ? <option value={template}>{t("Current")} · {template}</option> : null}
               {builds.map((item) => <option key={item.id} value={`${selectedTemplate}:${item.id}`}>{item.id} · {item.cpus} CPU / {item.memory_mib} MiB</option>)}
             </select>
           </Field>
           </>}
-          <Field id={`${id}-api-url`} label={t("Sandbox API URL")} help={t("The selected provider supplies a default. You can edit it for a compatible endpoint.")}>
-            <input id={`${id}-api-url`} type="url" value={apiURL} onChange={(event) => changeConnection(apiKey, event.target.value, domain)} placeholder="https://sandbox.example.com" autoComplete="off" spellCheck={false} />
-          </Field>
-          <Field id={`${id}-domain`} label={t("Sandbox data-plane domain")} error={(apiURL || domain) && !validEndpoint(apiURL.trim(), domain.trim()) ? t("Enter both a public HTTPS API origin and a domain.") : null}>
-            <input id={`${id}-domain`} value={domain} onChange={(event) => changeConnection(apiKey, apiURL, event.target.value)} placeholder="sandbox.example.com" autoComplete="off" spellCheck={false} />
-          </Field>
+          <button type="button" className="wizard-link" disabled={Boolean(editing && !apiKey.trim())} onClick={() => { importRevision.current++; setManualTemplate(!manualTemplate); }}>{t(manualTemplate ? "Choose from available templates" : "Enter an exact template build")}</button>
+          <a className="wizard-link" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template" target="_blank" rel="noopener noreferrer">{t("Build an OpenAgentCore template")} <ExternalLink size={11} aria-hidden="true" /></a>
         </div>
-        <Nav onBack={back} onNext={() => setStep("review")} nextDisabled={!e2bReady} t={t} />
+        <Nav onBack={back} onNext={() => { importRevision.current++; setStep("review"); }} nextDisabled={!e2bReady} t={t} />
       </Question>
     );
   } else if (step === "size") {

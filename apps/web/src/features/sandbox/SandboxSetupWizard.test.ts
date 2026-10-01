@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validEndpoint } from "./SandboxSetupWizard";
+import { validEndpoint } from "./e2b-template-manifest";
 
 describe("E2B endpoint input", () => {
   it("accepts the official default and a paired compatible service", () => {
