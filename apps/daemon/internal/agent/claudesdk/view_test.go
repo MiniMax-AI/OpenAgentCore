@@ -21,6 +21,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -145,7 +146,8 @@ func resolveTestView(t *testing.T) agent.View {
 			t.Fatal(path, err)
 		}
 	}
-	loader := viewLoader{Interp: "/lib64/ld-linux-x86-64.so.2", Source: filepath.Join(root, "lib", "ld.so"), LibDir: filepath.Join(root, "lib")}
+	lib := agent.ViewMount{Name: viewloader.MountName, HostDir: filepath.Join(root, "lib")}
+	loader := viewloader.Fragment{Closure: []agent.ViewMount{lib}, Overlays: []agent.ViewOverlay{{Path: "/lib64/ld-linux-x86-64.so.2", Source: filepath.Join(root, "lib", "ld.so"), Exec: true}}, LibraryPath: lib.Path()}
 	declared := declareView(probe, probe.Node, filepath.Join(root, "bundle"), "dist/main.js", "native/claude", loader)
 	registry := agent.NewRegistry()
 	registry.Register(Declaration, agent.Runtime{Info: Declaration.Info, Session: NewFactory(probe), View: declared})

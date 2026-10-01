@@ -287,7 +287,7 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 
 ### Executables
 
-Only mount flags grant execution. The closure, `Exec` overlays and the shim are read-only and are the only executable mounts; the sandbox's files and the home are noexec. `Launch` accepts only a `LocalExec` path as `Binary`. A dynamic binary, such as `node`, needs its ELF interpreter as an `Exec` overlay at its `PT_INTERP` path, and every library it loads in the closure, reached through `LD_LIBRARY_PATH`. Nothing loads from the sandbox's files.
+Only mount flags grant execution. The closure, `Exec` overlays and the shim are read-only and are the only executable mounts; the sandbox's files and the home are noexec. `Launch` accepts only a `LocalExec` path as `Binary`. A dynamic binary, such as `node`, needs its ELF interpreter as an `Exec` overlay at its `PT_INTERP` path, and every library it loads in the closure, reached through `LD_LIBRARY_PATH`. Nothing loads from the sandbox's files. `viewloader.For` builds this from the binaries' ELF headers: the interpreter's host directory as the `lib` closure mount, the interpreter overlay, empty masks over `/etc/ld.so.preload` and `/etc/ld.so.cache`, and the `LD_LIBRARY_PATH` value. A layout it cannot present, such as a library outside the interpreter's directory, returns `ErrUnsupportedOperation`.
 
 ### Shims
 

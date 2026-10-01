@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -25,12 +26,6 @@ type viewLayout struct {
 	node, bridge string
 	// libraries is LD_LIBRARY_PATH, empty when the closure binaries are static.
 	libraries string
-}
-
-// viewLoader is the ELF interpreter the closure's dynamic binaries share and
-// the host directory that holds every library they load.
-type viewLoader struct {
-	Interp, Source, LibDir string
 }
 
 // viewHomeDirs are the native directories under the Session home.
@@ -55,7 +50,7 @@ func newView(probe Config, info RuntimeInfo) (*agent.View, error) {
 	if resolved, err := filepath.EvalSymlinks(native); err != nil || resolved != native {
 		return nil, errors.New("the native Claude Code path leaves the bundle")
 	}
-	loader, err := closureLoader(node, native)
+	loader, err := viewloader.For(node, native)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +65,10 @@ func newView(probe Config, info RuntimeInfo) (*agent.View, error) {
 	return view, nil
 }
 
-func declareView(probe Config, node, root, bridge, native string, loader viewLoader) *agent.View {
+func declareView(probe Config, node, root, bridge, native string, loader viewloader.Fragment) *agent.View {
 	nodeMount := agent.ViewMount{Name: "node", HostDir: filepath.Dir(node)}
 	bundle := agent.ViewMount{Name: "claude-sdk", HostDir: root}
-	layout := viewLayout{node: nodeMount.Path() + "/" + filepath.Base(node), bridge: bundle.Path() + "/" + bridge}
+	layout := viewLayout{node: nodeMount.Path() + "/" + filepath.Base(node), bridge: bundle.Path() + "/" + bridge, libraries: loader.LibraryPath}
 	view := &agent.View{
 		Closure: []agent.ViewMount{nodeMount, bundle},
 		// The managed policy tier would let the sandbox inject settings (C1).
@@ -84,12 +79,7 @@ func declareView(probe Config, node, root, bridge, native string, loader viewLoa
 		ForwardEnv: []string{"CLAUDECODE", "GIT_EDITOR"},
 		Proxy:      agent.ViewProxyEnv,
 	}
-	if loader.Interp != "" {
-		lib := agent.ViewMount{Name: "lib", HostDir: loader.LibDir}
-		view.Closure = append(view.Closure, lib)
-		view.Overlays = []agent.ViewOverlay{{Path: loader.Interp, Source: loader.Source, Exec: true}}
-		layout.libraries = lib.Path()
-	}
+	loader.AddTo(view)
 	view.Executor = newViewExecutorFactory(probe, layout)
 	return view
 }

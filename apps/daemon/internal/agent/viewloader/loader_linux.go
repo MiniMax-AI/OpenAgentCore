@@ -1,6 +1,6 @@
 //go:build linux
 
-package claudesdk
+package viewloader
 
 import (
 	"debug/elf"
@@ -10,39 +10,41 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
-// closureLoader finds the ELF interpreter that the dynamic binaries share and
-// checks that the interpreter's directory holds every library they need, so
-// the view loads nothing from the sandbox's files.
-func closureLoader(binaries ...string) (viewLoader, error) {
-	var loader viewLoader
+// For returns the fragment for the host binaries. The dynamic ones must share
+// one ELF interpreter, and the interpreter's directory must hold every library
+// they need. Any other layout is unsupported.
+func For(binaries ...string) (Fragment, error) {
+	interp := ""
 	var pending []string
 	for _, binary := range binaries {
-		interp, needed, err := elfDependencies(binary)
+		next, needed, err := elfDependencies(binary)
 		if err != nil {
-			return viewLoader{}, err
+			return Fragment{}, err
 		}
-		if interp == "" {
+		if next == "" {
 			if len(needed) != 0 {
-				return viewLoader{}, fmt.Errorf("%s needs libraries but no interpreter", binary)
+				return Fragment{}, unsupported("%s needs libraries but no interpreter", binary)
 			}
 			continue
 		}
-		if loader.Interp != "" && loader.Interp != interp {
-			return viewLoader{}, fmt.Errorf("the closure binaries need different ELF interpreters")
+		if interp != "" && interp != next {
+			return Fragment{}, unsupported("the binaries need different ELF interpreters")
 		}
-		loader.Interp = interp
+		interp = next
 		pending = append(pending, needed...)
 	}
-	if loader.Interp == "" {
-		return viewLoader{}, nil
+	if interp == "" {
+		return Fragment{}, nil
 	}
-	source, err := filepath.EvalSymlinks(loader.Interp)
+	source, err := filepath.EvalSymlinks(interp)
 	if err != nil {
-		return viewLoader{}, err
+		return Fragment{}, err
 	}
-	loader.Source, loader.LibDir = source, filepath.Dir(source)
+	libDir := filepath.Dir(source)
 	seen := map[string]bool{}
 	for len(pending) > 0 {
 		name := pending[len(pending)-1]
@@ -51,17 +53,17 @@ func closureLoader(binaries ...string) (viewLoader, error) {
 			continue
 		}
 		seen[name] = true
-		path, err := libraryFile(loader.LibDir, name)
+		path, err := libraryFile(libDir, name)
 		if err != nil {
-			return viewLoader{}, fmt.Errorf("library %s is not in %s", name, loader.LibDir)
+			return Fragment{}, unsupported("library %s is not in %s: %v", name, libDir, err)
 		}
 		_, needed, err := elfDependencies(path)
 		if err != nil {
-			return viewLoader{}, err
+			return Fragment{}, err
 		}
 		pending = append(pending, needed...)
 	}
-	return loader, nil
+	return fragment(interp, source, libDir), nil
 }
 
 func elfDependencies(path string) (string, []string, error) {
@@ -104,4 +106,8 @@ func libraryFile(dir, name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("library %s has too many links", name)
+}
+
+func unsupported(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", agent.ErrUnsupportedOperation, fmt.Sprintf(format, args...))
 }
