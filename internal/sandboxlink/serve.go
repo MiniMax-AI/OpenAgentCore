@@ -54,8 +54,8 @@ type ServeConfig struct {
 
 // Serve connects to the relay and serves bound streams until parent ends. It
 // reconnects with backoff, sending the same ServerInstanceID, until the relay
-// refuses the Hello with a failure other than ServiceUnavailable or
-// LimitExceeded; it then returns that *Error. Before returning it cancels
+// refuses the Hello with a failure that is not [Code.Retryable]; it then
+// returns that *Error. Before returning it cancels
 // every handler's context and waits for the handlers.
 func Serve(parent context.Context, cfg ServeConfig) error {
 	hello := ServeHello{Version: Version, Credential: cfg.Credential, Resource: cfg.Resource, ServerInstanceID: cfg.ServerInstanceID}
@@ -95,7 +95,7 @@ func Serve(parent context.Context, cfg ServeConfig) error {
 			return stop(parent.Err())
 		}
 		var refused *Error
-		if !connected && errors.As(err, &refused) && refused.Code != ServiceUnavailable && refused.Code != LimitExceeded {
+		if !connected && errors.As(err, &refused) && !refused.Code.Retryable() {
 			return stop(refused)
 		}
 		if cfg.OnDisconnected != nil {

@@ -252,6 +252,12 @@ func (c Code) String() string {
 
 func (c Code) Error() string { return "sandbox link: " + c.String() }
 
+// Retryable reports whether the same request may succeed later.
+// ServiceUnavailable and LimitExceeded are transient; every other code is
+// final, and repeating the request with the same credential, attachment and
+// generation fails again.
+func (c Code) Retryable() bool { return c == ServiceUnavailable || c == LimitExceeded }
+
 // Error is a typed Link failure with its effect. Cause is the local error that
 // produced it, such as a transport failure or a canceled context; it is never
 // sent.

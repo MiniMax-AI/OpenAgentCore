@@ -20,7 +20,7 @@ The Sandbox I/O service runs `sandboxlink.Serve` with a `ServeConfig`:
 
 - `URL`, `Credential` and `Resource` come from the [bootstrap input](sandbox-bootstrap.md). The credential identifies the service, so the Hello carries no peer ID. `ServerInstanceID` is a new ID whenever the service starts without its operation and handle registries.
 - `Services` holds one handler per offered service and version. A handler receives the `Bind`, which carries the authorized binding including a File stream's exports, and the stream. It owns the stream and returns when it is done with it. Its context ends when the attachment closes or `Serve` returns.
-- `Serve` reconnects with jittered exponential backoff, sending the same `ServerInstanceID`, whenever the link drops. It returns when its context ends or when the relay refuses the Hello with any failure other than `ServiceUnavailable` or `LimitExceeded`, for example `AuthenticationFailed` after the credential is withdrawn or `StaleGeneration` after a newer sandbox took over the resource. Before returning it cancels every handler's context and waits for the handlers.
+- `Serve` reconnects with jittered exponential backoff, sending the same `ServerInstanceID`, whenever the link drops. It returns when its context ends or when the relay refuses the Hello with a failure that is not [retryable](#failures), for example `AuthenticationFailed` after the credential is withdrawn or `StaleGeneration` after a newer sandbox took over the resource. Before returning it cancels every handler's context and waits for the handlers.
 - `OnAttachmentLost` fires when an attachment's last open stream ends while the attachment is still open, such as when the link drops. `OnAttachmentRestored` fires when a stream binds a lost attachment again. `OnAttachmentClosed` fires with the reason when the relay reports `AttachmentClosed`. Losing a socket is not closing an attachment: the service keeps an attachment's state until it is closed.
 - Closing is final. A `Bind` the relay sent before a close can arrive after the `AttachmentClosed`, so `Serve` refuses a `Bind` for an attachment closed within the last `sandboxlink.HandshakeTimeout` with `LeaseExpired`. A stream of a closed attachment that ends later never marks another attachment lost.
 
@@ -276,6 +276,8 @@ The relay copies each direction through a 32 KiB buffer and holds at most one 25
 | 10 | `AttachmentConflict` | The `AttachmentID` is held with another identity or Runtime, or was closed during the Open |
 | 11 | `LimitExceeded` | A link's stream limit or its limit of renewals being decided is reached |
 | 12 | `ProtocolViolation` | A message is malformed, not allowed where it arrived, or carries a request ID that does not increase |
+
+`ServiceUnavailable` and `LimitExceeded` are transient: the same request may succeed later, and `Code.Retryable` reports them. Every other code is final: repeating the request with the same credential, attachment and generation fails again.
 
 ## Verification
 
