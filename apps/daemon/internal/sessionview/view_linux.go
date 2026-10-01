@@ -54,23 +54,11 @@ type View struct {
 
 // Start builds a view for spec and starts its process. ctx bounds only the construction.
 func Start(ctx context.Context, spec Spec) (*View, error) {
-	if spec.PTS != nil {
-		// The launcher holds its own descriptor of the instance once it runs.
-		defer spec.PTS.Close()
-	}
 	if err := spec.validate(); err != nil {
 		return nil, err
 	}
 	if err := Probe(); err != nil {
 		return nil, err
-	}
-	if spec.PTS == nil {
-		pts, err := NewPTS()
-		if err != nil {
-			return nil, err
-		}
-		defer pts.Close()
-		spec.PTS = pts
 	}
 	v := &View{done: make(chan struct{}), signaled: make(chan bool, 1)}
 	if err := v.launch(&spec); err != nil {
@@ -104,10 +92,6 @@ func (v *View) launch(spec *Spec) error {
 			}
 		}
 	}()
-	pts, err := spec.PTS.file()
-	if err != nil {
-		return err
-	}
 	v.staging, err = os.MkdirTemp(spec.StagingParent, "oac-view-*")
 	if err != nil {
 		return &Error{Kind: ErrLauncher, Op: "staging", Err: err}
@@ -133,7 +117,7 @@ func (v *View) launch(spec *Spec) error {
 		Args:       []string{launcherArg0},
 		Env:        []string{},
 		Stderr:     os.Stderr,
-		ExtraFiles: []*os.File{specR, ctlChild, child[0], child[1], child[2], pts},
+		ExtraFiles: []*os.File{specR, ctlChild, child[0], child[1], child[2]},
 		// Cloning into the namespaces, rather than unsharing later, puts every runtime thread of the launcher in them and makes it PID 1 of the view.
 		SysProcAttr: &syscall.SysProcAttr{
 			Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWPID,

@@ -22,8 +22,6 @@ type Spec struct {
 	Network  Network
 	// StagingParent is an existing absolute host directory, such as the Session directory, in which the view creates its staging directory and removes it at teardown.
 	StagingParent string
-	// PTS is the devpts instance mounted at /dev/pts. Start uses it and closes it, so one PTS serves one view; nil gives the view a new instance.
-	PTS *PTS
 }
 
 // World starts serving the view's root file system on dev, a /dev/fuse connection that the launcher has already mounted as mount describes, and reports how it presents mount's mountpoints. ctx is Start's: it bounds connecting, attaching and presenting, not the serving. The server runs in the daemon, outside the view, and never mounts or unmounts anything. sessionview closes dev after Stop returns.

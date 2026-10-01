@@ -134,7 +134,7 @@ func (b *builder) shimDir(names []string, shim int) error {
 	return readOnly(mnt, dir)
 }
 
-// dev builds a minimal read-only /dev with host device nodes, the view's devpts instance and a noexec /dev/shm.
+// dev builds a minimal read-only /dev with host device nodes, a new devpts instance and a noexec /dev/shm.
 func (b *builder) dev() error {
 	at, err := b.at(agent.ViewDevRoot)
 	if err != nil {
@@ -161,19 +161,18 @@ func (b *builder) dev() error {
 		}
 	}
 	subs := []struct {
-		name string
-		open func() (int, error)
+		name, fstype string
+		opts         [][2]string
+		attr         int
 	}{
-		{"pts", func() (int, error) { return ptsFD, nil }}, // the daemon's PTS
-		{"shm", func() (int, error) {
-			return newFS("tmpfs", [][2]string{{"mode", "1777"}}, attrNoSuid|attrNoDev|attrNoExec)
-		}},
+		{"pts", "devpts", [][2]string{{"ptmxmode", "0666"}, {"mode", "0620"}}, attrNoSuid | attrNoExec},
+		{"shm", "tmpfs", [][2]string{{"mode", "1777"}}, attrNoSuid | attrNoDev | attrNoExec},
 	}
 	for _, s := range subs {
 		if err := unix.Mkdirat(mnt, s.name, 0o755); err != nil {
 			return &Error{Kind: ErrLauncher, Op: "mkdir", Path: "/dev/" + s.name, Err: err}
 		}
-		fs, err := s.open()
+		fs, err := newFS(s.fstype, s.opts, s.attr)
 		if err != nil {
 			return err
 		}

@@ -24,7 +24,6 @@ const (
 	stdinFD   = 5
 	stdoutFD  = 6
 	stderrFD  = 7
-	ptsFD     = 8 // the view's devpts instance, a detached mount
 )
 
 // launchSpec is what the daemon sends the launcher: the Spec without its callbacks and files.
