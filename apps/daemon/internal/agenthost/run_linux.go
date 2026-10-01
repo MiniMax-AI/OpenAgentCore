@@ -370,12 +370,14 @@ func (s *session) turn(exec agent.Executor, in Input) error {
 			return &Error{Kind: ErrTurn, Op: "close executor", Err: errors.Join(nativeErr, err)}
 		}
 	}
-	// A confirmed Close confirms that out is closed too.
+	// A confirmed Close confirms that out is closed too. What arrived during
+	// Close counts: Close may deliver the Turn's Done.
 	select {
 	case <-f.done:
 	case <-s.ctx.Done():
 		return nil
 	}
+	terminal = f.terminal
 
 	var failure string
 	var result error

@@ -185,6 +185,29 @@ func TestTurnPublishesDoneAfterSettlementAndClose(t *testing.T) {
 	if !errors.Is(err, ErrTurn) || published != 0 || len(got) != 2 || got[0].Type != proto.TypeError || got[1].Type != proto.TypeDone {
 		t.Fatalf("turn = %v; %d envelopes published before Close; Output got %v, want Error then Done", err, published, got)
 	}
+	// A Turn that failed to start delivers its Done during Close.
+	s = newOwnerSession(t)
+	s.in.Output = output
+	native, err := proto.NewEnvelope(proto.TypeDone, "r", proto.DonePayload{Content: "native"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kept chan<- proto.Envelope
+	exec = &fakeExecutor{
+		start: func(_ string, out chan<- proto.Envelope) (agent.Turn, error) {
+			kept = out
+			return &fakeTurn{settleErr: errors.New("settlement lost")}, errors.New("start failed")
+		},
+		close: func() error {
+			kept <- native
+			close(kept)
+			return nil
+		},
+	}
+	err = within(t, func() error { return s.turn(exec, Input{RunID: "r"}) })
+	if got := drainAll(output); !errors.Is(err, ErrTurn) || len(got) != 2 || got[0].Type != proto.TypeError || !reflect.DeepEqual(got[1], native) {
+		t.Fatalf("turn = %v; Output got %v, want Error then the Done from Close", err, got)
+	}
 }
 
 func TestFailedCloseKeepsTheSessionDirectoryAndUID(t *testing.T) {
