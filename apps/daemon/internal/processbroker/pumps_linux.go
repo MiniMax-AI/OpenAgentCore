@@ -154,17 +154,7 @@ func (w *writer) run() {
 }
 
 func (inv *invocation) closeOutput(stream sp.Stream) {
-	h := inv.current()
-	for {
-		err := h.op.CloseOutput(inv.b.ctx, stream)
-		if err == nil || !h.s.ended() {
-			return
-		}
-		var ok bool
-		if h, ok = inv.relink(h); !ok {
-			return
-		}
-	}
+	inv.request(inv.current(), true, func(h handle) error { return h.op.CloseOutput(inv.b.ctx, stream) })
 }
 
 // pumpStdin forwards descriptor 0 until end of file, the exit or the shim's
@@ -184,7 +174,7 @@ func (inv *invocation) pumpStdin(caps sp.Capabilities) {
 			// After the exit, remote background readers see end of file
 			// rather than wait for input the Harness no longer sends.
 			if inv.term == nil && inv.exitDecided() {
-				inv.current().op.CloseStdin(inv.b.ctx)
+				inv.closeStdin()
 			}
 			return
 		case n == 0 || err != nil:
@@ -200,10 +190,13 @@ func (inv *invocation) pumpStdin(caps sp.Capabilities) {
 }
 
 // writeStdin writes data at the tracked offset. A write that had no effect
-// continues on the next stream; an uncertain one is never resent, so
-// forwarding continues only when the new stream shows it was accepted.
+// continues on the next stream, and a Busy refusal after a backoff, from
+// the first byte the service did not accept; an uncertain write is never
+// resent, so forwarding continues only when the new stream shows it was
+// accepted.
 func (inv *invocation) writeStdin(data []byte) bool {
 	h := inv.current()
+	backoff := minBackoff
 	for {
 		base := h.op.StdinOffset()
 		n, err := h.op.WriteStdin(inv.b.ctx, data)
@@ -211,6 +204,14 @@ func (inv *invocation) writeStdin(data []byte) bool {
 			return true
 		}
 		f := asFailure(err)
+		if !h.s.ended() && refused(f) {
+			data = data[n:] // the offset already counts the accepted n
+			if !inv.sleep(backoff) {
+				return false
+			}
+			backoff = min(2*backoff, maxBackoff)
+			continue
+		}
 		if !h.s.ended() {
 			if f.Code != sp.CodeStdinClosed && f.Code != sp.CodeNotRunning && f.Code != sp.CodeReleased {
 				inv.log.Warn("stdin forwarding stopped", "error", err)
@@ -234,17 +235,7 @@ func (inv *invocation) writeStdin(data []byte) bool {
 }
 
 func (inv *invocation) closeStdin() {
-	h := inv.current()
-	for {
-		err := h.op.CloseStdin(inv.b.ctx)
-		if err == nil || !h.s.ended() {
-			return
-		}
-		var ok bool
-		if h, ok = inv.relink(h); !ok {
-			return
-		}
-	}
+	inv.request(inv.current(), true, func(h handle) error { return h.op.CloseStdin(inv.b.ctx) })
 }
 
 func (inv *invocation) exitDecided() bool {
@@ -254,35 +245,18 @@ func (inv *invocation) exitDecided() bool {
 }
 
 // ackLoop acknowledges each delivered prefix, letting the service reclaim
-// its replay and keep reading output. A Busy refusal is retried until the
-// invocation halts.
+// its replay and keep reading output.
 func (inv *invocation) ackLoop() {
 	defer inv.helpers.Done()
 	var acked uint64
-	backoff := minBackoff
 	for {
 		prefix, changed := inv.acks.state()
 		if prefix > acked {
-			h := inv.current()
-			err := h.op.Ack(inv.b.ctx, prefix)
-			switch {
-			case err == nil:
-				acked, backoff = prefix, minBackoff
-				continue
-			case h.s.ended():
-				if _, ok := inv.relink(h); !ok {
-					return
-				}
-				continue
-			case asFailure(err).Code == sp.CodeBusy:
-				if !inv.sleep(backoff) {
-					return
-				}
-				backoff = min(2*backoff, maxBackoff)
-				continue
-			default:
+			if err := inv.request(inv.current(), true, func(h handle) error { return h.op.Ack(inv.b.ctx, prefix) }); err != nil {
 				return // released, or the operation is gone
 			}
+			acked = prefix
+			continue
 		}
 		select {
 		case <-changed:
@@ -310,16 +284,8 @@ func (inv *invocation) signal(n uint16) {
 	h := inv.current()
 	if inv.term != nil && n == uint16(unix.SIGWINCH) {
 		size := inv.term.size()
-		for {
-			err := h.op.Resize(inv.b.ctx, size)
-			if err == nil || !h.s.ended() {
-				return
-			}
-			var ok bool
-			if h, ok = inv.relink(h); !ok {
-				return
-			}
-		}
+		inv.request(h, true, func(h handle) error { return h.op.Resize(inv.b.ctx, size) })
+		return
 	}
 	target := sp.TargetInitialProcessGroup
 	if inv.term != nil && slices.Contains(ptyGroupSignals, n) {
@@ -330,21 +296,11 @@ func (inv *invocation) signal(n uint16) {
 		inv.log.Info("signal not forwarded", "signal", n, "reason", f.Message)
 		return
 	}
-	for {
-		err := h.op.Signal(inv.b.ctx, sig, target)
-		if err == nil {
-			return
-		}
-		f := asFailure(err)
-		if !h.s.ended() || f.Effect != sandboxwire.EffectNone {
-			if f.Code != sp.CodeNotRunning && f.Code != sp.CodeReleased {
-				inv.log.Info("signal not delivered", "signal", n, "error", err)
-			}
-			return
-		}
-		var ok bool
-		if h, ok = inv.relink(h); !ok {
-			return
-		}
+	err := inv.request(h, false, func(h handle) error { return h.op.Signal(inv.b.ctx, sig, target) })
+	if err == nil {
+		return
+	}
+	if f := asFailure(err); f.Code != sp.CodeNotRunning && f.Code != sp.CodeReleased {
+		inv.log.Info("signal not delivered", "signal", n, "error", err)
 	}
 }

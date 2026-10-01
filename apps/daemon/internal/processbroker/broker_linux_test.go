@@ -253,7 +253,7 @@ func TestEnvironmentIsDeclaredOnly(t *testing.T) {
 }
 
 func TestLinkLossKeepsOutputOrdered(t *testing.T) {
-	f := newFixture(t, func(c net.Conn) io.ReadWriteCloser { return &cutConn{Conn: c, left: 64 << 10} })
+	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser { return &cutConn{Conn: c, left: 64 << 10} }))
 	out, err := f.command("seq", "1", "2000000").Output()
 	if err != nil {
 		t.Fatalf("Output = %v", err)
@@ -314,7 +314,7 @@ func TestCloseEndsIncompleteRequest(t *testing.T) {
 // A gone output reader must not hold the exit back while the stream that
 // would close the remote output is lost behind the settled operation.
 func TestGoneReaderDoesNotHoldExit(t *testing.T) {
-	f := newFixture(t, func(c net.Conn) io.ReadWriteCloser { return &holdEvents{Conn: c} })
+	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser { return &holdEvents{Conn: c} }))
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -388,7 +388,7 @@ func TestUnixSocketOutputNamesTheShim(t *testing.T) {
 // A Busy acknowledgement is retried, or output past the replay limit would
 // never arrive.
 func TestBusyAckIsRetried(t *testing.T) {
-	f := newFixture(t, func(c net.Conn) io.ReadWriteCloser { return &busyAck{Conn: c} })
+	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser { return &busyAck{Conn: c} }))
 	cmd := f.command("seq", "1", "2000000")
 	var out countWriter
 	cmd.Stdout = &out
@@ -467,6 +467,138 @@ func TestSharedTerminalRestoredByLastUser(t *testing.T) {
 	}
 }
 
+// A Busy stdin write is repeated from the first byte the service did not
+// accept, so the program reads every byte once.
+func TestBusyStdinIsRetried(t *testing.T) {
+	var writes atomic.Int32
+	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser {
+		return intercept(c, func(fr sandboxwire.Frame) verdict {
+			if fr.Type == sp.OpWriteStdin && writes.Add(1) == 2 {
+				return refuseBusy
+			}
+			return pass
+		})
+	}))
+	var in []byte
+	for i := range 30000 {
+		in = strconv.AppendInt(in, int64(i), 10)
+		in = append(in, '\n')
+	}
+	cmd := f.command("sh", "-c", "cat")
+	cmd.Stdin = bytes.NewReader(in)
+	wait := make(chan error, 1)
+	var out []byte
+	go func() {
+		var err error
+		out, err = cmd.Output()
+		wait <- err
+	}()
+	select {
+	case err := <-wait:
+		if err != nil || !bytes.Equal(out, in) || writes.Load() < 2 {
+			t.Fatalf("Output = %v after %d stdin writes; read %d bytes of %d, equal %v", err, writes.Load(), len(out), len(in), bytes.Equal(out, in))
+		}
+	case <-time.After(30 * time.Second):
+		cmd.Process.Kill()
+		t.Fatal("stdin stalled after a Busy write")
+	}
+}
+
+// A Cancel whose response is lost with its stream is not sent again: the
+// scope gets one TERM, and KILL after the grace.
+func TestUncertainCancelIsNotReplayed(t *testing.T) {
+	var cancels atomic.Int32
+	f := newFixture(t, func(_ int32, c net.Conn) io.ReadWriteCloser {
+		return intercept(c, func(fr sandboxwire.Frame) verdict {
+			if fr.Type == sp.OpCancel && cancels.Add(1) == 1 {
+				return loseResponse
+			}
+			return pass
+		})
+	})
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	cmd := f.command("sh", "-c", "trap '' TERM; echo up; sleep 1000")
+	cmd.Stdout = w
+	err = cmd.Start()
+	w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := bufio.NewReader(r)
+	if line, err := out.ReadString('\n'); line != "up\n" {
+		t.Fatalf("first line %q, %v", line, err)
+	}
+	cmd.Process.Kill()
+	cmd.Wait()
+	read := make(chan error, 1)
+	go func() {
+		_, err := io.ReadAll(out)
+		read <- err
+	}()
+	select {
+	case <-read:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the cancelled program still runs")
+	}
+	if n := cancels.Load(); n != 1 {
+		t.Fatalf("%d Cancel requests, want 1", n)
+	}
+}
+
+// Losing the shim while the first stream is still connecting ends the
+// invocation: the broker closes the shim's descriptors.
+func TestShimLossEndsWaitForStream(t *testing.T) {
+	dialed := make(chan struct{})
+	f := newFixture(t, func(n int32, c net.Conn) io.ReadWriteCloser {
+		if n > 1 {
+			return c
+		}
+		c.Close()
+		close(dialed)
+		// A service that never answers.
+		broker, svc := net.Pipe()
+		go io.Copy(io.Discard, svc)
+		return broker
+	})
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	cmd := f.command("sh", "-c", "echo started")
+	cmd.Stdout = w
+	err = cmd.Start()
+	w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-dialed:
+	case <-time.After(10 * time.Second):
+		cmd.Process.Kill()
+		t.Fatal("the broker never dialed")
+	}
+	cmd.Process.Kill()
+	cmd.Wait()
+	read := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(r)
+		read <- data
+	}()
+	select {
+	case data := <-read:
+		if len(data) != 0 {
+			t.Fatalf("read %q", data)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the broker still holds the lost shim's descriptors")
+	}
+}
+
 func TestViewRunsRemoteShell(t *testing.T) {
 	if os.Getenv(viewGateEnv) != "1" {
 		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see the comment at the top of this file", viewGateEnv)
@@ -534,21 +666,21 @@ func TestViewRunsRemoteShell(t *testing.T) {
 type fixture struct {
 	dir, bin string
 	service  string
-	wrap     func(net.Conn) io.ReadWriteCloser
+	wrap     func(int32, net.Conn) io.ReadWriteCloser
 	dials    atomic.Int32
 	broker   *Broker
 }
 
 // newFixture starts a broker whose shims are this binary under the names
-// bash, sh, env and seq. A non-nil wrap wraps the first stream to the
-// service.
-func newFixture(t *testing.T, wrap func(net.Conn) io.ReadWriteCloser) *fixture {
+// bash, sh, env and seq. A non-nil wrap wraps each stream to the service,
+// which it gets with the stream's number, counting from 1.
+func newFixture(t *testing.T, wrap func(int32, net.Conn) io.ReadWriteCloser) *fixture {
 	return newFixtureFor(t, os.Getuid(), wrap)
 }
 
 // newFixtureFor starts the broker for shims running as uid, in a run
 // directory that uid can reach and only this process can change.
-func newFixtureFor(t *testing.T, uid int, wrap func(net.Conn) io.ReadWriteCloser) *fixture {
+func newFixtureFor(t *testing.T, uid int, wrap func(int32, net.Conn) io.ReadWriteCloser) *fixture {
 	t.Helper()
 	self, err := os.Executable()
 	if err != nil {
@@ -614,10 +746,81 @@ func (f *fixture) dial(ctx context.Context) (io.ReadWriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	if f.dials.Add(1) == 1 && f.wrap != nil {
-		return f.wrap(c), nil
+	if n := f.dials.Add(1); f.wrap != nil {
+		return f.wrap(n, c), nil
 	}
 	return c, nil
+}
+
+// first applies wrap to the first stream alone.
+func first(wrap func(net.Conn) io.ReadWriteCloser) func(int32, net.Conn) io.ReadWriteCloser {
+	return func(n int32, c net.Conn) io.ReadWriteCloser {
+		if n == 1 {
+			return wrap(c)
+		}
+		return c
+	}
+}
+
+// verdict is what intercept does with a request from the broker.
+type verdict int
+
+const (
+	pass         verdict = iota // pass it to the service
+	refuseBusy                  // answer Busy with no effect, as a service at its request limit does
+	loseResponse                // pass it on, then lose the stream in place of its response
+)
+
+// intercept relays a stream between the broker and the service and applies
+// decide to each request.
+func intercept(svc net.Conn, decide func(sandboxwire.Frame) verdict) io.ReadWriteCloser {
+	broker, relay := net.Pipe()
+	var mu sync.Mutex // writes to the broker
+	var lost atomic.Uint64
+	cut := func() {
+		svc.Close()
+		relay.Close()
+	}
+	go func() {
+		defer cut()
+		for {
+			fr, err := sandboxwire.ReadFrame(svc, sandboxwire.MaxPayload)
+			if err != nil || fr.RequestID != 0 && fr.RequestID == lost.Load() {
+				return
+			}
+			mu.Lock()
+			err = sandboxwire.WriteFrame(relay, fr)
+			mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	go func() {
+		defer cut()
+		for {
+			fr, err := sandboxwire.ReadFrame(relay, sandboxwire.MaxPayload)
+			if err != nil {
+				return
+			}
+			switch decide(fr) {
+			case refuseBusy:
+				m := sp.ResponseFailure{Request: fr.Type, Failure: *sp.Fail(sp.CodeBusy, sandboxwire.EffectNone, "busy")}
+				mu.Lock()
+				err = sandboxwire.WriteFrame(relay, sandboxwire.Frame{Type: m.MessageType(), RequestID: fr.RequestID, Payload: sp.Encode(m)})
+				mu.Unlock()
+			case loseResponse:
+				lost.Store(fr.RequestID)
+				fallthrough
+			default:
+				err = sandboxwire.WriteFrame(svc, fr)
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return broker
 }
 
 // cutConn loses the link after left bytes, mid-frame if it falls there.

@@ -57,6 +57,10 @@
 //     symlink the table does not declare fails with 127.
 //   - A stdin write whose outcome is uncertain after a lost stream stops
 //     stdin forwarding, because the write is never retried.
+//   - A Cancel whose outcome is uncertain after a lost stream is not sent
+//     again, because a second Cancel would send the scope TERM again. A
+//     program that Cancel never reached keeps running until it exits or the
+//     Session ends.
 //   - A broker lost after the acknowledgement makes the shim exit with 255
 //     and no message, because the shim no longer holds its stderr.
 //   - Descriptors 0, 1 and 2 must each be a pipe, FIFO, socket, regular

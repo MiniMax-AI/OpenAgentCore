@@ -46,6 +46,9 @@ type invocation struct {
 	writing sync.WaitGroup // the output writers
 	helpers sync.WaitGroup // everything else but the stdin pump
 	started chan struct{}  // closed once the operation exists or never will
+	// gone ends when the shim is lost.
+	gone     context.Context
+	loseShim context.CancelFunc
 
 	acks    tracker
 	writers map[sp.Stream]*writer
@@ -177,6 +180,7 @@ func (b *Broker) prepare(req processshim.Request, fds [3]int, cred unix.Ucred, l
 	}
 	inv.halt = make(chan struct{})
 	inv.started = make(chan struct{})
+	inv.gone, inv.loseShim = context.WithCancel(context.Background())
 	inv.sigs = make(chan uint16, 64)
 	inv.acks.init()
 	inv.writers = map[sp.Stream]*writer{}
@@ -284,7 +288,8 @@ const (
 // exists. One deadline, set by the first Start that may have taken effect,
 // bounds every later link wait, Start, implicit Attach and backoff; when it
 // passes, the shim gets 255. A Start that had no effect may move to a new
-// service incarnation.
+// service incarnation. Until a Start may have taken effect, losing the shim
+// ends the invocation, including a wait for a stream.
 func (inv *invocation) start() (handle, sp.Capabilities, bool) {
 	var deadline time.Time // set once a Start may have taken effect
 	exists := false        // a Start found the operation
@@ -303,11 +308,11 @@ func (inv *invocation) start() (handle, sp.Capabilities, bool) {
 		case startNow:
 			continue
 		}
-		wait := backoff
+		wait, gone := backoff, inv.gone.Done()
 		if !deadline.IsZero() {
-			wait = min(wait, time.Until(deadline))
+			wait, gone = min(wait, time.Until(deadline)), nil
 		}
-		if !inv.sleep(wait) {
+		if !inv.sleepUnless(wait, gone) {
 			inv.fail("the process broker stopped")
 			return handle{}, sp.Capabilities{}, false
 		}
@@ -316,10 +321,15 @@ func (inv *invocation) start() (handle, sp.Capabilities, bool) {
 }
 
 // startOnce makes one Start attempt. A deadline it sets or finds bounds the
-// attempt, including the Start's implicit Attach.
+// attempt, including the Start's implicit Attach. Until a Start may have
+// taken effect, the shim's loss ends the wait for a stream.
 func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sp.Capabilities, startNext) {
-	ctx, cancel := inv.b.ctx, context.CancelFunc(func() {})
-	if !deadline.IsZero() {
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if deadline.IsZero() {
+		ctx, cancel = context.WithCancel(inv.b.ctx)
+		defer context.AfterFunc(inv.gone, cancel)()
+	} else {
 		ctx, cancel = context.WithDeadline(inv.b.ctx, *deadline)
 	}
 	defer cancel()
@@ -328,11 +338,10 @@ func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sp.
 	case inv.b.ctx.Err() != nil:
 		inv.fail("the process broker stopped")
 		return handle{}, sp.Capabilities{}, startEnded
+	case deadline.IsZero() && inv.lost():
+		return handle{}, sp.Capabilities{}, startEnded // nothing started
 	case err != nil:
 		return handle{}, sp.Capabilities{}, startLater // the deadline passed
-	}
-	if inv.lost() && deadline.IsZero() {
-		return handle{}, sp.Capabilities{}, startEnded // nothing started
 	}
 	if inv.inst != s.instance {
 		if !deadline.IsZero() {
@@ -416,11 +425,16 @@ func provesAbsence(c sp.ErrorCode) bool {
 }
 
 // sleep waits for d and reports false when the invocation halts first.
-func (inv *invocation) sleep(d time.Duration) bool {
+func (inv *invocation) sleep(d time.Duration) bool { return inv.sleepUnless(d, nil) }
+
+// sleepUnless is sleep that also ends, reporting true, when wake closes.
+func (inv *invocation) sleepUnless(d time.Duration, wake <-chan struct{}) bool {
 	t := time.NewTimer(d)
 	defer t.Stop()
 	select {
 	case <-t.C:
+		return true
+	case <-wake:
 		return true
 	case <-inv.halt:
 		return false
@@ -481,6 +495,7 @@ func (inv *invocation) observe(h handle) {
 // reattach resumes the operation after the last received event on a new
 // stream. It reports done when the operation is over for the broker.
 func (inv *invocation) reattach(after uint64) (handle, bool) {
+	backoff := minBackoff
 	for {
 		s, err := inv.b.link.get(inv.b.ctx)
 		if err != nil {
@@ -497,10 +512,16 @@ func (inv *invocation) reattach(after uint64) (handle, bool) {
 				continue
 			}
 			f := asFailure(err)
-			switch f.Code {
-			case sp.CodeReleased:
+			switch {
+			case refused(f):
+				if inv.sleep(backoff) {
+					backoff = min(2*backoff, maxBackoff)
+					continue
+				}
+				inv.fail("the process broker stopped")
+			case f.Code == sp.CodeReleased:
 				return handle{}, true
-			case sp.CodeReplayGap:
+			case f.Code == sp.CodeReplayGap:
 				inv.fail("output was lost while the sandbox was unreachable")
 			default:
 				inv.fail(fmt.Sprintf("the operation could not be resumed: %s", f.Message))
@@ -709,6 +730,7 @@ func (inv *invocation) shimGone() {
 		return
 	}
 	inv.shimLost = true
+	inv.loseShim()
 	cancel := !inv.exited
 	inv.mu.Unlock()
 	inv.log.Info("process shim lost", "cancel", cancel)
@@ -731,28 +753,56 @@ func (inv *invocation) cancelRemote() {
 		return
 	}
 	grace := uint32(inv.b.cfg.CancelGrace.Milliseconds())
+	err := inv.request(h, false, func(h handle) error {
+		if inv.exitDecided() {
+			return nil
+		}
+		return h.op.Cancel(inv.b.ctx, grace)
+	})
+	switch {
+	case err == nil || inv.b.ctx.Err() != nil:
+	case asFailure(err).Effect == sandboxwire.EffectPossible:
+		// A second Cancel would send the scope TERM again; the events tell
+		// whether this one took effect.
+		inv.log.Info("operation cancel outcome unknown; not sent again", "error", err)
+	default:
+		inv.log.Warn("operation cancel failed", "error", err)
+	}
+}
+
+// request makes req on the operation until it succeeds or fails for good,
+// and returns the last failure. A Busy refusal is repeated after a backoff
+// until the invocation halts. When the stream ends, req is repeated on the
+// next stream if it had no effect, or if it is idempotent.
+func (inv *invocation) request(h handle, idempotent bool, req func(handle) error) error {
+	backoff := minBackoff
 	for {
-		inv.mu.Lock()
-		exited := inv.exited
-		inv.mu.Unlock()
-		if exited {
-			return
-		}
-		err := h.op.Cancel(inv.b.ctx, grace)
+		err := req(h)
 		if err == nil {
-			return
+			return nil
 		}
-		if !h.s.ended() {
-			if inv.b.ctx.Err() == nil {
-				inv.log.Warn("operation cancel failed", "error", err)
+		f := asFailure(err)
+		switch {
+		case h.s.ended() && (idempotent || f.Effect == sandboxwire.EffectNone):
+			var ok bool
+			if h, ok = inv.relink(h); !ok {
+				return err
 			}
-			return
-		}
-		var ok bool
-		if h, ok = inv.relink(h); !ok {
-			return
+		case refused(f):
+			if !inv.sleep(backoff) {
+				return err
+			}
+			backoff = min(2*backoff, maxBackoff)
+		default:
+			return err
 		}
 	}
+}
+
+// refused reports whether the service refused a request with Busy, without
+// effect; the same request may follow.
+func refused(f *sp.Failure) bool {
+	return f.Code == sp.CodeBusy && f.Effect == sandboxwire.EffectNone
 }
 
 func (inv *invocation) readShim() {
