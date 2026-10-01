@@ -19,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 )
 
 var errFactory = errors.New("factory reached")
@@ -83,7 +84,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		c.change(&req)
 		s, _, _ := newSession(newResource(), req)
 		var dials atomic.Int32
-		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }})
+		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
 		for _, want := range c.want {
 			if !errors.Is(err, want) {
 				t.Errorf("%s: Run = %v, want %v", name, err, want)
@@ -96,17 +97,34 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 			t.Errorf("%s: the sessions directory exists", name)
 		}
 	}
+	// A binding that Link encoding refuses is refused before any effect.
+	for name, change := range map[string]func(*Binding){
+		"zero assignment epoch":  func(b *Binding) { b.AssignmentEpoch = 0 },
+		"invalid resource kind":  func(b *Binding) { b.Resource.Kind = 0 },
+		"oversized attach grant": func(b *Binding) { b.AttachGrant = make([]byte, sandboxlink.MaxGrantBytes+1) },
+	} {
+		s, _, _ := newSession(newResource(), request("viewed", "/workspace", "https://model.test", "sk-test"))
+		change(&s.Binding)
+		var dials atomic.Int32
+		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
+		if !errors.Is(err, ErrInvalidSession) || dials.Load() != 0 {
+			t.Errorf("%s: Run = %v after %d dials, want ErrInvalidSession", name, err, dials.Load())
+		}
+		if _, err := os.Stat(sessionsDir(f.cfg.StateDir)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s: the sessions directory exists", name)
+		}
+	}
 }
 
 func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	f := newViewFixture(t)
 	bearer := "mcp-secret"
 	req := request("viewed", "/workspace", "https://model.test", "sk-test")
-	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs", BearerToken: &bearer}}
+	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs?tenant=a", BearerToken: &bearer}}
 	original := maps.Clone(req.AgentOptions)
 	s, _, _ := newSession(newResource(), req)
 	var dials atomic.Int32
-	err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }})
+	err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
 	if !errors.Is(err, ErrExecutor) || !errors.Is(err, errFactory) {
 		t.Fatalf("Run = %v, want the factory's error as ErrExecutor", err)
 	}
@@ -140,28 +158,11 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	req.AgentOptions["mcp_servers"] = map[string]any{}
 	s, _, _ = newSession(newResource(), req)
 	f.req = proto.PromptRequestPayload{}
-	err = run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }})
+	err = run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
 	if !errors.Is(err, ErrUnsupported) || !errors.Is(err, agent.ErrViewHandoff) || f.req.AgentKind != "" {
 		t.Errorf("Run with a connection option = %v, want ErrUnsupported and ErrViewHandoff before the adapter", err)
 	}
 	if dials.Load() != 0 || len(leftSessions(t, f.cfg)) != 0 {
 		t.Errorf("%d dials and %d Session directories after Run", dials.Load(), len(leftSessions(t, f.cfg)))
-	}
-}
-
-func TestSweepRemovesLeftoverSessions(t *testing.T) {
-	cfg := Config{StateDir: t.TempDir()}
-	if err := Sweep(cfg); err != nil {
-		t.Fatalf("Sweep without sessions: %v", err)
-	}
-	left := filepath.Join(sessionsDir(cfg.StateDir), "left", "home")
-	if err := os.MkdirAll(left, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(left, "history"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := Sweep(cfg); err != nil || len(leftSessions(t, cfg)) != 0 {
-		t.Fatalf("Sweep = %v, %d Session directories left", err, len(leftSessions(t, cfg)))
 	}
 }

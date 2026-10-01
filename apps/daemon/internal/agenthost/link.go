@@ -65,6 +65,13 @@ func newLinkOwner(dial dialFunc, b Binding, fail func(error)) *linkOwner {
 	return &linkOwner{dial: dial, binding: b, fail: fail}
 }
 
+// open is the Open that carries b for service.
+func (b Binding) open(service sandboxlink.Service, version uint16, expected sandboxwire.ID) sandboxlink.Open {
+	return sandboxlink.Open{Service: service, Version: version, Resource: b.Resource, ExpectedServerInstanceID: expected,
+		AttachmentID: b.AttachmentID, SessionID: b.SessionID, AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch,
+		AttachGrant: b.AttachGrant}
+}
+
 // current returns the live link, dialing a new one when there is none.
 func (l *linkOwner) current(ctx context.Context) (attachLink, error) {
 	l.dialMu.Lock()
@@ -110,10 +117,7 @@ func (l *linkOwner) open(ctx context.Context, service sandboxlink.Service, versi
 	l.opened = true
 	expected := l.instance
 	l.mu.Unlock()
-	b := l.binding
-	st, opened, err := link.OpenService(ctx, sandboxlink.Open{Service: service, Version: version, Resource: b.Resource,
-		ExpectedServerInstanceID: expected, AttachmentID: b.AttachmentID, SessionID: b.SessionID,
-		AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch, AttachGrant: b.AttachGrant})
+	st, opened, err := link.OpenService(ctx, l.binding.open(service, version, expected))
 	if err != nil {
 		return nil, l.observe("open "+service.String(), err)
 	}
@@ -138,9 +142,19 @@ func (l *linkOwner) open(ctx context.Context, service sandboxlink.Service, versi
 func (l *linkOwner) observe(op string, err error) error {
 	err = &Error{Kind: ErrLink, Op: op, Err: err}
 	if !retryable(err) {
-		l.fail(err)
+		l.report(err)
 	}
 	return err
+}
+
+// report fails the Session with err unless close has begun: from then on the
+// Session's own close of the attachment explains whatever the Link reports.
+func (l *linkOwner) report(err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.closing {
+		l.fail(err)
+	}
 }
 
 // retryable reports whether a failed Link request may succeed later: a Link
@@ -153,7 +167,7 @@ func retryable(err error) bool {
 // closed is the link's OnAttachmentClosed. It never blocks.
 func (l *linkOwner) closed(c sandboxlink.AttachmentClosed) {
 	if c.AttachmentID == l.binding.AttachmentID {
-		l.fail(&Error{Kind: ErrLink, Op: "attachment", Err: fmt.Errorf("the relay closed the attachment (reason %d)", c.Reason)})
+		l.report(&Error{Kind: ErrLink, Op: "attachment", Err: fmt.Errorf("the relay closed the attachment (reason %d)", c.Reason)})
 	}
 }
 
@@ -174,7 +188,7 @@ func (l *linkOwner) renew(ctx context.Context) {
 		}
 		for {
 			if !time.Now().Before(lease) {
-				l.fail(&Error{Kind: ErrLink, Op: "renew", Err: sandboxlink.LeaseExpired})
+				l.report(&Error{Kind: ErrLink, Op: "renew", Err: sandboxlink.LeaseExpired})
 				return
 			}
 			attempt, cancel := context.WithDeadline(ctx, lease)

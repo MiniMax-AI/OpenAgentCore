@@ -171,6 +171,26 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		}
 		checkReleased(t, cfg)
 	})
+
+	t.Run("Sweep ends a lingering Session process", func(t *testing.T) {
+		id := cfg.UIDs.First + 1
+		cmd := exec.Command("/bin/sleep", "60")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: id, Gid: id}}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- cmd.Wait() }()
+		if err := Sweep(cfg); err != nil {
+			t.Fatalf("Sweep = %v", err)
+		}
+		select {
+		case <-done:
+		case <-time.After(wait):
+			cmd.Process.Kill()
+			t.Fatal("the process with a Session uid still runs after Sweep")
+		}
+	})
 }
 
 // sandbox is a relay and the oac-sandbox-io serving its one resource.
@@ -298,7 +318,7 @@ func startSession(t *testing.T, cfg Config, sb *sandbox, req proto.PromptRequest
 	sb.grant(s.Binding, cfg.RuntimeID, lease)
 	r := &sessionRun{binding: s.Binding, in: in, out: out, done: make(chan error, 1)}
 	go func() {
-		r.done <- run(context.Background(), cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return noBroker{} }})
+		r.done <- run(context.Background(), cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return noBroker{} }, procs: procfs{}})
 	}()
 	return r
 }

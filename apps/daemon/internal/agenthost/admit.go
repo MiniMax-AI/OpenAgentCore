@@ -17,7 +17,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
 // modelName is the gateway's name for the request's model provider.
@@ -43,7 +45,7 @@ func checkConfig(cfg Config) (*x509.CertPool, error) {
 	switch {
 	case !isHostPath(cfg.StateDir):
 		return nil, invalidConfig("state directory %q is not absolute and clean", cfg.StateDir)
-	case cfg.UIDs.First == 0 || cfg.UIDs.Count == 0 || uint64(cfg.UIDs.First)+uint64(cfg.UIDs.Count) > math.MaxUint32:
+	case !cfg.UIDs.valid():
 		return nil, invalidConfig("uid range %d+%d", cfg.UIDs.First, cfg.UIDs.Count)
 	case sandboxlink.CheckRelayURL(cfg.RelayURL) != nil:
 		return nil, invalidConfig("relay URL")
@@ -204,15 +206,13 @@ func checkLayout(cfg Config, view agent.View) error {
 	return nil
 }
 
+// checkSession checks the Session's own fields. Its binding is valid when the
+// Open the Session sends is, as Link encoding checks it.
 func checkSession(s Session) error {
-	b := s.Binding
-	r := b.Resource
-	switch {
-	case r.TenantID.IsZero() || r.EnvironmentID.IsZero() || r.ID.IsZero() || r.Generation == 0:
-		return invalidSession("resource")
-	case b.AttachmentID.IsZero() || b.SessionID.IsZero() || b.AssignmentID.IsZero() || len(b.AttachGrant) == 0:
-		return invalidSession("binding")
-	case s.Input == nil || s.Output == nil:
+	if _, err := sandboxlink.Encode(1, s.Binding.open(sandboxlink.ServiceFile, sandboxfs.Version, sandboxwire.ID{})); err != nil {
+		return invalidSession("binding: %v", err)
+	}
+	if s.Input == nil || s.Output == nil {
 		return invalidSession("no input or output channel")
 	}
 	for _, env := range []map[string]string{s.Environment.Sandbox, s.Environment.Tool} {
@@ -223,6 +223,11 @@ func checkSession(s Session) error {
 		}
 	}
 	return nil
+}
+
+// valid reports whether r is a nonempty range of nonzero uids.
+func (r UIDRange) valid() bool {
+	return r.First != 0 && r.Count != 0 && uint64(r.First)+uint64(r.Count) <= math.MaxUint32
 }
 
 func isHostPath(p string) bool {

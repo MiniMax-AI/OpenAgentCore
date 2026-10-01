@@ -35,21 +35,35 @@ const (
 type deps struct {
 	dial   dialFunc
 	broker func() processBroker
+	procs  processTable
 }
 
 // Run runs one Session until Input is closed, ctx ends or the Session fails,
 // then tears it down. It returns nil after Input closed and every Turn
 // settled, ctx's error when ctx ended the Session, and otherwise the error
-// that ended it, joined with any teardown failure.
+// that ended it, joined with any view cleanup and teardown failure. A failure
+// recorded during teardown counts.
 func Run(ctx context.Context, cfg Config, s Session) error {
-	return run(ctx, cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return unavailableBroker{} }})
+	return run(ctx, cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return unavailableBroker{} }, procs: procfs{}})
 }
 
-// Sweep removes every Session directory under cfg.StateDir. Run's owner calls
-// it at startup, before any Session runs.
+// Sweep ends every process that holds a uid in cfg.UIDs, then removes every
+// Session directory under cfg.StateDir. Run's owner calls it at startup,
+// before any Session runs. It returns ErrTeardown when a process still holds
+// a Session uid after a bounded wait.
 func Sweep(cfg Config) error {
-	if !isHostPath(cfg.StateDir) {
+	return sweep(cfg, procfs{}, sweepBound)
+}
+
+func sweep(cfg Config, procs processTable, bound time.Duration) error {
+	switch {
+	case !isHostPath(cfg.StateDir):
 		return invalidConfig("state directory %q is not absolute and clean", cfg.StateDir)
+	case !cfg.UIDs.valid():
+		return invalidConfig("uid range %d+%d", cfg.UIDs.First, cfg.UIDs.Count)
+	}
+	if err := endProcesses(procs, cfg.UIDs, bound); err != nil {
+		return &Error{Kind: ErrTeardown, Op: "sweep processes", Err: err}
 	}
 	dir := sessionsDir(cfg.StateDir)
 	entries, err := os.ReadDir(dir)
@@ -85,7 +99,8 @@ type session struct {
 	cancel context.CancelFunc
 
 	failMu  sync.Mutex
-	failure error
+	failure error   // the first failure, which ended the Session
+	cleanup []error // each world that did not stop cleanly
 
 	mu sync.Mutex
 	// live is the one view that may run; nil when none does.
@@ -112,7 +127,7 @@ func run(ctx context.Context, cfg Config, in Session, d deps) error {
 	if s.plan, err = admit(cfg, roots, in, s.openNetwork); err != nil {
 		return err
 	}
-	if s.uid, err = allocUID(cfg.UIDs); err != nil {
+	if s.uid, err = allocUID(cfg.UIDs, d.procs); err != nil {
 		return err
 	}
 	if s.dir, err = createSessionDir(cfg.StateDir, in.Binding.SessionID, s.uid); err != nil {
@@ -132,13 +147,31 @@ func run(ctx context.Context, cfg Config, in Session, d deps) error {
 	} else {
 		err = s.drive(exec)
 	}
-	// The Session's failure and the end of ctx explain whatever followed them.
-	if failure := s.failed(); failure != nil {
+	return s.finish(exec, err, ctx.Err())
+}
+
+// finish tears the Session down and only then decides its result, so a
+// failure recorded during teardown counts: the Session's first failure, else
+// ended, the end of Run's ctx, else err. Teardown has joined every view and
+// stopped the link owner's reports, so nothing changes the result later.
+func (s *session) finish(exec agent.Executor, err, ended error) error {
+	terr := s.teardown(exec)
+	s.failMu.Lock()
+	failure, cleanup := s.failure, s.cleanup
+	s.failMu.Unlock()
+	switch {
+	case failure != nil:
 		err = failure
-	} else if ctx.Err() != nil {
-		err = ctx.Err()
+	case ended != nil:
+		err = ended
 	}
-	return errors.Join(err, s.teardown(exec))
+	errs := []error{err}
+	for _, c := range cleanup {
+		if c != failure {
+			errs = append(errs, c)
+		}
+	}
+	return errors.Join(append(errs, terr)...)
 }
 
 func executorError(err error) error {
@@ -159,10 +192,17 @@ func (s *session) fail(err error) {
 	s.cancel()
 }
 
-func (s *session) failed() error {
+// worldEnded records a world that did not stop cleanly, or that cannot show
+// that its attachment holds nothing. Only ending the attachment settles its
+// state, so the Session fails, and Run reports the error even after another
+// failure.
+func (s *session) worldEnded(op string, err error) error {
+	e := &Error{Kind: ErrWorld, Op: op, Err: err}
 	s.failMu.Lock()
-	defer s.failMu.Unlock()
-	return s.failure
+	s.cleanup = append(s.cleanup, e)
+	s.failMu.Unlock()
+	s.fail(e)
+	return e
 }
 
 // drive runs each Turn from Input in order until Input is closed, a Turn

@@ -21,11 +21,16 @@ var uids = struct {
 	used map[uint32]bool
 }{used: map[uint32]bool{}}
 
-func allocUID(r UIDRange) (uint32, error) {
+// allocUID returns a uid in r that no Session uses and no process holds.
+func allocUID(r UIDRange, procs processTable) (uint32, error) {
+	held, err := heldUIDs(procs, r)
+	if err != nil {
+		return 0, &Error{Kind: ErrInvalidConfig, Op: "processes", Err: err}
+	}
 	uids.Lock()
 	defer uids.Unlock()
 	for i := range r.Count {
-		if id := r.First + i; !uids.used[id] {
+		if id := r.First + i; !uids.used[id] && !held[id] {
 			uids.used[id] = true
 			return id, nil
 		}

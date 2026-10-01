@@ -22,11 +22,29 @@
 // The agent host owns the Session's Link attachment: it opens each stream
 // with the Session's binding, renews the lease and fails the Session when the
 // relay closes the attachment, a Link request fails in a way that is not
-// retryable, or the world is lost or may still hold state. A failure cancels
-// the running Turn and closes the live view. Teardown releases, in order, the
-// Executor, the view, the process broker, the Link attachment, the Session
-// directory and the uid. Sweep removes the Session directories a previous
-// agent host left; Run's owner calls it at startup.
+// retryable, or the world is lost or did not stop cleanly, which leaves what
+// the attachment holds uncertain. A failure cancels the running Turn and
+// closes the live view. A view's end is settled before its clirunner.Process
+// reports it: the gateway has stopped, the world's end is recorded and the
+// view slot is free. Teardown releases, in order, the Executor, the view, the
+// process broker, the Link attachment, the Session directory and the uid;
+// Run decides its result only afterwards, so a failure recorded during
+// teardown counts, and from the close of the attachment on, what the Link
+// reports changes nothing.
+//
+// Sweep runs at startup, before any Session. It sends SIGKILL to every
+// process whose real, effective, saved or file-system uid lies in
+// Config.UIDs, scans /proc again until none remains or a bound passes, and
+// then removes the Session directories a previous agent host left. Allocation
+// also skips a uid that a running process holds. A process in the range runs
+// with no capabilities and no_new_privs, so it can only fork more processes
+// of its own uid: each scan finds what the previous round's processes
+// started, and a uid that no process holds at allocation stays free until the
+// Session starts one. The signal goes through a pidfd and only after the
+// uids are read again, so a pid reused since the scan is never signalled. A
+// zombie runs nothing and is ignored. A process that the agent host's /proc
+// does not show, such as one in a sibling PID namespace, is outside these
+// guarantees, which is why nothing else may use the range.
 //
 // The Harness view protocol is in contracts/agents-api/harness-onboarding.md
 // and the gateway's in contracts/agents-api/model-execution.md.

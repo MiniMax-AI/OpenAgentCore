@@ -9,6 +9,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -107,4 +109,29 @@ func leftSessions(t *testing.T, cfg Config) []os.DirEntry {
 		t.Fatal(err)
 	}
 	return entries
+}
+
+// fakeProcesses is a process table whose processes end when killed, unless
+// they are stubborn.
+type fakeProcesses struct {
+	mu       sync.Mutex
+	procs    []hostProcess
+	stubborn bool
+	killed   []int
+}
+
+func (f *fakeProcesses) list() ([]hostProcess, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.procs), nil
+}
+
+func (f *fakeProcesses) kill(p hostProcess, r UIDRange) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.killed = append(f.killed, p.pid)
+	if !f.stubborn {
+		f.procs = slices.DeleteFunc(f.procs, func(q hostProcess) bool { return q.pid == p.pid })
+	}
+	return nil
 }

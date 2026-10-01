@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"slices"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,15 +27,29 @@ const worldExport sandboxlink.ExportID = "world"
 
 // liveView is the Session's one live view slot.
 type liveView struct {
-	view   *sessionview.View // nil while the view is being built
-	closed bool              // the Session ended while the view was being built
+	view   runningView // nil while the view is being built
+	closed bool        // the Session ended while the view was being built
+}
+
+// runningView is the part of *sessionview.View the Session owns.
+type runningView interface {
+	Signal(syscall.Signal) error
+	Wait() (sessionview.Exit, error)
+	Close() error
+}
+
+// viewWorld is the part of *worldfs.World the Session watches.
+type viewWorld interface {
+	Stop() error
+	Lost() <-chan struct{}
+	Err() error
 }
 
 // closeLive closes the live view. It runs when the Session's context ends.
 func (s *session) closeLive() {
 	s.mu.Lock()
 	lv := s.live
-	var v *sessionview.View
+	var v runningView
 	if lv != nil {
 		lv.closed, v = true, lv.view
 	}
@@ -73,11 +88,7 @@ func (s *session) launch(opts clirunner.StartOptions) (*clirunner.Process, error
 	s.live = lv
 	s.views.Add(1)
 	s.mu.Unlock()
-	p, err := s.start(lv, opts)
-	if err != nil {
-		s.release(lv)
-	}
-	return p, err
+	return s.start(lv, opts)
 }
 
 // release frees the view slot and ends the launch's count.
@@ -90,15 +101,20 @@ func (s *session) release(lv *liveView) {
 	s.views.Done()
 }
 
+// start builds the view for lv. Until the view runs, each failure releases
+// lv; from then on the view's owner does.
 func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.Process, error) {
 	if err := s.startBroker(opts.KillTimeout); err != nil {
+		s.release(lv)
 		return nil, err
 	}
 	if err := s.dir.chownHome(s.uid); err != nil {
+		s.release(lv)
 		return nil, &Error{Kind: ErrLaunch, Op: "home", Err: err}
 	}
 	ends, err := newStdio(opts.NeedStdin)
 	if err != nil {
+		s.release(lv)
 		return nil, &Error{Kind: ErrLaunch, Op: "stdio", Err: err}
 	}
 	// The gateway serves until the view has ended.
@@ -116,50 +132,98 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 	if err != nil {
 		stopGateway()
 		ends.closeParent()
-		if errors.Is(err, worldfs.ErrAttachmentDirty) {
-			// Only ending the attachment releases what the world may hold.
-			err = &Error{Kind: ErrWorld, Op: "launch", Err: err}
-			s.fail(err)
-			return nil, err
+		defer s.release(lv)
+		// sessionview stops a world that served; Stop reports how that went.
+		if serr := world.Stop(); serr != nil || errors.Is(err, worldfs.ErrAttachmentDirty) {
+			return nil, s.worldEnded("launch", errors.Join(err, serr))
 		}
 		return nil, &Error{Kind: ErrLaunch, Err: err}
 	}
 	p := v.Presentation()
 	s.log.Info("agent host view started", "binary", opts.Binary, "targets", p.Targets, "links", p.Links, "synthesized", p.Synthesized)
+	return s.own(lv, v, world, stopGateway, opts, ends)
+}
 
+// own hands a started view to the clirunner.Process the adapter receives.
+func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway func(), opts clirunner.StartOptions, ends *stdio) (*clirunner.Process, error) {
+	h := &ownedView{s: s, lv: lv, v: v, world: world, stopGateway: stopGateway, ended: make(chan struct{}), watched: make(chan struct{})}
+	go h.watch()
 	s.mu.Lock()
 	lv.view = v
 	closed := lv.closed
 	s.mu.Unlock()
 	if closed {
 		v.Close()
-		stopGateway()
+		h.Wait()
 		ends.closeParent()
 		return nil, &Error{Kind: ErrLaunch, Err: errors.New("the Session is ending")}
 	}
-	process, err := clirunner.FromHandle(viewHandle{v}, clirunner.HandleOptions{Parent: opts.Parent, Stdin: ends.stdin(),
+	process, err := clirunner.FromHandle(h, clirunner.HandleOptions{Parent: opts.Parent, Stdin: ends.stdin(),
 		Stdout: ends.parent[1], Stderr: ends.parent[2], KillTimeout: opts.KillTimeout})
 	if err != nil {
 		v.Close()
-		stopGateway()
+		h.Wait()
 		ends.closeParent()
 		return nil, &Error{Kind: ErrLaunch, Err: err}
 	}
-	ended := make(chan struct{})
-	go func() {
-		select {
-		case <-world.Lost():
-			s.fail(&Error{Kind: ErrWorld, Op: "world", Err: world.Err()})
-		case <-ended:
-		}
-	}()
-	go func() {
-		defer s.release(lv)
-		_, _ = v.Wait()
-		stopGateway()
-		close(ended)
-	}()
 	return process, nil
+}
+
+// ownedView is a running view as a clirunner.Handle. Its Wait ends the
+// Session's ownership of the view before it returns, so the end the adapter
+// observes through the Process comes after it: the gateway has stopped, a
+// lost world or one that did not stop cleanly has failed the Session, and
+// the view slot is free for the next Launch.
+type ownedView struct {
+	s           *session
+	lv          *liveView
+	v           runningView
+	world       viewWorld
+	stopGateway func()
+	ended       chan struct{} // closed once the view has ended
+	watched     chan struct{} // closed when watch returns
+	once        sync.Once
+}
+
+// watch fails the Session as soon as the world is lost while the view runs.
+func (h *ownedView) watch() {
+	defer close(h.watched)
+	select {
+	case <-h.world.Lost():
+		h.s.fail(&Error{Kind: ErrWorld, Op: "world", Err: h.world.Err()})
+	case <-h.ended:
+	}
+}
+
+func (h *ownedView) Signal(sig syscall.Signal) error { return h.v.Signal(sig) }
+
+func (h *ownedView) Close() error { return h.v.Close() }
+
+func (h *ownedView) Wait() (int, error) {
+	exit, err := h.v.Wait()
+	h.once.Do(h.end)
+	switch {
+	case err != nil:
+		return -1, err
+	case exit.Signal != 0:
+		return -1, nil
+	}
+	return exit.Code, nil
+}
+
+// end releases the view once it has ended and its world has stopped.
+func (h *ownedView) end() {
+	h.stopGateway()
+	close(h.ended)
+	<-h.watched
+	if lost := h.world.Err(); lost != nil {
+		h.s.fail(&Error{Kind: ErrWorld, Op: "world", Err: lost})
+	}
+	// The view has stopped its world; Stop reports how that went.
+	if err := h.world.Stop(); err != nil {
+		h.s.worldEnded("stop world", err)
+	}
+	h.s.release(h.lv)
 }
 
 // startBroker starts the Session's process broker at its first launch.
@@ -285,21 +349,3 @@ func closeFiles(files []*os.File) {
 		}
 	}
 }
-
-// viewHandle is a view as a clirunner.Handle.
-type viewHandle struct{ v *sessionview.View }
-
-func (h viewHandle) Signal(sig syscall.Signal) error { return h.v.Signal(sig) }
-
-func (h viewHandle) Wait() (int, error) {
-	exit, err := h.v.Wait()
-	switch {
-	case err != nil:
-		return -1, err
-	case exit.Signal != 0:
-		return -1, nil
-	}
-	return exit.Code, nil
-}
-
-func (h viewHandle) Close() error { return h.v.Close() }

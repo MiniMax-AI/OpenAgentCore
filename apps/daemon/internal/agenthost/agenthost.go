@@ -20,7 +20,7 @@ type Config struct {
 	StateDir string
 	// UIDs is the range Session uids are allocated from; each Session's gid
 	// equals its uid. Only one agent host runs per kernel, and nothing else
-	// uses the range.
+	// uses the range: Sweep kills every process that holds one of its uids.
 	UIDs UIDRange
 	// RelayURL and TLS reach the Link relay, as sandboxlink.DialAttach takes
 	// them. A nil TLS uses the system roots.
