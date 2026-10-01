@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,21 +137,21 @@ func devNull(t *testing.T) [3]int {
 	return [3]int{fd, fd, fd}
 }
 
-// An invocation whose handshake finishes first is still published after one
-// that reached the relay earlier, and the broker sees their Opens with
-// increasing IDs, as it requires.
+// While one invocation is between its ID and its Open, another handshake
+// waits for both steps, so the broker sees the Opens with increasing IDs, as
+// it requires.
 func TestOpensReachTheBrokerInIDOrder(t *testing.T) {
-	paused := make(chan struct{})
-	secondOpened := make(chan struct{})
+	paused, release := make(chan struct{}), make(chan struct{})
 	r := startTestRelay(t, func(r *relay) {
 		r.publishing = func(req Request) {
 			if string(req.Argv[0]) == "first" {
 				close(paused)
-				<-secondOpened
+				<-release
 			}
 		}
 	})
 	broken := make(chan error, 1)
+	secondOpened := make(chan struct{})
 	go func() {
 		var last uint64
 		for {
@@ -161,6 +163,9 @@ func TestOpensReachTheBrokerInIDOrder(t *testing.T) {
 			if !ok {
 				continue
 			}
+			if string(open.Request.Argv[0]) == "second" {
+				close(secondOpened)
+			}
 			if open.ID <= last {
 				// The broker ends the Session at an Open ID that does not
 				// increase.
@@ -171,9 +176,6 @@ func TestOpensReachTheBrokerInIDOrder(t *testing.T) {
 			last = open.ID
 			id := open.ID
 			r.send(Accept{ID: id}, Started{ID: id}, Exit{ID: id, Result: Result{Code: 0}}, End{ID: id})
-			if string(open.Request.Argv[0]) == "second" {
-				close(secondOpened)
-			}
 		}
 	}()
 	first := r.shim(t, "first", devNull(t))
@@ -182,7 +184,23 @@ func TestOpensReachTheBrokerInIDOrder(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the first handshake never reached publication")
 	}
+	// The second handshake either waits for the first's publication or, if
+	// the steps were apart, publishes its own Open first.
 	second := r.shim(t, "second", devNull(t))
+	settled := func() bool {
+		select {
+		case <-secondOpened:
+			return true
+		default:
+			return waitsForLock("processshim.(*relay).open(")
+		}
+	}
+	for deadline := time.Now().Add(10 * time.Second); !settled(); time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the second handshake neither waited nor published")
+		}
+	}
+	close(release)
 	for name, conn := range map[string]*Conn{"first": first, "second": second} {
 		if res, err := finished(conn); err != nil || res.Code != 0 {
 			t.Errorf("%s: Result %+v, %v", name, res, err)
@@ -193,6 +211,25 @@ func TestOpensReachTheBrokerInIDOrder(t *testing.T) {
 		t.Fatal(err)
 	default:
 	}
+}
+
+// waitsForLock reports whether a goroutine in fn waits to lock a mutex.
+func waitsForLock(fn string) bool {
+	buf := make([]byte, 1<<16)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	for _, g := range strings.Split(string(buf), "\n\n") {
+		if strings.Contains(g, "[sync.Mutex.Lock") && strings.Contains(g, fn) {
+			return true
+		}
+	}
+	return false
 }
 
 // Output for a terminal is written only once the terminal is raw, so the

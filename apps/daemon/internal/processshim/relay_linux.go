@@ -68,8 +68,8 @@ type relay struct {
 	gone   bool           // the broker's connection ended
 	live   sync.WaitGroup // the invocations' control goroutines
 
-	// Test seams: publishing runs before an invocation gets its ID, and
-	// makingRaw before the control goroutine makes a terminal raw.
+	// Test seams: publishing runs between an invocation's ID and its Open,
+	// and makingRaw before the control goroutine makes a terminal raw.
 	publishing func(Request)
 	makingRaw  func()
 }
@@ -195,9 +195,6 @@ func (r *relay) open(conn *Conn, req Request, fds [3]int) (*invocation, string) 
 	} else {
 		inv.rawOnce.Do(func() { close(inv.raw) })
 	}
-	if r.publishing != nil {
-		r.publishing(req)
-	}
 	r.sendMu.Lock()
 	defer r.sendMu.Unlock()
 	r.mu.Lock()
@@ -214,6 +211,9 @@ func (r *relay) open(conn *Conn, req Request, fds [3]int) (*invocation, string) 
 	r.invs[inv.id] = inv
 	r.live.Add(1)
 	r.mu.Unlock()
+	if r.publishing != nil {
+		r.publishing(req)
+	}
 	// The broker's messages for the ID queue until start runs the
 	// invocation. A failed write means the broker is gone, which ends it.
 	sandboxwire.WriteFrame(r.broker, Frame(Open{ID: inv.id, Request: req, Terminal: mode}))
