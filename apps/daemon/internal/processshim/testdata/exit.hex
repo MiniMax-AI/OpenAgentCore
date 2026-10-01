@@ -1,0 +1,12 @@
+# Exit with code 3 once both outputs reach their marks.
+00000025                          # PayloadLength 37
+0027                              # MessageType: Exit
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0000000000000001                  # ID 1
+0000                              # Result Signal 0
+03                                # Result Code 3
+00000000                          # Result Message ""
+00000002                          # Marks count 2
+01 0000000000000009               # FD 1 through Seq 9
+02 0000000000000006               # FD 2 through Seq 6

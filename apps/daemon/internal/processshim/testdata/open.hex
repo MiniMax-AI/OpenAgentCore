@@ -1,0 +1,20 @@
+# An Open with a terminal. Hex bytes; text after # is a comment.
+00000051                          # PayloadLength 81
+0011                              # MessageType: Open
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0000000000000001                  # ID 1
+0001                              # Request Version 1
+0000000c 2f2e6f61632f62696e2f7368 # ExecPath "/.oac/bin/sh"
+00000001                          # Argv count 1
+00000002 7368                     # "sh"
+00000000                          # Env count 0
+00000002 2f77                     # Cwd "/w"
+00000012                          # Umask 0o022
+01                                # Terminal present
+0018 0050 0000 0000               # Size 24 rows, 80 columns
+00000500                          # Iflag
+00000005                          # Oflag
+000000bf                          # Cflag
+00008a3b                          # Lflag
+00000002 031c                     # Cc

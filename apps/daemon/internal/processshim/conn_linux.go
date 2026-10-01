@@ -16,7 +16,7 @@ import (
 // Conn is one end of an invocation connection.
 type Conn struct {
 	c *net.UnixConn
-	// fds collects descriptors while the broker reads the Request; nil
+	// fds collects descriptors while the relay reads the Request; nil
 	// otherwise, so any control data is a violation.
 	fds *[]int
 	// first is true until the first read returns.
@@ -35,8 +35,8 @@ func (c *Conn) Unix() *net.UnixConn { return c.c }
 // SendRequest sends r with fds attached to its first byte.
 func (c *Conn) SendRequest(r Request, fds [3]int) error {
 	f := Frame(r)
-	if len(f.Payload) > MaxFrameBytes {
-		return fmt.Errorf("%w: request of %d bytes exceeds %d", ErrProtocol, len(f.Payload), MaxFrameBytes)
+	if len(f.Payload) > MaxRequestBytes {
+		return fmt.Errorf("%w: request of %d bytes exceeds %d", ErrProtocol, len(f.Payload), MaxRequestBytes)
 	}
 	var b frameBuffer
 	if err := sandboxwire.WriteFrame(&b, f); err != nil {
@@ -59,7 +59,7 @@ func (c *Conn) Send(m Message) error { return sandboxwire.WriteFrame(c.c, Frame(
 func (c *Conn) ReadRequest() (Request, [3]int, error) {
 	var fds []int
 	c.fds = &fds
-	m, err := c.ReadMessage()
+	m, err := c.read(MaxRequestBytes)
 	c.fds = nil
 	if err == nil && len(fds) != 3 {
 		err = fmt.Errorf("%w: request carries %d descriptors", ErrProtocol, len(fds))
@@ -77,8 +77,10 @@ func (c *Conn) ReadRequest() (Request, [3]int, error) {
 
 // ReadMessage reads one message. Descriptors on any message other than the
 // Request are a violation.
-func (c *Conn) ReadMessage() (Message, error) {
-	f, err := sandboxwire.ReadFrame(reader{c}, MaxFrameBytes)
+func (c *Conn) ReadMessage() (Message, error) { return c.read(MaxFrameBytes) }
+
+func (c *Conn) read(max uint32) (Message, error) {
+	f, err := sandboxwire.ReadFrame(reader{c}, max)
 	if err != nil {
 		return nil, err
 	}

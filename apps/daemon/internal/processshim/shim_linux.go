@@ -122,8 +122,8 @@ func request() (Request, error) {
 	for _, v := range os.Environ() {
 		r.Env = append(r.Env, []byte(v))
 	}
-	if n := len(Frame(r).Payload); n > MaxFrameBytes {
-		return Request{}, fmt.Errorf("argument list and environment of %d bytes exceed %d", n, MaxFrameBytes)
+	if n := len(Frame(r).Payload); n > MaxRequestBytes {
+		return Request{}, fmt.Errorf("argument list and environment of %d bytes exceed %d", n, MaxRequestBytes)
 	}
 	return r, nil
 }

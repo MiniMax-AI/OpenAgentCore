@@ -1,0 +1,9 @@
+# Output for stderr.
+00000019                          # PayloadLength 25
+0025                              # MessageType: Output
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0000000000000001                  # ID 1
+02                                # FD 2
+0000000000000005                  # Seq 5
+00000004 6572720a                 # Data "err\n"

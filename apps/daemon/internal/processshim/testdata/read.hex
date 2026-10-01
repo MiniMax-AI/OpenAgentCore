@@ -1,0 +1,7 @@
+# Read granting one Input of up to 64 KiB.
+0000000c                          # PayloadLength 12
+0023                              # MessageType: Read
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0000000000000001                  # ID 1
+00010000                          # Max 65536
