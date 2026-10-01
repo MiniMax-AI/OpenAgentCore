@@ -1,4 +1,6 @@
-// Package modelprovider validates the frozen upstream connection supplied to a native Harness.
+// Package modelprovider validates the frozen upstream connection supplied to a
+// native Harness and declares the native routes and credential header that the
+// Session's credential gateway relays for each protocol.
 package modelprovider
 
 import (
@@ -7,6 +9,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -77,4 +80,113 @@ func (p Provider) Validate() error {
 		return ErrConfiguration
 	}
 	return nil
+}
+
+// Placeholder is the credential a Harness receives instead of the upstream key.
+// It is not secret and authorizes nothing outside the Session's gateway listener.
+const Placeholder = "oac-gateway-placeholder"
+
+// Route is one native HTTP route of a protocol. Path is relative to the
+// upstream base URL; UpstreamPath joins the two, and the gateway relays the
+// request's query unchanged.
+type Route struct {
+	Method string
+	Path   string
+	// WebSocket allows an upgrade on this route; otherwise the gateway
+	// rejects a request that asks for one.
+	WebSocket bool
+}
+
+// UpstreamPath is the escaped upstream path for a route: the base URL's escaped
+// path with every trailing "/" removed, followed by the route's Path.
+func UpstreamPath(baseEscapedPath, routePath string) string {
+	return strings.TrimRight(baseEscapedPath, "/") + routePath
+}
+
+// Credential is the upstream credential header the gateway injects. Its value
+// is Prefix followed by the key.
+type Credential struct {
+	Header string
+	Prefix string
+}
+
+func (c Credential) Value(key string) string { return c.Prefix + key }
+
+// StrippedHeaders lists, in canonical MIME form, every inbound credential
+// header that a pinned Harness or its SDK can send. The gateway matches the
+// names case-insensitively and removes every value of each before it injects
+// the upstream credential.
+var StrippedHeaders = []string{
+	"Authorization",
+	"Proxy-Authorization",
+	"Cookie",
+	"X-Api-Key",
+	"Api-Key",
+	"X-Openai-Actor-Authorization",
+	"Cf-Aig-Authorization",
+	"X-Amz-Security-Token",
+}
+
+// surface is the declared native API of one protocol: the routes the pinned
+// Harnesses call and the credential form they send upstream.
+type surface struct {
+	routes     []Route
+	credential Credential
+}
+
+var surfaces = map[Protocol]surface{
+	Anthropic: {
+		routes: []Route{
+			{Method: "POST", Path: "/v1/messages"},
+			{Method: "POST", Path: "/v1/messages/count_tokens"},
+		},
+		credential: Credential{Header: "X-Api-Key"},
+	},
+	Responses: {
+		routes:     []Route{{Method: "POST", Path: "/responses"}},
+		credential: Credential{Header: "Authorization", Prefix: "Bearer "},
+	},
+	ChatCompletions: {
+		routes:     []Route{{Method: "POST", Path: "/chat/completions"}},
+		credential: Credential{Header: "Authorization", Prefix: "Bearer "},
+	},
+}
+
+var (
+	ErrRouteNotFound    = errors.New("model route is not declared")
+	ErrMethodNotAllowed = errors.New("model route does not allow this method")
+)
+
+// Routes returns the declared routes of a protocol.
+func Routes(p Protocol) []Route { return slices.Clone(surfaces[p].routes) }
+
+// UpstreamCredential returns the credential header the gateway injects for p.
+func UpstreamCredential(p Protocol) (Credential, error) {
+	s, ok := surfaces[p]
+	if !ok {
+		return Credential{}, ErrConfiguration
+	}
+	return s.credential, nil
+}
+
+// LookupRoute matches a request against the declared routes of p. The path is
+// the request's escaped path relative to the base URL and matches exactly,
+// with no normalization; the method matches exactly. A declared path with
+// another method is ErrMethodNotAllowed; any other path is ErrRouteNotFound.
+func LookupRoute(p Protocol, method, path string) (Route, error) {
+	s, ok := surfaces[p]
+	if !ok {
+		return Route{}, ErrConfiguration
+	}
+	err := ErrRouteNotFound
+	for _, route := range s.routes {
+		if route.Path != path {
+			continue
+		}
+		if route.Method == method {
+			return route, nil
+		}
+		err = ErrMethodNotAllowed
+	}
+	return Route{}, err
 }

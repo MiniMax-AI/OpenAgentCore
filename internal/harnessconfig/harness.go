@@ -23,10 +23,11 @@
 // Core freezes the model configuration per Session. Its meaning and explicit
 // settings must hold for the first Turn, later Turns, native retries, tool
 // continuations and recovery. A Runtime that cannot preserve a frozen snapshot
-// rejects it without rewriting, migration or aliases. Native connection setup is
-// direct: no model API proxy, passthrough gateway or protocol conversion, including
-// inside an adapter. Protocol acceptance does not qualify model capabilities;
-// operation and input requirements must still be checked before native submission.
+// rejects it without rewriting, migration or aliases. Native connection setup
+// goes through the credential gateway that internal/modelprovider declares, with
+// no protocol conversion, including inside an adapter. Protocol acceptance does
+// not qualify model capabilities; operation and input requirements must still be
+// checked before native submission.
 package harnessconfig
 
 import (
