@@ -66,6 +66,8 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | `internal/sandboxwire` | Frame header, primitive encoding and request ID sequence shared by the sandbox I/O protocols | [Framing](sandbox-link-protocol.md#framing) |
 | `internal/sandboxlink` | Link protocol, peer libraries and relay core | [Sandbox link protocol](sandbox-link-protocol.md) |
 | `internal/sandboxbootstrap` | Provider-to-Sandbox I/O service startup input | [Sandbox bootstrap](sandbox-bootstrap.md) |
+| `internal/sandboxfs` | Runtime–file service wire types, validators, client and server | [File access protocol](file-access-protocol.md) |
+| `apps/sandboxio` | Sandbox I/O service and its Linux protocol services | [File access protocol](file-access-protocol.md#the-linux-service) |
 | `apps/daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | Native harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |
 | `services/core/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](sandbox-provider.md) |

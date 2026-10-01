@@ -1,0 +1,9 @@
+# ReadDir resuming after a cookie.
+00000015                          # PayloadLength 21
+0011                              # MessageType: ReadDir (17)
+0000                              # Flags
+0000000000000005                  # RequestID 5
+0000000000000042                  # Handle
+1c6a3e5f0b9d2471                  # Cookie
+00010000                          # Limit 65536
+00                                # WithAttrs

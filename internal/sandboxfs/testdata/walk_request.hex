@@ -1,0 +1,9 @@
+# Walk request.
+00000021                          # PayloadLength 33
+0005                              # MessageType: Walk (5)
+0000                              # Flags
+0000000000000002                  # RequestID 2
+0000000000000001 0000000000000007 # Parent: ID 1, Generation 7
+00000002                          # Names: count 2
+00000004 6c696e6b                 # "link"
+00000001 78                       # "x"
