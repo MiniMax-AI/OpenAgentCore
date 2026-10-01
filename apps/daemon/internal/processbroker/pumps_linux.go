@@ -357,14 +357,17 @@ func (inv *invocation) writeStdin(data []byte) bool {
 
 // stdinLost ends an invocation whose stdin cannot continue: unless the exit
 // is decided, the shim exits with 255 and the reason, and the program, which
-// would wait for input that never comes, is cancelled.
+// would wait for input that never comes, is cancelled. When the shim already
+// has its Result or is gone, the path that answered or lost it owns the
+// program's end, and stdinLost cancels nothing.
 func (inv *invocation) stdinLost(reason string) {
 	if inv.exitDecided() {
 		return
 	}
 	inv.log.Warn("process invocation failed", "reason", reason)
-	inv.reply(processshim.Result{Code: processshim.ExitLost, Message: message(reason)}, nil)
-	inv.cancelRemote()
+	if inv.reply(processshim.Result{Code: processshim.ExitLost, Message: message(reason)}, nil) {
+		inv.cancelRemote()
+	}
 }
 
 func (inv *invocation) closeStdin() {
