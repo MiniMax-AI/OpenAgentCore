@@ -11,7 +11,7 @@ import (
 
 func TestProxyConnectsOnlyThroughTheSandbox(t *testing.T) {
 	sb := startSandbox(t)
-	eps := serveOnLoopback(t, Config{OpenNetwork: sb.open})
+	eps := serveOnLoopback(t, Config{OpenNetwork: sb.open, Proxy: true})
 	hello := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "hello "+r.RequestURI) })
 	secure := httptest.NewTLSServer(hello)
 	defer secure.Close()

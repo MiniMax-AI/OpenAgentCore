@@ -72,6 +72,7 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 		MCP:         []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: "http://127.0.0.1:" + port + "/mcp"}},
 		Prompt:      proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 		OpenNetwork: startSandbox(t).open,
+		Proxy:       true,
 	}
 	// The Harness's environment is built before the view exists.
 	eps, err := Plan(cfg)

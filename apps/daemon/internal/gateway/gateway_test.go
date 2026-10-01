@@ -18,6 +18,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
@@ -156,6 +157,28 @@ func startSandbox(t *testing.T) *sandbox {
 		return s, err
 	}
 	return sb
+}
+
+func TestPlanKeepsPortsWithoutTheProxy(t *testing.T) {
+	cfg := Config{
+		Models: []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://upstream.test", APIKey: upstreamKey}}},
+		MCP:    []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: "https://tools.test/mcp"}},
+		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
+	}
+	for _, proxy := range []bool{false, true} {
+		cfg.Proxy = proxy
+		eps, err := Plan(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := Endpoints{Placeholder: modelprovider.Placeholder, Models: map[string]string{"main": "http://127.0.0.1:17101"}, MCP: map[string]string{"tools": "http://127.0.0.1:17102/mcp"}}
+		if proxy {
+			want.Proxy = "http://127.0.0.1:17100"
+		}
+		if fmt.Sprint(eps) != fmt.Sprint(want) {
+			t.Errorf("proxy %v: %+v", proxy, eps)
+		}
+	}
 }
 
 func TestSessionEndEndsBlockedRelays(t *testing.T) {

@@ -1,8 +1,8 @@
 // Package gateway is the Session gateway on the agent host. Inside the
 // Session's loopback-only network namespace it serves one listener per frozen
-// model upstream, one per MCP HTTP binding and one generic proxy, so the
-// Harness never holds an upstream credential and has no network route of its
-// own.
+// model upstream, one per MCP HTTP binding and, when the view has one, a
+// generic proxy, so the Harness never holds an upstream credential and has no
+// network route of its own.
 //
 // A listener's identity selects its upstream and credential; nothing is routed
 // by hostname. A model listener relays the declared native routes of its
@@ -60,6 +60,10 @@ type Config struct {
 	// RootCAs are the roots the gateway trusts for upstream TLS. Nil means
 	// the system roots. The server name is always the destination's hostname.
 	RootCAs *x509.CertPool
+	// Proxy serves the generic proxy at ProxyPort. Without it nothing listens
+	// there and Endpoints.Proxy is empty; the other listeners keep their
+	// ports.
+	Proxy bool
 }
 
 // Model is one frozen model upstream.
@@ -81,7 +85,8 @@ type Endpoints struct {
 	// MCP maps each binding's server label to the URL the Harness uses: its
 	// listener with the server URL's path and query.
 	MCP map[string]string
-	// Proxy is the generic proxy's URL, for HTTP and HTTPS proxy settings.
+	// Proxy is the generic proxy's URL, for HTTP and HTTPS proxy settings,
+	// or empty when Config.Proxy is unset.
 	Proxy string
 }
 
@@ -92,7 +97,8 @@ type SessionNetwork struct {
 }
 
 // ProxyPort is the generic proxy's port in the Session's namespace. The model
-// listeners take the following ports in Config order, then the MCP listeners.
+// listeners take the following ports in Config order, then the MCP listeners,
+// whether or not the proxy is served.
 // The namespace is the Session's own and the gateway listens before the
 // Harness starts, so the ports are free; fixing them lets the Harness's
 // environment be built before the namespace exists.
@@ -118,7 +124,7 @@ func Plan(cfg Config) (Endpoints, error) {
 	if err != nil {
 		return Endpoints{}, err
 	}
-	return g.endpoints(fixedPorts(len(g.listeners))), nil
+	return g.endpoints(g.fixedPorts()), nil
 }
 
 // Start validates cfg, opens its listeners inside the Session's network
@@ -134,7 +140,7 @@ func Start(ctx context.Context, n SessionNetwork, cfg Config) (Endpoints, error)
 	if n.Namespace == nil {
 		return Endpoints{}, fmt.Errorf("%w: no namespace", ErrNetwork)
 	}
-	ports := fixedPorts(len(g.listeners))
+	ports := g.fixedPorts()
 	lns, err := listen(n.Namespace, ports)
 	if err != nil {
 		return Endpoints{}, err
@@ -143,10 +149,16 @@ func Start(ctx context.Context, n SessionNetwork, cfg Config) (Endpoints, error)
 	return g.endpoints(ports), nil
 }
 
-func fixedPorts(n int) []int {
-	ports := make([]int, n)
+// fixedPorts returns each listener's port: ProxyPort for the proxy, then the
+// following ports in listener order.
+func (g *gateway) fixedPorts() []int {
+	first := ProxyPort + 1
+	if len(g.listeners) > 0 && g.listeners[0].role == roleProxy {
+		first = ProxyPort
+	}
+	ports := make([]int, len(g.listeners))
 	for i := range ports {
-		ports[i] = ProxyPort + i
+		ports[i] = first + i
 	}
 	return ports
 }
@@ -169,7 +181,7 @@ type listener struct {
 }
 
 type gateway struct {
-	listeners  []listener // the proxy, then models, then MCP, in Config order
+	listeners  []listener // the proxy when served, then models, then MCP, in Config order
 	transports []*http.Transport
 }
 
@@ -193,7 +205,9 @@ func build(session context.Context, cfg Config) (*gateway, error) {
 		forward, sandbox = newTransport(cfg.RootCAs, dial), relayTransport(cfg.RootCAs, dial)
 		g.transports = append(g.transports, forward, sandbox)
 	}
-	g.listeners = append(g.listeners, listener{role: roleProxy, handler: newProxy(cfg.OpenNetwork, forward)})
+	if cfg.Proxy {
+		g.listeners = append(g.listeners, listener{role: roleProxy, handler: newProxy(cfg.OpenNetwork, forward)})
+	}
 
 	names := map[string]bool{}
 	for _, m := range cfg.Models {
