@@ -1,22 +1,25 @@
 // Package gateway is the Session gateway on the agent host. Inside the
 // Session's loopback-only network namespace it serves one listener per frozen
-// model upstream, one per MCP HTTP binding and one generic proxy, so the
-// Harness never holds an upstream credential and has no network route of its
-// own.
+// model upstream, one per MCP HTTP binding and, when the view has one, a
+// generic proxy, so the Harness never holds an upstream credential and has no
+// network route of its own.
 //
 // A listener's identity selects its upstream and credential; nothing is routed
 // by hostname. A model listener relays the declared native routes of its
 // protocol (internal/modelprovider) to the upstream from the agent host and
 // injects the credential. An MCP listener relays to its binding's server and
-// injects the bearer token: an environment-origin binding connects through the
-// sandbox's Network service, a service-origin binding from the agent host, and
-// the gateway does the TLS either way. The generic proxy carries HTTP CONNECT
-// tunnels and plain-HTTP forward requests, and connects only through the
-// sandbox's Network service. Redirects reach the Harness unchanged and are
-// never followed. Response headers and trailers that carry an injected
-// credential are withheld; bodies pass unchanged. The end of the Session
-// closes every connection, tunnels and upgraded ones included. The gateway
-// logs nothing.
+// injects the binding's bearer token and HTTP headers: an environment-origin
+// binding connects through the sandbox's Network service, a service-origin
+// binding from the agent host, and the gateway does the TLS either way. An MCP
+// listener serves only its server URL's path, without a query, and relays to
+// exactly the server URL. The server URL's query is a credential: a binding
+// with a query or an injected value needs https. The generic proxy carries
+// HTTP CONNECT tunnels and plain-HTTP forward requests, and connects only
+// through the sandbox's Network service. Redirects reach the Harness unchanged
+// and are never followed. Response header and trailer values that contain an
+// injected credential, header value or MCP query value are withheld; bodies
+// pass unchanged. The end of the Session closes every connection, tunnels and
+// upgraded ones included. The gateway logs nothing.
 package gateway
 
 import (
@@ -32,6 +35,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -43,11 +47,13 @@ type Config struct {
 	// Models are the frozen model upstreams, each under the adapter's name for
 	// it. Names are unique.
 	Models []Model
-	// MCP are the Session's MCP HTTP bindings. Server labels are unique.
-	MCP []proto.MCPHTTPServer
-	// Prompt is the request that declared MCP. Each binding's origin is
-	// admitted against its placement with ValidateConnectionOrigin before
-	// anything else.
+	// MCP are the Session's effective MCP bindings as
+	// agent.ResolveMCPBindings returns them, bearer tokens and HTTP headers
+	// included. Each is an HTTP binding, and server labels are unique.
+	MCP []agent.MCPBinding
+	// Prompt is the request the bindings were resolved from. Each binding's
+	// origin is admitted against its placement with
+	// proto.MCPHTTPServer.ValidateConnectionOrigin before anything else.
 	Prompt proto.PromptRequestPayload
 	// OpenNetwork opens a new Network stream to the Session's sandbox, as
 	// sandboxnet.Connect takes it. Nil means the Session has no sandbox
@@ -57,6 +63,10 @@ type Config struct {
 	// RootCAs are the roots the gateway trusts for upstream TLS. Nil means
 	// the system roots. The server name is always the destination's hostname.
 	RootCAs *x509.CertPool
+	// Proxy serves the generic proxy at ProxyPort. Without it nothing listens
+	// there and Endpoints.Proxy is empty; the other listeners keep their
+	// ports.
+	Proxy bool
 }
 
 // Model is one frozen model upstream.
@@ -76,9 +86,10 @@ type Endpoints struct {
 	// base URL's path.
 	Models map[string]string
 	// MCP maps each binding's server label to the URL the Harness uses: its
-	// listener with the server URL's path and query.
+	// listener with the server URL's path and no query.
 	MCP map[string]string
-	// Proxy is the generic proxy's URL, for HTTP and HTTPS proxy settings.
+	// Proxy is the generic proxy's URL, for HTTP and HTTPS proxy settings,
+	// or empty when Config.Proxy is unset.
 	Proxy string
 }
 
@@ -89,7 +100,8 @@ type SessionNetwork struct {
 }
 
 // ProxyPort is the generic proxy's port in the Session's namespace. The model
-// listeners take the following ports in Config order, then the MCP listeners.
+// listeners take the following ports in Config order, then the MCP listeners,
+// whether or not the proxy is served.
 // The namespace is the Session's own and the gateway listens before the
 // Harness starts, so the ports are free; fixing them lets the Harness's
 // environment be built before the namespace exists.
@@ -115,7 +127,7 @@ func Plan(cfg Config) (Endpoints, error) {
 	if err != nil {
 		return Endpoints{}, err
 	}
-	return g.endpoints(fixedPorts(len(g.listeners))), nil
+	return g.endpoints(g.fixedPorts()), nil
 }
 
 // Start validates cfg, opens its listeners inside the Session's network
@@ -131,7 +143,7 @@ func Start(ctx context.Context, n SessionNetwork, cfg Config) (Endpoints, error)
 	if n.Namespace == nil {
 		return Endpoints{}, fmt.Errorf("%w: no namespace", ErrNetwork)
 	}
-	ports := fixedPorts(len(g.listeners))
+	ports := g.fixedPorts()
 	lns, err := listen(n.Namespace, ports)
 	if err != nil {
 		return Endpoints{}, err
@@ -140,10 +152,16 @@ func Start(ctx context.Context, n SessionNetwork, cfg Config) (Endpoints, error)
 	return g.endpoints(ports), nil
 }
 
-func fixedPorts(n int) []int {
-	ports := make([]int, n)
+// fixedPorts returns each listener's port: ProxyPort for the proxy, then the
+// following ports in listener order.
+func (g *gateway) fixedPorts() []int {
+	first := ProxyPort + 1
+	if len(g.listeners) > 0 && g.listeners[0].role == roleProxy {
+		first = ProxyPort
+	}
+	ports := make([]int, len(g.listeners))
 	for i := range ports {
-		ports[i] = ProxyPort + i
+		ports[i] = first + i
 	}
 	return ports
 }
@@ -161,12 +179,12 @@ const (
 type listener struct {
 	role    role
 	name    string // model name or MCP server label
-	suffix  string // MCP: the server URL's path and query
+	suffix  string // MCP: the server URL's path
 	handler http.Handler
 }
 
 type gateway struct {
-	listeners  []listener // the proxy, then models, then MCP, in Config order
+	listeners  []listener // the proxy when served, then models, then MCP, in Config order
 	transports []*http.Transport
 }
 
@@ -190,7 +208,9 @@ func build(session context.Context, cfg Config) (*gateway, error) {
 		forward, sandbox = newTransport(cfg.RootCAs, dial), relayTransport(cfg.RootCAs, dial)
 		g.transports = append(g.transports, forward, sandbox)
 	}
-	g.listeners = append(g.listeners, listener{role: roleProxy, handler: newProxy(cfg.OpenNetwork, forward)})
+	if cfg.Proxy {
+		g.listeners = append(g.listeners, listener{role: roleProxy, handler: newProxy(cfg.OpenNetwork, forward)})
+	}
 
 	names := map[string]bool{}
 	for _, m := range cfg.Models {
@@ -206,26 +226,29 @@ func build(session context.Context, cfg Config) (*gateway, error) {
 	}
 
 	labels := map[string]bool{}
-	for _, s := range cfg.MCP {
-		if err := s.ValidateConnectionOrigin(cfg.Prompt); err != nil {
-			return nil, invalid("MCP server %q: %v", s.ServerLabel, err)
+	for _, b := range cfg.MCP {
+		if err := (proto.MCPHTTPServer{ConnectionOrigin: b.ConnectionOrigin}).ValidateConnectionOrigin(cfg.Prompt); err != nil {
+			return nil, invalid("MCP server %q: %v", b.ServerLabel, err)
 		}
-		if s.ServerLabel == "" || labels[s.ServerLabel] {
-			return nil, invalid("MCP server label %q is empty or repeated", s.ServerLabel)
+		if b.ServerLabel == "" || labels[b.ServerLabel] {
+			return nil, invalid("MCP server label %q is empty or repeated", b.ServerLabel)
 		}
-		labels[s.ServerLabel] = true
+		labels[b.ServerLabel] = true
+		if b.Transport != "http" {
+			return nil, invalid("MCP server %q has transport %q, not http", b.ServerLabel, b.Transport)
+		}
 		transport := host
-		if s.ConnectionOrigin == "environment" {
+		if b.ConnectionOrigin == "environment" {
 			if sandbox == nil {
-				return nil, invalid("MCP server %q has environment origin and the Session has no sandbox network", s.ServerLabel)
+				return nil, invalid("MCP server %q has environment origin and the Session has no sandbox network", b.ServerLabel)
 			}
 			transport = sandbox
 		}
-		h, suffix, err := newMCPRelay(s, transport)
+		h, suffix, err := newMCPRelay(b, transport)
 		if err != nil {
-			return nil, invalid("MCP server %q: %v", s.ServerLabel, err)
+			return nil, invalid("MCP server %q: %v", b.ServerLabel, err)
 		}
-		g.listeners = append(g.listeners, listener{role: roleMCP, name: s.ServerLabel, suffix: suffix, handler: h})
+		g.listeners = append(g.listeners, listener{role: roleMCP, name: b.ServerLabel, suffix: suffix, handler: h})
 	}
 	return g, nil
 }

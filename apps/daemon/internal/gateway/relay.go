@@ -202,23 +202,23 @@ func sentValue(v string) string {
 	return textproto.TrimString(strings.NewReplacer("\n", " ", "\r", " ").Replace(v))
 }
 
-// withhold returns t, or, when secret is set, a transport that keeps secret
-// out of the response headers the Harness receives. secret is the value as
-// sent.
-func withhold(t http.RoundTripper, secret string) http.RoundTripper {
-	if secret == "" {
+// withhold returns t, or, when a secret is set, a transport that keeps each
+// secret out of the response headers the Harness receives. Each secret is the
+// value as sent; empty ones are ignored.
+func withhold(t http.RoundTripper, secrets ...string) http.RoundTripper {
+	secrets = slices.DeleteFunc(slices.Clone(secrets), func(s string) bool { return s == "" })
+	if len(secrets) == 0 {
 		return t
 	}
-	return withholding{next: t, secret: secret}
+	return withholding{next: t, secrets: secrets}
 }
 
-// withholding removes every header and trailer value that contains secret
+// withholding removes every header and trailer value that contains a secret
 // from each response, informational ones included, so an upstream that echoes
-// the injected credential in a header does not disclose it. Bodies pass
-// unchanged.
+// an injected value in a header does not disclose it. Bodies pass unchanged.
 type withholding struct {
-	next   http.RoundTripper
-	secret string
+	next    http.RoundTripper
+	secrets []string
 }
 
 func (t withholding) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -243,11 +243,13 @@ func (t withholding) RoundTrip(r *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// remove deletes each value that contains the secret. A name whose values
-// are all removed stays with none, so an announced trailer stays announced.
+// remove deletes each value that contains a secret. A name whose values are
+// all removed stays with none, so an announced trailer stays announced.
 func (t withholding) remove(h http.Header) {
 	for name, values := range h {
-		h[name] = slices.DeleteFunc(values, func(v string) bool { return strings.Contains(v, t.secret) })
+		h[name] = slices.DeleteFunc(values, func(v string) bool {
+			return slices.ContainsFunc(t.secrets, func(s string) bool { return strings.Contains(v, s) })
+		})
 	}
 }
 

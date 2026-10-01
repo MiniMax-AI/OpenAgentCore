@@ -21,6 +21,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/sys/unix"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
@@ -68,9 +69,10 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 
 	cfg := Config{
 		Models:      []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://127.0.0.1:1", APIKey: upstreamKey}}},
-		MCP:         []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "http://127.0.0.1:" + port + "/mcp"}},
+		MCP:         []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: "http://127.0.0.1:" + port + "/mcp"}},
 		Prompt:      proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 		OpenNetwork: startSandbox(t).open,
+		Proxy:       true,
 	}
 	// The Harness's environment is built before the view exists.
 	eps, err := Plan(cfg)

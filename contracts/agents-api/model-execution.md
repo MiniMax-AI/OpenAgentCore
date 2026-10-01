@@ -96,9 +96,11 @@ The Harness reaches its frozen upstream through a Session-local credential gatew
 
 - The gateway relays only the declared native routes of the provider's protocol, with the request and response unchanged apart from the credential rules below. An undeclared path or method, or an undeclared WebSocket upgrade, is rejected and never reaches the upstream.
 - It removes every value of each stripped header, matching names case-insensitively, then injects the upstream credential in the protocol's declared header, with the key's surrounding whitespace removed.
-- It removes every response header and trailer value that contains the key, in informational responses too. Response bodies pass unchanged, so an upstream that echoes the key in a body discloses it to the Harness. The gateway applies the same rule to the bearer token it injects for an HTTP MCP server.
+- It removes every response header and trailer value that contains the key, in informational responses too. Response bodies pass unchanged, so an upstream that echoes the key in a body discloses it to the Harness. For an HTTP MCP server, the gateway injects the binding's bearer token and HTTP headers in place of the Harness's credential headers and same-named headers, and applies the same rule to each injected value.
 - It never follows a redirect with the credential.
 - It never converts between protocols.
+- An HTTP MCP server URL's query is a credential too. A binding with a bearer token, HTTP headers or a query needs an `https` server URL, and a server URL with userinfo is rejected. The gateway rejects any other before the Session starts, so no credential crosses a network in plaintext.
+- The Harness's URL for an HTTP MCP binding is its listener with the server URL's path and no query. The listener relays each request to exactly the server URL, query included. It refuses a request that carries a query with 400 and one for another path with 404. It removes every response header and trailer value that contains the query or one of its parameter values, as sent or decoded, so a short value also withholds any header value that contains it.
 
 [`internal/modelprovider/config.go`](../../internal/modelprovider/config.go) declares each protocol's routes and credential header, the stripped headers and the placeholder. Its `LookupRoute` matches a request against the routes, and `UpstreamPath` joins a matched route to the upstream base URL. A Harness that calls a route the table does not declare needs a protocol change, not a gateway exception.
 
