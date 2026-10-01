@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -766,8 +767,24 @@ func TestRetriedStartWaitsForStarted(t *testing.T) {
 	for _, fails := range []bool{false, true} {
 		t.Run(fmt.Sprintf("start fails %v", fails), func(t *testing.T) {
 			svc := newFakeService()
-			svc.startLate, svc.startDelay, svc.startFails = true, 300*time.Millisecond, fails
+			svc.startLate, svc.startFails = true, fails
 			f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpStart }))
+			// Once the retried Start's Attach found the operation starting,
+			// it starts when the broker observes it without forwarding stdin.
+			// A broker that forwards stdin first gets the refusal it counts.
+			go func() {
+				select {
+				case <-svc.attachedStarting:
+				case <-time.After(10 * time.Second):
+					return // runFor fails the test
+				}
+				for deadline := time.Now().Add(10 * time.Second); !awaitsStarted(); time.Sleep(time.Millisecond) {
+					if time.Now().After(deadline) {
+						return
+					}
+				}
+				svc.runStarting()
+			}()
 			const in = "stdin for a program that was still starting\n"
 			out, stderr, err := runFor(t, f.command("sh", "-c", "cat"), in)
 			refused := svc.counts().refusedIn
@@ -779,6 +796,23 @@ func TestRetriedStartWaitsForStarted(t *testing.T) {
 			}
 		})
 	}
+}
+
+// awaitsStarted reports whether an invocation observes its operation with no
+// stdin pump, as one does until Started arrives.
+func awaitsStarted() bool {
+	buf := make([]byte, 1<<16)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			buf = buf[:n]
+			break
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+	stacks := string(buf)
+	return strings.Contains(stacks, "processbroker.(*invocation).observe(") &&
+		!strings.Contains(stacks, "processbroker.(*invocation).pumpStdin(")
 }
 
 // A stdin write lost with its stream after the service took part of it

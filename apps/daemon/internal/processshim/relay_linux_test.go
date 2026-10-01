@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -252,14 +253,23 @@ func TestTerminalOutputWaitsForRawMode(t *testing.T) {
 	if err := unix.IoctlSetTermios(fd, unix.TCSETS, tio); err != nil {
 		t.Fatal(err)
 	}
-	written := make(chan struct{})
+	gated, written := make(chan struct{}), make(chan struct{})
+	var gateOnce sync.Once
 	r := startTestRelay(t, func(r *relay) {
-		// Hold the control goroutine in Started until the output is
-		// written, or long enough for a pump that does not wait to write it.
+		r.gating = func() { gateOnce.Do(func() { close(gated) }) }
+		// Hold the control goroutine in Started until the output pump holds
+		// the output, or a pump that does not wait for raw mode wrote it.
 		r.makingRaw = func() {
 			select {
+			case <-gated:
 			case <-written:
-			case <-time.After(300 * time.Millisecond):
+			case <-time.After(10 * time.Second):
+				t.Error("the output never reached its pump")
+			}
+			select {
+			case <-written:
+				t.Error("the output was written before the terminal was raw")
+			default:
 			}
 		}
 	})
@@ -284,31 +294,34 @@ func TestTerminalOutputWaitsForRawMode(t *testing.T) {
 	if res, err := finished(conn); err != nil || res.Code != 0 {
 		t.Fatalf("Result %+v, %v", res, err)
 	}
-	if got := drain(t, int(ptm.Fd())); string(got) != out {
+	if got := readN(t, int(ptm.Fd()), len(out)); string(got) != out {
 		t.Fatalf("the terminal got %q, want %q", got, out)
 	}
 }
 
-// drain reads what the terminal's master side holds until it stays empty
-// for 100ms.
-func drain(t *testing.T, fd int) []byte {
+// readN reads n bytes from the terminal's master side. It fails the test
+// when they do not arrive within 10s.
+func readN(t *testing.T, fd, n int) []byte {
 	t.Helper()
-	var got []byte
-	buf := make([]byte, 256)
-	for {
-		n, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 100)
+	got := make([]byte, 0, n)
+	deadline := time.Now().Add(10 * time.Second)
+	for len(got) < n {
+		wait := int(time.Until(deadline).Milliseconds())
+		if wait <= 0 {
+			t.Fatalf("the terminal got %q of %d bytes", got, n)
+		}
+		ready, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, wait)
 		switch {
-		case err == unix.EINTR:
+		case err == unix.EINTR || ready == 0:
 			continue
 		case err != nil:
 			t.Fatal(err)
-		case n == 0:
-			return got
 		}
-		m, err := unix.Read(fd, buf)
+		m, err := unix.Read(fd, got[len(got):n])
 		if err != nil || m == 0 {
-			return got
+			t.Fatalf("read the terminal: %v; got %q", err, got)
 		}
-		got = append(got, buf[:m]...)
+		got = got[:len(got)+m]
 	}
+	return got
 }

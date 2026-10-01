@@ -69,8 +69,10 @@ type relay struct {
 	live   sync.WaitGroup // the invocations' control goroutines
 
 	// Test seams: publishing runs between an invocation's ID and its Open,
-	// and makingRaw before the control goroutine makes a terminal raw.
+	// gating before an output pump waits for the terminal to be raw, and
+	// makingRaw before the control goroutine makes a terminal raw.
 	publishing func(Request)
+	gating     func()
 	makingRaw  func()
 }
 
@@ -618,6 +620,9 @@ func (o *output) run() {
 		}
 		// Until the terminal is raw, its output processing would translate
 		// the remote terminal's output a second time.
+		if o.inv.r.gating != nil {
+			o.inv.r.gating()
+		}
 		select {
 		case <-o.inv.raw:
 		case <-o.inv.end.c:

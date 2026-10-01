@@ -8,7 +8,6 @@ import (
 	"net"
 	"slices"
 	"sync"
-	"time"
 
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
@@ -20,10 +19,11 @@ type fakeService struct {
 	instance sandboxwire.ID
 	caps     sp.Capabilities
 
-	// startLate keeps an operation Starting until a retried Start finds it,
-	// and then for startDelay or until stdin is written, which it refuses.
-	startLate  bool
-	startDelay time.Duration
+	// startLate keeps an operation Starting until runStarting, or until
+	// stdin is written, which it refuses. attachedStarting closes once an
+	// Attach finds the operation Starting.
+	startLate        bool
+	attachedStarting chan struct{}
 	// startFails ends the start with StartFailed instead of Started.
 	startFails bool
 	// partialFirst accepts half of the first stdin write.
@@ -74,7 +74,8 @@ func newFakeService() *fakeService {
 			OwnerLossGraceMillis:       60000,
 			CancelGraceLimitMillis:     60000,
 		},
-		ops: map[sandboxwire.ID]*fakeOp{},
+		ops:              map[sandboxwire.ID]*fakeOp{},
+		attachedStarting: make(chan struct{}),
 	}
 }
 
@@ -143,6 +144,15 @@ func (s *fakeService) run(op *fakeOp) {
 	}
 	op.state = sp.StateRunning
 	s.emit(op, func(h sp.EventHeader) sp.Event { return sp.StartedEvent{EventHeader: h} })
+}
+
+// runStarting ends every start in progress.
+func (s *fakeService) runStarting() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, op := range s.ops {
+		s.run(op)
+	}
 }
 
 // exited ends the program with status, or only its background process
@@ -219,14 +229,7 @@ func (s *fakeService) Start(_ context.Context, conn *sp.Conn, req sp.StartReques
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if op := s.ops[req.OperationID]; op != nil {
-		if s.startLate {
-			time.AfterFunc(s.startDelay, func() {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-				s.run(op)
-			})
-		}
+	if s.ops[req.OperationID] != nil {
 		return sp.StartResponse{Disposition: sp.StartExisting}, nil
 	}
 	op := &fakeOp{id: req.OperationID, state: sp.StateStarting, changed: make(chan struct{})}
@@ -245,6 +248,13 @@ func (s *fakeService) Attach(_ context.Context, conn *sp.Conn, req sp.AttachRequ
 	}
 	defer s.mu.Unlock()
 	s.subscribe(conn, op, req.AfterSequence)
+	if op.state == sp.StateStarting {
+		select {
+		case <-s.attachedStarting:
+		default:
+			close(s.attachedStarting)
+		}
+	}
 	return sp.AttachResponse{Status: s.status(op)}, nil
 }
 
