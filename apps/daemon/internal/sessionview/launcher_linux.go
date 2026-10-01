@@ -31,6 +31,7 @@ type launcher struct {
 	ctl         *control
 	proceed     chan struct{}
 	proceedOnce sync.Once
+	targets     map[string]string // set before proceed closes
 
 	// mu orders signals against the process's exit. running holds from the process's start until it is reaped; termAt is when TERM first went to the view.
 	mu      sync.Mutex
@@ -69,7 +70,7 @@ func (l *launcher) run() (int, error) {
 		return 0, err
 	}
 	<-l.proceed
-	b := &builder{root: -1}
+	b := &builder{root: -1, targets: l.targets}
 	defer b.close()
 	if err := b.build(spec); err != nil {
 		return 0, err
@@ -122,7 +123,10 @@ func (l *launcher) serveControl() {
 		}
 		switch m.Kind {
 		case msgProceed:
-			l.proceedOnce.Do(func() { close(l.proceed) })
+			l.proceedOnce.Do(func() {
+				l.targets = m.Targets
+				close(l.proceed)
+			})
 		case msgSignal:
 			_ = l.ctl.send(message{Kind: msgSignaled, Delivered: l.signal(m.Signal)})
 		}

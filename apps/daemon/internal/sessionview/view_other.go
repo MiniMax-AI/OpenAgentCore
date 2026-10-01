@@ -20,6 +20,7 @@ func Start(context.Context, Spec) (*View, error) { return nil, ErrUnsupported }
 // View is a running view. Outside Linux none exists.
 type View struct{}
 
+func (*View) Presentation() Presentation  { return Presentation{} }
 func (*View) Wait() (Exit, error)         { return Exit{}, ErrUnsupported }
 func (*View) Signal(syscall.Signal) error { return ErrUnsupported }
 func (*View) Close() error                { return nil }

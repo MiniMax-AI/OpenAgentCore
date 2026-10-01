@@ -1,0 +1,30 @@
+//go:build !linux
+
+package worldfs
+
+import (
+	"os"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+)
+
+// World serves one Session's world to one view. It is Linux-only.
+type World struct{}
+
+// New returns a world that fails to serve on this platform.
+func New(sandboxlink.ExportID, Dial) *World { return &World{} }
+
+// Serve reports ErrUnsupported.
+func (w *World) Serve(*os.File, sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
+	return nil, sessionview.Presentation{}, &Error{Kind: ErrUnsupported, Op: "serve"}
+}
+
+// Stop does nothing: the world never served.
+func (w *World) Stop() error { return nil }
+
+// Lost is never closed.
+func (w *World) Lost() <-chan struct{} { return nil }
+
+// Err is always nil.
+func (w *World) Err() error { return nil }

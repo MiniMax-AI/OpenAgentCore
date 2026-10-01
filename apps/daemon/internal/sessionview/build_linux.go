@@ -12,10 +12,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
-// builder mounts the local pieces onto the world. Every target is resolved beneath its parent mount without following symlinks, so the sandbox cannot redirect a mount.
+// builder mounts the local pieces onto the world, at the paths the world presents the mountpoints at. Every target is resolved beneath its parent mount without following symlinks, so the sandbox cannot redirect a mount.
 type builder struct {
-	root int // the world root, an O_PATH fd
-	fds  []int
+	root    int               // the world root, an O_PATH fd
+	targets map[string]string // each mountpoint's view path to where the world presents it
+	fds     []int
 }
 
 // devNodes are bound from the host's /dev into the view's /dev.
@@ -42,11 +43,15 @@ func (b *builder) build(spec *launchSpec) error {
 	}
 	b.root = b.keep(root)
 	for _, d := range spec.Private {
+		at, err := b.at(agent.ViewPrivateRoot + "/" + d.Name)
+		if err != nil {
+			return err
+		}
 		src, err := b.source(d.HostDir)
 		if err != nil {
 			return err
 		}
-		if err := b.bind(src, b.root, agent.ViewPrivateRoot+"/"+d.Name, bindAttr(d.Writable, d.Exec, false)); err != nil {
+		if err := b.bind(src, b.root, at, bindAttr(d.Writable, d.Exec, false)); err != nil {
 			return err
 		}
 	}
@@ -60,33 +65,56 @@ func (b *builder) build(spec *launchSpec) error {
 		return err
 	}
 	for _, o := range spec.Overlays {
+		at, err := b.at(o.Path)
+		if err != nil {
+			return err
+		}
 		src, err := b.source(o.Source)
 		if err != nil {
 			return err
 		}
-		if err := b.bind(src, b.root, o.Path, bindAttr(false, o.Exec, false)); err != nil {
+		if err := b.bind(src, b.root, at, bindAttr(false, o.Exec, false)); err != nil {
 			return err
 		}
 	}
 	for _, p := range spec.Shim.Paths {
-		if err := b.bind(shim, b.root, p, bindAttr(false, true, false)); err != nil {
+		at, err := b.at(p)
+		if err != nil {
 			return err
 		}
+		if err := b.bind(shim, b.root, at, bindAttr(false, true, false)); err != nil {
+			return err
+		}
+	}
+	at, err := b.at(agent.ViewProcRoot)
+	if err != nil {
+		return err
 	}
 	proc, err := newFS("proc", nil, attrNoSuid|attrNoDev|attrNoExec)
 	if err != nil {
 		return err
 	}
 	defer unix.Close(proc)
-	if err := b.attach(proc, b.root, agent.ViewProcRoot, true); err != nil {
+	if err := b.attach(proc, b.root, at, true); err != nil {
 		return err
 	}
 	return b.dev()
 }
 
+// at returns where the world presents the mountpoint at view path p.
+func (b *builder) at(p string) (string, error) {
+	if t, ok := b.targets[p]; ok {
+		return t, nil
+	}
+	return "", &Error{Kind: ErrLauncher, Op: "present", Path: p, Err: errors.New("the world presents no target")}
+}
+
 // shimDir presents the shim at /.oac/bin/<name> on a read-only tmpfs.
 func (b *builder) shimDir(names []string, shim int) error {
-	dir := agent.ViewPrivateRoot + "/" + agent.ViewShimName
+	dir, err := b.at(agent.ViewPrivateRoot + "/" + agent.ViewShimName)
+	if err != nil {
+		return err
+	}
 	mnt, err := newFS("tmpfs", [][2]string{{"mode", "0755"}, {"size", "64k"}}, attrNoSuid|attrNoDev|attrNoExec)
 	if err != nil {
 		return err
@@ -108,12 +136,16 @@ func (b *builder) shimDir(names []string, shim int) error {
 
 // dev builds a minimal read-only /dev with host device nodes, a new devpts instance and a noexec /dev/shm.
 func (b *builder) dev() error {
+	at, err := b.at(agent.ViewDevRoot)
+	if err != nil {
+		return err
+	}
 	mnt, err := newFS("tmpfs", [][2]string{{"mode", "0755"}, {"size", "64k"}}, attrNoSuid|attrNoDev|attrNoExec)
 	if err != nil {
 		return err
 	}
 	defer unix.Close(mnt)
-	if err := b.attach(mnt, b.root, agent.ViewDevRoot, true); err != nil {
+	if err := b.attach(mnt, b.root, at, true); err != nil {
 		return err
 	}
 	for _, n := range devNodes {
