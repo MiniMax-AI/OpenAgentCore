@@ -45,26 +45,23 @@
 // the Executor unusable ends the Session, and nothing is sent to Output
 // after Run returns.
 //
-// Sweep runs at startup, before any Session. It ends every task, each thread
-// of each process, whose real, effective, saved or file-system uid lies in
-// Config.UIDs, scans /proc again until none runs or a bound passes, and only
-// then removes the Session directories a previous agent host left.
-// Allocation also skips a uid that any running task holds. Session processes
-// run only in a view's PID namespace, so Sweep ends a view's task by killing
-// the namespace's init: the kernel then kills every process in the
-// namespace, and nothing can fork into it any more. The init is the task's
-// nearest ancestor whose pid in its namespace is 1; no process in a view can
-// enter another namespace, so each ancestor up to it shares the namespace.
-// Each step of the walk pins the parent with a pidfd and confirms that the
-// child still has that parent, and each signal goes through a pidfd, so a
-// reused pid is never followed or signalled. A task with a Session uid in
-// the agent host's own namespace is not a Session's: Sweep kills its process
-// and returns ErrTeardown if one still runs after the bound. A scan misses a
-// process only while a parent that exits at once forks it; the view still
-// ends once any of its tasks is caught, and a view's launcher ends the view
-// when the agent host that started it goes away. A task that the agent
-// host's /proc does not show, such as one in a sibling PID namespace, is
-// outside these guarantees, which is why nothing else may use the range.
+// Sweep runs at startup, before any Session. Session processes run only in
+// views, and each view's launcher is PID 1 of the view's PID namespace, so
+// Sweep first ends every view a previous agent host left with
+// sessionview.EndLeftoverViews: killing a launcher kills every process in its
+// view, whatever its uids, and the launcher exits only once its view is
+// empty. Nothing in a view can start a view or leave its namespace, so no
+// Session process remains once every launcher has exited. Sweep then kills
+// each process with a task, any thread, whose real, effective, saved or
+// file-system uid lies in Config.UIDs. Such a process runs outside every view
+// and is not a Session's: Sweep scans /proc again until none runs or a bound
+// passes and then returns ErrTeardown; one that forks and exits as each scan
+// passes can escape the scans. Only then does Sweep remove the Session
+// directories a previous agent host left. Each signal goes through a pidfd,
+// so a reused pid is never signalled. Allocation also skips a uid that any
+// running task holds. A view or task that the agent host's /proc does not
+// show, such as one in a sibling PID namespace, is outside these guarantees,
+// which is why nothing else may use the range or start views.
 //
 // The Harness view protocol is in contracts/agents-api/harness-onboarding.md
 // and the gateway's in contracts/agents-api/model-execution.md.

@@ -43,9 +43,7 @@ type processTable interface {
 	// tasks returns every task that runs, each thread of each process; a
 	// zombie runs nothing and is left out.
 	tasks() ([]task, error)
-	// end kills, while t still holds a uid in r, the init of t's PID
-	// namespace when that is a view's, which ends every process in it, and
-	// t's process when t is in the agent host's own namespace. It never
+	// end kills t's process while t still holds a uid in r. It never
 	// signals a process that reused a pid.
 	end(t task, r UIDRange) error
 }
@@ -162,79 +160,25 @@ func (procfs) end(t task, r UIDRange) error {
 	if err != nil {
 		return fmt.Errorf("pidfd of %d: %w", t.tgid, err)
 	}
+	defer unix.Close(fd)
 	// The pid may name another process since the scan. What /proc shows under
-	// it belongs to the process fd pins while that process exists, which each
-	// read confirms afterwards; once it has ended, the signal reaches nothing.
+	// it belongs to the process fd pins while that process exists, which the
+	// signal 0 confirms afterwards; once it has ended, the kill reaches
+	// nothing.
 	s, err := readStatus(procPath(t.tgid, "task", strconv.Itoa(t.tid), "status"))
 	if err == nil {
 		err = exists(fd)
 	}
-	if err == nil && (!s.running() || !holds(s.uids, r)) {
-		err = errGone
-	}
-	if err == nil && len(s.nspid) > 1 {
-		fd, err = namespaceInit(fd, t.tgid, len(s.nspid))
-	}
-	if errors.Is(err, errGone) {
+	if errors.Is(err, errGone) || (err == nil && (!s.running() || !holds(s.uids, r))) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	defer unix.Close(fd)
 	if err := unix.PidfdSendSignal(fd, unix.SIGKILL, nil, 0); err != nil && !errors.Is(err, unix.ESRCH) {
 		return fmt.Errorf("kill: %w", err)
 	}
 	return nil
-}
-
-// namespaceInit takes fd, the pidfd of process pid, and returns a pidfd of the
-// init of its PID namespace, depth namespaces below /proc's. On an error it
-// closes every pidfd. The init is the process's nearest ancestor whose pid in
-// its own namespace is 1: no process in a view can enter another namespace,
-// so every ancestor up to the init shares the namespace. Each step pins the
-// parent and then confirms that the child still exists and still has that
-// parent, so the walk never follows a reused pid.
-func namespaceInit(fd, pid, depth int) (int, error) {
-	for {
-		s, err := readStatus(procPath(pid, "status"))
-		if err == nil {
-			err = exists(fd)
-		}
-		if err == nil && (len(s.nspid) != depth || s.ppid <= 0) {
-			err = fmt.Errorf("process %d is outside its view's PID namespace", pid)
-		}
-		if err != nil {
-			unix.Close(fd)
-			return -1, err
-		}
-		if s.nspid[depth-1] == 1 {
-			return fd, nil
-		}
-		parent, err := unix.PidfdOpen(s.ppid, 0)
-		if errors.Is(err, unix.ESRCH) {
-			continue // the parent has ended and the process has a new one
-		}
-		if err != nil {
-			unix.Close(fd)
-			return -1, fmt.Errorf("pidfd of %d: %w", s.ppid, err)
-		}
-		again, err := readStatus(procPath(pid, "status"))
-		if err == nil {
-			err = exists(fd)
-		}
-		if err != nil {
-			unix.Close(parent)
-			unix.Close(fd)
-			return -1, err
-		}
-		if again.ppid != s.ppid {
-			unix.Close(parent)
-			continue
-		}
-		unix.Close(fd)
-		fd, pid = parent, s.ppid
-	}
 }
 
 // exists returns nil while the process fd pins exists, as a zombie too, and
@@ -254,7 +198,6 @@ func procPath(pid int, name ...string) string {
 // status is what a status file in /proc reports.
 type status struct {
 	state string
-	ppid  int
 	uids  [4]uint32
 	nspid []int // the pid in each PID namespace, from /proc's to the task's own
 }
@@ -281,10 +224,6 @@ func readStatus(path string) (status, error) {
 		switch key {
 		case "State":
 			s.state = strings.TrimSpace(value)
-		case "PPid":
-			if s.ppid, err = strconv.Atoi(strings.TrimSpace(value)); err != nil {
-				return s, fmt.Errorf("%s: PPid %q", path, value)
-			}
 		case "Uid":
 			uids = strings.Fields(value)
 		case "NSpid":

@@ -200,7 +200,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd := inPIDNamespace(id, exe)
+		cmd := inView(id, exe)
 		cmd.Env = append(os.Environ(), zombieLeaderEnv+"=1")
 		done := startView(t, cmd)
 		until(t, "a zombie leader with a running thread", func() bool { return zombieLeaderHolds(id) })
@@ -211,23 +211,38 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		sweepEnds(t, cfg, id, done)
 	})
 
-	t.Run("Sweep ends a view whose processes fork", func(t *testing.T) {
+	t.Run("Sweep ends a view that the uid scan misses", func(t *testing.T) {
 		id := cfg.UIDs.First + 3
-		// Each subshell forks a sleep and exits at once.
-		done := startView(t, inPIDNamespace(id, "/bin/sh", "-c", "while :; do (sleep 60 &); sleep 0.01; done"))
-		until(t, "forked processes", func() bool { return processesHolding(id) >= 3 })
-		sweepEnds(t, cfg, id, done)
+		done := startView(t, inView(id, "/bin/sleep", "600"))
+		until(t, "a Session process", func() bool { return processesHolding(id) == 1 })
+		left := filepath.Join(sessionsDir(cfg.StateDir), "left")
+		if err := os.MkdirAll(left, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		// The scan finds no process with a Session uid, as when the last one
+		// forks and exits as the scan passes.
+		if err := sweep(cfg, sessionview.EndLeftoverViews, &fakeProcesses{}, wait); err != nil {
+			t.Fatalf("Sweep = %v", err)
+		}
+		select {
+		case <-done:
+		case <-time.After(wait):
+			t.Fatal("the view's launcher still runs after Sweep")
+		}
+		if n := processesHolding(id); n != 0 || len(leftSessions(t, cfg)) != 0 {
+			t.Errorf("%d processes hold uid %d and %d Session directories remain after Sweep", n, id, len(leftSessions(t, cfg)))
+		}
 	})
 }
 
-// inPIDNamespace returns a command that runs argv with uid under a root init
-// in a new PID namespace, as a view does. The init starts argv again whenever
-// it ends, so only ending the namespace ends it.
-func inPIDNamespace(uid uint32, argv ...string) *exec.Cmd {
-	script := `while :; do setpriv --reuid="$0" --regid="$0" --clear-groups -- "$@"; done`
-	cmd := exec.Command("/bin/sh", append([]string{"-c", script, strconv.Itoa(int(uid))}, argv...)...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID}
-	return cmd
+// inView returns a command that runs argv, which holds no shell syntax, with
+// uid in a view-like PID namespace: its root init has sessionview's launcher
+// command line and starts argv again whenever it ends, so only ending the
+// namespace ends it.
+func inView(uid uint32, argv ...string) *exec.Cmd {
+	script := fmt.Sprintf("while :; do setpriv --reuid=%d --regid=%d --clear-groups -- %s; done\n", uid, uid, strings.Join(argv, " "))
+	return &exec.Cmd{Path: "/bin/sh", Args: []string{"oac-sessionview"}, Stdin: strings.NewReader(script),
+		SysProcAttr: &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID}}
 }
 
 // startView starts cmd and returns its end.
@@ -242,8 +257,8 @@ func startView(t *testing.T, cmd *exec.Cmd) <-chan error {
 	return done
 }
 
-// sweepEnds checks that Sweep ends the view whose init done reports and every
-// process that holds id.
+// sweepEnds checks that Sweep ends the view whose launcher done reports and
+// every process that holds id.
 func sweepEnds(t *testing.T, cfg Config, id uint32, done <-chan error) {
 	t.Helper()
 	if err := Sweep(cfg); err != nil {
@@ -252,7 +267,7 @@ func sweepEnds(t *testing.T, cfg Config, id uint32, done <-chan error) {
 	select {
 	case <-done:
 	case <-time.After(wait):
-		t.Fatal("the view's init still runs after Sweep")
+		t.Fatal("the view's launcher still runs after Sweep")
 	}
 	if n := processesHolding(id); n != 0 {
 		t.Errorf("%d processes hold uid %d after Sweep", n, id)
