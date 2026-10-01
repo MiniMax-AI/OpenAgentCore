@@ -13,32 +13,35 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
-// mcpRelay serves one MCP HTTP binding: it relays each request to the
-// server's origin with the same path and query. When the binding has a bearer
-// token or HTTP headers, it replaces the Harness's credential headers and
-// same-named headers with them, and withholds each injected value from
-// response headers and trailers.
+// mcpRelay serves one MCP HTTP binding at its server URL's path and relays
+// each request to exactly the server URL, query included. The Harness's URL
+// carries no query, since a query may hold a credential, so a request with a
+// query or for another path is refused. When the binding has a bearer token or
+// HTTP headers, it replaces the Harness's credential headers and same-named
+// headers with them, and withholds each injected value from response headers
+// and trailers.
 type mcpRelay struct {
-	scheme    string
-	host      string
+	upstream  url.URL     // the binding's server URL
+	path      string      // the escaped path the Harness requests
 	inject    http.Header // canonical names, values as sent; empty when the binding has none
 	transport http.RoundTripper
 }
 
-// newMCPRelay returns the binding's handler and the path and query the
-// Harness appends to the listener's address. Errors name a header but never
-// carry a value.
+// newMCPRelay returns the binding's handler and the path the Harness appends
+// to the listener's address. A binding with a bearer token or HTTP headers
+// needs an https server URL, so no injected value crosses a network in
+// plaintext. Errors name a header but never carry a value.
 func newMCPRelay(b agent.MCPBinding, t http.RoundTripper) (*mcpRelay, string, error) {
 	u, err := url.Parse(b.ServerURL)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.User != nil || u.Opaque != "" || u.Fragment != "" {
 		return nil, "", errors.New("server URL is not an absolute http or https URL")
 	}
-	m := &mcpRelay{scheme: u.Scheme, host: u.Host, inject: http.Header{}}
+	m := &mcpRelay{upstream: *u, path: u.EscapedPath(), inject: http.Header{}}
+	if m.path == "" {
+		m.path = "/"
+	}
 	var secrets []string
 	if b.BearerToken != nil {
-		if u.Scheme != "https" {
-			return nil, "", errors.New("a bearer token needs an https server URL")
-		}
 		token := sentValue(*b.BearerToken)
 		m.inject.Set("Authorization", "Bearer "+token)
 		secrets = append(secrets, token)
@@ -55,24 +58,29 @@ func newMCPRelay(b agent.MCPBinding, t http.RoundTripper) (*mcpRelay, string, er
 		m.inject[key] = []string{v}
 		secrets = append(secrets, v)
 	}
-	m.transport = withhold(t, secrets...)
-	suffix := u.EscapedPath()
-	if u.RawQuery != "" || u.ForceQuery {
-		suffix += "?" + u.RawQuery
+	if len(m.inject) > 0 && u.Scheme != "https" {
+		return nil, "", errors.New("a bearer token or HTTP headers need an https server URL")
 	}
-	return m, suffix, nil
+	m.transport = withhold(t, secrets...)
+	return m, u.EscapedPath(), nil
 }
 
 func (m *mcpRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path, query, hasQuery, ok := requestTarget(r)
-	if !ok {
+	path, _, hasQuery, ok := requestTarget(r)
+	switch {
+	case !ok:
 		http.Error(w, "origin-form request target required", http.StatusBadRequest)
 		return
+	case hasQuery:
+		http.Error(w, "the MCP endpoint takes no query", http.StatusBadRequest)
+		return
+	case path != m.path:
+		http.NotFound(w, r)
+		return
 	}
-	upstream := &url.URL{Scheme: m.scheme, Host: m.host, Path: r.URL.Path, RawPath: path,
-		RawQuery: query, ForceQuery: hasQuery && query == ""}
 	reverseProxy(m.transport, func(pr *httputil.ProxyRequest) {
-		pr.Out.URL = upstream
+		upstream := m.upstream
+		pr.Out.URL = &upstream
 		pr.Out.Host = ""
 		if len(m.inject) == 0 {
 			return

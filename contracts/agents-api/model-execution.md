@@ -99,6 +99,8 @@ The Harness reaches its frozen upstream through a Session-local credential gatew
 - It removes every response header and trailer value that contains the key, in informational responses too. Response bodies pass unchanged, so an upstream that echoes the key in a body discloses it to the Harness. For an HTTP MCP server, the gateway injects the binding's bearer token and HTTP headers in place of the Harness's credential headers and same-named headers, and applies the same rule to each injected value.
 - It never follows a redirect with the credential.
 - It never converts between protocols.
+- An HTTP MCP binding with a bearer token or HTTP headers needs an `https` server URL. The gateway rejects any other before the Session starts, so no injected value crosses a network in plaintext.
+- The Harness's URL for an HTTP MCP binding is its listener with the server URL's path and no query, since a query may hold a credential. The listener relays each request to exactly the server URL, query included. It refuses a request that carries a query with 400 and one for another path with 404.
 
 [`internal/modelprovider/config.go`](../../internal/modelprovider/config.go) declares each protocol's routes and credential header, the stripped headers and the placeholder. Its `LookupRoute` matches a request against the routes, and `UpstreamPath` joins a matched route to the upstream base URL. A Harness that calls a route the table does not declare needs a protocol change, not a gateway exception.
 

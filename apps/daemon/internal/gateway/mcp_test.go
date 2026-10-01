@@ -73,9 +73,52 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 	stdio.Transport, stdio.ServerURL, stdio.BearerToken, stdio.HTTPHeaders = "stdio", "", nil, nil
 	twice := binding("service")
 	twice.HTTPHeaders = map[string]string{"Authorization": "Basic other"}
-	for name, b := range map[string]agent.MCPBinding{"stdio": stdio, "Authorization twice": twice} {
-		if _, err := Plan(Config{MCP: []agent.MCPBinding{b}, Prompt: service}); !errors.Is(err, ErrInvalidConfig) {
+	// An injected value never crosses a network in plaintext.
+	plain := binding("environment")
+	plain.ServerURL, plain.BearerToken, plain.HTTPHeaders = "http://mcp.test/mcp", nil, map[string]string{"X-Api-Key": "header-secret"}
+	for name, c := range map[string]struct {
+		b      agent.MCPBinding
+		prompt proto.PromptRequestPayload
+	}{"stdio": {stdio, service}, "Authorization twice": {twice, service}, "headers over http": {plain, environment}} {
+		_, err := Plan(Config{MCP: []agent.MCPBinding{c.b}, Prompt: c.prompt, OpenNetwork: sb.open})
+		if !errors.Is(err, ErrInvalidConfig) || strings.Contains(err.Error(), "secret") {
 			t.Errorf("Plan with %s: %v", name, err)
 		}
+	}
+}
+
+// The Harness's URL carries no query; the listener relays to exactly the
+// server URL and refuses any other target.
+func TestMCPServesOnlyItsServerURL(t *testing.T) {
+	seen := make(chan string, 8)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case seen <- r.URL.RequestURI():
+		default:
+		}
+	}))
+	defer srv.Close()
+	b := agent.MCPBinding{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp?tenant=a"}
+	eps := serveOnLoopback(t, Config{MCP: []agent.MCPBinding{b}, Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true}, RootCAs: trust(srv)})
+	harness := eps.MCP["tools"]
+	if !strings.HasPrefix(harness, "http://127.0.0.1:") || !strings.HasSuffix(harness, "/mcp") || strings.Contains(harness, "?") {
+		t.Fatalf("Harness URL %q", harness)
+	}
+	base := strings.TrimSuffix(harness, "/mcp")
+	for _, c := range []struct {
+		url    string
+		status int
+	}{{harness, 200}, {harness + "?tenant=b", 400}, {harness + "?", 400}, {base + "/other", 404}, {base + "/mcp/", 404}} {
+		resp, err := noRedirects.Get(c.url)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != c.status {
+			t.Errorf("GET %s: %d, want %d", strings.TrimPrefix(c.url, base), resp.StatusCode, c.status)
+		}
+	}
+	if got := <-seen; got != "/mcp?tenant=a" || len(seen) != 0 {
+		t.Errorf("the server saw %q and %d more requests", got, len(seen))
 	}
 }

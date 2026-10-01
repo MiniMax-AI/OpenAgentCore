@@ -10,7 +10,9 @@
 // injects the credential. An MCP listener relays to its binding's server and
 // injects the binding's bearer token and HTTP headers: an environment-origin
 // binding connects through the sandbox's Network service, a service-origin
-// binding from the agent host, and the gateway does the TLS either way. The
+// binding from the agent host, and the gateway does the TLS either way. An MCP
+// listener serves only its server URL's path, without a query, and relays to
+// exactly the server URL; a binding that injects a value needs https. The
 // generic proxy carries HTTP CONNECT tunnels and plain-HTTP forward requests,
 // and connects only through the sandbox's Network service. Redirects reach the
 // Harness unchanged and are never followed. Response header and trailer values
@@ -83,7 +85,7 @@ type Endpoints struct {
 	// base URL's path.
 	Models map[string]string
 	// MCP maps each binding's server label to the URL the Harness uses: its
-	// listener with the server URL's path and query.
+	// listener with the server URL's path and no query.
 	MCP map[string]string
 	// Proxy is the generic proxy's URL, for HTTP and HTTPS proxy settings,
 	// or empty when Config.Proxy is unset.
@@ -176,7 +178,7 @@ const (
 type listener struct {
 	role    role
 	name    string // model name or MCP server label
-	suffix  string // MCP: the server URL's path and query
+	suffix  string // MCP: the server URL's path
 	handler http.Handler
 }
 
