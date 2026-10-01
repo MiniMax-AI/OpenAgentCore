@@ -66,7 +66,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 		return nil, err
 	}
 	stop := context.AfterFunc(ctx, func() { _ = v.cmd.Process.Kill() })
-	err := v.handshake(&spec)
+	err := v.handshake(ctx, &spec)
 	if !stop() {
 		err = &Error{Kind: ErrLauncher, Op: "start", Err: ctx.Err()}
 	}
@@ -167,7 +167,7 @@ func (v *View) stdio(p *Process) ([3]*os.File, error) {
 	return child, nil
 }
 
-func (v *View) handshake(spec *Spec) error {
+func (v *View) handshake(ctx context.Context, spec *Spec) error {
 	m, files, err := v.ctl.recv()
 	if err != nil {
 		return v.lost("mount", err)
@@ -183,7 +183,7 @@ func (v *View) handshake(spec *Spec) error {
 	netns := files[1]
 	defer netns.Close()
 	mps := spec.mountpoints()
-	world, present, err := spec.World(v.dev, WorldMount{Options: fuseOptions, Flags: fuseFlags, UID: spec.Process.UID, GID: spec.Process.GID, Mountpoints: mps})
+	world, present, err := spec.World(ctx, v.dev, WorldMount{Options: fuseOptions, Flags: fuseFlags, UID: spec.Process.UID, GID: spec.Process.GID, Mountpoints: mps})
 	if err != nil {
 		return &Error{Kind: ErrWorld, Op: "serve", Err: err}
 	}

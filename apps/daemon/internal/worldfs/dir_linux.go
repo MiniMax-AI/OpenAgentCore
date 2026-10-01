@@ -71,7 +71,7 @@ func (f *frontend) ino(n *inode) uint64 {
 
 func (f *frontend) ReleaseDir(in *fuse.ReleaseIn) {
 	if h := f.dropHandle(in.Fh); h != nil && h.server != 0 && !f.closed.Load() {
-		f.release(f.ctx, cleanup{handle: h.server, dir: true})
+		f.release(cleanup{handle: h.server, dir: true})
 	}
 }
 

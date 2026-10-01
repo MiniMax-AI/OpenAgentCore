@@ -3,6 +3,7 @@
 package worldfs
 
 import (
+	"context"
 	"os"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
@@ -16,7 +17,7 @@ type World struct{}
 func New(sandboxlink.ExportID, Dial) *World { return &World{} }
 
 // Serve reports ErrUnsupported.
-func (w *World) Serve(*os.File, sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
+func (w *World) Serve(context.Context, *os.File, sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
 	return nil, sessionview.Presentation{}, &Error{Kind: ErrUnsupported, Op: "serve"}
 }
 

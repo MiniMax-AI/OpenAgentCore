@@ -3,6 +3,7 @@
 package worldfs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -16,11 +17,11 @@ import (
 // maxHops is how many symlinks resolving one mountpoint may traverse, the kernel's MAXSYMLINKS.
 const maxHops = 40
 
-// present resolves each mountpoint inside the world and installs the synthetic nodes the view needs. It runs before serving starts, so it needs no locks.
-func (f *frontend) present(mps []sessionview.Mountpoint) (sessionview.Presentation, error) {
+// present resolves each mountpoint inside the world within ctx and installs the synthetic nodes the view needs. It runs before serving starts, so it needs no locks.
+func (f *frontend) present(ctx context.Context, mps []sessionview.Mountpoint) (sessionview.Presentation, error) {
 	var p sessionview.Presentation
 	for _, mp := range mps {
-		r := resolver{f: f, p: &p, mp: mp}
+		r := resolver{ctx: ctx, f: f, p: &p, mp: mp}
 		target, err := r.resolve()
 		r.dropAhead()
 		if err != nil {
@@ -44,6 +45,7 @@ type step struct {
 
 // resolver walks one mountpoint's path from the world root, like the kernel would in the view.
 type resolver struct {
+	ctx   context.Context
 	f     *frontend
 	p     *sessionview.Presentation
 	mp    sessionview.Mountpoint
@@ -144,7 +146,7 @@ func (r *resolver) walk(name string) {
 		}
 		names = append(names, []byte(n))
 	}
-	resp, err := call(r.f, r.f.ctx, (*sandboxfs.Client).Walk, &sandboxfs.WalkRequest{Parent: r.top().ref, Names: names})
+	resp, err := call(r.f, r.ctx, (*sandboxfs.Client).Walk, &sandboxfs.WalkRequest{Parent: r.top().ref, Names: names})
 	switch {
 	case err != nil:
 		r.aheadErr = err
@@ -177,7 +179,7 @@ func (r *resolver) pin(cur *inode, name string, e sandboxfs.Entry) (*inode, erro
 	if n.fileType() != sandboxfs.ModeSymlink || n.link != nil {
 		return n, nil
 	}
-	resp, err := call(r.f, r.f.ctx, (*sandboxfs.Client).Readlink, &sandboxfs.ReadlinkRequest{Node: n.ref})
+	resp, err := call(r.f, r.ctx, (*sandboxfs.Client).Readlink, &sandboxfs.ReadlinkRequest{Node: n.ref})
 	if err != nil {
 		return nil, r.serverErr(err)
 	}

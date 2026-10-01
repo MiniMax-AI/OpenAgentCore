@@ -4,6 +4,7 @@ package worldfs
 
 import (
 	"context"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 )
@@ -14,7 +15,7 @@ type cleanup struct {
 	dir    bool
 }
 
-// wake runs the drainer without blocking.
+// wake runs the drainer without blocking. Whoever queues work calls it after queuing, so the drainer, which takes the queues after each wakeup, always sees the work.
 func (f *frontend) wake() {
 	select {
 	case f.kick <- struct{}{}:
@@ -22,28 +23,54 @@ func (f *frontend) wake() {
 	}
 }
 
-// drain sends what the kernel released: the queued Forget references and the Release and ReleaseDir requests a failed stream never sent. It runs until Stop.
+// drain sends what the kernel released: queued Forget references and the Release and ReleaseDir requests that could not be sent. After a pass that leaves something queued it waits, doubling the wait from retryMin to retryMax, unless a redial gives it a new stream first. It runs until Stop.
 func (f *frontend) drain() {
 	defer close(f.drained)
+	var retry <-chan time.Time
+	var backoff time.Duration
+	var failedOn uint64 // the stream generation of the last pass that left work queued
 	for {
 		select {
 		case <-f.drainCtx.Done():
 			return
+		case <-retry:
 		case <-f.kick:
+			if retry != nil && f.gen.Load() == failedOn {
+				continue // no new stream: newly queued work waits for the retry with the rest
+			}
 		}
-		f.sendForgets()
-		f.mu.Lock()
-		rs := f.releases
-		f.releases = nil
-		f.mu.Unlock()
-		for _, c := range rs {
-			f.release(f.drainCtx, c)
+		gen := f.gen.Load()
+		if f.flush() {
+			retry, backoff = nil, 0
+			continue
 		}
+		failedOn, backoff = gen, min(max(2*backoff, retryMin), retryMax)
+		retry = time.After(backoff)
 	}
 }
 
-// sendForgets sends the queued references in batches. A batch the stream never sent goes back to the queue; one that may have been applied is not sent again.
-func (f *frontend) sendForgets() {
+// flush sends everything queued and reports whether nothing was left to retry. It stops at the first request it must retry, which goes back to the queue with everything after it.
+func (f *frontend) flush() bool {
+	if !f.sendForgets() {
+		return false
+	}
+	f.mu.Lock()
+	rs := f.releases
+	f.releases = nil
+	f.mu.Unlock()
+	for i, c := range rs {
+		if !f.sendRelease(f.drainCtx, c) {
+			f.mu.Lock()
+			f.releases = append(rs[i:], f.releases...)
+			f.mu.Unlock()
+			return false
+		}
+	}
+	return true
+}
+
+// sendForgets sends the queued references in batches. A batch that certainly did nothing goes back to the queue with the rest; one that may have been applied is not sent again.
+func (f *frontend) sendForgets() bool {
 	f.mu.Lock()
 	batch := f.forgets
 	f.forgets = map[sandboxfs.NodeRef]uint64{}
@@ -54,29 +81,41 @@ func (f *frontend) sendForgets() {
 	}
 	for len(entries) > 0 {
 		n := min(len(entries), forgetBatch)
-		if _, err := call(f, f.drainCtx, (*sandboxfs.Client).Forget, &sandboxfs.ForgetRequest{Entries: entries[:n]}); err != nil && unsent(err) && !f.dead.Load() {
+		_, err := call(f, f.drainCtx, (*sandboxfs.Client).Forget, &sandboxfs.ForgetRequest{Entries: entries[:n]})
+		if err != nil && retryable(err) && !f.dead.Load() {
 			f.mu.Lock()
 			for _, e := range entries {
 				f.forgets[e.Node] += e.Count
 			}
 			f.mu.Unlock()
-			return
+			return false
 		}
 		entries = entries[n:]
 	}
+	return true
 }
 
-// release sends a Release or ReleaseDir. One the stream never sent is queued for the drainer, which runs after the next redial; one that may have reached the service is never sent again.
-func (f *frontend) release(ctx context.Context, c cleanup) {
+// release sends a Release or ReleaseDir for a handle the kernel closed. One that certainly did nothing and may succeed later is queued for the drainer; one that may have reached the service is never sent again.
+func (f *frontend) release(c cleanup) {
+	if f.sendRelease(f.ctx, c) {
+		return
+	}
+	if f.seams.queue != nil {
+		f.seams.queue()
+	}
+	f.mu.Lock()
+	f.releases = append(f.releases, c)
+	f.wake()
+	f.mu.Unlock()
+}
+
+// sendRelease sends c and reports false when it must be sent again.
+func (f *frontend) sendRelease(ctx context.Context, c cleanup) bool {
 	var err error
 	if c.dir {
 		_, err = call(f, ctx, (*sandboxfs.Client).ReleaseDir, &sandboxfs.ReleaseDirRequest{Handle: c.handle})
 	} else {
 		_, err = call(f, ctx, (*sandboxfs.Client).Release, &sandboxfs.ReleaseRequest{Handle: c.handle})
 	}
-	if err != nil && unsent(err) && !f.dead.Load() && !f.closed.Load() {
-		f.mu.Lock()
-		f.releases = append(f.releases, c)
-		f.mu.Unlock()
-	}
+	return err == nil || !retryable(err) || f.dead.Load() || f.closed.Load()
 }

@@ -331,7 +331,7 @@ type loopbackWorld struct {
 	served chan struct{}
 }
 
-func (w *loopbackWorld) serve(dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
+func (w *loopbackWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
 	fd, err := unix.Dup(int(dev.Fd()))
 	if err != nil {
 		return nil, Presentation{}, err

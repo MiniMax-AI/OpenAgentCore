@@ -243,9 +243,10 @@ func TestViewEditsWorkspace(t *testing.T) {
 
 	w := worldfs.New(fileservicetest.Export, srv.Dial)
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
-		World:   w.Serve,
-		Private: []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
-		Shim:    sessionview.Shim{Binary: filepath.Join(harness, "harness"), Names: []string{"sh"}, Paths: []string{"/bin/sh"}},
+		World:         w.Serve,
+		StagingParent: t.TempDir(),
+		Private:       []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
+		Shim:          sessionview.Shim{Binary: filepath.Join(harness, "harness"), Names: []string{"sh"}, Paths: []string{"/bin/sh"}},
 		Process: sessionview.Process{
 			Path:   "/.oac/harness/harness",
 			Args:   []string{"harness"},

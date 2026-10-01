@@ -122,7 +122,7 @@ func serve(t *testing.T, backing string, id uint32, mps ...sessionview.Mountpoin
 		}
 		return counted{rw, &m.readDirs}, nil
 	})
-	ws, p, err := m.world.Serve(dev, sessionview.WorldMount{UID: id, GID: id, Mountpoints: mps})
+	ws, p, err := m.world.Serve(context.Background(), dev, sessionview.WorldMount{UID: id, GID: id, Mountpoints: mps})
 	m.present = p
 	t.Cleanup(func() {
 		if !m.stopped {

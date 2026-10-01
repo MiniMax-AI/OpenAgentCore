@@ -28,6 +28,7 @@ type Server struct {
 	svc     *fileservice.Service
 	conns   []net.Conn
 	stalled bool
+	wrap    func(sandboxfs.Service) sandboxfs.Service
 }
 
 // New serves the absolute directory dir. The file service sets the process umask to zero.
@@ -59,8 +60,19 @@ func (s *Server) Dial(ctx context.Context) (io.ReadWriteCloser, error) {
 		Lease:            context.Background(),
 		Exports:          []sandboxlink.ExportGrant{{ID: Export}},
 	}
-	go sandboxfs.Serve(context.Background(), server, s.svc, a)
+	var svc sandboxfs.Service = s.svc
+	if s.wrap != nil {
+		svc = s.wrap(svc)
+	}
+	go sandboxfs.Serve(context.Background(), server, svc, a)
 	return client, nil
+}
+
+// Intercept wraps the service each later stream serves, so a test can change what it answers.
+func (s *Server) Intercept(wrap func(sandboxfs.Service) sandboxfs.Service) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.wrap = wrap
 }
 
 // Break closes every open stream, as a lost transport does.

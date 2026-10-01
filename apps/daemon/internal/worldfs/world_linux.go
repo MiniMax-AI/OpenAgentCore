@@ -24,6 +24,9 @@ const (
 	stopWait = 10 * time.Second
 	// detachWait bounds Detach, with the redial it may need, when Stop or a failed Serve ends the attachment.
 	detachWait = 5 * time.Second
+	// retryMin and retryMax bound the backoff before the drainer sends again what it could not send.
+	retryMin = 20 * time.Millisecond
+	retryMax = 2 * time.Second
 	// forgetBatch is the most entries one Forget request carries.
 	forgetBatch = 4096
 )
@@ -44,6 +47,7 @@ func New(export sandboxlink.ExportID, dial Dial) *World {
 		byRef:     map[sandboxfs.NodeRef]*inode{},
 		handles:   map[uint64]*handle{},
 		forgets:   map[sandboxfs.NodeRef]uint64{},
+		connTurn:  make(chan struct{}, 1),
 		kick:      make(chan struct{}, 1),
 		drainCtx:  drainCtx,
 		stopDrain: stopDrain,
@@ -53,16 +57,18 @@ func New(export sandboxlink.ExportID, dial Dial) *World {
 	}}
 }
 
-// Serve has the signature of [sessionview.World]. It connects, attaches the export, presents the mountpoints and starts serving dev. A World serves once.
-func (w *World) Serve(dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
-	p, err := w.fs.serve(dev, mount)
+// Serve has the signature of [sessionview.World]. Within ctx it connects, attaches the export and presents the mountpoints; it then starts serving dev. A World serves once.
+//
+// A Serve that fails after the export may have been attached detaches it only when nothing can still reach the attachment: when Attach may have taken effect without a response, when a request may still run on a failed stream, or when Detach fails, Serve returns [ErrAttachmentDirty] and the owner of the Link attachment must end it.
+func (w *World) Serve(ctx context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
+	p, err := w.fs.serve(ctx, dev, mount)
 	if err != nil {
 		return nil, sessionview.Presentation{}, err
 	}
 	return w, p, nil
 }
 
-// Stop waits up to 10 seconds for serving to end, which happens once the view's mount namespace is gone. It then detaches, ending every request still waiting on the service after 5 more seconds, so it returns within 15 seconds. It unmounts nothing.
+// Stop waits up to 10 seconds for serving to end, which happens once the view's mount namespace is gone. It then detaches, ending every request still waiting on the service after 5 more seconds, so it returns within 15 seconds. It unmounts nothing. After a Serve that failed, or without one, it returns at once.
 func (w *World) Stop() error {
 	w.fs.stopOnce.Do(func() { w.fs.stopErr = w.fs.stop() })
 	return w.fs.stopErr
@@ -88,8 +94,9 @@ type frontend struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	connMu   sync.Mutex
+	connTurn chan struct{} // held to use or replace conn; a channel so that waiting for it can be interrupted
 	conn     *sandboxfs.Client
+	gen      atomic.Uint64 // counts redials
 	instance sandboxwire.ID
 	service  sandboxfs.Identity // the identity the service acts as
 	view     sandboxfs.Identity // the identity the view's processes run as
@@ -112,7 +119,9 @@ type frontend struct {
 	drained   chan struct{}
 
 	started  atomic.Bool
-	attached bool
+	serving  atomic.Bool // Serve succeeded
+	attached bool        // Attach succeeded
+	maybe    bool        // Attach failed after it may have taken effect
 	dead     atomic.Bool // the attachment is gone: no request reaches the service again
 	closed   atomic.Bool // Stop began: kernel requests fail
 	lostOnce sync.Once
@@ -121,29 +130,35 @@ type frontend struct {
 	served   chan struct{}
 	stopOnce sync.Once
 	stopErr  error
+
+	// seams let tests run other requests at the points where order matters. They are nil outside tests.
+	seams struct {
+		undo  func() // after a lock request failed, before its recovery
+		queue func() // after a cleanup failed, before it is queued
+	}
 }
 
-func (f *frontend) serve(dev *os.File, mount sessionview.WorldMount) (sessionview.Presentation, error) {
+func (f *frontend) serve(ctx context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.Presentation, error) {
 	if !f.started.CompareAndSwap(false, true) {
 		return sessionview.Presentation{}, &Error{Kind: ErrConnect, Op: "serve", Err: errors.New("the world already serves a view")}
 	}
 	f.view = sandboxfs.Identity{UID: mount.UID, GID: mount.GID}
 	now := time.Now()
 	f.born = sandboxfs.Timestamp{Sec: now.Unix(), Nsec: uint32(now.Nanosecond())}
-	p, opts, err := f.attach(mount.Mountpoints)
+	p, opts, err := f.attach(ctx, mount.Mountpoints)
 	if err == nil {
 		err = f.start(dev, opts)
 	}
 	if err != nil {
-		f.abort()
-		return sessionview.Presentation{}, err
+		return sessionview.Presentation{}, f.abort(ctx, err)
 	}
+	f.serving.Store(true)
 	return p, nil
 }
 
 // attach connects, checks the service's declarations, attaches the export and presents the mountpoints.
-func (f *frontend) attach(mps []sessionview.Mountpoint) (sessionview.Presentation, *fuse.MountOptions, error) {
-	c, d, err := f.connect(f.ctx)
+func (f *frontend) attach(ctx context.Context, mps []sessionview.Mountpoint) (sessionview.Presentation, *fuse.MountOptions, error) {
+	c, d, err := f.connect(ctx)
 	if err != nil {
 		return sessionview.Presentation{}, nil, &Error{Kind: ErrConnect, Op: "describe", Err: err}
 	}
@@ -157,17 +172,16 @@ func (f *frontend) attach(mps []sessionview.Mountpoint) (sessionview.Presentatio
 	case maxIO == 0 || f.caps.MaxWalkComponents == 0 || f.caps.MaxReadDirBytes == 0:
 		return sessionview.Presentation{}, nil, &Error{Kind: ErrIncompatible, Op: "describe", Err: errors.New("read, write, walk or directory limit too small")}
 	}
-	a, err := c.Attach(f.ctx, &sandboxfs.AttachRequest{Export: f.export})
+	a, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: f.export})
 	if err != nil {
-		// An Attach whose outcome is unknown may have attached: abort detaches it rather than attaching again.
 		var fail *sandboxfs.Failure
-		f.attached = !errors.As(err, &fail) || fail.Effect != sandboxwire.EffectNone
+		f.maybe = !errors.As(err, &fail) || fail.Effect != sandboxwire.EffectNone
 		return sessionview.Presentation{}, nil, &Error{Kind: ErrConnect, Op: "attach", Path: string(f.export), Err: err}
 	}
 	f.attached = true
 	f.root = f.newInode(a.Root.Node)
 	f.root.attr, f.root.held = a.Root.Attr, true
-	p, err := f.present(mps)
+	p, err := f.present(ctx, mps)
 	if err != nil {
 		return sessionview.Presentation{}, nil, err
 	}
@@ -199,86 +213,27 @@ func (f *frontend) start(dev *os.File, opts *fuse.MountOptions) error {
 	return nil
 }
 
-// abort undoes a failed Serve.
-func (f *frontend) abort() {
-	if f.attached && !f.dead.Load() {
-		ctx, cancel := context.WithTimeout(f.ctx, detachWait)
-		_, _ = call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{})
-		cancel()
+// abort undoes a failed Serve and returns its error. Detach on the stream the export was attached on releases what the attachment holds only when nothing else can still reach the attachment, so it is sent only then, and any doubt is [ErrAttachmentDirty].
+func (f *frontend) abort(ctx context.Context, err error) error {
+	close(f.served)
+	close(f.drained)
+	defer f.shutdown()
+	switch {
+	case f.maybe:
+		return &Error{Kind: ErrAttachmentDirty, Op: "attach", Err: err}
+	case !f.attached || f.dead.Load():
+		return err
+	case f.gen.Load() != 0:
+		// A request on the failed stream may still be running.
+		return &Error{Kind: ErrAttachmentDirty, Op: "present", Err: err}
 	}
-	f.shutdown()
-}
-
-// connect opens a stream and describes the service within ctx.
-func (f *frontend) connect(ctx context.Context) (*sandboxfs.Client, *sandboxfs.DescribeResponse, error) {
-	rw, err := f.dial(ctx)
-	if err != nil {
-		return nil, nil, err
+	// Once ctx has ended, a request it abandoned may still run, and Detach under it fails, so the attachment is dirty.
+	ctx, cancel := context.WithTimeout(ctx, detachWait)
+	defer cancel()
+	if _, derr := f.conn.Detach(ctx, &sandboxfs.DetachRequest{}); derr != nil {
+		return &Error{Kind: ErrAttachmentDirty, Op: "detach", Err: errors.Join(err, derr)}
 	}
-	c := sandboxfs.NewClient(rw)
-	d, err := c.Describe(ctx, &sandboxfs.DescribeRequest{})
-	if err != nil {
-		c.Close()
-		return nil, nil, err
-	}
-	return c, d, nil
-}
-
-var errDead = errors.New("worldfs: the world is lost")
-
-// client returns the stream's client. After the stream failed it redials within ctx and continues only with the same service instance. A failed redial is an [ErrConnect] error: the request was never sent.
-func (f *frontend) client(ctx context.Context) (*sandboxfs.Client, error) {
-	f.connMu.Lock()
-	defer f.connMu.Unlock()
-	if f.dead.Load() {
-		return nil, errDead
-	}
-	if c := f.conn; c != nil {
-		select {
-		case <-c.Done():
-		default:
-			return c, nil
-		}
-	}
-	c, d, err := f.connect(ctx)
-	if err != nil {
-		f.observe(err)
-		return nil, &Error{Kind: ErrConnect, Op: "reconnect", Err: err}
-	}
-	if d.ServerInstanceID != f.instance {
-		c.Close()
-		f.lose(&Error{Kind: ErrInstanceChanged, Op: "reconnect"}, true)
-		return nil, errDead
-	}
-	f.conn = c
-	f.wake() // cleanup the failed stream never sent goes on the new one
-	return c, nil
-}
-
-// call sends one request. A request the stream failed before sending cannot have taken effect, so it is sent once more on a new stream; nothing else is retried.
-func call[Q, R any](f *frontend, ctx context.Context, op func(*sandboxfs.Client, context.Context, Q) (R, error), q Q) (R, error) {
-	var r R
-	var err error
-	for range 2 {
-		var c *sandboxfs.Client
-		if c, err = f.client(ctx); err != nil {
-			return r, err
-		}
-		if r, err = op(c, ctx, q); err == nil {
-			return r, nil
-		}
-		f.observe(err)
-		if !unsent(err) {
-			break
-		}
-	}
-	return r, err
-}
-
-// unsent reports whether err shows that the request never left the frontend: the redial failed, or the stream had failed before the request was written.
-func unsent(err error) bool {
-	var fail *sandboxfs.Failure
-	return errors.Is(err, ErrConnect) || errors.As(err, &fail) && fail.Effect == sandboxwire.EffectNone && errors.Is(err, sandboxfs.ErrTransport)
+	return err
 }
 
 // observe marks the world lost when err shows that the service incarnation or the attachment is gone: a File failure that says so, or a Link failure that is not retryable, such as LeaseExpired or StaleGeneration on a redial.
@@ -324,6 +279,10 @@ func (f *frontend) lose(err *Error, dead bool) {
 }
 
 func (f *frontend) stop() error {
+	if !f.serving.Load() {
+		f.shutdown()
+		return nil
+	}
 	var errs []error
 	select {
 	case <-f.served:
@@ -349,8 +308,8 @@ func (f *frontend) stop() error {
 
 func (f *frontend) shutdown() {
 	f.cancel()
-	f.connMu.Lock()
-	defer f.connMu.Unlock()
+	f.connTurn <- struct{}{}
+	defer func() { <-f.connTurn }()
 	if f.conn != nil {
 		f.conn.Close()
 	}

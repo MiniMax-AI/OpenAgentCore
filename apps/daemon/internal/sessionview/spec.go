@@ -1,6 +1,7 @@
 package sessionview
 
 import (
+	"context"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,8 +24,10 @@ type Spec struct {
 	StagingParent string
 }
 
-// World starts serving the view's root file system on dev, a /dev/fuse connection that the launcher has already mounted as mount describes, and reports how it presents mount's mountpoints. The server runs in the daemon, outside the view, and never mounts or unmounts anything. sessionview closes dev after Stop returns.
-type World func(dev *os.File, mount WorldMount) (WorldServer, Presentation, error)
+// World starts serving the view's root file system on dev, a /dev/fuse connection that the launcher has already mounted as mount describes, and reports how it presents mount's mountpoints. ctx is Start's: it bounds connecting, attaching and presenting, not the serving. The server runs in the daemon, outside the view, and never mounts or unmounts anything. sessionview closes dev after Stop returns.
+//
+// A World that fails releases what it acquired, or its error says that it cannot show it did. The owner of the attachment the world serves from then ends that attachment, which releases everything it holds.
+type World func(ctx context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error)
 
 // WorldServer is a running world.
 type WorldServer interface {

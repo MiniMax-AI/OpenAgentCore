@@ -93,8 +93,9 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
-		World:   (&loopbackWorld{dir: world}).serve,
-		Private: []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
+		World:         (&loopbackWorld{dir: world}).serve,
+		StagingParent: t.TempDir(),
+		Private:       []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
 		Process: sessionview.Process{
 			Path: "/.oac/harness/harness", Args: []string{"harness"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr,
 			Env: []string{harnessEnv + "=1", endpointsEnv + "=" + string(encoded), externalEnv + "=" + net.JoinHostPort(hostAddress(t), port)},
@@ -230,7 +231,7 @@ type loopbackWorld struct {
 	served chan struct{}
 }
 
-func (w *loopbackWorld) serve(dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
+func (w *loopbackWorld) serve(_ context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
 	fd, err := unix.Dup(int(dev.Fd()))
 	if err != nil {
 		return nil, sessionview.Presentation{}, err

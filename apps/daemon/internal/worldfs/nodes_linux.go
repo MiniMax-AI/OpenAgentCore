@@ -45,6 +45,9 @@ type handle struct {
 
 	failed atomic.Bool // the service may hold a lock on the handle that no request reported: every request but Release fails
 
+	locksMu sync.Mutex
+	locks   map[sandboxfs.LockOwner]*lockOrder
+
 	mu   sync.Mutex
 	list listing // a presented directory's offsets
 }
