@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -27,36 +26,25 @@ const (
 
 	// Allow the native process grace period and subsequent owner/pipe cleanup.
 	stopTimeout = 10 * time.Second
-
-	connectInlineURLEnv        = "OAC_RUNTIME_DAEMON_CONNECT_URL"
-	connectInlineTokenEnv      = "OAC_RUNTIME_DAEMON_CONNECT_TOKEN"
-	connectInlineDeviceNameEnv = "OAC_RUNTIME_DAEMON_CONNECT_DEVICE_NAME"
 )
 
 // runConnect dials /agent-daemon/bootstrap, opens /agent-daemon/ws,
 // wires the dispatch router, and routes Envelope traffic both ways
 // until either SIGINT/SIGTERM or a permanent credential rejection.
 //
-// `connect --url --token` folds one-shot pairing into the connect step:
-// the daemon consumes the pairing token, persists the returned runner
-// credential to auth.json, and connects. Subsequent `connect -b`
-// invocations reload the persisted profile.
+// The daemon credential comes from a Provider bootstrap file
+// (--bootstrap-file), self-hosted Environment enrollment
+// (--remote/--environment-id/--credential-file) or the saved profile
+// written by oac-core-device.
 //
 // -b re-execs the binary in the background with stdio redirected to
 // connect.log and the child PID written to connect.pid. The child
-// re-enters runConnect via BackgroundSentinelEnv. When --token is
-// supplied, the parent forks before pairing so the one-shot token is
-// consumed by the long-lived child. Inline pairing flags are scrubbed
-// from child argv and passed via environment to keep the token out of
-// process listings.
+// re-enters runConnect via BackgroundSentinelEnv.
 func runConnect(ctx *runContext, args []string) error {
 	fs := newFlagSet("connect")
 	var (
-		profile        = fs.String("profile", paths.DefaultProfile, "profile name for paired credentials and pid/log files")
+		profile        = fs.String("profile", paths.DefaultProfile, "profile name for daemon credentials and pid/log files")
 		background     = fs.Bool("b", false, "fork into the background; writes connect.pid + connect.log")
-		serverURL      = fs.String("url", "", "Core server base URL; with --token, pair inline before connecting")
-		token          = fs.String("token", "", "pairing token; with --url, connect consumes it without writing auth.json")
-		deviceName     = fs.String("device-name", "", "human label for inline pairing (defaults to hostname)")
 		remote         = fs.String("remote", "", "self-hosted Environment remote_url, unchanged")
 		environment    = fs.String("environment-id", "", "self-hosted Environment ID")
 		bootstrapFile  = fs.String("bootstrap-file", "", "absolute path to Provider-to-Runtime connection JSON")
@@ -74,21 +62,13 @@ func runConnect(ctx *runContext, args []string) error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return errors.New("connect: cannot inspect native installation; use oac-daemon start")
 	}
-	// Hydrate inline pairing inputs from env in BOTH parent and the
-	// re-execed background child. Server-spawned sandboxes pass the
-	// token via OAC_RUNTIME_DAEMON_CONNECT_TOKEN/URL env rather than --url
-	// /--token flags; without this hydration before the pre-fork
-	// auth.json check below, the parent would take the "rely on
-	// auth.json" branch and bail with "not paired". Idempotent —
-	// fills only empty flags and unsets the env after consuming.
-	loadInlineConnectEnv(serverURL, token, deviceName)
 	if err := paths.ValidateProfile(*profile); err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
 	var bootstrapped *auth.Profile
 	if *bootstrapFile != "" {
-		if *serverURL != "" || *token != "" || *deviceName != "" || *remote != "" || *environment != "" || *credentialFile != "" || fs.NArg() != 0 {
-			return errors.New("connect: bootstrap input cannot be combined with enrollment or pairing options")
+		if *remote != "" || *environment != "" || *credentialFile != "" || fs.NArg() != 0 {
+			return errors.New("connect: bootstrap input cannot be combined with enrollment options")
 		}
 		bootstrapped, err = bootstrapProfile(*bootstrapFile)
 		if err != nil {
@@ -96,47 +76,30 @@ func runConnect(ctx *runContext, args []string) error {
 		}
 	}
 	if *remote != "" || *environment != "" || *credentialFile != "" {
-		if *serverURL != "" || *token != "" || *deviceName != "" || fs.NArg() != 0 {
-			return errors.New("connect: Environment enrollment cannot use pairing options or positional arguments")
+		if fs.NArg() != 0 {
+			return errors.New("connect: Environment enrollment cannot use positional arguments")
 		}
 		connectCtx, stop := daemonize.NotifyContext(context.Background())
 		defer stop()
 		return runEnvironmentConnect(connectCtx, ctx, *profile, *background, *remote, *environment, *credentialFile)
 	}
 
-	inlinePair := strings.TrimSpace(*serverURL) != "" || strings.TrimSpace(*token) != ""
-	if inlinePair {
-		if strings.TrimSpace(*serverURL) == "" {
-			return fmt.Errorf("connect: --url is required when --token is supplied")
-		}
-		if strings.TrimSpace(*token) == "" {
-			return fmt.Errorf("connect: --token is required when --url is supplied")
-		}
-	}
-
 	// -b mode: parent forks, child re-enters with sentinel env set
-	// and skips this branch. Fork before inline pairing so the
-	// one-shot token is consumed by the child that owns the WS loop.
+	// and skips this branch.
 	if *background && !daemonize.IsBackgroundChild() {
 		// Validate auth.json exists before forking so the error
 		// surfaces in the user's terminal instead of the background
 		// child's log.
-		if !inlinePair && bootstrapped == nil {
+		if bootstrapped == nil {
 			if _, err := auth.Load(*profile); err != nil {
 				return fmt.Errorf("connect: %w", err)
 			}
 		}
-		argv := os.Args
-		extraEnv := []string(nil)
-		if inlinePair {
-			argv = scrubInlineConnectArgs(os.Args)
-			extraEnv = inlineConnectEnv(*serverURL, *token, *deviceName)
-		}
-		return spawnBackground(context.Background(), ctx, *profile, argv, extraEnv)
+		return spawnBackground(context.Background(), ctx, *profile, os.Args)
 	}
 
-	// Self-check before pairing/loading credentials so a machine with
-	// no supported agent CLI fails before consuming a one-shot token.
+	// Self-check before loading credentials so a machine with no
+	// supported agent CLI fails fast.
 	agentCLIs, err := preflightAgentCLIs(context.Background(), ctx, *profile)
 	if err != nil {
 		return err
@@ -146,84 +109,20 @@ func runConnect(ctx *runContext, args []string) error {
 	if bootstrapped != nil {
 		prof = *bootstrapped
 	} else {
-		prof, err = resolveConnectProfile(*profile, *serverURL, *token, *deviceName)
+		prof, err = auth.Load(*profile)
 		if err != nil {
-			return err
+			return fmt.Errorf("connect: %w", err)
 		}
 	}
 
 	return mainLoop(ctx, *profile, prof, agentCLIs)
 }
 
-func loadInlineConnectEnv(serverURL, token, deviceName *string) {
-	if strings.TrimSpace(*serverURL) == "" {
-		*serverURL = os.Getenv(connectInlineURLEnv)
-	}
-	if strings.TrimSpace(*token) == "" {
-		*token = os.Getenv(connectInlineTokenEnv)
-	}
-	if strings.TrimSpace(*deviceName) == "" {
-		*deviceName = os.Getenv(connectInlineDeviceNameEnv)
-	}
-	_ = os.Unsetenv(connectInlineURLEnv)
-	_ = os.Unsetenv(connectInlineTokenEnv)
-	_ = os.Unsetenv(connectInlineDeviceNameEnv)
-}
-
-func inlineConnectEnv(serverURL, token, deviceName string) []string {
-	out := []string{
-		connectInlineURLEnv + "=" + serverURL,
-		connectInlineTokenEnv + "=" + token,
-	}
-	if strings.TrimSpace(deviceName) != "" {
-		out = append(out, connectInlineDeviceNameEnv+"="+deviceName)
-	}
-	return out
-}
-
-func scrubInlineConnectArgs(argv []string) []string {
-	out := make([]string, 0, len(argv))
-	for i := 0; i < len(argv); i++ {
-		arg := argv[i]
-		switch {
-		case arg == "--url" || arg == "--token" || arg == "--device-name":
-			i++
-			continue
-		case strings.HasPrefix(arg, "--url=") || strings.HasPrefix(arg, "--token=") || strings.HasPrefix(arg, "--device-name="):
-			continue
-		default:
-			out = append(out, arg)
-		}
-	}
-	return out
-}
-
-func resolveConnectProfile(profile, serverURL, token, deviceName string) (auth.Profile, error) {
-	if strings.TrimSpace(serverURL) == "" && strings.TrimSpace(token) == "" {
-		prof, err := auth.Load(profile)
-		if err != nil {
-			return auth.Profile{}, fmt.Errorf("connect: %w", err)
-		}
-		return prof, nil
-	}
-
-	pairCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	prof, _, err := pairProfile(pairCtx, serverURL, token, deviceName)
-	if err != nil {
-		return auth.Profile{}, fmt.Errorf("connect: pair with server: %w", err)
-	}
-	if err := auth.Save(profile, prof); err != nil {
-		return auth.Profile{}, fmt.Errorf("connect: save auth profile: %w", err)
-	}
-	return prof, nil
-}
-
 // spawnBackground forks the daemon into the background. Parent
 // returns after printing the child PID; child re-enters runConnect
 // with BackgroundSentinelEnv set so the same mainLoop runs in either
 // mode.
-func spawnBackground(ctx context.Context, rc *runContext, profile string, argv []string, extraEnv []string) error {
+func spawnBackground(ctx context.Context, rc *runContext, profile string, argv []string) error {
 	logPath, err := paths.LogFile(profile)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -263,9 +162,8 @@ func spawnBackground(ctx context.Context, rc *runContext, profile string, argv [
 		return err
 	}
 	pid, err := daemonize.Spawn(argv, daemonize.ReExecOptions{
-		LogPath:  logPath,
-		PIDPath:  pidPath,
-		ExtraEnv: extraEnv,
+		LogPath: logPath,
+		PIDPath: pidPath,
 	})
 	if err != nil {
 		return fmt.Errorf("connect: spawn background: %w", err)
@@ -384,7 +282,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 				return nil
 			}
 			if errors.Is(err, transport.ErrPermanent) {
-				return fmt.Errorf("connect: permanent error (re-pair the daemon): %w", err)
+				return fmt.Errorf("connect: permanent error (reissue the daemon credential): %w", err)
 			}
 			return fmt.Errorf("connect: dial: %w", err)
 		}
@@ -409,7 +307,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 		// Permanent error (e.g. runtime deleted) → exit instead of
 		// reconnecting.
 		if pumpErr != nil && errors.Is(pumpErr, transport.ErrPermanent) {
-			return fmt.Errorf("connect: runtime deleted (re-pair the daemon): %w", pumpErr)
+			return fmt.Errorf("connect: runtime deleted (reissue the daemon credential): %w", pumpErr)
 		}
 		// Small breather before redialing so a flapping server doesn't
 		// get a tight loop of upgrade requests.
