@@ -5,6 +5,7 @@ package fileservice
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -16,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -29,7 +31,9 @@ type fixture struct {
 	t    *testing.T
 	dir  string
 	svc  *Service
+	srv  *sandboxfs.Server
 	att  sandboxfs.Attachment
+	ids  sandboxfs.HandleIDs // the attachment's handle IDs, across its streams
 	c    *sandboxfs.Client
 	root sandboxfs.NodeRef
 }
@@ -47,8 +51,8 @@ func attachRoot(t *testing.T, dir string) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { svc.Close() })
-	f := &fixture{t: t, dir: dir, svc: svc, att: attachment(svc, sandboxlink.ExportGrant{ID: "world"})}
-	f.c, _, _ = f.connect(f.svc, f.att)
+	f := &fixture{t: t, dir: dir, svc: svc, srv: sandboxfs.NewServer(svc), att: attachment(svc, sandboxlink.ExportGrant{ID: "world"})}
+	f.c, _, _ = f.connect(f.srv, f.att)
 	resp, err := f.c.Attach(context.Background(), &sandboxfs.AttachRequest{Export: "world"})
 	if err != nil {
 		t.Fatal(err)
@@ -57,12 +61,16 @@ func attachRoot(t *testing.T, dir string) *fixture {
 	return f
 }
 
-// connect opens a stream to svc for attachment a. It returns the client, the
+// binds stands in for Link's bind sequence: each stream is bound after every
+// earlier one.
+var binds atomic.Uint64
+
+// connect opens a stream to srv for attachment a. It returns the client, the
 // server end of the stream and the channel Serve's result arrives on.
-func (f *fixture) connect(svc *Service, a sandboxfs.Attachment) (*sandboxfs.Client, net.Conn, chan error) {
+func (f *fixture) connect(srv *sandboxfs.Server, a sandboxfs.Attachment) (*sandboxfs.Client, net.Conn, chan error) {
 	cc, sc := net.Pipe()
 	served := make(chan error, 1)
-	go func() { served <- sandboxfs.Serve(context.Background(), sc, svc, a) }()
+	go func() { served <- srv.Serve(context.Background(), sc, a, binds.Add(1)) }()
 	c := sandboxfs.NewClient(cc)
 	f.t.Cleanup(func() { c.Close() })
 	return c, sc, served
@@ -84,19 +92,51 @@ func (f *fixture) lookup(parent sandboxfs.NodeRef, name string) sandboxfs.Entry 
 
 func (f *fixture) create(name string, access sandboxfs.AccessMode, flags sandboxfs.OpenFlags) (sandboxfs.Entry, sandboxfs.HandleID) {
 	f.t.Helper()
-	r, err := f.c.Create(context.Background(), &sandboxfs.CreateRequest{Parent: f.root, Name: []byte(name), Mode: 0o640, Access: access, Flags: flags, Exclusive: true})
+	h := f.ids.Next()
+	r, err := f.c.Create(context.Background(), &sandboxfs.CreateRequest{Handle: h, Parent: f.root, Name: []byte(name), Mode: 0o640, Access: access, Flags: flags, Exclusive: true})
 	if err != nil {
 		f.t.Fatalf("create %q: %v", name, err)
 	}
-	return r.Entry, r.Handle
+	return r.Entry, h
+}
+
+// open opens the export's entry name for reading and writing.
+func (f *fixture) open(name string) sandboxfs.HandleID {
+	f.t.Helper()
+	h := f.ids.Next()
+	if _, err := f.c.Open(context.Background(), &sandboxfs.OpenRequest{Handle: h, Node: f.lookup(f.root, name).Node, Access: sandboxfs.AccessReadWrite}); err != nil {
+		f.t.Fatalf("open %q: %v", name, err)
+	}
+	return h
 }
 
 func (f *fixture) write(h sandboxfs.HandleID, off uint64, data string) {
 	f.t.Helper()
-	r, err := f.c.Write(context.Background(), &sandboxfs.WriteRequest{Handle: h, Offset: off, Data: []byte(data)})
-	if err != nil || r.Written != uint32(len(data)) || r.Failure != nil {
+	f.writeRequest(&sandboxfs.WriteRequest{Handle: h, Offset: off, Data: []byte(data)})
+}
+
+// appendWrite writes data at the end of the file, whatever the offset.
+func (f *fixture) appendWrite(h sandboxfs.HandleID, data string) {
+	f.t.Helper()
+	f.writeRequest(&sandboxfs.WriteRequest{Handle: h, Offset: 1 << 40, Append: true, Data: []byte(data)})
+}
+
+func (f *fixture) writeRequest(w *sandboxfs.WriteRequest) {
+	f.t.Helper()
+	r, err := f.c.Write(context.Background(), w)
+	if err != nil || r.Written != uint32(len(w.Data)) || r.Failure != nil {
 		f.t.Fatalf("write: %+v, %v", r, err)
 	}
+}
+
+// handles counts the attachment's handles, including reserved ones.
+func (f *fixture) handles() int {
+	f.svc.mu.Lock()
+	st := f.svc.atts[f.att.ID]
+	f.svc.mu.Unlock()
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return len(st.handles)
 }
 
 func (f *fixture) read(h sandboxfs.HandleID) string {
@@ -152,30 +192,52 @@ func TestCreateWriteRead(t *testing.T) {
 func TestExclusiveCreateConflict(t *testing.T) {
 	f := newFixture(t)
 	f.create("x", sandboxfs.AccessWrite, 0)
-	_, err := f.c.Create(context.Background(), &sandboxfs.CreateRequest{Parent: f.root, Name: []byte("x"), Mode: 0o600, Access: sandboxfs.AccessWrite, Exclusive: true})
+	_, err := f.c.Create(context.Background(), &sandboxfs.CreateRequest{Handle: f.ids.Next(), Parent: f.root, Name: []byte("x"), Mode: 0o600, Access: sandboxfs.AccessWrite, Exclusive: true})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoExists, sandboxwire.EffectNone)
-	if _, err := f.c.Create(context.Background(), &sandboxfs.CreateRequest{Parent: f.root, Name: []byte("x"), Mode: 0o600, Access: sandboxfs.AccessWrite}); err != nil {
+	if _, err := f.c.Create(context.Background(), &sandboxfs.CreateRequest{Handle: f.ids.Next(), Parent: f.root, Name: []byte("x"), Mode: 0o600, Access: sandboxfs.AccessWrite}); err != nil {
 		t.Fatalf("non-exclusive create of an existing file: %v", err)
+	}
+}
+
+// Append is a property of each write, as fcntl(F_SETFL, O_APPEND) makes it
+// on a native descriptor, so one handle mixes positioned and append writes.
+func TestAppendIsPerWrite(t *testing.T) {
+	f := newFixture(t)
+	for name, appendFirst := range map[string]bool{"positioned-then-append": false, "append-then-positioned": true} {
+		if err := os.WriteFile(filepath.Join(f.dir, name), []byte("abc"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		h := f.open(name)
+		if appendFirst {
+			f.appendWrite(h, "Y")
+			f.write(h, 0, "X")
+		} else {
+			f.write(h, 0, "X")
+			f.appendWrite(h, "Y")
+		}
+		if got := f.read(h); got != "XbcY" {
+			t.Fatalf("%s: read %q", name, got)
+		}
 	}
 }
 
 func TestAtomicAppendFromTwoHandles(t *testing.T) {
 	f := newFixture(t)
-	_, h1 := f.create("log", sandboxfs.AccessWrite, sandboxfs.OpenAppend)
-	open, err := f.c.Open(context.Background(), &sandboxfs.OpenRequest{Node: f.lookup(f.root, "log").Node, Access: sandboxfs.AccessWrite, Flags: sandboxfs.OpenAppend})
-	if err != nil {
+	_, h1 := f.create("log", sandboxfs.AccessWrite, 0)
+	h2 := f.ids.Next()
+	if _, err := f.c.Open(context.Background(), &sandboxfs.OpenRequest{Handle: h2, Node: f.lookup(f.root, "log").Node, Access: sandboxfs.AccessWrite}); err != nil {
 		t.Fatal(err)
 	}
 	const records = 200
 	var wg sync.WaitGroup
-	for i, h := range []sandboxfs.HandleID{h1, open.Handle} {
+	for i, h := range []sandboxfs.HandleID{h1, h2} {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for j := range records {
 				// Every write names offset zero; append ignores it.
 				rec := fmt.Sprintf("%d:%03d:%s\n", i, j, strings.Repeat("x", 64))
-				if r, err := f.c.Write(context.Background(), &sandboxfs.WriteRequest{Handle: h, Data: []byte(rec)}); err != nil || int(r.Written) != len(rec) {
+				if r, err := f.c.Write(context.Background(), &sandboxfs.WriteRequest{Handle: h, Append: true, Data: []byte(rec)}); err != nil || int(r.Written) != len(rec) {
 					t.Errorf("append: %+v, %v", r, err)
 					return
 				}
@@ -257,13 +319,13 @@ func TestReadDirPagesWithCookies(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	dir, err := f.c.OpenDir(context.Background(), &sandboxfs.OpenDirRequest{Node: f.root})
-	if err != nil {
+	dir := f.ids.Next()
+	if _, err := f.c.OpenDir(context.Background(), &sandboxfs.OpenDirRequest{Handle: dir, Node: f.root}); err != nil {
 		t.Fatal(err)
 	}
 	readAll := func(cookie uint64) (names []string, cookies []uint64) {
 		for {
-			r, err := f.c.ReadDir(context.Background(), &sandboxfs.ReadDirRequest{Handle: dir.Handle, Cookie: cookie, Limit: 200})
+			r, err := f.c.ReadDir(context.Background(), &sandboxfs.ReadDirRequest{Handle: dir, Cookie: cookie, Limit: 200})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -290,7 +352,7 @@ func TestReadDirPagesWithCookies(t *testing.T) {
 		t.Fatalf("resumed at cookie 10: %v, want %v", again, names[10:])
 	}
 
-	r, err := f.c.ReadDir(context.Background(), &sandboxfs.ReadDirRequest{Handle: dir.Handle, Limit: 1024, WithAttrs: true})
+	r, err := f.c.ReadDir(context.Background(), &sandboxfs.ReadDirRequest{Handle: dir, Limit: 1024, WithAttrs: true})
 	if err != nil || len(r.Entries) == 0 || r.Entries[0].Entry == nil || r.Entries[0].Entry.Attr.Mode&sandboxfs.ModeType != sandboxfs.ModeRegular {
 		t.Fatalf("readdir with attributes: %+v, %v", r, err)
 	}
@@ -337,7 +399,7 @@ func TestRootEscapeIsRefused(t *testing.T) {
 
 	// A client that skips validation gets the same answer from the server.
 	cc, sc := net.Pipe()
-	go sandboxfs.Serve(context.Background(), sc, f.svc, f.att)
+	go f.srv.Serve(context.Background(), sc, attachment(f.svc, sandboxlink.ExportGrant{ID: "world"}), binds.Add(1))
 	defer cc.Close()
 	var e sandboxwire.Encoder
 	e.U64(f.root.ID)
@@ -358,9 +420,9 @@ func TestRootEscapeIsRefused(t *testing.T) {
 	link := f.lookup(f.root, "escape").Node
 	_, err = f.c.Lookup(context.Background(), &sandboxfs.LookupRequest{Parent: link, Name: []byte("etc")})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoNotDirectory, sandboxwire.EffectNone)
-	_, err = f.c.Open(context.Background(), &sandboxfs.OpenRequest{Node: link, Access: sandboxfs.AccessRead})
+	_, err = f.c.Open(context.Background(), &sandboxfs.OpenRequest{Handle: f.ids.Next(), Node: link, Access: sandboxfs.AccessRead})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoSymlinkLoop, sandboxwire.EffectNone)
-	_, err = f.c.OpenDir(context.Background(), &sandboxfs.OpenDirRequest{Node: link})
+	_, err = f.c.OpenDir(context.Background(), &sandboxfs.OpenDirRequest{Handle: f.ids.Next(), Node: link})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoNotDirectory, sandboxwire.EffectNone)
 	_, err = f.c.Mkdir(context.Background(), &sandboxfs.MkdirRequest{Parent: link, Name: []byte("x"), Mode: 0o755})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoNotDirectory, sandboxwire.EffectNone)
@@ -421,14 +483,15 @@ func TestIncarnationChange(t *testing.T) {
 	defer next.Close()
 
 	// A stream bound to the old incarnation.
-	old, _, _ := f.connect(next, f.att)
+	nextSrv := sandboxfs.NewServer(next)
+	old, _, _ := f.connect(nextSrv, f.att)
 	_, err = old.Lookup(context.Background(), &sandboxfs.LookupRequest{Parent: f.root, Name: []byte("f")})
 	wantFailure(t, err, sandboxfs.CodeInstanceChanged, 0, sandboxwire.EffectNone)
 
 	// The same attachment rebound to the new incarnation holds nothing.
 	a := f.att
 	a.ServerInstanceID = next.InstanceID()
-	c, _, _ := f.connect(next, a)
+	c, _, _ := f.connect(nextSrv, a)
 	_, err = c.Lookup(context.Background(), &sandboxfs.LookupRequest{Parent: f.root, Name: []byte("f")})
 	wantFailure(t, err, sandboxfs.CodeStaleAttachment, 0, sandboxwire.EffectNone)
 	if _, err := c.Attach(context.Background(), &sandboxfs.AttachRequest{Export: "world"}); err != nil {
@@ -444,24 +507,24 @@ func TestAttachFollowsExportGrants(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 
-	c, _, _ := f.connect(f.svc, attachment(f.svc, sandboxlink.ExportGrant{ID: "logs"}))
+	c, _, _ := f.connect(f.srv, attachment(f.svc, sandboxlink.ExportGrant{ID: "logs"}))
 	_, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: "world"})
 	wantFailure(t, err, sandboxfs.CodeUnauthorized, 0, sandboxwire.EffectNone)
 
-	c, _, _ = f.connect(f.svc, attachment(f.svc, sandboxlink.ExportGrant{ID: "world", ReadOnly: true}))
+	c, _, _ = f.connect(f.srv, attachment(f.svc, sandboxlink.ExportGrant{ID: "world", ReadOnly: true}))
 	_, err = c.Attach(ctx, &sandboxfs.AttachRequest{Export: "world"})
 	wantFailure(t, err, sandboxfs.CodeUnauthorized, 0, sandboxwire.EffectNone)
 	r, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: "world", ReadOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = c.Create(ctx, &sandboxfs.CreateRequest{Parent: r.Root.Node, Name: []byte("f"), Mode: 0o644, Access: sandboxfs.AccessWrite})
+	_, err = c.Create(ctx, &sandboxfs.CreateRequest{Handle: 1, Parent: r.Root.Node, Name: []byte("f"), Mode: 0o644, Access: sandboxfs.AccessWrite})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoReadOnlyFilesystem, sandboxwire.EffectNone)
 }
 
 func TestDescribeListsGrantedExports(t *testing.T) {
 	f := newFixture(t)
-	c, _, _ := f.connect(f.svc, attachment(f.svc, sandboxlink.ExportGrant{ID: "logs"}))
+	c, _, _ := f.connect(f.srv, attachment(f.svc, sandboxlink.ExportGrant{ID: "logs"}))
 	d, err := c.Describe(context.Background(), &sandboxfs.DescribeRequest{})
 	if err != nil || len(d.Exports) != 0 {
 		t.Fatalf("describe without a world grant: %+v, %v", d, err)
@@ -480,9 +543,9 @@ func TestProcMagicLinkIsOpaque(t *testing.T) {
 	cwd := w.Entries[2].Node
 	_, err = f.c.Lookup(ctx, &sandboxfs.LookupRequest{Parent: cwd, Name: []byte("x")})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoNotDirectory, sandboxwire.EffectNone)
-	_, err = f.c.OpenDir(ctx, &sandboxfs.OpenDirRequest{Node: cwd})
+	_, err = f.c.OpenDir(ctx, &sandboxfs.OpenDirRequest{Handle: f.ids.Next(), Node: cwd})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoNotDirectory, sandboxwire.EffectNone)
-	_, err = f.c.Open(ctx, &sandboxfs.OpenRequest{Node: cwd, Access: sandboxfs.AccessRead})
+	_, err = f.c.Open(ctx, &sandboxfs.OpenRequest{Handle: f.ids.Next(), Node: cwd, Access: sandboxfs.AccessRead})
 	wantFailure(t, err, sandboxfs.CodeErrno, sandboxfs.ErrnoSymlinkLoop, sandboxwire.EffectNone)
 }
 
@@ -564,7 +627,7 @@ func TestTransportLoss(t *testing.T) {
 	// A second stream of the same attachment reuses its handles.
 	cc, sc := net.Pipe()
 	served := make(chan error, 1)
-	go func() { served <- sandboxfs.Serve(context.Background(), sc, f.svc, f.att) }()
+	go func() { served <- f.srv.Serve(context.Background(), sc, f.att, binds.Add(1)) }()
 	wrote := make(chan struct{}, 1)
 	c := sandboxfs.NewClient(wroteConn{cc, wrote})
 	defer c.Close()
@@ -587,4 +650,63 @@ func TestTransportLoss(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Serve did not return after the transport closed")
 	}
+}
+
+// dropConn closes the stream instead of writing the first frame of type typ,
+// as a relay that fails after the service ran the request does.
+type dropConn struct {
+	net.Conn
+	typ uint16
+}
+
+func (c dropConn) Write(p []byte) (int, error) {
+	if len(p) >= sandboxwire.HeaderSize && binary.BigEndian.Uint16(p[4:6]) == c.typ {
+		c.Conn.Close()
+		return 0, net.ErrClosed
+	}
+	return c.Conn.Write(p)
+}
+
+// A client that lost an Open's reply releases the ID it chose on the next
+// stream, and no handle remains.
+func TestLostOpenReplyIsReleased(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(f.dir, "f"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	node := f.lookup(f.root, "f").Node
+	cc, sc := net.Pipe()
+	go f.srv.Serve(ctx, dropConn{sc, sandboxwire.ResponseType(uint16(sandboxfs.OpOpen))}, f.att, binds.Add(1))
+	c := sandboxfs.NewClient(cc)
+	defer c.Close()
+	h := f.ids.Next()
+	_, err := c.Open(ctx, &sandboxfs.OpenRequest{Handle: h, Node: node, Access: sandboxfs.AccessRead})
+	if fail := wantFailure(t, err, sandboxfs.CodeUnknown, 0, sandboxwire.EffectPossible); !errors.Is(fail, sandboxfs.ErrTransport) {
+		t.Fatalf("%v is not a transport failure", fail)
+	}
+	if n := f.handles(); n != 1 {
+		t.Fatalf("%d handles after the lost reply", n)
+	}
+
+	resumed, _, _ := f.connect(f.srv, f.att)
+	if _, err := resumed.Release(ctx, &sandboxfs.ReleaseRequest{Handle: h}); err != nil {
+		t.Fatalf("release after resuming: %v", err)
+	}
+	if n := f.handles(); n != 0 {
+		t.Fatalf("%d handles after the release", n)
+	}
+}
+
+// An acquisition that names a live handle ID is refused before it touches the
+// file system.
+func TestDuplicateHandleIDIsRefused(t *testing.T) {
+	f := newFixture(t)
+	_, h := f.create("a", sandboxfs.AccessReadWrite, 0)
+	_, err := f.c.Create(context.Background(), &sandboxfs.CreateRequest{Handle: h, Parent: f.root, Name: []byte("b"), Mode: 0o600, Access: sandboxfs.AccessWrite})
+	wantFailure(t, err, sandboxfs.CodeInvalidArgument, 0, sandboxwire.EffectNone)
+	if _, err := os.Lstat(filepath.Join(f.dir, "b")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the refused Create made its file: %v", err)
+	}
+	f.write(h, 0, "still open")
 }

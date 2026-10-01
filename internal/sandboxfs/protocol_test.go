@@ -65,7 +65,7 @@ func TestGoldenFixtures(t *testing.T) {
 		{file: "walk_request.hex", op: OpWalk, id: 2, req: &WalkRequest{Parent: testNode, Names: [][]byte{[]byte("link"), []byte("x")}}},
 		{file: "walk_response.hex", op: OpWalk, id: 2, resp: &WalkResponse{Entries: []Entry{{Node: NodeRef{ID: 2, Generation: 7}, Attr: symlink}}}},
 		{file: "create_request.hex", op: OpCreate, id: 3, req: &CreateRequest{
-			Parent: testNode, Name: []byte("notes.md"), Mode: 0o644, Access: AccessReadWrite, Flags: OpenAppend, Exclusive: true}},
+			Handle: 9, Parent: testNode, Name: []byte("notes.md"), Mode: 0o644, Access: AccessReadWrite, Flags: OpenSync, Exclusive: true}},
 		{file: "write_response.hex", op: OpWrite, id: 4, resp: &WriteResponse{
 			Written: 4096, Failure: &Failure{Code: CodeErrno, Errno: ErrnoNoSpace, Effect: sandboxwire.EffectNone, Message: "disk full"}}},
 		{file: "readdir_request.hex", op: OpReadDir, id: 5, req: &ReadDirRequest{Handle: 0x42, Cookie: 0x1c6a3e5f0b9d2471, Limit: 65536}},
@@ -77,6 +77,7 @@ func TestGoldenFixtures(t *testing.T) {
 			Parent: testNode, Name: []byte("old"), NewParent: testNode2, NewName: []byte("new"), Mode: RenameExchange}},
 		{file: "failure_response.hex", op: OpLookup, id: 7, fail: &Failure{
 			Code: CodeErrno, Errno: ErrnoNotFound, Effect: sandboxwire.EffectNone, Message: "missing"}},
+		{file: "write_request.hex", op: OpWrite, id: 8, req: &WriteRequest{Handle: 9, Append: true, Data: []byte("log\n")}},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			want := readHexFixture(t, tc.file)
@@ -137,14 +138,14 @@ func samples() []struct {
 		{&GetAttrRequest{Target: Target{Kind: TargetHandle, Handle: 3}}, &GetAttrResponse{Attr: testAttr}},
 		{&SetAttrRequest{Target: Target{Kind: TargetNode, Node: testNode}, Set: AttrSize | AttrMode | AttrUID | AttrGID | AttrAtime | AttrMtimeNow, Size: 9, Mode: 0o4755, UID: 5, GID: 6, Atime: Timestamp{7, 8}}, &SetAttrResponse{Attr: testAttr}},
 		{&AccessRequest{Node: testNode, Mask: MayRead | MayExecute}, &AccessResponse{}},
-		{&OpenRequest{Node: testNode, Access: AccessWrite, Flags: OpenTruncate | OpenSync}, &OpenResponse{Handle: 4}},
-		{&CreateRequest{Parent: testNode, Name: []byte("n"), Mode: 0o600, Access: AccessRead, Flags: OpenDataSync}, &CreateResponse{Entry: testEntry, Handle: 5}},
+		{&OpenRequest{Handle: 4, Node: testNode, Access: AccessWrite, Flags: OpenTruncate | OpenSync}, &OpenResponse{}},
+		{&CreateRequest{Handle: 5, Parent: testNode, Name: []byte("n"), Mode: 0o600, Access: AccessRead, Flags: OpenDataSync}, &CreateResponse{Entry: testEntry}},
 		{&ReadRequest{Handle: 4, Offset: 10, Size: 65536}, &ReadResponse{Data: []byte("data")}},
-		{&WriteRequest{Handle: 4, Offset: 10, Data: []byte("data")}, &WriteResponse{Written: 4}},
+		{&WriteRequest{Handle: 4, Offset: 10, Append: true, Data: []byte("data")}, &WriteResponse{Written: 4}},
 		{&FlushRequest{Handle: 4, Owner: 11}, &FlushResponse{}},
 		{&FsyncRequest{Handle: 4, DataOnly: true}, &FsyncResponse{}},
 		{&ReleaseRequest{Handle: 4}, &ReleaseResponse{}},
-		{&OpenDirRequest{Node: testNode}, &OpenDirResponse{Handle: 6}},
+		{&OpenDirRequest{Handle: 6, Node: testNode}, &OpenDirResponse{}},
 		{&ReadDirRequest{Handle: 6, Cookie: 1, Limit: 4096, WithAttrs: true}, &ReadDirResponse{Entries: []DirEntry{{Name: []byte("f"), Ino: testAttr.Ino, Type: ModeRegular, Cookie: 2, Entry: &testEntry}}, End: true}},
 		{&ReleaseDirRequest{Handle: 6}, &ReleaseDirResponse{}},
 		{&MkdirRequest{Parent: testNode, Name: []byte("d"), Mode: 0o1777}, &MkdirResponse{Entry: testEntry}},
@@ -188,6 +189,14 @@ func TestRoundTripEveryMessage(t *testing.T) {
 	}
 }
 
+func TestRetryableCodes(t *testing.T) {
+	for c := CodeInvalidArgument; c.Valid(); c++ {
+		if c.Retryable() != (c == CodeResourceExhausted) {
+			t.Errorf("%s.Retryable() = %v", c, c.Retryable())
+		}
+	}
+}
+
 func TestDecodeRejects(t *testing.T) {
 	encode := func(m message) []byte {
 		var e sandboxwire.Encoder
@@ -200,9 +209,10 @@ func TestDecodeRejects(t *testing.T) {
 	}{
 		"dot-dot name":        {OpLookup, encode(&LookupRequest{Parent: testNode, Name: []byte("..")})},
 		"slash in name":       {OpMkdir, encode(&MkdirRequest{Parent: testNode, Name: []byte("a/b")})},
-		"zero generation":     {OpOpenDir, encode(&OpenDirRequest{Node: NodeRef{ID: 1}})},
-		"unknown open flag":   {OpOpen, encode(&OpenRequest{Node: testNode, Access: AccessRead, Flags: 1 << 5})},
-		"zero access mode":    {OpOpen, encode(&OpenRequest{Node: testNode})},
+		"zero generation":     {OpOpenDir, encode(&OpenDirRequest{Handle: 1, Node: NodeRef{ID: 1}})},
+		"zero handle ID":      {OpOpen, encode(&OpenRequest{Node: testNode, Access: AccessRead})},
+		"unknown open flag":   {OpOpen, encode(&OpenRequest{Handle: 1, Node: testNode, Access: AccessRead, Flags: 1 << 4})},
+		"zero access mode":    {OpOpen, encode(&OpenRequest{Handle: 1, Node: testNode})},
 		"duplicate forget":    {OpForget, encode(&ForgetRequest{Entries: []ForgetEntry{{testNode, 1}, {testNode, 1}}})},
 		"partial flock range": {OpSetLock, encode(&SetLockRequest{Handle: 1, Kind: LockFlock, Lock: Lock{Mode: LockRead, End: 10}})},
 		"trailing byte":       {OpReleaseDir, append(encode(&ReleaseDirRequest{Handle: 1}), 0)},

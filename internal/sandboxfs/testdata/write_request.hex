@@ -1,0 +1,9 @@
+# Append write: the service ignores Offset and writes at the end of the file.
+00000019                          # PayloadLength 25
+000c                              # MessageType: Write (12)
+0000                              # Flags
+0000000000000008                  # RequestID 8
+0000000000000009                  # Handle 9
+0000000000000000                  # Offset
+01                                # Append
+00000004 6c6f670a                 # Data "log\n"

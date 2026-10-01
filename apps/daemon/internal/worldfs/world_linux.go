@@ -59,7 +59,7 @@ func New(export sandboxlink.ExportID, dial Dial) *World {
 
 // Serve has the signature of [sessionview.World]. Within ctx it connects, attaches the export and presents the mountpoints; it then starts serving dev. A World serves once.
 //
-// A Serve that fails after the export may have been attached detaches it only when nothing can still reach the attachment: when Attach may have taken effect without a response, when a request may still run on a failed stream, or when Detach fails, Serve returns [ErrAttachmentDirty] and the owner of the Link attachment must end it.
+// A Serve that fails after the export may have been attached detaches it on a new stream, and returns within 5 more seconds even when ctx has ended or the transport blocks. When that Detach cannot be sent or answered in that time, Serve returns [ErrAttachmentDirty] and the owner of the Link attachment must end it.
 func (w *World) Serve(ctx context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
 	p, err := w.fs.serve(ctx, dev, mount)
 	if err != nil {
@@ -68,7 +68,7 @@ func (w *World) Serve(ctx context.Context, dev *os.File, mount sessionview.World
 	return w, p, nil
 }
 
-// Stop waits up to 10 seconds for serving to end, which happens once the view's mount namespace is gone. It then detaches, ending every request still waiting on the service after 5 more seconds, so it returns within 15 seconds. It unmounts nothing. After a Serve that failed, or without one, it returns at once.
+// Stop waits up to 10 seconds for serving to end, which happens once the view's mount namespace is gone. It then detaches, ending every request still waiting on the service after 5 more seconds, so it returns within 15 seconds even when the transport blocks. It unmounts nothing. After a Serve that failed, or without one, it returns at once.
 func (w *World) Stop() error {
 	w.fs.stopOnce.Do(func() { w.fs.stopErr = w.fs.stop() })
 	return w.fs.stopErr
@@ -96,7 +96,8 @@ type frontend struct {
 
 	connTurn chan struct{} // held to use or replace conn; a channel so that waiting for it can be interrupted
 	conn     *sandboxfs.Client
-	gen      atomic.Uint64 // counts redials
+	ids      sandboxfs.HandleIDs // the attachment's handle IDs, never reused
+	gen      atomic.Uint64       // counts redials
 	instance sandboxwire.ID
 	service  sandboxfs.Identity // the identity the service acts as
 	view     sandboxfs.Identity // the identity the view's processes run as
@@ -111,7 +112,7 @@ type frontend struct {
 	root     *inode
 	born     sandboxfs.Timestamp
 	forgets  map[sandboxfs.NodeRef]uint64 // references the kernel released, not yet sent
-	releases []cleanup                    // handles the kernel released whose Release a failed stream never sent
+	releases []cleanup                    // releases for the drainer: of handles the kernel closed whose Release went unanswered, and of acquisitions in doubt
 
 	kick      chan struct{} // wakes the drainer
 	drainCtx  context.Context
@@ -213,24 +214,18 @@ func (f *frontend) start(dev *os.File, opts *fuse.MountOptions) error {
 	return nil
 }
 
-// abort undoes a failed Serve and returns its error. Detach on the stream the export was attached on releases what the attachment holds only when nothing else can still reach the attachment, so it is sent only then, and any doubt is [ErrAttachmentDirty].
+// abort undoes a failed Serve and returns its error. When the export may be attached, it drops the stream and detaches on a new one: the service serves that stream only after every request of the earlier ones has finished, so Detach releases whatever Attach, or a request the failure abandoned, left. Detach is settled when it succeeds or the world is lost, since a lost attachment or incarnation holds nothing; anything else, including no answer within detachWait, is [ErrAttachmentDirty].
 func (f *frontend) abort(ctx context.Context, err error) error {
 	close(f.served)
 	close(f.drained)
 	defer f.shutdown()
-	switch {
-	case f.maybe:
-		return &Error{Kind: ErrAttachmentDirty, Op: "attach", Err: err}
-	case !f.attached || f.dead.Load():
+	if !f.attached && !f.maybe || f.dead.Load() {
 		return err
-	case f.gen.Load() != 0:
-		// A request on the failed stream may still be running.
-		return &Error{Kind: ErrAttachmentDirty, Op: "present", Err: err}
 	}
-	// Once ctx has ended, a request it abandoned may still run, and Detach under it fails, so the attachment is dirty.
-	ctx, cancel := context.WithTimeout(ctx, detachWait)
+	f.drop()
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachWait)
 	defer cancel()
-	if _, derr := f.conn.Detach(ctx, &sandboxfs.DetachRequest{}); derr != nil {
+	if _, derr := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{}); derr != nil && !f.dead.Load() {
 		return &Error{Kind: ErrAttachmentDirty, Op: "detach", Err: errors.Join(err, derr)}
 	}
 	return err
@@ -306,11 +301,19 @@ func (f *frontend) stop() error {
 	return errors.Join(errs...)
 }
 
+// shutdown ends every request and redial on f.ctx and closes the stream. client returns no stream after it.
 func (f *frontend) shutdown() {
 	f.cancel()
+	f.drop()
+}
+
+// drop closes the stream, which never waits for the transport, so the next request redials.
+func (f *frontend) drop() {
 	f.connTurn <- struct{}{}
-	defer func() { <-f.connTurn }()
-	if f.conn != nil {
-		f.conn.Close()
+	c := f.conn
+	f.conn = nil
+	<-f.connTurn
+	if c != nil {
+		c.Close()
 	}
 }

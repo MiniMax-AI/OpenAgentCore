@@ -13,6 +13,7 @@ import (
 var (
 	errDead        = errors.New("worldfs: the world is lost")
 	errInterrupted = errors.New("worldfs: interrupted before the request was sent")
+	errStopped     = errors.New("worldfs: the world stopped")
 )
 
 // connect opens a stream and describes the service within ctx.
@@ -30,7 +31,7 @@ func (f *frontend) connect(ctx context.Context) (*sandboxfs.Client, *sandboxfs.D
 	return c, d, nil
 }
 
-// client returns the stream's client. After the stream failed it redials within ctx and continues only with the same service instance. A failed redial is an [ErrConnect] error, and an interrupt while waiting for the stream or redialing is errInterrupted: either way the request was never sent.
+// client returns the stream's client. After the stream failed it redials within ctx and continues only with the same service instance. Once shutdown began it returns no stream. A failed redial is an [ErrConnect] error, and an interrupt while waiting for the stream or redialing is errInterrupted: either way the request was never sent.
 func (f *frontend) client(ctx context.Context, interrupt <-chan struct{}) (*sandboxfs.Client, error) {
 	select {
 	case f.connTurn <- struct{}{}:
@@ -42,6 +43,9 @@ func (f *frontend) client(ctx context.Context, interrupt <-chan struct{}) (*sand
 	defer func() { <-f.connTurn }()
 	if f.dead.Load() {
 		return nil, errDead
+	}
+	if f.ctx.Err() != nil {
+		return nil, &Error{Kind: ErrConnect, Op: "reconnect", Err: errStopped}
 	}
 	if c := f.conn; c != nil {
 		select {
@@ -126,10 +130,10 @@ func unsent(err error) bool {
 	return errors.Is(err, ErrConnect) || errors.As(err, &fail) && fail.Effect == sandboxwire.EffectNone && errors.Is(err, sandboxfs.ErrTransport)
 }
 
-// retryable reports whether a request certainly did nothing and may succeed when sent again: it was never sent, or the service refused it for now with ResourceExhausted and EffectNone.
+// retryable reports whether a request certainly did nothing and may succeed when sent again: it was never sent, or the service refused it for now with a retryable code and EffectNone.
 func retryable(err error) bool {
 	var fail *sandboxfs.Failure
-	return unsent(err) || errors.As(err, &fail) && fail.Code == sandboxfs.CodeResourceExhausted && fail.Effect == sandboxwire.EffectNone
+	return unsent(err) || errors.As(err, &fail) && fail.Code.Retryable() && fail.Effect == sandboxwire.EffectNone
 }
 
 // noEffect reports whether a request certainly changed nothing.

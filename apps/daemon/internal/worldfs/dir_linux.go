@@ -14,11 +14,12 @@ func (f *frontend) OpenDir(_ <-chan struct{}, in *fuse.OpenIn, out *fuse.OpenOut
 	}
 	h := &handle{node: n}
 	if !n.synthetic() {
-		r, err := call(f, f.ctx, (*sandboxfs.Client).OpenDir, &sandboxfs.OpenDirRequest{Node: n.ref})
-		if err != nil {
+		id := f.ids.Next()
+		if _, err := call(f, f.ctx, (*sandboxfs.Client).OpenDir, &sandboxfs.OpenDirRequest{Handle: id, Node: n.ref}); err != nil {
+			f.settle(cleanup{handle: id, dir: true}, err)
 			return status(err)
 		}
-		h.server = r.Handle
+		h.server = id
 	}
 	*out = fuse.OpenOut{Fh: f.newHandle(h)}
 	return fuse.OK

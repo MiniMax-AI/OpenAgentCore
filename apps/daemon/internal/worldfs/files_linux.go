@@ -24,7 +24,7 @@ func openFlags(flags uint32) (acc sandboxfs.AccessMode, of sandboxfs.OpenFlags, 
 	for _, m := range []struct {
 		bit  uint32
 		flag sandboxfs.OpenFlags
-	}{{syscall.O_APPEND, sandboxfs.OpenAppend}, {syscall.O_TRUNC, sandboxfs.OpenTruncate}, {syscall.O_NOFOLLOW, sandboxfs.OpenNoFollow}} {
+	}{{syscall.O_TRUNC, sandboxfs.OpenTruncate}, {syscall.O_NOFOLLOW, sandboxfs.OpenNoFollow}} {
 		if flags&m.bit != 0 {
 			of |= m.flag
 		}
@@ -53,11 +53,12 @@ func (f *frontend) Open(_ <-chan struct{}, in *fuse.OpenIn, out *fuse.OpenOut) f
 			return fuse.EPERM
 		}
 	} else {
-		r, err := call(f, f.ctx, (*sandboxfs.Client).Open, &sandboxfs.OpenRequest{Node: n.ref, Access: acc, Flags: of})
-		if err != nil {
+		id := f.ids.Next()
+		if _, err := call(f, f.ctx, (*sandboxfs.Client).Open, &sandboxfs.OpenRequest{Handle: id, Node: n.ref, Access: acc, Flags: of}); err != nil {
+			f.settle(cleanup{handle: id}, err)
 			return status(err)
 		}
-		h.server = r.Handle
+		h.server = id
 	}
 	*out = fuse.OpenOut{Fh: f.newHandle(h), OpenFlags: fuse.FOPEN_DIRECT_IO}
 	return fuse.OK
@@ -72,14 +73,16 @@ func (f *frontend) Create(_ <-chan struct{}, in *fuse.CreateIn, name string, out
 	if !ok {
 		return fuse.EINVAL
 	}
+	id := f.ids.Next()
 	r, err := call(f, f.ctx, (*sandboxfs.Client).Create, &sandboxfs.CreateRequest{
-		Parent: p.ref, Name: []byte(name), Mode: in.Mode & sandboxfs.ModePerm, Access: acc, Flags: of, Exclusive: in.Flags&syscall.O_EXCL != 0,
+		Handle: id, Parent: p.ref, Name: []byte(name), Mode: in.Mode & sandboxfs.ModePerm, Access: acc, Flags: of, Exclusive: in.Flags&syscall.O_EXCL != 0,
 	})
 	if err != nil {
+		f.settle(cleanup{handle: id}, err)
 		return status(err)
 	}
 	n := f.adopt(r.Entry, &out.EntryOut)
-	out.OpenOut = fuse.OpenOut{Fh: f.newHandle(&handle{node: n, server: r.Handle}), OpenFlags: fuse.FOPEN_DIRECT_IO}
+	out.OpenOut = fuse.OpenOut{Fh: f.newHandle(&handle{node: n, server: id}), OpenFlags: fuse.FOPEN_DIRECT_IO}
 	return fuse.OK
 }
 
@@ -98,7 +101,7 @@ func (f *frontend) Read(_ <-chan struct{}, in *fuse.ReadIn, _ []byte) (fuse.Read
 	return fuse.ReadResultData(r.Data), fuse.OK
 }
 
-// Write reports a short write when the service stopped after a prefix.
+// Write appends when the write's flags hold O_APPEND, which fcntl(F_SETFL) may have set or cleared since the open. It reports a short write when the service stopped after a prefix.
 func (f *frontend) Write(_ <-chan struct{}, in *fuse.WriteIn, data []byte) (uint32, fuse.Status) {
 	h, st := f.handle(in.Fh)
 	if !st.Ok() {
@@ -108,7 +111,7 @@ func (f *frontend) Write(_ <-chan struct{}, in *fuse.WriteIn, data []byte) (uint
 		return 0, fuse.EBADF
 	}
 	data = data[:min(uint32(len(data)), f.caps.MaxWriteBytes)]
-	r, err := call(f, f.ctx, (*sandboxfs.Client).Write, &sandboxfs.WriteRequest{Handle: h.server, Offset: in.Offset, Data: data})
+	r, err := call(f, f.ctx, (*sandboxfs.Client).Write, &sandboxfs.WriteRequest{Handle: h.server, Offset: in.Offset, Append: in.Flags&syscall.O_APPEND != 0, Data: data})
 	if err != nil {
 		return 0, status(err)
 	}

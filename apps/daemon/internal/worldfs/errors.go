@@ -19,7 +19,7 @@ var (
 	ErrInstanceChanged = errors.New("worldfs: file service instance changed")
 	ErrAttachmentLost  = errors.New("worldfs: attachment ended")
 	ErrTopologyChanged = errors.New("worldfs: pinned topology changed")
-	// ErrAttachmentDirty is a failed Serve that cannot show the attachment holds nothing: the owner of the Link attachment must end it.
+	// ErrAttachmentDirty is a failed Serve whose cleanup Detach could not be sent or answered, so it cannot show the attachment holds nothing: the owner of the Link attachment must end it.
 	ErrAttachmentDirty = errors.New("worldfs: the attachment may still hold state")
 )
 

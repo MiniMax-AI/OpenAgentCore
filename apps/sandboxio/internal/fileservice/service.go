@@ -120,7 +120,7 @@ func probeRename() (noReplace, exchange bool) {
 }
 
 // InstanceID is the service incarnation. Link binds each stream to it, and
-// the Attachment a stream passes to sandboxfs.Serve carries it.
+// the Attachment each stream's sandboxfs.Server.Serve receives carries it.
 func (s *Service) InstanceID() sandboxwire.ID { return s.instance }
 
 // Close releases every attachment and the export root. Requests still
@@ -290,9 +290,9 @@ type state struct {
 	free       []int
 	inodes     map[inodeKey]*node
 	generation uint64
-	handles    map[sandboxfs.HandleID]*handle
-	reserved   int
-	nextHandle uint64
+	// handles maps each client-chosen ID to its handle, or to nil while the
+	// acquisition that reserved the ID runs.
+	handles map[sandboxfs.HandleID]*handle
 }
 
 // inodeKey identifies a node. The mount ID keeps the same inode reached
@@ -349,21 +349,22 @@ type node struct {
 }
 
 type handle struct {
-	f      *os.File
-	append bool
-	dir    *cursor // set for directory handles
+	f   *os.File
+	dir *cursor // set for directory handles
+
+	writeMu sync.Mutex // holds a write and the O_APPEND mode it sets on f
 
 	lockMu sync.Mutex
 	flock  sandboxfs.LockMode // held flock mode; zero when none
 }
 
 func newState(s *Service, readOnly bool) *state {
-	// Random bases make a NodeRef or HandleID from another attachment or
+	// A random generation base makes a NodeRef from another attachment or
 	// incarnation miss instead of naming a live object.
 	return &state{
 		svc: s, readOnly: readOnly, done: make(chan struct{}),
 		inodes: map[inodeKey]*node{}, handles: map[sandboxfs.HandleID]*handle{},
-		generation: rand.Uint64() >> 2, nextHandle: rand.Uint64() >> 2,
+		generation: rand.Uint64() >> 2,
 	}
 }
 
@@ -385,7 +386,9 @@ func (st *state) close() {
 		}
 	}
 	for _, h := range handles {
-		h.f.Close()
+		if h != nil {
+			h.f.Close()
+		}
 	}
 }
 
@@ -472,40 +475,44 @@ func (st *state) forget(entries []sandboxfs.ForgetEntry) error {
 	return nil
 }
 
-// reserve claims a handle slot before a handle is opened, so exhaustion
-// fails before anything happens.
-func (st *state) reserve() error {
+// reserve claims the client-chosen handle ID before an acquisition touches
+// the file system, so a duplicate ID or exhaustion fails before anything
+// happens. A reserved ID counts toward MaxOpenHandles.
+func (st *state) reserve(id sandboxfs.HandleID) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.closed {
 		return errStaleAttachment()
 	}
-	if len(st.handles)+st.reserved >= int(st.svc.caps.MaxOpenHandles) {
+	if _, ok := st.handles[id]; ok {
+		return sandboxfs.NewFailure(sandboxfs.CodeInvalidArgument, sandboxwire.EffectNone, "handle ID is already in use")
+	}
+	if len(st.handles) >= int(st.svc.caps.MaxOpenHandles) {
 		return sandboxfs.NewFailure(sandboxfs.CodeResourceExhausted, sandboxwire.EffectNone, "too many open handles")
 	}
-	st.reserved++
+	st.handles[id] = nil
 	return nil
 }
 
-func (st *state) unreserve() {
+// unreserve drops the reservation of an acquisition that failed.
+func (st *state) unreserve(id sandboxfs.HandleID) {
 	st.mu.Lock()
-	st.reserved--
+	if !st.closed && st.handles[id] == nil {
+		delete(st.handles, id)
+	}
 	st.mu.Unlock()
 }
 
-// addHandle registers h in a reserved slot.
-func (st *state) addHandle(h *handle) (sandboxfs.HandleID, error) {
+// publish installs h under its reserved ID.
+func (st *state) publish(id sandboxfs.HandleID, h *handle) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	st.reserved--
 	if st.closed {
 		h.f.Close()
-		return 0, errStaleAttachment()
+		return errStaleAttachment()
 	}
-	st.nextHandle++
-	id := sandboxfs.HandleID(st.nextHandle)
 	st.handles[id] = h
-	return id, nil
+	return nil
 }
 
 func (st *state) handle(id sandboxfs.HandleID) (*handle, error) {

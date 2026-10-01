@@ -17,7 +17,7 @@ import (
 
 // Version is the protocol version. Link matches it exactly when it opens a
 // file stream.
-const Version uint16 = 1
+const Version uint16 = 2
 
 // Op is a request tag. Each response carries its request's tag with
 // sandboxwire.ResponseType. The protocol has no events.
@@ -137,7 +137,10 @@ type Lease interface {
 // Service is implemented by a file service, one method per operation.
 // CancelRequest is not a method: the server answers it by cancelling the
 // target's context. A method returns a *Failure for a typed failure; the server
-// reports any other error as Unknown with EffectPossible.
+// reports any other error as Unknown with EffectPossible. A method publishes
+// every state it creates before it returns. The server never runs two
+// acquisitions (Open, Create, OpenDir) of one handle ID of an attachment at
+// once, nor a Release or ReleaseDir while the acquisition of its ID runs.
 type Service interface {
 	Describe(context.Context, Attachment, *DescribeRequest) (*DescribeResponse, error)
 	Attach(context.Context, Attachment, *AttachRequest) (*AttachResponse, error)
@@ -206,6 +209,13 @@ var codeNames = [...]string{
 
 func (c ErrorCode) Valid() bool    { return c >= 1 && int(c) < len(codeNames) }
 func (c ErrorCode) String() string { return enumName(codeNames[:], uint16(c), "ErrorCode") }
+
+// Retryable reports whether the same request may succeed later.
+// ResourceExhausted is transient; a client may resend the request unchanged
+// after such a failure with EffectNone, and never after EffectPossible. Every
+// other code is final for the request, or reports the caller's own
+// cancellation.
+func (c ErrorCode) Retryable() bool { return c == CodeResourceExhausted }
 
 // Errno is the semantic error of a failed file-system call. Each adapter
 // converts its native errors; an unknown native error is ErrnoIO.
@@ -329,13 +339,12 @@ const DurabilityFsyncRequired Durability = 1
 type OpenFlags uint32
 
 const (
-	OpenAppend OpenFlags = 1 << iota
-	OpenTruncate
+	OpenTruncate OpenFlags = 1 << iota
 	OpenNoFollow
 	OpenSync
 	OpenDataSync
 
-	openFlagsAll = OpenAppend | OpenTruncate | OpenNoFollow | OpenSync | OpenDataSync
+	openFlagsAll = OpenTruncate | OpenNoFollow | OpenSync | OpenDataSync
 )
 
 // AttrMask selects the attributes SetAttr changes. AttrAtimeNow and
@@ -396,7 +405,8 @@ type NodeRef struct {
 	Generation uint64
 }
 
-// HandleID names an open file or directory handle. It is opaque and nonzero.
+// HandleID names an open file or directory handle. The client chooses it when
+// it opens the handle: nonzero, and never used twice within an attachment.
 type HandleID uint64
 
 // LockOwner identifies a lock owner within an attachment.
@@ -642,17 +652,21 @@ type AccessRequest struct {
 
 type AccessResponse struct{}
 
+// OpenRequest opens Node as Handle, an ID the client chose and never used
+// before in the attachment.
 type OpenRequest struct {
+	Handle HandleID
 	Node   NodeRef
 	Access AccessMode
 	Flags  OpenFlags
 }
 
-type OpenResponse struct {
-	Handle HandleID
-}
+type OpenResponse struct{}
 
+// CreateRequest creates and opens a regular file as Handle, an ID the client
+// chose and never used before in the attachment.
 type CreateRequest struct {
+	Handle    HandleID
 	Parent    NodeRef
 	Name      []byte
 	Mode      uint32 // permission bits, applied as given
@@ -662,8 +676,7 @@ type CreateRequest struct {
 }
 
 type CreateResponse struct {
-	Entry  Entry
-	Handle HandleID
+	Entry Entry
 }
 
 type ReadRequest struct {
@@ -677,11 +690,12 @@ type ReadResponse struct {
 	Data []byte
 }
 
-// WriteRequest writes Data at Offset. An append-opened handle appends
-// atomically and ignores Offset.
+// WriteRequest writes Data at Offset. An Append write ignores Offset and
+// writes Data atomically at the end of the file.
 type WriteRequest struct {
 	Handle HandleID
 	Offset uint64
+	Append bool
 	Data   []byte
 }
 
@@ -714,13 +728,14 @@ type ReleaseRequest struct {
 
 type ReleaseResponse struct{}
 
+// OpenDirRequest opens directory Node as Handle, an ID the client chose and
+// never used before in the attachment.
 type OpenDirRequest struct {
-	Node NodeRef
+	Handle HandleID
+	Node   NodeRef
 }
 
-type OpenDirResponse struct {
-	Handle HandleID
-}
+type OpenDirResponse struct{}
 
 // ReadDirRequest reads entries after Cookie; cookie zero is the start. Limit
 // bounds the entries' WireSize sum. "." and ".." are never returned.
@@ -968,6 +983,30 @@ func sideEffectFree(r Request) bool {
 	return false
 }
 
+// acquires returns the handle ID that r opens.
+func acquires(r Request) (HandleID, bool) {
+	switch r := r.(type) {
+	case *OpenRequest:
+		return r.Handle, true
+	case *CreateRequest:
+		return r.Handle, true
+	case *OpenDirRequest:
+		return r.Handle, true
+	}
+	return 0, false
+}
+
+// releases returns the handle ID that r closes.
+func releases(r Request) (HandleID, bool) {
+	switch r := r.(type) {
+	case *ReleaseRequest:
+		return r.Handle, true
+	case *ReleaseDirRequest:
+		return r.Handle, true
+	}
+	return 0, false
+}
+
 // modifiesFiles reports whether r changes the file system, which a read-only
 // attachment refuses.
 func modifiesFiles(r Request) bool {
@@ -1032,6 +1071,9 @@ func (c *Capabilities) Admit(r Request, readOnly bool) *Failure {
 	case *WriteRequest:
 		if tooLong(r.Data, c.MaxWriteBytes) {
 			return NewFailure(CodeInvalidArgument, sandboxwire.EffectNone, "write exceeds MaxWriteBytes")
+		}
+		if r.Append && !c.AtomicAppend {
+			return unsupported("an append write")
 		}
 	case *ReadDirRequest:
 		if r.Limit > c.MaxReadDirBytes {
@@ -1719,26 +1761,29 @@ func (*AccessResponse) decode(*decoder)             {}
 func (*AccessResponse) validate() error             { return nil }
 
 func (r *OpenRequest) encode(e *sandboxwire.Encoder) {
+	e.U64(uint64(r.Handle))
 	r.Node.encode(e)
 	e.Enum(uint16(r.Access))
 	e.U32(uint32(r.Flags))
 }
 
 func (r *OpenRequest) decode(d *decoder) {
+	r.Handle = HandleID(d.u64())
 	r.Node.decode(d)
 	r.Access = AccessMode(d.u16())
 	r.Flags = OpenFlags(d.u32())
 }
 
 func (r *OpenRequest) validate() error {
-	return errors.Join(r.Node.validate(), validAccess(r.Access), validOpenFlags(r.Flags))
+	return errors.Join(r.Handle.validate(), r.Node.validate(), validAccess(r.Access), validOpenFlags(r.Flags))
 }
 
-func (r *OpenResponse) encode(e *sandboxwire.Encoder) { e.U64(uint64(r.Handle)) }
-func (r *OpenResponse) decode(d *decoder)             { r.Handle = HandleID(d.u64()) }
-func (r *OpenResponse) validate() error               { return r.Handle.validate() }
+func (*OpenResponse) encode(*sandboxwire.Encoder) {}
+func (*OpenResponse) decode(*decoder)             {}
+func (*OpenResponse) validate() error             { return nil }
 
 func (r *CreateRequest) encode(e *sandboxwire.Encoder) {
+	e.U64(uint64(r.Handle))
 	r.Parent.encode(e)
 	e.Bytes(r.Name)
 	e.U32(r.Mode)
@@ -1748,6 +1793,7 @@ func (r *CreateRequest) encode(e *sandboxwire.Encoder) {
 }
 
 func (r *CreateRequest) decode(d *decoder) {
+	r.Handle = HandleID(d.u64())
 	r.Parent.decode(d)
 	r.Name = d.bytes()
 	r.Mode = d.u32()
@@ -1757,14 +1803,12 @@ func (r *CreateRequest) decode(d *decoder) {
 }
 
 func (r *CreateRequest) validate() error {
-	return errors.Join(r.Parent.validate(), validName(r.Name), validPerm(r.Mode), validAccess(r.Access), validOpenFlags(r.Flags))
+	return errors.Join(r.Handle.validate(), r.Parent.validate(), validName(r.Name), validPerm(r.Mode), validAccess(r.Access), validOpenFlags(r.Flags))
 }
 
-func (r *CreateResponse) encode(e *sandboxwire.Encoder) { r.Entry.encode(e); e.U64(uint64(r.Handle)) }
-func (r *CreateResponse) decode(d *decoder)             { r.Entry.decode(d); r.Handle = HandleID(d.u64()) }
-func (r *CreateResponse) validate() error {
-	return errors.Join(r.Entry.validate(), r.Handle.validate())
-}
+func (r *CreateResponse) encode(e *sandboxwire.Encoder) { r.Entry.encode(e) }
+func (r *CreateResponse) decode(d *decoder)             { r.Entry.decode(d) }
+func (r *CreateResponse) validate() error               { return r.Entry.validate() }
 
 func (r *ReadRequest) encode(e *sandboxwire.Encoder) {
 	e.U64(uint64(r.Handle))
@@ -1796,11 +1840,13 @@ func (r *ReadResponse) validate() error {
 func (r *WriteRequest) encode(e *sandboxwire.Encoder) {
 	e.U64(uint64(r.Handle))
 	e.U64(r.Offset)
+	e.Bool(r.Append)
 	e.Bytes(r.Data)
 }
 func (r *WriteRequest) decode(d *decoder) {
 	r.Handle = HandleID(d.u64())
 	r.Offset = d.u64()
+	r.Append = d.bool()
 	r.Data = d.bytes()
 }
 
@@ -1856,13 +1902,13 @@ func (*ReleaseResponse) encode(*sandboxwire.Encoder) {}
 func (*ReleaseResponse) decode(*decoder)             {}
 func (*ReleaseResponse) validate() error             { return nil }
 
-func (r *OpenDirRequest) encode(e *sandboxwire.Encoder) { r.Node.encode(e) }
-func (r *OpenDirRequest) decode(d *decoder)             { r.Node.decode(d) }
-func (r *OpenDirRequest) validate() error               { return r.Node.validate() }
+func (r *OpenDirRequest) encode(e *sandboxwire.Encoder) { e.U64(uint64(r.Handle)); r.Node.encode(e) }
+func (r *OpenDirRequest) decode(d *decoder)             { r.Handle = HandleID(d.u64()); r.Node.decode(d) }
+func (r *OpenDirRequest) validate() error               { return errors.Join(r.Handle.validate(), r.Node.validate()) }
 
-func (r *OpenDirResponse) encode(e *sandboxwire.Encoder) { e.U64(uint64(r.Handle)) }
-func (r *OpenDirResponse) decode(d *decoder)             { r.Handle = HandleID(d.u64()) }
-func (r *OpenDirResponse) validate() error               { return r.Handle.validate() }
+func (*OpenDirResponse) encode(*sandboxwire.Encoder) {}
+func (*OpenDirResponse) decode(*decoder)             {}
+func (*OpenDirResponse) validate() error             { return nil }
 
 func (r *ReadDirRequest) encode(e *sandboxwire.Encoder) {
 	e.U64(uint64(r.Handle))
