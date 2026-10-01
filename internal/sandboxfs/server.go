@@ -21,6 +21,10 @@ const MaxInFlight = 256
 // replaced.
 var ErrSuperseded = errors.New("sandboxfs: stream superseded by a successor")
 
+// ErrLeaseEnded refuses a stream whose attachment's lease had ended before
+// the stream was admitted.
+var ErrLeaseEnded = errors.New("sandboxfs: attachment lease ended")
+
 // Server answers File streams for one Service. It admits one stream at a time
 // for each (ServerInstanceID, AttachmentID), in the order Link bound them: a
 // stream bound before one already admitted is refused, and a successor runs no
@@ -52,10 +56,10 @@ func NewServer(svc Service) *Server {
 // Link authenticated for the stream; Serve refuses one without an ID, server
 // instance, lease or valid export grants. seq is the stream's Link bind
 // sequence: Serve refuses a stream bound before one of its attachment it
-// already admitted with ErrSuperseded, without running anything. Serve
-// owns conn and closes it. On return every request context is cancelled and
-// every handler has finished. A stream that ends cleanly returns nil; a
-// superseded one returns ErrSuperseded.
+// already admitted with ErrSuperseded, and a stream whose lease has ended with
+// ErrLeaseEnded, without running anything. Serve owns conn and closes it. On
+// return every request context is cancelled and every handler has finished. A
+// stream that ends cleanly returns nil; a superseded one returns ErrSuperseded.
 func (s *Server) Serve(ctx context.Context, conn io.ReadWriteCloser, a Attachment, seq uint64) error {
 	if err := a.validate(); err != nil {
 		conn.Close()
@@ -65,11 +69,11 @@ func (s *Server) Serve(ctx context.Context, conn io.ReadWriteCloser, a Attachmen
 	ctx, cancel := context.WithCancel(ctx)
 	st := &stream{srv: s, key: streamKey{a.ServerInstanceID, a.ID}, conn: conn, svc: s.svc, a: a, bindSeq: seq, cancel: cancel,
 		drained: make(chan struct{}), inflight: map[uint64]context.CancelFunc{}, acquiring: map[HandleID]chan struct{}{}}
-	prev, ok := s.admit(st)
-	if !ok {
+	prev, err := s.admit(st)
+	if err != nil {
 		cancel()
 		conn.Close()
-		return ErrSuperseded
+		return err
 	}
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer func() {
@@ -102,14 +106,20 @@ func (s *Server) Serve(ctx context.Context, conn io.ReadWriteCloser, a Attachmen
 }
 
 // admit makes st the newest stream of its attachment and returns the
-// predecessor it must fence. It refuses st when a stream bound later, or the
-// same stream, was admitted already. st waits for the predecessor to drain
-// when the predecessor has run a request; otherwise the predecessor never will,
-// and st waits for what the predecessor was waiting for. It forgets each
-// attachment whose lease has ended and whose newest stream has settled.
-func (s *Server) admit(st *stream) (prev *stream, ok bool) {
+// predecessor it must fence. It refuses st when its lease has ended, or when a
+// stream bound later, or the same stream, was admitted already. st waits for
+// the predecessor to drain when the predecessor has run a request; otherwise
+// the predecessor never will, and st waits for what the predecessor was
+// waiting for. It forgets each attachment whose lease has ended and whose
+// newest stream has settled. Every stream of an attachment shares its lease,
+// and the lease check and the forgetting happen under one lock, so a stream
+// bound before a forgotten one is always refused.
+func (s *Server) admit(st *stream) (prev *stream, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if closed(st.a.Lease.Done()) {
+		return nil, ErrLeaseEnded
+	}
 	for k, e := range s.streams {
 		if closed(e.a.Lease.Done()) && e.settled() {
 			delete(s.streams, k)
@@ -117,7 +127,7 @@ func (s *Server) admit(st *stream) (prev *stream, ok bool) {
 	}
 	prev = s.streams[st.key]
 	if prev != nil && prev.bindSeq >= st.bindSeq {
-		return nil, false
+		return nil, ErrSuperseded
 	}
 	if prev != nil {
 		st.after = prev.after
@@ -126,7 +136,7 @@ func (s *Server) admit(st *stream) (prev *stream, ok bool) {
 		}
 	}
 	s.streams[st.key] = st
-	return prev, true
+	return prev, nil
 }
 
 // start reports whether st may run a request: once every earlier stream that

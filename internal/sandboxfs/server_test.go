@@ -265,9 +265,10 @@ func TestSupersededWaiterEnds(t *testing.T) {
 }
 
 // The end of a waiting successor's stream, and then of the attachment's lease,
-// leave the fence in place: a later stream still waits for the stuck handler
-// of the stream before them. The lease and each stream's context end
-// separately.
+// leave the fence in place: a stream of the same attachment ID under a new
+// lease, as Link serves an ID bound again after its attachment closed, still
+// waits for the stuck handler of the streams before it. The leases and each
+// stream's context end separately.
 func TestFenceOutlivesLease(t *testing.T) {
 	ctx := context.Background()
 	svc := newOrdered()
@@ -288,7 +289,9 @@ func TestFenceOutlivesLease(t *testing.T) {
 	<-secondServed
 	endLease()
 
-	third, _ := serveStream(t, srv, a, 3)
+	renewed := a
+	renewed.Lease = ctx
+	third, _ := serveStream(t, srv, renewed, 3)
 	settled := make(chan error, 1)
 	go func() {
 		_, err := third.Detach(ctx, &DetachRequest{})
@@ -334,6 +337,30 @@ func TestOlderBindIsRefused(t *testing.T) {
 	<-served
 	if err := late(); !errors.Is(err, ErrSuperseded) || svc.calls.Load() != 2 {
 		t.Fatalf("older stream after the newer ended: %v, %d calls served", err, svc.calls.Load())
+	}
+}
+
+// A stream that reaches the server after its attachment's lease ended, and
+// after the newer stream it was bound before has drained and been forgotten,
+// is refused.
+func TestEndedLeaseIsRefused(t *testing.T) {
+	ctx := context.Background()
+	svc := &describer{}
+	srv := NewServer(svc)
+	lease, endLease := context.WithCancel(ctx)
+	a := testAttachment()
+	a.Lease = lease
+	newer, served := serveStream(t, srv, a, 2)
+	if _, err := newer.Describe(ctx, &DescribeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	newer.Close()
+	<-served
+	endLease()
+	cc, sc := net.Pipe()
+	cc.Close()
+	if err := srv.Serve(ctx, sc, a, 1); !errors.Is(err, ErrLeaseEnded) {
+		t.Fatalf("late stream: %v, want ErrLeaseEnded", err)
 	}
 }
 
