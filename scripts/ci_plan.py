@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import subprocess
 
@@ -74,6 +75,8 @@ GENERATED_OUTPUTS = {"contracts/agents-api/harness-catalog.md", "packages/agents
 
 def documentation(path):
     p = PurePosixPath(path)
+    if path in {"docs.json", ".mintignore"}:
+        return True
     if p.name in {"README.md", "README.zh-CN.md", "AGENTS.md", "CONTRIBUTING.md", "LICENSE"}:
         return True
     return (path.startswith(("docs/", "contracts/")) and p.suffix in {".md", ".png", ".jpg", ".jpeg", ".svg", ".webp"}) or path in {
@@ -130,8 +133,26 @@ def changed_paths(base, head):
 
 
 def event_plan(event_name, event, requested_ref=""):
-    if event_name != "pull_request" or requested_ref:
-        return full("Main, manual or reusable run: full gate")
+    if requested_ref:
+        return full("Explicit ref: full gate")
+    if event_name == "push":
+        try:
+            if event.get("ref") != "refs/heads/main" or event.get("forced") or event.get("deleted"):
+                return full("Non-main or rewritten push: full gate")
+            before, after = event["before"], event["after"]
+            if any(not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha) or sha == "0" * 40 for sha in (before, after)):
+                raise ValueError("Invalid push commits")
+            if git("rev-parse", "HEAD").decode().strip() != after:
+                raise ValueError("Checkout does not match push head")
+            git("merge-base", "--is-ancestor", before, after)
+            paths = changed_paths(before, after)
+            if paths and all(documentation(path) for path in paths):
+                return select(paths)
+            return full("Main push includes non-documentation changes: full gate")
+        except (KeyError, TypeError, ValueError, UnicodeError, subprocess.CalledProcessError) as err:
+            return full(f"Push diff unavailable ({type(err).__name__}); full gate")
+    if event_name != "pull_request":
+        return full("Manual or reusable run: full gate")
     try:
         pr = event["pull_request"]
         base, head = pr["base"]["sha"], pr["head"]["sha"]

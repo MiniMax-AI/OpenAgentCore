@@ -237,3 +237,71 @@ class GateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DocumentationPushTests(unittest.TestCase):
+    def setUp(self):
+        self.before, self.after = "a" * 40, "b" * 40
+        self.event = {"ref": "refs/heads/main", "before": self.before, "after": self.after, "forced": False, "deleted": False}
+
+    def plan(self, paths, event=None, ref=""):
+        with patch.object(ci, "git", side_effect=[self.after.encode(), b""]), patch.object(ci, "changed_paths", return_value=paths) as diff:
+            plan = ci.event_plan("push", self.event if event is None else event, ref)
+            return plan, diff
+
+    def test_doc_site_configuration_and_docs_only_push_skip_product_checks(self):
+        paths = ["docs.json", ".mintignore", "docs/getting-started/index.md", "README.md"]
+        self.assertEqual(set(ci.select(paths)["jobs"]), {"hygiene"})
+        plan, diff = self.plan(paths)
+        self.assertEqual(set(plan["jobs"]), {"hygiene"})
+        diff.assert_called_once_with(self.before, self.after)
+
+    def test_generated_documentation_keeps_freshness_checks(self):
+        plan, _ = self.plan(["docs/configuration.md", "contracts/agents-api/harness-catalog.md"])
+        self.assertEqual(set(plan["jobs"]), {"hygiene", "distribution"})
+
+    def test_code_mixed_unknown_and_empty_pushes_keep_full_gate(self):
+        for paths in (["README.md", "services/core/cmd/server/main.go"], ["new.md"], [], ["docs.json", "scripts/generate-harness-catalog.py"]):
+            with self.subTest(paths=paths):
+                self.assertEqual(self.plan(paths)[0]["jobs"], list(ci.JOBS))
+
+    def test_releases_and_untrusted_pushes_keep_full_gate(self):
+        self.assertEqual(self.plan(["README.md"], ref=self.after)[0]["jobs"], list(ci.JOBS))
+        for fields in ({"ref": "refs/tags/v1"}, {"forced": True}, {"deleted": True}, {"before": "0" * 40}, {"before": "--bad"}, {"after": "c" * 40}):
+            with self.subTest(fields=fields):
+                self.assertEqual(self.plan(["README.md"], self.event | fields)[0]["jobs"], list(ci.JOBS))
+        with patch.object(ci, "git", side_effect=subprocess.CalledProcessError(1, "git")):
+            self.assertEqual(ci.event_plan("push", self.event)["jobs"], list(ci.JOBS))
+
+    def test_push_uses_entire_commit_range_and_fails_closed_on_shallow_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "source"
+            repo.mkdir()
+            def git(*args):
+                return subprocess.check_output(["git", "-C", str(repo), *args], stderr=subprocess.DEVNULL).decode().strip()
+            git("init", "-b", "main")
+            git("config", "user.email", "ci-test@example.invalid")
+            git("config", "user.name", "CI test")
+            (repo / "README.md").write_text("base\n")
+            git("add", "."); git("commit", "-m", "base")
+            before = git("rev-parse", "HEAD")
+            (repo / "docs.json").write_text("{}\n")
+            git("add", "."); git("commit", "-m", "docs")
+            docs_head = git("rev-parse", "HEAD")
+            previous = Path.cwd()
+            try:
+                os.chdir(repo)
+                event = self.event | {"before": before, "after": docs_head}
+                self.assertEqual(ci.event_plan("push", event)["jobs"], ["hygiene"])
+                (repo / "code.go").write_text("package example\n")
+                git("add", "."); git("commit", "-m", "code")
+                (repo / "README.md").write_text("updated\n")
+                git("add", "."); git("commit", "-m", "docs again")
+                event["after"] = git("rev-parse", "HEAD")
+                self.assertEqual(ci.event_plan("push", event)["jobs"], list(ci.JOBS))
+                clone = Path(tmp) / "shallow"
+                subprocess.run(["git", "clone", "--depth=2", repo.as_uri(), str(clone)], check=True, capture_output=True)
+                os.chdir(clone)
+                self.assertEqual(ci.event_plan("push", event)["jobs"], list(ci.JOBS))
+            finally:
+                os.chdir(previous)

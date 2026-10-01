@@ -102,7 +102,7 @@ Toolchain setup and focused commands are in [Develop OpenAgentCore](docs/develop
 
 ### Checks for a change
 
-Run the checks for the changed behavior and its consumers before completion, including database migration and cross-component tests when affected. Use the [CI selection policy](docs/maintainers.md#continuous-integration) to determine the relevant groups; record what passed and any validation limits. A small follow-up needs its relevant checks, not another unrelated full run. The [Makefile](Makefile) retains `make check` as the complete local gate; main and release CI run all groups, and releases require the full gate. [Live acceptance](#live-acceptance) qualifies native execution beyond fixtures and builds.
+Run the checks for the changed behavior and its consumers before completion, including database migration and cross-component tests when affected. Use the [CI selection policy](docs/maintainers.md#continuous-integration) to determine the relevant groups; record what passed and any validation limits. A small follow-up needs its relevant checks, not another unrelated full run. The [Makefile](Makefile) retains `make check` as the complete local gate; main CI follows the linked selection policy, and releases require the full gate. [Live acceptance](#live-acceptance) qualifies native execution beyond fixtures and builds.
 
 ### Test database
 
