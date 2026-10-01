@@ -72,7 +72,7 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 	if strings.Contains(string(raw), "selected-secret") || !slices.Equal(original, config.Env) {
 		t.Fatal("provider leaked or mutated shared configuration")
 	}
-	if !slices.Contains(env, "ANTHROPIC_AUTH_TOKEN=selected-secret") || slices.Contains(env, "ANTHROPIC_AUTH_TOKEN=selected-provider-fixture") {
+	if !slices.Contains(env, "ANTHROPIC_API_KEY=selected-secret") || slices.ContainsFunc(env, func(entry string) bool { return strings.HasPrefix(entry, "ANTHROPIC_AUTH_TOKEN=") }) {
 		t.Fatal("provider selection was not exclusive")
 	}
 	for _, value := range []any{nil, "secret", map[string]any{"protocol": "anthropic", "base_url": "http://provider.example", "api_key": "secret"}, map[string]any{"protocol": "anthropic", "base_url": "https://user:pass@provider.example", "api_key": "secret"}} {

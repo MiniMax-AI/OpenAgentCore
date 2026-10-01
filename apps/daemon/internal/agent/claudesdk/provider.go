@@ -6,13 +6,15 @@ import (
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
-// Validate the frozen native provider before producing launch variables.
+// Validate the frozen native provider before producing launch variables. The
+// key renders as ANTHROPIC_API_KEY, which Claude Code sends as the X-Api-Key
+// header that the anthropic protocol declares.
 func providerEnvironment(value any) ([]string, error) {
 	provider, err := harnessconfiguration.Configuration().ParseProvider(value)
 	if err != nil {
 		return nil, err
 	}
-	return []string{"ANTHROPIC_BASE_URL=" + provider.BaseURL, "ANTHROPIC_AUTH_TOKEN=" + provider.APIKey}, nil
+	return []string{"ANTHROPIC_BASE_URL=" + provider.BaseURL, "ANTHROPIC_API_KEY=" + provider.APIKey}, nil
 }
 
 func withProvider(env, provider []string) []string {

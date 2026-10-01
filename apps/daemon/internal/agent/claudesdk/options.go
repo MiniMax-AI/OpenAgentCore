@@ -55,6 +55,62 @@ func prepare(config Config, req proto.PromptRequestPayload) (startRequest, []str
 }
 
 func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
+	start, provider, err := prepareOptions(req, req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) != 0))
+	if err != nil {
+		return startRequest{}, nil, err
+	}
+	if !filepath.IsAbs(config.Entrypoint) {
+		return startRequest{}, nil, fmt.Errorf("claudesdk: SDK entrypoint must be absolute")
+	}
+	config.Env = withProvider(config.Env, provider)
+	if config.Workspace != nil {
+		profile, env, err := prepareWorkspace(config, req)
+		if err != nil {
+			return startRequest{}, nil, err
+		}
+		start.Workspace = profile
+		start.Cwd = workspaceCwd(config.Workspace)
+		return start, env, nil
+	}
+	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
+		return startRequest{}, nil, fmt.Errorf("claudesdk: local execution and history recovery require a dedicated workspace")
+	}
+	root, err := paths.Root()
+	if err != nil {
+		return startRequest{}, nil, err
+	}
+	relative, err := filepath.Rel(root, config.StateDir)
+	if err != nil || !filepath.IsAbs(root) || !filepath.IsAbs(config.StateDir) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return startRequest{}, nil, fmt.Errorf("claudesdk: SDK state must be in a managed runtime subdirectory")
+	}
+	start.Cwd = filepath.Join(config.StateDir, "work")
+	for _, dir := range []string{config.StateDir, filepath.Join(config.StateDir, "tmp"), start.Cwd} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return startRequest{}, nil, err
+		}
+	}
+	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
+	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "DISABLE_TELEMETRY=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
+	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
+	if err != nil {
+		return startRequest{}, nil, err
+	}
+	if req.MCPHTTPServers != nil {
+		servers := make([]mcpHTTPServer, 0, len(projectedMCP))
+		for _, server := range projectedMCP {
+			servers = append(servers, server.mcpHTTPServer)
+		}
+		start.MCPHTTPServers = &servers
+	}
+	env = append(env, mcpEnv...)
+	return start, env, nil
+}
+
+// prepareOptions validates the request's execution options and renders the
+// selected model provider. mcp reports whether the Executor serves MCP, which
+// an agent-host view takes from its Session rather than the request.
+func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []string, error) {
+	skills := req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) != 0
 	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools, observeFunctions: req.ObserveToolObservations}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
@@ -71,7 +127,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		return startRequest{}, nil, err
 	}
 	if req.ToolSearch {
-		if (req.LocalEnvironment != nil && (len(req.LocalEnvironment.Skills) != 0 || len(req.LocalEnvironment.MCP) != 0)) || req.MCPHTTPServers != nil || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
+		if skills || mcp || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
 			return fail("tool discovery requires the single-agent text/function profile")
 		}
 		start.ToolSearch = true
@@ -86,7 +142,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && (len(req.LocalEnvironment.MCP) != 0 || len(req.LocalEnvironment.Skills) != 0)) {
+		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || mcp || skills {
 			return fail("structured output requires the qualified message-observing single-agent function profile")
 		}
 		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
@@ -95,7 +151,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		start.OutputFormat = format
 	}
 	if req.ObserveSubagentIdentities {
-		if req.DisableSubagents || len(req.FunctionTools) != 0 || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) != 0) {
+		if req.DisableSubagents || len(req.FunctionTools) != 0 || mcp {
 			return fail("subagent execution does not support this tool combination")
 		}
 		limit := 6
@@ -142,49 +198,5 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if strings.TrimSpace(start.Model) == "" {
 		return fail("model is required")
 	}
-	if !filepath.IsAbs(config.Entrypoint) {
-		return fail("SDK entrypoint must be absolute")
-	}
-	config.Env = withProvider(config.Env, provider)
-	if config.Workspace != nil {
-		profile, env, err := prepareWorkspace(config, req)
-		if err != nil {
-			return startRequest{}, nil, err
-		}
-		start.Workspace = profile
-		start.Cwd = workspaceCwd(config.Workspace)
-		return start, env, nil
-	}
-	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
-		return fail("local execution and history recovery require a dedicated workspace")
-	}
-	root, err := paths.Root()
-	if err != nil {
-		return startRequest{}, nil, err
-	}
-	relative, err := filepath.Rel(root, config.StateDir)
-	if err != nil || !filepath.IsAbs(root) || !filepath.IsAbs(config.StateDir) || relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return fail("SDK state must be in a managed runtime subdirectory")
-	}
-	start.Cwd = filepath.Join(config.StateDir, "work")
-	for _, dir := range []string{config.StateDir, filepath.Join(config.StateDir, "tmp"), start.Cwd} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return startRequest{}, nil, err
-		}
-	}
-	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
-	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "DISABLE_TELEMETRY=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
-	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
-	if err != nil {
-		return startRequest{}, nil, err
-	}
-	if req.MCPHTTPServers != nil {
-		servers := make([]mcpHTTPServer, 0, len(projectedMCP))
-		for _, server := range projectedMCP {
-			servers = append(servers, server.mcpHTTPServer)
-		}
-		start.MCPHTTPServers = &servers
-	}
-	env = append(env, mcpEnv...)
-	return start, env, nil
+	return start, provider, nil
 }

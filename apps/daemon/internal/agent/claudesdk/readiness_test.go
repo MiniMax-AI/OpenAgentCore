@@ -145,6 +145,8 @@ func runReadinessHelper() {
 		time.Sleep(time.Minute)
 	case "wait":
 		time.Sleep(time.Minute)
+	case "view":
+		_, _ = fmt.Fprintln(os.Stdout, strings.TrimSuffix(readyReport, "}")+`,"native_path":"native/claude","features":["workspace_tools","workspace_prepare","workspace_command_observations","local_runtime_v2","mcp_http_tools","workspace_mcp_http"]}`)
 	default:
 		os.Exit(3)
 	}
