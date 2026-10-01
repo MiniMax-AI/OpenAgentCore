@@ -18,7 +18,7 @@ A stream ends in one of two ways, and the relay keeps them apart end to end. An 
 
 The Sandbox I/O service runs `sandboxlink.Serve` with a `ServeConfig`:
 
-- `URL`, `Credential` and `Resource` come from the [bootstrap input](sandbox-bootstrap.md). `PeerID` identifies the service. `ServerInstanceID` is a new ID whenever the service starts without its operation and handle registries.
+- `URL`, `Credential` and `Resource` come from the [bootstrap input](sandbox-bootstrap.md). The credential identifies the service, so the Hello carries no peer ID. `ServerInstanceID` is a new ID whenever the service starts without its operation and handle registries.
 - `Services` holds one handler per offered service and version. A handler receives the `Bind`, which carries the authorized binding including a File stream's exports, and the stream. It owns the stream and returns when it is done with it. Its context ends when the attachment closes or `Serve` returns.
 - `Serve` reconnects with jittered exponential backoff, sending the same `ServerInstanceID`, whenever the link drops. It returns when its context ends or when the relay refuses the Hello with any failure other than `ServiceUnavailable` or `LimitExceeded`, for example `AuthenticationFailed` after the credential is withdrawn or `StaleGeneration` after a newer sandbox took over the resource. Before returning it cancels every handler's context and waits for the handlers.
 - `OnAttachmentLost` fires when an attachment's last open stream ends while the attachment is still open, such as when the link drops. `OnAttachmentRestored` fires when a stream binds a lost attachment again. `OnAttachmentClosed` fires with the reason when the relay reports `AttachmentClosed`. Losing a socket is not closing an attachment: the service keeps an attachment's state until it is closed.
@@ -114,7 +114,6 @@ Hello
   Version           u16            // 1
   Role              enum           // RoleServe = 1, RoleAttach = 2
   if RoleServe:
-    PeerID            ID
     Credential        bytes        // 1..4096 bytes
     Resource          ResourceRef
     ServerInstanceID  ID
@@ -204,7 +203,7 @@ Later control requests continue the Hello's request IDs. The relay ends an attac
 
 `HelloAccepted.MaxStreams` bounds the link's concurrent service streams. `MaxFrameBytes` bounds the payload of every frame on the link's service streams.
 
-For a serve peer, the Authority returns the peer ID and the resource, including generation, that the credential serves. Both must equal the Hello's, otherwise the answer is `PermissionDenied`. The relay then applies the [generation rule](#authority-and-staleness) and makes the link the resource's current serve peer.
+For a serve peer, the Authority returns the peer's identity and the resource, including generation, that the credential serves. The resource must equal the Hello's, otherwise the answer is `PermissionDenied`. The relay then applies the [generation rule](#authority-and-staleness) and makes the link the resource's current serve peer.
 
 The relay and the serve peer bound each handshake step, the WebSocket upgrade, the Hello, reading an `Open`, a `Bind` and its answer and each Authority call, by `sandboxlink.HandshakeTimeout` (10 seconds). The attach peer bounds an Open with its context.
 

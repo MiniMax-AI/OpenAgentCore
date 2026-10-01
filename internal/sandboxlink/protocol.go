@@ -292,11 +292,11 @@ type ServiceVersion struct {
 	Version uint16
 }
 
-// ServeHello introduces the Sandbox I/O service. ServerInstanceID changes
-// whenever the service loses its operation or handle registry.
+// ServeHello introduces the Sandbox I/O service. The credential identifies
+// the peer, so the Hello carries no peer ID. ServerInstanceID changes whenever
+// the service loses its operation or handle registry.
 type ServeHello struct {
 	Version          uint16
-	PeerID           sandboxwire.ID
 	Credential       []byte
 	Resource         ResourceRef
 	ServerInstanceID sandboxwire.ID
@@ -611,7 +611,7 @@ func decodeRequest(r *reader, op Op) Message {
 			return nil
 		}
 		if Role(r.enum(func(v uint16) bool { return Role(v) == RoleServe || Role(v) == RoleAttach })) == RoleServe {
-			h := ServeHello{Version: Version, PeerID: r.id(), Credential: r.bytes(), Resource: r.resource(), ServerInstanceID: r.id()}
+			h := ServeHello{Version: Version, Credential: r.bytes(), Resource: r.resource(), ServerInstanceID: r.id()}
 			n := r.count(uint32(ServiceNetwork))
 			for range n {
 				h.Services = append(h.Services, ServiceVersion{Service: r.service(), Version: r.u16()})
@@ -672,7 +672,6 @@ func decodeSuccess(r *reader, op Op) Message {
 func (h ServeHello) encode(e *sandboxwire.Encoder) {
 	e.U16(h.Version)
 	e.Enum(uint16(RoleServe))
-	e.ID(h.PeerID)
 	e.Bytes(h.Credential)
 	encodeResource(e, h.Resource)
 	e.ID(h.ServerInstanceID)
@@ -911,7 +910,7 @@ func (h ServeHello) validate() error {
 	if err := h.Resource.validate(); err != nil {
 		return err
 	}
-	return checkIDs(h.PeerID, h.ServerInstanceID)
+	return checkIDs(h.ServerInstanceID)
 }
 
 func (h AttachHello) validate() error {

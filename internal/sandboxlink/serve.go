@@ -28,7 +28,6 @@ type ServeConfig struct {
 	URL              string
 	TLS              *tls.Config
 	Dial             Dialer
-	PeerID           sandboxwire.ID
 	Credential       []byte
 	Resource         ResourceRef
 	ServerInstanceID sandboxwire.ID
@@ -59,7 +58,7 @@ type ServeConfig struct {
 // LimitExceeded; it then returns that *Error. Before returning it cancels
 // every handler's context and waits for the handlers.
 func Serve(parent context.Context, cfg ServeConfig) error {
-	hello := ServeHello{Version: Version, PeerID: cfg.PeerID, Credential: cfg.Credential, Resource: cfg.Resource, ServerInstanceID: cfg.ServerInstanceID}
+	hello := ServeHello{Version: Version, Credential: cfg.Credential, Resource: cfg.Resource, ServerInstanceID: cfg.ServerInstanceID}
 	for _, h := range cfg.Services {
 		if h.Serve == nil {
 			return errors.New("sandbox link: service handler without Serve")

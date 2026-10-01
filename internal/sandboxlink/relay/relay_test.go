@@ -143,8 +143,7 @@ func (f *fixture) serve(generation uint64) *servePeer {
 
 func (f *fixture) startServe(generation uint64) *servePeer {
 	credential := []byte(fmt.Sprintf("serve credential %d", generation))
-	peerID := sandboxwire.NewID()
-	f.auth.AddServe(credential, sandboxlink.ServePeer{PeerID: peerID, Resource: resource(generation)})
+	f.auth.AddServe(credential, sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource(generation)})
 	p := &servePeer{instance: sandboxwire.NewID(), connected: make(chan sandboxlink.HelloAccepted, 16), conns: make(chan net.Conn, 16),
 		lost: make(chan sandboxwire.ID, 16), restored: make(chan sandboxwire.ID, 16), closed: make(chan sandboxlink.CloseReason, 128),
 		binds: make(chan sandboxlink.Bind, 16), echoed: make(chan error, 16), done: make(chan struct{})}
@@ -168,7 +167,7 @@ func (f *fixture) startServe(generation uint64) *servePeer {
 			}
 			return c, err
 		},
-		PeerID: peerID, Credential: credential, Resource: resource(generation), ServerInstanceID: p.instance,
+		Credential: credential, Resource: resource(generation), ServerInstanceID: p.instance,
 		Services: []sandboxlink.ServiceHandler{
 			{Service: sandboxlink.ServiceFile, Version: 1, Serve: echo},
 			{Service: sandboxlink.ServiceProcess, Version: 1, Serve: resetAfterOne},

@@ -40,7 +40,7 @@ type golden struct {
 
 // goldenFrames are the frames in testdata/link_v1.hex, in order.
 var goldenFrames = []golden{
-	{1, ServeHello{Version: 1, PeerID: testID(0x04), Credential: []byte("serve"), Resource: testResource, ServerInstanceID: testID(0x05),
+	{1, ServeHello{Version: 1, Credential: []byte("serve"), Resource: testResource, ServerInstanceID: testID(0x05),
 		Services: []ServiceVersion{{ServiceFile, 1}, {ServiceNetwork, 1}}}},
 	{1, AttachHello{Version: 1, RuntimeID: testID(0x06), Credential: []byte("runtime")}},
 	{1, HelloAccepted{LinkID: testID(0x0a), MaxStreams: 256, MaxFrameBytes: 1 << 20}},

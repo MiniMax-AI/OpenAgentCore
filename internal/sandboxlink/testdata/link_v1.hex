@@ -1,11 +1,10 @@
 # Link version 1 frames from goldenFrames in protocol_test.go, in order. Hex bytes; text after # is a comment.
-# IDs repeat one byte: 01 tenant, 02 environment, 03 resource, 04 peer, 05 server instance, 06 Runtime, 07 attachment, 08 Session, 09 assignment, 0a link.
+# IDs repeat one byte: 01 tenant, 02 environment, 03 resource, 05 server instance, 06 Runtime, 07 attachment, 08 Session, 09 assignment, 0a link.
 
 # ServeHello
-00000073 0001 0000 0000000000000001    # header: length 115, OpHello, flags, request 1
+00000063 0001 0000 0000000000000001    # header: length 99, OpHello, flags, request 1
 0001                                   # Version 1
 0001                                   # Role RoleServe
-04040404040404040404040404040404       # PeerID
 00000005 7365727665                    # Credential "serve"
 01010101010101010101010101010101       # Resource.TenantID
 02020202020202020202020202020202       # Resource.EnvironmentID
