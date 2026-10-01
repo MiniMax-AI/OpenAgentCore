@@ -12,11 +12,12 @@
 // binding connects through the sandbox's Network service, a service-origin
 // binding from the agent host, and the gateway does the TLS either way. An MCP
 // listener serves only its server URL's path, without a query, and relays to
-// exactly the server URL; a binding that injects a value needs https. The
-// generic proxy carries HTTP CONNECT tunnels and plain-HTTP forward requests,
-// and connects only through the sandbox's Network service. Redirects reach the
-// Harness unchanged and are never followed. Response header and trailer values
-// that contain an injected credential or header value are withheld; bodies
+// exactly the server URL. The server URL's query is a credential: a binding
+// with a query or an injected value needs https. The generic proxy carries
+// HTTP CONNECT tunnels and plain-HTTP forward requests, and connects only
+// through the sandbox's Network service. Redirects reach the Harness unchanged
+// and are never followed. Response header and trailer values that contain an
+// injected credential, header value or MCP query value are withheld; bodies
 // pass unchanged. The end of the Session closes every connection, tunnels and
 // upgraded ones included. The gateway logs nothing.
 package gateway

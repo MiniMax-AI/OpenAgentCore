@@ -73,13 +73,17 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 	stdio.Transport, stdio.ServerURL, stdio.BearerToken, stdio.HTTPHeaders = "stdio", "", nil, nil
 	twice := binding("service")
 	twice.HTTPHeaders = map[string]string{"Authorization": "Basic other"}
-	// An injected value never crosses a network in plaintext.
+	// No credential crosses a network in plaintext, and userinfo is none.
 	plain := binding("environment")
 	plain.ServerURL, plain.BearerToken, plain.HTTPHeaders = "http://mcp.test/mcp", nil, map[string]string{"X-Api-Key": "header-secret"}
+	query := binding("environment")
+	query.ServerURL, query.BearerToken, query.HTTPHeaders = "http://mcp.test/mcp?api_key=query-secret", nil, nil
+	userinfo := binding("service")
+	userinfo.ServerURL = "https://user:info-secret@mcp.test/mcp"
 	for name, c := range map[string]struct {
 		b      agent.MCPBinding
 		prompt proto.PromptRequestPayload
-	}{"stdio": {stdio, service}, "Authorization twice": {twice, service}, "headers over http": {plain, environment}} {
+	}{"stdio": {stdio, service}, "Authorization twice": {twice, service}, "headers over http": {plain, environment}, "a query over http": {query, environment}, "userinfo": {userinfo, service}} {
 		_, err := Plan(Config{MCP: []agent.MCPBinding{c.b}, Prompt: c.prompt, OpenNetwork: sb.open})
 		if !errors.Is(err, ErrInvalidConfig) || strings.Contains(err.Error(), "secret") {
 			t.Errorf("Plan with %s: %v", name, err)
@@ -88,17 +92,22 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 }
 
 // The Harness's URL carries no query; the listener relays to exactly the
-// server URL and refuses any other target.
+// server URL, refuses any other target and keeps the query out of response
+// headers.
 func TestMCPServesOnlyItsServerURL(t *testing.T) {
 	seen := make(chan string, 8)
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case seen <- r.URL.RequestURI():
 		default:
 		}
+		w.Header().Set("Location", r.URL.RequestURI())
+		w.Header().Set("X-Key", r.URL.Query().Get("key"))
+		w.Header().Set("X-Plain", "visible")
 	}))
 	defer srv.Close()
-	b := agent.MCPBinding{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp?tenant=a"}
+	const query = "tenant=acme&key=query%2Bsecret"
+	b := agent.MCPBinding{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp?" + query}
 	eps := serveOnLoopback(t, Config{MCP: []agent.MCPBinding{b}, Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true}, RootCAs: trust(srv)})
 	harness := eps.MCP["tools"]
 	if !strings.HasPrefix(harness, "http://127.0.0.1:") || !strings.HasSuffix(harness, "/mcp") || strings.Contains(harness, "?") {
@@ -117,8 +126,11 @@ func TestMCPServesOnlyItsServerURL(t *testing.T) {
 		if resp.StatusCode != c.status {
 			t.Errorf("GET %s: %d, want %d", strings.TrimPrefix(c.url, base), resp.StatusCode, c.status)
 		}
+		if c.status == 200 && (resp.Header.Get("Location") != "" || resp.Header.Get("X-Key") != "" || resp.Header.Get("X-Plain") != "visible") {
+			t.Errorf("response headers %v", resp.Header)
+		}
 	}
-	if got := <-seen; got != "/mcp?tenant=a" || len(seen) != 0 {
+	if got := <-seen; got != "/mcp?"+query || len(seen) != 0 {
 		t.Errorf("the server saw %q and %d more requests", got, len(seen))
 	}
 }
