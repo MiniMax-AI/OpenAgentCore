@@ -1,0 +1,6 @@
+# A Signal reporting SIGINT.
+00000002                          # PayloadLength 2
+0003                              # MessageType: Signal
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0002                              # Number 2
