@@ -87,14 +87,20 @@ func (p Provider) Validate() error {
 const Placeholder = "oac-gateway-placeholder"
 
 // Route is one native HTTP route of a protocol. Path is relative to the
-// upstream base URL as the protocol's SDKs join it: the gateway relays a
-// request to the base URL's path followed by Path, with the query unchanged.
+// upstream base URL; UpstreamPath joins the two, and the gateway relays the
+// request's query unchanged.
 type Route struct {
 	Method string
 	Path   string
 	// WebSocket allows an upgrade on this route; otherwise the gateway
 	// rejects a request that asks for one.
 	WebSocket bool
+}
+
+// UpstreamPath is the escaped upstream path for a route: the base URL's escaped
+// path with every trailing "/" removed, followed by the route's Path.
+func UpstreamPath(baseEscapedPath, routePath string) string {
+	return strings.TrimRight(baseEscapedPath, "/") + routePath
 }
 
 // Credential is the upstream credential header the gateway injects. Its value
@@ -106,9 +112,20 @@ type Credential struct {
 
 func (c Credential) Value(key string) string { return c.Prefix + key }
 
-// StrippedHeaders lists every inbound credential header the gateway removes
-// before it injects the upstream credential.
-var StrippedHeaders = []string{"Authorization", "Proxy-Authorization", "X-Api-Key", "Api-Key"}
+// StrippedHeaders lists, in canonical MIME form, every inbound credential
+// header that a pinned Harness or its SDK can send. The gateway matches the
+// names case-insensitively and removes every value of each before it injects
+// the upstream credential.
+var StrippedHeaders = []string{
+	"Authorization",
+	"Proxy-Authorization",
+	"Cookie",
+	"X-Api-Key",
+	"Api-Key",
+	"X-Openai-Actor-Authorization",
+	"Cf-Aig-Authorization",
+	"X-Amz-Security-Token",
+}
 
 // surface is the declared native API of one protocol: the routes the pinned
 // Harnesses call and the credential form they send upstream.

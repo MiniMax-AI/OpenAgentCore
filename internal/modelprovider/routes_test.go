@@ -2,17 +2,28 @@ package modelprovider
 
 import (
 	"errors"
+	"net/http"
+	"slices"
 	"testing"
 )
 
 func TestLookupRouteMatchesOnlyDeclaredRoutes(t *testing.T) {
+	for _, header := range StrippedHeaders {
+		if http.CanonicalHeaderKey(header) != header {
+			t.Fatalf("stripped header %q is not canonical", header)
+		}
+	}
 	for _, protocol := range []Protocol{Anthropic, Responses, ChatCompletions} {
 		routes := Routes(protocol)
 		if len(routes) == 0 {
 			t.Fatalf("%s declares no routes", protocol)
 		}
-		if _, err := UpstreamCredential(protocol); err != nil {
+		credential, err := UpstreamCredential(protocol)
+		if err != nil {
 			t.Fatalf("%s declares no credential: %v", protocol, err)
+		}
+		if !slices.Contains(StrippedHeaders, credential.Header) {
+			t.Fatalf("%s credential header %s is not stripped", protocol, credential.Header)
 		}
 		for _, route := range routes {
 			if got, err := LookupRoute(protocol, route.Method, route.Path); err != nil || got != route {
@@ -52,6 +63,22 @@ func TestPlaceholderPassesProviderValidation(t *testing.T) {
 		gateway := Provider{Protocol: protocol, BaseURL: "http://127.0.0.1:41000", APIKey: Placeholder, ContextWindow: 64000, MaxOutputTokens: 4096}
 		if err := gateway.Validate(); err != nil {
 			t.Fatalf("%s rejected the placeholder: %v", protocol, err)
+		}
+	}
+}
+
+func TestUpstreamPathJoinsBaseAndRoute(t *testing.T) {
+	for _, join := range []struct{ base, route, want string }{
+		{"", "/responses", "/responses"},
+		{"/", "/responses", "/responses"},
+		{"/v1", "/responses", "/v1/responses"},
+		{"/v1/", "/responses", "/v1/responses"},
+		{"/v1//", "/responses", "/v1/responses"},
+		{"/anthropic", "/v1/messages", "/anthropic/v1/messages"},
+		{"/a%2Fb/v1", "/chat/completions", "/a%2Fb/v1/chat/completions"},
+	} {
+		if got := UpstreamPath(join.base, join.route); got != join.want {
+			t.Fatalf("UpstreamPath(%q, %q) = %q, want %q", join.base, join.route, got, join.want)
 		}
 	}
 }

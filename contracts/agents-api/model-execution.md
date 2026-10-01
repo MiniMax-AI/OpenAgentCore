@@ -42,7 +42,7 @@ Which sources apply depends on who owns the compute that receives the key:
 | `self_hosted` | Accepted | Never applied | 400 `model_provider_required` |
 | `none` | Rejected with 400 | Applied when configured | Accepted; the device's own environment supplies the model |
 
-The deployment default holds the operator's key, so it stays on operator compute: Core-managed sandboxes and operator-registered `none` devices. A `self_hosted` executor belongs to the application, which supplies its own bundle. Hosted and self-hosted Runtimes carry no model configuration of their own, so a Session there without a bundle is rejected before any write, with param `x_agents_core.model_provider` and a message saying what to configure.
+The deployment default holds the operator's key, so it applies only to operator-run Environments: Core-managed sandboxes and operator-registered `none` devices. A `self_hosted` executor belongs to the application, which supplies its own bundle. Hosted and self-hosted Runtimes carry no model configuration of their own, so a Session there without a bundle is rejected before any write, with param `x_agents_core.model_provider` and a message saying what to configure.
 
 | Operation | Omitted | Explicit null |
 | --- | --- | --- |
@@ -88,18 +88,18 @@ Unsupported protocol, Harness or Environment combinations are rejected before th
 
 The resolved provider configuration is frozen and encrypted in the Session creation transaction, with its own encryption purpose and Project and Session binding. Creation retries include it in their request hash, so a changed key or endpoint under the same Idempotency-Key conflicts; a key enters any stored hash only as a fingerprint keyed by the deployment credential key. No public Session, Agent, Environment, event or ordinary configuration contains the key. The top-level extension is write-only and cannot be updated.
 
-At dispatch, Core sends the snapshot as one confidential provider bundle over the daemon connection bound to the Session. The [credential gateway](#credential-gateway) holds the key, and the adapter points the Harness at the gateway through native configuration. Core never falls back to other credentials when a snapshot is missing or cannot be decrypted. For `self_hosted`, the receiving daemon is the executor enrolled for the Session's own Environment with a current executor credential of the Session creator's principal; rotation or revocation closes the socket before further dispatch. The executor host stores the bundle in its native Harness home, as hosted Runtimes do. Native tools run with the starting account's permissions and can read what that account can read, and revocation does not erase a bundle already delivered.
+At dispatch, Core sends the snapshot as one confidential provider bundle over the daemon connection bound to the Session, and the adapter points the Harness at the [credential gateway](#credential-gateway) through native configuration. Core never falls back to other credentials when a snapshot is missing or cannot be decrypted. For `self_hosted`, the receiving daemon is the executor enrolled for the Session's own Environment with a current executor credential of the Session creator's principal; rotation or revocation closes the socket before further dispatch. The gateway holds the key in memory for the Session, and the key never enters the Harness's environment, configuration or home, or the sandbox.
 
 ## Credential gateway
 
 The Harness reaches its frozen upstream through a Session-local credential gateway on the agent host. The Harness's native base URL points at the gateway, and the Harness receives only a non-secret placeholder credential, never the key.
 
 - The gateway relays only the declared native routes of the provider's protocol, with the request and response unchanged. An undeclared path or method, or an undeclared WebSocket upgrade, is rejected and never reaches the upstream.
-- It removes every inbound credential header, then injects the upstream credential in the protocol's declared header.
+- It removes every value of each stripped header, matching names case-insensitively, then injects the upstream credential in the protocol's declared header.
 - It never follows a redirect with the credential.
 - It never converts between protocols.
 
-[`internal/modelprovider/config.go`](../../internal/modelprovider/config.go) declares each protocol's routes and credential header, the stripped headers and the placeholder, and its `LookupRoute` matches a request against them. A Harness that calls a route the table does not declare needs a protocol change, not a gateway exception.
+[`internal/modelprovider/config.go`](../../internal/modelprovider/config.go) declares each protocol's routes and credential header, the stripped headers and the placeholder. Its `LookupRoute` matches a request against the routes, and `UpstreamPath` joins a matched route to the upstream base URL. A Harness that calls a route the table does not declare needs a protocol change, not a gateway exception.
 
 ## Native model parameters
 
