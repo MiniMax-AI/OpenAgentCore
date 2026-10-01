@@ -3,7 +3,6 @@ package codex
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -60,9 +59,6 @@ type providerConfig struct {
 // The provider block is rewritten on every prompt; manual edits to
 // scratch CODEX_HOME files are lost on the next spawn.
 func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
-	if err := os.MkdirAll(codexHome, 0o700); err != nil {
-		return fmt.Errorf("codex: mkdir CODEX_HOME %s: %w", codexHome, err)
-	}
 	if strings.TrimSpace(cfg.BaseURL) == "" {
 		return fmt.Errorf("codex: provider base_url is required")
 	}
@@ -148,8 +144,7 @@ func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
 
 	b.WriteByte('\n')
 
-	path := filepath.Join(codexHome, "config.toml")
-	return appendConfigTOML(path, b.String())
+	return appendConfigTOML(codexHome, b.String())
 }
 
 // appendConfigTOML appends body to <codexHome>/config.toml, creating it
@@ -159,15 +154,21 @@ func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
 //
 // File is opened O_APPEND so concurrent writers in the same prompt
 // (today: at most one of each) don't race. 0o600 perms because the
-// file carries the API bearer token in plaintext.
-func appendConfigTOML(path string, body string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+// file carries the API bearer token in plaintext. The file opens inside the
+// native home Root, so a link at config.toml cannot lead the write outside.
+func appendConfigTOML(codexHome string, body string) error {
+	root, err := openNativeHome(codexHome)
 	if err != nil {
-		return fmt.Errorf("codex: open %s: %w", path, err)
+		return err
+	}
+	defer root.Close()
+	f, err := root.OpenFile("config.toml", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("codex: open config.toml: %w", err)
 	}
 	defer f.Close()
 	if _, err := f.WriteString(body); err != nil {
-		return fmt.Errorf("codex: append %s: %w", path, err)
+		return fmt.Errorf("codex: append config.toml: %w", err)
 	}
 	return nil
 }

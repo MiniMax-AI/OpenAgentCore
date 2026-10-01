@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
-func lifecycleRollout(t *testing.T, change func([]map[string]any)) (string, subagentHistory) {
+func lifecycleRollout(t *testing.T, change func([]map[string]any)) (agent.ViewDir, subagentHistory) {
 	t.Helper()
 	home := t.TempDir()
 	if err := os.Mkdir(filepath.Join(home, "sessions"), 0700); err != nil {
@@ -31,7 +33,7 @@ func lifecycleRollout(t *testing.T, change func([]map[string]any)) (string, suba
 	if err := os.WriteFile(h.Path, body, 0600); err != nil {
 		t.Fatal(err)
 	}
-	return home, h
+	return agent.ViewDir{Host: home, View: home}, h
 }
 
 func TestSubagentLifecycleRequiresCorrelatedNativeReceipt(t *testing.T) {

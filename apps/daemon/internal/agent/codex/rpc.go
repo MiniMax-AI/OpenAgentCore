@@ -53,10 +53,12 @@ type JSONRPCConfig struct {
 	// Cwd is the working directory for the child process. Empty
 	// inherits the daemon's cwd.
 	Cwd string
-	// Env is layered ON TOP of os.Environ() — set CODEX_HOME / OPENAI_API_KEY
-	// here. Empty values are not filtered (codex distinguishes empty
-	// from unset for some keys).
+	// Env is the child's complete environment. Empty values are not
+	// filtered (codex distinguishes empty from unset for some keys).
 	Env []string
+	// Launch starts the child. nil runs clirunner.Start on this host; an
+	// agent-host view supplies ViewSession.Launch.
+	Launch func(clirunner.StartOptions) (*clirunner.Process, error)
 	// LogTag is the prefix carried on every internal log line.
 	LogTag string
 	// RequestTimeout overrides rpcDefaultRequestTimeout.
@@ -178,7 +180,11 @@ func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (Initi
 		args = append(args, "--disable", f)
 	}
 
-	process, err := clirunner.Start(clirunner.StartOptions{
+	launch := c.cfg.Launch
+	if launch == nil {
+		launch = clirunner.Start
+	}
+	process, err := launch(clirunner.StartOptions{
 		Parent: ctx, Binary: c.cfg.Binary, Args: args, Dir: c.cfg.Cwd, Env: c.cfg.Env,
 		NeedStdin: true, OwnProcessGroup: true, KillTimeout: 250 * time.Millisecond,
 	})

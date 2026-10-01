@@ -64,7 +64,13 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	req.AgentStateKey = effectiveAgentStateKey(req)
 
 	req.AgentOptions = executionOptions(req)
-	plan, skillRoots, err := prepareSessionPlan(parent, req, cfg)
+	var plan SessionPlan
+	var skillRoots []string
+	if cfg.view != nil {
+		plan, err = prepareViewPlan(parent, req, cfg)
+	} else {
+		plan, skillRoots, err = prepareSessionPlan(parent, req, cfg)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +86,9 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		LogTag:          "codex-preparation",
 		Logger:          cfg.logger,
 	}
+	if cfg.view != nil {
+		rpcCfg.Binary, rpcCfg.Env, rpcCfg.Launch = cfg.view.binary, plan.Env, cfg.view.Launch
+	}
 	for _, kv := range plan.ExtraConfig {
 		rpcCfg.ExtraArgs = append(rpcCfg.ExtraArgs, "-c", kv[0]+"="+kv[1])
 	}
@@ -87,7 +96,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	rpc := NewJSONRPCClient(rpcCfg)
 
 	s := &Session{
-		nativeHome:      nativeHomeFromPlan(plan),
+		nativeHome:      plan.home,
 		functions:       functions,
 		observeMessages: req.ObserveMessages,
 

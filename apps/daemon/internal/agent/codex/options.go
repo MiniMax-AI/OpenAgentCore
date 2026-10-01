@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
 )
@@ -21,9 +22,9 @@ type SessionPlan struct {
 	// the Session's private CODEX_HOME for environment:none.
 	Cwd string
 
-	// Env is the full environment slice (KEY=value) to layer onto
-	// os.Environ() before spawning. Includes CODEX_HOME, plus any
-	// caller-provided OPENAI_API_KEY / CODEX_API_KEY / proxy vars.
+	// Env is the environment slice (KEY=value) the plan adds. A local
+	// codex layers it onto os.Environ(); in an agent-host view it is the
+	// complete environment. Includes CODEX_HOME.
 	Env []string
 
 	// ExtraConfig is a list of `-c key=value` overrides applied at the
@@ -38,6 +39,9 @@ type SessionPlan struct {
 
 	// Non-nil for declared service or Environment MCP, including private references.
 	mcpServers map[string]mcpServerConfig
+
+	// home is CODEX_HOME as the daemon writes it and as codex sees it.
+	home agent.ViewDir
 
 	// Model is the slug to request on thread/start. Empty inherits the
 	// codex.config.toml default.
@@ -95,6 +99,15 @@ type SessionPlan struct {
 //
 // Daemon-managed Codex sessions bypass approvals and the engine sandbox.
 func BuildSessionPlan(runID, agentStateKey string, opts map[string]any) (SessionPlan, error) {
+	return buildSessionPlan(opts, func() (agent.ViewDir, error) {
+		home, err := allocCodexHome(agentStateKey)
+		return agent.ViewDir{Host: home, View: home}, err
+	})
+}
+
+// buildSessionPlan derives the plan with CODEX_HOME from allocHome, which runs
+// only after the options validate.
+func buildSessionPlan(opts map[string]any, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
 	cleanup := func() {}
 	plan := SessionPlan{
 		CollaborationMode: CollaborationModeDefault,
@@ -147,14 +160,16 @@ func BuildSessionPlan(runID, agentStateKey string, opts map[string]any) (Session
 		return plan, err
 	}
 
-	codexHome, err := allocCodexHome(agentStateKey)
+	home, err := allocHome()
 	if err != nil {
 		return plan, err
 	}
+	codexHome := home.Host
 	if err := resetGeneratedConfig(codexHome); err != nil {
 		return plan, err
 	}
-	env = append(env, "CODEX_HOME="+codexHome)
+	env = append(env, "CODEX_HOME="+home.View)
+	plan.home = home
 
 	// MCP servers come pre-rendered from server/internal/connector/agentdaemon
 	// (capabilityAdditions.MCPServers, rendered via render.TargetCodex)
@@ -233,22 +248,35 @@ func allocCodexHome(agentStateKey string) (string, error) {
 	return dir, nil
 }
 
-// nativeHomeFromPlan returns the CODEX_HOME codex receives: os/exec keeps the
-// last duplicate entry, and BuildSessionPlan appends the allocated home last.
-func nativeHomeFromPlan(plan SessionPlan) string {
-	var home string
-	for _, entry := range plan.Env {
-		if value, ok := strings.CutPrefix(entry, "CODEX_HOME="); ok {
-			home = value
-		}
+// openNativeHome opens CODEX_HOME from its parent. Every read and write in the
+// home goes through this Root: the Session user owns a view home, and a link
+// it leaves there resolves only inside the parent, never outside it.
+func openNativeHome(codexHome string) (*os.Root, error) {
+	if !filepath.IsAbs(codexHome) {
+		return nil, errors.New("codex: missing private native home")
 	}
-	return home
+	parent, err := os.OpenRoot(filepath.Dir(codexHome))
+	if err != nil {
+		return nil, fmt.Errorf("codex: open native home: %w", err)
+	}
+	defer parent.Close()
+	root, err := parent.OpenRoot(filepath.Base(codexHome))
+	if err != nil {
+		return nil, fmt.Errorf("codex: open native home: %w", err)
+	}
+	return root, nil
 }
 
+// resetGeneratedConfig removes config.toml; a link in its place is removed,
+// never followed.
 func resetGeneratedConfig(codexHome string) error {
-	path := filepath.Join(codexHome, "config.toml")
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("codex: remove generated config %s: %w", path, err)
+	root, err := openNativeHome(codexHome)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.Remove("config.toml"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("codex: remove generated config: %w", err)
 	}
 	return nil
 }

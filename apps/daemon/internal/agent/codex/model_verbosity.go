@@ -2,17 +2,29 @@ package codex
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 )
 
+// catalogProbe runs `debug models` on the trusted install, outside any view.
+type catalogProbe struct {
+	binary string
+	dir    string
+	env    []string
+}
+
 // Validate against the binary's active catalog and use that same snapshot for
 // execution. A CLI override alone is silently ignored for unsupported models.
 func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan) error {
+	return verifyModelVerbosity(ctx, catalogProbe{binary: binary, dir: plan.Cwd, env: append(os.Environ(), plan.Env...)}, plan)
+}
+
+func verifyModelVerbosity(ctx context.Context, probe catalogProbe, plan *SessionPlan) error {
 	args := []string{}
 	for _, kv := range plan.ExtraConfig {
 		args = append(args, "-c", kv[0]+"="+kv[1])
@@ -20,12 +32,12 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 	args = append(args, "debug", "models")
 	ctx, cancel := context.WithTimeout(ctx, rpcDefaultRequestTimeout)
 	defer cancel()
-	cmd, err := modelCatalogCommand(ctx, binary, args...)
+	cmd, err := modelCatalogCommand(ctx, probe.binary, args...)
 	if err != nil {
 		return err
 	}
-	cmd.Dir = plan.Cwd
-	cmd.Env = append(os.Environ(), plan.Env...)
+	cmd.Dir = probe.dir
+	cmd.Env = probe.env
 	catalog, err := cmd.Output()
 	// The launcher can exit before its children, ending the context watcher.
 	if cmd.Process != nil {
@@ -45,26 +57,36 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 		// Protocol medium means the default text amount, which needs no native override.
 		plan.ExtraConfig = slices.DeleteFunc(plan.ExtraConfig, func(kv [2]string) bool { return kv[0] == "model_verbosity" })
 	}
-	codexHome := nativeHomeFromPlan(*plan)
-	if !filepath.IsAbs(codexHome) {
-		return fmt.Errorf("codex: missing managed home for model catalog")
+	codexHome := plan.home.Host
+	root, err := openNativeHome(codexHome)
+	if err != nil {
+		return fmt.Errorf("codex: missing managed home for model catalog: %w", err)
 	}
-	file, err := os.CreateTemp(codexHome, "model-catalog-*.json")
+	defer root.Close()
+	name := "model-catalog-" + rand.Text() + ".json"
+	file, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	_, writeErr := file.Write(catalog)
 	closeErr := file.Close()
 	if writeErr != nil || closeErr != nil {
-		_ = os.Remove(file.Name())
+		_ = root.Remove(name)
 		if writeErr != nil {
 			return writeErr
 		}
 		return closeErr
 	}
 	cleanup := plan.Cleanup
-	plan.Cleanup = func() { _ = os.Remove(file.Name()); cleanup() }
-	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_catalog_json", strconv(file.Name())})
+	plan.Cleanup = func() {
+		if root, err := openNativeHome(codexHome); err == nil {
+			_ = root.Remove(name)
+			root.Close()
+		}
+		cleanup()
+	}
+	// Codex reads the catalog at its own path for the same file.
+	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_catalog_json", strconv(path.Join(plan.home.View, name))})
 	return nil
 }
 

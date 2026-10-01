@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -38,12 +38,14 @@ type rolloutCompletion struct {
 
 // The outer rollout timestamp is a write time. Only correlated native
 // ItemCompleted.completed_at_ms may timestamp a successful lifecycle effect.
-func readSubagentEffects(home string, h *subagentHistory) ([]subagentEffect, error) {
-	rel, err := filepath.Rel(home, h.Path)
-	if !filepath.IsAbs(home) || !filepath.IsAbs(h.Path) || err != nil || !strings.HasPrefix(rel, "sessions"+string(filepath.Separator)) {
+// h.Path is the path codex reports. The home opens from its parent, so a link
+// left in place of the home cannot lead the read out of the parent.
+func readSubagentEffects(home agent.ViewDir, h *subagentHistory) ([]subagentEffect, error) {
+	rel, err := filepath.Rel(home.View, h.Path)
+	if !filepath.IsAbs(home.View) || !filepath.IsAbs(home.Host) || !filepath.IsAbs(h.Path) || err != nil || !strings.HasPrefix(rel, "sessions"+string(filepath.Separator)) {
 		return nil, errors.New("codex: subagent history escaped private native home")
 	}
-	root, err := os.OpenRoot(home)
+	root, err := openNativeHome(home.Host)
 	if err != nil {
 		return nil, errors.New("codex: private subagent history unavailable")
 	}

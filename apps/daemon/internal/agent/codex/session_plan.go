@@ -37,7 +37,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		plan.ApprovalPolicy = AskForApproval{String: "never"}
 	} else if req.DisableExecutionEnvironment {
 		// environment:none has no workspace; the Session's private home is its cwd.
-		plan.Cwd = nativeHomeFromPlan(plan)
+		plan.Cwd = plan.home.View
 	}
 
 	if req.LocalEnvironment != nil {
