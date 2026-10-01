@@ -21,6 +21,8 @@ var (
 	ErrExec        = errors.New("sessionview: process start failed")
 	ErrLauncher    = errors.New("sessionview: launcher failed")
 	ErrClosed      = errors.New("sessionview: view closed")
+	// ErrCleanup reports a teardown that did not finish within its bound: the view's processes or the world server were still running. What remains finishes in the background if it can.
+	ErrCleanup = errors.New("sessionview: cleanup incomplete")
 	// ErrExited is Signal's result once the process has exited. It also matches os.ErrProcessDone.
 	ErrExited = errors.New("sessionview: process exited")
 )

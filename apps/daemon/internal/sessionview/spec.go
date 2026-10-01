@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 )
 
 // Spec declares one view and the process it runs.
@@ -31,7 +32,7 @@ type World func(ctx context.Context, dev *os.File, mount WorldMount) (WorldServe
 
 // WorldServer is a running world.
 type WorldServer interface {
-	// Stop returns once serving has ended. sessionview calls it after the view has exited, when the kernel has aborted the connection.
+	// Stop ends serving and returns within a bound of its own. sessionview calls it once the launcher has exited, while the view's processes may still be ending, and waits for it and for them together. A process blocked on a request the world has not answered cannot exit, and it keeps the view's mount alive, so Stop must end every request still pending rather than only wait for the view to end.
 	Stop() error
 }
 
@@ -84,7 +85,7 @@ type Overlay struct {
 	Exec   bool
 }
 
-// Shim presents a static binary at agent.ViewPrivateRoot/agent.ViewShimName/<name> for each name and binds it over each absolute view path.
+// Shim presents a static binary at agent.ViewPrivateRoot/agent.ViewShimName/<name> for each name and binds it over each absolute view path. A Spec that declares a shim also runs the binary as the Session's process relay: it is presented as processshim.RelayName too, and the launcher creates the relay's socket at processshim.SocketPath and starts the relay as the process's user, before the process. [View.Relay] is the broker's end of the relay's connection.
 type Shim struct {
 	Binary string
 	Names  []string
@@ -130,7 +131,7 @@ func (s *Spec) validate() error {
 	}
 	names := map[string]bool{}
 	for _, d := range s.Private {
-		if !isComponent(d.Name) || d.Name == agent.ViewShimName || names[d.Name] {
+		if !isComponent(d.Name) || d.Name == agent.ViewShimName || d.Name == agent.ViewRunName || names[d.Name] {
 			return invalid("private directory name %q", d.Name)
 		}
 		names[d.Name] = true
@@ -153,7 +154,7 @@ func (s *Spec) validate() error {
 		}
 		claimed = append(claimed, o.Path)
 	}
-	if len(s.Shim.Names) > 0 || len(s.Shim.Paths) > 0 {
+	if s.Shim.declared() {
 		if info, err := hostSource(s.Shim.Binary); err != nil {
 			return err
 		} else if info.IsDir() {
@@ -162,7 +163,7 @@ func (s *Spec) validate() error {
 	}
 	names = map[string]bool{}
 	for _, n := range s.Shim.Names {
-		if !isComponent(n) || names[n] {
+		if !isComponent(n) || n == processshim.RelayName || names[n] {
 			return invalid("shim name %q", n)
 		}
 		names[n] = true
@@ -181,6 +182,11 @@ func (s *Spec) validate() error {
 		}
 	}
 	return s.Process.validate()
+}
+
+// declared reports whether the spec declares a shim, and so a relay.
+func (s *Shim) declared() bool {
+	return len(s.Names) > 0 || len(s.Paths) > 0
 }
 
 func (p *Process) validate() error {

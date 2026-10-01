@@ -17,13 +17,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Launcher file descriptors. The spec travels over a pipe so that nothing about the view appears in argv or the environment.
+// Launcher file descriptors. The spec travels over a pipe so that nothing about the view appears in argv or the environment. relayFD, the relay's end of its broker connection, is open only when the spec declares a shim.
 const (
 	specFD    = 3
 	controlFD = 4
 	stdinFD   = 5
 	stdoutFD  = 6
 	stderrFD  = 7
+	relayFD   = 8
 )
 
 // launchSpec is what the daemon sends the launcher: the Spec without its callbacks and files.

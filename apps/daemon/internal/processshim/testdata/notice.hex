@@ -1,0 +1,7 @@
+# Notice for fd 2.
+00000015                          # PayloadLength 21
+0028                              # MessageType: Notice
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0000000000000001                  # ID 1
+00000009 6c696e6b206c6f7374       # Message "link lost"

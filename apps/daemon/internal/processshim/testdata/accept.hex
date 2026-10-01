@@ -1,0 +1,6 @@
+# Accept.
+00000008                          # PayloadLength 8
+0021                              # MessageType: Accept
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0000000000000001                  # ID 1

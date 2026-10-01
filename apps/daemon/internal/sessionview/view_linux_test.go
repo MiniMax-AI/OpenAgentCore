@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -29,6 +30,8 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/net/bpf"
 	"golang.org/x/sys/unix"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 )
 
 // The view tests need root with CAP_SYS_ADMIN and CAP_NET_ADMIN, /dev/fuse and no AppArmor confinement. Run them in a throwaway container:
@@ -44,9 +47,12 @@ const (
 	brokerAddr = "127.0.0.1:7070"
 )
 
-// The test binary is also the Harness, the shim and the world binary inside the view.
+// The test binary is also the Harness, the shim, the relay and the world binary inside the view.
 func TestMain(m *testing.M) {
 	Init()
+	if processshim.Relaying() {
+		os.Exit(processshim.Relay())
+	}
 	switch filepath.Base(os.Args[0]) {
 	case "sh", "env":
 		fmt.Println(shimMarker)
@@ -168,6 +174,45 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	}
 }
 
+// TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it.
+func TestTeardownIsBounded(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	writeFile(t, filepath.Join(f.world, "data", "hang"), "")
+	w := &hangWorld{loopbackWorld: loopbackWorld{dir: f.world}, hung: make(chan struct{}), release: make(chan struct{})}
+	saved := closeWait
+	closeWait = time.Second
+	defer func() { closeWait = saved }()
+	spec := f.spec(&w.loopbackWorld, "hang")
+	spec.World = w.serve
+	v, err := Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	select {
+	case <-w.hung:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the process never wrote to the world")
+	}
+	started := time.Now()
+	if err := v.Close(); !errors.Is(err, ErrCleanup) {
+		t.Errorf("Close = %v, want ErrCleanup", err)
+	}
+	if elapsed := time.Since(started); elapsed > 5*time.Second {
+		t.Errorf("Close took %v with a teardown bound of %v", elapsed, closeWait)
+	}
+	if _, err := v.Wait(); !errors.Is(err, ErrClosed) || !errors.Is(err, ErrCleanup) {
+		t.Errorf("Wait = %v, want ErrClosed and ErrCleanup", err)
+	}
+	// Once the world answers, what was left finishes.
+	close(w.release)
+	select {
+	case <-w.served:
+	case <-time.After(10 * time.Second):
+		t.Error("the view outlived the world's answer")
+	}
+}
+
 // TestViewRefusesSymlinkedMountpoint checks that the launcher still refuses a symlink on the way to a target, so a world that reports a target it did not resolve cannot redirect a mount.
 func TestViewRefusesSymlinkedMountpoint(t *testing.T) {
 	requireView(t)
@@ -235,6 +280,8 @@ func TestStartRejectsInvalidSpec(t *testing.T) {
 		"relative overlay":            {Overlays: []Overlay{{Path: "etc/resolv.conf", Source: "/etc/hosts"}}},
 		"writable executable private": {Private: []PrivateDir{{Name: "home", HostDir: t.TempDir(), Writable: true, Exec: true}}},
 		"missing staging parent":      {StagingParent: filepath.Join(t.TempDir(), "missing")},
+		"private run directory":       {Private: []PrivateDir{{Name: "run", HostDir: t.TempDir()}}},
+		"shim named as the relay":     {Shim: Shim{Binary: "/bin/true", Names: []string{processshim.RelayName}}},
 	} {
 		if spec.StagingParent == "" {
 			spec.StagingParent = t.TempDir()
@@ -258,7 +305,7 @@ func requireView(t *testing.T) {
 }
 
 type fixture struct {
-	self, world, harness, home, run, overlay, staging string
+	self, world, harness, home, overlay, staging string
 }
 
 // newFixture lays out a world with the mountpoints the real world frontend presents synthetically, plus the local sources.
@@ -273,7 +320,6 @@ func newFixture(t *testing.T) *fixture {
 		world:   filepath.Join(base, "world"),
 		harness: filepath.Join(base, "harness"),
 		home:    filepath.Join(base, "home"),
-		run:     filepath.Join(base, "run"),
 		overlay: filepath.Join(base, "overlay"),
 		staging: filepath.Join(base, "staging"),
 	}
@@ -286,11 +332,9 @@ func newFixture(t *testing.T) *fixture {
 	copyFile(t, self, filepath.Join(f.world, "bin", "worldbin"))
 	mkdir(t, f.harness)
 	copyFile(t, self, filepath.Join(f.harness, "harness"))
-	for _, d := range []string{f.home, f.run} {
-		mkdir(t, d)
-		if err := os.Chown(d, viewID, viewID); err != nil {
-			t.Fatal(err)
-		}
+	mkdir(t, f.home)
+	if err := os.Chown(f.home, viewID, viewID); err != nil {
+		t.Fatal(err)
 	}
 	mkdir(t, f.overlay)
 	mkdir(t, f.staging)
@@ -304,7 +348,6 @@ func (f *fixture) spec(w *loopbackWorld, mode string, env ...string) Spec {
 		Private: []PrivateDir{
 			{Name: "harness", HostDir: f.harness, Exec: true},
 			{Name: "home", HostDir: f.home, Writable: true},
-			{Name: "run", HostDir: f.run, Writable: true},
 		},
 		Overlays: []Overlay{{Path: "/etc/oac-overlay", Source: f.overlay}},
 		Shim: Shim{
@@ -332,13 +375,16 @@ type loopbackWorld struct {
 }
 
 func (w *loopbackWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
-	fd, err := unix.Dup(int(dev.Fd()))
+	root, err := gofs.NewLoopbackRoot(w.dir)
 	if err != nil {
 		return nil, Presentation{}, err
 	}
-	root, err := gofs.NewLoopbackRoot(w.dir)
+	return w.serveRoot(root, dev, mount)
+}
+
+func (w *loopbackWorld) serveRoot(root gofs.InodeEmbedder, dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
+	fd, err := unix.Dup(int(dev.Fd()))
 	if err != nil {
-		unix.Close(fd)
 		return nil, Presentation{}, err
 	}
 	srv, err := fuse.NewServer(gofs.NewNodeFS(root, &gofs.Options{}), fmt.Sprintf("/dev/fd/%d", fd), &fuse.MountOptions{})
@@ -365,6 +411,48 @@ func (w *loopbackWorld) Stop() error {
 	case <-time.After(10 * time.Second):
 		return errors.New("world still serving 10s after the view ended")
 	}
+}
+
+// hangWorld is a loopbackWorld in which writes to a file named hang get no answer, even when the writer is killed, and Stop never returns, until release closes.
+type hangWorld struct {
+	loopbackWorld
+	hung, release chan struct{} // hung closes at the first write to hang
+	hungOnce      sync.Once
+}
+
+func (w *hangWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
+	root, err := gofs.NewLoopbackRoot(w.dir)
+	if err != nil {
+		return nil, Presentation{}, err
+	}
+	root.(*gofs.LoopbackNode).RootData.NewNode = func(r *gofs.LoopbackRoot, _ *gofs.Inode, name string, _ *syscall.Stat_t) gofs.InodeEmbedder {
+		n := &gofs.LoopbackNode{RootData: r}
+		if name == "hang" {
+			return &hangNode{LoopbackNode: n, w: w}
+		}
+		return n
+	}
+	_, p, err := w.serveRoot(root, dev, mount)
+	if err != nil {
+		return nil, p, err
+	}
+	return w, p, nil
+}
+
+func (w *hangWorld) Stop() error {
+	<-w.release
+	return w.loopbackWorld.Stop()
+}
+
+type hangNode struct {
+	*gofs.LoopbackNode
+	w *hangWorld
+}
+
+func (n *hangNode) Write(context.Context, gofs.FileHandle, []byte, int64) (uint32, syscall.Errno) {
+	n.w.hungOnce.Do(func() { close(n.w.hung) })
+	<-n.w.release
+	return 0, syscall.EIO
 }
 
 // serveBroker listens in the view's network namespace, as the broker does.
@@ -475,6 +563,14 @@ func runHelper(mode string) int {
 		return 0
 	case "noop":
 		return 0
+	case "hang":
+		f, err := os.OpenFile("/data/hang", os.O_WRONLY, 0)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		f.Write([]byte("never answered"))
+		return 0
 	}
 	fmt.Fprintf(os.Stderr, "unknown helper %q\n", mode)
 	return 2
@@ -571,12 +667,31 @@ var viewChecks = []struct {
 		}
 		var pids []int
 		for _, e := range entries {
-			if pid, err := strconv.Atoi(e.Name()); err == nil {
+			if pid, err := strconv.Atoi(e.Name()); err == nil && pid != relayPID() {
 				pids = append(pids, pid)
 			}
 		}
 		if !slices.Equal(pids, []int{1, os.Getpid()}) {
-			return fmt.Errorf("pids %v", pids)
+			return fmt.Errorf("pids %v besides the relay", pids)
+		}
+		return nil
+	}},
+	{"the relay runs as the view user without privileges", func() error {
+		pid := relayPID()
+		if pid == 0 {
+			return errors.New("no relay")
+		}
+		id := fmt.Sprintf("%d\t%[1]d\t%[1]d\t%[1]d", viewID)
+		return statusHas(fmt.Sprintf("/proc/%d/status", pid), map[string]string{"Uid": id, "Gid": id, "CapPrm": noCaps, "CapEff": noCaps, "CapBnd": noCaps, "NoNewPrivs": "1"})
+	}},
+	{"the relay's socket accepts the view user and cannot be replaced", func() error {
+		c, err := net.Dial("unix", processshim.SocketPath)
+		if err != nil {
+			return err
+		}
+		c.Close()
+		if err := os.Remove(processshim.SocketPath); !errors.Is(err, syscall.EROFS) {
+			return fmt.Errorf("remove: %v, want EROFS", err)
 		}
 		return nil
 	}},
@@ -617,6 +732,19 @@ var viewChecks = []struct {
 }
 
 // onlyStdio finds inherited fds. Package initialisers in this binary open fds of their own, but Go opens every fd close-on-exec, so an fd without FD_CLOEXEC crossed the exec.
+// relayPID returns the pid of the view's relay, or 0.
+func relayPID() int {
+	want := []byte(strings.Join(processshim.RelayArgs, "\x00") + "\x00")
+	cmdlines, _ := filepath.Glob("/proc/[0-9]*/cmdline")
+	for _, p := range cmdlines {
+		if b, err := os.ReadFile(p); err == nil && bytes.Equal(b, want) {
+			pid, _ := strconv.Atoi(filepath.Base(filepath.Dir(p)))
+			return pid
+		}
+	}
+	return 0
+}
+
 func onlyStdio() error {
 	entries, err := os.ReadDir("/proc/self/fd")
 	if err != nil {
@@ -639,12 +767,18 @@ func onlyStdio() error {
 	return nil
 }
 
+const noCaps = "0000000000000000"
+
 func noPrivileges() error {
-	status, err := os.ReadFile("/proc/self/status")
+	return statusHas("/proc/self/status", map[string]string{"CapInh": noCaps, "CapPrm": noCaps, "CapEff": noCaps, "CapBnd": noCaps, "CapAmb": noCaps, "NoNewPrivs": "1"})
+}
+
+// statusHas checks fields of a /proc/<pid>/status file.
+func statusHas(path string, want map[string]string) error {
+	status, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	want := map[string]string{"CapInh": "0000000000000000", "CapPrm": "0000000000000000", "CapEff": "0000000000000000", "CapBnd": "0000000000000000", "CapAmb": "0000000000000000", "NoNewPrivs": "1"}
 	for _, line := range strings.Split(string(status), "\n") {
 		k, v, _ := strings.Cut(line, ":")
 		if w, ok := want[k]; ok {

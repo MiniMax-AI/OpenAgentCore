@@ -5,18 +5,23 @@ package sessionview
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 )
 
 // builder mounts the local pieces onto the world, at the paths the world presents the mountpoints at. Every target is resolved beneath its parent mount without following symlinks, so the sandbox cannot redirect a mount.
 type builder struct {
 	root    int               // the world root, an O_PATH fd
 	targets map[string]string // each mountpoint's view path to where the world presents it
-	fds     []int
+	fds     []int             // what only the build needs
+
+	// What the launcher keeps: the view's /proc, and the relay's listening socket or -1.
+	proc, listener int
 }
 
 // devNodes are bound from the host's /dev into the view's /dev.
@@ -55,14 +60,20 @@ func (b *builder) build(spec *launchSpec) error {
 			return err
 		}
 	}
-	shim := -1
-	if len(spec.Shim.Names) > 0 || len(spec.Shim.Paths) > 0 {
+	shim, names := -1, spec.Shim.Names
+	if spec.Shim.declared() {
 		if shim, err = b.source(spec.Shim.Binary); err != nil {
 			return err
 		}
+		names = append(slices.Clone(names), processshim.RelayName)
 	}
-	if err := b.shimDir(spec.Shim.Names, shim); err != nil {
+	if err := b.shimDir(names, shim); err != nil {
 		return err
+	}
+	if spec.Shim.declared() {
+		if err := b.runDir(spec.UID, spec.GID); err != nil {
+			return err
+		}
 	}
 	for _, o := range spec.Overlays {
 		at, err := b.at(o.Path)
@@ -90,12 +101,10 @@ func (b *builder) build(spec *launchSpec) error {
 	if err != nil {
 		return err
 	}
-	proc, err := newFS("proc", nil, attrNoSuid|attrNoDev|attrNoExec)
-	if err != nil {
+	if b.proc, err = newFS("proc", nil, attrNoSuid|attrNoDev|attrNoExec); err != nil {
 		return err
 	}
-	defer unix.Close(proc)
-	if err := b.attach(proc, b.root, at, true); err != nil {
+	if err := b.attach(b.proc, b.root, at, true); err != nil {
 		return err
 	}
 	return b.dev()
@@ -130,6 +139,43 @@ func (b *builder) shimDir(names []string, shim int) error {
 		if err := b.bindAt(shim, mnt, n, dir+"/"+n, bindAttr(false, true, false)); err != nil {
 			return err
 		}
+	}
+	return readOnly(mnt, dir)
+}
+
+// runDir presents the relay's listening socket at processshim.SocketPath on a read-only tmpfs, so that the process can connect to it but not replace it. Only the process's user may connect. The socket is created through the mount, never through a path the world resolves.
+func (b *builder) runDir(uid, gid uint32) error {
+	dir, err := b.at(agent.ViewPrivateRoot + "/" + agent.ViewRunName)
+	if err != nil {
+		return err
+	}
+	mnt, err := newFS("tmpfs", [][2]string{{"mode", "0755"}, {"size", "64k"}}, attrNoSuid|attrNoDev|attrNoExec)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(mnt)
+	if err := b.attach(mnt, b.root, dir, true); err != nil {
+		return err
+	}
+	fail := func(op string, err error) error {
+		return &Error{Kind: ErrLauncher, Op: op, Path: processshim.SocketPath, Err: err}
+	}
+	ln, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return fail("socket", err)
+	}
+	b.listener = ln
+	if err := unix.Bind(ln, &unix.SockaddrUnix{Name: fmt.Sprintf("/proc/self/fd/%d/%s", mnt, processshim.SocketName)}); err != nil {
+		return fail("bind", err)
+	}
+	if err := unix.Fchownat(mnt, processshim.SocketName, int(uid), int(gid), unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return fail("chown", err)
+	}
+	if err := unix.Fchmodat(mnt, processshim.SocketName, 0o600, 0); err != nil {
+		return fail("chmod", err)
+	}
+	if err := unix.Listen(ln, unix.SOMAXCONN); err != nil {
+		return fail("listen", err)
 	}
 	return readOnly(mnt, dir)
 }
@@ -204,11 +250,28 @@ func (b *builder) keep(fd int) int {
 	return fd
 }
 
-func (b *builder) close() {
+// closeBuild closes what only the build needs.
+func (b *builder) closeBuild() {
 	for _, fd := range b.fds {
 		unix.Close(fd)
 	}
 	b.fds, b.root = nil, -1
+}
+
+func (b *builder) closeListener() {
+	if b.listener >= 0 {
+		unix.Close(b.listener)
+		b.listener = -1
+	}
+}
+
+func (b *builder) close() {
+	b.closeBuild()
+	b.closeListener()
+	if b.proc >= 0 {
+		unix.Close(b.proc)
+		b.proc = -1
+	}
 }
 
 // bind mounts a clone of src at the absolute view path under the world root.

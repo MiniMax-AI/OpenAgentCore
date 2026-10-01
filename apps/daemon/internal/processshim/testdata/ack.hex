@@ -1,0 +1,5 @@
+# An Ack.
+00000000                          # PayloadLength 0
+0002                              # MessageType: Ack
+0000                              # Flags
+0000000000000000                  # RequestID 0

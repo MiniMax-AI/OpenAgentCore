@@ -10,9 +10,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -30,6 +32,12 @@ var (
 
 const fuseMountFlags = unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC
 
+// closeWait bounds the teardown once the launcher has exited: the world server's Stop and the end of the view's processes, which Stop may have to unblock.
+var closeWait = 30 * time.Second
+
+// exitWait bounds how long a lost launcher's exit status is awaited for an error message.
+const exitWait = time.Second
+
 // View is a running view.
 type View struct {
 	cmd     *exec.Cmd
@@ -39,17 +47,19 @@ type View struct {
 	dev     *os.File
 	staging string
 	pipes   [3]*os.File
+	relay   *os.File // the broker's end of the relay connection
 
-	reapOnce  sync.Once
-	reapErr   error
-	signalMu  sync.Mutex
-	signaled  chan bool
-	exited    atomic.Bool
-	closing   atomic.Bool
-	closeOnce sync.Once
-	done      chan struct{}
-	exit      Exit
-	err       error
+	waited     chan struct{} // closed once the launcher has been reaped
+	waitErr    error
+	cleanupErr error // set before done closes
+	signalMu   sync.Mutex
+	signaled   chan bool
+	exited     atomic.Bool
+	closing    atomic.Bool
+	closeOnce  sync.Once
+	done       chan struct{}
+	exit       Exit
+	err        error
 }
 
 // Start builds a view for spec and starts its process. ctx bounds only the construction.
@@ -62,8 +72,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	}
 	v := &View{done: make(chan struct{}), signaled: make(chan bool, 1)}
 	if err := v.launch(&spec); err != nil {
-		v.abort()
-		return nil, err
+		return nil, v.abort(err)
 	}
 	stop := context.AfterFunc(ctx, func() { _ = v.cmd.Process.Kill() })
 	err := v.handshake(ctx, &spec)
@@ -72,8 +81,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 		err = errors.Join(&Error{Kind: ErrLauncher, Op: "start", Err: ctx.Err()}, err)
 	}
 	if err != nil {
-		v.abort()
-		return nil, err
+		return nil, v.abort(err)
 	}
 	go v.watch()
 	return v, nil
@@ -112,12 +120,25 @@ func (v *View) launch(spec *Spec) error {
 		specW.Close()
 		return &Error{Kind: ErrLauncher, Op: "control", Err: err}
 	}
+	files := []*os.File{specR, ctlChild, child[0], child[1], child[2]}
+	if spec.Shim.declared() {
+		// A stream socket, so that the broker can read it without accepting descriptors.
+		pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			specW.Close()
+			return &Error{Kind: ErrLauncher, Op: "socketpair", Err: err}
+		}
+		v.relay = os.NewFile(uintptr(pair[0]), "sessionview-relay")
+		relayChild := os.NewFile(uintptr(pair[1]), "sessionview-relay")
+		defer relayChild.Close()
+		files = append(files, relayChild)
+	}
 	v.cmd = &exec.Cmd{
 		Path:       "/proc/self/exe",
 		Args:       []string{launcherArg0},
 		Env:        []string{},
 		Stderr:     os.Stderr,
-		ExtraFiles: []*os.File{specR, ctlChild, child[0], child[1], child[2]},
+		ExtraFiles: files,
 		// Cloning into the namespaces, rather than unsharing later, puts every runtime thread of the launcher in them and makes it PID 1 of the view.
 		SysProcAttr: &syscall.SysProcAttr{
 			Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWPID,
@@ -129,6 +150,11 @@ func (v *View) launch(spec *Spec) error {
 		v.cmd = nil
 		return &Error{Kind: ErrLauncher, Op: "start", Err: err}
 	}
+	v.waited = make(chan struct{})
+	go func() {
+		v.waitErr = v.cmd.Wait()
+		close(v.waited)
+	}()
 	ls := &launchSpec{
 		Staging: v.staging, Private: spec.Private, Overlays: spec.Overlays, Shim: spec.Shim,
 		Path: spec.Process.Path, Args: spec.Process.Args, Env: spec.Process.Env, Dir: spec.Process.Dir,
@@ -142,7 +168,7 @@ func (v *View) launch(spec *Spec) error {
 	return nil
 }
 
-// stdio returns the launcher's ends of the process's stdio, creating pipes where the spec gives no file.
+// stdio returns the launcher's ends of the process's stdio, creating pipes where the spec gives no file. The pipes belong to the process's user, so that the relay can open them as its own.
 func (v *View) stdio(p *Process) ([3]*os.File, error) {
 	child := [3]*os.File{p.Stdin, p.Stdout, p.Stderr}
 	for i := range child {
@@ -150,6 +176,12 @@ func (v *View) stdio(p *Process) ([3]*os.File, error) {
 			continue
 		}
 		r, w, err := os.Pipe()
+		if err == nil {
+			if err = r.Chown(int(p.UID), int(p.GID)); err != nil {
+				r.Close()
+				w.Close()
+			}
+		}
 		if err != nil {
 			for j := range i {
 				if v.pipes[j] != nil {
@@ -230,37 +262,77 @@ func targetsOf(mps []Mountpoint, p Presentation) (map[string]string, error) {
 	return targets, nil
 }
 
-// lost reports a launcher that stopped talking, with its exit status when it has exited.
+// lost reports a launcher that stopped talking, with its exit status when it exits promptly.
 func (v *View) lost(op string, err error) error {
 	if errors.Is(err, io.EOF) {
-		if werr := v.reap(); werr != nil {
-			err = werr
+		select {
+		case <-v.waited:
+			if v.waitErr != nil {
+				err = v.waitErr
+			}
+		case <-time.After(exitWait):
 		}
 	}
 	return &Error{Kind: ErrLauncher, Op: op, Err: err}
 }
 
-func (v *View) reap() error {
-	v.reapOnce.Do(func() { v.reapErr = v.cmd.Wait() })
-	return v.reapErr
-}
-
-// abort undoes a failed Start.
-func (v *View) abort() {
+// abort undoes a failed Start. It returns err, joined with ErrCleanup when the teardown did not finish.
+func (v *View) abort(err error) error {
 	if v.cmd != nil {
 		_ = v.cmd.Process.Kill()
-		_ = v.reap()
 	}
-	_ = v.teardown()
-	for _, p := range v.pipes {
-		if p != nil {
-			p.Close()
-		}
+	_, _ = v.teardown()
+	v.closePipes()
+	if v.cleanupErr != nil {
+		return errors.Join(err, v.cleanupErr)
 	}
+	return err
 }
 
-// teardown releases what the view held once the launcher has exited.
-func (v *View) teardown() error {
+// teardown releases the view once its launcher is exiting or never started. It disconnects the relay, so that the broker stops using it, and stops the world server, which ends the requests still pending on the view's FUSE connection so that a process blocked on the world can exit. It waits for the launcher and the world server together up to closeWait; past that it sets cleanupErr, and what still runs finishes in the background. It returns the launcher's wait error and the teardown's errors.
+func (v *View) teardown() (werr, err error) {
+	if v.relay != nil {
+		shutdown(v.relay)
+	}
+	waited := v.waited
+	stopped := make(chan error, 1)
+	go func() { stopped <- v.stopWorld() }()
+	timer := time.NewTimer(closeWait)
+	defer timer.Stop()
+	var errs []error
+	for waited != nil || stopped != nil {
+		select {
+		case <-waited:
+			werr, waited = v.waitErr, nil
+		case serr := <-stopped:
+			errs, stopped = append(errs, serr), nil
+		case <-timer.C:
+			var running []string
+			if waited != nil {
+				running = append(running, "the view's processes")
+			}
+			if stopped != nil {
+				running = append(running, "the world server")
+			}
+			v.cleanupErr = &Error{Kind: ErrCleanup, Op: "teardown", Err: fmt.Errorf("%s still running after %v", strings.Join(running, " and "), closeWait)}
+			errs = append(errs, v.cleanupErr)
+			waited, stopped = nil, nil
+		}
+	}
+	if v.relay != nil {
+		v.relay.Close()
+	}
+	if v.ctl != nil {
+		v.ctl.close()
+	}
+	if v.staging != "" {
+		os.Remove(v.staging)
+	}
+	return werr, errors.Join(errs...)
+}
+
+// stopWorld stops the world server, then closes the /dev/fuse connection it served.
+func (v *View) stopWorld() error {
 	var err error
 	if v.world != nil {
 		if serr := v.world.Stop(); serr != nil {
@@ -270,13 +342,22 @@ func (v *View) teardown() error {
 	if v.dev != nil {
 		v.dev.Close()
 	}
-	if v.ctl != nil {
-		v.ctl.close()
-	}
-	if v.staging != "" {
-		os.Remove(v.staging)
-	}
 	return err
+}
+
+// shutdown ends both directions of a socket, whoever else holds it.
+func shutdown(f *os.File) {
+	if c, err := f.SyscallConn(); err == nil {
+		c.Control(func(fd uintptr) { unix.Shutdown(int(fd), unix.SHUT_RDWR) })
+	}
+}
+
+func (v *View) closePipes() {
+	for _, p := range v.pipes {
+		if p != nil {
+			p.Close()
+		}
+	}
 }
 
 func (v *View) watch() {
@@ -302,8 +383,7 @@ func (v *View) watch() {
 			failed = m.Fail.err()
 		}
 	}
-	werr := v.reap()
-	terr := v.teardown()
+	werr, terr := v.teardown()
 	switch {
 	case exit != nil:
 		v.exit = *exit
@@ -319,7 +399,7 @@ func (v *View) watch() {
 	}
 }
 
-// Wait returns how the process ended once the view is torn down and the world server has stopped. It returns ErrClosed when Close ended the view first.
+// Wait returns how the process ended once the view is torn down and the world server has stopped, or once the teardown's bound expired, which it reports with ErrCleanup. It returns ErrClosed when Close ended the view first.
 func (v *View) Wait() (Exit, error) {
 	<-v.done
 	return v.exit, v.err
@@ -358,20 +438,19 @@ func (v *View) Signal(sig syscall.Signal) error {
 	}
 }
 
-// Close kills the view, waits for its teardown and closes the pipes it created.
+// Close kills the view, waits for its teardown and closes the pipes it created. It returns ErrCleanup when the teardown did not finish within its bound, and nil otherwise.
 func (v *View) Close() error {
 	v.closeOnce.Do(func() {
 		v.closing.Store(true)
 		_ = v.cmd.Process.Kill()
 		<-v.done
-		for _, p := range v.pipes {
-			if p != nil {
-				p.Close()
-			}
-		}
+		v.closePipes()
 	})
-	return nil
+	return v.cleanupErr
 }
+
+// Relay is the broker's end of the relay's connection, or nil when the spec declares no shim. processbroker.Start takes a duplicate of it. The view shuts the connection down as it ends, so a broker still running then sees the relay lost.
+func (v *View) Relay() *os.File { return v.relay }
 
 // Stdin is the write end of the process's stdin pipe, or nil when the spec gave a file.
 func (v *View) Stdin() *os.File { return v.pipes[0] }
@@ -387,8 +466,11 @@ func (s *Spec) mountpoints() []Mountpoint {
 	for _, d := range s.Private {
 		m = append(m, Mountpoint{Path: agent.ViewPrivateRoot + "/" + d.Name, Dir: true})
 	}
+	m = append(m, Mountpoint{Path: agent.ViewPrivateRoot + "/" + agent.ViewShimName, Dir: true})
+	if s.Shim.declared() {
+		m = append(m, Mountpoint{Path: agent.ViewPrivateRoot + "/" + agent.ViewRunName, Dir: true})
+	}
 	m = append(m,
-		Mountpoint{Path: agent.ViewPrivateRoot + "/" + agent.ViewShimName, Dir: true},
 		Mountpoint{Path: agent.ViewProcRoot, Dir: true},
 		Mountpoint{Path: agent.ViewDevRoot, Dir: true},
 	)

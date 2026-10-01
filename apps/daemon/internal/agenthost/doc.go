@@ -17,10 +17,10 @@
 // the gateway listening in the view's network namespace.
 //
 // Each view presents the closure directories read-only and executable, the
-// Session home read-write and noexec, the broker's run directory read-only,
-// the agent host's /etc/passwd, group, hosts, resolv.conf and nsswitch.conf,
-// the agent host's CA directory at its host path, then the adapter's overlays
-// and masks and the process shim. Everything else is the world.
+// Session home read-write and noexec, the agent host's /etc/passwd, group,
+// hosts, resolv.conf and nsswitch.conf, the agent host's CA directory at its
+// host path, then the adapter's overlays and masks and the process shim with
+// its relay. Everything else is the world.
 //
 // The agent host owns the Session's Link attachment: it opens each stream
 // with the Session's binding, renews the lease and fails the Session when the

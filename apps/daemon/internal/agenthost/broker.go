@@ -11,7 +11,7 @@ import (
 // over the Process service. One broker serves a Session from its first launch
 // until teardown.
 type processBroker interface {
-	// Start begins serving the Session's run directory.
+	// Start begins serving the Session.
 	Start(brokerConfig) error
 	// Close cancels and releases the remote operations that remain and stops
 	// serving.
@@ -20,9 +20,6 @@ type processBroker interface {
 
 // brokerConfig is what a Session's broker serves.
 type brokerConfig struct {
-	// RunDir is the host directory the view presents read-only at
-	// agent.ViewPrivateRoot/agent.ViewRunName.
-	RunDir string
 	// UID and GID are the Session's.
 	UID, GID uint32
 	// Names maps each shim name to the program it runs in the sandbox, found

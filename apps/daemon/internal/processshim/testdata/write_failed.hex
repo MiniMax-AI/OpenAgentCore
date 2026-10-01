@@ -1,0 +1,9 @@
+# WriteFailed with EACCES.
+00000015                          # PayloadLength 21
+0015                              # MessageType: WriteFailed
+0000                              # Flags
+0000000000000000                  # RequestID 0
+0000000000000001                  # ID 1
+01                                # FD 1
+0000000000000008                  # Seq 8
+0000000d                          # Errno 13
