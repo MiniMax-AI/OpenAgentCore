@@ -1,0 +1,18 @@
+# Network version 1 frames from goldenFrames in protocol_test.go, in order. Hex bytes; text after # is a comment.
+
+# ConnectRequest
+00000017 0001 0000 0000000000000001    # header: length 23, OpConnect, flags, request 1
+0001                                   # Network NetworkTCP
+0000000b 6578616d706c652e636f6d        # Host "example.com"
+01bb                                   # Port 443
+00002710                               # TimeoutMillis 10000
+
+# ConnectResponse, connected
+00000002 8001 0000 0000000000000001    # header: length 2, ConnectResponseTag, flags, request 1
+0001                                   # Result ResultConnected
+
+# ConnectResponse, failed
+00000006 8001 0000 0000000000000001    # header: length 6, ConnectResponseTag, flags, request 1
+0002                                   # Result ResultFailed
+0003                                   # Code CodeDenied
+0001                                   # Effect EffectNone

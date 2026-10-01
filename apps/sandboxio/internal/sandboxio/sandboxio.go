@@ -2,7 +2,8 @@
 
 // Package sandboxio assembles the Sandbox I/O service: it reads the
 // Provider's bootstrap, connects to the relay as the Link serve peer and
-// serves the File and Process protocols on the streams the relay binds.
+// serves the File, Process and Network protocols on the streams the relay
+// binds.
 // docs/sandbox-bootstrap.md describes the launch.
 package sandboxio
 
@@ -14,11 +15,13 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/internal/fileservice"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/internal/netservice"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/internal/processservice"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxnet"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -101,6 +104,7 @@ func run(ctx context.Context, bootstrapPath string, opt options) error {
 			{Service: sandboxlink.ServiceProcess, Version: sandboxprocess.Version, Serve: func(ctx context.Context, b sandboxlink.Bind, s sandboxlink.Stream) {
 				sandboxprocess.Serve(ctx, s, sandboxprocess.Attachment{ID: b.AttachmentID}, procs)
 			}},
+			{Service: sandboxlink.ServiceNetwork, Version: sandboxnet.Version, Serve: netservice.New().Handle},
 		},
 		OnConnected: func(sandboxlink.HelloAccepted) { down.Store(false) },
 		OnDisconnected: func(err error) {

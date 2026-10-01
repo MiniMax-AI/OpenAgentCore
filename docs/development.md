@@ -69,7 +69,8 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | `internal/sandboxbootstrap` | Provider-to-Sandbox I/O service startup input | [Sandbox bootstrap](sandbox-bootstrap.md) |
 | `internal/sandboxfs` | Runtime–file service wire types, validators, client and server | [File access protocol](file-access-protocol.md) |
 | `internal/sandboxprocess` | Runtime–process service wire types, validators, client and server | [Process protocol](process-protocol.md) |
-| `apps/sandboxio` | Sandbox I/O service binary `oac-sandbox-io` and its Linux protocol services | [Sandbox bootstrap](sandbox-bootstrap.md#responsibilities-and-readiness), [File access protocol](file-access-protocol.md#the-linux-service), [Process protocol](process-protocol.md#implement-a-service) |
+| `internal/sandboxnet` | Runtime–network service wire types, validators, client and server | [Sandbox network protocol](sandbox-network-protocol.md) |
+| `apps/sandboxio` | Sandbox I/O service binary `oac-sandbox-io` and its Linux protocol services | [Sandbox bootstrap](sandbox-bootstrap.md#responsibilities-and-readiness), [File access protocol](file-access-protocol.md#the-linux-service), [Process protocol](process-protocol.md#implement-a-service), [Network protocol](sandbox-network-protocol.md#implement-a-service) |
 | `apps/daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | Native harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |
 | `services/core/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](sandbox-provider.md) |

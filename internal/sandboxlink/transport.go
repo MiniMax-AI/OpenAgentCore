@@ -30,6 +30,13 @@ type Stream interface {
 	Close() error
 	// Reset aborts both directions.
 	Reset() error
+	// SetDeadline, SetReadDeadline and SetWriteDeadline bound pending and
+	// future reads and writes as net.Conn's do; a zero time removes the bound.
+	// A passed deadline fails the call with an error whose Timeout is true and
+	// leaves the stream usable.
+	SetDeadline(t time.Time) error
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
 }
 
 // Dialer opens the byte stream a peer runs yamux over. Production peers use

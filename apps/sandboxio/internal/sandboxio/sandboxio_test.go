@@ -5,6 +5,9 @@ package sandboxio
 import (
 	"context"
 	"errors"
+	"io"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,6 +25,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxnet"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -103,7 +107,7 @@ func next(t *testing.T, op *sp.Operation) sp.Event {
 	}
 }
 
-func TestServesFileAndProcessThroughTheRelay(t *testing.T) {
+func TestServesEachProtocolThroughTheRelay(t *testing.T) {
 	ctx := context.Background()
 	auth := sandboxlinktest.NewAuthority()
 	srv := sandboxlinktest.StartRelay(t, relay.Config{Authority: auth})
@@ -111,10 +115,24 @@ func TestServesFileAndProcessThroughTheRelay(t *testing.T) {
 	auth.AddServe([]byte("serve-credential"), sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource})
 	runtimeID := sandboxwire.NewID()
 	auth.AddRuntime([]byte("runtime-credential"), runtimeID)
+	// The grant lets Network streams reach only an echo listener.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		if c, err := ln.Accept(); err == nil {
+			io.Copy(c, c)
+			c.Close()
+		}
+	}()
+	echo := ln.Addr().(*net.TCPAddr).AddrPort()
 	o := sandboxlink.Open{Resource: resource, AttachmentID: sandboxwire.NewID(), SessionID: sandboxwire.NewID(),
 		AssignmentID: sandboxwire.NewID(), AssignmentEpoch: 1, AttachGrant: []byte("grant")}
 	auth.AddGrant(o.AttachGrant, sandboxlinktest.Grant{RuntimeID: runtimeID, Resource: resource, SessionID: o.SessionID,
-		AssignmentID: o.AssignmentID, AssignmentEpoch: 1, Services: []sandboxlink.Service{sandboxlink.ServiceFile, sandboxlink.ServiceProcess}, Lease: time.Minute})
+		AssignmentID: o.AssignmentID, AssignmentEpoch: 1, Services: []sandboxlink.Service{sandboxlink.ServiceFile, sandboxlink.ServiceProcess, sandboxlink.ServiceNetwork}, Lease: time.Minute,
+		Egress: []sandboxlink.EgressRule{{Prefix: netip.PrefixFrom(echo.Addr(), 32), PortFirst: echo.Port(), PortLast: echo.Port()}}})
 	link, err := sandboxlink.DialAttach(ctx, sandboxlink.AttachConfig{URL: srv.URL, TLS: srv.TLS, RuntimeID: runtimeID, Credential: []byte("runtime-credential")})
 	if err != nil {
 		t.Fatal(err)
@@ -180,6 +198,26 @@ func TestServesFileAndProcessThroughTheRelay(t *testing.T) {
 	}
 	if output.String() != "hi\n" || exited.Status != (sp.ExitStatus{Kind: sp.ExitCode, Code: 7}) {
 		t.Fatalf("output %q, exit %+v", output.String(), exited.Status)
+	}
+
+	// A Network stream connects under the Bind's egress and carries bytes
+	// both ways.
+	o.Service, o.Version = sandboxlink.ServiceNetwork, sandboxnet.Version
+	stream, _, err = open(link, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := sandboxnet.Connect(ctx, stream, echo.Addr().String(), echo.Port(), wait)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	got := make([]byte, 4)
+	if _, err := io.ReadFull(conn, got); err != nil || string(got) != "ping" {
+		t.Fatalf("echo: %q, %v", got, err)
 	}
 
 	// Stopping the service terminates its live operations before it returns.

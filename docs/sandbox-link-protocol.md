@@ -221,7 +221,7 @@ An attachment's binding identity is its `AttachmentID`, `Resource`, `SessionID`,
 `Bind` carries the authorized binding and never the grant or a credential:
 
 - For a File stream, `Exports` lists 1 to 64 exports the stream may use, each by ID and read-write or `ReadOnly`. An export ID is 1 to 64 lowercase letters, digits, `_` and `-`, and IDs in a list are distinct. Process and Network binds carry no `Exports`. The [Sandbox bootstrap](sandbox-bootstrap.md#responsibilities-and-readiness) states which exports the File service serves.
-- For a Network stream, `Egress` lists the destinations the stream may reach: an address inside a rule's prefix on a port from `PortFirst` to `PortLast`. An empty list denies everything. Each prefix has its host bits zero, `1 ≤ PortFirst ≤ PortLast`, and no rule appears twice. File and Process binds carry no `Egress`.
+- For a Network stream, `Egress` lists the destinations the stream may reach: an address inside a rule's prefix on a port from `PortFirst` to `PortLast`. An empty list denies everything. Each prefix has its host bits zero, `1 ≤ PortFirst ≤ PortLast`, and no rule appears twice. File and Process binds carry no `Egress`. The [Network protocol](sandbox-network-protocol.md#egress-check) states how the service applies it.
 
 The exports and egress of a stream are fixed when it opens; a renewal changes only the lease.
 
@@ -251,7 +251,7 @@ Losing a link resets the streams it carries and keeps its attachments until thei
 
 ## Stream ends
 
-The streams handed to service handlers and returned by `OpenService` implement `sandboxlink.Stream`: `Read`, `Write`, `CloseWrite`, `Close`, which ends writing in order and discards further input, and `Reset`.
+The streams handed to service handlers and returned by `OpenService` implement `sandboxlink.Stream`: `Read`, `Write`, `CloseWrite`, `Close`, which ends writing in order and discards further input, `Reset`, and `SetDeadline`, `SetReadDeadline` and `SetWriteDeadline`, which bound reads and writes as a `net.Conn`'s do and leave the stream usable when they pass.
 
 The relay copies each direction through a 32 KiB buffer and holds at most one 256 KiB yamux window per stream:
 
