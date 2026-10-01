@@ -86,6 +86,8 @@ Ordering:
 
 - `Started` or `StartFailed` comes first.
 - `Exited` and `OutputClosed` are independent. A background process holding a stream open keeps `OutputClosed` pending after `Exited`, and output can close before the leader exits.
+- `Exited` follows every output byte buffered in a captured stream when the service reaps the leader, and never waits for an acknowledgement. Exceptions: a stream abandoned by `CloseOutput` or lost to a read failure delivers no more output; output that the [replay limit](#output-replay-and-flow-control) keeps the service from reading follows `Exited`; with a PTY, output still in the kernel's asynchronous queue to the master at the reap can follow `Exited`, and a terminal flush discards output as it does natively.
+- Output written after the reap, by processes that still hold a stream, can follow `Exited`, as it does natively.
 - `OutputClosed` follows every output byte the service will deliver, and each `StreamClosed`.
 - Output of different streams has no order relative to each other or to changes in the file system.
 
@@ -120,7 +122,7 @@ The stdin offset counts the bytes the service has accepted, from 0. `WriteStdin`
 ### Output, replay and flow control
 
 - The service retains each operation's events until they are acknowledged, and delivers them to the observer in order.
-- Unacknowledged `Output` data of all the operation's streams together is limited to `MaxReplayBytesPerOperation`. At the limit the service stops reading the process's output, so the process blocks on its own writes. Nothing is discarded.
+- Unacknowledged `Output` data of all the operation's streams together is limited to `MaxReplayBytesPerOperation`. When less than one memory page of the limit remains, the service stops reading the process's output, so the process blocks on its own writes; a read never splits a packet-mode pipe write. Nothing is discarded.
 - A slow observer holds back its stream: the service writes events only as fast as the peer reads them.
 - `Attach` resumes after any sequence in the retained range. A request for acknowledged events returns `ReplayGap`, so missing output is never skipped silently. The events an accepted `Attach` promised stay retained until they are sent, even when another stream acknowledges them first.
 

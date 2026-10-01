@@ -57,6 +57,8 @@ type Service struct {
 	// onExpire runs after an expired owner-loss grace has decided the
 	// cleanup, before the operations are cancelled; tests restore there.
 	onExpire func()
+	// beforeRead runs before each output read; tests hold the readers there.
+	beforeRead func()
 
 	mu     sync.Mutex
 	ops    map[opKey]*operation

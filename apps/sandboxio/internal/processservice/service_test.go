@@ -154,6 +154,23 @@ func (h *harness) leader(op *sp.Operation) int {
 	return h.svc.ops[opKey{h.att, op.Ref().OperationID}].sid()
 }
 
+// waitReaped waits until the reaper has reaped the operation's leader.
+func (h *harness) waitReaped(op *sp.Operation) {
+	h.t.Helper()
+	h.svc.mu.Lock()
+	o := h.svc.ops[opKey{h.att, op.Ref().OperationID}]
+	h.svc.mu.Unlock()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		o.mu.Lock()
+		gone := o.leaderGone
+		o.mu.Unlock()
+		if gone {
+			return
+		}
+	}
+	h.t.Fatal("the leader was never reaped")
+}
+
 // waitMembers waits until the operation's session has n live processes named
 // comm.
 func (h *harness) waitMembers(op *sp.Operation, comm string, n int) {
@@ -228,14 +245,57 @@ func TestStartFailure(t *testing.T) {
 	}
 }
 
-// A background job holding stderr keeps output open after the leader exits.
-func TestExitedBeforeOutputClosed(t *testing.T) {
+// Exited follows every byte the leader left buffered: the readers wait until
+// the leader is reaped, so all its output is still in the pipes then.
+func TestOutputPrecedesExited(t *testing.T) {
 	h := newHarness(t, DefaultConfig())
-	evs := events(t, h.start(h.connect(), pipeSpec("sh", "-c", "sleep 1 >/dev/null & echo hi; exec sleep 0")), sp.EventScopeClosed)
-	_, exited := find[sp.ExitedEvent](t, evs)
-	closed, outputClosed := find[sp.OutputClosedEvent](t, evs)
-	if exited > outputClosed || closed.Disposition != sp.OutputDrained || output(evs, sp.StreamStdout) != "hi\n" {
+	hold := make(chan struct{})
+	h.svc.beforeRead = func() { <-hold }
+	op := h.start(h.connect(), pipeSpec("sh", "-c", "printf out; printf err >&2"))
+	h.waitReaped(op)
+	close(hold)
+	evs := events(t, op, sp.EventExited)
+	if output(evs, sp.StreamStdout) != "out" || output(evs, sp.StreamStderr) != "err" {
 		t.Fatalf("events %v", evs)
+	}
+}
+
+// Output a background process writes after the leader exits follows Exited,
+// and keeps OutputClosed pending until it ends.
+func TestLaterOutputFollowsExited(t *testing.T) {
+	h := newHarness(t, DefaultConfig())
+	fifo := filepath.Join(t.TempDir(), "fifo")
+	if err := unix.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	op := h.start(h.connect(), pipeSpec("sh", "-c", `printf a; (read x <"$0"; printf b) & exit 0`, fifo))
+	before := events(t, op, sp.EventExited)
+	if err := os.WriteFile(fifo, []byte("\n"), 0); err != nil {
+		t.Fatal(err)
+	}
+	after := events(t, op, sp.EventOutputClosed)
+	if output(before, sp.StreamStdout) != "a" || output(after, sp.StreamStdout) != "b" || after[len(after)-1].(sp.OutputClosedEvent).Disposition != sp.OutputDrained {
+		t.Fatalf("events %v then %v", before, after)
+	}
+}
+
+// A pipe in packet mode keeps every packet whole at the replay limit, and
+// Exited does not wait for the acknowledgement that lets the rest be read.
+func TestPacketsAtReplayLimit(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxReplayBytesPerOperation = sandboxwire.MaxChunk + 1000 // not a whole number of packets
+	h := newHarness(t, cfg)
+	const packet, packets = 4096, 20
+	op := h.start(h.connect(), pipeSpec("dd", "if=/dev/zero", "bs="+strconv.Itoa(packet), "count="+strconv.Itoa(packets), "oflag=direct", "status=none"))
+	evs := events(t, op, sp.EventExited)
+	before := len(output(evs, sp.StreamStdout))
+	if err := op.Ack(context.Background(), evs[len(evs)-1].Header().Sequence); err != nil {
+		t.Fatal(err)
+	}
+	evs = events(t, op, sp.EventOutputClosed)
+	after, closed := len(output(evs, sp.StreamStdout)), evs[len(evs)-1].(sp.OutputClosedEvent)
+	if before != sandboxwire.MaxChunk || before+after != packet*packets || closed.Disposition != sp.OutputDrained {
+		t.Fatalf("%d bytes before Exited and %d after, output %v", before, after, closed.Disposition)
 	}
 }
 
