@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
@@ -183,7 +184,7 @@ func TestSessionEndEndsBlockedRelays(t *testing.T) {
 	}))
 	defer srv.Close()
 	gw := serveOnLoopback(t, Config{
-		MCP:    []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: srv.URL + "/mcp"}},
+		MCP:    []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp"}},
 		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 	})
 
@@ -235,7 +236,7 @@ func TestRejectedUpgradeClosesTheUpstream(t *testing.T) {
 	}))
 	defer srv.Close()
 	gw := serveOnLoopback(t, Config{
-		MCP:    []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: srv.URL + "/mcp"}},
+		MCP:    []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp"}},
 		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 	})
 

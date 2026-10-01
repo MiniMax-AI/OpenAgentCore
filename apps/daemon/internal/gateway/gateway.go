@@ -8,15 +8,15 @@
 // by hostname. A model listener relays the declared native routes of its
 // protocol (internal/modelprovider) to the upstream from the agent host and
 // injects the credential. An MCP listener relays to its binding's server and
-// injects the bearer token: an environment-origin binding connects through the
-// sandbox's Network service, a service-origin binding from the agent host, and
-// the gateway does the TLS either way. The generic proxy carries HTTP CONNECT
-// tunnels and plain-HTTP forward requests, and connects only through the
-// sandbox's Network service. Redirects reach the Harness unchanged and are
-// never followed. Response headers and trailers that carry an injected
-// credential are withheld; bodies pass unchanged. The end of the Session
-// closes every connection, tunnels and upgraded ones included. The gateway
-// logs nothing.
+// injects the binding's bearer token and HTTP headers: an environment-origin
+// binding connects through the sandbox's Network service, a service-origin
+// binding from the agent host, and the gateway does the TLS either way. The
+// generic proxy carries HTTP CONNECT tunnels and plain-HTTP forward requests,
+// and connects only through the sandbox's Network service. Redirects reach the
+// Harness unchanged and are never followed. Response header and trailer values
+// that contain an injected credential or header value are withheld; bodies
+// pass unchanged. The end of the Session closes every connection, tunnels and
+// upgraded ones included. The gateway logs nothing.
 package gateway
 
 import (
@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -43,11 +44,13 @@ type Config struct {
 	// Models are the frozen model upstreams, each under the adapter's name for
 	// it. Names are unique.
 	Models []Model
-	// MCP are the Session's MCP HTTP bindings. Server labels are unique.
-	MCP []proto.MCPHTTPServer
-	// Prompt is the request that declared MCP. Each binding's origin is
-	// admitted against its placement with ValidateConnectionOrigin before
-	// anything else.
+	// MCP are the Session's effective MCP bindings as
+	// agent.ResolveMCPBindings returns them, bearer tokens and HTTP headers
+	// included. Each is an HTTP binding, and server labels are unique.
+	MCP []agent.MCPBinding
+	// Prompt is the request the bindings were resolved from. Each binding's
+	// origin is admitted against its placement with
+	// proto.MCPHTTPServer.ValidateConnectionOrigin before anything else.
 	Prompt proto.PromptRequestPayload
 	// OpenNetwork opens a new Network stream to the Session's sandbox, as
 	// sandboxnet.Connect takes it. Nil means the Session has no sandbox
@@ -206,26 +209,29 @@ func build(session context.Context, cfg Config) (*gateway, error) {
 	}
 
 	labels := map[string]bool{}
-	for _, s := range cfg.MCP {
-		if err := s.ValidateConnectionOrigin(cfg.Prompt); err != nil {
-			return nil, invalid("MCP server %q: %v", s.ServerLabel, err)
+	for _, b := range cfg.MCP {
+		if err := (proto.MCPHTTPServer{ConnectionOrigin: b.ConnectionOrigin}).ValidateConnectionOrigin(cfg.Prompt); err != nil {
+			return nil, invalid("MCP server %q: %v", b.ServerLabel, err)
 		}
-		if s.ServerLabel == "" || labels[s.ServerLabel] {
-			return nil, invalid("MCP server label %q is empty or repeated", s.ServerLabel)
+		if b.ServerLabel == "" || labels[b.ServerLabel] {
+			return nil, invalid("MCP server label %q is empty or repeated", b.ServerLabel)
 		}
-		labels[s.ServerLabel] = true
+		labels[b.ServerLabel] = true
+		if b.Transport != "http" {
+			return nil, invalid("MCP server %q has transport %q, not http", b.ServerLabel, b.Transport)
+		}
 		transport := host
-		if s.ConnectionOrigin == "environment" {
+		if b.ConnectionOrigin == "environment" {
 			if sandbox == nil {
-				return nil, invalid("MCP server %q has environment origin and the Session has no sandbox network", s.ServerLabel)
+				return nil, invalid("MCP server %q has environment origin and the Session has no sandbox network", b.ServerLabel)
 			}
 			transport = sandbox
 		}
-		h, suffix, err := newMCPRelay(s, transport)
+		h, suffix, err := newMCPRelay(b, transport)
 		if err != nil {
-			return nil, invalid("MCP server %q: %v", s.ServerLabel, err)
+			return nil, invalid("MCP server %q: %v", b.ServerLabel, err)
 		}
-		g.listeners = append(g.listeners, listener{role: roleMCP, name: s.ServerLabel, suffix: suffix, handler: h})
+		g.listeners = append(g.listeners, listener{role: roleMCP, name: b.ServerLabel, suffix: suffix, handler: h})
 	}
 	return g, nil
 }
