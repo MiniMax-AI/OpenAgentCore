@@ -108,6 +108,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Native Item variants beyond those listed under [Turns and Items](sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.
+- Behind the [credential gateway](model-execution.md#credential-gateway), pinned Codex compacts history locally and never calls `/responses/compact`.
 - Claude Code and MiniMax Code report no public usage.
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
 - Images must be inline PNG or JPEG data URIs; remote URLs, `file_id` and `detail` are rejected.

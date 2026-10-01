@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
@@ -30,7 +31,7 @@ func TestRequiredHistoryResolution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
 			home := t.TempDir()
-			plan := SessionPlan{Cwd: "/workspace", Env: []string{"CODEX_HOME=" + home}}
+			plan := SessionPlan{Cwd: "/workspace", home: agent.ViewDir{Host: home, View: home}}
 			row := map[string]any{"id": "original", "parentThreadId": nil, "forkedFromId": nil, "ephemeral": false, "source": "vscode", "cwd": plan.Cwd, "path": filepath.Join(home, "sessions", "rollout.jsonl")}
 			switch scenario {
 			case "missing-parent":

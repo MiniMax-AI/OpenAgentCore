@@ -10,9 +10,20 @@ import (
 	"strings"
 )
 
+// catalogProbe runs `debug models` on the trusted install, outside any view.
+type catalogProbe struct {
+	binary string
+	dir    string
+	env    []string
+}
+
 // Validate against the binary's active catalog and use that same snapshot for
 // execution. A CLI override alone is silently ignored for unsupported models.
 func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan) error {
+	return verifyModelVerbosity(ctx, catalogProbe{binary: binary, dir: plan.Cwd, env: append(os.Environ(), plan.Env...)}, plan)
+}
+
+func verifyModelVerbosity(ctx context.Context, probe catalogProbe, plan *SessionPlan) error {
 	args := []string{}
 	for _, kv := range plan.ExtraConfig {
 		args = append(args, "-c", kv[0]+"="+kv[1])
@@ -20,12 +31,12 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 	args = append(args, "debug", "models")
 	ctx, cancel := context.WithTimeout(ctx, rpcDefaultRequestTimeout)
 	defer cancel()
-	cmd, err := modelCatalogCommand(ctx, binary, args...)
+	cmd, err := modelCatalogCommand(ctx, probe.binary, args...)
 	if err != nil {
 		return err
 	}
-	cmd.Dir = plan.Cwd
-	cmd.Env = append(os.Environ(), plan.Env...)
+	cmd.Dir = probe.dir
+	cmd.Env = probe.env
 	catalog, err := cmd.Output()
 	// The launcher can exit before its children, ending the context watcher.
 	if cmd.Process != nil {
@@ -45,7 +56,7 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 		// Protocol medium means the default text amount, which needs no native override.
 		plan.ExtraConfig = slices.DeleteFunc(plan.ExtraConfig, func(kv [2]string) bool { return kv[0] == "model_verbosity" })
 	}
-	codexHome := nativeHomeFromPlan(*plan)
+	codexHome := plan.home.Host
 	if !filepath.IsAbs(codexHome) {
 		return fmt.Errorf("codex: missing managed home for model catalog")
 	}
@@ -64,7 +75,8 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 	}
 	cleanup := plan.Cleanup
 	plan.Cleanup = func() { _ = os.Remove(file.Name()); cleanup() }
-	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_catalog_json", strconv(file.Name())})
+	// Codex reads the catalog at its own path for the same file.
+	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_catalog_json", strconv(plan.home.View + strings.TrimPrefix(file.Name(), codexHome))})
 	return nil
 }
 

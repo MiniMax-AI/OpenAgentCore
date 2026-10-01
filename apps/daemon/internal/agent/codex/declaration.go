@@ -65,6 +65,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	caps.LocalEnvironment = proto.CapabilityFromBool(SupportsLocalEnvironment(version))
 	caps.MCPHTTPRequired = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	runtime.Executor = NewExecutorFactory()
+	runtime.View = discoverView(version)
 	if caps.LocalEnvironment.IsSupported() {
 		runtime.WorkspaceReadPreparation = true
 		runtime.Preparation = func(ctx context.Context, req proto.PromptRequestPayload) (agent.Prepared, error) {

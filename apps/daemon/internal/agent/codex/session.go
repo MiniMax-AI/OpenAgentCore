@@ -23,9 +23,12 @@ const terminalSendTimeout = 2 * time.Second
 // sessionConfig is the cross-cutting knob bag — production callers go
 // through Factory which uses defaults.
 type sessionConfig struct {
+	// codexBinary is the trusted install on this host. Probes run it here.
 	codexBinary string
 	logger      *slog.Logger
 	killTimeout time.Duration
+	// view runs codex in an agent-host Session view instead of on this host.
+	view *viewLaunch
 }
 
 func defaultSessionConfig() sessionConfig {
@@ -64,7 +67,7 @@ type Session struct {
 	operationMu               sync.Mutex
 	operations                sync.WaitGroup
 	operationsClosed          bool
-	nativeHome                string
+	nativeHome                agent.ViewDir
 	subagents                 *subagentObservations
 	observeSubagentIdentities bool
 	functions                 *functionCalls

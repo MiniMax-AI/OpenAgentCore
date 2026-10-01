@@ -22,6 +22,12 @@ func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConf
 	if bindings == nil {
 		return nil, nil, nil
 	}
+	return mcpServersFromBindings(bindings)
+}
+
+// mcpServersFromBindings renders resolved bindings, with each credential in a
+// private environment variable.
+func mcpServersFromBindings(bindings []agent.MCPBinding) (map[string]mcpServerConfig, []string, error) {
 	servers := make(map[string]mcpServerConfig, len(bindings))
 	var env []string
 	for _, binding := range bindings {
@@ -50,7 +56,7 @@ func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConf
 }
 
 func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
-	codexHome := nativeHomeFromPlan(*plan)
+	codexHome := plan.home.Host
 	if !filepath.IsAbs(codexHome) {
 		return errors.New("codex: public MCP requires a private native home")
 	}
