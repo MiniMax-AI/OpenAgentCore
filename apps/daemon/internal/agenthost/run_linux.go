@@ -30,9 +30,8 @@ const (
 
 // deps are the parts tests replace.
 type deps struct {
-	dial   dialFunc
-	broker func() processBroker
-	procs  processTable
+	dial  dialFunc
+	procs processTable
 }
 
 // Run runs one Session until Input is closed, ctx ends or the Session fails,
@@ -41,7 +40,7 @@ type deps struct {
 // that ended it, joined with any view cleanup and teardown failure. A failure
 // recorded during teardown counts.
 func Run(ctx context.Context, cfg Config, s Session) error {
-	return run(ctx, cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return unavailableBroker{} }, procs: procfs{}})
+	return run(ctx, cfg, s, deps{dial: relayDial(cfg), procs: procfs{}})
 }
 
 // session is one running Session.
@@ -61,16 +60,14 @@ type session struct {
 
 	failMu  sync.Mutex
 	failure error   // the first failure, which ended the Session
-	cleanup []error // each world that did not stop cleanly
+	cleanup []error // each world, view or broker that did not stop cleanly
+	left    bool    // a view's teardown did not finish
 
 	mu sync.Mutex
 	// live is the one view that may run; nil when none does.
 	live *liveView
 	// views counts launches and their views until each is torn down.
 	views sync.WaitGroup
-
-	brokerMu sync.Mutex
-	broker   processBroker // started at the first launch
 
 	// The goroutine that runs drive and then teardown owns these.
 	fwd        *forwarder // the last Turn's forwarder
@@ -163,9 +160,23 @@ func (s *session) fail(err error) {
 // state, so the Session fails, and Run reports the error even after another
 // failure.
 func (s *session) worldEnded(op string, err error) error {
-	e := &Error{Kind: ErrWorld, Op: op, Err: err}
+	return s.ended(&Error{Kind: ErrWorld, Op: op, Err: err}, false)
+}
+
+// viewLeft records a view whose teardown did not finish within sessionview's
+// bound (sessionview.ErrCleanup): its processes may still run and use the
+// Session directory. The Session fails, Run reports the error even after
+// another failure, and teardown keeps the directory and the uid.
+func (s *session) viewLeft(err error) error {
+	return s.ended(&Error{Kind: ErrTeardown, Op: "view", Err: err}, true)
+}
+
+// ended records e, a resource that did not stop cleanly, and fails the
+// Session with it. left says that the Session directory may still be in use.
+func (s *session) ended(e *Error, left bool) error {
 	s.failMu.Lock()
 	s.cleanup = append(s.cleanup, e)
+	s.left = s.left || left
 	s.failMu.Unlock()
 	s.fail(e)
 	return e
@@ -418,12 +429,13 @@ func (s *session) closeExecutor(exec agent.Executor) error {
 	return s.execErr
 }
 
-// teardown releases the Session in order: the Executor, the view, the
+// teardown releases the Session in order: the Executor, the view with its
 // process broker, the Link attachment, the Session directory and the uid.
 // When Close fails, teardown ends the views, which kills each view's
 // processes, and retries Close once. If that fails too, the Executor may
 // still use the Session directory: teardown returns ErrTeardown and keeps
 // the directory and the uid, which stays in use until the agent host exits.
+// It keeps both too when a view's teardown did not finish.
 func (s *session) teardown(exec agent.Executor) error {
 	var errs []error
 	closeErr := s.execErr
@@ -444,17 +456,14 @@ func (s *session) teardown(exec agent.Executor) error {
 		f.halt()
 		<-f.done
 	}
-	s.brokerMu.Lock()
-	broker := s.broker
-	s.brokerMu.Unlock()
-	if broker != nil {
-		if err := broker.Close(); err != nil {
-			errs = append(errs, &Error{Kind: ErrTeardown, Op: "close process broker", Err: err})
-		}
-	}
 	errs = append(errs, s.link.close())
 	if closeErr != nil {
 		errs = append(errs, &Error{Kind: ErrTeardown, Op: "close executor", Err: closeErr})
+	}
+	s.failMu.Lock()
+	left := s.left
+	s.failMu.Unlock()
+	if closeErr != nil || left {
 		return errors.Join(errs...)
 	}
 	if err := os.RemoveAll(string(s.dir)); err != nil {

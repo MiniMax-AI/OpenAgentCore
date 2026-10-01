@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
@@ -22,10 +23,17 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-// The test binary is also the privileged suite's Harness inside the view and
-// its process with a zombie leader.
+// The test binary is also the privileged suite's Harness inside the view,
+// the view's shim and process relay, and its process with a zombie leader.
 func TestMain(m *testing.M) {
 	sessionview.Init()
+	if processshim.Relaying() {
+		os.Exit(processshim.Relay())
+	}
+	// The shim runs with the Harness's environment, so it comes first.
+	if filepath.Base(os.Args[0]) == "sh" {
+		os.Exit(processshim.Run(processshim.SocketPath))
+	}
 	if os.Getenv(harnessEnv) != "" {
 		os.Exit(runHarness(os.Args[1:]))
 	}
@@ -96,12 +104,6 @@ func countingDial(n *atomic.Int32) dialFunc {
 		return nil, errors.New("no relay in this test")
 	}
 }
-
-// noBroker is a process broker that serves nothing.
-type noBroker struct{}
-
-func (noBroker) Start(brokerConfig) error { return nil }
-func (noBroker) Close() error             { return nil }
 
 // leftSessions lists what remains under the state directory's sessions.
 func leftSessions(t *testing.T, cfg Config) []os.DirEntry {

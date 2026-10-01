@@ -29,6 +29,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
@@ -88,6 +90,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		Closure:   []agent.ViewMount{{Name: "harness", HostDir: closure}},
 		Masks:     []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
 		LocalExec: []string{harnessPath},
+		ShimPaths: []string{"/bin/sh"},
 		Proxy:     agent.ViewProxyNone,
 		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
 			provider, err := modelprovider.ParseProvider(req.AgentOptions["model_provider"])
@@ -149,6 +152,41 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		checkReleased(t, cfg)
 	})
 
+	t.Run("a command runs in the sandbox through the shim", func(t *testing.T) {
+		s := startSession(t, cfg, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
+		if r := s.turn(t, "shim"); r.Stdout != "42\n" || r.Code != 3 {
+			t.Errorf("the forwarded command printed %q and exited %d, want 42 and 3; stderr %s", r.Stdout, r.Code, r.Stderr)
+		}
+		close(s.in)
+		if err := s.wait(t); err != nil {
+			t.Fatalf("Run = %v", err)
+		}
+		checkReleased(t, cfg)
+	})
+
+	t.Run("a lost relay fails the Session", func(t *testing.T) {
+		s := startSession(t, cfg, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
+		s.send(t, "wait")
+		beat := filepath.Join(workspace, "beat")
+		defer os.Remove(beat)
+		until(t, "the Harness to run", func() bool {
+			_, err := os.Stat(beat)
+			return err == nil
+		})
+		relays := processesWith(processshim.RelayArgs)
+		if len(relays) != 1 {
+			t.Fatalf("%d process relays run, want 1", len(relays))
+		}
+		if err := syscall.Kill(relays[0], syscall.SIGKILL); err != nil {
+			t.Fatal(err)
+		}
+		err := s.wait(t)
+		if !errors.Is(err, ErrProcessBroker) || !errors.Is(err, processbroker.ErrRelayLost) || errors.Is(err, ErrTeardown) {
+			t.Errorf("Run = %v, want ErrProcessBroker with ErrRelayLost", err)
+		}
+		checkReleased(t, cfg)
+	})
+
 	t.Run("a restarted sandbox service fails the Session", func(t *testing.T) {
 		s := startSession(t, cfg, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
 		s.send(t, "wait")
@@ -196,6 +234,22 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			t.Errorf("allocUID beside a running thread = %d, %v", got, err)
 		}
 	})
+}
+
+// processesWith lists the processes whose argv is args.
+func processesWith(args []string) []int {
+	var pids []int
+	entries, _ := os.ReadDir("/proc")
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		if cmdline, err := os.ReadFile(procPath(pid, "cmdline")); err == nil && string(cmdline) == strings.Join(args, "\x00")+"\x00" {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
 }
 
 func until(t *testing.T, what string, ok func() bool) {
@@ -396,7 +450,7 @@ func startSession(t *testing.T, cfg Config, sb *sandbox, req proto.PromptRequest
 	sb.grant(s.Binding, cfg.RuntimeID, lease)
 	r := &sessionRun{binding: s.Binding, in: in, out: out, done: make(chan error, 1)}
 	go func() {
-		r.done <- run(context.Background(), cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return noBroker{} }, procs: procfs{}})
+		r.done <- run(context.Background(), cfg, s, deps{dial: relayDial(cfg), procs: procfs{}})
 	}()
 	return r
 }
@@ -522,12 +576,14 @@ func (e *testExecutor) StartTurn(_ context.Context, runID string, input proto.Me
 
 func (e *testExecutor) Close(context.Context) error { return nil }
 
-// report is a Turn's report envelope: the Harness's checks, its stderr and how
-// it exited.
+// report is a Turn's report envelope: the Harness's checks, or its stdout
+// when that is not a check report, its stderr and how it exited.
 type report struct {
 	Checks map[string]string `json:"checks"`
+	Stdout string            `json:"stdout"`
 	Stderr string            `json:"stderr"`
 	Exit   string            `json:"exit"`
+	Code   int               `json:"code"`
 }
 
 type testTurn struct {
@@ -547,10 +603,13 @@ func (t *testTurn) run(runID string, out chan<- proto.Envelope) {
 	stdout, _ := io.ReadAll(t.p.Stdout)
 	<-copied
 	var r report
-	json.Unmarshal(stdout, &r.Checks)
+	if json.Unmarshal(stdout, &r.Checks) != nil {
+		r.Stdout = string(stdout)
+	}
 	if err := t.p.Wait(); err != nil {
 		r.Exit = err.Error()
 	}
+	r.Code, _ = t.p.ExitCode()
 	r.Stderr = stderr.String()
 	payload, _ := json.Marshal(r)
 	out <- proto.Envelope{Type: proto.TypeOutputMessage, ID: runID, Payload: payload}
@@ -657,6 +716,18 @@ func runHarness(args []string) int {
 		}
 	case "touch":
 		checks["touch"] = func() error { return os.WriteFile("touched", []byte("renewed"), 0o644) }
+	case "shim":
+		// /bin/sh is the shim, so the command runs in the sandbox.
+		cmd := exec.Command("/bin/sh", "-c", "echo $((6*7)); exit 3")
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		var exit *exec.ExitError
+		if err := cmd.Run(); errors.As(err, &exit) {
+			return exit.ExitCode()
+		} else if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 125
+		}
+		return 0
 	case "wait":
 		// Beat in the world until the view ends.
 		for i := 0; i < 600; i++ {

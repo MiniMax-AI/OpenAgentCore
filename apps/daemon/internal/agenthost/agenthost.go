@@ -120,11 +120,14 @@ var (
 	ErrWorld = errors.New("agenthost: world lost")
 	// ErrLaunch is a view that could not be launched.
 	ErrLaunch = errors.New("agenthost: launch failed")
-	// ErrProcessBroker is a process broker that could not start.
+	// ErrProcessBroker is a view's process broker that could not start, or
+	// whose process relay was lost while the view ran
+	// (processbroker.ErrRelayLost).
 	ErrProcessBroker = errors.New("agenthost: process broker failed")
 	// ErrTurn is a Turn that failed or left its Executor unusable.
 	ErrTurn = errors.New("agenthost: turn failed")
-	// ErrTeardown is a Session resource that could not be released.
+	// ErrTeardown is a Session resource that could not be released, such as
+	// a view whose teardown did not finish (sessionview.ErrCleanup).
 	ErrTeardown = errors.New("agenthost: teardown incomplete")
 )
 

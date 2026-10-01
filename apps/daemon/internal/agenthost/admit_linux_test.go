@@ -25,8 +25,9 @@ import (
 var errFactory = errors.New("factory reached")
 
 // viewFixture registers "viewed", whose factory records what it receives,
-// "masked", whose view masks an /etc file the agent host writes, and
-// "plain", which declares no view.
+// "masked", whose view masks an /etc file the agent host writes, "shimmed",
+// whose view runs a shim name on the sandbox PATH, and "plain", which
+// declares no view.
 type viewFixture struct {
 	cfg     Config
 	req     proto.PromptRequestPayload
@@ -54,6 +55,9 @@ func newViewFixture(t *testing.T) *viewFixture {
 	masked := view
 	masked.Masks = []agent.ViewMask{{Path: "/etc/passwd"}}
 	register(reg, "masked", &masked)
+	shimmed := view
+	shimmed.Shims = []string{"git"}
+	register(reg, "shimmed", &shimmed)
 	register(reg, "plain", nil)
 	f.cfg = newConfig(t, reg, upstream.Certificate())
 	return f
@@ -70,13 +74,14 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"environment none": {func(r *proto.PromptRequestPayload) {
 			r.DisableExecutionEnvironment, r.LocalEnvironment = true, nil
 		}, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
-		"relative workspace":   {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceRoot = "workspace" }, []error{ErrInvalidSession}},
-		"no model provider":    {func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }, []error{ErrUnsupported}},
-		"no strict resume":     {func(r *proto.PromptRequestPayload) { r.StrictResume = false }, []error{ErrUnsupported}},
-		"capabilities":         {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, []error{ErrUnsupported}},
-		"restricted network":   {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, []error{ErrUnsupported}},
-		"allowed domains only": {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, []error{ErrUnsupported}},
-		"function tools":       {func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "lookup"}} }, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
+		"shim name without PATH": {func(r *proto.PromptRequestPayload) { r.AgentKind = "shimmed" }, []error{ErrInvalidSession}},
+		"relative workspace":     {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceRoot = "workspace" }, []error{ErrInvalidSession}},
+		"no model provider":      {func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }, []error{ErrUnsupported}},
+		"no strict resume":       {func(r *proto.PromptRequestPayload) { r.StrictResume = false }, []error{ErrUnsupported}},
+		"capabilities":           {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, []error{ErrUnsupported}},
+		"restricted network":     {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, []error{ErrUnsupported}},
+		"allowed domains only":   {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, []error{ErrUnsupported}},
+		"function tools":         {func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "lookup"}} }, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
 		"stdio MCP": {func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
 		}, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
@@ -85,7 +90,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		c.change(&req)
 		s, _, _ := newSession(newResource(), req)
 		var dials atomic.Int32
-		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
+		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
 		for _, want := range c.want {
 			if !errors.Is(err, want) {
 				t.Errorf("%s: Run = %v, want %v", name, err, want)
@@ -107,7 +112,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		s, _, _ := newSession(newResource(), request("viewed", "/workspace", "https://model.test", "sk-test"))
 		change(&s.Binding)
 		var dials atomic.Int32
-		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
+		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
 		if !errors.Is(err, ErrInvalidSession) || dials.Load() != 0 {
 			t.Errorf("%s: Run = %v after %d dials, want ErrInvalidSession", name, err, dials.Load())
 		}
@@ -125,7 +130,7 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	original := maps.Clone(req.AgentOptions)
 	s, _, _ := newSession(newResource(), req)
 	var dials atomic.Int32
-	err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
+	err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
 	if !errors.Is(err, ErrExecutor) || !errors.Is(err, errFactory) {
 		t.Fatalf("Run = %v, want the factory's error as ErrExecutor", err)
 	}
@@ -159,7 +164,7 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	req.AgentOptions["mcp_servers"] = map[string]any{}
 	s, _, _ = newSession(newResource(), req)
 	f.req = proto.PromptRequestPayload{}
-	err = run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), broker: func() processBroker { return noBroker{} }, procs: &fakeProcesses{}})
+	err = run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
 	if !errors.Is(err, ErrUnsupported) || !errors.Is(err, agent.ErrViewHandoff) || f.req.AgentKind != "" {
 		t.Errorf("Run with a connection option = %v, want ErrUnsupported and ErrViewHandoff before the adapter", err)
 	}
