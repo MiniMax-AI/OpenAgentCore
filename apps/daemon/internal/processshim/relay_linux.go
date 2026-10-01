@@ -56,6 +56,9 @@ func Relay() int {
 type relay struct {
 	broker *net.UnixConn
 	ln     *net.UnixListener
+	// sendMu orders the frames to the broker. An invocation's ID is
+	// allocated and its Open written under it in one step, so Open IDs reach
+	// the broker in increasing order.
 	sendMu sync.Mutex
 	terms  terminals
 
@@ -64,6 +67,9 @@ type relay struct {
 	lastID uint64
 	gone   bool           // the broker's connection ended
 	live   sync.WaitGroup // the invocations' control goroutines
+
+	// publishing, a test seam, runs before an invocation gets its ID.
+	publishing func(Request)
 }
 
 func newRelay() (*relay, error) {
@@ -134,11 +140,11 @@ func (r *relay) handshake(c *net.UnixConn) {
 		return
 	}
 	c.SetDeadline(time.Time{})
-	inv.start(req)
+	inv.start()
 }
 
-// open prepares and registers an invocation, or returns why it is refused.
-// On refusal the caller still owns fds.
+// open prepares, registers and publishes an invocation, or returns why it is
+// refused. On refusal the caller still owns fds.
 func (r *relay) open(conn *Conn, req Request, fds [3]int) (*invocation, string) {
 	if req.Version != Version {
 		return nil, fmt.Sprintf("IPC version %d is not %d", req.Version, Version)
@@ -181,18 +187,34 @@ func (r *relay) open(conn *Conn, req Request, fds [3]int) (*invocation, string) 
 	if inv.term, err = openTerminal(&r.terms, fds[0], fds[1]); err != nil {
 		return refuse(fmt.Sprintf("terminal: %v", err))
 	}
+	var mode *Terminal
+	if inv.term != nil {
+		mode = inv.term.mode()
+	} else {
+		inv.rawOnce.Do(func() { close(inv.raw) })
+	}
+	if r.publishing != nil {
+		r.publishing(req)
+	}
+	r.sendMu.Lock()
+	defer r.sendMu.Unlock()
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	switch {
 	case r.gone:
+		r.mu.Unlock()
 		return refuse("the process broker is unavailable")
 	case len(r.invs) >= MaxInvocations:
+		r.mu.Unlock()
 		return refuse(fmt.Sprintf("more than %d programs are running", MaxInvocations))
 	}
 	r.lastID++
 	inv.id = r.lastID
 	r.invs[inv.id] = inv
 	r.live.Add(1)
+	r.mu.Unlock()
+	// The broker's messages for the ID queue until start runs the
+	// invocation. A failed write means the broker is gone, which ends it.
+	sandboxwire.WriteFrame(r.broker, Frame(Open{ID: inv.id, Request: req, Terminal: mode}))
 	return inv, ""
 }
 
@@ -272,21 +294,13 @@ type invocation struct {
 // lost is the control item for the broker's loss.
 type lost struct{}
 
-// start runs the registered invocation and hands it to the broker.
-func (inv *invocation) start(req Request) {
+// start runs the published invocation.
+func (inv *invocation) start() {
 	go inv.run()
 	inv.pumps.Add(2)
 	go inv.out[1].run()
 	go inv.out[2].run()
 	go inv.in.run()
-	var mode *Terminal
-	if inv.term != nil {
-		mode = inv.term.mode()
-	} else {
-		inv.rawOnce.Do(func() { close(inv.raw) })
-	}
-	// A failed send means the broker is gone, which ends the invocation.
-	inv.r.send(Open{ID: inv.id, Request: req, Terminal: mode})
 	go inv.readShim()
 }
 
