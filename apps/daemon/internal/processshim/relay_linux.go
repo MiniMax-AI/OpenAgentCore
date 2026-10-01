@@ -298,10 +298,11 @@ type invocation struct {
 // lost is the control item for the broker's loss.
 type lost struct{}
 
-// start runs the published invocation.
+// start runs the published invocation. The output pumps are counted before
+// run starts, as its finish waits for them.
 func (inv *invocation) start() {
-	go inv.run()
 	inv.pumps.Add(2)
+	go inv.run()
 	go inv.out[1].run()
 	go inv.out[2].run()
 	go inv.in.run()
