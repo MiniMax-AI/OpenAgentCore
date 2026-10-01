@@ -15,10 +15,13 @@ import (
 // ServiceHandler serves one service. Serve owns the stream and returns when
 // it is done with it. ctx ends when the attachment closes or Serve returns.
 // The Bind carries the authorized binding, including a File stream's exports.
-// seq orders the streams of an attachment by bind: the serve peer assigns it
-// before it answers Bound, and a stream bound later gets a larger one however
-// late its handler runs. A service may rely on that order to fence a stream's
-// successor.
+// seq is the stream's bind sequence. Bind order is the order in which the
+// serve peer assigns it, under the lock that tracks attachments and before it
+// answers Bound; concurrent Bound and Opened replies may reach the opener in
+// another order, and a handler that runs late keeps its stream's place. The
+// sequence belongs to one Serve call and survives reconnects; it increases
+// strictly but has gaps, since all attachments share it. A service may rely
+// on it to fence a stream's successor.
 type ServiceHandler struct {
 	Service Service
 	Version uint16

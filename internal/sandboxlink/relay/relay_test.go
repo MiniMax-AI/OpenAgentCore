@@ -113,7 +113,8 @@ func newFixture(t *testing.T) *fixture {
 }
 
 // servePeer is a serve peer whose File handler echoes until EOF and whose
-// Process handler resets its stream after one byte.
+// Process handler reports its bind sequence after one byte and then resets its
+// stream.
 type servePeer struct {
 	instance  sandboxwire.ID
 	connected chan sandboxlink.HelloAccepted
@@ -123,6 +124,7 @@ type servePeer struct {
 	closed    chan sandboxlink.CloseReason
 	binds     chan sandboxlink.Bind
 	echoed    chan error
+	seqs      chan uint64
 	done      chan struct{}
 	err       error // Serve's result, once done is closed
 }
@@ -146,7 +148,7 @@ func (f *fixture) startServe(generation uint64) *servePeer {
 	f.auth.AddServe(credential, sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource(generation)})
 	p := &servePeer{instance: sandboxwire.NewID(), connected: make(chan sandboxlink.HelloAccepted, 16), conns: make(chan net.Conn, 16),
 		lost: make(chan sandboxwire.ID, 16), restored: make(chan sandboxwire.ID, 16), closed: make(chan sandboxlink.CloseReason, 128),
-		binds: make(chan sandboxlink.Bind, 16), echoed: make(chan error, 16), done: make(chan struct{})}
+		binds: make(chan sandboxlink.Bind, 16), echoed: make(chan error, 16), seqs: make(chan uint64, 16), done: make(chan struct{})}
 	echo := func(_ context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 		put(p.binds, b)
 		_, err := io.Copy(s, s)
@@ -155,8 +157,9 @@ func (f *fixture) startServe(generation uint64) *servePeer {
 		}
 		put(p.echoed, err)
 	}
-	resetAfterOne := func(_ context.Context, _ sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
+	resetAfterOne := func(_ context.Context, _ sandboxlink.Bind, seq uint64, s sandboxlink.Stream) {
 		s.Read(make([]byte, 1))
+		put(p.seqs, seq)
 		s.Reset()
 	}
 	cfg := sandboxlink.ServeConfig{
@@ -485,5 +488,33 @@ func TestServeReconnect(t *testing.T) {
 	defer s.Close()
 	if id := recv(t, p.restored); id != attachment {
 		t.Fatalf("restored %s, want %s", id, attachment)
+	}
+}
+
+// Handlers receive bind sequences in bind order however late they run, and the
+// sequence keeps increasing after the serve peer reconnects.
+func TestBindSequence(t *testing.T) {
+	f := newFixture(t)
+	p := f.serve(1)
+	attachment := sandboxwire.NewID()
+	// A Process handler reports its sequence once its stream's first byte
+	// arrives, so the test decides which handler runs first.
+	seq := func(s sandboxlink.Stream) uint64 {
+		t.Helper()
+		if _, err := s.Write([]byte{0}); err != nil {
+			t.Fatal(err)
+		}
+		return recv(t, p.seqs)
+	}
+	first, _ := f.mustOpen(sandboxlink.ServiceProcess, attachment, 1)
+	second, _ := f.mustOpen(sandboxlink.ServiceProcess, attachment, 1)
+	later := seq(second)
+	earlier := seq(first)
+	recv(t, p.conns).Close()
+	recv(t, p.connected)
+	third, _ := f.mustOpen(sandboxlink.ServiceProcess, attachment, 1)
+	reconnected := seq(third)
+	if !(0 < earlier && earlier < later && later < reconnected) {
+		t.Fatalf("bind sequences %d, %d, then %d after a reconnect; want them to increase from above zero", earlier, later, reconnected)
 	}
 }
