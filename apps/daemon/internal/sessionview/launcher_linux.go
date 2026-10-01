@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -31,7 +31,11 @@ type launcher struct {
 	ctl         *control
 	proceed     chan struct{}
 	proceedOnce sync.Once
-	pidfd       atomic.Int64
+
+	// mu orders signals against the process's exit. running holds from the process's start until it is reaped; termAt is when TERM first went to the view.
+	mu      sync.Mutex
+	running bool
+	termAt  time.Time
 }
 
 func runLauncher() int {
@@ -41,7 +45,6 @@ func runLauncher() int {
 		return 1
 	}
 	l := &launcher{ctl: ctl, proceed: make(chan struct{})}
-	l.pidfd.Store(-1)
 	code, err := l.run()
 	if err != nil {
 		_ = ctl.send(message{Kind: msgFailed, Fail: failureOf(err)})
@@ -82,11 +85,9 @@ func (l *launcher) run() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	pidfd, err := unix.PidfdOpen(pid, 0)
-	if err != nil {
-		return 0, &Error{Kind: ErrExec, Op: "pidfd_open", Err: err}
-	}
-	l.pidfd.Store(int64(pidfd))
+	l.mu.Lock()
+	l.running = true
+	l.mu.Unlock()
 	for _, fd := range []int{stdinFD, stdoutFD, stderrFD} {
 		unix.Close(fd)
 	}
@@ -94,7 +95,11 @@ func (l *launcher) run() (int, error) {
 		return 0, &Error{Kind: ErrLauncher, Op: "report start", Err: err}
 	}
 	l.forwardSignals()
-	return l.reap(pid)
+	code, err := l.reap(pid)
+	if err == nil {
+		l.drain(spec.Grace)
+	}
+	return code, err
 }
 
 func readSpec() (*launchSpec, error) {
@@ -119,15 +124,23 @@ func (l *launcher) serveControl() {
 		case msgProceed:
 			l.proceedOnce.Do(func() { close(l.proceed) })
 		case msgSignal:
-			l.signal(m.Signal)
+			_ = l.ctl.send(message{Kind: msgSignaled, Delivered: l.signal(m.Signal)})
 		}
 	}
 }
 
-func (l *launcher) signal(sig syscall.Signal) {
-	if fd := l.pidfd.Load(); fd >= 0 {
-		_ = unix.PidfdSendSignal(int(fd), sig, nil, 0)
+// signal delivers sig to every process in the view while the process runs and reports whether it did. As PID 1 of the view, the launcher reaches them all with kill(-1) and is itself spared. Once the process has been reaped, only the drain signals what remains.
+func (l *launcher) signal(sig syscall.Signal) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.running {
+		return false
 	}
+	if sig == unix.SIGTERM && l.termAt.IsZero() {
+		l.termAt = time.Now()
+	}
+	_ = unix.Kill(-1, sig)
+	return true
 }
 
 func (l *launcher) forwardSignals() {
@@ -138,6 +151,34 @@ func (l *launcher) forwardSignals() {
 			l.signal(s.(syscall.Signal))
 		}
 	}()
+}
+
+// drain gives the processes left after the process exits TERM and up to grace from that TERM to exit, reaping them. When TERM already went to the view, they keep what remains of the grace and get no second TERM. The launcher's exit then kills whatever remains.
+func (l *launcher) drain(grace time.Duration) {
+	l.mu.Lock()
+	termAt := l.termAt
+	l.mu.Unlock()
+	if !termAt.IsZero() {
+		grace -= time.Since(termAt)
+	}
+	if grace <= 0 || (termAt.IsZero() && unix.Kill(-1, unix.SIGTERM) != nil) {
+		return
+	}
+	reaped := make(chan struct{})
+	go func() {
+		defer close(reaped)
+		for {
+			if _, err := unix.Wait4(-1, nil, 0, nil); err != nil && err != unix.EINTR {
+				return
+			}
+		}
+	}()
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case <-reaped:
+	case <-timer.C:
+	}
 }
 
 // reap collects every child, since orphans in the view reparent to PID 1, until the process exits.
@@ -154,6 +195,9 @@ func (l *launcher) reap(pid int) (int, error) {
 		if wpid != pid {
 			continue
 		}
+		l.mu.Lock()
+		l.running = false
+		l.mu.Unlock()
 		var exit Exit
 		code := ws.ExitStatus()
 		if ws.Signaled() {

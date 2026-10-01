@@ -147,7 +147,7 @@ A Harness that supports the Subagent reads implements the [neutral observation c
 
 ## Register the adapter
 
-Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](../../apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
+Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](../../apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration`, the `ConnectionOptions` an agent-host view rejects ([Endpoints and proxy](#endpoints-and-proxy)) and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
 
 `Runtime.SessionCapabilityContext` and `Runtime.ExecutorCapabilityContext` explicitly request capability-download URL resolution and scoped product-upload context for the corresponding execution factory. Preparation never receives those effects. An adapter that supports product workspace authoring declares `WorkspaceAuthoring` itself; common registration does not grant it.
 
@@ -158,8 +158,11 @@ Registration is static and requires a build. Export one `agent.Declaration` from
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration, agent.Factory)` | Kind, availability, version, `AgentKindCapabilities`, the model configuration declaration and the direct-call factory. It resets the other registrations, so call it first. |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | The Executor and Turn lifecycle used for execution; derives the `Preparation` capability |
 | 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | Optional: separate read-only workspace preparation for qualified workspace operations |
+| 4 | `RegisterView(kind, connectionOptions, agent.View)` | Optional: the agent-host view declaration from `Runtime.View`, with the declaration's `ConnectionOptions`. It panics with `ErrInvalidView` when `View.Validate` fails. Its Executor factory validates the model configuration like `RegisterExecutor` and enforces the [gateway rule](#endpoints-and-proxy). |
 
 The direct-call `agent.Factory` delegates to the same Executor implementation.
+
+`Runtime.View` declares how the Harness runs in an agent-host Session view, described in [Run in an agent-host view](#run-in-an-agent-host-view). Every adapter sets it explicitly; `View: nil` means the agent host rejects the kind, and `Registry.ResolveView` returns an error wrapping `ErrUnsupportedOperation`. `TestPublicHarnessContractDeclarations` requires the field in each declaration.
 
 Every `proto.AgentKindCapabilities` field must be explicitly `proto.CapabilitySupported` or `proto.CapabilityUnsupported`, even for an unavailable Harness. `proto.CapabilityUnspecified` is invalid: zero values and omitted fields never mean Unsupported. An installation probe may set an individual field with `proto.CapabilityFromBool`; it must not populate unmentioned or future fields. Availability stays separate in `SupportedAgentKind.Available`. Registration validates the complete declaration before changing the registry, and the wire carries an explicit boolean for every field, so omitted and null fields are invalid. A new field requires a decision in every production declaration. Runtime consumers use `IsSupported()` and reject unsupported requests before native operations; an interface assertion verifies implementation, never support. Every declaration must match the behavior verified for that installation; the [Core–Runtime protocol](../../docs/runtime-protocol.md#capability-declarations) owns how declarations travel and are frozen.
 
@@ -252,6 +255,84 @@ Owned output pipes stay readable after the leader exits. Consumers drain stdout 
 Adapters run native tools unattended with the launching user's permissions: Codex with approval policy `never` and full access, Claude through the adapter's tool callback in native `default` permission mode with the SDK sandbox disabled, and MiniMax with bypassed permissions and its sandbox disabled. Do not add permission profiles, bubblewrap wrappers or native sandbox settings; there is one execution path for every Environment origin. Resource paths are operator configuration, not a permission boundary.
 
 Network admission follows [Restricted network](environments.md#restricted-network).
+
+## Run in an agent-host view
+
+An agent host runs the Harness outside the sandbox, in a per-Session view. The view shows the sandbox's files at `/` over the [File access protocol](../../docs/file-access-protocol.md), and the Harness's own files under `/.oac`. Programs the Harness does not declare local run in the sandbox over the [Process protocol](../../docs/process-protocol.md). The network has loopback only, where the Session's credential gateway listens. The adapter declares what its Harness needs in `Runtime.View`, and the agent host builds each view from that declaration and the Session. Support is the declared field: a kind without a View is rejected with `ErrUnsupportedOperation`.
+
+### The declaration
+
+| Field | Declares |
+| --- | --- |
+| `Closure` | Host directories presented read-only and executable at `/.oac/<Name>` (`ViewMount.Path`) |
+| `Overlays` | Trusted host files or directories presented read-only at view paths; `Exec` makes one executable |
+| `Masks` | View paths presented empty and read-only, as a directory when `Dir` is set |
+| `LocalExec` | Every view path the Harness process tree executes locally |
+| `Shims` | Names on `/.oac/bin`; each runs that name on the Environment's tool `PATH` in the sandbox |
+| `ShimPaths` | View paths the shim is bound over; each runs the same path in the sandbox |
+| `ForwardEnv` | Harness variables that a process run in the sandbox keeps |
+| `Proxy` | `ViewProxyEnv` or `ViewProxyNone` |
+| `Executor` | The `ViewExecutorFactory` that prepares the Session's Executor in its view |
+
+`View.Validate` checks the declaration without touching the host:
+
+- view and host paths are absolute and clean;
+- closure names are single path components other than `bin`, `home` and `run`, which the agent host uses for the shims, the Session home and the process broker;
+- shim paths, overlays and masks do not overlap each other or `/`, and stay out of the trees the view builds itself: `/.oac`, `/proc` and `/dev` (`ViewReserved`);
+- each `LocalExec` entry lies in a closure directory or an `Exec` overlay;
+- shim names and `ForwardEnv` names are unique, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));
+- `Proxy` is one of the two values and `Executor` is non-nil.
+
+`harness.go` defines the view layout once, and `sessionview` builds views from it. The agent host checks its own overlays, such as `/etc/passwd`, against the declaration when it builds the view.
+
+### Executables
+
+Only mount flags grant execution. The closure, `Exec` overlays and the shim are read-only and are the only executable mounts; the sandbox's files and the home are noexec. `Launch` accepts only a `LocalExec` path as `Binary`. A dynamic binary, such as `node`, needs its ELF interpreter as an `Exec` overlay at its `PT_INTERP` path, and every library it loads in the closure, reached through `LD_LIBRARY_PATH`. Nothing loads from the sandbox's files.
+
+### Shims
+
+The agent host derives the process broker's table from the declaration: `/.oac/bin/<name>` runs `<name>` in the sandbox, and each `ShimPaths` entry runs the same path there. A Harness that runs tools by name finds them through a `PATH` that lists `/.oac/bin`. The view's `/etc/passwd` gives the Session user the login shell `/bin/bash` and the home `/.oac/home`.
+
+### Environment
+
+`Launch` takes the complete Harness environment in `StartOptions.Env`. The agent host's own environment never passes through, so a view adapter does not start from `os.Environ()`. A process run in the sandbox gets the broker's environment: the `ForwardEnv` variables from the Harness, the Environment's fixed sandbox values (`HOME`, `PATH`, `TMPDIR` and `LANG`) and the Environment's tool environment. The broker is the only home of the tool environment, and a view adapter passes none of it to the Harness.
+
+`ForwardEnv` never names a variable the view or the broker sets: `HOME`, `PATH`, `TMPDIR`, `LANG`, `LD_LIBRARY_PATH`, or `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` in any case. When the Environment's tool environment also sets a forwarded variable, the tool environment's value wins.
+
+### Endpoints and proxy
+
+Before it calls the factory, the agent host points the request's `model_provider` at the Session's [credential gateway](model-execution.md#credential-gateway): `base_url` is `http://127.0.0.1:<port>` with no path and `api_key` is `modelprovider.Placeholder`. It resolves the Session's MCP once, from the public declarations and the installed Environment MCP, into `ViewSession.MCP`, and removes both from the request. Each HTTP binding points at its gateway URL and carries no bearer and no headers; the gateway adds the declared credential and headers. A stdio binding is as resolved and runs in the sandbox through the declared shims. A view Executor takes MCP only from `ViewSession.MCP` and never resolves the request. The adapter renders the provider and the bindings as it does for a local Harness and never sees a real credential.
+
+An adapter whose Harness reads MCP servers, endpoints, credentials or environment values from other `AgentOptions` keys lists those keys in `Declaration.ConnectionOptions`. The Registry checks each view request once, before the factory, and rejects it with `ErrViewHandoff` when its model provider is missing or is not the gateway with the placeholder, when it sets a connection option, when it carries MCP outside `ViewSession.MCP`, or when an HTTP binding is not a credential-free loopback endpoint.
+
+With `ViewProxyEnv`, `ViewSession.Proxy` is the gateway's proxy URL. The adapter sets `HTTPS_PROXY` and `HTTP_PROXY` to it and `NO_PROXY` to `127.0.0.1,localhost`, each in upper and lower case. Declare `ViewProxyEnv` only after qualifying that every request the Harness makes locally honours these variables. A request that ignores them fails to connect, because the view has no route out.
+
+With `ViewProxyNone`, `ViewSession.Proxy` is empty and the view has no generic proxy. Admission rejects a request that enables a feature needing one with `ErrUnsupportedOperation`. Web tools that the provider executes keep provider origin.
+
+### Home
+
+`ViewSession.Home` is the per-Session native home. The adapter writes at `Home.Host`, and the Harness sees the same directory at `Home.View` (`/.oac/home`), read-write and noexec. It persists across the Session's Executors. Lay out native directories and write configuration under it before calling `Launch`. `Launch` gives the tree to the Session user without following links; after that, read the home without following links.
+
+### Launch
+
+`ViewSession.Launch` replaces `clirunner.Start`. Each call builds one view and runs `Binary` in it, and at most one view per Session is live at a time. `Dir` is a path in the sandbox, `OwnProcessGroup` is true and `Env` is the complete environment. The returned `clirunner.Process` follows [Native process ownership](#native-process-ownership):
+
+- Cancel sends TERM to every process in the view and closes the view after `KillTimeout`. A Cancel that finds the Harness exited leaves its exit as it was, even while the processes it left still end.
+- When the Harness exits while other processes remain, the view sends them TERM unless Cancel already did, and ends once they exit or `KillTimeout` passes from the first TERM.
+- `Wait` closes the stdio ends, returns the context error when Cancel's TERM reached the running Harness and it then exited 0, and `ExitCode` reports the exit once `Done` closes.
+
+### Qualify the view
+
+Run the adapter's Turns, cancellation and continuation in a view, then qualify each declared entry:
+
+| Entry | Qualification |
+| --- | --- |
+| `Closure`, `Overlays`, `LocalExec` | Every local exec succeeds from a declared path. Each dynamic binary's interpreter overlay matches its `PT_INTERP`, and `LD_LIBRARY_PATH` resolves every library in the closure. |
+| `Masks` | The Harness reads none of the sandbox's files at the masked paths. |
+| `Shims`, `ShimPaths` | Each tool the Harness runs by name or path runs in the sandbox, and its output, exit status and signals reach the Harness. |
+| `ForwardEnv` | A process run in the sandbox keeps each declared variable and no other Harness variable. |
+| `Proxy` | With `ViewProxyEnv`, every local request, such as web fetches, downloads and update checks, goes through the proxy. With `ViewProxyNone`, a request enabling a feature that needs it is rejected. |
+| `Home` | Native history and configuration stay under `/.oac/home`, and a later Executor in the same Session continues from them. |
 
 ## Native references
 

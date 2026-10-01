@@ -29,6 +29,7 @@ type Registry struct {
 	factories      map[string]Factory
 	preparers      map[string]PreparationFactory
 	executors      map[string]ExecutorFactory
+	views          map[string]View
 	kinds          map[string]proto.SupportedAgentKind
 	configurations map[string]harnessconfig.Configuration
 }
@@ -38,6 +39,7 @@ func NewRegistry() *Registry {
 		factories:      make(map[string]Factory),
 		preparers:      make(map[string]PreparationFactory),
 		executors:      make(map[string]ExecutorFactory),
+		views:          make(map[string]View),
 		kinds:          make(map[string]proto.SupportedAgentKind),
 		configurations: make(map[string]harnessconfig.Configuration),
 	}

@@ -15,6 +15,8 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
 // launcherArg0 marks the re-executed daemon binary as a launcher.
@@ -39,6 +41,9 @@ type View struct {
 
 	reapOnce  sync.Once
 	reapErr   error
+	signalMu  sync.Mutex
+	signaled  chan bool
+	exited    atomic.Bool
 	closing   atomic.Bool
 	closeOnce sync.Once
 	done      chan struct{}
@@ -54,7 +59,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	if err := Probe(); err != nil {
 		return nil, err
 	}
-	v := &View{done: make(chan struct{})}
+	v := &View{done: make(chan struct{}), signaled: make(chan bool, 1)}
 	if err := v.launch(&spec); err != nil {
 		v.abort()
 		return nil, err
@@ -85,7 +90,7 @@ func (v *View) launch(spec *Spec) error {
 			}
 		}
 	}()
-	v.staging, err = os.MkdirTemp("", "oac-view-*")
+	v.staging, err = os.MkdirTemp(spec.StagingParent, "oac-view-*")
 	if err != nil {
 		return &Error{Kind: ErrLauncher, Op: "staging", Err: err}
 	}
@@ -125,7 +130,7 @@ func (v *View) launch(spec *Spec) error {
 	ls := &launchSpec{
 		Staging: v.staging, Private: spec.Private, Overlays: spec.Overlays, Shim: spec.Shim,
 		Path: spec.Process.Path, Args: spec.Process.Args, Env: spec.Process.Env, Dir: spec.Process.Dir,
-		UID: spec.Process.UID, GID: spec.Process.GID, Groups: spec.Process.Groups,
+		UID: spec.Process.UID, GID: spec.Process.GID, Groups: spec.Process.Groups, Grace: spec.Process.Grace,
 	}
 	// A launcher that dies early breaks the pipe; the handshake reports that.
 	go func() {
@@ -267,6 +272,9 @@ func (v *View) watch() {
 		switch m.Kind {
 		case msgExited:
 			exit = &m.Exit
+			v.exited.Store(true)
+		case msgSignaled:
+			v.signaled <- m.Delivered
 		case msgFailed:
 			failed = m.Fail.err()
 		}
@@ -294,8 +302,14 @@ func (v *View) Wait() (Exit, error) {
 	return v.exit, v.err
 }
 
-// Signal delivers sig to the process.
+// Signal delivers sig to every process in the view while the process runs. Once the process has exited it delivers nothing and returns ErrExited, even while the processes it left still drain.
 func (v *View) Signal(sig syscall.Signal) error {
+	v.signalMu.Lock()
+	defer v.signalMu.Unlock()
+	exited := &Error{Kind: ErrExited, Op: "signal", Err: os.ErrProcessDone}
+	if v.exited.Load() {
+		return exited
+	}
 	select {
 	case <-v.done:
 		return ErrClosed
@@ -304,7 +318,18 @@ func (v *View) Signal(sig syscall.Signal) error {
 	if err := v.ctl.send(message{Kind: msgSignal, Signal: sig}); err != nil {
 		return &Error{Kind: ErrLauncher, Op: "signal", Err: err}
 	}
-	return nil
+	select {
+	case delivered := <-v.signaled:
+		if !delivered {
+			return exited
+		}
+		return nil
+	case <-v.done:
+		if v.exited.Load() {
+			return exited
+		}
+		return ErrClosed
+	}
 }
 
 // Close kills the view, waits for its teardown and closes the pipes it created.
@@ -334,12 +359,12 @@ func (v *View) Stderr() *os.File { return v.pipes[2] }
 func (s *Spec) mountpoints() []Mountpoint {
 	var m []Mountpoint
 	for _, d := range s.Private {
-		m = append(m, Mountpoint{Path: privateRoot + "/" + d.Name, Dir: true})
+		m = append(m, Mountpoint{Path: agent.ViewPrivateRoot + "/" + d.Name, Dir: true})
 	}
 	m = append(m,
-		Mountpoint{Path: privateRoot + "/" + shimName, Dir: true},
-		Mountpoint{Path: "/proc", Dir: true},
-		Mountpoint{Path: "/dev", Dir: true},
+		Mountpoint{Path: agent.ViewPrivateRoot + "/" + agent.ViewShimName, Dir: true},
+		Mountpoint{Path: agent.ViewProcRoot, Dir: true},
+		Mountpoint{Path: agent.ViewDevRoot, Dir: true},
 	)
 	for _, o := range s.Overlays {
 		info, err := os.Stat(o.Source)

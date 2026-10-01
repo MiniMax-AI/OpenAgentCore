@@ -21,6 +21,8 @@ var (
 	ErrExec        = errors.New("sessionview: process start failed")
 	ErrLauncher    = errors.New("sessionview: launcher failed")
 	ErrClosed      = errors.New("sessionview: view closed")
+	// ErrExited is Signal's result once the process has exited. It also matches os.ErrProcessDone.
+	ErrExited = errors.New("sessionview: process exited")
 )
 
 // errorKinds fixes the wire code of each kind the launcher reports.

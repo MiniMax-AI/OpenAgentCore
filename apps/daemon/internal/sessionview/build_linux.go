@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
 // builder mounts the local pieces onto the world. Every target is resolved beneath its parent mount without following symlinks, so the sandbox cannot redirect a mount.
@@ -44,7 +46,7 @@ func (b *builder) build(spec *launchSpec) error {
 		if err != nil {
 			return err
 		}
-		if err := b.bind(src, b.root, privateRoot+"/"+d.Name, bindAttr(d.Writable, d.Exec, false)); err != nil {
+		if err := b.bind(src, b.root, agent.ViewPrivateRoot+"/"+d.Name, bindAttr(d.Writable, d.Exec, false)); err != nil {
 			return err
 		}
 	}
@@ -76,7 +78,7 @@ func (b *builder) build(spec *launchSpec) error {
 		return err
 	}
 	defer unix.Close(proc)
-	if err := b.attach(proc, b.root, "/proc", true); err != nil {
+	if err := b.attach(proc, b.root, agent.ViewProcRoot, true); err != nil {
 		return err
 	}
 	return b.dev()
@@ -84,7 +86,7 @@ func (b *builder) build(spec *launchSpec) error {
 
 // shimDir presents the shim at /.oac/bin/<name> on a read-only tmpfs.
 func (b *builder) shimDir(names []string, shim int) error {
-	dir := privateRoot + "/" + shimName
+	dir := agent.ViewPrivateRoot + "/" + agent.ViewShimName
 	mnt, err := newFS("tmpfs", [][2]string{{"mode", "0755"}, {"size", "64k"}}, attrNoSuid|attrNoDev|attrNoExec)
 	if err != nil {
 		return err
@@ -111,7 +113,7 @@ func (b *builder) dev() error {
 		return err
 	}
 	defer unix.Close(mnt)
-	if err := b.attach(mnt, b.root, "/dev", true); err != nil {
+	if err := b.attach(mnt, b.root, agent.ViewDevRoot, true); err != nil {
 		return err
 	}
 	for _, n := range devNodes {
@@ -153,7 +155,7 @@ func (b *builder) dev() error {
 			return &Error{Kind: ErrLauncher, Op: "symlink", Path: "/dev/" + l[0], Err: err}
 		}
 	}
-	return readOnly(mnt, "/dev")
+	return readOnly(mnt, agent.ViewDevRoot)
 }
 
 // source opens a trusted host path.

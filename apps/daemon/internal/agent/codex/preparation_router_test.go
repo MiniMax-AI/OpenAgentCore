@@ -119,7 +119,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			ready := await("ready")
 			p := <-prepared
 			assertPreparationOnly(t, root)
-			pid := p.session.rpc.cmd.Process.Pid
+			pid := p.session.rpc.process.Cmd.Process.Pid
 			if r.ActiveRuns() != 0 {
 				t.Fatal("preparation became a Run")
 			}

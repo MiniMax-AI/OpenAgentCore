@@ -69,7 +69,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 		}
 	})
 	t.Logf("native_version=0.153.4 prepare_ms=%d", time.Since(began).Milliseconds())
-	pid := e.prepared.session.rpc.cmd.Process.Pid
+	pid := e.prepared.session.rpc.process.Cmd.Process.Pid
 	var thread string
 	run := func(id, prompt string, old agent.Turn, interrupt bool) (agent.Turn, string) {
 		t.Helper()
@@ -135,7 +135,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 		if thread == "" {
 			thread = s.currentThreadID()
 		}
-		if thread == "" || s.currentThreadID() != thread || !s.rpc.Alive() || s.rpc.cmd.Process.Pid != pid {
+		if thread == "" || s.currentThreadID() != thread || !s.rpc.Alive() || s.rpc.process.Cmd.Process.Pid != pid {
 			t.Fatal("native owner/thread changed")
 		}
 		t.Logf("turn=%s first_event_ms=%d settled_ms=%d same_process=true same_thread=true", id, first.Milliseconds(), time.Since(started).Milliseconds())

@@ -38,6 +38,10 @@ type Process struct {
 	waitOnce      sync.Once
 	cancelProcess func() error
 	waitProcess   func() error
+
+	// A handle-backed process records its exit here before closing done.
+	exitCode int
+	exited   bool
 }
 
 func Start(opts StartOptions) (*Process, error) {
@@ -144,15 +148,37 @@ func (p *Process) Cancel() {
 }
 
 func (p *Process) Wait() error {
-	if p == nil || p.Cmd == nil {
+	if p == nil {
 		return nil
 	}
 	if p.waitProcess != nil {
 		return p.waitProcess()
 	}
+	if p.Cmd == nil {
+		return nil
+	}
 	err := p.Cmd.Wait()
 	p.waitOnce.Do(func() { close(p.done) })
 	return err
+}
+
+// ExitCode returns the exit code once Done is closed, or -1 when a signal ended the process. ok is false before then and when the exit is unknown.
+func (p *Process) ExitCode() (code int, ok bool) {
+	if p == nil {
+		return 0, false
+	}
+	select {
+	case <-p.done:
+	default:
+		return 0, false
+	}
+	if p.Cmd == nil {
+		return p.exitCode, p.exited
+	}
+	if p.Cmd.ProcessState == nil {
+		return 0, false
+	}
+	return p.Cmd.ProcessState.ExitCode(), true
 }
 
 func closePipe(p io.Closer) {

@@ -19,10 +19,10 @@ func TestJSONRPCClientCloseCanRetryUnreapedChild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd, stdin, stdout := process.Cmd, process.Stdin, process.Stdout
+	stdin, stdout := process.Stdin, process.Stdout
 	client := NewJSONRPCClient(JSONRPCConfig{})
 	input := &countedCloseWriter{WriteCloser: stdin}
-	client.process, client.cmd, client.stdin, client.stdout, client.alive = process, cmd, input, stdout, true
+	client.process, client.stdin, client.stdout, client.alive = process, input, stdout, true
 	var reap sync.Once
 	t.Cleanup(func() {
 		process.Cancel()
@@ -91,7 +91,7 @@ func TestJSONRPCClientCloseCanRetryUnreapedChild(t *testing.T) {
 		t.Fatalf("Session cancellation retry after reap: %v", err)
 	}
 	closeConcurrently(false)
-	if client.cmd != cmd || cmd.ProcessState == nil {
+	if _, exited := process.ExitCode(); client.process != process || !exited {
 		t.Fatal("Close did not retain and reap its original child")
 	}
 	if got := input.closes.Load(); got != 1 {

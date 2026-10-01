@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"os/exec"
 	"sync"
 	"time"
 
@@ -82,7 +81,6 @@ type JSONRPCClient struct {
 	cfg JSONRPCConfig
 
 	process *clirunner.Process
-	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	stdout  io.ReadCloser
 	stderr  io.ReadCloser
@@ -189,7 +187,6 @@ func (c *JSONRPCClient) Start(ctx context.Context, init InitializeParams) (Initi
 	}
 	c.mu.Lock()
 	c.process = process
-	c.cmd = process.Cmd
 	c.stdin, c.stdout, c.stderr = process.Stdin, process.Stdout, process.Stderr
 	c.alive = true
 	c.mu.Unlock()
@@ -465,8 +462,7 @@ func (c *JSONRPCClient) waitChild() {
 	err := c.process.Wait()
 	c.mu.Lock()
 	c.alive = false
-	if c.cmd.ProcessState != nil {
-		code := c.cmd.ProcessState.ExitCode()
+	if code, ok := c.process.ExitCode(); ok {
 		c.exitCode = &code
 	}
 	c.mu.Unlock()

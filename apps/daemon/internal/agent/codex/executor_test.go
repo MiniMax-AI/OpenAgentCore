@@ -170,7 +170,7 @@ func TestExecutorCloseRetainsPlanUntilReaped(t *testing.T) {
 		t.Fatal(err)
 	}
 	rpc := NewJSONRPCClient(JSONRPCConfig{})
-	rpc.process, rpc.cmd, rpc.stdin, rpc.alive = process, process.Cmd, process.Stdin, true
+	rpc.process, rpc.stdin, rpc.alive = process, process.Stdin, true
 
 	var reap sync.Once
 	t.Cleanup(func() { process.Cancel(); reap.Do(rpc.waitChild) })

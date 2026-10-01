@@ -169,7 +169,7 @@ func TestCancelReleasesBlockedNativeProcess(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("cancelled native child was not reaped")
 	}
-	if client.Alive() || client.cmd.ProcessState == nil || ctx.Err() == nil {
+	if _, exited := client.process.ExitCode(); client.Alive() || !exited || ctx.Err() == nil {
 		t.Fatal("native process or cancellation context remained active")
 	}
 	// The cleanup consumes the writer's result after proving it was released.

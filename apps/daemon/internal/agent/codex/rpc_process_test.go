@@ -26,7 +26,7 @@ func TestJSONRPCClientCloseReapsChildProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start fake process: %v", err)
 	}
-	if client.cmd == nil || client.cmd.Process == nil {
+	if client.process == nil || client.process.Cmd.Process == nil {
 		t.Fatal("client did not spawn a child process")
 	}
 
@@ -38,8 +38,8 @@ func TestJSONRPCClientCloseReapsChildProcess(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("child process was not reaped")
 	}
-	if client.cmd.ProcessState == nil {
-		t.Fatalf("process state not exited after close: %#v", client.cmd.ProcessState)
+	if _, exited := client.process.ExitCode(); !exited {
+		t.Fatal("process exit not recorded after close")
 	}
 }
 

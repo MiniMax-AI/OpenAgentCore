@@ -106,6 +106,9 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if n := processesWith(t, token); n != 1 {
 		t.Fatalf("%d grandchildren before exit, want 1", n)
 	}
+	if staged, _ := os.ReadDir(f.staging); len(staged) != 1 {
+		t.Fatalf("staging parent holds %v, want the view's staging directory", staged)
+	}
 	if err := v.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("Signal: %v", err)
 	}
@@ -120,8 +123,48 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	default:
 		t.Error("world server still serving")
 	}
-	if left, _ := filepath.Glob(filepath.Join(os.TempDir(), "oac-view-*")); len(left) != 0 {
+	if left, _ := os.ReadDir(f.staging); len(left) != 0 {
 		t.Errorf("staging directories left: %v", left)
+	}
+}
+
+// TestViewDescendantsKeepTheGrace checks that a helper still cleaning up when the Harness exits gets TERM and finishes within the grace.
+func TestViewDescendantsKeepTheGrace(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	w := &loopbackWorld{dir: f.world}
+	spec := f.spec(w, "cleanup")
+	spec.Process.Grace = 10 * time.Second
+	v, err := Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer v.Close()
+	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("helper said %q, %v", line, err)
+	}
+	started := time.Now()
+	if err := v.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("Signal: %v", err)
+	}
+	// The Harness's exit shows while its helper still cleans up.
+	for err := v.Signal(0); !errors.Is(err, os.ErrProcessDone); err = v.Signal(0) {
+		if err != nil || time.Since(started) > 5*time.Second {
+			t.Fatalf("Signal after the Harness exited = %v, want os.ErrProcessDone", err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := os.Stat(filepath.Join(f.world, "data", "cleaned")); err == nil {
+		t.Error("Signal reported the exit only after the helper finished")
+	}
+	if exit, err := v.Wait(); err != nil || exit != (Exit{Code: 7}) {
+		t.Fatalf("Wait = %+v, %v; want exit code 7", exit, err)
+	}
+	if elapsed := time.Since(started); elapsed >= spec.Process.Grace {
+		t.Errorf("view ended after %v, want once the helper exited", elapsed)
+	}
+	if got, err := os.ReadFile(filepath.Join(f.world, "data", "cleaned")); err != nil || string(got) != "done" {
+		t.Errorf("helper cleanup = %q, %v; want it finished", got, err)
 	}
 }
 
@@ -191,7 +234,11 @@ func TestStartRejectsInvalidSpec(t *testing.T) {
 	for name, spec := range map[string]Spec{
 		"relative overlay":            {Overlays: []Overlay{{Path: "etc/resolv.conf", Source: "/etc/hosts"}}},
 		"writable executable private": {Private: []PrivateDir{{Name: "home", HostDir: t.TempDir(), Writable: true, Exec: true}}},
+		"missing staging parent":      {StagingParent: filepath.Join(t.TempDir(), "missing")},
 	} {
+		if spec.StagingParent == "" {
+			spec.StagingParent = t.TempDir()
+		}
 		spec.World = (&loopbackWorld{}).serve
 		spec.Process = Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: viewID, GID: viewID}
 		if _, err := Start(context.Background(), spec); !errors.Is(err, ErrInvalidSpec) {
@@ -211,7 +258,7 @@ func requireView(t *testing.T) {
 }
 
 type fixture struct {
-	self, world, harness, home, run, overlay string
+	self, world, harness, home, run, overlay, staging string
 }
 
 // newFixture lays out a world with the mountpoints the real world frontend presents synthetically, plus the local sources.
@@ -228,6 +275,7 @@ func newFixture(t *testing.T) *fixture {
 		home:    filepath.Join(base, "home"),
 		run:     filepath.Join(base, "run"),
 		overlay: filepath.Join(base, "overlay"),
+		staging: filepath.Join(base, "staging"),
 	}
 	for _, d := range []string{".oac/harness", ".oac/home", ".oac/run", ".oac/bin", "proc", "dev", "bin", "usr/bin", "data", "etc/oac-overlay"} {
 		mkdir(t, filepath.Join(f.world, d))
@@ -245,6 +293,7 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}
 	mkdir(t, f.overlay)
+	mkdir(t, f.staging)
 	writeFile(t, filepath.Join(f.overlay, "greeting"), "from the overlay")
 	return f
 }
@@ -272,6 +321,7 @@ func (f *fixture) spec(w *loopbackWorld, mode string, env ...string) Spec {
 			GID:    viewID,
 			Stderr: os.Stderr,
 		},
+		StagingParent: f.staging,
 	}
 }
 
@@ -392,6 +442,32 @@ func runHelper(mode string) int {
 		return 7
 	case "sleep":
 		time.Sleep(time.Hour)
+		return 0
+	case "cleanup":
+		// The Harness exits on TERM at once while its helper still cleans up.
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGTERM)
+		child := exec.Command("/.oac/harness/harness")
+		child.Env = []string{helperEnv + "=slow-term"}
+		child.Stdout = os.Stdout
+		if err := child.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		<-sigs
+		return 7
+	case "slow-term":
+		// A second TERM ends it before the cleanup finishes.
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGTERM)
+		fmt.Println("ready")
+		<-sigs
+		signal.Reset(syscall.SIGTERM)
+		time.Sleep(300 * time.Millisecond)
+		if err := os.WriteFile("/data/cleaned", []byte("done"), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 		return 0
 	case "noop":
 		return 0

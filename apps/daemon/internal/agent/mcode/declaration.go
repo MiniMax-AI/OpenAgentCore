@@ -42,13 +42,13 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode"
 	MCPHTTPTools:                   proto.CapabilityUnsupported,
 	MCPHTTPRequired:                proto.CapabilityUnsupported,
 	MCPHTTPBearerAuth:              proto.CapabilityUnsupported,
-}}, Configuration: configuration.Configuration(), Discover: discover}
+}}, Configuration: configuration.Configuration(), ConnectionOptions: []string{"mcp_servers", "env"}, Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, result proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
-	runtime := &agent.Runtime{Info: result, Session: Factory, SessionCapabilityContext: true, ExecutorCapabilityContext: true}
+	runtime := &agent.Runtime{Info: result, Session: Factory, SessionCapabilityContext: true, ExecutorCapabilityContext: true, View: nil}
 
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()

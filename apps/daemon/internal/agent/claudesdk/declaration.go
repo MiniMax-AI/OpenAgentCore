@@ -62,7 +62,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	}
 	out := &agent.Runtime{Info: descriptor, Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		return nil, fmt.Errorf("claude_sdk: configured runtime is unavailable")
-	}}
+	}, View: nil}
 	var config Config
 
 	fail := func(err error) *agent.Runtime {
