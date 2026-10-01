@@ -168,7 +168,7 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	}
 }
 
-// TestViewRefusesSymlinkedMountpoint checks that a sandbox symlink on the way to a mountpoint fails the view instead of redirecting the mount.
+// TestViewRefusesSymlinkedMountpoint checks that the launcher still refuses a symlink on the way to a target, so a world that reports a target it did not resolve cannot redirect a mount.
 func TestViewRefusesSymlinkedMountpoint(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
@@ -325,33 +325,37 @@ func (f *fixture) spec(w *loopbackWorld, mode string, env ...string) Spec {
 	}
 }
 
-// loopbackWorld serves a directory as the world, the way the world frontend serves a sandbox.
+// loopbackWorld serves a directory as the world, the way the world frontend serves a sandbox. It presents each mountpoint at its declared path.
 type loopbackWorld struct {
 	dir    string
 	served chan struct{}
 }
 
-func (w *loopbackWorld) serve(dev *os.File, _ WorldMount) (WorldServer, error) {
+func (w *loopbackWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
 	fd, err := unix.Dup(int(dev.Fd()))
 	if err != nil {
-		return nil, err
+		return nil, Presentation{}, err
 	}
 	root, err := gofs.NewLoopbackRoot(w.dir)
 	if err != nil {
 		unix.Close(fd)
-		return nil, err
+		return nil, Presentation{}, err
 	}
 	srv, err := fuse.NewServer(gofs.NewNodeFS(root, &gofs.Options{}), fmt.Sprintf("/dev/fd/%d", fd), &fuse.MountOptions{})
 	if err != nil {
 		unix.Close(fd)
-		return nil, err
+		return nil, Presentation{}, err
 	}
 	w.served = make(chan struct{})
 	go func() {
 		srv.Serve()
 		close(w.served)
 	}()
-	return w, nil
+	var p Presentation
+	for _, m := range mount.Mountpoints {
+		p.Targets = append(p.Targets, m.Path)
+	}
+	return w, p, nil
 }
 
 func (w *loopbackWorld) Stop() error {

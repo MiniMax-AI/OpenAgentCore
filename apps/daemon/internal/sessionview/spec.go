@@ -1,6 +1,7 @@
 package sessionview
 
 import (
+	"context"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,8 +24,10 @@ type Spec struct {
 	StagingParent string
 }
 
-// World starts serving the view's root file system on dev, a /dev/fuse connection that the launcher has already mounted as mount describes. The server runs in the daemon, outside the view, and never mounts or unmounts anything. sessionview closes dev after Stop returns.
-type World func(dev *os.File, mount WorldMount) (WorldServer, error)
+// World starts serving the view's root file system on dev, a /dev/fuse connection that the launcher has already mounted as mount describes, and reports how it presents mount's mountpoints. ctx is Start's: it bounds connecting, attaching and presenting, not the serving. The server runs in the daemon, outside the view, and never mounts or unmounts anything. sessionview closes dev after Stop returns.
+//
+// A World that fails releases what it acquired, or its error says that it cannot show it did. The owner of the attachment the world serves from then ends that attachment, which releases everything it holds.
+type World func(ctx context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error)
 
 // WorldServer is a running world.
 type WorldServer interface {
@@ -38,8 +41,26 @@ type WorldMount struct {
 	Options []string
 	// Flags are the mount flags.
 	Flags []string
-	// Mountpoints are the view paths the launcher mounts over. The world presents each one, and each ancestor as a directory, with no symlinks and a stable identity for the view's lifetime, whether or not the sandbox has the path. A mountpoint that disappears or changes identity detaches what is mounted on it.
+	// UID and GID are the identity the view's process runs as.
+	UID, GID uint32
+	// Mountpoints are the view paths the launcher mounts over. The world presents each one with its type, whether or not the sandbox has the path, and keeps it and its ancestors stable for the view's lifetime: a mountpoint that disappears or changes identity detaches what is mounted on it.
 	Mountpoints []Mountpoint
+}
+
+// Presentation is how the world presents the mountpoints.
+type Presentation struct {
+	// Targets holds, for each of WorldMount.Mountpoints in order, the absolute view path without symlinks where the world presents it. The launcher mounts there, still refusing to follow a symlink.
+	Targets []string
+	// Links are the sandbox symlinks on the way to a mountpoint. They stay symlinks in the view.
+	Links []PresentedLink
+	// Synthesized are the directories the world presents because the sandbox lacks them.
+	Synthesized []string
+}
+
+// PresentedLink is the symlink at Path, whose target is Target.
+type PresentedLink struct {
+	Path   string
+	Target string
 }
 
 // Mountpoint is a view path the world presents as a directory or a regular file.

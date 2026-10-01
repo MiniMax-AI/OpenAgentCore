@@ -46,7 +46,7 @@ type msgKind uint8
 
 const (
 	msgMounted  msgKind = iota + 1 // launcher: the world is mounted; carries the /dev/fuse and netns fds
-	msgProceed                     // daemon: the world serves and the network is set up
+	msgProceed                     // daemon: the world serves and the network is set up; carries the mount targets
 	msgStarted                     // launcher: the process runs
 	msgFailed                      // launcher: construction failed
 	msgExited                      // launcher: the process ended
@@ -61,6 +61,7 @@ type message struct {
 	Delivered bool
 	Exit      Exit
 	Fail      failure
+	Targets   map[string]string // each mountpoint's view path to the path the world presents it at
 }
 
 // failure carries a launcher *Error across the control socket.

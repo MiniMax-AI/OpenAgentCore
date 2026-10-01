@@ -35,6 +35,7 @@ type View struct {
 	cmd     *exec.Cmd
 	ctl     *control
 	world   WorldServer
+	present Presentation
 	dev     *os.File
 	staging string
 	pipes   [3]*os.File
@@ -65,9 +66,10 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 		return nil, err
 	}
 	stop := context.AfterFunc(ctx, func() { _ = v.cmd.Process.Kill() })
-	err := v.handshake(&spec)
+	err := v.handshake(ctx, &spec)
 	if !stop() {
-		err = &Error{Kind: ErrLauncher, Op: "start", Err: ctx.Err()}
+		// The world's own error stays: it may say that the attachment must be ended.
+		err = errors.Join(&Error{Kind: ErrLauncher, Op: "start", Err: ctx.Err()}, err)
 	}
 	if err != nil {
 		v.abort()
@@ -166,7 +168,7 @@ func (v *View) stdio(p *Process) ([3]*os.File, error) {
 	return child, nil
 }
 
-func (v *View) handshake(spec *Spec) error {
+func (v *View) handshake(ctx context.Context, spec *Spec) error {
 	m, files, err := v.ctl.recv()
 	if err != nil {
 		return v.lost("mount", err)
@@ -181,17 +183,22 @@ func (v *View) handshake(spec *Spec) error {
 	v.dev = files[0]
 	netns := files[1]
 	defer netns.Close()
-	world, err := spec.World(v.dev, WorldMount{Options: fuseOptions, Flags: fuseFlags, Mountpoints: spec.mountpoints()})
+	mps := spec.mountpoints()
+	world, present, err := spec.World(ctx, v.dev, WorldMount{Options: fuseOptions, Flags: fuseFlags, UID: spec.Process.UID, GID: spec.Process.GID, Mountpoints: mps})
 	if err != nil {
 		return &Error{Kind: ErrWorld, Op: "serve", Err: err}
 	}
-	v.world = world
+	v.world, v.present = world, present
+	targets, err := targetsOf(mps, present)
+	if err != nil {
+		return &Error{Kind: ErrWorld, Op: "present", Err: err}
+	}
 	if spec.Network.Setup != nil {
 		if err := spec.Network.Setup(netns); err != nil {
 			return &Error{Kind: ErrNetwork, Op: "setup", Err: err}
 		}
 	}
-	if err := v.ctl.send(message{Kind: msgProceed}); err != nil {
+	if err := v.ctl.send(message{Kind: msgProceed, Targets: targets}); err != nil {
 		return v.lost("proceed", err)
 	}
 	m, files, err = v.ctl.recv()
@@ -205,6 +212,22 @@ func (v *View) handshake(spec *Spec) error {
 		return &Error{Kind: ErrLauncher, Op: "start", Err: fmt.Errorf("unexpected message %d", m.Kind)}
 	}
 	return nil
+}
+
+// targetsOf pairs each mountpoint with the path the world presents it at.
+func targetsOf(mps []Mountpoint, p Presentation) (map[string]string, error) {
+	if len(p.Targets) != len(mps) {
+		return nil, fmt.Errorf("%d targets for %d mountpoints", len(p.Targets), len(mps))
+	}
+	targets := make(map[string]string, len(mps))
+	for i, m := range mps {
+		t := p.Targets[i]
+		if !isViewAbs(t) || t == "/" {
+			return nil, fmt.Errorf("target %q for %s", t, m.Path)
+		}
+		targets[m.Path] = t
+	}
+	return targets, nil
 }
 
 // lost reports a launcher that stopped talking, with its exit status when it has exited.
@@ -301,6 +324,9 @@ func (v *View) Wait() (Exit, error) {
 	<-v.done
 	return v.exit, v.err
 }
+
+// Presentation reports how the world presented the view's mountpoints.
+func (v *View) Presentation() Presentation { return v.present }
 
 // Signal delivers sig to every process in the view while the process runs. Once the process has exited it delivers nothing and returns ErrExited, even while the processes it left still drain.
 func (v *View) Signal(sig syscall.Signal) error {

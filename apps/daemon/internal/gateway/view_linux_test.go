@@ -93,8 +93,9 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
-		World:   (&loopbackWorld{dir: world}).serve,
-		Private: []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
+		World:         (&loopbackWorld{dir: world}).serve,
+		StagingParent: t.TempDir(),
+		Private:       []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
 		Process: sessionview.Process{
 			Path: "/.oac/harness/harness", Args: []string{"harness"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr,
 			Env: []string{harnessEnv + "=1", endpointsEnv + "=" + string(encoded), externalEnv + "=" + net.JoinHostPort(hostAddress(t), port)},
@@ -224,33 +225,37 @@ func copyExecutable(t *testing.T, dst string) {
 	}
 }
 
-// loopbackWorld serves a directory as the view's world.
+// loopbackWorld serves a directory as the view's world. It presents each mountpoint at its declared path.
 type loopbackWorld struct {
 	dir    string
 	served chan struct{}
 }
 
-func (w *loopbackWorld) serve(dev *os.File, _ sessionview.WorldMount) (sessionview.WorldServer, error) {
+func (w *loopbackWorld) serve(_ context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
 	fd, err := unix.Dup(int(dev.Fd()))
 	if err != nil {
-		return nil, err
+		return nil, sessionview.Presentation{}, err
 	}
 	root, err := gofs.NewLoopbackRoot(w.dir)
 	if err != nil {
 		unix.Close(fd)
-		return nil, err
+		return nil, sessionview.Presentation{}, err
 	}
 	srv, err := fuse.NewServer(gofs.NewNodeFS(root, &gofs.Options{}), fmt.Sprintf("/dev/fd/%d", fd), &fuse.MountOptions{})
 	if err != nil {
 		unix.Close(fd)
-		return nil, err
+		return nil, sessionview.Presentation{}, err
 	}
 	w.served = make(chan struct{})
 	go func() {
 		srv.Serve()
 		close(w.served)
 	}()
-	return w, nil
+	var p sessionview.Presentation
+	for _, m := range mount.Mountpoints {
+		p.Targets = append(p.Targets, m.Path)
+	}
+	return w, p, nil
 }
 
 func (w *loopbackWorld) Stop() error {
