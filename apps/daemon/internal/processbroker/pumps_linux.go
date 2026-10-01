@@ -361,13 +361,11 @@ func (inv *invocation) writeStdin(data []byte) bool {
 // has its Result or is gone, the path that answered or lost it owns the
 // program's end, and stdinLost cancels nothing.
 func (inv *invocation) stdinLost(reason string) {
-	if inv.exitDecided() {
+	if !inv.replyBeforeExit(processshim.Result{Code: processshim.ExitLost, Message: message(reason)}) {
 		return
 	}
 	inv.log.Warn("process invocation failed", "reason", reason)
-	if inv.reply(processshim.Result{Code: processshim.ExitLost, Message: message(reason)}, nil) {
-		inv.cancelRemote()
-	}
+	inv.cancelRemote()
 }
 
 func (inv *invocation) closeStdin() {

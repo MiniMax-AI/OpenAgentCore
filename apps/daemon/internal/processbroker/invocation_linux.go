@@ -626,8 +626,19 @@ func (inv *invocation) relink(h handle) (handle, bool) {
 // is written, unless the shim has a Result or is gone. It reports false
 // then. A Result Message reaches the shim's stderr.
 func (inv *invocation) reply(r processshim.Result, marks []processshim.Mark) bool {
+	return inv.answer(r, marks, false)
+}
+
+// replyBeforeExit is reply that also reports false once the exit is decided.
+// It checks the exit and reserves the Result in one step, so the Result
+// never replaces a decided exit's.
+func (inv *invocation) replyBeforeExit(r processshim.Result) bool {
+	return inv.answer(r, nil, true)
+}
+
+func (inv *invocation) answer(r processshim.Result, marks []processshim.Mark, beforeExit bool) bool {
 	inv.mu.Lock()
-	if inv.replied || inv.shimLost {
+	if inv.replied || inv.shimLost || beforeExit && inv.exited {
 		inv.mu.Unlock()
 		return false
 	}
