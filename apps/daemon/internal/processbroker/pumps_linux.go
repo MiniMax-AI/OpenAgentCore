@@ -3,11 +3,13 @@
 package processbroker
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 
 	"golang.org/x/sys/unix"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -72,44 +74,74 @@ type chunk struct {
 	close bool
 }
 
-// writer writes one remote stream to its descriptor. It closes its
-// descriptors after the stream's last byte; on a PTY the terminal writer also
-// closes descriptor 2, which the merged stream never uses.
+// sent is Output or a Close the relay has not reported yet.
+type sent struct {
+	seq uint64
+	n   int
+}
+
+// writer forwards one remote stream to its descriptor through the relay.
+// At most processshim.OutputWindow bytes are unreported, so a descriptor the
+// Harness does not read holds the stream back, and the process service in
+// turn holds back the program. The relay closes the descriptor after the
+// stream's last byte; on a PTY it also closes descriptor 2, which the merged
+// stream never uses.
 type writer struct {
 	inv    *invocation
 	stream sp.Stream
-	fds    []int
+	fd     uint8
 
-	mu    sync.Mutex
-	queue []chunk
-	wake  chan struct{}
+	mu     sync.Mutex
+	queue  []chunk
+	wake   chan struct{} // a push, or window space
+	window int
+	sent   []sent
+	broken bool   // the relay reported a failed write
+	last   uint64 // the last pushed chunk the relay reports
 }
 
 func (w *writer) push(c chunk) {
 	w.mu.Lock()
 	w.queue = append(w.queue, c)
+	if c.close || len(c.data) > 0 {
+		w.last = c.seq
+	}
 	w.mu.Unlock()
+	w.signal()
+}
+
+func (w *writer) signal() {
 	select {
 	case w.wake <- struct{}{}:
 	default:
 	}
 }
 
-func (w *writer) next() (chunk, bool) {
+// next returns the next chunk once the window has room for it, and whether
+// the relay is to report it.
+func (w *writer) next() (c chunk, report, ok bool) {
 	for {
 		w.mu.Lock()
 		if len(w.queue) > 0 {
 			c := w.queue[0]
-			w.queue[0] = chunk{}
-			w.queue = w.queue[1:]
-			w.mu.Unlock()
-			return c, true
+			n := len(c.data)
+			if w.broken || c.close || w.window == 0 || w.window+n <= processshim.OutputWindow {
+				w.queue[0] = chunk{}
+				w.queue = w.queue[1:]
+				report := !w.broken && (c.close || n > 0)
+				if report {
+					w.sent = append(w.sent, sent{seq: c.seq, n: n})
+					w.window += n
+				}
+				w.mu.Unlock()
+				return c, report, true
+			}
 		}
 		w.mu.Unlock()
 		select {
 		case <-w.wake:
 		case <-w.inv.halt:
-			return chunk{}, false
+			return chunk{}, false, false
 		}
 	}
 }
@@ -117,75 +149,135 @@ func (w *writer) next() (chunk, bool) {
 func (w *writer) run() {
 	inv := w.inv
 	defer inv.writing.Done()
-	broken := false
 	for {
-		c, ok := w.next()
+		c, report, ok := w.next()
 		if !ok {
 			return
 		}
 		switch {
 		case c.close:
-			for _, i := range w.fds {
-				inv.closeFD(i)
+			// After a failed write the relay still closes the descriptor,
+			// without a report.
+			inv.send(processshim.Close{ID: inv.rid, FD: w.fd, Seq: c.seq})
+			if !report {
+				inv.acks.deliver(c.seq)
 			}
-			inv.acks.deliver(c.seq)
 			return
-		case !broken:
-			err := writeFD(inv.endpoint(w.fds[0]), c.data, inv.abort)
-			if err == errStopped {
-				return
-			}
-			if err != nil {
-				// The reader is gone; the remote writer gets EPIPE as it
-				// would locally. The chunk is delivered at once: closing
-				// the remote output may wait for a new stream, which the
-				// operation's settlement may in turn wait behind.
-				broken = true
-				inv.log.Info("output reader gone", "stream", w.stream, "error", err)
-				inv.helpers.Add(1)
-				go func() {
-					defer inv.helpers.Done()
-					inv.closeOutput(w.stream)
-				}()
-			}
+		case report:
+			inv.send(processshim.Output{ID: inv.rid, FD: w.fd, Seq: c.seq, Data: c.data})
+		default:
+			inv.acks.deliver(c.seq)
 		}
-		inv.acks.deliver(c.seq)
 	}
+}
+
+// marks returns, for each writer the relay still reports for, the last
+// chunk pushed so far.
+func (inv *invocation) marks() []processshim.Mark {
+	var marks []processshim.Mark
+	for _, w := range inv.byFD {
+		if w == nil {
+			continue
+		}
+		w.mu.Lock()
+		if !w.broken && w.last > 0 {
+			marks = append(marks, processshim.Mark{FD: w.fd, Seq: w.last})
+		}
+		w.mu.Unlock()
+	}
+	return marks
+}
+
+// written takes the relay's report of the oldest unreported chunk.
+func (w *writer) written(seq uint64) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.sent) == 0 || w.sent[0].seq != seq {
+		return fmt.Errorf("%w: fd %d reported %d out of order", processshim.ErrProtocol, w.fd, seq)
+	}
+	w.window -= w.sent[0].n
+	w.sent = w.sent[1:]
+	w.signal()
+	return nil
+}
+
+// failed takes the relay's report that the oldest unreported chunk failed,
+// and returns every unreported chunk, none of which the relay reports.
+func (w *writer) failed(seq uint64) ([]uint64, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.sent) == 0 || w.sent[0].seq != seq {
+		return nil, fmt.Errorf("%w: fd %d reported %d out of order", processshim.ErrProtocol, w.fd, seq)
+	}
+	seqs := make([]uint64, len(w.sent))
+	for i, s := range w.sent {
+		seqs[i] = s.seq
+	}
+	w.sent, w.window, w.broken = nil, 0, true
+	w.signal()
+	return seqs, nil
 }
 
 func (inv *invocation) closeOutput(stream sp.Stream) {
 	inv.request(inv.current(), true, func(h handle) error { return h.op.CloseOutput(inv.b.ctx, stream) })
 }
 
-// pumpStdin forwards descriptor 0 until end of file, the exit or the shim's
-// loss. It owns descriptor 0 and stopIn and closes both when it returns, so
-// teardown never waits for a stdin request still on the stream.
+// pumpStdin forwards stdin until end of file, the exit, the shim's loss or
+// the end. The relay reads descriptor 0 once per Read, so stdin is taken
+// only as fast as the service accepts it.
 func (inv *invocation) pumpStdin(caps sp.Capabilities) {
-	ep := inv.endpoint(0)
-	defer func() {
-		inv.closeFD(0)
-		inv.stopIn.close()
-	}()
-	buf := make([]byte, min(int(caps.MaxDataBytes), sandboxwire.MaxPayload))
+	limit := min(caps.MaxDataBytes, sandboxwire.MaxChunk)
 	for {
-		n, err := readFD(ep, buf, inv.stopIn)
-		switch {
-		case err == errStopped:
-			// After the exit, remote background readers see end of file
-			// rather than wait for input the Harness no longer sends.
-			if inv.term == nil && inv.exitDecided() {
-				inv.closeStdin()
-			}
+		if !inv.grant(limit) {
+			inv.stdinStopped()
 			return
-		case n == 0 || err != nil:
+		}
+		var m processshim.RelayMessage
+		select {
+		case m = <-inv.input:
+		case <-inv.stopIn:
+			inv.stdinStopped()
+			return
+		}
+		select {
+		case <-inv.stopIn:
+			inv.stdinStopped()
+			return
+		default:
+		}
+		in, ok := m.(processshim.Input)
+		if !ok { // end of file
 			if inv.term == nil {
 				inv.closeStdin()
 			}
 			return
 		}
-		if !inv.writeStdin(buf[:n]) {
+		if !inv.writeStdin(in.Data) {
+			inv.stopInput()
 			return
 		}
+	}
+}
+
+// grant asks the relay for one read of stdin.
+func (inv *invocation) grant(limit uint32) bool {
+	select {
+	case <-inv.stopIn:
+		return false
+	default:
+	}
+	inv.mu.Lock()
+	inv.credit = limit
+	inv.mu.Unlock()
+	return inv.send(processshim.Read{ID: inv.rid, Max: limit}) == nil
+}
+
+// stdinStopped closes the remote stdin after the exit, so remote background
+// readers see end of file rather than wait for input the Harness no longer
+// sends.
+func (inv *invocation) stdinStopped() {
+	if inv.term == nil && inv.exitDecided() {
+		inv.closeStdin()
 	}
 }
 
@@ -280,11 +372,13 @@ func (inv *invocation) forwardSignals() {
 
 // signal forwards one signal the shim caught. A signal whose delivery is
 // uncertain is not resent.
-func (inv *invocation) signal(n uint16) {
-	h := inv.current()
+func (inv *invocation) signal(s processshim.Signaled) {
+	h, n := inv.current(), s.Number
 	if inv.term != nil && n == uint16(unix.SIGWINCH) {
-		size := inv.term.size()
-		inv.request(h, true, func(h handle) error { return h.op.Resize(inv.b.ctx, size) })
+		if s.Size != nil {
+			size := windowSize(*s.Size)
+			inv.request(h, true, func(h handle) error { return h.op.Resize(inv.b.ctx, size) })
+		}
 		return
 	}
 	target := sp.TargetInitialProcessGroup

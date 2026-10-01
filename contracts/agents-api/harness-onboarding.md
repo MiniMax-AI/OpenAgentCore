@@ -277,7 +277,7 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 `View.Validate` checks the declaration without touching the host:
 
 - view and host paths are absolute and clean;
-- closure names are single path components other than `bin`, `home` and `run`, which the agent host uses for the shims, the Session home and the process broker;
+- closure names are single path components other than `bin`, `home` and `run`, which the agent host uses for the shims, the Session home and the process relay;
 - shim paths, overlays and masks do not overlap each other or `/`, and stay out of the trees the view builds itself: `/.oac`, `/proc` and `/dev` (`ViewReserved`);
 - each `LocalExec` entry lies in a closure directory or an `Exec` overlay;
 - shim names and `ForwardEnv` names are unique, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"path"
 	"slices"
 	"sync"
@@ -20,28 +19,22 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-// invocation is one shim request: the operation it started and the
-// descriptors the broker pumps for it.
+// invocation is one shim invocation: the operation it started and the
+// streams the broker forwards for it through the relay.
 type invocation struct {
 	b    *Broker
-	conn *processshim.Conn
+	rid  uint64 // the relay's invocation ID
+	open processshim.Open
 	log  *slog.Logger
 	spec sp.ProcessSpec
 	id   sandboxwire.ID
-	term *terminal // nil for pipes
-	// sender is what output on a Unix socket names as its sender.
-	sender *sender
+	term *processshim.Terminal // nil for pipes
 
-	// eps are the passed descriptors 0, 1 and 2; fd is -1 once closed.
-	fdMu sync.Mutex
-	eps  [3]endpoint
-
-	// halt ends every wait of the invocation; abort ends every descriptor
-	// poll; stopIn ends the stdin pump alone.
+	// halt ends every wait of the invocation; stopIn ends stdin forwarding.
 	halt     chan struct{}
 	haltOnce sync.Once
-	abort    *stopFlag
-	stopIn   *stopFlag
+	stopIn   chan struct{}
+	stopOnce sync.Once
 
 	writing sync.WaitGroup // the output writers
 	helpers sync.WaitGroup // everything else but the stdin pump
@@ -52,7 +45,14 @@ type invocation struct {
 
 	acks    tracker
 	writers map[sp.Stream]*writer
-	sigs    chan uint16
+	byFD    [3]*writer
+	sigs    chan processshim.Signaled
+	// input holds the relay's answer to the outstanding Read.
+	input chan processshim.RelayMessage
+
+	// sendMu orders the invocation's messages before its End.
+	sendMu sync.Mutex
+	ended  bool
 
 	mu       sync.Mutex
 	inst     sandboxwire.ID
@@ -60,8 +60,7 @@ type invocation struct {
 	exited   bool // the exit is decided: Exited, StartFailed or exit lost
 	shimLost bool
 	replied  bool
-	// pumping says the stdin pump owns descriptor 0 and stopIn.
-	pumping bool
+	credit   uint32 // the outstanding Read's Max; 0 for none
 	// settlement, from delivered events
 	startFailed, outputClosed, scopeClosed bool
 }
@@ -80,71 +79,73 @@ var ptyGroupSignals = []uint16{
 	uint16(unix.SIGTTOU), uint16(unix.SIGCONT), uint16(unix.SIGHUP),
 }
 
-// handshakeTimeout bounds reading the request and answering it.
-const handshakeTimeout = 10 * time.Second
+func (b *Broker) newInvocation(open processshim.Open) *invocation {
+	inv := &invocation{
+		b: b, rid: open.ID, open: open, log: b.log.With("invocation", open.ID),
+		id: sandboxwire.NewID(), term: open.Terminal,
+		halt: make(chan struct{}), stopIn: make(chan struct{}), started: make(chan struct{}),
+		sigs: make(chan processshim.Signaled, 64), input: make(chan processshim.RelayMessage, 1),
+		writers: map[sp.Stream]*writer{},
+	}
+	inv.gone, inv.loseShim = context.WithCancel(context.Background())
+	inv.acks.init()
+	add := func(stream sp.Stream, fd uint8) {
+		w := &writer{inv: inv, stream: stream, fd: fd, wake: make(chan struct{}, 1)}
+		inv.writers[stream] = w
+		inv.byFD[fd] = w
+	}
+	if inv.term != nil {
+		add(sp.StreamTerminal, 1)
+	} else {
+		add(sp.StreamStdout, 1)
+		add(sp.StreamStderr, 2)
+	}
+	return inv
+}
 
-// serve reads one request, refuses it or acknowledges it, and runs it. Until
-// the invocation runs, Close closes the connection; unwatch stops that.
-func (b *Broker) serve(uc *net.UnixConn, unwatch func() bool) {
-	defer unwatch()
-	cred, err := peerCred(uc)
-	if err != nil || int(cred.Uid) != b.cfg.UID {
-		b.log.Warn("process shim connection refused", "uid", cred.Uid, "pid", cred.Pid, "error", err)
-		uc.Close()
+// serve refuses the invocation or accepts and runs it, then ends it.
+func (inv *invocation) serve() {
+	defer inv.b.wg.Done()
+	defer inv.teardown()
+	if refusal := inv.prepare(); refusal != nil {
+		inv.reply(*refusal, nil)
 		return
 	}
-	log := b.log.With("pid", cred.Pid)
-	c := processshim.NewConn(uc)
-	uc.SetDeadline(time.Now().Add(handshakeTimeout))
-	// ReadRequest closes the received descriptors when it fails.
-	req, fds, err := c.ReadRequest()
-	if err != nil {
-		log.Warn("process shim request rejected", "error", err)
-		c.Close()
-		return
-	}
-	inv, refusal := b.prepare(req, fds, cred, log)
-	if refusal != nil {
-		closeAll(fds[:])
-		c.Send(*refusal)
-		c.Close()
-		return
-	}
-	inv.conn = c
-	err = c.Send(processshim.Ack{})
-	if err == nil {
-		err = uc.SetDeadline(time.Time{})
-	}
-	if !unwatch() || err != nil {
-		inv.halted()
-		inv.teardown()
+	stop := context.AfterFunc(inv.b.ctx, inv.halted)
+	defer stop()
+	if inv.send(processshim.Accept{ID: inv.rid}) != nil {
 		return
 	}
 	inv.run()
 }
 
 func refuse(code uint8, format string, args ...any) *processshim.Result {
-	msg := fmt.Sprintf(format, args...)
-	return &processshim.Result{Code: code, Message: []byte(msg[:min(len(msg), processshim.MaxMessageBytes)])}
+	return &processshim.Result{Code: code, Message: message(fmt.Sprintf(format, args...))}
+}
+
+// message is msg within the IPC's limit.
+func message(msg string) []byte {
+	if msg == "" {
+		msg = "failed"
+	}
+	return []byte(msg[:min(len(msg), processshim.MaxMessageBytes)])
 }
 
 // prepare checks the request and builds the spec. Every refusal happens
-// here, before the shim gives up its descriptors; the caller then closes
-// them.
-func (b *Broker) prepare(req processshim.Request, fds [3]int, cred unix.Ucred, log *slog.Logger) (*invocation, *processshim.Result) {
-	if req.Version != processshim.Version {
-		return nil, refuse(processshim.ExitCannotRun, "IPC version %d is not %d", req.Version, processshim.Version)
-	}
+// here, before the relay acknowledges the shim.
+func (inv *invocation) prepare() *processshim.Result {
+	b, req := inv.b, inv.open.Request
 	remote, ok := b.cfg.Executables.resolve(string(req.ExecPath), string(req.Cwd))
 	if !ok {
-		return nil, refuse(processshim.ExitNotFound, "%s: not a declared sandbox executable", req.ExecPath)
+		return refuse(processshim.ExitNotFound, "%s: not a declared sandbox executable", req.ExecPath)
 	}
 	if underPrivate(path.Clean(string(req.Cwd))) {
-		return nil, refuse(processshim.ExitCannotRun, "%s: the working directory is private to the Session", req.Cwd)
+		return refuse(processshim.ExitCannotRun, "%s: the working directory is private to the Session", req.Cwd)
 	}
+	inv.log = inv.log.With("executable", remote)
 	env, dropped := b.cfg.Environment.compose(req.Env)
 	if len(dropped) > 0 {
-		log.Info("environment entries naming the private directory dropped", "names", dropped)
+		inv.log.Info("environment entries naming the private directory dropped", "names", dropped)
 	}
 	spec := sp.ProcessSpec{
 		Executable: []byte(remote),
@@ -155,76 +156,27 @@ func (b *Broker) prepare(req processshim.Request, fds [3]int, cred unix.Ucred, l
 		IOMode:     sp.IOPipes,
 		Scope:      b.cfg.Scope,
 	}
-	term, err := openTerminal(&b.terms, fds[0], fds[1])
-	if err != nil {
-		return nil, refuse(processshim.ExitCannotRun, "terminal: %v", err)
-	}
-	if term != nil {
+	if t := inv.term; t != nil {
 		spec.IOMode = sp.IOPTY
-		spec.PTY = &sp.PTYSpec{Size: term.size(), Term: termName(spec.Env)}
+		spec.PTY = &sp.PTYSpec{Size: windowSize(t.Size), Term: termName(spec.Env)}
 		spec.Env = slices.DeleteFunc(spec.Env, func(v sp.EnvVar) bool { return string(v.Name) == "TERM" })
 	}
 	if err := spec.Validate(); err != nil {
-		term.close()
-		return nil, refuse(processshim.ExitCannotRun, "%s: %v", remote, err)
+		return refuse(processshim.ExitCannotRun, "%s: %v", remote, err)
 	}
-	inv := &invocation{
-		b: b, log: log.With("executable", remote), spec: spec, id: sandboxwire.NewID(), term: term,
-		sender: &sender{uid: cred.Uid, gid: cred.Gid},
-		eps:    [3]endpoint{closedEndpoint, closedEndpoint, closedEndpoint},
-	}
-	inv.sender.pid.Store(cred.Pid)
-	if err := inv.open(fds); err != nil {
-		inv.release()
-		return nil, refuse(processshim.ExitCannotRun, "%v", err)
-	}
-	inv.halt = make(chan struct{})
-	inv.started = make(chan struct{})
-	inv.gone, inv.loseShim = context.WithCancel(context.Background())
-	inv.sigs = make(chan uint16, 64)
-	inv.acks.init()
-	inv.writers = map[sp.Stream]*writer{}
-	if term != nil {
-		inv.writers[sp.StreamTerminal] = &writer{inv: inv, stream: sp.StreamTerminal, fds: []int{1, 2}, wake: make(chan struct{}, 1)}
-	} else {
-		inv.writers[sp.StreamStdout] = &writer{inv: inv, stream: sp.StreamStdout, fds: []int{1}, wake: make(chan struct{}, 1)}
-		inv.writers[sp.StreamStderr] = &writer{inv: inv, stream: sp.StreamStderr, fds: []int{2}, wake: make(chan struct{}, 1)}
-	}
-	return inv, nil
-}
-
-// open allocates the stop flags and the endpoints of the passed descriptors.
-// On failure the caller releases what open allocated.
-func (inv *invocation) open(fds [3]int) error {
-	var err error
-	if inv.abort, err = newStopFlag(); err != nil {
-		return err
-	}
-	if inv.stopIn, err = newStopFlag(); err != nil {
-		return err
-	}
-	for i, fd := range fds {
-		ep, err := openEndpoint(fd, i > 0, inv.b.cfg.PTSDevice, inv.sender)
-		if err != nil {
-			return fmt.Errorf("descriptor %d: %w", i, err)
-		}
-		inv.eps[i] = ep
-	}
+	inv.spec = spec
 	return nil
 }
 
-// release frees what prepare allocated for a refused request. The passed
-// descriptors stay open for the caller.
-func (inv *invocation) release() {
-	for _, ep := range inv.eps {
-		ep.closeIO()
-	}
-	for _, s := range []*stopFlag{inv.abort, inv.stopIn} {
-		if s != nil {
-			s.close()
-		}
-	}
-	inv.term.close()
+func windowSize(s processshim.WindowSize) sp.WindowSize {
+	return sp.WindowSize{Rows: s.Rows, Cols: s.Cols, XPixels: s.XPixels, YPixels: s.YPixels}
+}
+
+// termios is the terminal's saved mode.
+func termios(t *processshim.Terminal) *unix.Termios {
+	tio := &unix.Termios{Iflag: t.Iflag, Oflag: t.Oflag, Cflag: t.Cflag, Lflag: t.Lflag}
+	copy(tio.Cc[:], t.Cc)
+	return tio
 }
 
 // termName is the remote TERM: the composed environment's, unless it is
@@ -239,24 +191,12 @@ func termName(env []sp.EnvVar) []byte {
 }
 
 func (inv *invocation) run() {
-	defer inv.teardown()
-	stop := context.AfterFunc(inv.b.ctx, inv.halted)
-	defer stop()
-	inv.helpers.Add(1)
-	go inv.readShim()
 	h, caps, ok := inv.start()
 	close(inv.started)
 	if !ok {
 		return
 	}
-	if inv.term != nil {
-		if err := inv.term.makeRaw(); err != nil {
-			inv.log.Warn("local terminal stays in its mode", "error", err)
-		}
-	}
-	inv.mu.Lock()
-	inv.pumping = true
-	inv.mu.Unlock()
+	inv.send(processshim.Started{ID: inv.rid})
 	go inv.pumpStdin(caps)
 	inv.writing.Add(len(inv.writers))
 	for _, w := range inv.writers {
@@ -351,15 +291,15 @@ func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sp.
 		inv.inst = s.instance
 	}
 	if inv.spec.PTY != nil && inv.spec.PTY.Modes == nil {
-		inv.spec.PTY.Modes = sp.ReadModes(inv.term.saved(), s.caps.PTYModes)
+		inv.spec.PTY.Modes = sp.ReadModes(termios(inv.term), s.caps.PTYModes)
 	}
 	if f := s.caps.CheckStart(inv.spec); f != nil {
-		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
+		inv.reply(*refuse(processshim.ExitCannotRun, "%s: %s", inv.spec.Executable, f.Message), nil)
 		return handle{}, sp.Capabilities{}, startEnded
 	}
 	req := sp.StartRequest{OperationRef: sp.OperationRef{ServerInstanceID: inv.inst, OperationID: inv.id}, Spec: inv.spec}
 	if n := len(sp.Encode(req)); n > int(s.caps.MaxStartBytes) {
-		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: argument list and environment of %d bytes exceed %d", inv.spec.Executable, n, s.caps.MaxStartBytes))
+		inv.reply(*refuse(processshim.ExitCannotRun, "%s: argument list and environment of %d bytes exceed %d", inv.spec.Executable, n, s.caps.MaxStartBytes), nil)
 		return handle{}, sp.Capabilities{}, startEnded
 	}
 	began := time.Now()
@@ -394,7 +334,7 @@ func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sp.
 		case f.Code == sp.CodeBusy:
 			return handle{}, sp.Capabilities{}, startLater
 		}
-		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
+		inv.reply(*refuse(processshim.ExitCannotRun, "%s: %s", inv.spec.Executable, f.Message), nil)
 		return handle{}, sp.Capabilities{}, startEnded
 	}
 	switch {
@@ -405,7 +345,7 @@ func (inv *invocation) startOnce(deadline *time.Time, exists *bool) (handle, sp.
 		inv.fail(fmt.Sprintf("the program's start could not be resolved: %s", f.Message))
 		return handle{}, sp.Capabilities{}, startEnded
 	case !*exists && f.Effect == sandboxwire.EffectNone && provesAbsence(f.Code):
-		inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
+		inv.reply(*refuse(processshim.ExitCannotRun, "%s: %s", inv.spec.Executable, f.Message), nil)
 		return handle{}, sp.Capabilities{}, startEnded
 	}
 	return handle{}, sp.Capabilities{}, startLater
@@ -558,29 +498,21 @@ func (inv *invocation) handle(h handle, ev sp.Event) bool {
 		}
 	case sp.ExitedEvent:
 		inv.decideExit()
-		inv.helpers.Add(1)
-		go func() {
-			defer inv.helpers.Done()
-			// The shim exits only after the output the program wrote before
-			// exiting is delivered, as a native exit follows its writes.
-			if inv.acks.wait(seq-1, inv.halt) {
-				inv.reply(exitResult(ev.Status), "")
-				inv.acks.deliver(seq)
-			}
-		}()
-		return false
+		// The relay answers the shim once the output the program wrote
+		// before exiting is written, as a native exit follows its writes.
+		inv.reply(exitResult(ev.Status), inv.marks())
 	case sp.StartFailedEvent:
 		inv.decideExit()
 		code := uint8(processshim.ExitCannotRun)
 		if ev.Failure.Code == sp.CodeNotFound {
 			code = processshim.ExitNotFound
 		}
-		inv.reply(processshim.Result{Code: code}, fmt.Sprintf("%s: %s", inv.spec.Executable, ev.Failure.Message))
+		inv.reply(*refuse(code, "%s: %s", inv.spec.Executable, ev.Failure.Message), nil)
 		inv.setSettlement(func() { inv.startFailed = true })
 	case sp.ObservationLostEvent:
 		if ev.Observation == sp.ObservationExit {
 			inv.decideExit()
-			inv.reply(processshim.Result{Code: processshim.ExitLost}, fmt.Sprintf("the program's exit status was lost: %s", ev.Failure.Message))
+			inv.reply(*refuse(processshim.ExitLost, "the program's exit status was lost: %s", ev.Failure.Message), nil)
 		} else {
 			// The service keeps watching the scope and reports its close.
 			inv.log.Info("operation scope observation lost", "reason", ev.Failure.Message)
@@ -656,7 +588,7 @@ func (inv *invocation) decideExit() {
 	inv.mu.Lock()
 	inv.exited = true
 	inv.mu.Unlock()
-	inv.stopIn.set()
+	inv.stopInput()
 }
 
 func (inv *invocation) lost() bool {
@@ -681,25 +613,20 @@ func (inv *invocation) relink(h handle) (handle, bool) {
 	}
 }
 
-// reply sends the shim its one Result, unless the shim is gone. msg goes to
-// the shim's stderr first. The shim then exits, so stdin forwarding has
-// stopped and the terminal is restored before the Result is sent.
-func (inv *invocation) reply(r processshim.Result, msg string) {
+// reply has the relay send the shim its one Result once the marked output
+// is written, unless the shim has a Result or is gone. It reports false
+// then. A Result Message reaches the shim's stderr.
+func (inv *invocation) reply(r processshim.Result, marks []processshim.Mark) bool {
 	inv.mu.Lock()
 	if inv.replied || inv.shimLost {
 		inv.mu.Unlock()
-		return
+		return false
 	}
 	inv.replied = true
 	inv.mu.Unlock()
-	inv.stopIn.set()
-	if msg != "" {
-		inv.writeStderr(msg)
-	}
-	inv.term.restore()
-	inv.sender.shimGone() // the shim exits on the Result
-	inv.conn.Send(r)
-	inv.conn.Close()
+	inv.stopInput()
+	inv.send(processshim.Exit{ID: inv.rid, Result: r, Marks: marks})
+	return true
 }
 
 // fail ends the invocation with 255 and the reason on the shim's stderr. The
@@ -708,15 +635,8 @@ func (inv *invocation) reply(r processshim.Result, msg string) {
 func (inv *invocation) fail(reason string) {
 	inv.log.Warn("process invocation failed", "reason", reason)
 	inv.halted()
-	inv.writeStderr(reason)
-	inv.reply(processshim.Result{Code: processshim.ExitLost}, "")
-}
-
-func (inv *invocation) writeStderr(msg string) {
-	inv.fdMu.Lock()
-	defer inv.fdMu.Unlock()
-	if ep := inv.eps[2]; ep.fd >= 0 {
-		tryWrite(ep, []byte("oac-process-shim: "+msg+"\n"))
+	if !inv.reply(processshim.Result{Code: processshim.ExitLost, Message: message(reason)}, nil) {
+		inv.send(processshim.Notice{ID: inv.rid, Message: message(reason)})
 	}
 }
 
@@ -734,9 +654,7 @@ func (inv *invocation) shimGone() {
 	cancel := !inv.exited
 	inv.mu.Unlock()
 	inv.log.Info("process shim lost", "cancel", cancel)
-	inv.sender.shimGone()
-	inv.stopIn.set()
-	inv.term.restore()
+	inv.stopInput()
 	if cancel {
 		inv.cancelRemote()
 	}
@@ -805,79 +723,116 @@ func refused(f *sp.Failure) bool {
 	return f.Code == sp.CodeBusy && f.Effect == sandboxwire.EffectNone
 }
 
-func (inv *invocation) readShim() {
-	defer inv.helpers.Done()
-	for {
-		m, err := inv.conn.ReadMessage()
+// receive takes one relay message for the invocation. It never blocks, and
+// returns an error for a message that breaks the IPC.
+func (inv *invocation) receive(m processshim.RelayMessage) error {
+	switch m := m.(type) {
+	case processshim.Input:
+		return inv.answered(m, len(m.Data))
+	case processshim.InputEnd:
+		return inv.answered(m, 0)
+	case processshim.Written:
+		w := inv.byFD[m.FD]
+		if w == nil {
+			return fmt.Errorf("%w: fd %d has no output", processshim.ErrProtocol, m.FD)
+		}
+		if err := w.written(m.Seq); err != nil {
+			return err
+		}
+		inv.acks.deliver(m.Seq)
+	case processshim.WriteFailed:
+		w := inv.byFD[m.FD]
+		if w == nil {
+			return fmt.Errorf("%w: fd %d has no output", processshim.ErrProtocol, m.FD)
+		}
+		sent, err := w.failed(m.Seq)
 		if err != nil {
-			inv.shimGone()
-			return
+			return err
 		}
-		s, ok := m.(processshim.Signal)
-		if !ok {
-			inv.log.Warn("unexpected message from the process shim")
-			inv.conn.Close()
-			inv.shimGone()
-			return
+		// The reader is gone; the remote writer gets EPIPE as it would
+		// locally. The output is delivered at once: closing the remote
+		// output may wait for a new stream, which the operation's
+		// settlement may in turn wait behind.
+		for _, seq := range sent {
+			inv.acks.deliver(seq)
 		}
+		inv.log.Info("output reader gone", "stream", w.stream, "error", unix.Errno(m.Errno))
+		inv.helpers.Add(1)
+		go func() {
+			defer inv.helpers.Done()
+			inv.closeOutput(w.stream)
+		}()
+	case processshim.Signaled:
 		select {
-		case inv.sigs <- s.Number:
+		case inv.sigs <- m:
 		default:
-			inv.log.Warn("signal dropped: too many pending", "signal", s.Number)
+			inv.log.Warn("signal dropped: too many pending", "signal", m.Number)
 		}
+	case processshim.Gone:
+		inv.helpers.Add(1)
+		go func() {
+			defer inv.helpers.Done()
+			inv.shimGone()
+		}()
 	}
+	return nil
+}
+
+// answered takes the relay's answer to the outstanding Read.
+func (inv *invocation) answered(m processshim.RelayMessage, n int) error {
+	inv.mu.Lock()
+	credit := inv.credit
+	inv.credit = 0
+	inv.mu.Unlock()
+	if credit == 0 || n > int(credit) {
+		return fmt.Errorf("%w: %d bytes of stdin without a Read for them", processshim.ErrProtocol, n)
+	}
+	select {
+	case inv.input <- m:
+	default: // the stdin pump took the previous answer before granting
+	}
+	return nil
+}
+
+// send sends m unless the invocation has ended.
+func (inv *invocation) send(m processshim.BrokerMessage) error {
+	inv.sendMu.Lock()
+	defer inv.sendMu.Unlock()
+	if inv.ended {
+		return errEnded
+	}
+	return inv.b.send(m)
 }
 
 // halted stops every pump and wait.
 func (inv *invocation) halted() {
 	inv.haltOnce.Do(func() {
 		close(inv.halt)
-		inv.abort.set()
-		inv.stopIn.set()
+		inv.stopInput()
 	})
 }
 
+// stopInput ends stdin forwarding.
+func (inv *invocation) stopInput() {
+	inv.stopOnce.Do(func() {
+		close(inv.stopIn)
+		inv.send(processshim.StopInput{ID: inv.rid})
+	})
+}
+
+// teardown ends the invocation: once no relay message reaches it and its
+// helpers are done, End tells the relay to close its descriptors. The stdin
+// pump is not waited for, so teardown never waits for a stdin request still
+// on the stream; it sends nothing after End.
 func (inv *invocation) teardown() {
 	inv.halted()
+	inv.b.unregister(inv.rid)
 	inv.writing.Wait()
-	inv.term.close()
-	if inv.conn != nil {
-		inv.conn.Close()
-	}
 	inv.helpers.Wait()
-	inv.mu.Lock()
-	pumping := inv.pumping
-	inv.mu.Unlock()
-	if !pumping {
-		inv.closeFD(0)
-		inv.stopIn.close()
-	}
-	inv.closeFD(1)
-	inv.closeFD(2)
-	inv.abort.close()
-}
-
-// endpoint returns passed descriptor i.
-func (inv *invocation) endpoint(i int) endpoint {
-	inv.fdMu.Lock()
-	defer inv.fdMu.Unlock()
-	return inv.eps[i]
-}
-
-// closeFD closes passed descriptor i once.
-func (inv *invocation) closeFD(i int) {
-	inv.fdMu.Lock()
-	defer inv.fdMu.Unlock()
-	inv.eps[i].close()
-	inv.eps[i] = closedEndpoint
-}
-
-func closeAll(fds []int) {
-	for _, fd := range fds {
-		if fd >= 0 {
-			unix.Close(fd)
-		}
-	}
+	inv.sendMu.Lock()
+	defer inv.sendMu.Unlock()
+	inv.ended = true
+	inv.b.send(processshim.End{ID: inv.rid})
 }
 
 func asFailure(err error) *sp.Failure {

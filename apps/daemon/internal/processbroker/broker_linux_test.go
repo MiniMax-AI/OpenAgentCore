@@ -22,11 +22,8 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	gofs "github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/sys/unix"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
@@ -36,8 +33,9 @@ import (
 // The sandbox side is the Linux process service in its own process,
 // processserve, because the service reaps every child of its process and
 // this binary waits on the shims it starts. Locally the tests build
-// processserve and the shim with the go command. The view test needs root in
-// a privileged container, with static binaries:
+// processserve with the go command. As root, the relay runs as viewID, as
+// in a view. The view tests need root in a privileged container, with
+// static binaries:
 //
 //	CGO_ENABLED=0 go test -c -o /tmp/processbroker.test ./apps/daemon/internal/processbroker
 //	CGO_ENABLED=0 go build -o /tmp/processserve ./apps/sandboxio/testdata/processserve
@@ -48,15 +46,20 @@ import (
 //	  debian:bookworm-slim /t.test -test.v
 const (
 	shimSocketEnv = "OAC_TEST_SHIM_SOCKET"
+	relayEnv      = "OAC_TEST_RELAY"
 	serviceEnv    = "OAC_TEST_PROCESS_SERVICE"
 	shimEnv       = "OAC_TEST_PROCESS_SHIM"
 	viewGateEnv   = "OAC_TEST_SESSIONVIEW"
 	viewID        = 1000
 )
 
-// The test binary is also the shim, through links named after the commands.
+// The test binary is also the relay, and the shim through links named after
+// the commands.
 func TestMain(m *testing.M) {
 	sessionview.Init()
+	if os.Getenv(relayEnv) == "1" {
+		os.Exit(processshim.Relay())
+	}
 	if sock := os.Getenv(shimSocketEnv); sock != "" {
 		os.Exit(processshim.Run(sock))
 	}
@@ -76,14 +79,16 @@ func TestStreamsAndExitCode(t *testing.T) {
 	}
 }
 
-func TestShimExitsBeforeBackgroundJobOutput(t *testing.T) {
+// The shim exits with the leader, and output a background job writes later
+// still reaches the shim's stdout.
+func TestBackgroundOutputAfterShimExits(t *testing.T) {
 	f := newFixture(t, nil)
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	cmd := f.command("sh", "-c", "sleep 1 >/dev/null & echo hi")
+	cmd := f.command("sh", "-c", "(sleep 1; echo late) & echo hi")
 	cmd.Stdout, cmd.Stderr = w, w
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -104,7 +109,7 @@ func TestShimExitsBeforeBackgroundJobOutput(t *testing.T) {
 	}
 	select {
 	case data := <-read:
-		if string(data) != "hi\n" {
+		if string(data) != "hi\nlate\n" {
 			t.Fatalf("read %q", data)
 		}
 	case <-time.After(10 * time.Second):
@@ -271,9 +276,9 @@ func TestLinkLossKeepsOutputOrdered(t *testing.T) {
 	}
 }
 
-// A request that never completes must not hold Close, and the descriptors
-// it carried are closed.
-func TestCloseEndsIncompleteRequest(t *testing.T) {
+// A shim request that never completes holds neither another invocation nor
+// Close, and the descriptors it carried close with the relay.
+func TestIncompleteRequestHoldsNothing(t *testing.T) {
 	f := newFixture(t, nil)
 	c, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: filepath.Join(f.dir, processshim.SocketName), Net: "unix"})
 	if err != nil {
@@ -294,7 +299,9 @@ func TestCloseEndsIncompleteRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(100 * time.Millisecond) // let the broker start reading
+	if out, err := f.command("sh", "-c", "echo ok").Output(); err != nil || string(out) != "ok\n" {
+		t.Fatalf("Output = %q, %v", out, err)
+	}
 	closed := make(chan struct{})
 	go func() {
 		f.broker.Close()
@@ -306,7 +313,7 @@ func TestCloseEndsIncompleteRequest(t *testing.T) {
 		t.Fatal("Close waits for the incomplete request")
 	}
 	pfd := []unix.PollFd{{Fd: int32(p[0]), Events: unix.POLLIN}}
-	if n, err := unix.Poll(pfd, 5000); n != 1 || err != nil || pfd[0].Revents&unix.POLLHUP == 0 {
+	if n, err := unix.Poll(pfd, 10000); n != 1 || err != nil || pfd[0].Revents&unix.POLLHUP == 0 {
 		t.Fatalf("the passed descriptors are still open: poll = %d, %v, revents %#x", n, err, pfd[0].Revents)
 	}
 }
@@ -340,13 +347,10 @@ func TestGoneReaderDoesNotHoldExit(t *testing.T) {
 	}
 }
 
-// A receiver with SO_PASSCRED sees the shim's credentials on its output,
-// never the root broker's.
-func TestUnixSocketOutputNamesTheShim(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip("naming the shim's credentials needs root; run the test binary as root, as the comment at the top of this file describes")
-	}
-	f := newFixtureFor(t, viewID, nil)
+// A receiver with SO_PASSCRED sees the relay's own credentials on output:
+// its pid and the Session's uid and gid.
+func TestUnixSocketOutputNamesTheRelay(t *testing.T) {
+	f := newFixture(t, nil)
 	sv, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -358,7 +362,6 @@ func TestUnixSocketOutputNamesTheShim(t *testing.T) {
 	out := os.NewFile(uintptr(sv[1]), "output")
 	cmd := f.command("sh", "-c", "echo hi")
 	cmd.Stdout = out
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: viewID, Gid: viewID}}
 	err = cmd.Start()
 	out.Close()
 	if err != nil {
@@ -380,8 +383,168 @@ func TestUnixSocketOutputNamesTheShim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(buf[:n]) != "hi\n" || cred.Uid != viewID || cred.Gid != viewID || int(cred.Pid) != cmd.Process.Pid {
-		t.Fatalf("read %q from %+v; the shim was pid %d", buf[:n], *cred, cmd.Process.Pid)
+	if string(buf[:n]) != "hi\n" || int(cred.Pid) != f.relay.Process.Pid || int(cred.Uid) != f.uid || int(cred.Gid) != f.gid {
+		t.Fatalf("read %q from %+v; the relay is pid %d, uid %d, gid %d", buf[:n], *cred, f.relay.Process.Pid, f.uid, f.gid)
+	}
+}
+
+// A write the kernel refuses the Session fails as a write failure, never
+// with the daemon's authority: lowering oom_score_adj needs
+// CAP_SYS_RESOURCE, which the relay lacks.
+func TestOutputWritesHaveTheSessionsAuthority(t *testing.T) {
+	f := newFixture(t, nil)
+	before, err := os.ReadFile("/proc/self/oom_score_adj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adj, err := os.OpenFile("/proc/self/oom_score_adj", os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer adj.Close()
+	cmd := f.command("bash", "-c", `trap "" PIPE; echo -1000; while echo x; do sleep 0.05; done 2>/dev/null; exit 3`)
+	cmd.Stdout = adj
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	wait := make(chan error, 1)
+	go func() { wait <- cmd.Wait() }()
+	select {
+	case err := <-wait:
+		if exitCode(err) != 3 {
+			t.Fatalf("Wait = %v, want exit 3 after the remote output closed", err)
+		}
+	case <-time.After(10 * time.Second):
+		cmd.Process.Kill()
+		t.Fatal("the failed write never closed the remote output")
+	}
+	if after, err := os.ReadFile("/proc/self/oom_score_adj"); err != nil || !bytes.Equal(after, before) {
+		t.Fatalf("oom_score_adj %q, %v; was %q", after, err, before)
+	}
+}
+
+// Output that nobody reads holds back only its own invocation: another
+// invocation starts, reads stdin, gets a signal and exits, and the blocked
+// one still gets its signal and its cancel.
+func TestBlockedOutputHoldsOnlyItsInvocation(t *testing.T) {
+	f := newFixture(t, nil)
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	a := f.command("bash", "-c", `echo $$ > a.pid; trap 'touch a.int' INT; while :; do yes; done`)
+	a.Stdout = w
+	err = a.Start()
+	w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Process.Kill()
+	size, err := unix.FcntlInt(r.Fd(), unix.F_GETPIPE_SZ, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	await(t, "the first invocation's pipe to fill", func() bool {
+		n, err := unix.IoctlGetInt(int(r.Fd()), unix.TIOCINQ) // FIONREAD
+		return err == nil && n == size
+	})
+
+	b := f.command("bash", "-c", `trap 'exit 6' TERM; read line; echo "got $line"; while :; do sleep 0.05; done`)
+	b.Stdin = strings.NewReader("hello\n")
+	startLine(t, b, "got hello")
+	if err := b.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Wait(); exitCode(err) != 6 {
+		t.Fatalf("second Wait = %v, want exit 6", err)
+	}
+
+	if err := a.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	await(t, "the blocked invocation's trap", func() bool {
+		_, err := os.Stat(filepath.Join(f.dir, "a.int"))
+		return err == nil
+	})
+	pid, err := os.ReadFile(filepath.Join(f.dir, "a.pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := "/proc/" + strings.TrimSpace(string(pid))
+	a.Process.Kill()
+	a.Wait()
+	await(t, "the blocked invocation's cancel", func() bool {
+		_, err := os.Stat(remote)
+		return errors.Is(err, os.ErrNotExist)
+	})
+}
+
+// The broker never takes a descriptor from the relay: one sent with a
+// message is closed as the broker reads it.
+func TestRelayDescriptorsAreDiscarded(t *testing.T) {
+	sv, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := os.NewFile(uintptr(sv[0]), "broker")
+	b, err := Start(Config{
+		Relay: end,
+		Scope: sp.ScopePOSIXSession,
+		Dial:  func(context.Context) (io.ReadWriteCloser, error) { return nil, errors.New("no sandbox") },
+	})
+	end.Close()
+	if err != nil {
+		unix.Close(sv[1])
+		t.Fatal(err)
+	}
+	defer b.Close()
+	rf := os.NewFile(uintptr(sv[1]), "relay")
+	c, err := net.FileConn(rf)
+	rf.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		b.Close()
+		c.Close()
+	}()
+	var p [2]int
+	if err := unix.Pipe2(p[:], unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(p[0])
+	var open bytes.Buffer
+	req := processshim.Request{Version: processshim.Version, ExecPath: []byte("/bin/undeclared"), Argv: [][]byte{[]byte("undeclared")}, Cwd: []byte("/")}
+	if err := sandboxwire.WriteFrame(&open, processshim.Frame(processshim.Open{ID: 1, Request: req})); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = c.(*net.UnixConn).WriteMsgUnix(open.Bytes(), unix.UnixRights(p[1]), nil)
+	unix.Close(p[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SetReadDeadline(time.Now().Add(10 * time.Second))
+	for {
+		fr, err := sandboxwire.ReadFrame(c, processshim.MaxFrameBytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := processshim.DecodeBroker(fr)
+		if _, ok := m.(processshim.StopInput); ok {
+			continue
+		}
+		if exit, ok := m.(processshim.Exit); err != nil || !ok || exit.Result.Code != processshim.ExitNotFound {
+			t.Fatalf("broker answered %#v, %v", m, err)
+		}
+		break
+	}
+	pfd := []unix.PollFd{{Fd: int32(p[0]), Events: unix.POLLIN}}
+	if n, err := unix.Poll(pfd, 5000); n != 1 || err != nil || pfd[0].Revents&unix.POLLHUP == 0 {
+		t.Fatalf("the broker holds the relay's descriptor: poll = %d, %v, revents %#x", n, err, pfd[0].Revents)
+	}
+	if err := b.Err(); err != nil {
+		t.Fatalf("Err = %v", err)
 	}
 }
 
@@ -427,13 +590,6 @@ func TestSharedTerminalRestoredByLastUser(t *testing.T) {
 		return tio
 	}
 	raw := func() bool { return mode().Lflag&unix.ICANON == 0 }
-	await := func(what string, done func() bool) {
-		for deadline := time.Now().Add(10 * time.Second); !done(); time.Sleep(10 * time.Millisecond) {
-			if time.Now().After(deadline) {
-				t.Fatalf("timed out waiting for %s", what)
-			}
-		}
-	}
 	file := func(name string) string { return filepath.Join(f.dir, name) }
 	exists := func(name string) func() bool {
 		return func() bool { _, err := os.Stat(file(name)); return err == nil }
@@ -448,9 +604,9 @@ func TestSharedTerminalRestoredByLastUser(t *testing.T) {
 		return cmd
 	}
 	a := run("until [ -e a.done ]; do sleep 0.05; done")
-	await("the first invocation to make the terminal raw", raw)
+	await(t, "the first invocation to make the terminal raw", raw)
 	b := run("touch b.up; until [ -e b.done ]; do sleep 0.05; done")
-	await("the second invocation to run", exists("b.up"))
+	await(t, "the second invocation to run", exists("b.up"))
 	os.WriteFile(file("a.done"), nil, 0o644)
 	if err := a.Wait(); err != nil {
 		t.Fatalf("first Wait = %v", err)
@@ -599,88 +755,21 @@ func TestShimLossEndsWaitForStream(t *testing.T) {
 	}
 }
 
-func TestViewRunsRemoteShell(t *testing.T) {
-	if os.Getenv(viewGateEnv) != "1" {
-		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see the comment at the top of this file", viewGateEnv)
-	}
-	if err := sessionview.Probe(); err != nil {
-		t.Fatalf("Probe: %v", err)
-	}
-	sock := service.socket(t)
-	base := t.TempDir()
-	world, run := filepath.Join(base, "world"), filepath.Join(base, "run")
-	for _, d := range []string{".oac/run", ".oac/bin", "proc", "dev", "bin"} {
-		if err := os.MkdirAll(filepath.Join(world, d), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(world, "bin", "sh"), nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(run, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	pts, err := sessionview.NewPTS()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pts.Close()
-	b, err := Start(Config{
-		RunDir:      run,
-		UID:         viewID,
-		PTSDevice:   pts.Device(),
-		Executables: Executables{Paths: map[string]string{"/bin/sh": "/bin/sh"}},
-		Environment: Environment{Sandbox: map[string]string{"PATH": "/usr/bin:/bin"}},
-		Scope:       sp.ScopePOSIXSession,
-		Dial: func(ctx context.Context) (io.ReadWriteCloser, error) {
-			return new(net.Dialer).DialContext(ctx, "unix", sock)
-		},
-		CancelGrace: time.Second,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer b.Close()
-	w := &loopbackWorld{dir: world}
-	v, err := sessionview.Start(context.Background(), sessionview.Spec{
-		World:         w.serve,
-		Private:       []sessionview.PrivateDir{{Name: agent.ViewRunName, HostDir: run}},
-		Shim:          sessionview.Shim{Binary: shimBinary(t), Paths: []string{"/bin/sh"}},
-		Process:       sessionview.Process{Path: "/bin/sh", Args: []string{"sh", "-c", "echo $0"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr},
-		StagingParent: base,
-		PTS:           pts,
-	})
-	if err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer v.Close()
-	out, err := io.ReadAll(v.Stdout())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if exit, err := v.Wait(); err != nil || exit != (sessionview.Exit{}) || string(out) != "sh\n" {
-		t.Fatalf("Wait = %+v, %v; output %q", exit, err, out)
-	}
-}
-
 type fixture struct {
 	dir, bin string
+	uid, gid int // the relay's
 	service  string
 	wrap     func(int32, net.Conn) io.ReadWriteCloser
 	dials    atomic.Int32
+	relay    *exec.Cmd
 	broker   *Broker
 }
 
-// newFixture starts a broker whose shims are this binary under the names
-// bash, sh, env and seq. A non-nil wrap wraps each stream to the service,
-// which it gets with the stream's number, counting from 1.
+// newFixture starts a relay and its broker, whose shims are this binary
+// under the names bash, sh, env and seq. As root the relay runs as viewID. A
+// non-nil wrap wraps each stream to the service, which it gets with the
+// stream's number, counting from 1.
 func newFixture(t *testing.T, wrap func(int32, net.Conn) io.ReadWriteCloser) *fixture {
-	return newFixtureFor(t, os.Getuid(), wrap)
-}
-
-// newFixtureFor starts the broker for shims running as uid, in a run
-// directory that uid can reach and only this process can change.
-func newFixtureFor(t *testing.T, uid int, wrap func(int32, net.Conn) io.ReadWriteCloser) *fixture {
 	t.Helper()
 	self, err := os.Executable()
 	if err != nil {
@@ -694,11 +783,10 @@ func newFixtureFor(t *testing.T, uid int, wrap func(int32, net.Conn) io.ReadWrit
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	var pts unix.Stat_t
-	if err := unix.Stat("/dev/pts", &pts); err != nil {
-		t.Fatal(err)
+	f := &fixture{dir: dir, uid: os.Getuid(), gid: os.Getgid(), service: service.socket(t), wrap: wrap}
+	if f.uid == 0 {
+		f.uid, f.gid = viewID, viewID
 	}
-	f := &fixture{dir: dir, service: service.socket(t), wrap: wrap}
 	f.bin = filepath.Join(f.dir, "bin")
 	if err := os.Mkdir(f.bin, 0o755); err != nil {
 		t.Fatal(err)
@@ -711,10 +799,9 @@ func newFixtureFor(t *testing.T, uid int, wrap func(int32, net.Conn) io.ReadWrit
 		}
 		paths[local] = name
 	}
+	end := f.startRelay(t, self)
 	b, err := Start(Config{
-		RunDir:      f.dir,
-		UID:         uid,
-		PTSDevice:   pts.Dev, // where pty.Open makes terminals
+		Relay:       end,
 		Executables: Executables{Paths: paths},
 		Environment: Environment{
 			Pass:    []string{"KEEP", "LEAK"},
@@ -725,12 +812,76 @@ func newFixtureFor(t *testing.T, uid int, wrap func(int32, net.Conn) io.ReadWrit
 		Dial:        f.dial,
 		CancelGrace: time.Second,
 	})
+	end.Close()
+	if err != nil {
+		f.relay.Process.Kill()
+		f.relay.Wait()
+		t.Fatal(err)
+	}
+	f.broker = b
+	t.Cleanup(func() {
+		b.Close()
+		f.waitRelay(t)
+	})
+	return f
+}
+
+// startRelay starts this binary as the relay, listening at the shim socket
+// in f.dir, and returns the broker's end of its connection.
+func (f *fixture) startRelay(t *testing.T, self string) *os.File {
+	t.Helper()
+	sv, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { b.Close() })
-	f.broker = b
-	return f
+	end, relayEnd := os.NewFile(uintptr(sv[0]), "broker"), os.NewFile(uintptr(sv[1]), "relay")
+	defer relayEnd.Close()
+	sock := filepath.Join(f.dir, processshim.SocketName)
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
+	if err != nil {
+		end.Close()
+		t.Fatal(err)
+	}
+	ln.SetUnlinkOnClose(false)
+	lf, err := ln.File()
+	ln.Close()
+	if err == nil {
+		defer lf.Close()
+		err = os.Chmod(sock, 0o666)
+	}
+	if err != nil {
+		end.Close()
+		t.Fatal(err)
+	}
+	f.relay = exec.Command(self)
+	f.relay.Env = []string{relayEnv + "=1", "GORACE=atexit_sleep_ms=0"}
+	f.relay.ExtraFiles = []*os.File{relayEnd, lf} // processshim.RelayBrokerFD and RelayListenerFD
+	f.relay.Stderr = os.Stderr
+	if f.uid != os.Getuid() {
+		f.relay.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(f.uid), Gid: uint32(f.gid)}}
+	}
+	if err := f.relay.Start(); err != nil {
+		end.Close()
+		t.Fatal(err)
+	}
+	return end
+}
+
+// waitRelay waits for the relay, which exits once the broker's connection
+// ends.
+func (f *fixture) waitRelay(t *testing.T) {
+	done := make(chan error, 1)
+	go func() { done <- f.relay.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("relay: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		f.relay.Process.Kill()
+		<-done
+		t.Error("the relay still runs 10s after the broker closed")
+	}
 }
 
 func (f *fixture) command(name string, args ...string) *exec.Cmd {
@@ -926,6 +1077,16 @@ func startLine(t *testing.T, cmd *exec.Cmd, want string) io.Reader {
 	return out
 }
 
+// await polls done until it holds, for at most 10s.
+func await(t *testing.T, what string, done func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); !done(); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+	}
+}
+
 func exitCode(err error) int {
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
@@ -996,18 +1157,6 @@ func (s *processService) stop() {
 	}
 }
 
-// shimBinary returns a static oac-process-shim for the view.
-func shimBinary(t *testing.T) string {
-	if bin := os.Getenv(shimEnv); bin != "" {
-		return bin
-	}
-	bin := filepath.Join(t.TempDir(), "oac-process-shim")
-	if err := build(bin, "../../cmd/oac-process-shim"); err != nil {
-		t.Fatal(err)
-	}
-	return bin
-}
-
 func build(out, pkg string) error {
 	cmd := exec.Command("go", "build", "-o", out, pkg)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
@@ -1015,43 +1164,4 @@ func build(out, pkg string) error {
 		return fmt.Errorf("go build %s: %v\n%s", pkg, err, msg)
 	}
 	return nil
-}
-
-// loopbackWorld serves a directory as the world, the way the world frontend
-// serves a sandbox.
-type loopbackWorld struct {
-	dir    string
-	served chan struct{}
-}
-
-func (w *loopbackWorld) serve(dev *os.File, _ sessionview.WorldMount) (sessionview.WorldServer, error) {
-	fd, err := unix.Dup(int(dev.Fd()))
-	if err != nil {
-		return nil, err
-	}
-	root, err := gofs.NewLoopbackRoot(w.dir)
-	if err != nil {
-		unix.Close(fd)
-		return nil, err
-	}
-	srv, err := fuse.NewServer(gofs.NewNodeFS(root, &gofs.Options{}), fmt.Sprintf("/dev/fd/%d", fd), &fuse.MountOptions{})
-	if err != nil {
-		unix.Close(fd)
-		return nil, err
-	}
-	w.served = make(chan struct{})
-	go func() {
-		srv.Serve()
-		close(w.served)
-	}()
-	return w, nil
-}
-
-func (w *loopbackWorld) Stop() error {
-	select {
-	case <-w.served:
-		return nil
-	case <-time.After(10 * time.Second):
-		return errors.New("world still serving 10s after the view ended")
-	}
 }

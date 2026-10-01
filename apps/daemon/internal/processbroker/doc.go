@@ -1,58 +1,71 @@
 // Package processbroker runs a Session's shim invocations in its sandbox.
 //
 // A Harness in the Session view executes oac-process-shim
-// (apps/daemon/internal/processshim), which hands the broker its invocation
-// and its descriptors 0, 1 and 2. The broker resolves the invocation against
-// the declared executable table and environment policy, starts the program
-// with the process protocol (internal/sandboxprocess), pumps its streams
-// through the passed descriptors, forwards the signals the shim reports, and
-// sends the shim the remote exit. The broker does all protocol work; the shim
-// holds no credentials.
+// (apps/daemon/internal/processshim), which hands its invocation and its
+// descriptors 0, 1 and 2 to the Session's process relay. The relay is the
+// same binary in relay mode, which sessionview starts in the view as the
+// Session user, with no capabilities, before the Harness. It is the only
+// process that holds a descriptor from the view: it does every read, write
+// and terminal ioctl on them with the Session's own authority. It hands the
+// broker the request and the terminal's mode over a socketpair that
+// sessionview creates. The broker does all process protocol work: it
+// resolves the invocation against the declared executable table and
+// environment policy, starts the program with the process protocol
+// (internal/sandboxprocess), sends the relay the program's output and asks
+// it for stdin, forwards the signals the shim reports, and has the relay
+// send the shim the remote exit. Neither the shim nor the relay holds
+// credentials.
 //
-// The broker runs as root and treats the view as untrusted. It listens in a
-// run directory that its own user owns and no one else can write, and does
-// every name operation relative to that directory, so nothing in the view
-// can redirect the socket; the view mounts the directory read-only, because
-// a shim only connects. The broker authenticates each connection with
-// SO_PEERCRED, accepts only the view's uid, and never reads an identity from
-// the payload.
+// The broker treats the relay as untrusted Session input. It reads the
+// socketpair without a control buffer, so the kernel closes any descriptor
+// sent with a message, checks every message against the IPC's types and
+// limits, and stops serving at the first message that breaks the IPC. That,
+// or the relay's loss, fails the Session: Done closes and Err wraps
+// ErrRelayLost. The broker never restarts the relay and never replays output
+// whose delivery is uncertain. Close never waits on the relay.
 //
-// The broker never changes the flags of a passed descriptor, whose open file
-// description the Harness shares. It reopens a pipe, FIFO or terminal
+// The relay pumps each descriptor on its own, and its dispatch never waits
+// on one, so a descriptor nobody reads holds back only its own stream. The
+// broker sends the relay at most processshim.OutputWindow bytes of a stream
+// that the relay has not reported written, and acknowledges output to the
+// process service only after that report, so the service in turn holds back
+// the program.
+//
+// The relay never changes the flags of a passed descriptor, whose open file
+// description the Harness shares. It reopens a pipe, FIFO or pty slave
 // through /proc/self/fd as its own non-blocking description, uses a socket
-// with MSG_DONTWAIT, and uses a regular file, block device or memory device
-// (/dev/null, /dev/zero, /dev/full, /dev/random, /dev/urandom) as it is, so
-// it waits on a peer only in a poll that ending the invocation interrupts. A
-// terminal is accepted only as a pty slave of the view's devpts instance,
-// because reopening any other character device as root could grant access
-// its description lacks, such as a terminal revoked by vhangup. Output on an
-// AF_UNIX socket carries SCM_CREDENTIALS with the shim's pid, uid and gid, so
-// a receiver with SO_PASSCRED never sees the broker's root credentials.
+// with MSG_DONTWAIT and a regular file or block device as it is, and polls
+// any other descriptor before each call, so it waits on a peer only in a
+// poll that ending the invocation interrupts. Output on an AF_UNIX socket
+// carries the relay's own credentials.
 //
-// Invocations on one terminal share its saved mode: the first saves it, each
-// runs the terminal raw, and the last to finish restores it.
+// Invocations on one terminal share its saved mode in the relay: the first
+// saves it, each runs the terminal raw, and the last to finish restores it.
 //
-// Each output descriptor closes after its stream's last byte, so a remote
-// background job that keeps its output open keeps the Harness's pipe open
-// while the shim still exits when the leader does. After the leader exits,
-// remote background processes stay with the Session and are not cancelled;
-// a shim lost before the exit cancels the operation's scope.
+// The broker forwards the exit without waiting for output, and the relay
+// answers the shim once the output the program wrote before exiting is
+// written. Each output descriptor closes after its stream's last byte is
+// written, so a remote background job that keeps its output open keeps the
+// Harness's pipe open while the shim still exits when the leader does.
+// After the leader exits, remote background processes stay with the Session
+// and are not cancelled; a shim lost before the exit cancels the operation's
+// scope.
 //
 // Qualification limits. These behaviors differ from a native child:
 //   - Stop and continue job control is incomplete. The shim reports TSTP,
 //     TTIN and TTOU to the remote process group but does not stop itself, so
 //     the Harness never sees the job stop. SIGSTOP of the shim stops only the
 //     shim.
-//   - Stdin is read ahead. The broker reads the shared stdin as data arrives
-//     and forwards it, so bytes the program never consumes are still taken
-//     from a stdin the Harness shares with later commands. Forwarding stops
-//     when the leader exits; remote background readers then see end of file.
+//   - Stdin is read ahead. The relay reads the shared stdin as the service
+//     accepts it, so bytes the program never consumes are still taken from a
+//     stdin the Harness shares with later commands. Forwarding stops when the
+//     leader exits; remote background readers then see end of file.
 //   - On a terminal, stderr is merged into the terminal output, as the
 //     remote PTY merges it.
 //   - A descriptor 0, 1 or 2 that was closed when the shim started is
 //     /dev/null, because the Go runtime opens it.
 //   - The argument list and environment together are limited to
-//     processshim.MaxFrameBytes, below the kernel's limit.
+//     processshim.MaxRequestBytes, below the kernel's limit.
 //   - The invocation path is matched lexically: a path reached through a
 //     symlink the table does not declare fails with 127.
 //   - A stdin write whose outcome is uncertain after a lost stream stops
@@ -61,18 +74,20 @@
 //     again, because a second Cancel would send the scope TERM again. A
 //     program that Cancel never reached keeps running until it exits or the
 //     Session ends.
-//   - A broker lost after the acknowledgement makes the shim exit with 255
-//     and no message, because the shim no longer holds its stderr.
-//   - Descriptors 0, 1 and 2 must each be a pipe, FIFO, socket, regular
-//     file, block device, memory device or pty slave of the view's devpts
-//     instance, and a pipe, FIFO or terminal must be open for the direction
-//     the program uses it in. The shim fails with 126 otherwise, for
-//     /dev/tty, /dev/ptmx and every other character device too. Reads and
-//     writes of a regular file or block device block, as a native program's
-//     do.
-//   - Output on an AF_UNIX socket written after the shim exited names the
-//     broker's pid, which is pid 0 in the view, because the shim's pid may
-//     already belong to another process.
+//   - A broker lost after the acknowledgement makes the shim exit with 255,
+//     with the reason on its stderr when the relay can still write it. A
+//     relay lost after the acknowledgement makes the shim exit with 255 and
+//     no message, because the shim no longer holds its stderr.
+//   - A pipe, FIFO or pty slave must be open for the direction the program
+//     uses it in; the shim fails with 126 otherwise. Reads and writes of a
+//     regular file or block device block, as a native program's do. A
+//     character device other than a pty slave, such as /dev/tty, and a pipe,
+//     FIFO or pty slave that the Session user may not reopen, is shared: the
+//     relay polls it before each call and writes at most PIPE_BUF bytes at
+//     once, and a read still waits when another reader took the data the
+//     poll reported.
+//   - Output on an AF_UNIX socket names the relay's pid, uid and gid, not
+//     the shim's.
 //   - A signal sent to the shim reaches the remote program only when the
 //     process service declares it. The shim catches every signal a Go
 //     program can catch except CHLD, PIPE, URG and PROF, and the broker drops

@@ -113,7 +113,7 @@ const (
 	ViewShimName = "bin"
 	// ViewHomeName is the Session home under ViewPrivateRoot.
 	ViewHomeName = "home"
-	// ViewRunName is the process broker's socket directory under ViewPrivateRoot.
+	// ViewRunName is the process relay's socket directory under ViewPrivateRoot.
 	ViewRunName = "run"
 	// ViewProcRoot and ViewDevRoot are the view's own /proc and minimal /dev.
 	ViewProcRoot = "/proc"

@@ -1,18 +1,18 @@
 //go:build linux
 
-package processbroker
+package processshim
 
 import (
 	"sync"
 
 	"golang.org/x/sys/unix"
-
-	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 )
 
-// terminals coordinates the invocations that share a local terminal: the
-// first one saves the terminal's settings, each one runs it raw from those
-// settings, and the last one to leave restores them.
+// terminals coordinates the invocations that share a terminal: the first
+// one saves the terminal's mode, each one runs it raw from that mode, and
+// the last one to leave restores it. Saving and restoring both happen under
+// mu, so an invocation that arrives while the last one leaves saves the
+// restored mode, never the raw one.
 type terminals struct {
 	mu sync.Mutex
 	m  map[termKey]*sharedTerminal
@@ -27,10 +27,8 @@ type sharedTerminal struct {
 	raw   bool
 }
 
-func (ts *terminals) init() { ts.m = map[termKey]*sharedTerminal{} }
-
-// terminal is the local terminal on descriptor 0 of a PTY invocation. It is
-// raw while the operation runs and restored on every path. It keeps its own
+// terminal is the terminal on descriptor 0 of a PTY invocation. It is raw
+// while the program runs and restored on every path. It keeps its own
 // descriptor, so it outlives the stdin pump's; holding a terminal open has
 // no end-of-file effect.
 type terminal struct {
@@ -47,11 +45,7 @@ type terminal struct {
 // openTerminal returns the terminal when in and out are both terminals, and
 // counts the invocation as one of its users.
 func openTerminal(reg *terminals, in, out int) (*terminal, error) {
-	cur, err := unix.IoctlGetTermios(in, unix.TCGETS)
-	if err != nil {
-		return nil, nil
-	}
-	if _, err := unix.IoctlGetTermios(out, unix.TCGETS); err != nil {
+	if !isTerminal(in) || !isTerminal(out) {
 		return nil, nil
 	}
 	var st unix.Stat_t
@@ -67,27 +61,47 @@ func openTerminal(reg *terminals, in, out int) (*terminal, error) {
 	defer reg.mu.Unlock()
 	s := reg.m[key]
 	if s == nil {
+		cur, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+		if err != nil {
+			unix.Close(fd)
+			return nil, err
+		}
 		s = &sharedTerminal{saved: *cur}
+		if reg.m == nil {
+			reg.m = map[termKey]*sharedTerminal{}
+		}
 		reg.m[key] = s
 	}
 	s.users++
 	return &terminal{fd: fd, reg: reg, key: key, shared: s}, nil
 }
 
-// saved is the terminal's mode before any invocation made it raw.
-func (t *terminal) saved() *unix.Termios { return &t.shared.saved }
+func isTerminal(fd int) bool {
+	_, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	return err == nil
+}
 
-func (t *terminal) size() sp.WindowSize {
+// mode is the terminal's saved mode and current size.
+func (t *terminal) mode() *Terminal {
+	s := t.shared.saved
+	return &Terminal{
+		Size:  t.size(),
+		Iflag: s.Iflag, Oflag: s.Oflag, Cflag: s.Cflag, Lflag: s.Lflag,
+		Cc: append([]byte(nil), s.Cc[:]...),
+	}
+}
+
+func (t *terminal) size() WindowSize {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
-		return sp.WindowSize{}
+		return WindowSize{}
 	}
 	ws, err := unix.IoctlGetWinsize(t.fd, unix.TIOCGWINSZ)
 	if err != nil {
-		return sp.WindowSize{}
+		return WindowSize{}
 	}
-	return sp.WindowSize{Rows: ws.Row, Cols: ws.Col, XPixels: ws.Xpixel, YPixels: ws.Ypixel}
+	return WindowSize{Rows: ws.Row, Cols: ws.Col, XPixels: ws.Xpixel, YPixels: ws.Ypixel}
 }
 
 // makeRaw passes every byte through to the remote terminal, which does the

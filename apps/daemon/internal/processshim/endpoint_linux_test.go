@@ -1,6 +1,6 @@
 //go:build linux
 
-package processbroker
+package processshim
 
 import (
 	"testing"
@@ -26,7 +26,7 @@ func TestWritersSharingAFullPipeStop(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ep, err := openEndpoint(fd, true, 0, nil)
+		ep, err := openEndpoint(fd, true)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -15,10 +15,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Forwarded are the signals the shim catches and reports to the broker, which
-// forwards those the process service declares. They are every signal the Go
-// runtime lets a program catch, except CHLD and PIPE, which the shim ignores,
-// and URG and PROF, which the runtime uses.
+// Forwarded are the signals the shim catches and reports to the relay; the
+// broker forwards those the process service declares. They are every signal
+// the Go runtime lets a program catch, except CHLD and PIPE, which the shim
+// ignores, and URG and PROF, which the runtime uses.
 var Forwarded = append([]syscall.Signal{
 	unix.SIGHUP, unix.SIGINT, unix.SIGQUIT, unix.SIGABRT, unix.SIGUSR1, unix.SIGUSR2,
 	unix.SIGALRM, unix.SIGTERM, unix.SIGCONT, unix.SIGTSTP, unix.SIGTTIN, unix.SIGTTOU,
@@ -33,7 +33,7 @@ func realTime(first, last syscall.Signal) []syscall.Signal {
 	return sigs
 }
 
-// Run runs the shim against the broker at socketPath and returns its exit
+// Run runs the shim against the relay at socketPath and returns its exit
 // code, or does not return when it re-raises the remote signal.
 func Run(socketPath string) int {
 	caught := make(chan os.Signal, 64)
@@ -54,15 +54,15 @@ func Run(socketPath string) int {
 	}
 	sock, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: socketPath, Net: "unix"})
 	if err != nil {
-		return fail(ExitCannotRun, "process broker unavailable: "+err.Error())
+		return fail(ExitCannotRun, "process relay unavailable: "+err.Error())
 	}
 	c := NewConn(sock)
 	if err := c.SendRequest(req, [3]int{0, 1, 2}); err != nil {
-		return fail(ExitCannotRun, "process broker: "+err.Error())
+		return fail(ExitCannotRun, "process relay: "+err.Error())
 	}
 	m, err := c.ReadMessage()
 	if err != nil {
-		return fail(ExitCannotRun, "process broker: "+err.Error())
+		return fail(ExitCannotRun, "process relay: "+err.Error())
 	}
 	switch m := m.(type) {
 	case Result:
@@ -72,10 +72,10 @@ func Run(socketPath string) int {
 		return exit(m)
 	case Ack:
 	default:
-		return fail(ExitCannotRun, "process broker: unexpected message")
+		return fail(ExitCannotRun, "process relay: unexpected message")
 	}
 
-	// The broker's copies are now the only references this invocation holds,
+	// The relay's copies are now the only references this invocation holds,
 	// so a reader of the shim's stdout sees EOF when the remote output ends.
 	os.Stdin.Close()
 	os.Stdout.Close()
@@ -92,7 +92,7 @@ func Run(socketPath string) int {
 	for {
 		select {
 		case s := <-caught:
-			// A failed send means the broker is gone; the read reports it.
+			// A failed send means the relay is gone; the read reports it.
 			_ = c.Send(Signal{Number: uint16(s.(syscall.Signal))})
 		case r, ok := <-results:
 			if !ok {
