@@ -51,7 +51,9 @@
 //     Ack, or refuses with an Exit whose Result carries the reason.
 //  3. The broker sends Started once the program runs; on a terminal the relay
 //     then makes the terminal raw, and only after that writes its output or
-//     reads its input.
+//     reads its input. Terminal output that arrives after the Exit is written
+//     in the restored mode, so the local terminal processes it again (a remote
+//     "\r\n" becomes "\r\r\n").
 //  4. Stdin is read on demand. Each Read grants one Input or InputEnd; the
 //     relay reads fd 0 once per grant, sends what it read, and sends InputEnd
 //     at end of file or on a read error. StopInput ends reading, and the relay
