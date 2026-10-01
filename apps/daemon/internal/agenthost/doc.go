@@ -30,7 +30,20 @@
 // process broker, the Link attachment, the Session directory and the uid;
 // Run decides its result only afterwards, so a failure recorded during
 // teardown counts, and from the close of the attachment on, what the Link
-// reports changes nothing.
+// reports changes nothing. When Executor.Close fails, teardown ends the
+// views, which kills their processes, and retries Close once. If Close
+// fails again, the Executor may still use the Session directory: Run returns
+// ErrTeardown and keeps the directory and the uid, which stays in use until
+// the agent host exits, and the next agent host's Sweep reclaims both.
+//
+// Run drives each Turn as the daemon's dispatch drives a prepared execution.
+// One output consumer starts before StartTurn and forwards the Turn's
+// envelopes to Output in order. The Turn's Done waits until the Turn has
+// settled and, when the Turn leaves the Executor unusable, until the
+// Executor has closed; a failed Turn publishes an Error envelope before it.
+// When Close fails, nothing more is published. A Turn that fails or leaves
+// the Executor unusable ends the Session, and nothing is sent to Output
+// after Run returns.
 //
 // Sweep runs at startup, before any Session. It ends every task, each thread
 // of each process, whose real, effective, saved or file-system uid lies in

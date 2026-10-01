@@ -485,22 +485,31 @@ func (r *sessionRun) send(t *testing.T, mode string) {
 	}
 }
 
+// turn runs a Turn in mode and returns its report, which its Done follows.
 func (r *sessionRun) turn(t *testing.T, mode string) report {
 	t.Helper()
 	r.send(t, mode)
+	var rep report
+	if err := json.Unmarshal(r.next(t, mode).Payload, &rep); err != nil {
+		t.Fatal(err)
+	}
+	if e := r.next(t, mode); e.Type != proto.TypeDone {
+		t.Fatalf("the %s Turn sent %s after its report, want its Done", mode, e.Type)
+	}
+	return rep
+}
+
+func (r *sessionRun) next(t *testing.T, mode string) proto.Envelope {
+	t.Helper()
 	select {
 	case e := <-r.out:
-		var rep report
-		if err := json.Unmarshal(e.Payload, &rep); err != nil {
-			t.Fatal(err)
-		}
-		return rep
+		return e
 	case err := <-r.done:
 		t.Fatalf("Run ended during the %s Turn: %v", mode, err)
 	case <-time.After(wait):
-		t.Fatalf("no %s report", mode)
+		t.Fatalf("the %s Turn sent nothing", mode)
 	}
-	return report{}
+	return proto.Envelope{}
 }
 
 func (r *sessionRun) wait(t *testing.T) error {
@@ -586,7 +595,7 @@ func (e *testExecutor) StartTurn(_ context.Context, runID string, input proto.Me
 
 func (e *testExecutor) Close(context.Context) error { return nil }
 
-// report is a Turn's one envelope: the Harness's checks, its stderr and how
+// report is a Turn's report envelope: the Harness's checks, its stderr and how
 // it exited.
 type report struct {
 	Checks map[string]string `json:"checks"`
@@ -618,6 +627,8 @@ func (t *testTurn) run(runID string, out chan<- proto.Envelope) {
 	r.Stderr = stderr.String()
 	payload, _ := json.Marshal(r)
 	out <- proto.Envelope{Type: proto.TypeOutputMessage, ID: runID, Payload: payload}
+	done, _ := proto.NewEnvelope(proto.TypeDone, runID, proto.DonePayload{})
+	out <- done
 }
 
 func (t *testTurn) Cancel(context.Context) error {

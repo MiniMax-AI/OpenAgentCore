@@ -25,10 +25,9 @@ import (
 const (
 	// turnBuffer is how many envelopes a Turn may emit ahead of Output.
 	turnBuffer = 64
-	// settleBound bounds a cancelled Turn's settlement.
-	settleBound = 30 * time.Second
-	// executorCloseBound bounds Executor.Close at teardown.
-	executorCloseBound = 30 * time.Second
+	// nativeBound bounds a Turn's settlement and each Executor.Close, as
+	// dispatch's preparedCancelTimeout does.
+	nativeBound = 10 * time.Second
 )
 
 // deps are the parts tests replace.
@@ -111,6 +110,11 @@ type session struct {
 
 	brokerMu sync.Mutex
 	broker   processBroker // started at the first launch
+
+	// The goroutine that runs drive and then teardown owns these.
+	fwd        *forwarder // the last Turn's forwarder
+	execClosed bool       // a Close of the Executor succeeded
+	execErr    error      // the last Close's error
 }
 
 func run(ctx context.Context, cfg Config, in Session, d deps) error {
@@ -224,57 +228,245 @@ func (s *session) drive(exec agent.Executor) error {
 	}
 }
 
-// turn runs one Turn, forwards its envelopes to Output and waits for its
-// settlement. When the Session ends first it cancels the Turn.
-func (s *session) turn(exec agent.Executor, in Input) error {
-	out := make(chan proto.Envelope, turnBuffer)
-	turn, err := exec.StartTurn(s.ctx, in.RunID, in.Message, out)
-	if turn == nil {
-		if err == nil {
-			err = errors.New("no Turn")
-		}
-		return &Error{Kind: ErrTurn, Op: "start", Err: err}
+// The Turn driving below mirrors the daemon's prepared execution in
+// apps/daemon/internal/dispatch: startPreparedExecution
+// (preparation_start.go), forwardPreparedOutput, runPreparedRelease and
+// forwardPreparedTerminal (prepared_handoff.go), as harness-onboarding.md's
+// "What the Runtime does around a Turn" describes them. A Session has no
+// steering, functions or interactions, so no admitted operation joins the
+// release; the end of the Session stands in for the connection's shutdown.
+
+// forwarder is a Turn's one output consumer. It starts before StartTurn and
+// drains out: it forwards each envelope to Output in order until the Session
+// ends, and keeps the Turn's Done for turn to publish after settlement.
+type forwarder struct {
+	runID string
+	out   chan proto.Envelope
+	// ended closes at the Turn's terminal observation: its Done, a protocol
+	// error or the close of out.
+	ended chan struct{}
+	// abort closes when the Turn is to be cancelled: a protocol error, a
+	// failed start or the end of the Session.
+	abort chan struct{}
+	// stop makes the forwarder return without draining further.
+	stop chan struct{}
+	// done closes when the forwarder has returned and sends nothing more.
+	done chan struct{}
+
+	endOnce, abortOnce, stopOnce sync.Once
+
+	mu          sync.Mutex
+	terminal    *proto.Envelope
+	protocolErr error
+}
+
+func newForwarder(runID string) *forwarder {
+	return &forwarder{runID: runID, out: make(chan proto.Envelope, turnBuffer),
+		ended: make(chan struct{}), abort: make(chan struct{}), stop: make(chan struct{}), done: make(chan struct{})}
+}
+
+func (f *forwarder) end()    { f.endOnce.Do(func() { close(f.ended) }) }
+func (f *forwarder) cancel() { f.abortOnce.Do(func() { close(f.abort) }) }
+func (f *forwarder) halt()   { f.stopOnce.Do(func() { close(f.stop) }) }
+
+func (f *forwarder) aborted() bool {
+	select {
+	case <-f.abort:
+		return true
+	default:
+		return false
 	}
-	forwarded := make(chan struct{})
-	go func() {
-		defer close(forwarded)
-		for e := range out {
-			select {
-			case s.in.Output <- e:
-			case <-s.ctx.Done():
+}
+
+// forward runs f until out closes or f is halted.
+func (s *session) forward(f *forwarder) {
+	defer close(f.done)
+	for {
+		select {
+		case <-f.stop:
+			return
+		case e, ok := <-f.out:
+			if !ok {
+				f.end()
+				return
+			}
+			f.mu.Lock()
+			if e.ID != f.runID || f.terminal != nil {
+				if f.protocolErr == nil {
+					f.protocolErr = errors.New("executor output crossed the Turn boundary")
+				}
+				f.mu.Unlock()
+				f.end()
+				f.cancel()
+				continue
+			}
+			if e.Type == proto.TypeDone {
+				f.terminal = &e
+				f.mu.Unlock()
+				f.end()
+				continue
+			}
+			f.mu.Unlock()
+			if s.ctx.Err() == nil {
+				select {
+				case s.in.Output <- e:
+				case <-s.ctx.Done():
+				}
 			}
 		}
-	}()
-	settled, serr := turn.AwaitSettlement(s.ctx)
-	if s.ctx.Err() != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), settleBound)
-		turn.Cancel(ctx)
-		settled, serr = turn.AwaitSettlement(ctx)
-		cancel()
 	}
-	if serr != nil {
-		return &Error{Kind: ErrTurn, Op: "settle", Err: serr}
+}
+
+// turn runs one Turn. Its forwarder starts before StartTurn. Once the Turn's
+// output ends, or the Turn is to be cancelled, turn awaits its settlement,
+// closes the Executor when the Turn leaves it unusable and only then
+// publishes the Turn's Done, after an Error envelope when the Turn failed.
+// When Close fails, the Executor keeps the Turn and nothing is published.
+// When the Session has ended, nothing is published and turn returns nil.
+func (s *session) turn(exec agent.Executor, in Input) error {
+	f := newForwarder(in.RunID)
+	s.fwd = f
+	go s.forward(f)
+	defer context.AfterFunc(s.ctx, f.cancel)()
+	turn, startErr := exec.StartTurn(s.ctx, in.RunID, in.Message, f.out)
+	if turn == nil {
+		// out stays with the caller. The failed Turn ends the Session, and
+		// teardown closes the Executor.
+		close(f.out)
+		<-f.done
+		if startErr == nil {
+			startErr = errors.New("no Turn")
+		}
+		return &Error{Kind: ErrTurn, Op: "start", Err: startErr}
 	}
-	<-forwarded
+	if startErr != nil {
+		f.cancel()
+	}
+	select {
+	case <-f.ended:
+	case <-f.abort:
+	}
+	settlement, nativeErr := settle(turn, f.abort)
+	if nativeErr == nil {
+		// Settlement confirms that out is closed.
+		select {
+		case <-f.done:
+		case <-s.ctx.Done():
+		}
+	}
+	f.mu.Lock()
+	terminal, protocolErr := f.terminal, f.protocolErr
+	if terminal == nil && protocolErr == nil && !f.aborted() {
+		protocolErr = errors.New("executor output ended without a terminal result")
+	}
+	f.mu.Unlock()
+	if nativeErr != nil || !settlement.Reusable || startErr != nil || protocolErr != nil || s.ctx.Err() != nil {
+		if err := s.closeExecutor(exec); err != nil {
+			return &Error{Kind: ErrTurn, Op: "close executor", Err: errors.Join(nativeErr, err)}
+		}
+	}
+	// A confirmed Close confirms that out is closed too.
+	select {
+	case <-f.done:
+	case <-s.ctx.Done():
+		return nil
+	}
+
+	var failure string
+	var result error
 	switch {
-	case err != nil:
-		return &Error{Kind: ErrTurn, Op: "start", Err: err}
-	case !settled.Reusable:
-		return &Error{Kind: ErrTurn, Op: "settle", Err: fmt.Errorf("the Executor is not reusable: %s", settled.Reason)}
+	case nativeErr != nil:
+		failure, result = "executor Turn settlement failed", &Error{Kind: ErrTurn, Op: "settle", Err: nativeErr}
+	case protocolErr != nil:
+		failure, result = protocolErr.Error(), &Error{Kind: ErrTurn, Op: "output", Err: protocolErr}
+	case startErr != nil:
+		failure, result = "executor Turn could not start", &Error{Kind: ErrTurn, Op: "start", Err: startErr}
+	case !settlement.Reusable:
+		result = &Error{Kind: ErrTurn, Op: "settle", Err: fmt.Errorf("the Executor is not reusable: %s", settlement.Reason)}
 	}
-	return nil
+	if failure != "" {
+		e, err := proto.NewEnvelope(proto.TypeError, in.RunID, proto.ErrorPayload{Error: failure})
+		if err != nil {
+			return errors.Join(result, err)
+		}
+		s.publish(e)
+	}
+	if terminal == nil {
+		e, err := proto.NewEnvelope(proto.TypeDone, in.RunID, proto.DonePayload{})
+		if err != nil {
+			return errors.Join(result, err)
+		}
+		terminal = &e
+	}
+	s.publish(*terminal)
+	if s.ctx.Err() != nil {
+		return nil
+	}
+	return result
+}
+
+// settle awaits turn's settlement for at most nativeBound. When abort closes
+// first it cancels the Turn, and a failed Cancel ends the wait; natural
+// completion never calls Cancel.
+func settle(turn agent.Turn, abort <-chan struct{}) (agent.TurnSettlement, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), nativeBound)
+	defer cancel()
+	cancelled := make(chan error, 1)
+	settled := make(chan struct{})
+	go func() {
+		select {
+		case <-abort:
+			err := turn.Cancel(ctx)
+			if err != nil {
+				cancel()
+			}
+			cancelled <- err
+		case <-settled:
+			cancelled <- nil
+		}
+	}()
+	settlement, err := turn.AwaitSettlement(ctx)
+	close(settled)
+	return settlement, errors.Join(err, <-cancelled)
+}
+
+// publish sends e to Output while the Session runs.
+func (s *session) publish(e proto.Envelope) {
+	if s.ctx.Err() != nil {
+		return
+	}
+	select {
+	case s.in.Output <- e:
+	case <-s.ctx.Done():
+	}
+}
+
+// closeExecutor closes exec for at most nativeBound, until a Close succeeds.
+// A failed Close retains the Executor's resources, and a later call retries
+// it.
+func (s *session) closeExecutor(exec agent.Executor) error {
+	if exec == nil || s.execClosed {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), nativeBound)
+	defer cancel()
+	s.execErr = exec.Close(ctx)
+	s.execClosed = s.execErr == nil
+	return s.execErr
 }
 
 // teardown releases the Session in order: the Executor, the view, the
 // process broker, the Link attachment, the Session directory and the uid.
+// When Close fails, teardown ends the views, which kills each view's
+// processes, and retries Close once. If that fails too, the Executor may
+// still use the Session directory: teardown returns ErrTeardown and keeps
+// the directory and the uid, which stays in use until the agent host exits;
+// the next agent host's Sweep reclaims both.
 func (s *session) teardown(exec agent.Executor) error {
 	var errs []error
-	if exec != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), executorCloseBound)
-		if err := exec.Close(ctx); err != nil {
-			errs = append(errs, &Error{Kind: ErrTeardown, Op: "close executor", Err: err})
-		}
-		cancel()
+	closeErr := s.execErr
+	if closeErr == nil {
+		closeErr = s.closeExecutor(exec)
 	}
 	// Ending the Session closes the live view and refuses new launches. Under
 	// mu, every launch that passed its check has already counted itself.
@@ -282,6 +474,14 @@ func (s *session) teardown(exec agent.Executor) error {
 	s.cancel()
 	s.mu.Unlock()
 	s.views.Wait()
+	if closeErr != nil {
+		closeErr = s.closeExecutor(exec)
+	}
+	// The Session has ended, so the forwarder sends nothing more.
+	if f := s.fwd; f != nil {
+		f.halt()
+		<-f.done
+	}
 	s.brokerMu.Lock()
 	broker := s.broker
 	s.brokerMu.Unlock()
@@ -291,6 +491,10 @@ func (s *session) teardown(exec agent.Executor) error {
 		}
 	}
 	errs = append(errs, s.link.close())
+	if closeErr != nil {
+		errs = append(errs, &Error{Kind: ErrTeardown, Op: "close executor", Err: closeErr})
+		return errors.Join(errs...)
+	}
 	if err := os.RemoveAll(string(s.dir)); err != nil {
 		errs = append(errs, &Error{Kind: ErrTeardown, Op: "remove session directory", Err: err})
 	}

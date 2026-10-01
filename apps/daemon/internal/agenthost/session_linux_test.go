@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -125,13 +126,215 @@ func TestFailureDuringTeardownCounts(t *testing.T) {
 	}
 }
 
+func TestTurnDrainsOutputFromStart(t *testing.T) {
+	s := newOwnerSession(t)
+	output := make(chan proto.Envelope, 2*turnBuffer)
+	s.in.Output = output
+	// The adapter emits more than out holds before StartTurn returns.
+	turn := &fakeTurn{}
+	exec := &fakeExecutor{start: func(runID string, out chan<- proto.Envelope) (agent.Turn, error) {
+		for range turnBuffer + 1 {
+			out <- proto.Envelope{Type: proto.TypeOutputMessage, ID: runID}
+		}
+		out <- doneEnvelope(runID)
+		close(out)
+		return turn, nil
+	}}
+	if err := within(t, func() error { return s.turn(exec, Input{RunID: "r"}) }); err != nil {
+		t.Fatalf("turn = %v", err)
+	}
+	if got := drainAll(output); len(got) != turnBuffer+2 || got[len(got)-1].Type != proto.TypeDone || turn.cancelled.Load() || exec.closes != 0 {
+		t.Fatalf("Output got %d envelopes; Turn cancelled %v; Executor closed %d times", len(got), turn.cancelled.Load(), exec.closes)
+	}
+	// A nil Turn leaves out with its caller, which closes it.
+	var kept chan<- proto.Envelope
+	exec = &fakeExecutor{start: func(_ string, out chan<- proto.Envelope) (agent.Turn, error) {
+		kept = out
+		return nil, errors.New("refused")
+	}}
+	if err := within(t, func() error { return s.turn(exec, Input{RunID: "r"}) }); !errors.Is(err, ErrTurn) || !isClosed(kept) {
+		t.Fatalf("turn without a Turn = %v; out closed %v", err, isClosed(kept))
+	}
+}
+
+func TestTurnPublishesDoneAfterSettlementAndClose(t *testing.T) {
+	s := newOwnerSession(t)
+	output := make(chan proto.Envelope, 4)
+	s.in.Output = output
+	published := -1
+	exec := &fakeExecutor{
+		start: func(runID string, out chan<- proto.Envelope) (agent.Turn, error) {
+			out <- doneEnvelope(runID)
+			close(out)
+			return &fakeTurn{settleErr: errors.New("settlement lost")}, nil
+		},
+		close: func() error {
+			published = len(output)
+			return nil
+		},
+	}
+	err := within(t, func() error { return s.turn(exec, Input{RunID: "r"}) })
+	got := drainAll(output)
+	if !errors.Is(err, ErrTurn) || published != 0 || len(got) != 2 || got[0].Type != proto.TypeError || got[1].Type != proto.TypeDone {
+		t.Fatalf("turn = %v; %d envelopes published before Close; Output got %v, want Error then Done", err, published, got)
+	}
+}
+
+func TestFailedCloseKeepsTheSessionDirectoryAndUID(t *testing.T) {
+	errStuck := errors.New("close stuck")
+	for name, recovers := range map[string]bool{"Close fails until the view ends": true, "Close keeps failing": false} {
+		s := newOwnerSession(t)
+		output := make(chan proto.Envelope, 4)
+		s.in.Output = output
+		// Each case takes its own uid.
+		uid, err := allocUID(UIDRange{First: 72000, Count: 2}, &fakeProcesses{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { freeUID(uid) })
+		s.uid = uid
+		if s.dir, err = createSessionDir(t.TempDir(), sandboxwire.NewID(), uid); err != nil {
+			t.Fatal(err)
+		}
+		v := &fakeView{exit: make(chan struct{})}
+		s.live = &liveView{view: v}
+		s.views.Add(1)
+		go func() {
+			v.Wait()
+			s.views.Done()
+		}()
+		// The Turn's settlement fails, and its adapter never closes out.
+		var kept chan<- proto.Envelope
+		exec := &fakeExecutor{
+			start: func(runID string, out chan<- proto.Envelope) (agent.Turn, error) {
+				kept = out
+				out <- proto.Envelope{Type: proto.TypeOutputMessage, ID: runID}
+				out <- doneEnvelope(runID)
+				return &fakeTurn{settleErr: errors.New("settlement lost")}, nil
+			},
+			close: func() error {
+				select {
+				case <-v.exit:
+					if recovers {
+						return nil
+					}
+				default:
+				}
+				return errStuck
+			},
+		}
+		err = within(t, func() error { return s.finish(exec, s.turn(exec, Input{RunID: "r"}), nil) })
+		_, statErr := os.Stat(string(s.dir))
+		uids.Lock()
+		used := uids.used[uid]
+		uids.Unlock()
+		switch {
+		case !errors.Is(err, ErrTurn) || exec.closes != 2 || len(output) != 1:
+			t.Errorf("%s: Run = %v; Executor closed %d times; Output got %d envelopes, want only the output message", name, err, exec.closes, len(output))
+		case recovers && (errors.Is(err, ErrTeardown) || statErr == nil || used):
+			t.Errorf("%s: Run = %v; directory kept %v; uid in use %v", name, err, statErr == nil, used)
+		case !recovers && (!errors.Is(err, ErrTeardown) || !errors.Is(err, errStuck) || statErr != nil || !used):
+			t.Errorf("%s: Run = %v; directory kept %v; uid in use %v; want ErrTeardown keeping both", name, err, statErr == nil, used)
+		}
+		// The forwarder has returned, so nothing reaches Output any more.
+		select {
+		case <-s.fwd.done:
+		default:
+			t.Errorf("%s: the forwarder outlives Run", name)
+		}
+		kept <- proto.Envelope{Type: proto.TypeOutputMessage, ID: "r"}
+	}
+}
+
 // newOwnerSession is a Session with no directory, uid or link.
 func newOwnerSession(t *testing.T) *session {
 	s := &session{log: slog.New(slog.DiscardHandler)}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	t.Cleanup(s.cancel)
+	context.AfterFunc(s.ctx, s.closeLive)
 	s.link = newLinkOwner(nil, Binding{AttachmentID: sandboxwire.NewID()}, s.fail)
 	return s
+}
+
+// within runs f and fails t unless f returns within a bound.
+func within(t *testing.T, f func() error) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- f() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocked")
+		return nil
+	}
+}
+
+// drainAll returns what ch holds.
+func drainAll(ch chan proto.Envelope) []proto.Envelope {
+	var list []proto.Envelope
+	for len(ch) > 0 {
+		list = append(list, <-ch)
+	}
+	return list
+}
+
+// isClosed reports whether ch is closed.
+func isClosed(ch chan<- proto.Envelope) (closed bool) {
+	defer func() { closed = recover() != nil }()
+	select {
+	case ch <- proto.Envelope{}:
+	default:
+	}
+	return false
+}
+
+func doneEnvelope(runID string) proto.Envelope {
+	e, err := proto.NewEnvelope(proto.TypeDone, runID, proto.DonePayload{})
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
+// fakeExecutor starts each Turn with start; Close returns close's result.
+type fakeExecutor struct {
+	start  func(runID string, out chan<- proto.Envelope) (agent.Turn, error)
+	close  func() error
+	closes int
+}
+
+func (e *fakeExecutor) StartTurn(_ context.Context, runID string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
+	return e.start(runID, out)
+}
+
+func (e *fakeExecutor) Close(context.Context) error {
+	e.closes++
+	if e.close == nil {
+		return nil
+	}
+	return e.close()
+}
+
+// fakeTurn settles at once: reusable, or with settleErr.
+type fakeTurn struct {
+	settleErr error
+	cancelled atomic.Bool
+}
+
+func (t *fakeTurn) Cancel(context.Context) error {
+	t.cancelled.Store(true)
+	return nil
+}
+
+func (t *fakeTurn) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
+
+func (t *fakeTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
+	return agent.ErrUnsupportedOperation
+}
+
+func (t *fakeTurn) AwaitSettlement(context.Context) (agent.TurnSettlement, error) {
+	return agent.TurnSettlement{Reusable: t.settleErr == nil}, t.settleErr
 }
 
 // fakeView is a view that ends when closed.
