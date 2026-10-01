@@ -85,7 +85,7 @@ Decoding rules:
 - Reject unknown tags, nonzero flags, unknown enum values, duplicate entries, overflow and trailing payload bytes. Every such error wraps `sandboxwire.ErrMalformed`.
 - There are no maps and no implicit defaults.
 - A file or process data chunk is at most 64 KiB (`sandboxwire.MaxChunk`).
-- Each sender's request IDs on a stream strictly increase in wire order, so a receiver checks uniqueness in constant memory. A sender takes each ID from `sandboxwire.RequestSequence.Next` in the critical section that writes the frame. A receiver checks each ID with `Admit` and answers an ID that does not increase as a protocol violation, without dispatching the request.
+- Each sender's request IDs on a stream strictly increase in wire order, so a receiver checks uniqueness in constant memory. A sender takes each ID from `sandboxwire.RequestSequence.Next` in the critical section that writes the frame. A receiver checks each ID with `Admit` and answers an ID that does not increase as a protocol violation, without dispatching the request. A service stream carries two sequences in turn: the Link exchange that opens it, `Open` and `Opened` on the attach side or `Bind` and `Bound` on the serve side, then the service protocol's own sequence, which starts after that exchange, so the first service request may use ID 1 again.
 - A failed request states whether it may have taken effect: `EffectNone` or `EffectPossible`. Transport loss after dispatch is `EffectPossible` unless the server later establishes the result.
 
 Each protocol keeps annotated golden frames under its package's `testdata` and a decoder fuzz target.
@@ -221,7 +221,7 @@ An attachment's binding identity is its `AttachmentID`, `Resource`, `SessionID`,
 `Bind` carries the authorized binding and never the grant or a credential:
 
 - For a File stream, `Exports` lists 1 to 64 exports the stream may use, each by ID and read-write or `ReadOnly`. An export ID is 1 to 64 lowercase letters, digits, `_` and `-`, and IDs in a list are distinct. Process and Network binds carry no `Exports`. The [Sandbox bootstrap](sandbox-bootstrap.md#responsibilities-and-readiness) states which exports the File service serves.
-- For a Network stream, `Egress` lists the destinations the stream may reach: an address inside a rule's prefix on a port from `PortFirst` to `PortLast`. An empty list denies everything. Each prefix has its host bits zero, `1 ≤ PortFirst ≤ PortLast`, and no rule appears twice. File and Process binds carry no `Egress`.
+- For a Network stream, `Egress` lists the destinations the stream may reach: an address inside a rule's prefix on a port from `PortFirst` to `PortLast`. An empty list denies everything. Each prefix has its host bits zero, `1 ≤ PortFirst ≤ PortLast`, and no rule appears twice. File and Process binds carry no `Egress`. The [Network protocol](sandbox-network-protocol.md#egress-check) states how the service applies it.
 
 The exports and egress of a stream are fixed when it opens; a renewal changes only the lease.
 
@@ -251,7 +251,7 @@ Losing a link resets the streams it carries and keeps its attachments until thei
 
 ## Stream ends
 
-The streams handed to service handlers and returned by `OpenService` implement `sandboxlink.Stream`: `Read`, `Write`, `CloseWrite`, `Close`, which ends writing in order and discards further input, and `Reset`.
+The streams handed to service handlers and returned by `OpenService` implement `sandboxlink.Stream`: `Read`, `Write`, `CloseWrite`, `Close`, which ends writing in order and discards further input, `Reset`, and `SetDeadline`, `SetReadDeadline` and `SetWriteDeadline`. The deadlines bound how long a `Read` or `Write` waits, as yamux's do: a call that would wait past its deadline fails with an error whose `Timeout` is true and leaves the stream usable, and a `Read` still returns input already buffered. One goroutine may read while another writes; concurrent reads, or concurrent writes, need the caller's own lock.
 
 The relay copies each direction through a 32 KiB buffer and holds at most one 256 KiB yamux window per stream:
 

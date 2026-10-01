@@ -36,7 +36,7 @@ The Provider creates the account and the sandbox, delivers this file and starts 
 
 The service validates the input and owns the link: it connects as the serve peer, serves bound streams and reconnects while the credential stays valid. `resource`, including its generation, must be the resource the credential serves, or the relay refuses the link.
 
-The File service serves the single export `world`, rooted at the sandbox's `/`, and the Provider's sandbox setup owns that topology's isolation. The [Process service](process-protocol.md#implement-a-service) runs processes as the service's account, and the service, a child subreaper, reaps their orphaned descendants.
+The File service serves the single export `world`, rooted at the sandbox's `/`, and the Provider's sandbox setup owns that topology's isolation. The [Process service](process-protocol.md#implement-a-service) runs processes as the service's account, and the service, a child subreaper, reaps their orphaned descendants. The service also serves the [Network protocol](sandbox-network-protocol.md): it resolves names and dials TCP from the sandbox's network namespace, within the egress each stream's `Bind` carries.
 
 The service exits nonzero with a message naming the failed step when it cannot start, and with the relay's failure code when `Serve` returns a [refusal](sandbox-link-protocol.md#implement-a-serve-peer). Neither message includes the credential. On SIGTERM it stops accepting streams, cancels its live operations as [ownership cleanup](process-protocol.md#ownership) does, waits for them to end, at most the cancel grace limit plus five seconds, and exits 0.
 
