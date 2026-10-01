@@ -4,6 +4,7 @@ package processservice
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -413,6 +414,22 @@ func (op *operation) watchScope() {
 		op.mu.Unlock()
 		time.Sleep(delay)
 		delay = min(2*delay, scopePollMax)
+	}
+}
+
+// awaitScope waits until the scope has closed or ctx ends. A launch that
+// failed closes the scope too.
+func (op *operation) awaitScope(ctx context.Context) {
+	stop := context.AfterFunc(ctx, func() {
+		op.mu.Lock()
+		op.cond.Broadcast()
+		op.mu.Unlock()
+	})
+	defer stop()
+	op.mu.Lock()
+	defer op.mu.Unlock()
+	for op.scope != sp.ScopeStateClosed && ctx.Err() == nil {
+		op.cond.Wait()
 	}
 }
 

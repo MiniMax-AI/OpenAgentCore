@@ -4,7 +4,13 @@ A Sandbox Provider starts the Sandbox I/O service by handing it one bootstrap fi
 
 ## Launch input
 
-Deliver one JSON object in a regular file that only the service's account and trusted provisioning processes can read (mode 0600 on Linux), and pass its absolute path to the service when starting it.
+Deliver one JSON object in a regular file that only the service's account and trusted provisioning processes can read (mode 0600 on Linux), and pass its absolute path:
+
+```sh
+oac-sandbox-io --bootstrap-file /home/sandbox/sandbox-io-bootstrap.json
+```
+
+The command takes no other argument and reads no environment variable or configuration file.
 
 | Field | Meaning |
 | --- | --- |
@@ -24,14 +30,18 @@ The file is the service's only authentication input. Credentials never go in com
 
 The service runs as the account the Provider starts it with. The input names no user or group, and the service never changes identity. The Provider already creates the sandbox's accounts and launches its processes, so it chooses this account, and the service needs no privilege-dropping code.
 
-## Responsibilities
+## Responsibilities and readiness
 
-The Provider creates the account and the sandbox, delivers this file and starts the service. It keeps the file for process restarts and removes it only during explicit cleanup of the resources it owns.
+The Provider creates the account and the sandbox, delivers this file and starts `oac-sandbox-io` as that account. `make build-sandbox-io` builds the static Linux binary. The Provider keeps the file for process restarts and removes it only during explicit cleanup of the resources it owns.
 
-The service validates the input and owns the link: it connects, serves bound streams and reconnects while the credential stays valid. `resource`, including its generation, must be the resource the credential serves, or the relay refuses the link.
+The service validates the input and owns the link: it connects as the serve peer, serves bound streams and reconnects while the credential stays valid. `resource`, including its generation, must be the resource the credential serves, or the relay refuses the link.
 
-The File service serves the single export `world`, rooted at the sandbox's `/`, and the Provider's sandbox setup owns that topology's isolation.
+The File service serves the single export `world`, rooted at the sandbox's `/`, and the Provider's sandbox setup owns that topology's isolation. The [Process service](process-protocol.md#implement-a-service) runs processes as the service's account, and the service, a child subreaper, reaps their orphaned descendants.
+
+The service exits nonzero with a message naming the failed step when it cannot start, and with the relay's failure code when `Serve` returns a [refusal](sandbox-link-protocol.md#implement-a-serve-peer). Neither message includes the credential. On SIGTERM it stops accepting streams, cancels its live operations as [ownership cleanup](process-protocol.md#ownership) does, waits for them to end, at most the cancel grace limit plus five seconds, and exits 0.
+
+A successful launch proves only the handoff. The service is ready when the relay holds it as the resource's current serve peer, so that an `Open` of the resource reaches it instead of failing with `ServiceUnavailable`.
 
 ## Verification
 
-`go test ./internal/sandboxbootstrap` covers the input contract.
+`go test ./internal/sandboxbootstrap` covers the input contract, and `go test ./apps/sandboxio/internal/sandboxio` runs the service against a test relay on Linux.
