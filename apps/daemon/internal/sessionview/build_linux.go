@@ -44,7 +44,7 @@ func (b *builder) build(spec *launchSpec) error {
 		if err != nil {
 			return err
 		}
-		if err := b.bind(src, b.root, privateRoot+"/"+d.Name, bindAttr(d.Writable, d.Exec, false)); err != nil {
+		if err := b.bind(src, b.root, PrivateRoot+"/"+d.Name, bindAttr(d.Writable, d.Exec, false)); err != nil {
 			return err
 		}
 	}
@@ -84,7 +84,7 @@ func (b *builder) build(spec *launchSpec) error {
 
 // shimDir presents the shim at /.oac/bin/<name> on a read-only tmpfs.
 func (b *builder) shimDir(names []string, shim int) error {
-	dir := privateRoot + "/" + shimName
+	dir := PrivateRoot + "/" + ShimDir
 	mnt, err := newFS("tmpfs", [][2]string{{"mode", "0755"}, {"size", "64k"}}, attrNoSuid|attrNoDev|attrNoExec)
 	if err != nil {
 		return err

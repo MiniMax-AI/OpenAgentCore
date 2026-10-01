@@ -27,7 +27,7 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 			if len(preparedCatalogs(t, root)) != 1 {
 				t.Fatal("preparation did not retain its model catalog")
 			}
-			pid := p.session.rpc.cmd.Process.Pid
+			pid := p.session.rpc.process.Cmd.Process.Pid
 			cfgPreparedCwd := p.plan.Cwd
 			// Caller-owned data cannot revise the prepared native configuration.
 			req.AgentOptions["model"] = "different-model"
@@ -42,7 +42,7 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 			}
 			session := started.(*Session)
 			defer session.Cancel(context.Background())
-			if session.rpc != p.session.rpc || session.rpc.cmd.Process.Pid != pid {
+			if session.rpc != p.session.rpc || session.rpc.process.Cmd.Process.Pid != pid {
 				t.Fatal("start replaced the prepared native resource")
 			}
 			if err := p.Close(); err != nil || !session.rpc.Alive() {

@@ -85,7 +85,7 @@ func (v *View) launch(spec *Spec) error {
 			}
 		}
 	}()
-	v.staging, err = os.MkdirTemp("", "oac-view-*")
+	v.staging, err = os.MkdirTemp(spec.StagingParent, "oac-view-*")
 	if err != nil {
 		return &Error{Kind: ErrLauncher, Op: "staging", Err: err}
 	}
@@ -334,10 +334,10 @@ func (v *View) Stderr() *os.File { return v.pipes[2] }
 func (s *Spec) mountpoints() []Mountpoint {
 	var m []Mountpoint
 	for _, d := range s.Private {
-		m = append(m, Mountpoint{Path: privateRoot + "/" + d.Name, Dir: true})
+		m = append(m, Mountpoint{Path: PrivateRoot + "/" + d.Name, Dir: true})
 	}
 	m = append(m,
-		Mountpoint{Path: privateRoot + "/" + shimName, Dir: true},
+		Mountpoint{Path: PrivateRoot + "/" + ShimDir, Dir: true},
 		Mountpoint{Path: "/proc", Dir: true},
 		Mountpoint{Path: "/dev", Dir: true},
 	)

@@ -106,6 +106,9 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if n := processesWith(t, token); n != 1 {
 		t.Fatalf("%d grandchildren before exit, want 1", n)
 	}
+	if staged, _ := os.ReadDir(f.staging); len(staged) != 1 {
+		t.Fatalf("staging parent holds %v, want the view's staging directory", staged)
+	}
 	if err := v.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("Signal: %v", err)
 	}
@@ -120,7 +123,7 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	default:
 		t.Error("world server still serving")
 	}
-	if left, _ := filepath.Glob(filepath.Join(os.TempDir(), "oac-view-*")); len(left) != 0 {
+	if left, _ := os.ReadDir(f.staging); len(left) != 0 {
 		t.Errorf("staging directories left: %v", left)
 	}
 }
@@ -191,7 +194,11 @@ func TestStartRejectsInvalidSpec(t *testing.T) {
 	for name, spec := range map[string]Spec{
 		"relative overlay":            {Overlays: []Overlay{{Path: "etc/resolv.conf", Source: "/etc/hosts"}}},
 		"writable executable private": {Private: []PrivateDir{{Name: "home", HostDir: t.TempDir(), Writable: true, Exec: true}}},
+		"missing staging parent":      {StagingParent: filepath.Join(t.TempDir(), "missing")},
 	} {
+		if spec.StagingParent == "" {
+			spec.StagingParent = t.TempDir()
+		}
 		spec.World = (&loopbackWorld{}).serve
 		spec.Process = Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: viewID, GID: viewID}
 		if _, err := Start(context.Background(), spec); !errors.Is(err, ErrInvalidSpec) {
@@ -211,7 +218,7 @@ func requireView(t *testing.T) {
 }
 
 type fixture struct {
-	self, world, harness, home, run, overlay string
+	self, world, harness, home, run, overlay, staging string
 }
 
 // newFixture lays out a world with the mountpoints the real world frontend presents synthetically, plus the local sources.
@@ -228,6 +235,7 @@ func newFixture(t *testing.T) *fixture {
 		home:    filepath.Join(base, "home"),
 		run:     filepath.Join(base, "run"),
 		overlay: filepath.Join(base, "overlay"),
+		staging: filepath.Join(base, "staging"),
 	}
 	for _, d := range []string{".oac/harness", ".oac/home", ".oac/run", ".oac/bin", "proc", "dev", "bin", "usr/bin", "data", "etc/oac-overlay"} {
 		mkdir(t, filepath.Join(f.world, d))
@@ -245,6 +253,7 @@ func newFixture(t *testing.T) *fixture {
 		}
 	}
 	mkdir(t, f.overlay)
+	mkdir(t, f.staging)
 	writeFile(t, filepath.Join(f.overlay, "greeting"), "from the overlay")
 	return f
 }
@@ -272,6 +281,7 @@ func (f *fixture) spec(w *loopbackWorld, mode string, env ...string) Spec {
 			GID:    viewID,
 			Stderr: os.Stderr,
 		},
+		StagingParent: f.staging,
 	}
 }
 

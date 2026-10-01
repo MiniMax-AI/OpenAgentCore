@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -122,6 +123,33 @@ func TestPublicHarnessContractDeclarations(t *testing.T) {
 				if !reflect.DeepEqual(assertions[name], want) {
 					t.Errorf("%s needs explicit compile assertions on %v; got %v", name, want, assertions[name])
 				}
+			}
+			// Each discovered Runtime decides its agent-host view explicitly, even when it declares none.
+			declaration, err := parser.ParseFile(token.NewFileSet(), filepath.Join(entry.Configuration, "declaration.go"), nil, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runtimes := 0
+			ast.Inspect(declaration, func(node ast.Node) bool {
+				literal, ok := node.(*ast.CompositeLit)
+				if !ok {
+					return true
+				}
+				selector, ok := literal.Type.(*ast.SelectorExpr)
+				if !ok || selector.Sel.Name != "Runtime" {
+					return true
+				}
+				runtimes++
+				for _, element := range literal.Elts {
+					if field, ok := element.(*ast.KeyValueExpr); ok && fmt.Sprint(field.Key) == "View" {
+						return true
+					}
+				}
+				t.Error("agent.Runtime literal must set View explicitly")
+				return true
+			})
+			if runtimes == 0 {
+				t.Error("declaration.go constructs no agent.Runtime")
 			}
 		})
 	}

@@ -16,6 +16,8 @@ type Spec struct {
 	Shim     Shim
 	Process  Process
 	Network  Network
+	// StagingParent is an existing absolute host directory, such as the Session directory, in which the view creates its staging directory and removes it at teardown.
+	StagingParent string
 }
 
 // World starts serving the view's root file system on dev, a /dev/fuse connection that the launcher has already mounted as mount describes. The server runs in the daemon, outside the view, and never mounts or unmounts anything. sessionview closes dev after Stop returns.
@@ -92,20 +94,27 @@ type Exit struct {
 }
 
 const (
-	privateRoot = "/.oac"
-	shimName    = "bin"
+	// PrivateRoot is the view directory that holds the private directories and the shim directory.
+	PrivateRoot = "/.oac"
+	// ShimDir is the name of the shim directory under PrivateRoot; no private directory uses it.
+	ShimDir = "bin"
 )
 
 // reservedTrees are built by the launcher; overlays and shim paths stay out of them.
-var reservedTrees = []string{privateRoot, "/proc", "/dev"}
+var reservedTrees = []string{PrivateRoot, "/proc", "/dev"}
 
 func (s *Spec) validate() error {
 	if s.World == nil {
 		return invalid("world is required")
 	}
+	if info, err := hostSource(s.StagingParent); err != nil {
+		return err
+	} else if !info.IsDir() {
+		return invalid("staging parent %s is not a directory", s.StagingParent)
+	}
 	names := map[string]bool{}
 	for _, d := range s.Private {
-		if !isComponent(d.Name) || d.Name == shimName || names[d.Name] {
+		if !isComponent(d.Name) || d.Name == ShimDir || names[d.Name] {
 			return invalid("private directory name %q", d.Name)
 		}
 		names[d.Name] = true
