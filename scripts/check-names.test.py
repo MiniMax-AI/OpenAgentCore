@@ -122,7 +122,7 @@ class NameGuardTests(unittest.TestCase):
 
     def test_checked_in_exceptions_do_not_hide_unrelated_retired_setting(self):
         rules = names.load_rules(Path(__file__).with_name("name-allowlist.json"))
-        for content in ('"contracts/agents-api/README.md" PARSAR_HOME',
+        for content in ('"contracts/agents-api/index.md" PARSAR_HOME',
                         '"Parsar product" PARSAR_HOME'):
             with self.subTest(content=content):
                 self.assertEqual(len(names.violations("README.md", content, rules)), 1)

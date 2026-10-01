@@ -1,6 +1,8 @@
-# Core wire behavior
+---
+title: "Core wire behavior"
+---
 
-The pinned OpenAI Python SDK ([upstream.json](upstream.json)) defines the `/v1` routes, fields and types. This page states what Core does where those types are silent, such as status codes, error fields, defaults and list bounds, and where Core behaves differently from the official service. The [coverage ledger](README.md) lists the differences and open gaps; [Sessions, events and history](sessions-events.md), [message content](message-content.md), [Vaults](vaults.md), [source Files and Skills](source-files.md) and [Environment files and Artifacts](environment-files.md) own the rules of their resources.
+The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)) defines the `/v1` routes, fields and types. This page states what Core does where those types are silent, such as status codes, error fields, defaults and list bounds, and where Core behaves differently from the official service. The [coverage ledger](./index.md) lists the differences and open gaps; [Sessions, events and history](./sessions-events.md), [message content](./message-content.md), [Vaults](./vaults.md), [source Files and Skills](./source-files.md) and [Environment files and Artifacts](./environment-files.md) own the rules of their resources.
 
 "Beta routes" below are the routes under `/v1/agents` and `/v1/vaults`. "Files and Skills" are the routes under `/v1/files` and `/v1/skills`, which ignore `OpenAI-Beta`.
 
@@ -36,7 +38,7 @@ Every Agents API response, including errors and event streams, carries:
 
 ### Authentication
 
-`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. All keys of one Project act as the same caller: they share its resources and its Session creation retries. Core resolves the key and its Project in the database on every request, with no credential cache and a five-second timeout. Revoking a key or archiving its Project takes effect on the next request. All keys of a Project act as subject `service_account/project:<Project ID>`. [Projects and keys](admin-api.md#projects-and-keys) describes key management.
+`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. All keys of one Project act as the same caller: they share its resources and its Session creation retries. Core resolves the key and its Project in the database on every request, with no credential cache and a five-second timeout. Revoking a key or archiving its Project takes effect on the next request. All keys of a Project act as subject `service_account/project:<Project ID>`. [Projects and keys](./admin-api.md#projects-and-keys) describes key management.
 
 The optional `OpenAI-Organization` and `OpenAI-Project` headers must, when sent, appear once and equal `core` and `proj_<Project ID>`; any other value rejects the key.
 
@@ -52,11 +54,11 @@ Every `/v1` JSON route passes one body gate before route decoding, validation or
 | Order | Case | Response |
 | --- | --- | --- |
 | 1 | `Content-Type` missing, not JSON or malformed, including a bodyless `POST`. `application/json` and `application/*+json` are accepted case-insensitively, with parameters | "expected request with Content-Type: application/json" |
-| 2 | Body over the route limit: 16 MiB for Session create and Environment Templates, the [Environment file](environment-files.md) bound for file create, 1 MiB elsewhere | 413, code `request_too_large` |
+| 2 | Body over the route limit: 16 MiB for Session create and Environment Templates, the [Environment file](./environment-files.md) bound for file create, 1 MiB elsewhere | 413, code `request_too_large` |
 | 3 | Invalid UTF-8 | "Invalid body: encountered a unicode decode error when parsing this JSON value. Please check the value to ensure it is valid unicode." |
 | 4 | Malformed JSON, trailing data, two values, a byte order mark, a whitespace-only body, or an escape that forms a lone UTF-16 surrogate | "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)" |
-| 5 | A key repeated in one object, at any depth | "Invalid body: duplicate JSON key '<key>' at '<path>'. Duplicate JSON keys are not supported." The path joins object keys with `.` and omits array indices, such as `metadata.k` or `tools.type`. Keys compare after unescaping and case-sensitively. The first repeat in document order is reported. |
-| 6 | A root that is not an object, including an array | "Invalid type: expected an object, but got <kind> instead." |
+| 5 | A key repeated in one object, at any depth | `"Invalid body: duplicate JSON key '<key>' at '<path>'. Duplicate JSON keys are not supported."` The path joins object keys with `.` and omits array indices, such as `metadata.k` or `tools.type`. Keys compare after unescaping and case-sensitively. The first repeat in document order is reported. |
+| 6 | A root that is not an object, including an array | `"Invalid type: expected an object, but got <kind> instead."` |
 | — | An empty body or `null` | Treated as `{}` |
 
 Member names match exactly. A case variant such as `Metadata` or a nested `Role` is an unknown member and gets the route's unknown-member error before any write.
@@ -87,7 +89,7 @@ Other 400 responses use type `invalid_request_error`. Validation failures with a
 | Case | Response |
 | --- | --- |
 | More than 16 metadata pairs, a key over 64 characters or a value over 512 characters on Agent or Session create or update | Param `metadata` or `metadata.<key>` and the official message with the actual count or length. Pairs are checked before keys and values, keys in sorted order. |
-| A non-string metadata value on Agent or Session create or update, or Vault create | Param `metadata.<key>`, message "Invalid type for 'metadata.<key>': expected a string, but got <kind> instead." The first such value in document order is reported first. |
+| A non-string metadata value on Agent or Session create or update, or Vault create | Param `metadata.<key>`, message `"Invalid type for 'metadata.<key>': expected a string, but got <kind> instead."` The first such value in document order is reported first. |
 | Agent `name` over 128 characters | Param `name`. Empty and untrimmed names are accepted. |
 | U+0000 in a metadata key or value | Param `metadata.<key>` |
 | U+0000 or invalid UTF-8 in any other stored string or query filter | Null param, message "Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8." Nothing is written. PostgreSQL cannot store U+0000, which the official service accepts. |
@@ -96,7 +98,7 @@ Other 400 responses use type `invalid_request_error`. Validation failures with a
 
 ## Lists
 
-Lists return `object: "list"`, `data`, `has_more`, `first_id` and `last_id`; an empty page has null first and last IDs. `order` defaults to `desc`. [Environment files](environment-files.md) page with their own `page` token and are not covered here.
+Lists return `object: "list"`, `data`, `has_more`, `first_id` and `last_id`; an empty page has null first and last IDs. `order` defaults to `desc`. [Environment files](./environment-files.md) page with their own `page` token and are not covered here.
 
 ### Query parameters
 
@@ -104,7 +106,7 @@ Lists return `object: "list"`, `data`, `has_more`, `first_id` and `last_id`; an 
 | --- | --- | --- | --- |
 | Unknown key, including `tenant_id` | Ignored, on lists and on single-resource routes | Ignored | Ignored |
 | Repeated supported key, including a scalar `status` | 400 `invalid_request_error`, null param, "Failed to deserialize query string: duplicate field `<key>`" | 400 `unsupported_parameter` | 400 `duplicate_parameter`, param `<key>`, the official message |
-| `order` other than `asc` or `desc`, including an explicit empty `order=` | 400 `invalid_request_error`, null param, "Failed to deserialize query string: order: unknown variant `<value>`, expected `asc` or `desc`" | 400, null code, "order must be asc or desc." | 400 `invalid_value`, param `order`, "Invalid value: '<value>'. Supported values are: 'asc' and 'desc'." |
+| `order` other than `asc` or `desc`, including an explicit empty `order=` | 400 `invalid_request_error`, null param, "Failed to deserialize query string: order: unknown variant `<value>`, expected `asc` or `desc`" | 400, null code, "order must be asc or desc." | 400 `invalid_value`, param `order`, `"Invalid value: '<value>'. Supported values are: 'asc' and 'desc'."` |
 
 The pinned Python SDK drops empty query values, so `list(order="")` sends no `order` and uses the default. `after` is trimmed of surrounding whitespace. Checks run in this order: repeated keys, then `limit`, then `order`; Vault and Credential `status` is checked first. These checks run before any resource lookup.
 
@@ -132,7 +134,7 @@ A `limit` that is not a decimal integer, including an empty value, returns 400 `
 | Session Items, Subagent Items, Subagent Turn Items | 400 `invalid_request_error`, null param, "Invalid session item ID in `after`" |
 | Subagents, Subagent Turns | 400 `invalid_request_error`, null param, "Invalid resource ID in `after`" |
 | Session Artifacts | 400 `invalid_request_error`, null param, "after is not a valid artifact ID" |
-| Skill versions | A value that does not begin with `skillver`: 400 `invalid_value`, param `after`, "Invalid 'after': '<value>'. Expected an ID that begins with 'skillver'." A version of another Skill: the same fields, "Skill version cursor does not match this skill." A malformed `skillver` suffix or a missing, deleted or foreign version: 404 with a null code and param |
+| Skill versions | A value that does not begin with `skillver`: 400 `invalid_value`, param `after`, `"Invalid 'after': '<value>'. Expected an ID that begins with 'skillver'."` A version of another Skill: the same fields, "Skill version cursor does not match this skill." A malformed `skillver` suffix or a missing, deleted or foreign version: 404 with a null code and param |
 | Skills | 404 with a null code and param |
 | Files | 404, param `after` |
 
@@ -153,8 +155,8 @@ Agent create requires `model`. Core saves and returns these values for omitted f
 | `multi_agent` | Disabled. When enabled without `max_concurrent_subagents`, 6 |
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
-| `web_search` | Every pinned mode is saved; see [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
-| HTTP MCP transport | Saved with `headers: {}`; nonempty headers are rejected. Origin and allowlist defaults are in [public MCP connection origin](environments.md#public-mcp-connection-origin) |
+| `web_search` | Every pinned mode is saved; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
+| HTTP MCP transport | Saved with `headers: {}`; nonempty headers are rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
 
 Saving a value does not make it executable. Session creation admits a smaller set; see [Session admission](#session-admission).
 
@@ -185,11 +187,11 @@ A Session's effective configuration must also pass execution admission, which ap
 | --- | --- |
 | Explicit `reasoning.effort` or `reasoning.summary` | "Explicit reasoning execution options are not supported by this service yet." |
 | `service_tier` other than `auto` | "Execution currently supports service_tier=auto only." |
-| Enabled or omitted-mode `web_search`, enabled `programmatic_tool_calling` | See [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
+| Enabled or omitted-mode `web_search`, enabled `programmatic_tool_calling` | See [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
 | More than 64 functions, or a function name that is blank or longer than 512 bytes | "This service supports at most 64 function tools." or "Function names must be nonempty, unique and at most 512 bytes." |
 | Two `programmatic_tool_calling` declarations, two MCP servers with one label | "Execution requires distinct tool controls.", "Execution requires distinct MCP server labels." |
 
-A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](execution-tools.md).
+A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](./execution-tools.md).
 
 Omitted, null and explicit `medium` text verbosity give the same Session configuration. For a model whose native catalog declares no verbosity support, the Codex adapter drops a `medium` setting and uses the model's default, and rejects `low` or `high`.
 

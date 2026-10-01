@@ -1,6 +1,8 @@
-# Model execution
+---
+title: "Model execution"
+---
 
-Each Session runs one Harness with one model provider. Core selects them through three Core extensions that the pinned upstream protocol does not define: `x_agents_core.harness` chooses the Harness, `x_agents_core.model_provider` supplies the endpoint and key, and `x_agents_core.harness_config` carries native model parameters. Core has no provider catalog, model alias resolution or product permission model; besides Session and saved-Agent bundles, the only stored bundle is one [deployment default](#deployment-defaults) per Harness. This document is the Harness–model provider protocol: [`internal/modelprovider/config.go`](../../internal/modelprovider/config.go) validates the frozen provider connection, and each Harness declares its protocols and native parameters through [`internal/harnessconfig/harness.go`](../../internal/harnessconfig/harness.go).
+Each Session runs one Harness with one model provider. Core selects them through three Core extensions that the pinned upstream protocol does not define: `x_agents_core.harness` chooses the Harness, `x_agents_core.model_provider` supplies the endpoint and key, and `x_agents_core.harness_config` carries native model parameters. Core has no provider catalog, model alias resolution or product permission model; besides Session and saved-Agent bundles, the only stored bundle is one [deployment default](#deployment-defaults) per Harness. This document is the Harness–model provider protocol: [`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) validates the frozen provider connection, and each Harness declares its protocols and native parameters through [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go).
 
 ## Harness selection
 
@@ -8,7 +10,7 @@ Each Session runs one Harness with one model provider. Core selects them through
 {"x_agents_core": {"harness": "claude_sdk"}}
 ```
 
-Saved Agents accept `x_agents_core.harness` on create, update and read, and Sessions accept it in the inline `agent.x_agents_core`. Identifiers come from the [Harness catalog](harness-catalog.md); unknown identifiers and unknown nested fields are rejected, as is an empty inline Session extension. Which Harnesses a deployment enables, and its default, are the process settings `core.harnesses` and `core.default_harness` ([configuration](../../docs/configuration.md#settings)).
+Saved Agents accept `x_agents_core.harness` on create, update and read, and Sessions accept it in the inline `agent.x_agents_core`. Identifiers come from the [Harness catalog](./harness-catalog.md); unknown identifiers and unknown nested fields are rejected, as is an empty inline Session extension. Which Harnesses a deployment enables, and its default, are the process settings `core.harnesses` and `core.default_harness` ([configuration](../../docs/configuration.md#settings)).
 
 - Omitted: a Session inherits its saved Agent's Harness; an inline Agent uses the deployment default.
 - Explicit null on the Session's inline extension: resets to the deployment default Harness while keeping inherited provider bundles. On a saved Agent, a null extension clears its Harness and provider.
@@ -57,7 +59,7 @@ An empty Session execution extension is invalid. An explicit null provider reque
 
 Core reads the Agent configuration and encrypted bundle from one database snapshot; an explicit complete Session override needs no decryption of the saved bundle. The Session's own encrypted snapshot is written atomically with the Session and its Environment. Existing Sessions never consult the Agent again: edits, key replacement, deletion, suspension and restarts cannot change their model, Harness or provider. A missing or wrong encryption key fails closed; keep the same [credential key](../../docs/configuration.md#installation-directory) across restarts. There is no Turn-level override.
 
-New hosted requests, and requests that omit the inline model, record caller intent before resolving mutable defaults. Other inline requests, such as `none`, keep the resolved-request retry rule; that hash leaves out the deployment default, so changing the default does not change their retry identity. A matching creation retry recovers the committed Session before resolving the Agent or provider again and enqueues no further input. Streaming is outside the retry identity. The [TypeScript client](../../packages/agents-client/README.md#saved-agent-and-deployment-defaults) shows saved Agents and deployment defaults.
+New hosted requests, and requests that omit the inline model, record caller intent before resolving mutable defaults. Other inline requests, such as `none`, keep the resolved-request retry rule; that hash leaves out the deployment default, so changing the default does not change their retry identity. A matching creation retry recovers the committed Session before resolving the Agent or provider again and enqueues no further input. Streaming is outside the retry identity. The [TypeScript client](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md#saved-agent-and-deployment-defaults) shows saved Agents and deployment defaults.
 
 ## Session override
 
@@ -82,7 +84,7 @@ New hosted requests, and requests that omit the inline model, record caller inte
 - `api_key` is nonempty, at most 16 KiB and contains no NUL, CR or LF.
 - `context_window` and `max_output_tokens` are optional nonnegative integers, with output no larger than context; both must be positive for MiniMax Code. Use the real model's limits.
 - `agent.model` is the exact provider model ID; a supplied value always replaces the deployment model.
-- The Session's `x_agents_core` accepts `model_provider`, `harness_config` and `environment` ([Environments](environments.md#preparation-order)); any other member, such as `sandbox_node_id`, is rejected with 400. Hosted node placement is automatic.
+- The Session's `x_agents_core` accepts `model_provider`, `harness_config` and `environment` ([Environments](./environments.md#preparation-order)); any other member, such as `sandbox_node_id`, is rejected with 400. Hosted node placement is automatic.
 
 Unsupported protocol, Harness or Environment combinations are rejected before the Session is created. Provider availability is checked during execution, not by a probe.
 

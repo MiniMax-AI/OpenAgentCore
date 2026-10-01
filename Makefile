@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core check-core-packages check-core-store docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -64,11 +64,23 @@ build-daemon:
 build-core:
 	./scripts/build-core.sh
 
-check-core: build-core
-	# Persistence integration tests include bounded lifecycle waits that together exceed Go's 10m default.
-	go test ./services/core/... ./packages/agents-client/... -count=1 -timeout=20m
+CORE_STORE_PACKAGE := github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store
+
+check-core: override OAC_CORE_STORE_SHARD :=
+check-core: build-core check-core-packages check-core-store
+
+# Core, service and client tests except the serial store integration package.
+check-core-packages:
+	@set -euo pipefail; packages=$$(go list ./services/core/... ./packages/agents-client/...); \
+	packages=$$(printf '%s\n' "$$packages" | grep -vxF '$(CORE_STORE_PACKAGE)'); \
+	go test $$packages -count=1 -timeout=20m
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/core/tests -p 'official_diagnostics_test.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/e2b/managed_init_test.py
+
+# Store integration tests run serially and include bounded lifecycle waits that together exceed Go's 10m default.
+# OAC_CORE_STORE_SHARD=INDEX/TOTAL runs one deterministic partition; unset runs them all.
+check-core-store:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/go-test-shard.py $(CORE_STORE_PACKAGE) $(or $(OAC_CORE_STORE_SHARD),1/1) -count=1 -timeout=20m
 
 # The distribution's Core image, without the native installer catalog.
 docker-build-core:

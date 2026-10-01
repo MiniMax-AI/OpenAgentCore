@@ -1,6 +1,6 @@
 # Core implementation constraints
 
-These are the code-level rules of `services/core` that no contract states. Contracts own behavior: the [coverage ledger](../../contracts/agents-api/README.md) and its linked contracts own the public and administrator APIs, the [machine connection API](../../contracts/agents-api/machine-api.md) the `/api/v1` routes, the [Core–Runtime protocol](../../docs/runtime-protocol.md) the daemon wire, and the [Sandbox Provider guide](../../docs/sandbox-provider.md#managed-lifecycle) the managed compute lifecycle. When code changes one of these rules, change the rule here in the same branch.
+These are the code-level rules of `services/core` that no contract states. Contracts own behavior: the [coverage ledger](../../contracts/agents-api/index.md) and its linked contracts own the public and administrator APIs, the [machine connection API](../../contracts/agents-api/machine-api.md) the `/api/v1` routes, the [Core–Runtime protocol](../../docs/runtime-protocol.md) the daemon wire, and the [Sandbox Provider guide](../../docs/sandbox-provider.md#managed-lifecycle) the managed compute lifecycle. When code changes one of these rules, change the rule here in the same branch.
 
 ## Layering
 

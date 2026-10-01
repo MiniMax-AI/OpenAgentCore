@@ -1,6 +1,6 @@
 # Core service
 
-`services/core` is Core: one Go service that serves the Agents API (`/v1`), the Core API (`/core/v1`) and the machine connection routes (`/api/v1`), owns its PostgreSQL schema, and runs the execution Worker that dispatches Turns to Runtimes. [Architecture](../../docs/architecture.md) describes its role, and the [API index](../../docs/api/README.md) its namespaces and credentials. This guide is for contributors who build, run and test Core from source; operators install it with the [installer](../../docs/getting-started/install.md). The [implementation constraints](IMPLEMENTATION.md) hold the code-level rules.
+`services/core` is Core: one Go service that serves the Agents API (`/v1`), the Core API (`/core/v1`) and the machine connection routes (`/api/v1`), owns its PostgreSQL schema, and runs the execution Worker that dispatches Turns to Runtimes. [Architecture](../../docs/architecture.md) describes its role, and the [API index](../../docs/api/index.md) its namespaces and credentials. This guide is for contributors who build, run and test Core from source; operators install it with the [installer](../../docs/getting-started/install.md). The [implementation constraints](IMPLEMENTATION.md) hold the code-level rules.
 
 ## Commands
 

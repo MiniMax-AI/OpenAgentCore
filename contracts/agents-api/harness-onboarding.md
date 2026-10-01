@@ -1,11 +1,13 @@
-# Add a native Harness to OpenAgentCore
+---
+title: "Add a native Harness to OpenAgentCore"
+---
 
-A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code) that runs the model and tool loop. A **Harness adapter** translates the Runtime's Executor and Turn contract into that engine's SDK or protocol. This document is the Runtime–Harness protocol: the adapter interfaces and their lifecycle obligations, registration, Core qualification and acceptance. [Harness capabilities](harness-capabilities.md) records what each current Harness supports.
+A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code) that runs the model and tool loop. A **Harness adapter** translates the Runtime's Executor and Turn contract into that engine's SDK or protocol. This document is the Runtime–Harness protocol: the adapter interfaces and their lifecycle obligations, registration, Core qualification and acceptance. [Harness capabilities](./harness-capabilities.md) records what each current Harness supports.
 
 Start from two entry points:
 
-- [`internal/harnessconfig/harness.go`](../../internal/harnessconfig/harness.go): the shared model configuration contract (declarations and preparation).
-- [`agent/harness.go`](../../apps/daemon/internal/agent/harness.go): the execution lifecycle, the extension contracts and the registration methods.
+- [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go): the shared model configuration contract (declarations and preparation).
+- [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go): the execution lifecycle, the extension contracts and the registration methods.
 
 ## Ownership
 
@@ -30,7 +32,7 @@ Runtime: Executor preparation, reuse, idle expiry, recovery
 | Service profile | Pure validation of qualified operations and placements | `services/core/internal/engine` |
 | Registration | Adapter declarations, installed factories and verified capabilities | `apps/daemon/internal/agent/<kind>/declaration.go`; static list in `apps/daemon/internal/cli/agent_discovery.go` |
 
-An Environment supplies execution resources. Managed E2B, Docker and microsandbox machines and application-owned machines differ in provisioning and connection; the connected Runtime uses this same contract. The daemon runs on Linux, macOS and Windows, managed Providers are Linux-only, and each adapter qualifies its own platforms ([self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms)). Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
+An Environment supplies execution resources. Managed E2B, Docker and microsandbox machines and application-owned machines differ in provisioning and connection; the connected Runtime uses this same contract. The daemon runs on Linux, macOS and Windows, managed Providers are Linux-only, and each adapter qualifies its own platforms ([self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms)). Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](./environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
 
 ## Steps
 
@@ -39,8 +41,8 @@ An Environment supplies execution resources. Managed E2B, Docker and microsandbo
 3. **Declare the kind in the adapter** and add its declaration to the Runtime’s static list in `apps/daemon/internal/cli/agent_discovery.go` ([register the adapter](#register-the-adapter)).
 4. **Add the service profile and one catalog entry** ([add the engine to Core](#add-the-engine-to-core)).
 5. **Package native prerequisites.** Add a Runtime image under `services/core/deploy/<kind>` and, optionally, [native installer participation](#native-installer-participation).
-6. **Enable and select the engine** with the `core.harnesses` setting and [Harness selection](model-execution.md#harness-selection).
-7. **Qualify it** ([qualify the adapter](#qualify-the-adapter)) and record the result in [Harness capabilities](harness-capabilities.md).
+6. **Enable and select the engine** with the `core.harnesses` setting and [Harness selection](./model-execution.md#harness-selection).
+7. **Qualify it** ([qualify the adapter](#qualify-the-adapter)) and record the result in [Harness capabilities](./harness-capabilities.md).
 
 Implement the mandatory text lifecycle and handle every extension explicitly. Qualify supported extensions one at a time; an unqualified extension returns `agent.ErrUnsupportedOperation` without native effects. A native cancellation may require retirement instead of reuse: `Reusable=false` carries a reason and the caller must confirm `Executor.Close`. Do not force reuse to fit a test helper, and do not copy an adapter's native limitations into the shared Core protocol.
 
@@ -56,7 +58,7 @@ Implement the mandatory text lifecycle and handle every extension explicitly. Qu
 
 ## Required adapter interfaces
 
-[`agent/harness.go`](../../apps/daemon/internal/agent/harness.go) is the interface entry point. The required lifecycle is `ExecutorFactory`, `Executor`, `Turn` (including `DurableSteerer`) and `TurnSettlement`. Required methods perform their native obligations; returning Unsupported is not an implementation of cancellation, receipts, settlement or cleanup. Turn and workspace extension interfaces stay small and separate, but every public adapter implements each one explicitly. All use the neutral protocol types.
+[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) is the interface entry point. The required lifecycle is `ExecutorFactory`, `Executor`, `Turn` (including `DurableSteerer`) and `TurnSettlement`. Required methods perform their native obligations; returning Unsupported is not an implementation of cancellation, receipts, settlement or cleanup. Turn and workspace extension interfaces stay small and separate, but every public adapter implements each one explicitly. All use the neutral protocol types.
 
 For example, the Codex adapter keeps its app-server and thread, the Claude adapter one streaming Query, and the MiniMax adapter its ACP connection and native session. All expose the same Executor and Turn contract. Native callbacks and resources stay inside the adapter; the Runtime owns admission, idle expiry and replacement. Cancellation targets the exact Turn through `agent.Session`, and the adapter supplies native completion evidence to the Runtime.
 
@@ -121,7 +123,7 @@ A Session owns one reusable Executor in its connected Runtime; a Turn owns one i
 
 ## Events, inputs and optional capabilities
 
-Use [`internal/agentdaemon/proto`](../../internal/agentdaemon/proto) for neutral requests, events and receipts. Each Turn emits only its own events with its Run ID, in order, and one terminal outcome. Native IDs and usage are observed, never invented; a missing measurement is unknown, not zero.
+Use [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) for neutral requests, events and receipts. Each Turn emits only its own events with its Run ID, in order, and one terminal outcome. Native IDs and usage are observed, never invented; a missing measurement is unknown, not zero.
 
 Initial input and steering use ordered `proto.MessageInput`. Keep user-message and content order. Text-only adapters reject images through `TextOnly()` instead of dropping them; image adapters translate each part natively and acknowledge an active batch only after all its messages are applied. A successful transport write is distinct from confirmed native application. User-choice answers use the emitted question ID and an array of values; the shared `PromptForUserChoiceDecisionPayload.AnswersFor` validates identity before consuming a pending interaction, so never map answers by header or position. Resume only the exact history bound to the Session; missing, ambiguous or foreign history fails before new model input. Device identity is not native session ownership.
 
@@ -131,27 +133,27 @@ The public text path requires durable Turns, applied input receipts, ordered obs
 
 MCP, public functions, deferred function discovery, structured output, image input, verbosity controls and other optional operations need not match another engine. Reject an unqualified combination with Unsupported and record the gap; never advertise a capability to bypass selection.
 
-- Structured output: consume `ExecutionControls.OutputFormat` and publish confirmed native output through the Message contract ([execution tools](execution-tools.md#structured-output)). Register the public qualification separately from the Runtime capability.
-- Images: register the Runtime's `MessageImages` and qualify the profile's `MessageImages` separately ([message input](message-content.md)).
+- Structured output: consume `ExecutionControls.OutputFormat` and publish confirmed native output through the Message contract ([execution tools](./execution-tools.md#structured-output)). Register the public qualification separately from the Runtime capability.
+- Images: register the Runtime's `MessageImages` and qualify the profile's `MessageImages` separately ([message input](./message-content.md)).
 - Workspace placements additionally need verified preparation, workspace reads and output export and the dedicated Runtime binding with the shared Files helpers. Enable a placement only after its lifecycle behavior is demonstrated.
 
 ### MCP origin and native limits
 
 Declare supported public origins in the engine profile's `MCPOrigins` and bearer support in `MCPBearer`. The Runtime advertises its actual HTTP, bearer and required-initialization capabilities. Shared admission validates origin and placement; adapter validation keeps native label, allowlist and initialization limits.
 
-Consume `agent.ResolveMCPBindings` for public and installed declarations, and keep origin, credential authority, null versus empty allowlists and required startup. Do not copy tokens into native profiles or reinterpret a service request as an Environment request. Reject unsupported native policies instead of dropping them. Follow the [MCP origin contract](environments.md#public-mcp-connection-origin) and run public-client, failure, cancellation and cold-recovery qualification for each advertised combination. Model capability is separate from Harness transport support; never infer it from model names or silently degrade input.
+Consume `agent.ResolveMCPBindings` for public and installed declarations, and keep origin, credential authority, null versus empty allowlists and required startup. Do not copy tokens into native profiles or reinterpret a service request as an Environment request. Reject unsupported native policies instead of dropping them. Follow the [MCP origin contract](./environments.md#public-mcp-connection-origin) and run public-client, failure, cancellation and cold-recovery qualification for each advertised combination. Model capability is separate from Harness transport support; never infer it from model names or silently degrade input.
 
 ### Subagent observations
 
-A Harness that supports the Subagent reads implements the [neutral observation contract](subagents.md#adapter-contract). It reports verified child identity, lifecycle effects and owned Turn and Item history through the authenticated Run and qualifies those facts with real execution, without routes, storage branches or a Harness-specific scheduler. Report unsupported native facts explicitly; completing a child task is not closing its Subagent. Native background work stays owned through settlement and cancellation.
+A Harness that supports the Subagent reads implements the [neutral observation contract](./subagents.md#adapter-contract). It reports verified child identity, lifecycle effects and owned Turn and Item history through the authenticated Run and qualifies those facts with real execution, without routes, storage branches or a Harness-specific scheduler. Report unsupported native facts explicitly; completing a child task is not closing its Subagent. Native background work stays owned through settlement and cancellation.
 
 ## Register the adapter
 
-Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](../../apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
+Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
 
 `Runtime.SessionCapabilityContext` and `Runtime.ExecutorCapabilityContext` explicitly request capability-download URL resolution and scoped product-upload context for the corresponding execution factory. Preparation never receives those effects. An adapter that supports product workspace authoring declares `WorkspaceAuthoring` itself; common registration does not grant it.
 
-[`cli/agent_registration.go`](../../apps/daemon/internal/cli/agent_registration.go) iterates the discovered runtimes and calls `Registry.Register` from `agent/harness.go`. It verifies that discovery retained the declared kind and installs factories in this order:
+[`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) iterates the discovered runtimes and calls `Registry.Register` from `agent/harness.go`. It verifies that discovery retained the declared kind and installs factories in this order:
 
 | Order | Method | Registers |
 | --- | --- | --- |
@@ -165,11 +167,11 @@ Every `proto.AgentKindCapabilities` field must be explicitly `proto.CapabilitySu
 
 The admission mapping is explicit. `Steering` controls non-durable `Steerer` input. `DurableInputReceipts` controls `DurableSteerer` input and also requires the Turn settlement contract; neither implies the other, and Core's public text profile requires both. `Permissions` qualifies permission and user-choice responses together and requires both native response paths. Workspace declarations describe the authorized resource owner, including the common Runtime workspace implementation. Runtime registration does not grant Core qualification; the service profile does.
 
-The runnable test-only example [`testdata/onboarding/main.go`](../../apps/daemon/testdata/onboarding/main.go) registers a text-only synthetic Harness. It shows a Session-owned Executor, fresh Turns, durable steering, cancellation and history binding, and is never shipped.
+The runnable test-only example [`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/testdata/onboarding/main.go) registers a text-only synthetic Harness. It shows a Session-owned Executor, fresh Turns, durable steering, cancellation and history binding, and is never shipped.
 
 ## Add the engine to Core
 
-Core recognizes the [built-in Harness registrations](harness-catalog.md). Add one entry to `internal/harnessconfig/builtin/catalog.json` with:
+Core recognizes the [built-in Harness registrations](./harness-catalog.md). Add one entry to `internal/harnessconfig/builtin/catalog.json` with:
 
 - the public `kind` and display `label`;
 - the model `configuration` package under `internal/harnessconfig`;
@@ -200,7 +202,7 @@ Run the `engine` and `execution` tests for omission, policy, combination and err
 
 ## Native model configuration
 
-[`internal/harnessconfig/harness.go`](../../internal/harnessconfig/harness.go) owns the shared configuration declaration and pure preparation contract. Each adapter supplies one `Configuration`, in `internal/harnessconfig/<kind>`, to Core's composition and to the Runtime's `RegisterKind`. The direct factory, preparation and Executor paths all validate through that declaration before native side effects, and Registry wrappers keep the declaration with the factory. The wire object is `proto.HarnessConfig`. [Model execution](model-execution.md#native-model-parameters) lists each Harness's accepted fields.
+[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) owns the shared configuration declaration and pure preparation contract. Each adapter supplies one `Configuration`, in `internal/harnessconfig/<kind>`, to Core's composition and to the Runtime's `RegisterKind`. The direct factory, preparation and Executor paths all validate through that declaration before native side effects, and Registry wrappers keep the declaration with the factory. The wire object is `proto.HarnessConfig`. [Model execution](./model-execution.md#native-model-parameters) lists each Harness's accepted fields.
 
 A supplied `model` must be a nonempty string, and an explicit `model_provider` requires it. The native-owned connection path may omit both; explicit null is invalid. An explicitly empty declaration accepts no provider or nonempty native parameters and advertises no provider support. Unknown protocol formats and duplicate protocol declarations fail at registration.
 
@@ -214,11 +216,11 @@ Before starting, record the operation set, expected results, exclusions and stop
 2. **Shared integration.** `TestThirdHarnessPublicOnboarding` runs the synthetic Harness through public Session and input admission, Worker device selection, the real WebSocket gateway, the daemon Registry and Router, neutral events and durable terminal projection. It uses a custom immutable `engine.Catalog` in the same `execution.Policy` given to the API handler and the dispatcher, and checks applied input receipts, saved native identity, continuation, cancellation, unsupported optional requests and missing mandatory Runtime support. The fixture has no workspace, MCP, public functions, permissions or user-choice handlers, and its registration stays local to the test. It proves the integration path, not native execution.
 3. **Real acceptance.** Use the pinned official Python SDK and raw HTTP against Core, a real provider API, the native Harness and a dedicated database. Verify initial execution, a warm follow-up, cancellation and restart with continuation; record native owner identity and same-condition cold and warm timing. For workspace placements also verify Files and Artifacts, workspace identity, that no credentials appear in public responses and that foreign history is rejected. `services/core/tests/official_hosted_functions_native.py` holds the shared function assertions: success and error, native file output and public Artifact bytes, same-history continuation after restart, foreign result rejection and pending-call cancellation. Synthetic or failed runs never count. The opt-in tests below run the pinned-SDK fixtures in `services/core/tests` against a real daemon and model; each runs when `OAC_TEST_OFFICIAL_SDK_PYTHON`, `OAC_TEST_NATIVE_DAEMON_BIN`, `OAC_TEST_NATIVE_PROOF_DIR` and its private options file are set. The options file is a JSON object with exactly `model` and `model_provider` (the fields of `x_agents_core.model_provider`); the test sets it as the deployment default model provider, which the fixtures' `environment: none` Sessions freeze at creation.
 4. **Regression.** Existing Harnesses keep working. Run targeted tests, then `make check`; run `make openapi` after API changes and `make sqlc-generate` after query changes.
-5. **Review.** Follow the [blind review workflow](../../CONTRIBUTING.md#review).
+5. **Review.** Follow the [blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review).
 
 | Operation | Test in `services/core/internal/store` | Options file variable, and Harness variable where the test takes one |
 | --- | --- | --- |
-| Model provider protocols | `TestNativeModelProtocolPublicExecution` | [Model execution](model-execution.md#acceptance) |
+| Model provider protocols | `TestNativeModelProtocolPublicExecution` | [Model execution](./model-execution.md#acceptance) |
 | MiniMax Code text | `TestNativeMCodePublicExecution` | `OAC_TEST_MCODE_REAL_OPTIONS` |
 | Message images | `TestNativeMessageImagePublicExecution` | `OAC_TEST_MESSAGE_IMAGE_REAL_OPTIONS`, `OAC_TEST_MESSAGE_IMAGE_ENGINE` |
 | Function results with images | `TestNativeFunctionImagePublicExecution` | `OAC_TEST_FUNCTION_IMAGE_REAL_OPTIONS`, `OAC_TEST_FUNCTION_IMAGE_ENGINE` |
@@ -251,12 +253,12 @@ Owned output pipes stay readable after the leader exits. Consumers drain stdout 
 
 Adapters run native tools unattended with the launching user's permissions: Codex with approval policy `never` and full access, Claude through the adapter's tool callback in native `default` permission mode with the SDK sandbox disabled, and MiniMax with bypassed permissions and its sandbox disabled. Do not add permission profiles, bubblewrap wrappers or native sandbox settings; there is one execution path for every Environment origin. Resource paths are operator configuration, not a permission boundary.
 
-Network admission follows [Restricted network](environments.md#restricted-network).
+Network admission follows [Restricted network](./environments.md#restricted-network).
 
 ## Native references
 
 | Harness | Adapter | Native transport | Runtime guide |
 | --- | --- | --- | --- |
-| Codex | [`agent/codex`](../../apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](../../services/core/deploy/codex/README.md) |
-| Claude Code | [`agent/claudesdk`](../../apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](../../packages/claude-sdk-adapter/README.md) | [Claude Runtime](../../services/core/deploy/claude/README.md) |
-| MiniMax Code | [`agent/mcode`](../../apps/daemon/internal/agent/mcode) | ACP and native workspace companion | [MiniMax Code Runtime](../../services/core/deploy/mcode/README.md) |
+| Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) |
+| Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) | [Claude Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) |
+| MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP and native workspace companion | [MiniMax Code Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/mcode/README.md) |

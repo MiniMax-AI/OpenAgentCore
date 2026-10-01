@@ -1,17 +1,19 @@
-# Console API usage
+---
+title: "Console API usage"
+---
 
-This page lists the Core routes each console page reads and writes, and how the console bounds its reads. The [administrator API contract](../../contracts/agents-api/admin-api.md) defines the routes, response shapes, pagination and audit records; [API namespaces and credentials](../api/README.md) defines the terms used here.
+This page lists the Core routes each console page reads and writes, and how the console bounds its reads. The [administrator API contract](../../contracts/agents-api/admin-api.md) defines the routes, response shapes, pagination and audit records; [API namespaces and credentials](../api/index.md) defines the terms used here.
 
 ## Interfaces
 
 | Interface | Paths | Authentication | Console use |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config`, `/console/installation/domain`, `/node-install/manifest.json` | The Core key at sign-in, then the console session cookie; `/node-install/manifest.json` needs no sign-in | Sign-in and sign-out; the node installer and node artifacts for Add node; domain setup on **System → Domain and HTTPS**; the distribution's Runtime release for Docker and microsandbox setup. See [console server](console-server.md) |
+| Console server | `/console/auth`, `/console/auth/{login,logout}`, `/console/config`, `/console/installation/domain`, `/node-install/manifest.json` | The Core key at sign-in, then the console session cookie; `/node-install/manifest.json` needs no sign-in | Sign-in and sign-out; the node installer and node artifacts for Add node; domain setup on **System → Domain and HTTPS**; the distribution's Runtime release for Docker and microsandbox setup. See [console server](./console-server.md) |
 | Administrator API | `/core/v1/**` outside `/core/v1/sandbox` | The Core key, added by the console server | Projects, keys, resource reads and deletion, diagnostics, executor credentials and installation commands, provenance, summaries, Core metrics, the installation, default models |
 | Sandbox administration | `/core/v1/sandbox/**` | The Core key, added by the console server | Sandbox configuration, Nodes, fleet and capacity figures on Overview and Sandbox metrics, Runtime observations of every project |
 | Agents API | `/v1/**` | Project API key | Not used. The console shows developers how to call it (see [Provenance and monitoring](#provenance-and-monitoring)) |
 
-Browser requests are same-origin and carry only the console session cookie. The browser sends the Core key once, in the sign-in request body, and never stores it; it never holds or sends an API key or an `OpenAI-Beta` header. The console reads through `AdminClient`, `SandboxAdminClient` and `CoreMetricsClient` from [`packages/agents-client`](../../packages/agents-client/README.md), which validate every response: a malformed value is reported as a failure, or marked as unrecognised where noted below, and never replaced by a guessed or zero value.
+Browser requests are same-origin and carry only the console session cookie. The browser sends the Core key once, in the sign-in request body, and never stores it; it never holds or sends an API key or an `OpenAI-Beta` header. The console reads through `AdminClient`, `SandboxAdminClient` and `CoreMetricsClient` from [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md), which validate every response: a malformed value is reported as a failure, or marked as unrecognised where noted below, and never replaced by a guessed or zero value.
 
 ## Projects and keys
 

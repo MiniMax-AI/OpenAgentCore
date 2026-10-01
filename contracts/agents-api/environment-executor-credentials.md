@@ -1,4 +1,6 @@
-# Environment executor credentials
+---
+title: "Environment executor credentials"
+---
 
 An executor credential lets `oac-daemon` enroll and connect for one `self_hosted` Environment. It authorizes only the private daemon transport (`/api/v1/agent-daemon/*`) for that Environment, never `/v1`, `/core/v1`, sandbox-node enrollment or Project resources. The Project's principal is its execution principal. Core stores only a digest of the secret.
 
@@ -93,4 +95,4 @@ A machine reconnects only with its bound `key_id`, rotated to a new secret that 
 
 ## Model provider
 
-A `self_hosted` Session carries its own model provider; deployment defaults never apply. [Model execution](model-execution.md) owns the delivery rules. A saved Agent's provider key is delivered to the executor of every `self_hosted` Session created with that Agent in the Project, so anyone who can create `self_hosted` Sessions in the Project and run an executor can read it.
+A `self_hosted` Session carries its own model provider; deployment defaults never apply. [Model execution](./model-execution.md) owns the delivery rules. A saved Agent's provider key is delivered to the executor of every `self_hosted` Session created with that Agent in the Project, so anyone who can create `self_hosted` Sessions in the Project and run an executor can read it.

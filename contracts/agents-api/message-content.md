@@ -1,6 +1,8 @@
-# Message content
+---
+title: "Message content"
+---
 
-User messages and function results share one content model: an ordered list of `input_text` and `input_image` parts. Core stores message boundaries, part order and image references exactly as sent and returns them unchanged in user Items. It never downloads, transcodes or repairs media. Session creation `input` and `events.create` messages share validation and admission; [Sessions, events and history](sessions-events.md#send-input) covers admission, request limits and errors.
+User messages and function results share one content model: an ordered list of `input_text` and `input_image` parts. Core stores message boundaries, part order and image references exactly as sent and returns them unchanged in user Items. It never downloads, transcodes or repairs media. Session creation `input` and `events.create` messages share validation and admission; [Sessions, events and history](./sessions-events.md#send-input) covers admission, request limits and errors.
 
 ## Messages
 
@@ -41,7 +43,7 @@ The rejection applies to Session creation (including streaming and `self_hosted`
 
 An `agent.session.input.tool_result` event carries `success`, an optional nullable `error` string and an optional nullable `output`: a string or an ordered array of `input_text` and `input_image` parts.
 
-- Core stores the result as submitted, including which of `output` and `error` were present, and uses it for retry identity. Public Items always carry both fields ([Item rules](sessions-events.md#turns-and-items)).
+- Core stores the result as submitted, including which of `output` and `error` were present, and uses it for retry identity. Public Items always carry both fields ([Item rules](./sessions-events.md#turns-and-items)).
 - The Runtime receives one ordered content list: the `output` parts, then the `error` text as a final text part. This conversion never changes the stored result.
 - A result with images needs a Runtime that reports function-result image support; only image-bearing results check it. When the Runtime refuses a result after admission, the Turn fails without a confirmed application, and the stored result stays readable.
 
@@ -67,4 +69,4 @@ The Core–Runtime wire carries messages as `MessageInput` for initial input, pr
 - **Codex** flattens a batch into its native input list with a blank-line separator between public messages. Public message boundaries stay in Core's storage; the native history does not keep them.
 - **Claude Code** sends native image blocks and a UUID per native user message. One public input is applied only after every message in its batch is consumed. Within one native Turn the bridge accepts at most 64 user messages, including the opening prompt; it rejects a steering batch that would exceed the bound before submitting any part of it, which ends the running Turn. The daemon requires bridge protocol 3.
 
-Native message and function-result image checks are listed under [qualify the adapter](harness-onboarding.md#qualify-the-adapter).
+Native message and function-result image checks are listed under [qualify the adapter](./harness-onboarding.md#qualify-the-adapter).

@@ -39,7 +39,7 @@ Each row names the protocol's code entry point and its document.
 ### Public API
 
 - The target is the complete OpenAI Agents API (`openai/openai-python` `beta/agents`) as pinned in [`contracts/agents-api/upstream.json`](contracts/agents-api/upstream.json): paths, methods, headers, field presence, nullability, discriminators, defaults, status transitions, pagination, errors and streaming. Engine limitations are gaps to close, never grounds to narrow or redefine the contract. Operations or fields newer than the pinned baseline wait for a protocol upgrade.
-- Native differences between Harnesses stay explicit. Record each difference and any unspecified or unverified behavior in the [coverage ledger](contracts/agents-api/README.md), reject explicit enablement of an unsupported feature and never invent official semantics. When a material difference has no clear mapping, stop and ask before changing its semantics. Native differences never relax authentication, isolation, credential protection or data consistency.
+- Native differences between Harnesses stay explicit. Record each difference and any unspecified or unverified behavior in the [coverage ledger](contracts/agents-api/index.md), reject explicit enablement of an unsupported feature and never invent official semantics. When a material difference has no clear mapping, stop and ask before changing its semantics. Native differences never relax authentication, isolation, credential protection or data consistency.
 - Applications, including the Parsar product, reach Core only through the public contract, with no privileged endpoint and no shared tables, and Core never interprets their product payloads.
 
 ### One home for each setting and datum
@@ -71,4 +71,4 @@ OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): read before changing code. Documentation ownership, repository boundary, workflow, independent review, required checks and naming.
 - [Develop OpenAgentCore](docs/development.md): setup, the repository map, focused checks and [the guide for each extension boundary](docs/development.md#choose-an-extension-boundary).
-- [API index](docs/api/README.md): each route's caller and credential.
+- [API index](docs/api/index.md): each route's caller and credential.

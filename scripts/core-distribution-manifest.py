@@ -37,7 +37,7 @@ BUNDLED_DOCS = (
     "docs/api/public-agent-api.md",
     "docs/development.md",
     "docs/configuration.md",
-    "docs/getting-started/README.md",
+    "docs/getting-started/index.md",
     "docs/getting-started/install.md",
     "docs/getting-started/install-options.md",
     "docs/getting-started/nodes.md",

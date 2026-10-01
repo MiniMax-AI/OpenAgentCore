@@ -1,12 +1,14 @@
-# Environments and Templates
+---
+title: "Environments and Templates"
+---
 
 An Environment is the execution resource of a Session: the machine, workspace and prepared capabilities that a Harness runs in. A Session creates its Environment through its `environment` configuration; there is no standalone create call. An Environment Template is reusable preparation configuration that a Session resolves when it is created. This contract covers both resources, the two placements, input admission, capability preparation, Skills, Plugins and MCP connection origins.
 
 Related owners:
 
-- [Environment files](environment-files.md): the Files API on a live workspace.
-- [Executor credentials](environment-executor-credentials.md): enrollment, the installation grant and connection status of a `self_hosted` machine.
-- [Sandbox deployment](sandbox-deployment.md): which Sandbox Provider (E2B, Docker or microsandbox) hosts `openai_hosted` Environments.
+- [Environment files](./environment-files.md): the Files API on a live workspace.
+- [Executor credentials](./environment-executor-credentials.md): enrollment, the installation grant and connection status of a `self_hosted` machine.
+- [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (E2B, Docker or microsandbox) hosts `openai_hosted` Environments.
 - [Core–Runtime protocol](../../docs/runtime-protocol.md): the `runtime_prepare` transfer and every other wire message.
 - [Runtime and outer isolation](../../docs/concepts.md#runtime-and-outer-isolation): the daemon runs tools with its launching user's permissions; isolation comes from the outer Environment.
 
@@ -18,7 +20,7 @@ Paths follow the SDK resource methods, before the service's `/v1` prefix. The li
 | --- | --- | --- |
 | [Environment](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | Created through Session configuration. Returns `id`, `type`, `status` and the `files`, `plugins` and `skills` recorded at Session creation. |
 | [Template](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/templates.py) | `POST`, `GET /agents/environments/templates`; `GET`, `POST`, `DELETE /agents/environments/templates/{id}` | See [Templates](#templates). |
-| [Files](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py) | `POST`, `GET /agents/environments/{id}/files` | See [Environment files](environment-files.md). |
+| [Files](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py) | `POST`, `GET /agents/environments/{id}/files` | See [Environment files](./environment-files.md). |
 
 An Environment read joins its live owning Session within the caller's Project and returns the durable connection status. It needs no live Runtime, starts no native work and changes no connection state. The installation arrays list API-managed files, Plugins and Skills for both placements: files as `{id, type, path, file_id, size_bytes}` without content, Skills as `{type, name, description, skill_id, version}` and Plugins as `{type, name, description}`. Capabilities discovered in local capability directories are not listed.
 
@@ -53,7 +55,7 @@ Both placements run the same Runtime: the daemon, the selected Harness, native t
 
 ### Hosted (`openai_hosted`)
 
-The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](sandbox-deployment.md)) hosts the Environment. [Harness capabilities](harness-capabilities.md) lists which Harnesses run there.
+The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
 
 - Session creation, with or without initial input, commits the Session, Environment and retry identity before the Worker provisions compute. A creation interrupted before bootstrap is recovered without repeating the Provider's Create.
 - Provisioning needs no caller action; the Session stays idle until a Turn starts.
@@ -64,17 +66,17 @@ The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [
 
 ### Self-hosted (`self_hosted`)
 
-The application owns the machine. It creates the Session with a clean absolute `workspace_directory` and optional absolute local `capability_directories`. Core returns the Environment ID, the `remote_url` and an install command in `x_agents_core.installation`; running that command on the machine installs the daemon and enrolls it ([self-hosted guide](../../docs/getting-started/self-hosted.md), [executor credentials](environment-executor-credentials.md)).
+The application owns the machine. It creates the Session with a clean absolute `workspace_directory` and optional absolute local `capability_directories`. Core returns the Environment ID, the `remote_url` and an install command in `x_agents_core.installation`; running that command on the machine installs the daemon and enrolls it ([self-hosted guide](../../docs/getting-started/self-hosted.md), [executor credentials](./environment-executor-credentials.md)).
 
 - `remote_url` is the daemon WebSocket URL derived from Core's public URL, never from request headers or a daemon address. It names Core's private daemon transport.
 - Enrollment binds the exact Session, Environment, device and executor key. It creates no allocation and cannot move a Session to another device.
 - The Session's workspace must equal the `/workspace` alias or the exact canonical directory the Runtime is bound to. Naming a path grants no access to it.
-- The Session carries its own model provider; deployment defaults never apply ([model execution](model-execution.md#saved-defaults-and-precedence)).
+- The Session carries its own model provider; deployment defaults never apply ([model execution](./model-execution.md#saved-defaults-and-precedence)).
 - Session reads, lists and events return the `self_hosted` output with the Environment ID, workspace and capability directories, never private configuration. `capability_directories` lists the caller's selections; the Runtime's installation locations stay private.
 - Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access but does not stop native processes; the machine owner stops and cleans up.
 - The workspace and native history must survive a daemon restart. Losing them never authorizes silent replacement or replay.
 
-**Application-managed E2B.** An application can run the Runtime in an E2B sandbox it creates, renews and destroys with the E2B SDK, then enroll that Runtime as a `self_hosted` Environment ([E2B Runtime guide](../../services/core/deploy/e2b/README.md)). Core keeps no E2B allocation for it and never renews or kills it.
+**Application-managed E2B.** An application can run the Runtime in an E2B sandbox it creates, renews and destroys with the E2B SDK, then enroll that Runtime as a `self_hosted` Environment ([E2B Runtime guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)). Core keeps no E2B allocation for it and never renews or kills it.
 
 ### Ownership rules
 
@@ -156,7 +158,7 @@ Preparation installs what a Session selected: initial files, tool configuration,
 
 Resource management keeps Provider placement, capacity, allocation and Environment create, renew and reclaim. The authenticated Runtime connection carries initialization, capability preparation and executor operations; it never allocates or destroys compute. Providers never run Core initialization commands.
 
-Closing an Executor, cancelling a Turn or losing the transport keeps the installed snapshot, workspace and allocation. Reclamation is an explicit operation coordinated with active work; a disconnected socket does not prove that native effects stopped. [Harness onboarding](harness-onboarding.md#executor-and-turn-lifetimes) owns the Executor and Turn lifetimes.
+Closing an Executor, cancelling a Turn or losing the transport keeps the installed snapshot, workspace and allocation. Reclamation is an explicit operation coordinated with active work; a disconnected socket does not prove that native effects stopped. [Harness onboarding](./harness-onboarding.md#executor-and-turn-lifetimes) owns the Executor and Turn lifetimes.
 
 ### Preparation order
 
@@ -324,7 +326,7 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. The pinned SDK 3.13.0 drops a single file tuple during multipart extraction, so upload a single ZIP with raw HTTP. An upload holds at most 500 regular files and exactly one `SKILL.md`, 5 MiB compressed and 20 MiB expanded. [File resource semantics](source-files.md#versions-and-metadata) owns default-version and deletion rules.
+The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. The pinned SDK 3.13.0 drops a single file tuple during multipart extraction, so upload a single ZIP with raw HTTP. An upload holds at most 500 regular files and exactly one `SKILL.md`, 5 MiB compressed and 20 MiB expanded. [File resource semantics](./source-files.md#versions-and-metadata) owns default-version and deletion rules.
 
 A reference with an omitted or null version selects the default at Session creation, `"latest"` the latest version, and a positive version string that version. Template responses keep the unresolved selector (`version: null` for the default); Session metadata shows `{type, skill_id, version, name, description}` with a concrete version. A Session freezes the selected version's bytes and metadata in its creation transaction; later default changes, source deletion or Template updates cannot change it.
 
@@ -361,7 +363,7 @@ The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_h
 
 A stdio server starts through the daemon's stdio helper, which resolves the installed declaration and launches the command with the Harness's permissions. On Unix the helper replaces itself with the server; on Windows it forwards stdio inside the owned process tree. Initialized values override the declaration's variables. Process groups and Windows Jobs own cancellation and descendant cleanup, not isolation.
 
-[Harness capabilities](harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
+[Harness capabilities](./harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
 
 Environment MCP needs enabled network. Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
@@ -371,7 +373,7 @@ The Runtime resolves public HTTP declarations and installed Plugin MCP through `
 
 ### Public MCP connection origin
 
-An Agent's HTTP MCP tool ([declaration](execution-tools.md#http-mcp)) has a `connection_origin`. Omitted or null means `service`, including on `self_hosted` Sessions. The origin is kept from saved configuration through the Session snapshot to the Runtime request, which requires the exact wire version; a `service` request never becomes an `environment` connection.
+An Agent's HTTP MCP tool ([declaration](./execution-tools.md#http-mcp)) has a `connection_origin`. Omitted or null means `service`, including on `self_hosted` Sessions. The origin is kept from saved configuration through the Session snapshot to the Runtime request, which requires the exact wire version; a `service` request never becomes an `environment` connection.
 
 | Origin | Connects from | Allowed placements |
 | --- | --- | --- |
@@ -380,8 +382,8 @@ An Agent's HTTP MCP tool ([declaration](execution-tools.md#http-mcp)) has a `con
 
 Core's Harness profile declares `MCPOrigins`; admission and dispatch check the origin against the placement and the Runtime's advertised HTTP, bearer and required-initialization capabilities, and the Runtime validates the origin again before invoking an adapter. No Harness-name or Provider branch selects a different path.
 
-[Harness capabilities](harness-capabilities.md#tools) owns per-Harness origin support and policy limits.
+[Harness capabilities](./harness-capabilities.md#tools) owns per-Harness origin support and policy limits.
 
 Both origins support anonymous HTTP and HTTPS bearer credentials. The attached-Vault selection freezes the credential identity, including a unique implicit URL match or an anonymous selection. Only that Project-authorized credential enters the transient Runtime request; Core defaults and unrelated Vaults are never searched. A decryption failure or missing credential fails execution without an anonymous fallback. Public Environment MCP keeps `project_vault` authority and Plugin credentials keep `environment_configuration` authority; neither overrides a duplicate server label. Bearers never enter persisted native configuration or process arguments.
 
-Tool allowlists and required initialization follow the [HTTP MCP contract](execution-tools.md#http-mcp).
+Tool allowlists and required initialization follow the [HTTP MCP contract](./execution-tools.md#http-mcp).

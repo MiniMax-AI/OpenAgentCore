@@ -1,4 +1,6 @@
-# Console server
+---
+title: "Console server"
+---
 
 The console server (`services/web`, the `oac-web` process) serves the built console, signs the administrator in with the Core key and forwards the signed-in browser's `/core/v1` requests to Core with that key. The browser never holds the Core key or any API key. Applications, nodes and self-hosted executors call Core directly; the console forwards none of their traffic.
 
@@ -61,7 +63,7 @@ On the way to Core, the console:
 
 On the way back, it removes `Set-Cookie`, `WWW-Authenticate`, `Location`, `Refresh` and every `Access-Control-*` header. A redirect from Core, or a failed connection to Core, becomes 502 `core_unreachable`.
 
-The console never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](../../packages/agents-client/README.md); [console API usage](console-api-usage.md) lists what each page reads and writes.
+The console never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md); [console API usage](./console-api-usage.md) lists what each page reads and writes.
 
 ## Sign-in
 
@@ -108,7 +110,7 @@ The status has `supported`, `state` (`unconfigured`, `checking`, `applying`, `re
 
 Without `OAC_WEB_INSTALLATION_SOCKET` (external reverse proxy installations), `GET` reports `supported: false` and `POST` returns 400 `domain_setup_unavailable`. An unreachable installer or an invalid answer returns 502 `installation_unreachable`.
 
-The System page submits a hostname once, polls the status every 2 seconds while it is `checking` or `applying`, and asks for confirmation when the installer requires it. During setup, network failures and HTTP 502/503/504 responses keep polling active. The page allows 30 seconds without a successful status response before showing the disconnected message, and recovers when a poll succeeds. It never retries a write. Applying the domain restarts the console, which ends every session; the page keeps a sign-in link to the new HTTPS address. Only the `ready` state confirms HTTPS; the browser does not probe the new origin. The installer owns certificates, locking and recovery ([managed HTTPS](../../deploy/install/README.md#managed-https)).
+The System page submits a hostname once, polls the status every 2 seconds while it is `checking` or `applying`, and asks for confirmation when the installer requires it. During setup, network failures and HTTP 502/503/504 responses keep polling active. The page allows 30 seconds without a successful status response before showing the disconnected message, and recovers when a poll succeeds. It never retries a write. Applying the domain restarts the console, which ends every session; the page keeps a sign-in link to the new HTTPS address. Only the `ready` state confirms HTTPS; the browser does not probe the new origin. The installer owns certificates, locking and recovery ([managed HTTPS](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/install/README.md#managed-https)).
 
 `OAC_WEB_BOOTSTRAP=1`, which the installer sets while no public URL is configured, lets the console also accept plain HTTP requests addressed to a literal IP address, treating `http://<that address>` as the origin, so an operator can sign in through the server's IP address. Host names still require `OAC_WEB_ORIGIN`, so DNS rebinding cannot reach the console.
 

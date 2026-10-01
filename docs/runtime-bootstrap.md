@@ -1,6 +1,8 @@
-# Runtime bootstrap
+---
+title: "Runtime bootstrap"
+---
 
-A Sandbox Provider starts a managed Runtime by handing it one bootstrap file. This document owns that Provider-to-Runtime startup input. The type and validator live in [`internal/runtimebootstrap`](../internal/runtimebootstrap/bootstrap.go); Go providers build it with `sandbox.Bootstrap.RuntimeConnection()` in [`runtime_bootstrap.go`](../services/core/internal/sandbox/runtime_bootstrap.go), and SDK helpers forward the serialized object unchanged. A provider never reads or writes the Runtime's private authentication store.
+A Sandbox Provider starts a managed Runtime by handing it one bootstrap file. This document owns that Provider-to-Runtime startup input. The type and validator live in [`internal/runtimebootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/runtimebootstrap/bootstrap.go); Go providers build it with `sandbox.Bootstrap.RuntimeConnection()` in [`runtime_bootstrap.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/runtime_bootstrap.go), and SDK helpers forward the serialized object unchanged. A provider never reads or writes the Runtime's private authentication store.
 
 ## Launch input
 
@@ -25,7 +27,7 @@ The file is the only authentication input for this launch: the daemon refuses to
 
 The provider creates the account, mounts and workspace, delivers this file, sets the Runtime's resource and Environment binding settings, and starts the daemon as the unprivileged Runtime account. Docker writes the file into the Runtime's owned home volume; microsandbox and E2B deliver it before launching the same command.
 
-The Runtime validates the input and owns authentication and connection. A successful launch proves only the handoff: an authenticated connection, prepared capabilities and execution readiness are separate observations under the [Core–Runtime protocol](runtime-protocol.md), and the [Sandbox Provider guide](sandbox-provider.md#four-distinct-readiness-facts) lists what each one proves.
+The Runtime validates the input and owns authentication and connection. A successful launch proves only the handoff: an authenticated connection, prepared capabilities and execution readiness are separate observations under the [Core–Runtime protocol](./runtime-protocol.md), and the [Sandbox Provider guide](./sandbox-provider.md#four-distinct-readiness-facts) lists what each one proves.
 
 Self-hosted executors and operator-provisioned devices get their daemon identity in other ways; the [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists every credential source. All of them enter the same Runtime execution loop.
 

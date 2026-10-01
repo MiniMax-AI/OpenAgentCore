@@ -1,6 +1,8 @@
-# Subagents
+---
+title: "Subagents"
+---
 
-With `multi_agent.enabled`, a Harness may start native child agents. Core exposes them through the six Subagent read operations of the pinned SDK in [`upstream.json`](upstream.json) and records them from adapter observations. With `multi_agent.enabled=false`, the Runtime removes native child tools. [Harness capabilities](harness-capabilities.md) lists which Harness supports Subagents in which combinations.
+With `multi_agent.enabled`, a Harness may start native child agents. Core exposes them through the six Subagent read operations of the pinned SDK in [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) and records them from adapter observations. With `multi_agent.enabled=false`, the Runtime removes native child tools. [Harness capabilities](./harness-capabilities.md) lists which Harness supports Subagents in which combinations.
 
 ## Public reads
 
@@ -48,11 +50,11 @@ An adapter freezes root output before child settlement, keeps its native owner a
 
 ## Native profiles
 
-[Harness capabilities](harness-capabilities.md#tools) lists rejected tool combinations.
+[Harness capabilities](./harness-capabilities.md#tools) lists rejected tool combinations.
 
 **Codex.** The adapter enables the native `multi_agent` feature with a nesting depth of 64 and maps the concurrency limit to `agents.max_threads`. It disables native hooks, plugins, code mode and `multi_agent_v2`, and refuses to start if the native hook list is not empty or managed requirements force a conflicting feature. Close and reopen facts come from direct tool output correlated with the same call's persisted completion, so they need native persisted receipts. Native Turn times have second precision. Child file work can finish under the same owner after the root Turn finishes. Cancellation continues under the same owner after a caller deadline; a later call can confirm settlement without repeating the native interrupt.
 
-**Claude SDK.** The pinned SDK's native Agent and SendMessage calls run the single child type `oac_worker`, which inherits the model and has workspace Bash, Agent and SendMessage; the bridge's `subagent_resources` feature gates it. Children use native Bash with the parent's launching-user permissions. Private child records establish parentage, the first own input time and later own Turns; inherited parent context is excluded. The query owner admits children before start and keeps their history through settlement. Confirmed cancellation writes an immutable effect receipt because a native abort can leave no terminal record. There is no close operation: completed or cancelled children stay active. Messages to running children, background work, other child profiles and per-call model overrides are rejected. The [Claude SDK adapter](../../packages/claude-sdk-adapter/README.md#subagents) documents the details.
+**Claude SDK.** The pinned SDK's native Agent and SendMessage calls run the single child type `oac_worker`, which inherits the model and has workspace Bash, Agent and SendMessage; the bridge's `subagent_resources` feature gates it. Children use native Bash with the parent's launching-user permissions. Private child records establish parentage, the first own input time and later own Turns; inherited parent context is excluded. The query owner admits children before start and keeps their history through settlement. Confirmed cancellation writes an immutable effect receipt because a native abort can leave no terminal record. There is no close operation: completed or cancelled children stay active. Messages to running children, background work, other child profiles and per-call model overrides are rejected. The [Claude SDK adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md#subagents) documents the details.
 
 **MiniMax Code.** Native ACP delegation (`task`, `task_append`, `task_stop`) creates children. Session-private SQLite records supply child identity, accepted inputs, terminal times and own messages. The native task-create transaction enforces the concurrency limit before start, and native preparation must acknowledge that limit and the restricted tool profile before any model input. There is no close or reopen, and native workers do not delegate nested work.
 

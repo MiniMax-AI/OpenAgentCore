@@ -8,10 +8,30 @@ from pathlib import Path, PurePosixPath
 import subprocess
 
 JOBS = ("hygiene", "distribution", "backend", "harness", "example", "web", "web-acceptance", "api", "native", "lint")
+NODE_JOBS = ("harness", "example", "web", "web-acceptance", "native")
+GO_JOBS = ("distribution", "backend", "api", "native")
+# Exact file matches keep new workflows/actions conservative until classified.
+CI_INPUTS = {
+    ".github/workflows/check.yml": JOBS,
+    ".github/workflows/release.yml": JOBS,
+    ".github/workflows/api-acceptance.yml": ("api", "lint"),
+    ".github/workflows/native.yml": ("native", "lint"),
+    ".github/workflows/actionlint.yml": ("lint",),
+    ".github/workflows/ci-review.yml": ("lint",),
+    ".github/actions/node/action.yml": (*NODE_JOBS, "lint"),
+    "scripts/ci_plan.py": JOBS,
+    "scripts/ci_plan_test.py": ("hygiene",),
+    "scripts/ci_metrics.py": ("hygiene",),
+    "scripts/ci_metrics_test.py": ("hygiene",),
+}
+DEPENDENCY_INPUTS = {
+    **dict.fromkeys(("go.mod", "go.sum", "go.work", "go.work.sum"), GO_JOBS),
+    **dict.fromkeys(("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc"), NODE_JOBS),
+    "tsconfig.base.json": ("web", "web-acceptance", "example"),
+}
 # Rules accumulate: shared inputs exercise every declared consumer. This is the
 # only authored path map; workflows consume the resulting plan.
 RULES = (
-    ((".github/", "scripts/ci_"), JOBS),
     (("apps/web/", "playwright.config.ts"), ("web", "web-acceptance")),
     (("services/web/",), ("distribution", "web", "web-acceptance")),
     (("example/",), ("example",)),
@@ -27,7 +47,7 @@ RULES = (
     (("contracts/",), ("backend", "api", "native", "web", "web-acceptance", "example", "distribution")),
     (("packages/agents-client/",), ("backend", "api", "web", "web-acceptance", "example")),
     (("packages/claude-sdk-adapter/", "packages/mcode-harness/"), ("harness", "native", "backend", "distribution")),
-    (("packages/tsconfig/",), JOBS),
+    (("packages/tsconfig/",), NODE_JOBS),
     (("deploy/install/", "deploy/install-release.sh", "scripts/install-release.", "scripts/publish-core-release.",
       "scripts/core-distribution-manifest.", "scripts/build-core-distribution.sh", "scripts/config-reference.py",
       "scripts/build-web.sh"), ("distribution",)),
@@ -39,11 +59,11 @@ RULES = (
     (("scripts/build-agents-runtime.sh",), ("backend", "native", "distribution")),
     (("scripts/generate-harness-catalog", "scripts/harness-catalog/", "scripts/openapi-split/", "scripts/patch-agents-openapi.py",
       "scripts/extract-agents-api-upstream.py"), JOBS),
-    (("scripts/check-sqlc.py",), ("backend",)),
+    (("scripts/check-sqlc.py", "scripts/go-test-shard.py"), ("backend",)),
     (("scripts/check-names", "scripts/name-allowlist.json"), ("hygiene",)),
 )
-FULL_INPUTS = {"Makefile", "go.mod", "go.sum", "go.work", "go.work.sum", "package.json", "pnpm-lock.yaml",
-               "pnpm-workspace.yaml", "tsconfig.base.json", ".npmrc", ".gitignore", ".gitattributes", ".dockerignore"}
+FULL_INPUTS = {"Makefile", ".gitignore", ".gitattributes", ".dockerignore"}
+IMAGE_FILES = {"go.mod", "go.sum", "go.work", "go.work.sum", ".github/workflows/api-acceptance.yml"}
 IMAGE_INPUTS = ("scripts/build-core", "scripts/build-e2b-provider", "deploy/distribution/", "services/core/tools/e2b-provider/",
                 "services/core/deploy/e2b/")
 # Generated outputs retain freshness checks even when the file is documentation.
@@ -73,15 +93,20 @@ def select(paths):
     for path in paths:
         if not path or path.startswith("/") or ".." in PurePosixPath(path).parts:
             return full("Invalid path in diff")
-        if path in FULL_INPUTS or path.startswith(".github/"):
+        if path in FULL_INPUTS:
             return full(f"Shared build or CI input: {path}")
-        matches = {"hygiene"} if documentation(path) else {
-            job for prefixes, targets in RULES if path.startswith(prefixes) for job in targets}
+        if path in CI_INPUTS:
+            matches = set(CI_INPUTS[path])
+        elif path in DEPENDENCY_INPUTS:
+            matches = set(DEPENDENCY_INPUTS[path])
+        else:
+            matches = {"hygiene"} if documentation(path) else {
+                job for prefixes, targets in RULES if path.startswith(prefixes) for job in targets}
         if path in GENERATED_OUTPUTS:
             matches.add("distribution")
         if not matches:
             return full(f"Unclassified input: {path}")
-        if not documentation(path) and path.startswith(IMAGE_INPUTS):
+        if path in IMAGE_FILES or (not documentation(path) and path.startswith(IMAGE_INPUTS)):
             matches.add("api")
             image = True
         jobs.update(matches)

@@ -1,6 +1,8 @@
-# Sandbox node protocol
+---
+title: "Sandbox node protocol"
+---
 
-A sandbox node runs the Docker or microsandbox Provider on its host and connects to Core over one WebSocket. Core sends Provider operations over that connection; the node runs them against its local provider and reports readiness, host measurements and the deployment generations it holds. Core stays the only lifecycle owner: the node never retries a mutation or schedules work. The frames and validators live in [`services/core/internal/sandbox/node`](../../services/core/internal/sandbox/node) (`wire.go`, `generation_wire.go`); the HTTP routes a node uses to enroll and read its configuration are in the [machine connection API](machine-api.md#node-routes).
+A sandbox node runs the Docker or microsandbox Provider on its host and connects to Core over one WebSocket. Core sends Provider operations over that connection; the node runs them against its local provider and reports readiness, host measurements and the deployment generations it holds. Core stays the only lifecycle owner: the node never retries a mutation or schedules work. The frames and validators live in [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node) (`wire.go`, `generation_wire.go`); the HTTP routes a node uses to enroll and read its configuration are in the [machine connection API](./machine-api.md#node-routes).
 
 ## Frames and version
 
@@ -15,7 +17,7 @@ Every frame is one JSON text message whose `version` equals `node.ProtocolVersio
 
 Core counts a node as online while it is connected under the current owner epoch and its last heartbeat is less than 45 seconds old. A heartbeat establishes provider readiness and the last host measurements, never Session activity.
 
-Health carries `provider_ready`, an optional fixed `diagnostic`, `observed_at`, `active_operations` (at most 32) and the host measurements that the [Runtime telemetry API](runtime-observability-api.md#node-host-observations-and-history) reports. A node without generation management probes its provider for every report; an unready provider reports one fixed diagnostic code, classified from typed probe errors, and the probe text and host paths stay on the node. Core stores an unknown code as `provider_unavailable`. The [nodes guide](../../docs/getting-started/nodes.md#readiness-codes) lists the codes and their causes. A generation-managing node reports readiness per generation instead, as described below.
+Health carries `provider_ready`, an optional fixed `diagnostic`, `observed_at`, `active_operations` (at most 32) and the host measurements that the [Runtime telemetry API](./runtime-observability-api.md#node-host-observations-and-history) reports. A node without generation management probes its provider for every report; an unready provider reports one fixed diagnostic code, classified from typed probe errors, and the probe text and host paths stay on the node. Core stores an unknown code as `provider_unavailable`. The [nodes guide](../../docs/getting-started/nodes.md#readiness-codes) lists the codes and their causes. A generation-managing node reports readiness per generation instead, as described below.
 
 ## Provider requests
 

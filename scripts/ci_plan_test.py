@@ -69,11 +69,62 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue({"backend", "api", "distribution"} <= self.jobs(path))
 
-    def test_unknown_dependencies_ci_and_empty_diffs_are_full(self):
-        for paths in ([], ["new-component/source.rs"], ["pnpm-lock.yaml"], ["go.sum"], ["Makefile"],
-                      [".github/actions/node/action.yml"], ["scripts/ci_plan.py"], ["../outside"], ["/outside"]):
+    def test_unknown_inputs_planner_and_empty_diffs_are_full(self):
+        for paths in ([], ["new-component/source.rs"], ["Makefile"], [".github/workflows/new.yml"],
+                      [".github/actions/new/action.yml"], [".github/workflows/check.yml"], [".github/workflows/release.yml"], ["scripts/ci_plan.py"], ["../outside"], ["/outside"]):
             self.assertEqual(set(ci.select(paths)["jobs"]), set(ci.JOBS))
             self.assertTrue(ci.select(paths)["image"])
+
+    def test_workflow_changes_select_only_their_consumers(self):
+        for workflow, selected in {
+            "ci-review": {"hygiene", "lint"},
+            "actionlint": {"hygiene", "lint"},
+            "native": {"hygiene", "native", "lint"},
+            "api-acceptance": {"hygiene", "api", "lint"},
+        }.items():
+            with self.subTest(workflow=workflow):
+                plan = ci.select([f".github/workflows/{workflow}.yml"])
+                self.assertEqual(set(plan["jobs"]), selected)
+                self.assertEqual(plan["image"], workflow == "api-acceptance")
+
+    def test_node_action_selects_all_direct_consumers_and_lint(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / ".github/workflows/check.yml").read_text()
+        consumers = {name for name, body in re.findall(
+            r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:|\Z)", workflow, re.M | re.S)
+            if "uses: ./.github/actions/node" in body}
+        for name, filename in (("api", "api-acceptance"), ("native", "native")):
+            if "uses: ./.github/actions/node" in (root / f".github/workflows/{filename}.yml").read_text():
+                consumers.add(name)
+        self.assertEqual(self.jobs(".github/actions/node/action.yml"), consumers | {"hygiene", "lint"})
+
+    def test_dependencies_are_scoped_to_language_consumers(self):
+        for path in ("go.mod", "go.sum", "go.work", "go.work.sum"):
+            with self.subTest(path=path):
+                self.assertEqual(self.jobs(path), {"hygiene", "backend", "distribution", "api", "native"})
+                self.assertTrue(ci.select([path])["image"])
+        for path in ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", "packages/tsconfig/base.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self.jobs(path), {"hygiene", "harness", "example", "web", "web-acceptance", "native"})
+                self.assertFalse(ci.select([path])["image"])
+        self.assertEqual(self.jobs("tsconfig.base.json"), {"hygiene", "example", "web", "web-acceptance"})
+
+    def test_ci_tests_and_metrics_do_not_trigger_product_checks(self):
+        for path in ("scripts/ci_plan_test.py", "scripts/ci_metrics.py", "scripts/ci_metrics_test.py"):
+            self.assertEqual(self.jobs(path), {"hygiene"})
+
+    def test_workflow_and_code_changes_accumulate(self):
+        self.assertEqual(self.jobs(".github/workflows/ci-review.yml", "services/core/internal/store/sessions.go"),
+                         {"hygiene", "lint", "backend", "api"})
+        self.assertEqual(self.jobs(".github/workflows/native.yml", "apps/web/src/app.tsx"),
+                         {"hygiene", "lint", "native", "web", "web-acceptance"})
+
+    def test_every_job_has_a_plan_condition(self):
+        workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/check.yml").read_text()
+        bodies = dict(re.findall(r"^  ([a-z-]+):\n(.*?)(?=^  [a-z-]+:|\Z)", workflow, re.M | re.S))
+        for job in ci.JOBS:
+            with self.subTest(job=job):
+                self.assertIn(f"contains(fromJSON(needs.plan.outputs.jobs || '[]'), '{job}')", bodies[job])
 
     def test_mixed_changes_accumulate(self):
         self.assertEqual(self.jobs("docs/maintainers.md", "deploy/install/install.py", "apps/web/src/app.tsx"),

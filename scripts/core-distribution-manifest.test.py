@@ -301,7 +301,7 @@ class BundledDocsTests(unittest.TestCase):
                                "- A list item\n\n    [continued](#install)\n",
             "docs/banner.png": "png",
             "docs/chart.png": "png",
-            "docs/web/README.md": "# Web\n",
+            "docs/web/index.md": "# Web\n",
             "contracts/api.md": "# API\n## Routes\n",
             "contracts/schema.json": "{}",
         }.items():

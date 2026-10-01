@@ -1,8 +1,10 @@
-# Sandbox deployment
+---
+title: "Sandbox deployment"
+---
 
 The sandbox deployment selects the Sandbox Provider, the per-sandbox resources and the immutable Runtime release for Core-managed `openai_hosted` execution. PostgreSQL holds one active selection per installation; Web and the Core API write the same configuration. A node's files hold an installed copy of it plus host-specific paths and cannot override its resources or Runtime. The selection is independent of the Harness, and a deployment can stay unconfigured, with no nodes and no hosted admission.
 
-This contract owns the Core API routes below and their semantics. The [nodes guide](../../docs/getting-started/nodes.md) owns the operator workflow, the [machine connection API](machine-api.md#node-routes) the routes nodes call, and the [sandbox node protocol](node-generation-protocol.md) the node connection.
+This contract owns the Core API routes below and their semantics. The [nodes guide](../../docs/getting-started/nodes.md) owns the operator workflow, the [machine connection API](./machine-api.md#node-routes) the routes nodes call, and the [sandbox node protocol](./node-generation-protocol.md) the node connection.
 
 ## Routes
 
@@ -18,11 +20,11 @@ Every route requires the Core key. [Web's console server](../../docs/web/console
 | `POST /core/v1/sandbox/providers/{provider}/discovery` | Query a provider's configuration catalog with a transient credential |
 | `POST /core/v1/sandbox/enrollment-tokens` | Issue a one-use node enrollment token with approved capacity |
 | `GET /core/v1/sandbox/nodes` | List registered nodes |
-| `GET /core/v1/sandbox/nodes/{node_id}` | Read one node with its [host observations and history](runtime-observability-api.md#node-host-observations-and-history) |
+| `GET /core/v1/sandbox/nodes/{node_id}` | Read one node with its [host observations and history](./runtime-observability-api.md#node-host-observations-and-history) |
 | `PATCH /core/v1/sandbox/nodes/{node_id}` | Change a node's name and capacity |
 | `DELETE /core/v1/sandbox/nodes/{node_id}` | Remove a node |
 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | List a node's unreleased allocations |
-| `GET /core/v1/sandbox/runtime-observations` | Current Runtime observations; see the [Runtime telemetry API](runtime-observability-api.md) |
+| `GET /core/v1/sandbox/runtime-observations` | Current Runtime observations; see the [Runtime telemetry API](./runtime-observability-api.md) |
 
 ## Selection request
 
@@ -52,7 +54,7 @@ These limits describe each sandbox. A node's `max_active` and `max_retained` are
 
 Docker applies the CPU and memory limits and checks the running container's limits and exact image; it has no hard root or workspace disk quota. E2B CPU and memory must equal the exact ready template build, which Core validates through the pinned SDK before saving; disk capacity stays part of the template. Neither provider accepts a disk quota it cannot enforce. An E2B selection may omit `resources`: Core then stores the build's CPU count and memory as `cpus` and `memory_mib`, returned in `specification.resources` without disk fields. On restart Core loads the committed E2B selection without validating the template build again, so an E2B outage never blocks inspection or cleanup; new selections still require validation.
 
-microsandbox configures the CPUs, memory, a managed root disk and a separate owned disk at `/environment`. The [microsandbox helper](../../services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
+microsandbox configures the CPUs, memory, a managed root disk and a separate owned disk at `/environment`. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
 
 ### Runtime release
 
@@ -163,7 +165,7 @@ One database snapshot partitions every unreleased allocation and every pending h
 
 When both held counts reach zero, the owner drains and atomically clears the provider, mode, specification, provider configuration, credential and metadata and provider policy, retires nodes and unused enrollment tokens, increments the generation and owner epoch, and records `reset_complete`. The installation identity and history remain. Core immediately publishes the unconfigured state and keeps the new generation even with no provider, so a delayed load cannot revive the old one. Configure again with POST and the returned generation; no restart is needed.
 
-During a reset, fresh hosted admission returns 503 `sandbox_reset_in_progress` and leaves no provisional Session rows; live input, receipt retries, restoration and cleanup continue. Management writes and new enrollment return 409 `sandbox_reset_in_progress`, while registered nodes can still read their configuration to recover for cleanup. Per-Session [archive](admin-api.md#session-archive) needs only the current generation and works with or without a reset. It keeps history and persisted Files and Artifacts, discards the unpersisted workspace and prevents the Session from resuming; poll the archive GET for the actual release. A reset never fabricates a release receipt.
+During a reset, fresh hosted admission returns 503 `sandbox_reset_in_progress` and leaves no provisional Session rows; live input, receipt retries, restoration and cleanup continue. Management writes and new enrollment return 409 `sandbox_reset_in_progress`, while registered nodes can still read their configuration to recover for cleanup. Per-Session [archive](./admin-api.md#session-archive) needs only the current generation and works with or without a reset. It keeps history and persisted Files and Artifacts, discards the unpersisted workspace and prevents the Session from resuming; poll the archive GET for the actual release. A reset never fabricates a release receipt.
 
 A force archive fences credentials and new work at once. When the hosted delivery of the Turn is still connected, Core keeps only that delivery's native cancellation and terminal receipt path open until the terminal commit, for at most 20 seconds from the original cancellation request; `done` does not end the bound while a cancellation acknowledgement or terminal commit is pending. This drain never authorizes reconnection, workspace or MCP access or further execution, and an explicit credential revocation ends it. Missing or failed receipts keep honest failure outcomes, and a disconnected, expired or restarted owner falls back to ordinary provider cleanup.
 
@@ -183,7 +185,7 @@ A node without generation management reports its provider's readiness itself: `p
 
 ## What each field means per sandbox provider
 
-Some fields keep one name across providers but differ in meaning, or do not apply. Deployment fields come from `GET /core/v1/sandbox/deployment`, node and allocation fields from the node routes, and Runtime fields from the [Runtime telemetry API](runtime-observability-api.md), where `disk` appears only in the observation list and history is described under [Session Runtime history](runtime-observability-api.md#session-runtime-history).
+Some fields keep one name across providers but differ in meaning, or do not apply. Deployment fields come from `GET /core/v1/sandbox/deployment`, node and allocation fields from the node routes, and Runtime fields from the [Runtime telemetry API](./runtime-observability-api.md), where `disk` appears only in the observation list and history is described under [Session Runtime history](./runtime-observability-api.md#session-runtime-history).
 
 | Field | E2B | Docker | microsandbox |
 | --- | --- | --- | --- |
@@ -218,7 +220,7 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | 503 | `execution_unavailable` | Provider preparation is unavailable |
 | 503 | `credential_storage_unavailable` | Core has no credential encryption key |
 
-Storage and credential failures stay errors: an empty or failed read never proves cleanup. The [machine connection API](machine-api.md#node-route-errors) lists the errors of the node routes.
+Storage and credential failures stay errors: an empty or failed read never proves cleanup. The [machine connection API](./machine-api.md#node-route-errors) lists the errors of the node routes.
 
 ## Canonical node specification
 

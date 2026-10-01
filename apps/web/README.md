@@ -1,6 +1,6 @@
 # Web console package
 
-`apps/web` (`@oac/web`) is the React application of the OpenAgentCore administrator console. The [console server](../../docs/web/console-server.md) serves its production build. [DESIGN.md](DESIGN.md) records the visual system and [PRODUCT.md](PRODUCT.md) the product scope and behavior; the [operator guide](../../docs/web/README.md) describes the console for administrators.
+`apps/web` (`@oac/web`) is the React application of the OpenAgentCore administrator console. The [console server](../../docs/web/console-server.md) serves its production build. [DESIGN.md](DESIGN.md) records the visual system and [PRODUCT.md](PRODUCT.md) the product scope and behavior; the [operator guide](../../docs/web/index.md) describes the console for administrators.
 
 ## Rules for console code
 

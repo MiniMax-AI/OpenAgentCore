@@ -69,4 +69,4 @@ Core keeps durable execution state. The Runtime runs the chosen harness inside t
 | Understand the design | [Architecture](docs/architecture.md) |
 | Add a sandbox, harness or other component | [Developer guide](docs/development.md) |
 
-All pages: [documentation index](docs/getting-started/README.md). Before changing code, read the [contributor rules](CONTRIBUTING.md).
+All pages: [documentation index](docs/getting-started/index.md). Before changing code, read the [contributor rules](CONTRIBUTING.md).

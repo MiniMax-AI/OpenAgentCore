@@ -53,11 +53,25 @@ jobs:
       - name: Verify names, documentation and CI selection invariants
         run: make check-names check-docs check-ci
 
+  # Parts run in parallel; the serial store integration package is split into deterministic shards.
   backend:
     needs: plan
     if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'backend')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: runtime
+          - part: core
+          - part: store
+            shard: 1/3
+          - part: store
+            shard: 2/3
+          - part: store
+            shard: 3/3
+    name: backend (${{ matrix.part }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }})
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
-    timeout-minutes: 40
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
@@ -91,14 +105,16 @@ jobs:
           path: |
             ~/.oac/cache/go-build
             ~/.oac/cache/go-mod
-          key: core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-${{ steps.source.outputs.revision }}
+          key: core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-${{ matrix.part }}-${{ steps.source.outputs.revision }}
           restore-keys: |
+            core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-${{ matrix.part }}-
             core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-
             core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
       - name: Install native Go prerequisites
+        if: matrix.part == 'runtime'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential pkg-config libssl-dev
@@ -109,15 +125,23 @@ jobs:
           echo "OAC_TEST_DATABASE_URL=$OAC_TEST_DATABASE_URL" >> "$GITHUB_ENV"
           make check-database
       - name: Verify generated SQL queries
+        if: matrix.part == 'runtime'
         run: make check-sqlc
       - name: Test Runtime and shared Go contracts
+        if: matrix.part == 'runtime'
         run: make check-go
       - name: Test microsandbox provider and Linux helper
+        if: matrix.part == 'runtime'
         run: make check-microsandbox-provider
-      - name: Build and test standalone Core and persistence
-        run: make check-core
       - name: Build execution daemon
+        if: matrix.part == 'runtime'
         run: make build-daemon
+      - name: Build standalone Core and test services and clients
+        if: matrix.part == 'core'
+        run: make build-core check-core-packages
+      - name: Test Core persistence shard ${{ matrix.shard }}
+        if: matrix.part == 'store'
+        run: make check-core-store OAC_CORE_STORE_SHARD=${{ matrix.shard }}
 
   distribution:
     needs: plan

@@ -1,6 +1,8 @@
-# Core administration API
+---
+title: "Core administration API"
+---
 
-The Core administration API (`/core/v1`) manages an installation: Projects and their API keys, reads and deletion of Project resources, executor credentials, deployment default models, the sandbox deployment and its nodes, monitoring and audit. Web's console server calls it for the signed-in administrator ([console server](../../docs/web/console-server.md#forwarding-to-core)); operators call it from scripts on the Core host ([script the Core API](../../docs/getting-started/operations.md#script-the-core-api)). The generated schema is [core.openapi.yaml](core.openapi.yaml), and every error uses the [Core error envelope](core-errors.md).
+The Core administration API (`/core/v1`) manages an installation: Projects and their API keys, reads and deletion of Project resources, executor credentials, deployment default models, the sandbox deployment and its nodes, monitoring and audit. Web's console server calls it for the signed-in administrator ([console server](../../docs/web/console-server.md#forwarding-to-core)); operators call it from scripts on the Core host ([script the Core API](../../docs/getting-started/operations.md#script-the-core-api)). The generated schema is [core.openapi.yaml](./core.openapi.yaml), and every error uses the [Core error envelope](./core-errors.md).
 
 Applications never call `/core/v1`. It has no operation that creates or edits Agents, Sessions, templates, Files, Skills or Vaults, starts or cancels work, reads Source File content or streams events; applications do those through the [Agents API](../../docs/api/public-agent-api.md).
 
@@ -9,7 +11,7 @@ Applications never call `/core/v1`. It has no operation that creates or edits Ag
 Every `/core/v1` request, including one for an unknown path, must send `Authorization: Bearer <Core key>`. Without it Core answers 401 `invalid_admin_key` with `WWW-Authenticate: Bearer`; an unknown path answers 404 `not_found` only after authentication.
 
 - Core compares the SHA-256 of the bearer with the Core key digest it reads at startup from `generated/core-key-digests.json`, which `oac apply` derives from `secrets/core.key` ([Core key](../../docs/getting-started/operations.md#core-key)). A rotated Core key takes effect when Core restarts. Core serves no `/core/v1` route when no digest is configured.
-- The Core key authenticates only `/core/v1`. Project API keys and machine credentials get 401 here, and the Core key gets 401 on `/v1` and `/api/v1` ([API namespaces and credentials](../../docs/api/README.md)).
+- The Core key authenticates only `/core/v1`. Project API keys and machine credentials get 401 here, and the Core key gets 401 on `/v1` and `/api/v1` ([API namespaces and credentials](../../docs/api/index.md)).
 - `X-Core-Console-Actor` is a label the caller asserts. Core records it as the audit `actor_label` without checking it. The console server sends `console`; scripts normally send none, which records an empty label. Never use it for authorization or as proof of origin.
 - A `{project_id}` in a path selects the target Project, including an archived one; it grants nothing.
 
@@ -24,17 +26,17 @@ Paths are relative to `/core/v1`.
 | `projects/{project_id}/{agents,environment-templates,skills,files,vaults,sessions}/**` | Resource reads and deletion, Session history and Artifacts | [Resource reads and deletion](#resource-reads-and-deletion) |
 | `projects/{project_id}/sessions/{session_id}/archive` | Archive one hosted Session | [Session archive](#session-archive) |
 | `projects/{project_id}/sessions/{session_id}/execution-configuration` | The Session's frozen model, Harness and provider selection | [Execution configuration](#execution-configuration) |
-| `projects/{project_id}/sessions/{session_id}/diagnostics`, `…/turns/{turn_id}/diagnostics` | Failure categories and Item receipt timing | [Session diagnostics](session-diagnostics.md) |
-| `projects/{project_id}/sessions/{session_id}/runtime-observation`, `sandbox/runtime-observations` | Current Runtime observations | [Runtime observations](runtime-observability-api.md), [the list's disk field](#runtime-observations) |
-| `projects/{project_id}/sessions/{session_id}/runtime-history` | Stored Runtime history | [Runtime history](runtime-observability-api.md#session-runtime-history) |
-| `projects/{project_id}/environments/{environment_id}/installation` | Install commands of a `self_hosted` Environment | [Installation grant](environment-executor-credentials.md#installation-grant) |
-| `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials of a `self_hosted` Environment | [Executor credentials](environment-executor-credentials.md#core-key-routes) |
+| `projects/{project_id}/sessions/{session_id}/diagnostics`, `…/turns/{turn_id}/diagnostics` | Failure categories and Item receipt timing | [Session diagnostics](./session-diagnostics.md) |
+| `projects/{project_id}/sessions/{session_id}/runtime-observation`, `sandbox/runtime-observations` | Current Runtime observations | [Runtime observations](./runtime-observability-api.md), [the list's disk field](#runtime-observations) |
+| `projects/{project_id}/sessions/{session_id}/runtime-history` | Stored Runtime history | [Runtime history](./runtime-observability-api.md#session-runtime-history) |
+| `projects/{project_id}/environments/{environment_id}/installation` | Install commands of a `self_hosted` Environment | [Installation grant](./environment-executor-credentials.md#installation-grant) |
+| `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials of a `self_hosted` Environment | [Executor credentials](./environment-executor-credentials.md#core-key-routes) |
 | `projects/{project_id}/resource-owners`, `projects/{project_id}/write-operations` | Which API key created a resource and each key's writes | [Write provenance](#write-provenance) |
-| `harnesses`, `harnesses/{harness}/model-configuration` | Enabled Harnesses and each Harness's deployment default model | [Deployment defaults](model-execution.md#deployment-defaults) |
-| `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](sandbox-deployment.md#routes) |
-| `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](sandbox-deployment.md), [node host history](runtime-observability-api.md#node-host-observations-and-history) |
+| `harnesses`, `harnesses/{harness}/model-configuration` | Enabled Harnesses and each Harness's deployment default model | [Deployment defaults](./model-execution.md#deployment-defaults) |
+| `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](./sandbox-deployment.md#routes) |
+| `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](./sandbox-deployment.md), [node host history](./runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | Session counts and usage by Project, Agent or key | [Summary](#summary) |
-| `metrics` | Core's own process, execution, database and job metrics | [Core metrics](core-metrics.md) |
+| `metrics` | Core's own process, execution, database and job metrics | [Core metrics](./core-metrics.md) |
 | `audit-log` | Administrator writes | [Audit log](#audit-log) |
 
 ## Projects and keys
@@ -57,7 +59,7 @@ A Project owns one execution tenant; its keys share its principal and assets ([P
 - Only the issuance response contains the key's plaintext, in `key`; Core stores its digest. Show it once and never cache it. After an uncertain issuance response, list the keys and revoke any you cannot use before issuing another.
 - Archive marks the Project archived, revokes all its keys and writes the audit entry in one transaction. Issuing a key in an archived Project returns 409 `project_archived`. There is no Project deletion, unarchive or key reset.
 
-The [`/v1` authentication rules](wire-semantics.md#authentication) define key lookup, revocation visibility, scope headers and authentication errors.
+The [`/v1` authentication rules](./wire-semantics.md#authentication) define key lookup, revocation visibility, scope headers and authentication errors.
 
 ## Resource reads and deletion
 
@@ -79,7 +81,7 @@ Paths are relative to `/core/v1/projects/{project_id}`. Each read returns the sa
 
 ## Session archive
 
-`POST /projects/{project_id}/sessions/{session_id}/archive` with `{"expected_generation": N}` releases one Core-managed `openai_hosted` Session's sandbox without a deployment reset. N is the current generation of the [sandbox deployment](sandbox-deployment.md), a positive integer. The deployment must be configured in Web.
+`POST /projects/{project_id}/sessions/{session_id}/archive` with `{"expected_generation": N}` releases one Core-managed `openai_hosted` Session's sandbox without a deployment reset. N is the current generation of the [sandbox deployment](./sandbox-deployment.md), a positive integer. The deployment must be configured in Web.
 
 | Case | Result |
 | --- | --- |
@@ -91,7 +93,7 @@ One transaction marks the Environment expired (a failed Environment stays failed
 
 `POST` and `GET /projects/{project_id}/sessions/{session_id}/archive` return `{session_id, environment_id, state}`. `GET` is read-only and needs no generation. `state` is the resource's current disposition: `active`, `cleanup_pending` or `released`, whatever released it. `released` does not mean an active Turn has finished cancelling; read the Turn for that.
 
-After an uncertain `POST` response, `GET` the archive before writing again. Repeating the `POST` has the same effect and records one audit entry per accepted request. To clear every hosted Session before changing the deployment, use the [deployment reset](sandbox-deployment.md#reset).
+After an uncertain `POST` response, `GET` the archive before writing again. Repeating the `POST` has the same effect and records one audit entry per accepted request. To clear every hosted Session before changing the deployment, use the [deployment reset](./sandbox-deployment.md#reset).
 
 ## Execution configuration
 
@@ -113,7 +115,7 @@ After an uncertain `POST` response, `GET` the archive before writing again. Repe
 }
 ```
 
-Each `source` is `session`, `agent`, `deployment` or `unknown`, recorded independently: a Session can override the model and keep its Agent's Harness and provider. An explicit inline Harness is `session`; an inline `agent.x_agents_core: null` resets the Harness to `deployment` and keeps the inherited provider; a null Session provider inherits normally. `harness_config.value` is `{}` when no native parameters apply. [Model execution](model-execution.md) owns how each value is resolved.
+Each `source` is `session`, `agent`, `deployment` or `unknown`, recorded independently: a Session can override the model and keep its Agent's Harness and provider. An explicit inline Harness is `session`; an inline `agent.x_agents_core: null` resets the Harness to `deployment` and keeps the inherited provider; a null Session provider inherits normally. `harness_config.value` is `{}` when no native parameters apply. [Model execution](./model-execution.md) owns how each value is resolved.
 
 | `model_provider.status` | Meaning | `configuration` |
 | --- | --- | --- |
@@ -214,7 +216,7 @@ The response is `{data, has_more, next_cursor}`. Each row has `project_id`, null
 
 ## Runtime observations
 
-The [Runtime telemetry API](runtime-observability-api.md) owns current observations, the [list-only disk field](runtime-observability-api.md#disk), Session history and node host observations and history.
+The [Runtime telemetry API](./runtime-observability-api.md) owns current observations, the [list-only disk field](./runtime-observability-api.md#disk), Session history and node host observations and history.
 
 ## Audit log
 

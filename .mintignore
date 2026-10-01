@@ -1,0 +1,17 @@
+# Publish guides and contracts; repository implementation stays on GitHub.
+apps/
+deploy/
+example/
+internal/
+packages/
+scripts/
+services/
+AGENTS.md
+README.zh-CN.md
+**/*.js
+**/*.jsx
+**/*.ts
+**/*.tsx
+**/*.mjs
+**/*.cjs
+**/*.css

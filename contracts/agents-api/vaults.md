@@ -1,4 +1,6 @@
-# Vaults and Credentials
+---
+title: "Vaults and Credentials"
+---
 
 A Vault is a Project-owned container of Credentials. A Credential holds the secret for one HTTPS MCP server: a `static_bearer` token or an `mcp_oauth` grant. A Session attaches Vaults in `vault_ids`; Core selects one Credential per HTTP MCP server when the Session is created and hands the decrypted token to the Runtime only when it dispatches work. Secrets are write-only: no read returns a token, refresh token, client secret or ciphertext.
 
@@ -32,7 +34,7 @@ session = client.beta.agents.sessions.create(
 )
 ```
 
-The MCP tool may name the Credential in `credential_id`; without it, Core picks the attached Credential whose `mcp_server_url` equals the tool's `server_url` ([selection](#credential-selection-in-a-session)). Which Harness and placement can connect to the server depends on the tool's `connection_origin` ([MCP connection origin](environments.md#public-mcp-connection-origin)).
+The MCP tool may name the Credential in `credential_id`; without it, Core picks the attached Credential whose `mcp_server_url` equals the tool's `server_url` ([selection](#credential-selection-in-a-session)). Which Harness and placement can connect to the server depends on the tool's `connection_origin` ([MCP connection origin](./environments.md#public-mcp-connection-origin)).
 
 ## Routes
 
@@ -50,7 +52,7 @@ All routes are under `/v1`, take a Project API key and require `OpenAI-Beta: age
 | Replace secrets | `POST /vaults/{vault_id}/credentials/{credential_id}` | Credential |
 | Delete a Credential | `DELETE /vaults/{vault_id}/credentials/{credential_id}` | `{id, object: "vault.credential.deleted", deleted: true}` |
 
-A malformed, missing or foreign ID returns 404 `not_found_error`, and so does a Credential addressed through a Vault that does not own it. Both lists order by creation time, then ID, and filter by `status` (`active`, `archived` or both); the [list rules](wire-semantics.md#lists) give the paging and filter details. Core stores the status privately, defaults it to `active` and has no operation that archives a Vault or Credential. A Credential's status is independent of its Vault's.
+A malformed, missing or foreign ID returns 404 `not_found_error`, and so does a Credential addressed through a Vault that does not own it. Both lists order by creation time, then ID, and filter by `status` (`active`, `archived` or both); the [list rules](./wire-semantics.md#lists) give the paging and filter details. Core stores the status privately, defaults it to `active` and has no operation that archives a Vault or Credential. A Credential's status is independent of its Vault's.
 
 ## Vaults
 

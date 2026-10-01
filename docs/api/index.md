@@ -1,10 +1,12 @@
-# API namespaces and credentials
+---
+title: "API namespaces and credentials"
+---
 
 Core serves three namespaces. Each has one kind of caller and its own credential, and a credential works only in its own namespace.
 
 | Namespace | Caller | Credential | Contents | Owner |
 | --- | --- | --- | --- | --- |
-| `/v1` | Applications: business systems and the official OpenAI SDK | Project API key | Exactly the 58 method and path pairs of the pinned official Agents API, listed in [upstream-routes.json](../../contracts/agents-api/upstream-routes.json). Core-only fields sit inside `x_agents_core`: `harness`, `model_provider`, `harness_config`, `environment`, and the read-only Session `installation` | [Agents API guide](public-agent-api.md) |
+| `/v1` | Applications: business systems and the official OpenAI SDK | Project API key | Exactly the 58 method and path pairs of the pinned official Agents API, listed in [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json). Core-only fields sit inside `x_agents_core`: `harness`, `model_provider`, `harness_config`, `environment`, and the read-only Session `installation` | [Agents API guide](./public-agent-api.md) |
 | `/core/v1` | Web's console server and operator scripts | [Core key](../getting-started/operations.md#core-key) | Installation facts, Projects and keys, resource reads and deletion, Session archive, executor credentials, default models, metrics, audit, sandbox deployment and nodes | [Core administration API](../../contracts/agents-api/admin-api.md) |
 | `/api/v1` | Nodes, Runtime daemons, self-hosted executors and their installers | Machine credentials: node enrollment tokens and node credentials, installation grants, executor credentials, and daemon credentials. Each works only on its own routes | Machine bootstrap and connections under `/api/v1/sandbox-node/*` and `/api/v1/agent-daemon/*`, including WebSockets, and the public native installer downloads | [Machine connection API](../../contracts/agents-api/machine-api.md) |
 

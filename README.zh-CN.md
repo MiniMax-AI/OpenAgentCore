@@ -69,4 +69,4 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 | 了解设计 | [架构说明](docs/architecture.md) |
 | 接入新的沙箱、Harness 或其他组件 | [开发指南](docs/development.md) |
 
-全部文档见[文档目录](docs/getting-started/README.md)。修改代码前请阅读[贡献规范](CONTRIBUTING.md)。
+全部文档见[文档目录](docs/getting-started/index.md)。修改代码前请阅读[贡献规范](CONTRIBUTING.md)。

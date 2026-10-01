@@ -11,8 +11,8 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Projects, keys, resource isolation, administrator authority, secrets and audit concepts | [Concepts and ownership](docs/concepts.md) |
 | Component responsibilities and Session flow | [Architecture](docs/architecture.md) |
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
-| API callers, credentials and route inventory | [API index](docs/api/README.md) |
-| Public wire semantics and protocol coverage | [Agents API contracts](contracts/agents-api/README.md) |
+| API callers, credentials and route inventory | [API index](docs/api/index.md) |
+| Public wire semantics and protocol coverage | [Agents API contracts](contracts/agents-api/index.md) |
 | Machine connection routes | [Machine connection API](contracts/agents-api/machine-api.md) |
 | Core service setup, tests and generation | [Core service guide](services/core/README.md) |
 | Core implementation constraints beyond the public contracts | [Implementation constraints](services/core/IMPLEMENTATION.md) |
@@ -85,7 +85,7 @@ Record unrelated findings without automatically starting them. Scope compatibili
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs. Harness profiles must not copy Runtime tool environment values; see the [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
 - Require absolute user-supplied working directories.
 - Keep test artifacts under `~/.oac/`.
-- New or changed routes identify their caller and credential in the [API index](docs/api/README.md) and link their detailed contract.
+- New or changed routes identify their caller and credential in the [API index](docs/api/index.md) and link their detailed contract.
 
 ### Review
 
@@ -126,7 +126,7 @@ Use official SDKs and upstream types or schemas where suitable. Validate raw HTT
 
 Controlled fixtures and synthetic model responses qualify deterministic behavior. Live execution acceptance calls a real model API through Core, the daemon and the Harness adapter. Direct native probes establish feasibility. Keep provider credentials in private test configuration, outside source, logs and task records.
 
-For wire details unspecified by the pinned SDK, probe resources you own and retain request evidence. Distinguish observed behavior from guarantees, accepted profiles from complete coverage, and provider connectivity from deployment qualification. Maintain those distinctions in the [coverage ledger](contracts/agents-api/README.md).
+For wire details unspecified by the pinned SDK, probe resources you own and retain request evidence. Distinguish observed behavior from guarantees, accepted profiles from complete coverage, and provider connectivity from deployment qualification. Maintain those distinctions in the [coverage ledger](contracts/agents-api/index.md).
 
 ### Live acceptance
 

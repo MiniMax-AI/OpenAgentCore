@@ -1,14 +1,16 @@
-# Add and manage nodes
+---
+title: "Add and manage nodes"
+---
 
-A node is a Linux host that runs sandboxes for Core-hosted Sessions when the sandbox backend is Docker or microsandbox. Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. E2B needs no nodes. Machines that applications connect for their own Sessions are [self-hosted executors](self-hosted.md), not nodes.
+A node is a Linux host that runs sandboxes for Core-hosted Sessions when the sandbox backend is Docker or microsandbox. Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. E2B needs no nodes. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes.
 
 You add a node by generating a command in Web and running it on the host. The [sandbox deployment contract](../../contracts/agents-api/sandbox-deployment.md) defines the sandbox settings and their change rules, and the [node protocol](../../contracts/agents-api/node-generation-protocol.md) defines how nodes prepare and keep Runtime generations.
 
 ## Before you add a node
 
-- **Core has an HTTPS public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Configure a domain and HTTPS in System before adding nodes*; see [Configure the domain and HTTPS](install.md#configure-the-domain-and-https), or with external ingress [change the public URL](../configuration.md#changing-the-public-url).
+- **Core has an HTTPS public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Configure a domain and HTTPS in System before adding nodes*; see [Configure the domain and HTTPS](./install.md#configure-the-domain-and-https), or with external ingress [change the public URL](../configuration.md#changing-the-public-url).
 - **The sandbox configuration is saved.** The installer saves microsandbox at the Standard size unless you passed another `--sandbox`. After `--sandbox none`, open **System** → **Manage sandbox configuration**, choose **Own machines**, then microsandbox (recommended) or Docker and a sandbox size, and **Save configuration**. Every node of an installation uses that backend.
-- **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. For hosts without access to the release, install Core from the [offline bundle](install-options.md#offline-hosts) so the console holds every file. Without the files, Add node says *This console has no node files for …*.
+- **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. For hosts without access to the release, install Core from the [offline bundle](./install-options.md#offline-hosts) so the console holds every file. Without the files, Add node says *This console has no node files for …*.
 
 The Core host joins like any other host: to run sandboxes on it, add it as a node.
 
@@ -77,7 +79,7 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 
-**One release.** A node runs the program of the console that added it and is never upgraded in place; see the [installation version policy](operations.md#installation-version-policy).
+**One release.** A node runs the program of the console that added it and is never upgraded in place; see the [installation version policy](./operations.md#installation-version-policy).
 
 **The token.** It is single-use, expires after 10 minutes and only registers the node. The installer takes it only on standard input and refuses it in the environment, where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy with `log_input` records standard input, and so the token.
 
@@ -153,7 +155,7 @@ The node connects out to Core; Core needs no SSH or Docker TCP access to the hos
 
 ## When a node host fails
 
-A restarted node service keeps its identity and finds its existing sandboxes again. Core never replaces a missing sandbox by itself, and never moves a Session to another node: the Session's resources show as **Node disconnected** or **Sandbox resource missing** until the original host and its storage are back, or you archive the Session. A lost node state directory is a recovery incident: restore it from its [backup](operations.md#back-up) together with the database and the provider storage, rather than registering the host again over existing resources.
+A restarted node service keeps its identity and finds its existing sandboxes again. Core never replaces a missing sandbox by itself, and never moves a Session to another node: the Session's resources show as **Node disconnected** or **Sandbox resource missing** until the original host and its storage are back, or you archive the Session. A lost node state directory is a recovery incident: restore it from its [backup](./operations.md#back-up) together with the database and the provider storage, rather than registering the host again over existing resources.
 
 ## Troubleshooting
 
