@@ -14,14 +14,17 @@ import (
 
 // Config is the agent host's own configuration, shared by its Sessions. It
 // holds a credential: keep it in memory and never log it.
+//
+// The agent host does not yet recover Sessions that an earlier agent-host
+// process left. Until it does, an agent-host process must not reuse the
+// StateDir or the UIDs of an earlier one.
 type Config struct {
 	// StateDir is an absolute host directory private to the agent host. Each
 	// Session's directory is StateDir/sessions/<Session ID>.
 	StateDir string
 	// UIDs is the range Session uids are allocated from; each Session's gid
 	// equals its uid. Only one agent host runs per kernel, and nothing else
-	// uses the range or starts session views: Sweep ends every view and kills
-	// every process that holds one of the range's uids.
+	// uses the range or starts session views.
 	UIDs UIDRange
 	// RelayURL and TLS reach the Link relay, as sandboxlink.DialAttach takes
 	// them. A nil TLS uses the system roots.
@@ -92,8 +95,7 @@ type Input struct {
 	Message proto.MessageInput
 }
 
-// Error kinds. Every error Run and Sweep return matches one of them with
-// errors.Is.
+// Error kinds. Every error Run returns matches one of them with errors.Is.
 var (
 	// ErrUnsupported is a platform other than Linux, or a Session that asks
 	// for what the agent host does not run. A Session's error also matches
@@ -101,7 +103,7 @@ var (
 	// agent.ErrViewHandoff, or agent.ErrInvalidView for a view whose paths
 	// meet the agent host's own overlays.
 	ErrUnsupported = errors.New("agenthost: unsupported")
-	// ErrInvalidConfig is a Config that Run and Sweep reject.
+	// ErrInvalidConfig is a Config that Run rejects.
 	ErrInvalidConfig = errors.New("agenthost: invalid configuration")
 	// ErrInvalidSession is a malformed Session.
 	ErrInvalidSession = errors.New("agenthost: invalid session")

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -22,38 +21,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
-
-func TestSweepEndsViewsAndProcessesBeforeRemovingDirectories(t *testing.T) {
-	cfg := Config{StateDir: t.TempDir(), UIDs: UIDRange{First: 70000, Count: 8}}
-	viewsEnded := func(time.Duration) error { return nil }
-	if err := sweep(cfg, viewsEnded, &fakeProcesses{}, time.Second); err != nil {
-		t.Fatalf("Sweep without sessions: %v", err)
-	}
-	leave := func() {
-		left := filepath.Join(sessionsDir(cfg.StateDir), "left", "home")
-		if err := os.MkdirAll(left, 0o700); err != nil {
-			t.Fatal(err)
-		}
-	}
-	leave()
-	// Any of the four uids of any thread places a process in the range.
-	outside := [4]uint32{1000, 1000, 1000, 1000}
-	procs := &fakeProcesses{list: []task{{tgid: 10, tid: 10, uids: outside}, {tgid: 10, tid: 12, uids: [4]uint32{1000, 1000, 1000, 70003}}, {tgid: 11, tid: 11, uids: outside}}}
-	if err := sweep(cfg, viewsEnded, procs, time.Second); err != nil || !reflect.DeepEqual(procs.ended, []int{10}) || len(leftSessions(t, cfg)) != 0 {
-		t.Fatalf("Sweep = %v, ended %v, %d Session directories left", err, procs.ended, len(leftSessions(t, cfg)))
-	}
-	leave()
-	procs = &fakeProcesses{list: []task{{tgid: 12, tid: 12, uids: [4]uint32{70000, 70000, 70000, 70000}}}, stubborn: true}
-	if err := sweep(cfg, viewsEnded, procs, 100*time.Millisecond); !errors.Is(err, ErrTeardown) || len(leftSessions(t, cfg)) != 1 {
-		t.Fatalf("Sweep with a process that outlives the bound = %v, %d Session directories left", err, len(leftSessions(t, cfg)))
-	}
-	errStuck := errors.New("a launcher still runs")
-	procs = &fakeProcesses{list: []task{{tgid: 13, tid: 13, uids: [4]uint32{70000, 70000, 70000, 70000}}}}
-	viewsStuck := func(time.Duration) error { return errStuck }
-	if err := sweep(cfg, viewsStuck, procs, time.Second); !errors.Is(err, ErrTeardown) || !errors.Is(err, errStuck) || procs.ended != nil || len(leftSessions(t, cfg)) != 1 {
-		t.Fatalf("Sweep with a view that outlives the bound = %v, ended %v, %d Session directories left", err, procs.ended, len(leftSessions(t, cfg)))
-	}
-}
 
 func TestAllocationSkipsUIDsThatProcessesHold(t *testing.T) {
 	r := UIDRange{First: 71000, Count: 2}

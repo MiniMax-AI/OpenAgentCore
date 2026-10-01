@@ -7,15 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -45,47 +42,6 @@ type deps struct {
 // recorded during teardown counts.
 func Run(ctx context.Context, cfg Config, s Session) error {
 	return run(ctx, cfg, s, deps{dial: relayDial(cfg), broker: func() processBroker { return unavailableBroker{} }, procs: procfs{}})
-}
-
-// Sweep ends every view a previous agent host left, then every process that
-// holds a uid in cfg.UIDs, then removes every Session directory under
-// cfg.StateDir. Run's owner calls it at startup, before any Session runs,
-// with /proc showing the agent host's own PID namespace. It returns
-// ErrTeardown when a view or a process with a Session uid still runs after a
-// bounded wait.
-func Sweep(cfg Config) error {
-	return sweep(cfg, sessionview.EndLeftoverViews, procfs{}, sweepBound)
-}
-
-func sweep(cfg Config, endViews func(time.Duration) error, procs processTable, bound time.Duration) error {
-	switch {
-	case !isHostPath(cfg.StateDir):
-		return invalidConfig("state directory %q is not absolute and clean", cfg.StateDir)
-	case !cfg.UIDs.valid():
-		return invalidConfig("uid range %d+%d", cfg.UIDs.First, cfg.UIDs.Count)
-	}
-	if err := endViews(bound); err != nil {
-		return &Error{Kind: ErrTeardown, Op: "sweep views", Err: err}
-	}
-	if err := endProcesses(procs, cfg.UIDs, bound); err != nil {
-		return &Error{Kind: ErrTeardown, Op: "sweep processes", Err: err}
-	}
-	dir := sessionsDir(cfg.StateDir)
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return &Error{Kind: ErrTeardown, Op: "sweep", Err: err}
-	}
-	var errs []error
-	for _, e := range entries {
-		errs = append(errs, os.RemoveAll(filepath.Join(dir, e.Name())))
-	}
-	if err := errors.Join(errs...); err != nil {
-		return &Error{Kind: ErrTeardown, Op: "sweep", Err: err}
-	}
-	return nil
 }
 
 // session is one running Session.
@@ -467,8 +423,7 @@ func (s *session) closeExecutor(exec agent.Executor) error {
 // When Close fails, teardown ends the views, which kills each view's
 // processes, and retries Close once. If that fails too, the Executor may
 // still use the Session directory: teardown returns ErrTeardown and keeps
-// the directory and the uid, which stays in use until the agent host exits;
-// the next agent host's Sweep reclaims both.
+// the directory and the uid, which stays in use until the agent host exits.
 func (s *session) teardown(exec agent.Executor) error {
 	var errs []error
 	closeErr := s.execErr

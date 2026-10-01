@@ -174,104 +174,28 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		checkReleased(t, cfg)
 	})
 
-	t.Run("Sweep ends a lingering Session process", func(t *testing.T) {
+	t.Run("allocation skips a uid that a thread holds under an exited leader", func(t *testing.T) {
 		id := cfg.UIDs.First + 1
-		cmd := exec.Command("/bin/sleep", "60")
-		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: id, Gid: id}}
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-		done := make(chan error, 1)
-		go func() { done <- cmd.Wait() }()
-		if err := Sweep(cfg); err != nil {
-			t.Fatalf("Sweep = %v", err)
-		}
-		select {
-		case <-done:
-		case <-time.After(wait):
-			cmd.Process.Kill()
-			t.Fatal("the process with a Session uid still runs after Sweep")
-		}
-	})
-
-	t.Run("Sweep ends a view whose leader thread has exited", func(t *testing.T) {
-		id := cfg.UIDs.First + 2
 		exe, err := os.Executable()
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd := inView(id, exe)
+		cmd := exec.Command(exe)
 		cmd.Env = append(os.Environ(), zombieLeaderEnv+"=1")
-		done := startView(t, cmd)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: id, Gid: id}}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			cmd.Process.Kill()
+			cmd.Wait()
+		}()
 		until(t, "a zombie leader with a running thread", func() bool { return zombieLeaderHolds(id) })
 		if got, err := allocUID(UIDRange{First: id, Count: 1}, procfs{}); !errors.Is(err, ErrCapacity) {
 			freeUID(got)
 			t.Errorf("allocUID beside a running thread = %d, %v", got, err)
 		}
-		sweepEnds(t, cfg, id, done)
 	})
-
-	t.Run("Sweep ends a view that the uid scan misses", func(t *testing.T) {
-		id := cfg.UIDs.First + 3
-		done := startView(t, inView(id, "/bin/sleep", "600"))
-		until(t, "a Session process", func() bool { return processesHolding(id) == 1 })
-		left := filepath.Join(sessionsDir(cfg.StateDir), "left")
-		if err := os.MkdirAll(left, 0o700); err != nil {
-			t.Fatal(err)
-		}
-		// The scan finds no process with a Session uid, as when the last one
-		// forks and exits as the scan passes.
-		if err := sweep(cfg, sessionview.EndLeftoverViews, &fakeProcesses{}, wait); err != nil {
-			t.Fatalf("Sweep = %v", err)
-		}
-		select {
-		case <-done:
-		case <-time.After(wait):
-			t.Fatal("the view's launcher still runs after Sweep")
-		}
-		if n := processesHolding(id); n != 0 || len(leftSessions(t, cfg)) != 0 {
-			t.Errorf("%d processes hold uid %d and %d Session directories remain after Sweep", n, id, len(leftSessions(t, cfg)))
-		}
-	})
-}
-
-// inView returns a command that runs argv, which holds no shell syntax, with
-// uid in a view-like PID namespace: its root init has sessionview's launcher
-// command line and starts argv again whenever it ends, so only ending the
-// namespace ends it.
-func inView(uid uint32, argv ...string) *exec.Cmd {
-	script := fmt.Sprintf("while :; do setpriv --reuid=%d --regid=%d --clear-groups -- %s; done\n", uid, uid, strings.Join(argv, " "))
-	return &exec.Cmd{Path: "/bin/sh", Args: []string{"oac-sessionview"}, Stdin: strings.NewReader(script),
-		SysProcAttr: &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID}}
-}
-
-// startView starts cmd and returns its end.
-func startView(t *testing.T, cmd *exec.Cmd) <-chan error {
-	t.Helper()
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-	t.Cleanup(func() { cmd.Process.Kill() })
-	return done
-}
-
-// sweepEnds checks that Sweep ends the view whose launcher done reports and
-// every process that holds id.
-func sweepEnds(t *testing.T, cfg Config, id uint32, done <-chan error) {
-	t.Helper()
-	if err := Sweep(cfg); err != nil {
-		t.Fatalf("Sweep = %v", err)
-	}
-	select {
-	case <-done:
-	case <-time.After(wait):
-		t.Fatal("the view's launcher still runs after Sweep")
-	}
-	if n := processesHolding(id); n != 0 {
-		t.Errorf("%d processes hold uid %d after Sweep", n, id)
-	}
 }
 
 func until(t *testing.T, what string, ok func() bool) {
@@ -283,18 +207,6 @@ func until(t *testing.T, what string, ok func() bool) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-}
-
-// processesHolding counts the processes with a running thread whose real uid
-// is id.
-func processesHolding(id uint32) int {
-	procs := map[int]bool{}
-	for _, t := range threads() {
-		if t.running && t.uids[0] == id {
-			procs[t.tgid] = true
-		}
-	}
-	return len(procs)
 }
 
 // zombieLeaderHolds reports whether a process whose leader thread is a zombie

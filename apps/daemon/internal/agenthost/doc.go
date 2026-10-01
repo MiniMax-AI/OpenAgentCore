@@ -1,12 +1,14 @@
 // Package agenthost runs Sessions whose Harness runs on the agent host, next to
 // Core, while its tools, files and network act in the sandbox through the
-// Session's Link attachment. It needs Linux; elsewhere Run and Sweep return
+// Session's Link attachment. It needs Linux; elsewhere Run returns
 // ErrUnsupported.
 //
 // Run runs one Session. It admits the Session before any effect: the kind
 // must declare an agent.View, and the request must use only what a view runs
-// and no function tools, whose results Input cannot carry.
-// It then allocates the Session uid, creates the Session directory under
+// and no function tools, whose results Input cannot carry. It then allocates
+// the Session uid, skipping each uid that a running thread holds as its real,
+// effective, saved or file-system uid; this check only detects a conflict and
+// never ends a process. It creates the Session directory under
 // Config.StateDir, rewrites the request so the model provider and HTTP MCP
 // reach the network only through the Session's gateway, and calls the view's
 // Executor factory. The first ViewSession.Launch starts the process broker;
@@ -34,8 +36,8 @@
 // reports changes nothing. When Executor.Close fails, teardown ends the
 // views, which kills their processes, and retries Close once. If Close
 // fails again, the Executor may still use the Session directory: Run returns
-// ErrTeardown and keeps the directory and the uid, which stays in use until
-// the agent host exits, and the next agent host's Sweep reclaims both.
+// ErrTeardown and keeps the directory, and the uid stays in use until the
+// agent host exits.
 //
 // Run drives each Turn as the daemon's dispatch drives a prepared execution.
 // One output consumer starts before StartTurn and forwards the Turn's
@@ -45,24 +47,6 @@
 // When Close fails, nothing more is published. A Turn that fails or leaves
 // the Executor unusable ends the Session, and nothing is sent to Output
 // after Run returns.
-//
-// Sweep runs at startup, before any Session. Session processes run only in
-// views, and each view's launcher is PID 1 of the view's PID namespace, so
-// Sweep first ends every view a previous agent host left with
-// sessionview.EndLeftoverViews: killing a launcher kills every process in its
-// view, whatever its uids, and the launcher exits only once its view is
-// empty. Nothing in a view can start a view or leave its namespace, so no
-// Session process remains once every launcher has exited. Sweep then kills
-// each process with a task, any thread, whose real, effective, saved or
-// file-system uid lies in Config.UIDs. Such a process runs outside every view
-// and is not a Session's: Sweep scans /proc again until none runs or a bound
-// passes and then returns ErrTeardown; one that forks and exits as each scan
-// passes can escape the scans. Only then does Sweep remove the Session
-// directories a previous agent host left. Each signal goes through a pidfd,
-// so a reused pid is never signalled. Allocation also skips a uid that any
-// running task holds. A view or task that the agent host's /proc does not
-// show, such as one in a sibling PID namespace, is outside these guarantees,
-// which is why nothing else may use the range or start views.
 //
 // The Harness view protocol is in contracts/agents-api/harness-onboarding.md
 // and the gateway's in contracts/agents-api/model-execution.md.
