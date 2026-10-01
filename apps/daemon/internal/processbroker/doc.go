@@ -11,9 +11,11 @@
 //
 // The broker authenticates each connection with SO_PEERCRED, accepts only the
 // view's uid, and never reads an identity from the payload. It never changes
-// the flags of a passed descriptor: they share open file descriptions with
-// the Harness, so every read and write polls first and then uses the
-// descriptor as it is.
+// the flags of a passed descriptor, whose open file description the Harness
+// shares. It reopens a pipe, FIFO or character device through /proc/self/fd
+// as its own non-blocking description, uses a socket with MSG_DONTWAIT, and
+// uses a regular file or block device as it is, so it waits on a peer only in
+// a poll that ending the invocation interrupts.
 //
 // Each output descriptor closes after its stream's last byte, so a remote
 // background job that keeps its output open keeps the Harness's pipe open
@@ -42,4 +44,24 @@
 //     stdin forwarding, because the write is never retried.
 //   - A broker lost after the acknowledgement makes the shim exit with 255
 //     and no message, because the shim no longer holds its stderr.
+//   - Descriptors 0, 1 and 2 must each be a pipe, FIFO, socket, regular
+//     file, block device, or character device other than /dev/tty,
+//     /dev/console and /dev/ptmx, and a pipe, FIFO or character device must
+//     be open for the direction the program uses it in. The shim fails with
+//     126 otherwise. Reads and writes of a regular file or block device
+//     block, as a native program's do.
+//   - A signal sent to the shim reaches the remote program only when the
+//     process service declares it. The shim catches every signal a Go
+//     program can catch except CHLD, PIPE, URG and PROF, and the broker drops
+//     the ones the service does not declare. Of the signals it does not
+//     catch, KILL ends the shim, ILL, TRAP, BUS, FPE, SEGV, STKFLT and SYS
+//     make the Go runtime end it with status 2, and signals 32 and 34 end it;
+//     a shim ended before the exit cancels the operation. PIPE, PROF and
+//     signal 33 have no effect.
+//   - A signal ignored when the shim started is still forwarded unless it is
+//     HUP or INT, because the Go runtime replaces inherited ignores.
+//   - A signal sent to the shim's PID reaches the remote initial process
+//     group, or on a terminal the foreground process group for INT, QUIT,
+//     TSTP, TTIN, TTOU, CONT and HUP, because the shim cannot tell it from a
+//     signal sent to its process group.
 package processbroker

@@ -15,10 +15,22 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Forwarded are the signals the shim catches and reports to the broker.
-var Forwarded = []syscall.Signal{
-	unix.SIGHUP, unix.SIGINT, unix.SIGQUIT, unix.SIGTERM, unix.SIGUSR1, unix.SIGUSR2,
-	unix.SIGALRM, unix.SIGCONT, unix.SIGTSTP, unix.SIGTTIN, unix.SIGTTOU, unix.SIGWINCH,
+// Forwarded are the signals the shim catches and reports to the broker, which
+// forwards those the process service declares. They are every signal the Go
+// runtime lets a program catch, except CHLD and PIPE, which the shim ignores,
+// and URG and PROF, which the runtime uses.
+var Forwarded = append([]syscall.Signal{
+	unix.SIGHUP, unix.SIGINT, unix.SIGQUIT, unix.SIGABRT, unix.SIGUSR1, unix.SIGUSR2,
+	unix.SIGALRM, unix.SIGTERM, unix.SIGCONT, unix.SIGTSTP, unix.SIGTTIN, unix.SIGTTOU,
+	unix.SIGXCPU, unix.SIGXFSZ, unix.SIGVTALRM, unix.SIGWINCH, unix.SIGIO, unix.SIGPWR,
+}, realTime(35, 64)...)
+
+func realTime(first, last syscall.Signal) []syscall.Signal {
+	var sigs []syscall.Signal
+	for s := first; s <= last; s++ {
+		sigs = append(sigs, s)
+	}
+	return sigs
 }
 
 // Run runs the shim against the broker at socketPath and returns its exit
@@ -26,7 +38,11 @@ var Forwarded = []syscall.Signal{
 func Run(socketPath string) int {
 	caught := make(chan os.Signal, 64)
 	for _, s := range Forwarded {
-		signal.Notify(caught, s)
+		// HUP or INT ignored at exec stays ignored, as in a native child.
+		// The Go runtime replaces other inherited ignores.
+		if !signal.Ignored(s) {
+			signal.Notify(caught, s)
+		}
 	}
 	// The Go runtime already ignores SIGURG for the program and uses it for
 	// preemption, so only CHLD and PIPE are set to ignore here.

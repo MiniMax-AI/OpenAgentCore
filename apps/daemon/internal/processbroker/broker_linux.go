@@ -78,16 +78,13 @@ func (b *Broker) accept() {
 			}
 			return
 		}
-		cred, err := peerCred(c)
-		if err != nil || int(cred.Uid) != b.cfg.UID {
-			b.log.Warn("process shim connection refused", "uid", cred.Uid, "pid", cred.Pid, "error", err)
-			c.Close()
-			continue
-		}
+		// Until the invocation runs, Close ends the connection, which ends
+		// any read or write of the handshake.
+		unwatch := context.AfterFunc(b.ctx, func() { c.Close() })
 		b.wg.Add(1)
 		go func() {
 			defer b.wg.Done()
-			b.serve(processshim.NewConn(c), cred)
+			b.serve(c, unwatch)
 		}()
 	}
 }

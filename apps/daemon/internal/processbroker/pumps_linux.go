@@ -131,26 +131,26 @@ func (w *writer) run() {
 			inv.acks.deliver(c.seq)
 			return
 		case !broken:
-			err := writeFD(inv.fd(w.fds[0]), c.data, inv.abort)
+			err := writeFD(inv.endpoint(w.fds[0]), c.data, inv.abort)
 			if err == errStopped {
 				return
 			}
 			if err != nil {
 				// The reader is gone; the remote writer gets EPIPE as it
-				// would locally.
+				// would locally. The chunk is delivered at once: closing
+				// the remote output may wait for a new stream, which the
+				// operation's settlement may in turn wait behind.
 				broken = true
 				inv.log.Info("output reader gone", "stream", w.stream, "error", err)
-				inv.closeOutput(w.stream)
+				inv.helpers.Add(1)
+				go func() {
+					defer inv.helpers.Done()
+					inv.closeOutput(w.stream)
+				}()
 			}
 		}
 		inv.acks.deliver(c.seq)
 	}
-}
-
-func (inv *invocation) fd(i int) int {
-	inv.fdMu.Lock()
-	defer inv.fdMu.Unlock()
-	return inv.fds[i]
 }
 
 func (inv *invocation) closeOutput(stream sp.Stream) {
@@ -168,18 +168,17 @@ func (inv *invocation) closeOutput(stream sp.Stream) {
 }
 
 // pumpStdin forwards descriptor 0 until end of file, the exit or the shim's
-// loss. It owns descriptor 0 and stopIn and closes both when it returns: a
-// read can block after its poll on a descriptor whose data another reader
-// took, and nothing else may wait for it.
+// loss. It owns descriptor 0 and stopIn and closes both when it returns, so
+// teardown never waits for a stdin request still on the stream.
 func (inv *invocation) pumpStdin(caps sp.Capabilities) {
-	fd := inv.fd(0)
+	ep := inv.endpoint(0)
 	defer func() {
 		inv.closeFD(0)
 		inv.stopIn.close()
 	}()
 	buf := make([]byte, min(int(caps.MaxDataBytes), sandboxwire.MaxPayload))
 	for {
-		n, err := readFD(fd, buf, inv.stopIn)
+		n, err := readFD(ep, buf, inv.stopIn)
 		switch {
 		case err == errStopped:
 			// After the exit, remote background readers see end of file

@@ -3,14 +3,15 @@
 package processbroker
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"path"
 	"slices"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -29,8 +30,9 @@ type invocation struct {
 	id   sandboxwire.ID
 	term *terminal // nil for pipes
 
+	// eps are the passed descriptors 0, 1 and 2; fd is -1 once closed.
 	fdMu sync.Mutex
-	fds  [3]int // -1 once closed
+	eps  [3]endpoint
 
 	// halt ends every wait of the invocation; abort ends every descriptor
 	// poll; stopIn ends the stdin pump alone.
@@ -56,7 +58,7 @@ type invocation struct {
 	// pumping says the stdin pump owns descriptor 0 and stopIn.
 	pumping bool
 	// settlement, from delivered events
-	startFailed, outputClosed, scopeClosed, scopeLost bool
+	startFailed, outputClosed, scopeClosed bool
 }
 
 // handle is the operation's handle on one stream. relinked closes when a
@@ -73,9 +75,23 @@ var ptyGroupSignals = []uint16{
 	uint16(unix.SIGTTOU), uint16(unix.SIGCONT), uint16(unix.SIGHUP),
 }
 
-// serve reads one request, refuses it or acknowledges it, and runs it.
-func (b *Broker) serve(c *processshim.Conn, cred unix.Ucred) {
+// handshakeTimeout bounds reading the request and answering it.
+const handshakeTimeout = 10 * time.Second
+
+// serve reads one request, refuses it or acknowledges it, and runs it. Until
+// the invocation runs, Close closes the connection; unwatch stops that.
+func (b *Broker) serve(uc *net.UnixConn, unwatch func() bool) {
+	defer unwatch()
+	cred, err := peerCred(uc)
+	if err != nil || int(cred.Uid) != b.cfg.UID {
+		b.log.Warn("process shim connection refused", "uid", cred.Uid, "pid", cred.Pid, "error", err)
+		uc.Close()
+		return
+	}
 	log := b.log.With("pid", cred.Pid)
+	c := processshim.NewConn(uc)
+	uc.SetDeadline(time.Now().Add(handshakeTimeout))
+	// ReadRequest closes the received descriptors when it fails.
 	req, fds, err := c.ReadRequest()
 	if err != nil {
 		log.Warn("process shim request rejected", "error", err)
@@ -90,7 +106,11 @@ func (b *Broker) serve(c *processshim.Conn, cred unix.Ucred) {
 		return
 	}
 	inv.conn = c
-	if err := c.Send(processshim.Ack{}); err != nil {
+	err = c.Send(processshim.Ack{})
+	if err == nil {
+		err = uc.SetDeadline(time.Time{})
+	}
+	if !unwatch() || err != nil {
 		inv.halted()
 		inv.teardown()
 		return
@@ -104,7 +124,8 @@ func refuse(code uint8, format string, args ...any) *processshim.Result {
 }
 
 // prepare checks the request and builds the spec. Every refusal happens
-// here, before the shim gives up its descriptors.
+// here, before the shim gives up its descriptors; the caller then closes
+// them.
 func (b *Broker) prepare(req processshim.Request, fds [3]int, log *slog.Logger) (*invocation, *processshim.Result) {
 	if req.Version != processshim.Version {
 		return nil, refuse(processshim.ExitCannotRun, "IPC version %d is not %d", req.Version, processshim.Version)
@@ -135,24 +156,24 @@ func (b *Broker) prepare(req processshim.Request, fds [3]int, log *slog.Logger) 
 	}
 	if term != nil {
 		spec.IOMode = sp.IOPTY
+		spec.PTY = &sp.PTYSpec{Size: term.size(), Term: termName(spec.Env)}
 		spec.Env = slices.DeleteFunc(spec.Env, func(v sp.EnvVar) bool { return string(v.Name) == "TERM" })
-		spec.PTY = &sp.PTYSpec{Size: term.size(), Term: termName(req.Env)}
 	}
 	if err := spec.Validate(); err != nil {
 		term.close()
 		return nil, refuse(processshim.ExitCannotRun, "%s: %v", remote, err)
 	}
-	abort, err1 := newStopFlag()
-	stopIn, err2 := newStopFlag()
-	if err := errors.Join(err1, err2); err != nil {
-		term.close()
+	inv := &invocation{
+		b: b, log: log.With("executable", remote), spec: spec, id: sandboxwire.NewID(), term: term,
+		eps: [3]endpoint{closedEndpoint, closedEndpoint, closedEndpoint},
+	}
+	if err := inv.open(fds); err != nil {
+		inv.release()
 		return nil, refuse(processshim.ExitCannotRun, "%v", err)
 	}
-	inv := &invocation{
-		b: b, log: log.With("executable", remote), spec: spec, id: sandboxwire.NewID(), term: term, fds: fds,
-		halt: make(chan struct{}), abort: abort, stopIn: stopIn,
-		started: make(chan struct{}), sigs: make(chan uint16, 64),
-	}
+	inv.halt = make(chan struct{})
+	inv.started = make(chan struct{})
+	inv.sigs = make(chan uint16, 64)
 	inv.acks.init()
 	inv.writers = map[sp.Stream]*writer{}
 	if term != nil {
@@ -164,14 +185,46 @@ func (b *Broker) prepare(req processshim.Request, fds [3]int, log *slog.Logger) 
 	return inv, nil
 }
 
-// termName is the remote TERM: the shim's, unless it is unusable.
-func termName(environ [][]byte) []byte {
-	for _, entry := range environ {
-		if v, ok := bytes.CutPrefix(entry, []byte("TERM=")); ok {
-			if len(v) == 0 || len(v) > sp.MaxTermBytes || bytes.Contains(v, privateMarker) {
-				break
-			}
-			return v
+// open allocates the stop flags and the endpoints of the passed descriptors.
+// On failure the caller releases what open allocated.
+func (inv *invocation) open(fds [3]int) error {
+	var err error
+	if inv.abort, err = newStopFlag(); err != nil {
+		return err
+	}
+	if inv.stopIn, err = newStopFlag(); err != nil {
+		return err
+	}
+	for i, fd := range fds {
+		ep, err := openEndpoint(fd, i > 0)
+		if err != nil {
+			return fmt.Errorf("descriptor %d: %w", i, err)
+		}
+		inv.eps[i] = ep
+	}
+	return nil
+}
+
+// release frees what prepare allocated for a refused request. The passed
+// descriptors stay open for the caller.
+func (inv *invocation) release() {
+	for _, ep := range inv.eps {
+		ep.closeIO()
+	}
+	for _, s := range []*stopFlag{inv.abort, inv.stopIn} {
+		if s != nil {
+			s.close()
+		}
+	}
+	inv.term.close()
+}
+
+// termName is the remote TERM: the composed environment's, unless it is
+// unusable.
+func termName(env []sp.EnvVar) []byte {
+	for _, v := range env {
+		if string(v.Name) == "TERM" && len(v.Value) > 0 && len(v.Value) <= sp.MaxTermBytes {
+			return v.Value
 		}
 	}
 	return []byte("dumb")
@@ -207,22 +260,37 @@ func (inv *invocation) run() {
 	inv.observe(h)
 }
 
-// start starts the operation. An uncertain Start is retried with the same ID
-// and spec on the next stream; a Start that had no effect may move to a new
-// service incarnation.
+// resolveWindow bounds how long a Start that may have taken effect is
+// resolved before the shim gets 255.
+const resolveWindow = 30 * time.Second
+
+// start starts the operation. A Start that may have taken effect is retried
+// with the same ID and spec until the outcome is definite: the service then
+// answers with the existing operation, or refuses after finding none. A Start
+// that had no effect may move to a new service incarnation.
 func (inv *invocation) start() (handle, sp.Capabilities, bool) {
-	uncertain := false
+	var uncertain time.Time // when a Start first may have taken effect
+	backoff := minBackoff
 	for {
-		s, err := inv.b.link.get(inv.b.ctx)
-		if err != nil {
+		ctx, cancel := inv.b.ctx, context.CancelFunc(func() {})
+		if !uncertain.IsZero() {
+			ctx, cancel = context.WithDeadline(inv.b.ctx, uncertain.Add(resolveWindow))
+		}
+		s, err := inv.b.link.get(ctx)
+		cancel()
+		switch {
+		case inv.b.ctx.Err() != nil:
 			inv.fail("the process broker stopped")
 			return handle{}, sp.Capabilities{}, false
+		case err != nil:
+			inv.unconfirmed()
+			return handle{}, sp.Capabilities{}, false
 		}
-		if inv.lost() && !uncertain {
+		if inv.lost() && uncertain.IsZero() {
 			return handle{}, sp.Capabilities{}, false // nothing started
 		}
 		if inv.inst != s.instance {
-			if uncertain {
+			if !uncertain.IsZero() {
 				inv.fail("the sandbox process service restarted while the program was starting")
 				return handle{}, sp.Capabilities{}, false
 			}
@@ -253,12 +321,55 @@ func (inv *invocation) start() (handle, sp.Capabilities, bool) {
 		case inv.b.ctx.Err() != nil:
 			inv.fail("the process broker stopped")
 			return handle{}, sp.Capabilities{}, false
+		case f.Effect == sandboxwire.EffectPossible:
+			if uncertain.IsZero() {
+				uncertain = time.Now()
+			}
+		case f.Code == sp.CodeInstanceChanged && !uncertain.IsZero():
+			inv.fail("the sandbox process service restarted while the program was starting")
+			return handle{}, sp.Capabilities{}, false
 		case !s.ended():
+			// The service looks for the operation before refusing, so a
+			// refusal without effect means none exists.
 			inv.reply(processshim.Result{Code: processshim.ExitCannotRun}, fmt.Sprintf("%s: %s", inv.spec.Executable, f.Message))
 			return handle{}, sp.Capabilities{}, false
 		}
-		uncertain = uncertain || f.Effect == sandboxwire.EffectPossible
+		if uncertain.IsZero() {
+			continue // no effect on an ended stream: start on the next one
+		}
+		if time.Since(uncertain) >= resolveWindow {
+			inv.unconfirmed()
+			return handle{}, sp.Capabilities{}, false
+		}
+		select {
+		case <-time.After(backoff):
+		case <-inv.halt:
+			inv.fail("the process broker stopped")
+			return handle{}, sp.Capabilities{}, false
+		}
+		backoff = min(2*backoff, maxBackoff)
 	}
+}
+
+// unconfirmed ends an invocation whose start never became definite, and
+// cancels the operation if it exists after all. A Start that takes effect
+// later is left to the Session's cleanup.
+func (inv *invocation) unconfirmed() {
+	inv.fail("the program may have started, but its start could not be confirmed")
+	s := inv.b.link.current()
+	if s == nil || s.instance != inv.inst {
+		return
+	}
+	ctx, cancel := context.WithTimeout(inv.b.ctx, 5*time.Second)
+	defer cancel()
+	op, _, err := s.client.Attach(ctx, inv.inst, inv.id, 0)
+	if err != nil {
+		return
+	}
+	if err := op.Cancel(ctx, uint32(inv.b.cfg.CancelGrace.Milliseconds())); err != nil {
+		inv.log.Warn("operation cancel failed", "error", err)
+	}
+	op.Detach()
 }
 
 // observe handles events until the operation is released, then returns.
@@ -268,14 +379,15 @@ func (inv *invocation) observe(h handle) {
 		select {
 		case ev, ok := <-h.op.Events():
 			if !ok {
-				if inv.isSettled() && inv.releaseOp(h) {
-					return
-				}
 				next, done := inv.reattach(received)
 				if done {
 					return
 				}
 				h = next
+				// A settled operation has no events left to resume.
+				if inv.isSettled() && inv.settle(h, received) {
+					return
+				}
 				continue
 			}
 			received = ev.Header().Sequence
@@ -373,7 +485,8 @@ func (inv *invocation) handle(h handle, ev sp.Event) bool {
 			inv.decideExit()
 			inv.reply(processshim.Result{Code: processshim.ExitLost}, fmt.Sprintf("the program's exit status was lost: %s", ev.Failure.Message))
 		} else {
-			inv.setSettlement(func() { inv.scopeLost = true })
+			// The service keeps watching the scope and reports its close.
+			inv.log.Info("operation scope observation lost", "reason", ev.Failure.Message)
 		}
 	case sp.OutputClosedEvent:
 		inv.setSettlement(func() { inv.outputClosed = true })
@@ -381,19 +494,8 @@ func (inv *invocation) handle(h handle, ev sp.Event) bool {
 		inv.setSettlement(func() { inv.scopeClosed = true })
 	}
 	inv.acks.deliver(seq)
-	switch {
-	case inv.isSettled():
-		// Release only after Exited and OutputClosed reached the shim and
-		// its descriptors.
-		if !inv.acks.wait(seq, inv.halt) {
-			h.op.Detach()
-			return true
-		}
-		return inv.releaseOp(h)
-	case inv.unsettleable():
-		inv.log.Warn("operation scope is unobservable; leaving it to the Session")
-		h.op.Detach()
-		return true
+	if inv.isSettled() {
+		return inv.settle(h, seq)
 	}
 	return false
 }
@@ -418,14 +520,20 @@ func (inv *invocation) isSettled() bool {
 	return inv.startFailed || (inv.exited && inv.outputClosed && inv.scopeClosed)
 }
 
-func (inv *invocation) unsettleable() bool {
-	inv.mu.Lock()
-	defer inv.mu.Unlock()
-	return inv.exited && inv.outputClosed && inv.scopeLost
+// settle releases the settled operation once every event through seq
+// reached its destination, so Release follows the delivery of Exited and
+// OutputClosed. It reports false when the stream ended first; the caller
+// re-Attaches and settles again.
+func (inv *invocation) settle(h handle, seq uint64) bool {
+	if !inv.acks.wait(seq, inv.halt) {
+		h.op.Detach()
+		return true
+	}
+	return inv.releaseOp(h)
 }
 
 // releaseOp releases the settled operation. It reports false when the
-// stream ended first, so the caller re-Attaches and releases again.
+// stream ended first.
 func (inv *invocation) releaseOp(h handle) bool {
 	err := h.op.Release(inv.b.ctx)
 	if err == nil {
@@ -503,8 +611,8 @@ func (inv *invocation) fail(reason string) {
 func (inv *invocation) writeStderr(msg string) {
 	inv.fdMu.Lock()
 	defer inv.fdMu.Unlock()
-	if fd := inv.fds[2]; fd >= 0 {
-		tryWrite(fd, []byte("oac-process-shim: "+msg+"\n"))
+	if ep := inv.eps[2]; ep.fd >= 0 {
+		tryWrite(ep, []byte("oac-process-shim: "+msg+"\n"))
 	}
 }
 
@@ -615,14 +723,19 @@ func (inv *invocation) teardown() {
 	inv.abort.close()
 }
 
+// endpoint returns passed descriptor i.
+func (inv *invocation) endpoint(i int) endpoint {
+	inv.fdMu.Lock()
+	defer inv.fdMu.Unlock()
+	return inv.eps[i]
+}
+
 // closeFD closes passed descriptor i once.
 func (inv *invocation) closeFD(i int) {
 	inv.fdMu.Lock()
 	defer inv.fdMu.Unlock()
-	if inv.fds[i] >= 0 {
-		unix.Close(inv.fds[i])
-		inv.fds[i] = -1
-	}
+	inv.eps[i].close()
+	inv.eps[i] = closedEndpoint
 }
 
 func closeAll(fds []int) {

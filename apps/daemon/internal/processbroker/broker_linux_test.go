@@ -29,6 +29,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
 // The sandbox side is the Linux process service in its own process,
@@ -64,7 +65,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestStreamsAndExitCode(t *testing.T) {
-	f := newFixture(t, 0)
+	f := newFixture(t, nil)
 	cmd := f.command("bash", "-c", "echo out; echo err >&2; exit 3")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -75,7 +76,7 @@ func TestStreamsAndExitCode(t *testing.T) {
 }
 
 func TestShimExitsBeforeBackgroundJobOutput(t *testing.T) {
-	f := newFixture(t, 0)
+	f := newFixture(t, nil)
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +112,7 @@ func TestShimExitsBeforeBackgroundJobOutput(t *testing.T) {
 }
 
 func TestRemoteSignalDeath(t *testing.T) {
-	f := newFixture(t, 0)
+	f := newFixture(t, nil)
 	err := f.command("sh", "-c", "kill -TERM $$").Run()
 	var ee *exec.ExitError
 	if !errors.As(err, &ee) {
@@ -123,7 +124,7 @@ func TestRemoteSignalDeath(t *testing.T) {
 }
 
 func TestInterruptReachesRemoteGroup(t *testing.T) {
-	f := newFixture(t, 0)
+	f := newFixture(t, nil)
 	cmd := f.command("bash", "-c", "trap 'echo interrupted; exit 7' INT; echo ready; while :; do sleep 0.1; done")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	out := startLine(t, cmd, "ready")
@@ -137,7 +138,7 @@ func TestInterruptReachesRemoteGroup(t *testing.T) {
 }
 
 func TestKilledShimCancelsRemoteScope(t *testing.T) {
-	f := newFixture(t, 0)
+	f := newFixture(t, nil)
 	cmd := f.command("bash", "-c", "sleep 1000 & echo $!; wait")
 	out := bufio.NewReader(start(t, cmd))
 	line, err := out.ReadString('\n')
@@ -163,7 +164,7 @@ func TestKilledShimCancelsRemoteScope(t *testing.T) {
 }
 
 func TestTerminalSizeAndMode(t *testing.T) {
-	f := newFixture(t, 0)
+	f := newFixture(t, nil)
 	ptm, pts, err := pty.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -237,7 +238,7 @@ func TestTerminalSizeAndMode(t *testing.T) {
 }
 
 func TestEnvironmentIsDeclaredOnly(t *testing.T) {
-	f := newFixture(t, 0)
+	f := newFixture(t, nil)
 	cmd := f.command("env")
 	cmd.Env = append(cmd.Env, "KEEP=kept", "LEAK=/x/.oac/run", "OTHER=dropped", "HOME=/local/home")
 	out, err := cmd.Output()
@@ -251,7 +252,7 @@ func TestEnvironmentIsDeclaredOnly(t *testing.T) {
 }
 
 func TestLinkLossKeepsOutputOrdered(t *testing.T) {
-	f := newFixture(t, 64<<10)
+	f := newFixture(t, func(c net.Conn) io.ReadWriteCloser { return &cutConn{Conn: c, left: 64 << 10} })
 	out, err := f.command("seq", "1", "2000000").Output()
 	if err != nil {
 		t.Fatalf("Output = %v", err)
@@ -266,6 +267,75 @@ func TestLinkLossKeepsOutputOrdered(t *testing.T) {
 	}
 	if n := f.dials.Load(); n < 2 {
 		t.Fatalf("%d dials; the link was never cut", n)
+	}
+}
+
+// A request that never completes must not hold Close, and the descriptors
+// it carried are closed.
+func TestCloseEndsIncompleteRequest(t *testing.T) {
+	f := newFixture(t, nil)
+	c, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: filepath.Join(f.dir, processshim.SocketName), Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var p [2]int
+	if err := unix.Pipe2(p[:], unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(p[0])
+	var req bytes.Buffer
+	if err := sandboxwire.WriteFrame(&req, processshim.Frame(processshim.Request{Version: processshim.Version})); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = c.WriteMsgUnix(req.Bytes()[:req.Len()/2], unix.UnixRights(p[1], p[1], p[1]), nil)
+	unix.Close(p[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond) // let the broker start reading
+	closed := make(chan struct{})
+	go func() {
+		f.broker.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close waits for the incomplete request")
+	}
+	pfd := []unix.PollFd{{Fd: int32(p[0]), Events: unix.POLLIN}}
+	if n, err := unix.Poll(pfd, 5000); n != 1 || err != nil || pfd[0].Revents&unix.POLLHUP == 0 {
+		t.Fatalf("the passed descriptors are still open: poll = %d, %v, revents %#x", n, err, pfd[0].Revents)
+	}
+}
+
+// A gone output reader must not hold the exit back while the stream that
+// would close the remote output is lost behind the settled operation.
+func TestGoneReaderDoesNotHoldExit(t *testing.T) {
+	f := newFixture(t, func(c net.Conn) io.ReadWriteCloser { return &holdEvents{Conn: c} })
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Close()
+	cmd := f.command("sh", "-c", "echo hi")
+	cmd.Stdout = w
+	err = cmd.Start()
+	w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wait := make(chan error, 1)
+	go func() { wait <- cmd.Wait() }()
+	select {
+	case err := <-wait:
+		if err != nil {
+			t.Fatalf("Wait = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		cmd.Process.Kill()
+		t.Fatal("the shim did not exit")
 	}
 }
 
@@ -331,20 +401,21 @@ func TestViewRunsRemoteShell(t *testing.T) {
 type fixture struct {
 	dir, bin string
 	service  string
-	cut      int
+	wrap     func(net.Conn) io.ReadWriteCloser
 	dials    atomic.Int32
+	broker   *Broker
 }
 
 // newFixture starts a broker whose shims are this binary under the names
-// bash, sh, env and seq. A positive cut drops the first stream after that
-// many bytes from the service.
-func newFixture(t *testing.T, cut int) *fixture {
+// bash, sh, env and seq. A non-nil wrap wraps the first stream to the
+// service.
+func newFixture(t *testing.T, wrap func(net.Conn) io.ReadWriteCloser) *fixture {
 	t.Helper()
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{dir: t.TempDir(), service: service.socket(t), cut: cut}
+	f := &fixture{dir: t.TempDir(), service: service.socket(t), wrap: wrap}
 	f.bin = filepath.Join(f.dir, "bin")
 	if err := os.Mkdir(f.bin, 0o755); err != nil {
 		t.Fatal(err)
@@ -374,6 +445,7 @@ func newFixture(t *testing.T, cut int) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { b.Close() })
+	f.broker = b
 	return f
 }
 
@@ -390,8 +462,8 @@ func (f *fixture) dial(ctx context.Context) (io.ReadWriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	if f.dials.Add(1) == 1 && f.cut > 0 {
-		return &cutConn{Conn: c, left: f.cut}, nil
+	if f.dials.Add(1) == 1 && f.wrap != nil {
+		return f.wrap(c), nil
 	}
 	return c, nil
 }
@@ -410,6 +482,39 @@ func (c *cutConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p[:min(len(p), c.left)])
 	c.left -= n
 	return n, err
+}
+
+// holdEvents holds the service's events until the scope closes, then passes
+// them on at once and loses the link before anything that follows.
+type holdEvents struct {
+	net.Conn
+	held, out bytes.Buffer
+	cut       bool
+}
+
+func (c *holdEvents) Read(p []byte) (int, error) {
+	for c.out.Len() == 0 {
+		if c.cut {
+			c.Conn.Close()
+			return 0, net.ErrClosed
+		}
+		fr, err := sandboxwire.ReadFrame(c.Conn, sandboxwire.MaxPayload)
+		if err != nil {
+			return 0, err
+		}
+		dst := &c.out
+		if fr.RequestID == 0 {
+			dst = &c.held
+		}
+		if err := sandboxwire.WriteFrame(dst, fr); err != nil {
+			return 0, err
+		}
+		if fr.Type == sp.EventScopeClosed {
+			c.held.WriteTo(&c.out)
+			c.cut = true
+		}
+	}
+	return c.out.Read(p)
 }
 
 func start(t *testing.T, cmd *exec.Cmd) io.Reader {

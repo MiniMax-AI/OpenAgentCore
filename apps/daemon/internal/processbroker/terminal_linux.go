@@ -52,11 +52,6 @@ func (t *terminal) size() sp.WindowSize {
 	return sp.WindowSize{Rows: ws.Row, Cols: ws.Col, XPixels: ws.Xpixel, YPixels: ws.Ypixel}
 }
 
-// spec describes the remote terminal: the local size and modes.
-func (t *terminal) spec(term []byte, modes []sp.PTYMode) *sp.PTYSpec {
-	return &sp.PTYSpec{Size: t.size(), Term: term, Modes: sp.ReadModes(&t.saved, modes)}
-}
-
 // makeRaw passes every byte through to the remote terminal, which does the
 // line discipline.
 func (t *terminal) makeRaw() error {
