@@ -79,7 +79,6 @@ func withExecutorCapabilities(factory agent.ExecutorFactory, serverURL string) a
 		if valid {
 			req = capabilityDownloadRequest(req, base)
 		}
-		req = skillUploadRequest(req, serverURL)
 		return factory(ctx, req)
 	}
 }

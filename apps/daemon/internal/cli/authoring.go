@@ -3,8 +3,6 @@ package cli
 import (
 	"context"
 	"maps"
-	"os"
-	"path/filepath"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/authoring"
@@ -30,9 +28,6 @@ func withAuthoringBridge(factory agent.Factory, bridge *authoring.Bridge) agent.
 			env = make(map[string]any)
 		}
 		env[proto.AuthoringSocketEnv] = path
-		if executable, err := os.Executable(); err == nil {
-			addCompanionCLIPath(env, filepath.Dir(executable))
-		}
 		req.AgentOptions["env"] = env
 		upstream := make(chan proto.Envelope, 64)
 		session, err := factory(ctx, req, upstream)

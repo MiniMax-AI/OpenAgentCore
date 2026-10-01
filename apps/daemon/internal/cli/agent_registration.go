@@ -6,7 +6,7 @@ func registerAgentKinds(registry *agent.Registry, discovery agentCLIDiscovery, s
 	for _, discovered := range discovery {
 		runtime := discovered.runtime
 		if runtime.SessionCapabilityContext {
-			runtime.Session = withSkillUploadServer(withCapabilityDownloads(runtime.Session, serverURL), serverURL)
+			runtime.Session = withCapabilityDownloads(runtime.Session, serverURL)
 		}
 		if runtime.Executor != nil && runtime.ExecutorCapabilityContext {
 			runtime.Executor = withExecutorCapabilities(runtime.Executor, serverURL)

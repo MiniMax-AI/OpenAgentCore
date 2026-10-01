@@ -143,7 +143,7 @@ Native adapter changes require their build/check targets and live provider accep
 | Provider ownership labels | `io.oac.*` |
 | E2B metadata | `oac_*` |
 
-Provider bootstrap, Runtime images and Harness adapters must agree on these names. The separate Parsar product integration settings keep their own names.
+Provider bootstrap, Runtime images and Harness adapters must agree on these names.
 
 The [installation version policy](docs/getting-started/operations.md#installation-version-policy) owns release changes and preservation of installed data and resources.
 
