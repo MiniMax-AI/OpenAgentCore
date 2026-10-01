@@ -29,7 +29,19 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// A Harness from an earlier turn can leave links in the home it owns.
 	home := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, []byte("outside\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(home, viewCodexHome), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	planted := filepath.Join(home, viewCodexHome, "config.toml")
+	if err := os.Symlink(outside, planted); err != nil {
+		t.Fatal(err)
+	}
 	var launched []clirunner.StartOptions
 	session := agent.ViewSession{
 		Home:  agent.ViewDir{Host: home, View: agent.ViewPrivateRoot + "/" + agent.ViewHomeName},
@@ -57,7 +69,10 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 			t.Fatal("the test process environment reached the Harness")
 		}
 	}
-	config, err := os.ReadFile(filepath.Join(home, viewCodexHome, "config.toml"))
+	if info, err := os.Lstat(planted); err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("config.toml was not replaced: %v", err)
+	}
+	config, err := os.ReadFile(planted)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,6 +103,19 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 		if !strings.Contains(args, "-c "+override) {
 			t.Fatalf("missing -c %s in %s", override, args)
 		}
+	}
+
+	if err := os.Remove(planted); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, planted); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendConfigTOML(filepath.Join(home, viewCodexHome), "x = 1\n"); err == nil {
+		t.Fatal("a write followed a link out of the home")
+	}
+	if body, err := os.ReadFile(outside); err != nil || string(body) != "outside\n" {
+		t.Fatalf("outside file changed: %q, %v", body, err)
 	}
 
 	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{}}}

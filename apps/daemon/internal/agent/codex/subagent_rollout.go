@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -46,12 +45,7 @@ func readSubagentEffects(home agent.ViewDir, h *subagentHistory) ([]subagentEffe
 	if !filepath.IsAbs(home.View) || !filepath.IsAbs(home.Host) || !filepath.IsAbs(h.Path) || err != nil || !strings.HasPrefix(rel, "sessions"+string(filepath.Separator)) {
 		return nil, errors.New("codex: subagent history escaped private native home")
 	}
-	parent, err := os.OpenRoot(filepath.Dir(home.Host))
-	if err != nil {
-		return nil, errors.New("codex: private subagent history unavailable")
-	}
-	defer parent.Close()
-	root, err := parent.OpenRoot(filepath.Base(home.Host))
+	root, err := openNativeHome(home.Host)
 	if err != nil {
 		return nil, errors.New("codex: private subagent history unavailable")
 	}

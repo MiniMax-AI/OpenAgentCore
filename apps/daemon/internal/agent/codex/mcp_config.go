@@ -2,8 +2,6 @@ package codex
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -35,9 +33,6 @@ type mcpServerConfig struct {
 // once per prompt after resetGeneratedConfig; native history stays in CODEX_HOME.
 // The transport and enabled_tools fields mirror native McpServerConfig.
 func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) error {
-	if err := os.MkdirAll(codexHome, 0o700); err != nil {
-		return fmt.Errorf("codex: mkdir CODEX_HOME %s: %w", codexHome, err)
-	}
 	names := make([]string, 0, len(servers))
 	for name := range servers {
 		names = append(names, name)
@@ -113,8 +108,7 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 		b.WriteByte('\n')
 	}
 
-	path := filepath.Join(codexHome, "config.toml")
-	return appendConfigTOML(path, b.String())
+	return appendConfigTOML(codexHome, b.String())
 }
 
 func writeMCPHeaderMap(b *strings.Builder, field string, values map[string]string) {

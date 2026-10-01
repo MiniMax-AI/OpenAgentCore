@@ -248,10 +248,35 @@ func allocCodexHome(agentStateKey string) (string, error) {
 	return dir, nil
 }
 
+// openNativeHome opens CODEX_HOME from its parent. Every read and write in the
+// home goes through this Root: the Session user owns a view home, and a link
+// it leaves there resolves only inside the parent, never outside it.
+func openNativeHome(codexHome string) (*os.Root, error) {
+	if !filepath.IsAbs(codexHome) {
+		return nil, errors.New("codex: missing private native home")
+	}
+	parent, err := os.OpenRoot(filepath.Dir(codexHome))
+	if err != nil {
+		return nil, fmt.Errorf("codex: open native home: %w", err)
+	}
+	defer parent.Close()
+	root, err := parent.OpenRoot(filepath.Base(codexHome))
+	if err != nil {
+		return nil, fmt.Errorf("codex: open native home: %w", err)
+	}
+	return root, nil
+}
+
+// resetGeneratedConfig removes config.toml; a link in its place is removed,
+// never followed.
 func resetGeneratedConfig(codexHome string) error {
-	path := filepath.Join(codexHome, "config.toml")
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("codex: remove generated config %s: %w", path, err)
+	root, err := openNativeHome(codexHome)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.Remove("config.toml"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("codex: remove generated config: %w", err)
 	}
 	return nil
 }

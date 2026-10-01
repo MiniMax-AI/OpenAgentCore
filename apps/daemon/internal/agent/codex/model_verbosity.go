@@ -2,10 +2,11 @@ package codex
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 )
@@ -57,26 +58,35 @@ func verifyModelVerbosity(ctx context.Context, probe catalogProbe, plan *Session
 		plan.ExtraConfig = slices.DeleteFunc(plan.ExtraConfig, func(kv [2]string) bool { return kv[0] == "model_verbosity" })
 	}
 	codexHome := plan.home.Host
-	if !filepath.IsAbs(codexHome) {
-		return fmt.Errorf("codex: missing managed home for model catalog")
+	root, err := openNativeHome(codexHome)
+	if err != nil {
+		return fmt.Errorf("codex: missing managed home for model catalog: %w", err)
 	}
-	file, err := os.CreateTemp(codexHome, "model-catalog-*.json")
+	defer root.Close()
+	name := "model-catalog-" + rand.Text() + ".json"
+	file, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
 	_, writeErr := file.Write(catalog)
 	closeErr := file.Close()
 	if writeErr != nil || closeErr != nil {
-		_ = os.Remove(file.Name())
+		_ = root.Remove(name)
 		if writeErr != nil {
 			return writeErr
 		}
 		return closeErr
 	}
 	cleanup := plan.Cleanup
-	plan.Cleanup = func() { _ = os.Remove(file.Name()); cleanup() }
+	plan.Cleanup = func() {
+		if root, err := openNativeHome(codexHome); err == nil {
+			_ = root.Remove(name)
+			root.Close()
+		}
+		cleanup()
+	}
 	// Codex reads the catalog at its own path for the same file.
-	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_catalog_json", strconv(plan.home.View + strings.TrimPrefix(file.Name(), codexHome))})
+	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_catalog_json", strconv(path.Join(plan.home.View, name))})
 	return nil
 }
 

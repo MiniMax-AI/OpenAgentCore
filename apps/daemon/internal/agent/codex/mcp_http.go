@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"os"
-	"path/filepath"
 	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -57,12 +56,15 @@ func mcpServersFromBindings(bindings []agent.MCPBinding) (map[string]mcpServerCo
 
 func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
 	codexHome := plan.home.Host
-	if !filepath.IsAbs(codexHome) {
+	root, err := openNativeHome(codexHome)
+	if err != nil {
 		return errors.New("codex: public MCP requires a private native home")
 	}
 	// Native OAuth defaults to the global keyring. File mode confines lookup to
 	// this owned history directory; never delete existing credentials to admit it.
-	if _, err := os.Lstat(filepath.Join(codexHome, ".credentials.json")); !errors.Is(err, os.ErrNotExist) {
+	_, err = root.Lstat(".credentials.json")
+	root.Close()
+	if !errors.Is(err, os.ErrNotExist) {
 		return errors.New("codex: public MCP requires a native home without stored MCP credentials")
 	}
 	if err := writeCodexMCPConfig(codexHome, servers); err != nil {
