@@ -813,6 +813,16 @@ func (inv *invocation) send(m processshim.BrokerMessage) error {
 	return inv.b.send(m)
 }
 
+// halting reports whether the invocation halted.
+func (inv *invocation) halting() bool {
+	select {
+	case <-inv.halt:
+		return true
+	default:
+		return false
+	}
+}
+
 // halted stops every pump and wait.
 func (inv *invocation) halted() {
 	inv.haltOnce.Do(func() {

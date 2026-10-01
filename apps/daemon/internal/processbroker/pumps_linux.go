@@ -281,49 +281,82 @@ func (inv *invocation) stdinStopped() {
 	}
 }
 
-// writeStdin writes data at the tracked offset. A write that had no effect
-// continues on the next stream, and a Busy refusal after a backoff, from
-// the first byte the service did not accept; an uncertain write is never
-// resent, so forwarding continues only when the new stream shows it was
-// accepted.
+// writeStdin writes data, which begins at the tracked stdin offset. A Busy
+// refusal is repeated after a backoff from the first byte the service did
+// not accept. After a lost stream, a failure that may have taken effect or
+// an offset conflict, the accepted offset is uncertain: the broker learns it
+// with Inspect, on the next stream when the stream ended, and writes only
+// the bytes of data after it. WriteStdin succeeds only at the current
+// offset, so no byte reaches the program twice. When the offset cannot be
+// learned, lies outside data, or shows that a stream that is still up
+// failed the write without taking it, the program would wait for input
+// that never comes: stdinLost ends the invocation.
 func (inv *invocation) writeStdin(data []byte) bool {
 	h := inv.current()
+	at := h.op.StdinOffset() // data[0]'s offset
 	backoff := minBackoff
 	for {
-		base := h.op.StdinOffset()
 		n, err := h.op.WriteStdin(inv.b.ctx, data)
 		if err == nil {
 			return true
 		}
-		f := asFailure(err)
-		if !h.s.ended() && refused(f) {
-			data = data[n:] // the offset already counts the accepted n
+		f, lost := asFailure(err), h.s.ended()
+		switch {
+		case inv.b.ctx.Err() != nil:
+			return false
+		case !lost && refused(f):
+			data, at = data[n:], at+uint64(n) // the offset already counts the accepted n
 			if !inv.sleep(backoff) {
 				return false
 			}
 			backoff = min(2*backoff, maxBackoff)
 			continue
-		}
-		if !h.s.ended() {
+		case !lost && f.Effect == sandboxwire.EffectNone && f.Code != sp.CodeInputOffsetConflict:
 			if f.Code != sp.CodeStdinClosed && f.Code != sp.CodeNotRunning && f.Code != sp.CodeReleased {
 				inv.log.Warn("stdin forwarding stopped", "error", err)
 			}
 			return false
 		}
-		var ok bool
-		if h, ok = inv.relink(h); !ok {
-			return false
-		}
-		got := h.op.StdinOffset()
+		var st sp.OperationStatus
+		err = inv.request(h, true, func(next handle) error {
+			h = next
+			var err error
+			st, err = h.op.Inspect(inv.b.ctx)
+			return err
+		})
+		off := st.StdinOffset
 		switch {
-		case f.Effect == sandboxwire.EffectPossible && got == base+uint64(len(data)):
-			return true
-		case f.Effect == sandboxwire.EffectPossible || got != base+uint64(n):
-			inv.log.Warn("stdin forwarding stopped after an uncertain write", "offset", got)
+		case err != nil && (inv.b.ctx.Err() != nil || inv.halting()):
+			return false
+		case err != nil:
+			inv.stdinLost(fmt.Sprintf("stdin could not be resumed: %s", asFailure(err).Message))
+			return false
+		case st.State != sp.StateRunning || st.StdinClosed:
+			return false // nothing reads stdin any more
+		case off < at || off-at > uint64(len(data)):
+			inv.stdinLost(fmt.Sprintf("stdin could not be resumed: the service accepted %d bytes, outside %d to %d", off, at, at+uint64(len(data))))
+			return false
+		case !lost && off == at+uint64(n):
+			inv.stdinLost(fmt.Sprintf("stdin could not be resumed: %s", f.Message))
 			return false
 		}
-		data = data[n:]
+		data, at = data[off-at:], off
+		if len(data) == 0 {
+			return true
+		}
 	}
+}
+
+// stdinLost ends an invocation whose stdin cannot continue: unless the exit
+// is decided, the shim exits with 255 and the reason, and the program, which
+// would wait for input that never comes, is cancelled.
+func (inv *invocation) stdinLost(reason string) {
+	if inv.exitDecided() {
+		return
+	}
+	inv.log.Warn("process invocation failed", "reason", reason)
+	inv.reply(processshim.Result{Code: processshim.ExitLost, Message: message(reason)}, nil)
+	inv.cancelRemote()
 }
 
 func (inv *invocation) closeStdin() {

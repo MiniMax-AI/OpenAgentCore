@@ -781,6 +781,35 @@ func TestRetriedStartWaitsForStarted(t *testing.T) {
 	}
 }
 
+// A stdin write lost with its stream after the service took part of it
+// resumes from the offset Inspect reports: the program reads every byte
+// once, and stdin closes at the end of the input.
+func TestUncertainStdinWriteResumes(t *testing.T) {
+	svc := newFakeService()
+	svc.partialFirst = true
+	f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpWriteStdin }))
+	const in = "stdin that crosses a lost stream\n"
+	out, stderr, err := runFor(t, f.command("sh", "-c", "cat"), in)
+	c := svc.counts()
+	if err != nil || out != in || string(c.stdin) != in || c.closedAt != uint64(len(in)) || c.writes < 2 {
+		t.Fatalf("Run = %v after %d writes; stdout %q, stderr %q; the service took %q and closed stdin at %d", err, c.writes, out, stderr, c.stdin, c.closedAt)
+	}
+}
+
+// When the accepted stdin offset cannot be learned after a lost write, the
+// shim exits with 255 and the reason, and the program is cancelled, rather
+// than both waiting for input that never comes.
+func TestUnresolvedStdinEndsTheInvocation(t *testing.T) {
+	svc := newFakeService()
+	svc.partialFirst, svc.inspectFails = true, true
+	f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpWriteStdin }))
+	_, stderr, err := runFor(t, f.command("sh", "-c", "cat"), "stdin\n")
+	if exitCode(err) != processshim.ExitLost || !strings.Contains(stderr, "stdin could not be resumed: inspect failed") {
+		t.Fatalf("Run = %v; stderr %q", err, stderr)
+	}
+	await(t, "the program's cancel", func() bool { return svc.counts().cancels == 1 })
+}
+
 // runFor runs cmd with stdin in and returns its stdout, stderr and error. It
 // fails the test when cmd still runs after 10s.
 func runFor(t *testing.T, cmd *exec.Cmd, in string) (string, string, error) {

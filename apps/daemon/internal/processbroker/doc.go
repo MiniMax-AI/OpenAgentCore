@@ -68,8 +68,10 @@
 //     processshim.MaxRequestBytes, below the kernel's limit.
 //   - The invocation path is matched lexically: a path reached through a
 //     symlink the table does not declare fails with 127.
-//   - A stdin write whose outcome is uncertain after a lost stream stops
-//     stdin forwarding, because the write is never retried.
+//   - After a stdin write whose outcome is uncertain, the broker asks the
+//     service how much stdin it accepted and sends only the rest. When the
+//     service cannot say, the shim exits with 255 and the program is
+//     cancelled.
 //   - A Cancel whose outcome is uncertain after a lost stream is not sent
 //     again, because a second Cancel would send the scope TERM again. A
 //     program that Cancel never reached keeps running until it exits or the
