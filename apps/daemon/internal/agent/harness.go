@@ -30,13 +30,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
+	"net/url"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
@@ -92,17 +93,45 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 }
 
 // Agent-host Session view. The agent host runs the Harness in a per-Session
-// sessionview view: the sandbox world at /, the closure, home and shims under
-// sessionview.PrivateRoot, and a loopback-only network whose model, MCP and
-// proxy endpoints belong to the Session's credential gateway. The declaration
-// is data; the agent host builds each view from it and the Session.
+// view: the sandbox world at /, the closure, home and shims under
+// ViewPrivateRoot, and a loopback-only network whose model, MCP and proxy
+// endpoints belong to the Session's credential gateway. The declaration is
+// data; the agent host builds each view from it and the Session.
 
-// Names under sessionview.PrivateRoot that the agent host presents itself,
-// besides sessionview.ShimDir: the Session home and the process broker's
-// socket directory. No closure mount uses them.
+// The view layout. This is its one definition: sessionview builds views from
+// it, and View.Validate keeps declarations out of the trees it reserves.
 const (
+	// ViewPrivateRoot holds the closure mounts, the shim directory, the home
+	// and the run directory.
+	ViewPrivateRoot = "/.oac"
+	// ViewShimName is the shim directory under ViewPrivateRoot.
+	ViewShimName = "bin"
+	// ViewHomeName is the Session home under ViewPrivateRoot.
 	ViewHomeName = "home"
-	ViewRunName  = "run"
+	// ViewRunName is the process broker's socket directory under ViewPrivateRoot.
+	ViewRunName = "run"
+	// ViewProcRoot and ViewDevRoot are the view's own /proc and minimal /dev.
+	ViewProcRoot = "/proc"
+	ViewDevRoot  = "/dev"
+)
+
+// ViewReserved reports whether the view path p is at or beneath a tree the
+// view builds itself: ViewPrivateRoot, ViewProcRoot or ViewDevRoot.
+func ViewReserved(p string) bool {
+	for _, root := range [...]string{ViewPrivateRoot, ViewProcRoot, ViewDevRoot} {
+		if p == root || isWithin(p, root) {
+			return true
+		}
+	}
+	return false
+}
+
+// viewOwnedEnv are the variables the view or the process broker sets for a
+// forwarded process; ForwardEnv never names them. Proxy variables match in
+// any case.
+var (
+	viewOwnedEnv   = []string{"HOME", "PATH", "TMPDIR", "LANG", "LD_LIBRARY_PATH"}
+	viewOwnedProxy = []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"}
 )
 
 // ErrInvalidView marks a View declaration that View.Validate rejects.
@@ -114,7 +143,7 @@ var ErrInvalidView = errors.New("agent: invalid view declaration")
 // every other mount are noexec.
 type View struct {
 	// Closure lists the host directories presented read-only and executable
-	// at sessionview.PrivateRoot/<Name>.
+	// at ViewPrivateRoot/<Name>.
 	Closure []ViewMount
 	// Overlays present trusted host files or directories read-only at view paths.
 	Overlays []ViewOverlay
@@ -123,26 +152,29 @@ type View struct {
 	// LocalExec lists every view path the Harness process tree executes
 	// locally. Each lies in the closure or in an Exec overlay.
 	LocalExec []string
-	// Shims are names on sessionview.PrivateRoot/sessionview.ShimDir. Each
-	// runs that name on the Environment's tool PATH in the sandbox.
+	// Shims are names on ViewPrivateRoot/ViewShimName. Each runs that name on
+	// the Environment's tool PATH in the sandbox.
 	Shims []string
 	// ShimPaths are view paths the shim is bound over. Each runs the same
 	// path in the sandbox.
 	ShimPaths []string
-	// ForwardEnv names the Harness variables a forwarded process keeps.
+	// ForwardEnv names the Harness variables a forwarded process keeps. It
+	// never names a variable the view or the broker sets: HOME, PATH, TMPDIR,
+	// LANG, LD_LIBRARY_PATH or a proxy variable. The Environment's tool
+	// environment wins over a forwarded variable of the same name.
 	ForwardEnv []string
 	Proxy      ViewProxy
 	Executor   ViewExecutorFactory
 }
 
-// ViewMount presents HostDir at sessionview.PrivateRoot/<Name>.
+// ViewMount presents HostDir at ViewPrivateRoot/<Name>.
 type ViewMount struct {
 	Name    string
 	HostDir string
 }
 
 // Path returns the mount's view path.
-func (m ViewMount) Path() string { return sessionview.PrivateRoot + "/" + m.Name }
+func (m ViewMount) Path() string { return ViewPrivateRoot + "/" + m.Name }
 
 // ViewOverlay presents the trusted host file or directory Source at Path.
 // Exec makes it executable, as the ELF interpreter of a dynamic closure
@@ -175,8 +207,10 @@ const (
 )
 
 // ViewExecutorFactory prepares the Session's Executor in its view. The agent
-// host has already pointed the request's model provider and MCP servers at
-// the Session's gateway, with the placeholder in place of each credential.
+// host has already pointed the request's model provider at the Session's
+// gateway, with the placeholder in place of the key, and moved its MCP into
+// ViewSession.MCP: the request carries neither MCPHTTPServers nor
+// LocalEnvironment.MCP.
 type ViewExecutorFactory func(context.Context, proto.PromptRequestPayload, ViewSession) (Executor, error)
 
 // ViewSession is what the agent host gives a view Executor factory.
@@ -187,11 +221,44 @@ type ViewSession struct {
 	// Proxy is http://127.0.0.1:<port> for ViewProxyEnv and empty for
 	// ViewProxyNone.
 	Proxy string
+	// MCP is the Session's effective MCP, resolved once from the public
+	// declarations and the installed Environment MCP. Each HTTP binding's
+	// ServerURL is its loopback gateway URL, and it carries no BearerToken and
+	// no HTTPHeaders; the gateway adds them. A stdio binding is as resolved and
+	// runs in the sandbox through the declared shims. A view Executor takes MCP
+	// only from here.
+	MCP []MCPBinding
 	// Launch replaces clirunner.Start. Each call builds one view and runs
 	// Binary, which must be a LocalExec path, in it. Dir is a world path,
 	// OwnProcessGroup is true, and Env is the complete Harness environment.
-	// Cancel sends TERM to the Harness and closes the view after KillTimeout.
+	// Cancel sends TERM to every process in the view and closes the view after
+	// KillTimeout. When the Harness exits while other processes remain, the
+	// view sends them TERM and ends once they exit or KillTimeout passes.
 	Launch func(clirunner.StartOptions) (*clirunner.Process, error)
+}
+
+// checkViewMCP enforces that the factory receives MCP only in session.MCP and
+// no MCP credential at all.
+func checkViewMCP(req proto.PromptRequestPayload, session ViewSession) error {
+	if req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) > 0) {
+		return errors.New("agent: a view request carries MCP outside ViewSession.MCP")
+	}
+	for _, binding := range session.MCP {
+		if binding.BearerToken != nil || len(binding.HTTPHeaders) > 0 || (binding.Transport == "http" && !isGatewayURL(binding.ServerURL)) {
+			return fmt.Errorf("agent: view MCP binding %q is not a credential-free gateway endpoint", binding.ServerLabel)
+		}
+	}
+	return nil
+}
+
+// isGatewayURL reports whether raw is a plain HTTP URL on a loopback address.
+func isGatewayURL(raw string) bool {
+	endpoint, err := url.Parse(raw)
+	if err != nil || endpoint.Scheme != "http" {
+		return false
+	}
+	addr, err := netip.ParseAddr(endpoint.Hostname())
+	return err == nil && addr.IsLoopback()
 }
 
 // ViewDir is one directory as the adapter writes it on the host and as the
@@ -209,7 +276,7 @@ func (v View) Validate() error {
 	if v.Proxy != ViewProxyNone && v.Proxy != ViewProxyEnv {
 		return invalidView("proxy %d", v.Proxy)
 	}
-	names := map[string]bool{sessionview.ShimDir: true, ViewHomeName: true, ViewRunName: true}
+	names := map[string]bool{ViewShimName: true, ViewHomeName: true, ViewRunName: true}
 	for _, m := range v.Closure {
 		if !isPathComponent(m.Name) || names[m.Name] {
 			return invalidView("closure name %q", m.Name)
@@ -230,7 +297,7 @@ func (v View) Validate() error {
 		claimed = append(claimed, m.Path)
 	}
 	for i, p := range claimed {
-		if !isViewPath(p) || p == "/" || p == sessionview.PrivateRoot || isWithin(p, sessionview.PrivateRoot) {
+		if !isViewPath(p) || p == "/" || ViewReserved(p) {
 			return invalidView("view path %q", p)
 		}
 		for _, q := range claimed[:i] {
@@ -250,7 +317,7 @@ func (v View) Validate() error {
 		}
 	}
 	for i, n := range v.ForwardEnv {
-		if n == "" || strings.ContainsAny(n, "=\x00") || slices.Contains(v.ForwardEnv[:i], n) {
+		if n == "" || strings.ContainsAny(n, "=\x00") || slices.Contains(v.ForwardEnv[:i], n) || viewOwnsEnv(n) {
 			return invalidView("forwarded variable %q", n)
 		}
 	}
@@ -280,6 +347,10 @@ func (v View) clone() View {
 	v.ShimPaths = slices.Clone(v.ShimPaths)
 	v.ForwardEnv = slices.Clone(v.ForwardEnv)
 	return v
+}
+
+func viewOwnsEnv(name string) bool {
+	return slices.Contains(viewOwnedEnv, name) || slices.ContainsFunc(viewOwnedProxy, func(proxy string) bool { return strings.EqualFold(name, proxy) })
 }
 
 func invalidView(format string, args ...any) error {
@@ -320,6 +391,9 @@ func (r *Registry) RegisterView(kind string, view View) {
 	factory := view.Executor
 	view.Executor = func(ctx context.Context, req proto.PromptRequestPayload, session ViewSession) (Executor, error) {
 		if _, err := configuration.Prepare(req.AgentOptions); err != nil {
+			return nil, err
+		}
+		if err := checkViewMCP(req, session); err != nil {
 			return nil, err
 		}
 		return factory(ctx, req, session)

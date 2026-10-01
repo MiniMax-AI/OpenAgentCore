@@ -158,7 +158,7 @@ Registration is static and requires a build. Export one `agent.Declaration` from
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration, agent.Factory)` | Kind, availability, version, `AgentKindCapabilities`, the model configuration declaration and the direct-call factory. It resets the other registrations, so call it first. |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | The Executor and Turn lifecycle used for execution; derives the `Preparation` capability |
 | 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | Optional: separate read-only workspace preparation for qualified workspace operations |
-| 4 | `RegisterView(kind, agent.View)` | Optional: the agent-host view declaration from `Runtime.View`. It panics with `ErrInvalidView` when `View.Validate` fails, and its Executor factory validates the model configuration like `RegisterExecutor`. |
+| 4 | `RegisterView(kind, agent.View)` | Optional: the agent-host view declaration from `Runtime.View`. It panics with `ErrInvalidView` when `View.Validate` fails. Its Executor factory validates the model configuration like `RegisterExecutor` and enforces the [MCP rule](#endpoints-and-proxy). |
 
 The direct-call `agent.Factory` delegates to the same Executor implementation.
 
@@ -278,12 +278,12 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 
 - view and host paths are absolute and clean;
 - closure names are single path components other than `bin`, `home` and `run`, which the agent host uses for the shims, the Session home and the process broker;
-- shim paths, overlays and masks do not overlap each other, `/` or `/.oac`;
+- shim paths, overlays and masks do not overlap each other or `/`, and stay out of the trees the view builds itself: `/.oac`, `/proc` and `/dev` (`ViewReserved`);
 - each `LocalExec` entry lies in a closure directory or an `Exec` overlay;
-- shim names and `ForwardEnv` names are unique, and a variable name contains no `=`;
+- shim names and `ForwardEnv` names are unique, a variable name contains no `=`, and `ForwardEnv` names no variable the view or the broker sets ([Environment](#environment));
 - `Proxy` is one of the two values and `Executor` is non-nil.
 
-The agent host checks collisions with its own mounts, such as `/proc` and `/dev`, when it builds the view.
+`harness.go` defines the view layout once, and `sessionview` builds views from it. The agent host checks its own overlays, such as `/etc/passwd`, against the declaration when it builds the view.
 
 ### Executables
 
@@ -297,11 +297,13 @@ The agent host derives the process broker's table from the declaration: `/.oac/b
 
 `Launch` takes the complete Harness environment in `StartOptions.Env`. The agent host's own environment never passes through, so a view adapter does not start from `os.Environ()`. A process run in the sandbox gets the broker's environment: the `ForwardEnv` variables from the Harness, the Environment's fixed sandbox values (`HOME`, `PATH`, `TMPDIR` and `LANG`) and the Environment's tool environment. The broker is the only home of the tool environment, and a view adapter passes none of it to the Harness.
 
+`ForwardEnv` never names a variable the view or the broker sets: `HOME`, `PATH`, `TMPDIR`, `LANG`, `LD_LIBRARY_PATH`, or `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and `NO_PROXY` in any case. When the Environment's tool environment also sets a forwarded variable, the tool environment's value wins.
+
 ### Endpoints and proxy
 
-Before it calls the factory, the agent host points the request's `model_provider` and each `MCPHTTPServers` entry at the Session's [credential gateway](model-execution.md#credential-gateway), with the placeholder in place of each credential. The adapter renders them as it does for a local Harness and never sees a real key.
+Before it calls the factory, the agent host points the request's `model_provider` at the Session's [credential gateway](model-execution.md#credential-gateway), with the placeholder in place of the key. It resolves the Session's MCP once, from the public declarations and the installed Environment MCP, into `ViewSession.MCP`, and removes both from the request. Each HTTP binding points at its gateway URL and carries no bearer and no headers; the gateway adds the declared credential and headers. A stdio binding is as resolved and runs in the sandbox through the declared shims. A view Executor takes MCP only from `ViewSession.MCP` and never resolves the request, and the Registry rejects a request or HTTP binding that breaks this rule. The adapter renders the provider and the bindings as it does for a local Harness and never sees a real credential.
 
-With `ViewProxyEnv`, `ViewSession.Proxy` is the gateway's proxy URL. The adapter sets `HTTPS_PROXY` and `HTTP_PROXY`, in upper and lower case, to it, and `NO_PROXY` to `127.0.0.1,localhost`. Declare `ViewProxyEnv` only after qualifying that every request the Harness makes locally honours these variables. A request that ignores them fails to connect, because the view has no route out.
+With `ViewProxyEnv`, `ViewSession.Proxy` is the gateway's proxy URL. The adapter sets `HTTPS_PROXY` and `HTTP_PROXY` to it and `NO_PROXY` to `127.0.0.1,localhost`, each in upper and lower case. Declare `ViewProxyEnv` only after qualifying that every request the Harness makes locally honours these variables. A request that ignores them fails to connect, because the view has no route out.
 
 With `ViewProxyNone`, `ViewSession.Proxy` is empty and the view has no generic proxy. Admission rejects a request that enables a feature needing one with `ErrUnsupportedOperation`. Web tools that the provider executes keep provider origin.
 
@@ -311,7 +313,11 @@ With `ViewProxyNone`, `ViewSession.Proxy` is empty and the view has no generic p
 
 ### Launch
 
-`ViewSession.Launch` replaces `clirunner.Start`. Each call builds one view and runs `Binary` in it, and at most one view per Session is live at a time. `Dir` is a path in the sandbox, `OwnProcessGroup` is true and `Env` is the complete environment. The returned `clirunner.Process` follows [Native process ownership](#native-process-ownership): Cancel sends TERM to the Harness and closes the view after `KillTimeout`, and `ExitCode` reports the exit once `Done` closes.
+`ViewSession.Launch` replaces `clirunner.Start`. Each call builds one view and runs `Binary` in it, and at most one view per Session is live at a time. `Dir` is a path in the sandbox, `OwnProcessGroup` is true and `Env` is the complete environment. The returned `clirunner.Process` follows [Native process ownership](#native-process-ownership):
+
+- Cancel sends TERM to every process in the view and closes the view after `KillTimeout`. Cancelling a Harness that has exited does nothing.
+- When the Harness exits while other processes remain, the view sends them TERM and ends once they exit or `KillTimeout` passes.
+- `Wait` closes the stdio ends, returns the context error when cancellation interrupted a Harness that then exited 0, and `ExitCode` reports the exit once `Done` closes.
 
 ### Qualify the view
 

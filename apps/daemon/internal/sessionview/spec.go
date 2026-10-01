@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
 // Spec declares one view and the process it runs.
@@ -45,7 +48,7 @@ type Mountpoint struct {
 	Dir  bool
 }
 
-// PrivateDir binds a host directory at /.oac/<Name>. A writable directory is never executable.
+// PrivateDir binds a host directory at agent.ViewPrivateRoot/<Name>. A writable directory is never executable.
 type PrivateDir struct {
 	Name     string
 	HostDir  string
@@ -60,7 +63,7 @@ type Overlay struct {
 	Exec   bool
 }
 
-// Shim presents a static binary at /.oac/bin/<name> for each name and binds it over each absolute view path.
+// Shim presents a static binary at agent.ViewPrivateRoot/agent.ViewShimName/<name> for each name and binds it over each absolute view path.
 type Shim struct {
 	Binary string
 	Names  []string
@@ -78,6 +81,8 @@ type Process struct {
 	Groups []uint32
 	// A nil Stdin, Stdout or Stderr is a pipe whose other end the View exposes.
 	Stdin, Stdout, Stderr *os.File
+	// Grace is how long processes left in the view when the process exits have, after TERM, before the view ends. Zero ends the view at once.
+	Grace time.Duration
 }
 
 // Network configures the view's network namespace, which has only loopback up.
@@ -93,16 +98,6 @@ type Exit struct {
 	CoreDumped bool
 }
 
-const (
-	// PrivateRoot is the view directory that holds the private directories and the shim directory.
-	PrivateRoot = "/.oac"
-	// ShimDir is the name of the shim directory under PrivateRoot; no private directory uses it.
-	ShimDir = "bin"
-)
-
-// reservedTrees are built by the launcher; overlays and shim paths stay out of them.
-var reservedTrees = []string{PrivateRoot, "/proc", "/dev"}
-
 func (s *Spec) validate() error {
 	if s.World == nil {
 		return invalid("world is required")
@@ -114,7 +109,7 @@ func (s *Spec) validate() error {
 	}
 	names := map[string]bool{}
 	for _, d := range s.Private {
-		if !isComponent(d.Name) || d.Name == ShimDir || names[d.Name] {
+		if !isComponent(d.Name) || d.Name == agent.ViewShimName || names[d.Name] {
 			return invalid("private directory name %q", d.Name)
 		}
 		names[d.Name] = true
@@ -174,6 +169,9 @@ func (p *Process) validate() error {
 	if len(p.Args) == 0 {
 		return invalid("process argv is empty")
 	}
+	if p.Grace < 0 {
+		return invalid("process grace %v is negative", p.Grace)
+	}
 	if p.UID == 0 || p.GID == 0 {
 		return invalid("process must not run as uid or gid 0")
 	}
@@ -194,10 +192,8 @@ func viewPath(p string) error {
 	if !isViewAbs(p) || p == "/" {
 		return invalid("view path %q must be absolute, clean and not /", p)
 	}
-	for _, r := range reservedTrees {
-		if p == r || within(p, r) {
-			return invalid("view path %s is inside %s", p, r)
-		}
+	if agent.ViewReserved(p) {
+		return invalid("view path %s is inside a tree the launcher builds", p)
 	}
 	return nil
 }

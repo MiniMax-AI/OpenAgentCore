@@ -128,6 +128,36 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	}
 }
 
+// TestViewDescendantsKeepTheGrace checks that a helper still cleaning up when the Harness exits gets TERM and finishes within the grace.
+func TestViewDescendantsKeepTheGrace(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	w := &loopbackWorld{dir: f.world}
+	spec := f.spec(w, "cleanup")
+	spec.Process.Grace = 10 * time.Second
+	v, err := Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer v.Close()
+	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("helper said %q, %v", line, err)
+	}
+	started := time.Now()
+	if err := v.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("Signal: %v", err)
+	}
+	if exit, err := v.Wait(); err != nil || exit != (Exit{Code: 7}) {
+		t.Fatalf("Wait = %+v, %v; want exit code 7", exit, err)
+	}
+	if elapsed := time.Since(started); elapsed >= spec.Process.Grace {
+		t.Errorf("view ended after %v, want once the helper exited", elapsed)
+	}
+	if got, err := os.ReadFile(filepath.Join(f.world, "data", "cleaned")); err != nil || string(got) != "done" {
+		t.Errorf("helper cleanup = %q, %v; want it finished", got, err)
+	}
+}
+
 // TestViewRefusesSymlinkedMountpoint checks that a sandbox symlink on the way to a mountpoint fails the view instead of redirecting the mount.
 func TestViewRefusesSymlinkedMountpoint(t *testing.T) {
 	requireView(t)
@@ -402,6 +432,30 @@ func runHelper(mode string) int {
 		return 7
 	case "sleep":
 		time.Sleep(time.Hour)
+		return 0
+	case "cleanup":
+		// The Harness exits on TERM at once while its helper still cleans up.
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGTERM)
+		child := exec.Command("/.oac/harness/harness")
+		child.Env = []string{helperEnv + "=slow-term"}
+		child.Stdout = os.Stdout
+		if err := child.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		<-sigs
+		return 7
+	case "slow-term":
+		sigs := make(chan os.Signal, 2)
+		signal.Notify(sigs, syscall.SIGTERM)
+		fmt.Println("ready")
+		<-sigs
+		time.Sleep(300 * time.Millisecond)
+		if err := os.WriteFile("/data/cleaned", []byte("done"), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
 		return 0
 	case "noop":
 		return 0

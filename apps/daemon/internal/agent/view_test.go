@@ -27,9 +27,12 @@ func TestViewValidate(t *testing.T) {
 		},
 		"shim path equal to a mask":   func(v *agent.View) { v.ShimPaths = append(v.ShimPaths, "/etc/harness") },
 		"overlay in the private root": func(v *agent.View) { v.Overlays[1].Path = "/.oac/certs" },
+		"mask in /proc":               func(v *agent.View) { v.Masks[0].Path = "/proc/cpuinfo" },
 		"unclean view path":           func(v *agent.View) { v.Masks[0].Path = "/etc/../etc/harness" },
 		"duplicate shim":              func(v *agent.View) { v.Shims = append(v.Shims, "git") },
 		"forwarded assignment":        func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "A=B") },
+		"forwarded broker variable":   func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "PATH") },
+		"forwarded proxy variable":    func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "https_proxy") },
 	} {
 		view := validView(t)
 		change(&view)
@@ -54,6 +57,45 @@ func TestRegistryResolvesOnlyDeclaredViews(t *testing.T) {
 		t.Fatalf("ResolveView = %+v, %v; want the declared view", view, err)
 	}
 }
+
+func TestViewExecutorReceivesOnlyCredentialFreeMCP(t *testing.T) {
+	reg := agent.NewRegistry()
+	declared := validView(t)
+	declared.Executor = func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
+		return nil, errReached
+	}
+	info := proto.SupportedAgentKind{Kind: "viewed", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
+	reg.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, Session: stubFactory("viewed"), View: &declared})
+	view, err := reg.ResolveView("viewed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := "secret"
+	gateway := agent.MCPBinding{ServerLabel: "docs", Transport: "http", ServerURL: "http://127.0.0.1:4100/mcp/docs"}
+	withBearer, withHeaders, remote := gateway, gateway, gateway
+	withBearer.BearerToken = &token
+	withHeaders.HTTPHeaders = map[string]string{"X-Api-Key": token}
+	remote.ServerURL = "https://mcp.example.com/docs"
+	for name, c := range map[string]struct {
+		req  proto.PromptRequestPayload
+		mcp  []agent.MCPBinding
+		want error
+	}{
+		"gateway binding":    {mcp: []agent.MCPBinding{gateway}, want: errReached},
+		"request MCP":        {req: proto.PromptRequestPayload{MCPHTTPServers: &[]proto.MCPHTTPServer{}}},
+		"installed MCP":      {req: proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{}}}}},
+		"bearer":             {mcp: []agent.MCPBinding{withBearer}},
+		"credential headers": {mcp: []agent.MCPBinding{withHeaders}},
+		"direct endpoint":    {mcp: []agent.MCPBinding{remote}},
+	} {
+		_, err := view.Executor(context.Background(), c.req, agent.ViewSession{MCP: c.mcp})
+		if c.want != nil && !errors.Is(err, c.want) || c.want == nil && (err == nil || errors.Is(err, errReached)) {
+			t.Errorf("%s: Executor = %v, want %v", name, err, c.want)
+		}
+	}
+}
+
+var errReached = errors.New("factory reached")
 
 func validView(t *testing.T) agent.View {
 	host := t.TempDir()

@@ -12,6 +12,7 @@ import (
 	"os"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -38,6 +39,7 @@ type launchSpec struct {
 	UID      uint32
 	GID      uint32
 	Groups   []uint32
+	Grace    time.Duration
 }
 
 type msgKind uint8

@@ -4,7 +4,7 @@
 //
 // The exec guard is narrow. Mount flags alone decide which files can be executed: the world and every writable mount are nosuid and noexec, so executing a file from the file system works only from read-only mounts declared executable, such as the Harness directory, the shim and exec-flagged overlays. The seccomp filter denies creating a user namespace and every setns, so the process cannot create or enter another user namespace. Executing from a memfd and code that an allowed interpreter runs are outside this guard.
 //
-// The daemon calls [Init] first thing in main. [Start] re-executes the daemon binary as the launcher, which becomes PID 1 of the view: it builds the view, starts the process, forwards signals, reaps orphans and exits with the process status. Its exit tears the view down.
+// The daemon calls [Init] first thing in main. [Start] re-executes the daemon binary as the launcher, which becomes PID 1 of the view: it builds the view, starts the process, delivers signals to every process in the view, reaps orphans and exits with the process status. When the process exits while others remain, it sends them TERM and waits up to [Process].Grace for them first. Its exit kills what remains and tears the view down.
 //
 // The package works only on Linux. Elsewhere [Start] returns [ErrUnsupported].
 package sessionview

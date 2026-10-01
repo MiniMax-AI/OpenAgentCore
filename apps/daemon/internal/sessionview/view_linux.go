@@ -15,6 +15,8 @@ import (
 	"syscall"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
 // launcherArg0 marks the re-executed daemon binary as a launcher.
@@ -125,7 +127,7 @@ func (v *View) launch(spec *Spec) error {
 	ls := &launchSpec{
 		Staging: v.staging, Private: spec.Private, Overlays: spec.Overlays, Shim: spec.Shim,
 		Path: spec.Process.Path, Args: spec.Process.Args, Env: spec.Process.Env, Dir: spec.Process.Dir,
-		UID: spec.Process.UID, GID: spec.Process.GID, Groups: spec.Process.Groups,
+		UID: spec.Process.UID, GID: spec.Process.GID, Groups: spec.Process.Groups, Grace: spec.Process.Grace,
 	}
 	// A launcher that dies early breaks the pipe; the handshake reports that.
 	go func() {
@@ -294,7 +296,7 @@ func (v *View) Wait() (Exit, error) {
 	return v.exit, v.err
 }
 
-// Signal delivers sig to the process.
+// Signal delivers sig to every process in the view.
 func (v *View) Signal(sig syscall.Signal) error {
 	select {
 	case <-v.done:
@@ -334,12 +336,12 @@ func (v *View) Stderr() *os.File { return v.pipes[2] }
 func (s *Spec) mountpoints() []Mountpoint {
 	var m []Mountpoint
 	for _, d := range s.Private {
-		m = append(m, Mountpoint{Path: PrivateRoot + "/" + d.Name, Dir: true})
+		m = append(m, Mountpoint{Path: agent.ViewPrivateRoot + "/" + d.Name, Dir: true})
 	}
 	m = append(m,
-		Mountpoint{Path: PrivateRoot + "/" + ShimDir, Dir: true},
-		Mountpoint{Path: "/proc", Dir: true},
-		Mountpoint{Path: "/dev", Dir: true},
+		Mountpoint{Path: agent.ViewPrivateRoot + "/" + agent.ViewShimName, Dir: true},
+		Mountpoint{Path: agent.ViewProcRoot, Dir: true},
+		Mountpoint{Path: agent.ViewDevRoot, Dir: true},
 	)
 	for _, o := range s.Overlays {
 		info, err := os.Stat(o.Source)
