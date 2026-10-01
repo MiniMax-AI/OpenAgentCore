@@ -222,6 +222,48 @@ func TestSuccessorWaitsForPredecessor(t *testing.T) {
 	}
 }
 
+// A successor waiting behind a predecessor whose handler is stuck ends as soon
+// as a newer stream supersedes it. The newest stream keeps waiting for the
+// stuck handler: its Detach finds the attachment that handler creates.
+func TestSupersededWaiterEnds(t *testing.T) {
+	ctx := context.Background()
+	svc := newOrdered()
+	srv := NewServer(svc)
+	waiting := make(chan struct{}, 2)
+	srv.awaitPredecessor = func() { waiting <- struct{}{} }
+	a := testAttachment()
+	first, _ := serveStream(t, srv, a, 1)
+	go first.Attach(ctx, &AttachRequest{Export: "world"})
+	<-svc.entered
+
+	second, secondServed := serveStream(t, srv, a, 2)
+	go second.Detach(ctx, &DetachRequest{})
+	<-waiting
+	third, _ := serveStream(t, srv, a, 3)
+	select {
+	case err := <-secondServed:
+		if !errors.Is(err, ErrSuperseded) {
+			t.Fatalf("superseded Serve returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the superseded stream still waits for the stuck handler")
+	}
+
+	settled := make(chan error, 1)
+	go func() {
+		_, err := third.Detach(ctx, &DetachRequest{})
+		settled <- err
+	}()
+	<-waiting
+	close(svc.proceed)
+	if err := <-settled; err != nil {
+		t.Fatalf("Detach on the newest stream: %v, want it to follow the Attach", err)
+	}
+	if svc.leftover() {
+		t.Fatal("the attachment remains")
+	}
+}
+
 // A stream Link bound before the attachment's newest stream, but whose handler
 // reaches Serve later, is refused without dispatching anything, also after the
 // newer stream ended. The newer stream keeps serving.

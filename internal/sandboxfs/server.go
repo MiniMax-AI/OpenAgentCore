@@ -6,6 +6,7 @@ import (
 	"io"
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -22,10 +23,11 @@ var ErrSuperseded = errors.New("sandboxfs: stream superseded by a successor")
 
 // Server answers File streams for one Service. It admits one stream at a time
 // for each (ServerInstanceID, AttachmentID), in the order Link bound them: a
-// stream bound before one already admitted is refused, and a successor
-// dispatches nothing until its predecessor has stopped admitting requests and
-// every request it admitted has finished. Its methods are safe for concurrent
-// use.
+// stream bound before one already admitted is refused, and a successor runs no
+// request until every earlier stream that ran one has stopped admitting
+// requests and every request it admitted has finished. A successor that has
+// run nothing ends at once when it is superseded or its stream or context
+// ends. Its methods are safe for concurrent use.
 type Server struct {
 	svc Service
 
@@ -34,7 +36,7 @@ type Server struct {
 	// until the attachment's lease has ended too.
 	streams map[streamKey]*stream
 
-	awaitPredecessor func() // test seam: runs when a successor starts waiting
+	awaitPredecessor func() // test seam: runs when a request of a successor starts waiting
 }
 
 type streamKey struct{ instance, attachment sandboxwire.ID }
@@ -50,7 +52,7 @@ func NewServer(svc Service) *Server {
 // Link authenticated for the stream; Serve refuses one without an ID, server
 // instance, lease or valid export grants. seq is the stream's Link bind
 // sequence: Serve refuses a stream bound before one of its attachment it
-// already admitted with ErrSuperseded, without dispatching anything. Serve
+// already admitted with ErrSuperseded, without running anything. Serve
 // owns conn and closes it. On return every request context is cancelled and
 // every handler has finished. A stream that ends cleanly returns nil; a
 // superseded one returns ErrSuperseded.
@@ -61,9 +63,9 @@ func (s *Server) Serve(ctx context.Context, conn io.ReadWriteCloser, a Attachmen
 	}
 	a.Exports = slices.Clone(a.Exports)
 	ctx, cancel := context.WithCancel(ctx)
-	st := &stream{conn: conn, svc: s.svc, a: a, bindSeq: seq, cancel: cancel, drained: make(chan struct{}),
-		inflight: map[uint64]context.CancelFunc{}, acquiring: map[HandleID]chan struct{}{}}
-	prev, ok := s.admit(streamKey{a.ServerInstanceID, a.ID}, st)
+	st := &stream{srv: s, key: streamKey{a.ServerInstanceID, a.ID}, conn: conn, svc: s.svc, a: a, bindSeq: seq, cancel: cancel,
+		drained: make(chan struct{}), inflight: map[uint64]context.CancelFunc{}, acquiring: map[HandleID]chan struct{}{}}
+	prev, ok := s.admit(st)
 	if !ok {
 		cancel()
 		conn.Close()
@@ -79,12 +81,6 @@ func (s *Server) Serve(ctx context.Context, conn io.ReadWriteCloser, a Attachmen
 	}()
 	if prev != nil {
 		prev.fence()
-		if s.awaitPredecessor != nil {
-			s.awaitPredecessor()
-		}
-		// No deadline: a handler the predecessor admitted may still change
-		// state the successor's requests depend on.
-		<-prev.drained
 	}
 	for {
 		f, err := sandboxwire.ReadFrame(conn, sandboxwire.MaxPayload)
@@ -107,9 +103,11 @@ func (s *Server) Serve(ctx context.Context, conn io.ReadWriteCloser, a Attachmen
 
 // admit makes st the newest stream of its attachment and returns the
 // predecessor it must fence. It refuses st when a stream bound later, or the
-// same stream, was admitted already. It forgets each attachment whose lease
-// has ended and whose newest stream has drained.
-func (s *Server) admit(key streamKey, st *stream) (prev *stream, ok bool) {
+// same stream, was admitted already. st waits for the predecessor to drain
+// when the predecessor has run a request; otherwise the predecessor never will,
+// and st waits for what the predecessor was waiting for. It forgets each
+// attachment whose lease has ended and whose newest stream has drained.
+func (s *Server) admit(st *stream) (prev *stream, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for k, e := range s.streams {
@@ -117,12 +115,48 @@ func (s *Server) admit(key streamKey, st *stream) (prev *stream, ok bool) {
 			delete(s.streams, k)
 		}
 	}
-	prev = s.streams[key]
+	prev = s.streams[st.key]
 	if prev != nil && prev.bindSeq >= st.bindSeq {
 		return nil, false
 	}
-	s.streams[key] = st
+	if prev != nil {
+		st.after = prev.after
+		if prev.started.Load() {
+			st.after = prev.drained
+		}
+	}
+	s.streams[st.key] = st
 	return prev, true
+}
+
+// start reports whether st may run a request: once every earlier stream that
+// ran one has drained, and only while no successor has superseded st. It
+// reports false when st was superseded or ctx ended first; st has then run
+// nothing. The check and the mark are one step under the Server's lock, so a
+// successor either waits for st or knows that st will run nothing.
+func (st *stream) start(ctx context.Context) bool {
+	if st.started.Load() {
+		return true
+	}
+	if st.after != nil {
+		if st.srv.awaitPredecessor != nil {
+			st.srv.awaitPredecessor()
+		}
+		// No deadline: a handler an earlier stream admitted may still change
+		// state this stream's requests depend on.
+		select {
+		case <-st.after:
+		case <-ctx.Done():
+			return false
+		}
+	}
+	st.srv.mu.Lock()
+	defer st.srv.mu.Unlock()
+	if st.srv.streams[st.key] != st || ctx.Err() != nil {
+		return false
+	}
+	st.started.Store(true)
+	return true
 }
 
 func closed(c <-chan struct{}) bool {
@@ -136,12 +170,16 @@ func closed(c <-chan struct{}) bool {
 
 // stream is one served File stream.
 type stream struct {
+	srv     *Server
+	key     streamKey
 	conn    io.ReadWriteCloser
 	svc     Service
 	a       Attachment
 	bindSeq uint64
 	cancel  context.CancelFunc
 	drained chan struct{}               // closed once the stream has ended and every handler finished
+	after   <-chan struct{}             // closed once every earlier stream that ran a request has drained; nil when none did
+	started atomic.Bool                 // a request passed the fence; set under the Server's lock
 	seq     sandboxwire.RequestSequence // read loop only
 	wmu     sync.Mutex
 	wg      sync.WaitGroup
@@ -251,8 +289,12 @@ func (st *stream) dispatch(ctx context.Context, f sandboxwire.Frame) error {
 	return nil
 }
 
-// serve runs one request after the acquisition it must follow, if any.
+// serve runs one request once the stream may run requests, and after the
+// acquisition it must follow, if any.
 func (st *stream) serve(ctx context.Context, op Op, req Request, after <-chan struct{}) (message, error) {
+	if !st.start(ctx) {
+		return nil, NewFailure(CodeCancelled, sandboxwire.EffectNone, "stream superseded or ended before the request ran")
+	}
 	if after != nil {
 		select {
 		case <-after:

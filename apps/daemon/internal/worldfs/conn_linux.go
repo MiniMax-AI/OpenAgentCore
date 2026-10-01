@@ -13,6 +13,7 @@ import (
 var (
 	errDead        = errors.New("worldfs: the world is lost")
 	errInterrupted = errors.New("worldfs: interrupted before the request was sent")
+	errStopped     = errors.New("worldfs: the world stopped")
 )
 
 // connect opens a stream and describes the service within ctx.
@@ -30,7 +31,7 @@ func (f *frontend) connect(ctx context.Context) (*sandboxfs.Client, *sandboxfs.D
 	return c, d, nil
 }
 
-// client returns the stream's client. After the stream failed it redials within ctx and continues only with the same service instance. A failed redial is an [ErrConnect] error, and an interrupt while waiting for the stream or redialing is errInterrupted: either way the request was never sent.
+// client returns the stream's client. After the stream failed it redials within ctx and continues only with the same service instance. Once shutdown began it returns no stream. A failed redial is an [ErrConnect] error, and an interrupt while waiting for the stream or redialing is errInterrupted: either way the request was never sent.
 func (f *frontend) client(ctx context.Context, interrupt <-chan struct{}) (*sandboxfs.Client, error) {
 	select {
 	case f.connTurn <- struct{}{}:
@@ -42,6 +43,9 @@ func (f *frontend) client(ctx context.Context, interrupt <-chan struct{}) (*sand
 	defer func() { <-f.connTurn }()
 	if f.dead.Load() {
 		return nil, errDead
+	}
+	if f.ctx.Err() != nil {
+		return nil, &Error{Kind: ErrConnect, Op: "reconnect", Err: errStopped}
 	}
 	if c := f.conn; c != nil {
 		select {

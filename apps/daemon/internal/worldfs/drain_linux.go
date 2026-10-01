@@ -96,14 +96,14 @@ func (f *frontend) sendForgets() bool {
 	return true
 }
 
-// settle releases the handle ID of an acquisition that failed after it may have taken effect. Sent after the acquisition, on its stream or on a successor the service fences behind it, the Release finds whatever the acquisition left. The acquisition itself is never sent again.
+// settle queues a release of the handle ID of an acquisition that failed after it may have taken effect, so the kernel request returns its error without waiting for the service. The drainer sends it after the acquisition, on its stream or on a successor the service fences behind it, so the Release finds whatever the acquisition left. The acquisition itself is never sent again.
 func (f *frontend) settle(c cleanup, err error) {
 	if !noEffect(err) {
-		f.release(c)
+		f.queue(c)
 	}
 }
 
-// release sends a Release or ReleaseDir for a handle the kernel closed, or for an acquisition in doubt. One the service has not answered is queued for the drainer.
+// release sends a Release or ReleaseDir for a handle the kernel closed. One the service has not answered is queued for the drainer.
 func (f *frontend) release(c cleanup) {
 	if f.sendRelease(f.ctx, c) {
 		return
@@ -111,6 +111,11 @@ func (f *frontend) release(c cleanup) {
 	if f.seams.queue != nil {
 		f.seams.queue()
 	}
+	f.queue(c)
+}
+
+// queue hands c to the drainer.
+func (f *frontend) queue(c cleanup) {
 	f.mu.Lock()
 	f.releases = append(f.releases, c)
 	f.wake()

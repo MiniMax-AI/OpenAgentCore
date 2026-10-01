@@ -59,7 +59,7 @@ func New(export sandboxlink.ExportID, dial Dial) *World {
 
 // Serve has the signature of [sessionview.World]. Within ctx it connects, attaches the export and presents the mountpoints; it then starts serving dev. A World serves once.
 //
-// A Serve that fails after the export may have been attached detaches it on a new stream, within 5 more seconds even when ctx has ended. When that Detach cannot be sent or answered, Serve returns [ErrAttachmentDirty] and the owner of the Link attachment must end it.
+// A Serve that fails after the export may have been attached detaches it on a new stream, and returns within 5 more seconds even when ctx has ended or the transport blocks. When that Detach cannot be sent or answered in that time, Serve returns [ErrAttachmentDirty] and the owner of the Link attachment must end it.
 func (w *World) Serve(ctx context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
 	p, err := w.fs.serve(ctx, dev, mount)
 	if err != nil {
@@ -68,7 +68,7 @@ func (w *World) Serve(ctx context.Context, dev *os.File, mount sessionview.World
 	return w, p, nil
 }
 
-// Stop waits up to 10 seconds for serving to end, which happens once the view's mount namespace is gone. It then detaches, ending every request still waiting on the service after 5 more seconds, so it returns within 15 seconds. It unmounts nothing. After a Serve that failed, or without one, it returns at once.
+// Stop waits up to 10 seconds for serving to end, which happens once the view's mount namespace is gone. It then detaches, ending every request still waiting on the service after 5 more seconds, so it returns within 15 seconds even when the transport blocks. It unmounts nothing. After a Serve that failed, or without one, it returns at once.
 func (w *World) Stop() error {
 	w.fs.stopOnce.Do(func() { w.fs.stopErr = w.fs.stop() })
 	return w.fs.stopErr
@@ -112,7 +112,7 @@ type frontend struct {
 	root     *inode
 	born     sandboxfs.Timestamp
 	forgets  map[sandboxfs.NodeRef]uint64 // references the kernel released, not yet sent
-	releases []cleanup                    // handles the kernel released whose Release a failed stream never sent
+	releases []cleanup                    // releases for the drainer: of handles the kernel closed whose Release went unanswered, and of acquisitions in doubt
 
 	kick      chan struct{} // wakes the drainer
 	drainCtx  context.Context
@@ -214,7 +214,7 @@ func (f *frontend) start(dev *os.File, opts *fuse.MountOptions) error {
 	return nil
 }
 
-// abort undoes a failed Serve and returns its error. When the export may be attached, it closes the stream and detaches on a new one: the service serves that stream only after every request of the earlier ones has finished, so Detach releases whatever Attach, or a request the failure abandoned, left. Detach is settled when it succeeds or the world is lost, since a lost attachment or incarnation holds nothing; anything else is [ErrAttachmentDirty].
+// abort undoes a failed Serve and returns its error. When the export may be attached, it drops the stream and detaches on a new one: the service serves that stream only after every request of the earlier ones has finished, so Detach releases whatever Attach, or a request the failure abandoned, left. Detach is settled when it succeeds or the world is lost, since a lost attachment or incarnation holds nothing; anything else, including no answer within detachWait, is [ErrAttachmentDirty].
 func (f *frontend) abort(ctx context.Context, err error) error {
 	close(f.served)
 	close(f.drained)
@@ -222,13 +222,33 @@ func (f *frontend) abort(ctx context.Context, err error) error {
 	if !f.attached && !f.maybe || f.dead.Load() {
 		return err
 	}
-	f.conn.Close()
+	f.drop()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachWait)
 	defer cancel()
-	if _, derr := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{}); derr != nil && !f.dead.Load() {
+	if derr := f.detach(ctx); derr != nil && !f.dead.Load() {
 		return &Error{Kind: ErrAttachmentDirty, Op: "detach", Err: errors.Join(err, derr)}
 	}
 	return err
+}
+
+// detach sends Detach and waits for it until ctx ends. The request runs on its own goroutine, because a transport that blocks can hold a write, and the stream close a cancellation starts, past ctx.
+func (f *frontend) detach(ctx context.Context) error {
+	done := make(chan error, 1)
+	go func() {
+		_, err := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		select {
+		case err := <-done:
+			return err
+		default:
+			return &Error{Kind: ErrConnect, Op: "detach", Err: ctx.Err()}
+		}
+	}
 }
 
 // observe marks the world lost when err shows that the service incarnation or the attachment is gone: a File failure that says so, or a Link failure that is not retryable, such as LeaseExpired or StaleGeneration on a redial.
@@ -291,9 +311,12 @@ func (f *frontend) stop() error {
 	context.AfterFunc(ctx, f.cancel)
 	// Detach drops every reference and handle the attachment holds, so nothing queued needs sending.
 	f.stopDrain()
-	<-f.drained
+	select {
+	case <-f.drained:
+	case <-ctx.Done():
+	}
 	if !f.dead.Load() {
-		if _, err := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{}); err != nil {
+		if err := f.detach(ctx); err != nil {
 			errs = append(errs, &Error{Kind: ErrConnect, Op: "detach", Err: err})
 		}
 	}
@@ -301,11 +324,19 @@ func (f *frontend) stop() error {
 	return errors.Join(errs...)
 }
 
+// shutdown ends every request and redial on f.ctx, and closes the stream once no redial holds it, without waiting for the transport. client returns no stream after it.
 func (f *frontend) shutdown() {
 	f.cancel()
+	go f.drop()
+}
+
+// drop closes the stream without waiting for the transport, so the next request redials.
+func (f *frontend) drop() {
 	f.connTurn <- struct{}{}
-	defer func() { <-f.connTurn }()
-	if f.conn != nil {
-		f.conn.Close()
+	c := f.conn
+	f.conn = nil
+	<-f.connTurn
+	if c != nil {
+		go c.Close()
 	}
 }

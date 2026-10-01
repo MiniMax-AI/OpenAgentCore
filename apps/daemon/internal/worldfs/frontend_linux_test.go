@@ -246,21 +246,38 @@ func TestReleaseQueuedAfterRedial(t *testing.T) {
 	eventually(t, "the queued Release", func() bool { return c.released.Load() == 1 })
 }
 
-// An Open whose response is lost fails with EIO, and its handle ID is released on the next stream once the service has finished the Open, so the service holds no handle.
+// An Open whose response is lost while the service is unreachable fails with EIO at once, and its handle ID is released on the next stream once the service is reachable, after the service finished the Open, so the service holds no handle.
 func TestLostOpenIsReleased(t *testing.T) {
 	srv, c, _ := newServer(t)
-	f := attached(t, srv.Dial)
+	var down atomic.Bool
+	reachable := make(chan struct{})
+	f := attached(t, func(ctx context.Context) (io.ReadWriteCloser, error) {
+		if down.Load() {
+			select {
+			case <-reachable:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return srv.Dial(ctx)
+	})
+	draining(t, f)
 	var e fuse.EntryOut
 	if st := f.Lookup(nil, &fuse.InHeader{NodeId: f.root.id}, "f", &e); !st.Ok() {
 		t.Fatalf("Lookup: %v", st)
 	}
+	down.Store(true)
 	c.cut.Store(true)
-	var o fuse.OpenOut
-	if st := f.Open(nil, &fuse.OpenIn{InHeader: fuse.InHeader{NodeId: e.NodeId}, Flags: syscall.O_RDWR}, &o); st != fuse.EIO {
-		t.Fatalf("Open with its response lost: %v, want EIO", st)
-	}
-	if c.opened.Load() != 1 || c.released.Load() != 1 {
-		t.Fatalf("%d opened and %d released, want the lost handle released", c.opened.Load(), c.released.Load())
+	got := make(chan fuse.Status, 1)
+	go func() {
+		var o fuse.OpenOut
+		got <- f.Open(nil, &fuse.OpenIn{InHeader: fuse.InHeader{NodeId: e.NodeId}, Flags: syscall.O_RDWR}, &o)
+	}()
+	wantStatus(t, got, fuse.EIO)
+	close(reachable)
+	eventually(t, "the release of the lost handle", func() bool { return c.released.Load() == 1 })
+	if c.opened.Load() != 1 {
+		t.Fatalf("%d opened, want 1", c.opened.Load())
 	}
 }
 
@@ -306,6 +323,68 @@ func TestUncertainAttachIsDetached(t *testing.T) {
 	var fail *sandboxfs.Failure
 	if _, err := c.Detach(context.Background(), &sandboxfs.DetachRequest{}); !errors.As(err, &fail) || fail.Code != sandboxfs.CodeStaleAttachment {
 		t.Fatalf("Detach after Serve: %v, want StaleAttachment", err)
+	}
+}
+
+// jammed passes reads through and, while jam is set, holds every write and Close until free closes, as a transport whose outgoing traffic is stuck does.
+type jammed struct {
+	io.ReadWriteCloser
+	jam  *atomic.Bool
+	free <-chan struct{}
+}
+
+func (j jammed) Write(p []byte) (int, error) {
+	if j.jam.Load() {
+		<-j.free
+	}
+	return j.ReadWriteCloser.Write(p)
+}
+
+func (j jammed) Close() error {
+	if j.jam.Load() {
+		<-j.free
+	}
+	return j.ReadWriteCloser.Close()
+}
+
+// A Serve whose context ends while Attach is in doubt and the transport holds every write returns ErrAttachmentDirty within detachWait, teardown included.
+func TestAbortBoundedWhenTransportBlocks(t *testing.T) {
+	srv, err := fileservicetest.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv.Close() })
+	attaching := make(chan struct{})
+	srv.Intercept(func(s sandboxfs.Service) sandboxfs.Service { return lateAttach{s, attaching} })
+	var jam atomic.Bool
+	free := make(chan struct{})
+	t.Cleanup(func() { close(free) })
+	w := New(fileservicetest.Export, func(ctx context.Context) (io.ReadWriteCloser, error) {
+		rw, err := srv.Dial(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return jammed{rw, &jam, free}, nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-attaching
+		jam.Store(true)
+		cancel()
+	}()
+	served := make(chan error, 1)
+	go func() {
+		_, _, err := w.Serve(ctx, nil, sessionview.WorldMount{})
+		served <- err
+	}()
+	select {
+	case err := <-served:
+		if !errors.Is(err, ErrAttachmentDirty) {
+			t.Fatalf("Serve = %v, want ErrAttachmentDirty", err)
+		}
+	case <-time.After(detachWait + 2*time.Second):
+		t.Fatal("Serve still cleaning up 2s after the detach bound")
 	}
 }
 
