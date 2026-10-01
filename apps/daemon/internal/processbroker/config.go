@@ -13,13 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 )
 
 // Config configures one Session's broker.
 type Config struct {
-	// RunDir is the host directory bound at processshim.RunDir in the view.
+	// RunDir is the host directory the view binds as its run directory,
+	// the private directory agent.ViewRunName.
 	// It must be owned by the broker's user and writable by no one else, and
 	// the view needs no write access to it: a shim only connects.
 	RunDir string
@@ -48,7 +49,7 @@ type Config struct {
 // executable is a bare name, resolved on the remote PATH, or an absolute
 // sandbox path.
 type Executables struct {
-	// Names maps a name under sessionview.ShimDir to its remote executable.
+	// Names maps a name in the view's shim directory to its remote executable.
 	Names map[string]string
 	// Paths maps an absolute view path the shim is bound over, such as
 	// /bin/bash, to its remote executable.
@@ -132,7 +133,7 @@ func validEnvName(name string) bool {
 }
 
 func underPrivate(p string) bool {
-	return p == sessionview.PrivateRoot || strings.HasPrefix(p, sessionview.PrivateRoot+"/")
+	return p == agent.ViewPrivateRoot || strings.HasPrefix(p, agent.ViewPrivateRoot+"/")
 }
 
 // resolve returns the remote executable for the shim's exec path. A relative
@@ -144,7 +145,7 @@ func (x Executables) resolve(execPath, cwd string) (string, bool) {
 		p = path.Join(cwd, p)
 	}
 	p = path.Clean(p)
-	if name, ok := strings.CutPrefix(p, sessionview.ShimDir+"/"); ok {
+	if name, ok := strings.CutPrefix(p, agent.ViewPrivateRoot+"/"+agent.ViewShimName+"/"); ok {
 		remote, ok := x.Names[name]
 		return remote, ok
 	}
@@ -153,7 +154,7 @@ func (x Executables) resolve(execPath, cwd string) (string, bool) {
 }
 
 // privateMarker is the view prefix no value may carry into the sandbox.
-var privateMarker = []byte(sessionview.PrivateRoot)
+var privateMarker = []byte(agent.ViewPrivateRoot)
 
 // compose builds the remote environment from the shim's environ. It returns
 // the names it dropped because their value names the private directory.

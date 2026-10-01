@@ -26,6 +26,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/sys/unix"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
@@ -510,11 +511,12 @@ func TestViewRunsRemoteShell(t *testing.T) {
 	defer b.Close()
 	w := &loopbackWorld{dir: world}
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
-		World:   w.serve,
-		Private: []sessionview.PrivateDir{{Name: "run", HostDir: run}},
-		Shim:    sessionview.Shim{Binary: shimBinary(t), Paths: []string{"/bin/sh"}},
-		Process: sessionview.Process{Path: "/bin/sh", Args: []string{"sh", "-c", "echo $0"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr},
-		PTS:     pts,
+		World:         w.serve,
+		Private:       []sessionview.PrivateDir{{Name: agent.ViewRunName, HostDir: run}},
+		Shim:          sessionview.Shim{Binary: shimBinary(t), Paths: []string{"/bin/sh"}},
+		Process:       sessionview.Process{Path: "/bin/sh", Args: []string{"sh", "-c", "echo $0"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr},
+		StagingParent: base,
+		PTS:           pts,
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)

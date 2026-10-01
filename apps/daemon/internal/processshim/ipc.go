@@ -40,14 +40,14 @@ import (
 )
 
 const (
-	// RunDir is the view directory the broker listens in: the Session's
-	// private directory named "run".
-	RunDir = "/.oac/run"
-	// SocketName is the broker's socket in RunDir.
+	// SocketName is the broker's socket in the view's run directory.
 	SocketName = "process.sock"
-	// SocketPath is the fixed path the shim connects to. It is not
-	// configurable, so the Harness environment cannot redirect it.
-	SocketPath = RunDir + "/" + SocketName
+	// SocketPath is the fixed path the shim connects to: SocketName in the
+	// run directory of the view layout in package agent. It is not
+	// configurable, so the Harness environment cannot redirect it. It is a
+	// literal so that the shim does not link package agent; a test checks it
+	// against the layout.
+	SocketPath = "/.oac/run/" + SocketName
 
 	// Version is the IPC version. The broker refuses any other.
 	Version = 1
