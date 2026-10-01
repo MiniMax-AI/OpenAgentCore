@@ -264,6 +264,47 @@ func TestSupersededWaiterEnds(t *testing.T) {
 	}
 }
 
+// The end of a waiting successor's stream, and then of the attachment's lease,
+// leave the fence in place: a later stream still waits for the stuck handler
+// of the stream before them. The lease and each stream's context end
+// separately.
+func TestFenceOutlivesLease(t *testing.T) {
+	ctx := context.Background()
+	svc := newOrdered()
+	srv := NewServer(svc)
+	waiting := make(chan struct{}, 2)
+	srv.awaitPredecessor = func() { waiting <- struct{}{} }
+	lease, endLease := context.WithCancel(ctx)
+	a := testAttachment()
+	a.Lease = lease
+	first, _ := serveStream(t, srv, a, 1)
+	go first.Attach(ctx, &AttachRequest{Export: "world"})
+	<-svc.entered
+
+	second, secondServed := serveStream(t, srv, a, 2)
+	go second.Detach(ctx, &DetachRequest{})
+	<-waiting
+	second.Close()
+	<-secondServed
+	endLease()
+
+	third, _ := serveStream(t, srv, a, 3)
+	settled := make(chan error, 1)
+	go func() {
+		_, err := third.Detach(ctx, &DetachRequest{})
+		settled <- err
+	}()
+	select {
+	case <-waiting:
+	case err := <-settled:
+		t.Fatalf("the later stream ran Detach beside the stuck Attach: %v", err)
+	}
+	close(svc.proceed)
+	if err := <-settled; err != nil {
+		t.Fatalf("Detach: %v, want it to follow the Attach", err)
+	}
+}
+
 // A stream Link bound before the attachment's newest stream, but whose handler
 // reaches Serve later, is refused without dispatching anything, also after the
 // newer stream ended. The newer stream keeps serving.

@@ -28,7 +28,7 @@ type Client struct {
 	err       error
 	done      chan struct{}
 
-	afterWrite func() // test seam: runs once a frame is recorded as written
+	afterWrite func() // test seam: runs once a frame is written
 }
 
 // HandleIDs allocates the handle IDs a client chooses for Open, Create and
@@ -58,7 +58,8 @@ func NewClient(conn io.ReadWriteCloser) *Client {
 	return c
 }
 
-// Close closes the stream. Requests in flight fail with EffectPossible.
+// Close closes the stream. Requests in flight fail with EffectPossible. It
+// does not wait for the transport to finish closing.
 func (c *Client) Close() error {
 	c.shutdown(errClientClosed)
 	return nil
@@ -93,17 +94,19 @@ func (c *Client) shutdown(cause error) {
 	c.pending, c.abandoned = nil, nil
 	close(c.done)
 	c.mu.Unlock()
-	c.conn.Close()
 	for _, cl := range pending {
 		cl.ch <- outcome{fail: transportFailure(sandboxwire.EffectPossible, cause)}
 	}
+	// A transport may hold its close, as yamux does while it cannot queue the
+	// stream's FIN; no call waits for that.
+	go c.conn.Close()
 }
 
 // send registers a request and writes it. A request that ends before its
 // write starts fails with EffectNone. Cancelling ctx during the write fails
 // the stream, since a partial frame cannot be taken back, and the request
-// then fails with EffectPossible. Once the write is recorded as finished, a
-// cancellation is left to roundTrip, which sends CancelRequest.
+// then fails with EffectPossible. Once the write has finished, a cancellation
+// is left to roundTrip, which sends CancelRequest.
 func (c *Client) send(ctx context.Context, op Op, payload []byte) (uint64, *call, *Failure) {
 	if fail := c.acquire(ctx); fail != nil {
 		return 0, nil, fail
@@ -121,30 +124,35 @@ func (c *Client) send(ctx context.Context, op Op, payload []byte) (uint64, *call
 	id, cl := c.seq.Next(), &call{op: op, ch: make(chan outcome, 1)}
 	c.pending[id] = cl
 	c.mu.Unlock()
-	// The write and the cancellation callback race for state; whichever
-	// moves it from writing decides. The callback is settled before the
-	// write slot is released, so it never acts on a later write.
-	const writing, written, interrupted = 0, 1, 2
-	var state atomic.Int32
-	settled := make(chan struct{})
-	stop := context.AfterFunc(ctx, func() {
-		defer close(settled)
-		if state.CompareAndSwap(writing, interrupted) {
-			c.shutdown(fmt.Errorf("request cancelled while being written: %w", context.Cause(ctx)))
-		}
-	})
-	err := sandboxwire.WriteFrame(c.conn, sandboxwire.Frame{Type: uint16(op), RequestID: id, Payload: payload})
-	state.CompareAndSwap(writing, written)
-	if c.afterWrite != nil {
-		c.afterWrite()
-	}
-	if !stop() {
-		<-settled
-	}
-	if err != nil {
+	if err := c.write(ctx, sandboxwire.Frame{Type: uint16(op), RequestID: id, Payload: payload}); err != nil {
 		c.shutdown(err)
 	}
 	return id, cl, nil
+}
+
+// write writes f for a caller that holds the write slot. It stops waiting
+// when ctx ends or the stream fails first and returns why, and the caller
+// then fails the stream: a transport can hold a write, and nothing writes on
+// a failed stream after it, so releasing the slot cannot interleave frames.
+func (c *Client) write(ctx context.Context, f sandboxwire.Frame) error {
+	written := make(chan error, 1)
+	go func() { written <- sandboxwire.WriteFrame(c.conn, f) }()
+	var err error
+	select {
+	case err = <-written:
+	case <-c.done:
+		return c.Err()
+	case <-ctx.Done():
+		select {
+		case err = <-written:
+		default:
+			return fmt.Errorf("request cancelled while being written: %w", context.Cause(ctx))
+		}
+	}
+	if err == nil && c.afterWrite != nil {
+		c.afterWrite()
+	}
+	return err
 }
 
 // acquire takes the write turn unless ctx ends or the stream fails first.

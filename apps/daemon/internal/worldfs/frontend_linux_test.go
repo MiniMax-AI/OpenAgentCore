@@ -370,6 +370,10 @@ func TestAbortBoundedWhenTransportBlocks(t *testing.T) {
 	defer cancel()
 	go func() {
 		<-attaching
+		// A request completed after Attach shows that Attach's write has finished, so the cancellation finds Attach in doubt rather than mid-write.
+		if _, err := w.fs.conn.Describe(context.Background(), &sandboxfs.DescribeRequest{}); err != nil {
+			t.Errorf("Describe beside Attach: %v", err)
+		}
 		jam.Store(true)
 		cancel()
 	}()

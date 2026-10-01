@@ -225,30 +225,10 @@ func (f *frontend) abort(ctx context.Context, err error) error {
 	f.drop()
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachWait)
 	defer cancel()
-	if derr := f.detach(ctx); derr != nil && !f.dead.Load() {
+	if _, derr := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{}); derr != nil && !f.dead.Load() {
 		return &Error{Kind: ErrAttachmentDirty, Op: "detach", Err: errors.Join(err, derr)}
 	}
 	return err
-}
-
-// detach sends Detach and waits for it until ctx ends. The request runs on its own goroutine, because a transport that blocks can hold a write, and the stream close a cancellation starts, past ctx.
-func (f *frontend) detach(ctx context.Context) error {
-	done := make(chan error, 1)
-	go func() {
-		_, err := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{})
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		return err
-	case <-ctx.Done():
-		select {
-		case err := <-done:
-			return err
-		default:
-			return &Error{Kind: ErrConnect, Op: "detach", Err: ctx.Err()}
-		}
-	}
 }
 
 // observe marks the world lost when err shows that the service incarnation or the attachment is gone: a File failure that says so, or a Link failure that is not retryable, such as LeaseExpired or StaleGeneration on a redial.
@@ -311,12 +291,9 @@ func (f *frontend) stop() error {
 	context.AfterFunc(ctx, f.cancel)
 	// Detach drops every reference and handle the attachment holds, so nothing queued needs sending.
 	f.stopDrain()
-	select {
-	case <-f.drained:
-	case <-ctx.Done():
-	}
+	<-f.drained
 	if !f.dead.Load() {
-		if err := f.detach(ctx); err != nil {
+		if _, err := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{}); err != nil {
 			errs = append(errs, &Error{Kind: ErrConnect, Op: "detach", Err: err})
 		}
 	}
@@ -324,19 +301,19 @@ func (f *frontend) stop() error {
 	return errors.Join(errs...)
 }
 
-// shutdown ends every request and redial on f.ctx, and closes the stream once no redial holds it, without waiting for the transport. client returns no stream after it.
+// shutdown ends every request and redial on f.ctx and closes the stream. client returns no stream after it.
 func (f *frontend) shutdown() {
 	f.cancel()
-	go f.drop()
+	f.drop()
 }
 
-// drop closes the stream without waiting for the transport, so the next request redials.
+// drop closes the stream, which never waits for the transport, so the next request redials.
 func (f *frontend) drop() {
 	f.connTurn <- struct{}{}
 	c := f.conn
 	f.conn = nil
 	<-f.connTurn
 	if c != nil {
-		go c.Close()
+		c.Close()
 	}
 }

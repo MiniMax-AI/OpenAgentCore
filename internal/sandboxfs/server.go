@@ -33,7 +33,7 @@ type Server struct {
 
 	mu sync.Mutex
 	// streams holds the newest stream of each attachment, kept after it ends
-	// until the attachment's lease has ended too.
+	// until the attachment's lease has ended and the stream has settled.
 	streams map[streamKey]*stream
 
 	awaitPredecessor func() // test seam: runs when a request of a successor starts waiting
@@ -106,12 +106,12 @@ func (s *Server) Serve(ctx context.Context, conn io.ReadWriteCloser, a Attachmen
 // same stream, was admitted already. st waits for the predecessor to drain
 // when the predecessor has run a request; otherwise the predecessor never will,
 // and st waits for what the predecessor was waiting for. It forgets each
-// attachment whose lease has ended and whose newest stream has drained.
+// attachment whose lease has ended and whose newest stream has settled.
 func (s *Server) admit(st *stream) (prev *stream, ok bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for k, e := range s.streams {
-		if closed(e.a.Lease.Done()) && closed(e.drained) {
+		if closed(e.a.Lease.Done()) && e.settled() {
 			delete(s.streams, k)
 		}
 	}
@@ -157,6 +157,13 @@ func (st *stream) start(ctx context.Context) bool {
 	}
 	st.started.Store(true)
 	return true
+}
+
+// settled reports whether st has drained and so has every stream admitted
+// before it that ran a request. Until then the attachment's entry carries the
+// fence a later stream must wait behind.
+func (st *stream) settled() bool {
+	return closed(st.drained) && (st.after == nil || closed(st.after))
 }
 
 func closed(c <-chan struct{}) bool {
