@@ -153,14 +153,15 @@ func TestServesEachProtocolThroughTheRelay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := files.Create(ctx, &sandboxfs.CreateRequest{Parent: attached.Root.Node, Name: []byte("note"), Mode: 0o644, Access: sandboxfs.AccessReadWrite, Exclusive: true})
-	if err != nil {
+	var handles sandboxfs.HandleIDs
+	note := handles.Next()
+	if _, err := files.Create(ctx, &sandboxfs.CreateRequest{Handle: note, Parent: attached.Root.Node, Name: []byte("note"), Mode: 0o644, Access: sandboxfs.AccessReadWrite, Exclusive: true}); err != nil {
 		t.Fatal(err)
 	}
-	if w, err := files.Write(ctx, &sandboxfs.WriteRequest{Handle: created.Handle, Data: []byte("hello")}); err != nil || w.Written != 5 {
+	if w, err := files.Write(ctx, &sandboxfs.WriteRequest{Handle: note, Data: []byte("hello")}); err != nil || w.Written != 5 {
 		t.Fatalf("write: %+v, %v", w, err)
 	}
-	if r, err := files.Read(ctx, &sandboxfs.ReadRequest{Handle: created.Handle, Size: 64}); err != nil || string(r.Data) != "hello" {
+	if r, err := files.Read(ctx, &sandboxfs.ReadRequest{Handle: note, Size: 64}); err != nil || string(r.Data) != "hello" {
 		t.Fatalf("read: %+v, %v", r, err)
 	}
 	if b, err := os.ReadFile(filepath.Join(root, "note")); err != nil || string(b) != "hello" {

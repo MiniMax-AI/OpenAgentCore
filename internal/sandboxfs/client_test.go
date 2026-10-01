@@ -5,17 +5,14 @@ import (
 	"errors"
 	"net"
 	"testing"
-
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
 // A cancellation that arrives after the frame is written cancels the request
 // and leaves the stream open.
 func TestCancelAfterWriteKeepsStream(t *testing.T) {
 	cc, sc := net.Pipe()
-	a := Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: "world"}}}
-	go Serve(context.Background(), sc, &describer{}, a)
+	a := testAttachment()
+	go NewServer(&describer{}).Serve(context.Background(), sc, a, 1)
 	c := NewClient(cc)
 	defer c.Close()
 
@@ -44,8 +41,8 @@ func (finisher) Describe(ctx context.Context, _ Attachment, _ *DescribeRequest) 
 // An interrupt cancels the request and still returns its own outcome.
 func TestInterruptReturnsOutcome(t *testing.T) {
 	cc, sc := net.Pipe()
-	a := Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: "world"}}}
-	go Serve(context.Background(), sc, finisher{}, a)
+	a := testAttachment()
+	go NewServer(finisher{}).Serve(context.Background(), sc, a, 1)
 	c := NewClient(cc)
 	defer c.Close()
 

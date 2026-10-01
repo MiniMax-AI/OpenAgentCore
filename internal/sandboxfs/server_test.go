@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +12,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
+
+func testAttachment() Attachment {
+	return Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: "world"}}}
+}
 
 // describer answers Describe and counts the calls.
 type describer struct {
@@ -29,8 +34,8 @@ func TestUnreadResponsesStopAdmission(t *testing.T) {
 	cc, sc := net.Pipe()
 	svc := &describer{}
 	served := make(chan error, 1)
-	a := Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: "world"}}}
-	go func() { served <- Serve(context.Background(), sc, svc, a) }()
+	a := testAttachment()
+	go func() { served <- NewServer(svc).Serve(context.Background(), sc, a, 1) }()
 	var read atomic.Int32 // net.Pipe completes a write once the server has read it
 	go func() {
 		for id := uint64(1); id <= 2*MaxInFlight; id++ {
@@ -60,8 +65,8 @@ func TestRequestIDsMustIncrease(t *testing.T) {
 	defer cc.Close()
 	svc := &describer{}
 	served := make(chan error, 1)
-	a := Attachment{ID: sandboxwire.NewID(), ServerInstanceID: testInstance, Lease: context.Background(), Exports: []sandboxlink.ExportGrant{{ID: "world"}}}
-	go func() { served <- Serve(context.Background(), sc, svc, a) }()
+	a := testAttachment()
+	go func() { served <- NewServer(svc).Serve(context.Background(), sc, a, 1) }()
 	describe := sandboxwire.Frame{Type: uint16(OpDescribe), RequestID: 5}
 	if err := sandboxwire.WriteFrame(cc, describe); err != nil {
 		t.Fatal(err)
@@ -79,5 +84,236 @@ func TestRequestIDsMustIncrease(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatalf("a repeated RequestID kept the stream after %d calls", svc.calls.Load())
+	}
+}
+
+// ordered holds Attach and Open until the test lets them finish, whatever
+// their context says, as a handler inside a system call does. It records the
+// attachment and the handles they create.
+type ordered struct {
+	Service
+	entered, proceed chan struct{}
+
+	mu       sync.Mutex
+	attached bool
+	handles  map[HandleID]bool
+}
+
+func newOrdered() *ordered {
+	return &ordered{entered: make(chan struct{}), proceed: make(chan struct{}), handles: map[HandleID]bool{}}
+}
+
+func (o *ordered) hold() {
+	close(o.entered)
+	<-o.proceed
+}
+
+func (o *ordered) Describe(context.Context, Attachment, *DescribeRequest) (*DescribeResponse, error) {
+	return &DescribeResponse{ServerInstanceID: testInstance, Capabilities: testCaps}, nil
+}
+
+func (o *ordered) Attach(context.Context, Attachment, *AttachRequest) (*AttachResponse, error) {
+	o.hold()
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.attached = true
+	return &AttachResponse{Root: Entry{Node: testNode, Attr: testDirAttr}}, nil
+}
+
+func (o *ordered) Detach(context.Context, Attachment, *DetachRequest) (*DetachResponse, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.attached {
+		return nil, NewFailure(CodeStaleAttachment, sandboxwire.EffectNone, "not attached")
+	}
+	o.attached = false
+	return &DetachResponse{}, nil
+}
+
+func (o *ordered) Open(_ context.Context, _ Attachment, r *OpenRequest) (*OpenResponse, error) {
+	o.hold()
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.handles[r.Handle] = true
+	return &OpenResponse{}, nil
+}
+
+func (o *ordered) Release(_ context.Context, _ Attachment, r *ReleaseRequest) (*ReleaseResponse, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.handles[r.Handle] {
+		return nil, NewFailure(CodeStaleHandle, sandboxwire.EffectNone, "no such handle")
+	}
+	delete(o.handles, r.Handle)
+	return &ReleaseResponse{}, nil
+}
+
+// leftover reports whether an attachment or handle remains.
+func (o *ordered) leftover() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.attached || len(o.handles) > 0
+}
+
+func serveStream(t *testing.T, srv *Server, a Attachment, seq uint64) (*Client, chan error) {
+	cc, sc := net.Pipe()
+	served := make(chan error, 1)
+	go func() { served <- srv.Serve(context.Background(), sc, a, seq) }()
+	c := NewClient(cc)
+	t.Cleanup(func() { c.Close() })
+	return c, served
+}
+
+// A request still running on a failed stream finishes before the successor
+// stream of its attachment dispatches the cleanup for it, so the cleanup
+// finds what the request created.
+func TestSuccessorWaitsForPredecessor(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name            string
+		acquire, settle func(*Client) error
+	}{
+		{"Attach then Detach",
+			func(c *Client) error { _, err := c.Attach(ctx, &AttachRequest{Export: "world"}); return err },
+			func(c *Client) error { _, err := c.Detach(ctx, &DetachRequest{}); return err }},
+		{"Open then Release",
+			func(c *Client) error {
+				_, err := c.Open(ctx, &OpenRequest{Handle: 7, Node: testNode, Access: AccessRead})
+				return err
+			},
+			func(c *Client) error { _, err := c.Release(ctx, &ReleaseRequest{Handle: 7}); return err }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newOrdered()
+			srv := NewServer(svc)
+			waiting := make(chan struct{})
+			srv.awaitPredecessor = func() { close(waiting) }
+			a := testAttachment()
+
+			first, served := serveStream(t, srv, a, 1)
+			acquired := make(chan error, 1)
+			go func() { acquired <- tc.acquire(first) }()
+			<-svc.entered
+
+			// The client gives up on the first stream and resumes on a second.
+			second, _ := serveStream(t, srv, a, 2)
+			settled := make(chan error, 1)
+			go func() { settled <- tc.settle(second) }()
+			select {
+			case <-waiting:
+			case err := <-settled:
+				t.Fatalf("the successor served the cleanup while the predecessor ran: %v", err)
+			}
+			close(svc.proceed)
+
+			if err := <-settled; err != nil {
+				t.Fatalf("cleanup on the successor: %v", err)
+			}
+			if err := <-acquired; !errors.Is(err, ErrTransport) {
+				t.Fatalf("the superseded stream answered: %v", err)
+			}
+			if err := <-served; !errors.Is(err, ErrSuperseded) {
+				t.Fatalf("superseded Serve returned %v", err)
+			}
+			if svc.leftover() {
+				t.Fatal("the cleanup left state behind")
+			}
+		})
+	}
+}
+
+// A stream Link bound before the attachment's newest stream, but whose handler
+// reaches Serve later, is refused without dispatching anything, also after the
+// newer stream ended. The newer stream keeps serving.
+func TestOlderBindIsRefused(t *testing.T) {
+	ctx := context.Background()
+	svc := &describer{}
+	srv := NewServer(svc)
+	a := testAttachment()
+	newer, served := serveStream(t, srv, a, 2)
+	if _, err := newer.Describe(ctx, &DescribeRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	// The older stream's client is gone, so a Serve that admitted it would
+	// end at once with EOF instead of ErrSuperseded.
+	late := func() error {
+		cc, sc := net.Pipe()
+		cc.Close()
+		return srv.Serve(ctx, sc, a, 1)
+	}
+	if err := late(); !errors.Is(err, ErrSuperseded) {
+		t.Fatalf("older stream: %v, want ErrSuperseded", err)
+	}
+	if _, err := newer.Describe(ctx, &DescribeRequest{}); err != nil {
+		t.Fatalf("newer stream after the refusal: %v", err)
+	}
+	newer.Close()
+	<-served
+	if err := late(); !errors.Is(err, ErrSuperseded) || svc.calls.Load() != 2 {
+		t.Fatalf("older stream after the newer ended: %v, %d calls served", err, svc.calls.Load())
+	}
+}
+
+// On a healthy stream, a Release of a handle whose Open still runs, as after
+// the client cancelled the Open, waits and releases what the Open created. A
+// second acquisition of the pending ID is refused without effect.
+func TestReleaseFollowsPendingAcquisition(t *testing.T) {
+	svc := newOrdered()
+	cc, sc := net.Pipe()
+	defer cc.Close()
+	go NewServer(svc).Serve(context.Background(), sc, testAttachment(), 1)
+	responses := make(chan sandboxwire.Frame, 8)
+	go func() {
+		for {
+			f, err := sandboxwire.ReadFrame(cc, sandboxwire.MaxPayload)
+			if err != nil {
+				return
+			}
+			responses <- f
+		}
+	}()
+	send := func(id uint64, r Request) {
+		payload, err := encodeRequest(r)
+		if err == nil {
+			err = sandboxwire.WriteFrame(cc, sandboxwire.Frame{Type: uint16(r.Op()), RequestID: id, Payload: payload})
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	outcomes := map[uint64]*Failure{}
+	receive := func() uint64 {
+		f := <-responses
+		_, fail, err := decodeResponse(Op(f.Type^sandboxwire.ResponseType(0)), f.Payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		outcomes[f.RequestID] = fail
+		return f.RequestID
+	}
+
+	open := &OpenRequest{Handle: 7, Node: testNode, Access: AccessRead}
+	send(1, open)
+	<-svc.entered
+	send(2, &CancelRequestRequest{Target: 1})
+	send(3, &ReleaseRequest{Handle: 7})
+	send(4, open)
+	send(5, &DescribeRequest{})
+	// The server dispatches in order, so the Describe answer shows that it
+	// has dispatched the Release.
+	for receive() != 5 {
+	}
+	if _, ok := outcomes[3]; ok {
+		t.Fatal("Release answered while its Open ran")
+	}
+	if f := outcomes[4]; f == nil || f.Code != CodeInvalidArgument || f.Effect != sandboxwire.EffectNone {
+		t.Fatalf("second Open of a pending ID: %v", f)
+	}
+	close(svc.proceed)
+	for len(outcomes) < 5 {
+		receive()
+	}
+	if f := outcomes[3]; f != nil || svc.leftover() {
+		t.Fatalf("Release after the Open: %v; handles left: %v", f, svc.leftover())
 	}
 }

@@ -4,12 +4,13 @@ package worldfs
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 )
 
-// cleanup is a Release or ReleaseDir of a handle the kernel closed.
+// cleanup is a Release or ReleaseDir of a handle the kernel closed, or of a handle ID whose acquisition may have taken effect without a response.
 type cleanup struct {
 	handle sandboxfs.HandleID
 	dir    bool
@@ -95,7 +96,14 @@ func (f *frontend) sendForgets() bool {
 	return true
 }
 
-// release sends a Release or ReleaseDir for a handle the kernel closed. One that certainly did nothing and may succeed later is queued for the drainer; one that may have reached the service is never sent again.
+// settle releases the handle ID of an acquisition that failed after it may have taken effect. Sent after the acquisition, on its stream or on a successor the service fences behind it, the Release finds whatever the acquisition left. The acquisition itself is never sent again.
+func (f *frontend) settle(c cleanup, err error) {
+	if !noEffect(err) {
+		f.release(c)
+	}
+}
+
+// release sends a Release or ReleaseDir for a handle the kernel closed, or for an acquisition in doubt. One the service has not answered is queued for the drainer.
 func (f *frontend) release(c cleanup) {
 	if f.sendRelease(f.ctx, c) {
 		return
@@ -109,7 +117,7 @@ func (f *frontend) release(c cleanup) {
 	f.mu.Unlock()
 }
 
-// sendRelease sends c and reports false when it must be sent again.
+// sendRelease sends c and reports false when it must be sent again: when it certainly did nothing and may succeed later, or when the stream failed before its answer arrived. The frontend never reuses a handle ID, so a repeat of a Release that ran finds StaleHandle, which settles it as success does.
 func (f *frontend) sendRelease(ctx context.Context, c cleanup) bool {
 	var err error
 	if c.dir {
@@ -117,5 +125,5 @@ func (f *frontend) sendRelease(ctx context.Context, c cleanup) bool {
 	} else {
 		_, err = call(f, ctx, (*sandboxfs.Client).Release, &sandboxfs.ReleaseRequest{Handle: c.handle})
 	}
-	return err == nil || !retryable(err) || f.dead.Load() || f.closed.Load()
+	return err == nil || !retryable(err) && !errors.Is(err, sandboxfs.ErrTransport) || f.dead.Load() || f.closed.Load()
 }

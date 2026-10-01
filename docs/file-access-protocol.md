@@ -1,6 +1,6 @@
 # File access protocol
 
-The File access protocol is how a Runtime reads and changes the files of a sandbox. The Sandbox I/O service in the sandbox serves it, and the Runtime is its client. It is a node and handle protocol shaped like the FUSE low-level operations: lookups acquire node references, opens return handles, reads and writes take offsets, directory reads resume at cookies, and locks work against the sandbox's own processes. Phase 1 serves the [Uncached](#uncached-profile) profile only, with no change stream.
+The File access protocol is how a Runtime reads and changes the files of a sandbox. The Sandbox I/O service in the sandbox serves it, and the Runtime is its client. It is a node and handle protocol shaped like the FUSE low-level operations: lookups acquire node references, opens create handles under IDs the client chooses, reads and writes take offsets, directory reads resume at cookies, and locks work against the sandbox's own processes. Phase 1 serves the [Uncached](#uncached-profile) profile only, with no change stream.
 
 [`internal/sandboxfs/protocol.go`](../internal/sandboxfs/protocol.go) is the authored definition: message tags, payload layouts, validators and the `Service` interface. The same package holds the generic client and server. [`apps/sandboxio/internal/fileservice`](../apps/sandboxio/internal/fileservice) is the Linux service. Frames use the shared [framing](sandbox-link-protocol.md#framing), and the Link layer supplies the authenticated attachment of each stream.
 
@@ -8,7 +8,7 @@ The File access protocol is how a Runtime reads and changes the files of a sandb
 
 - A stream belongs to one attachment, which Link authenticates and hands to the server as a `sandboxfs.Attachment`: its ID, the `ServerInstanceID` the stream was bound to, its lease and the exports it is granted. No request names an attachment, an OS user or a credential.
 - Request IDs follow the [framing](sandbox-link-protocol.md#framing) rule, and a response carries its request's RequestID. Requests on one stream run concurrently, so responses can arrive in any order. The protocol has no events.
-- An attachment attaches to one export. Its node references, handles and locks live in the service until it detaches, its lease ends or the service restarts. A new stream of the same attachment in the same incarnation continues with them.
+- An attachment attaches to one export. Its node references, handles and locks live in the service until it detaches, its lease ends or the service restarts. A new stream of the same attachment in the same incarnation continues with them, after the [succession fence](#stream-succession).
 - A service incarnation is named by `ServerInstanceID`. A request on a stream bound to another incarnation fails with `InstanceChanged`, and nothing is reopened automatically.
 
 ## Implement a client
@@ -19,8 +19,10 @@ The Go client is `sandboxfs.NewClient(stream)`. It has one method per operation,
 2. `Attach` an export and keep the root `NodeRef`.
 3. `Lookup`, `Walk`, `Create`, `Mkdir`, `Symlink`, `Link` and `ReadDir` with `WithAttrs` each acquire one reference on every node they return. Release references with `Forget` when the kernel forgets them.
 4. `Walk` stops after a symlink. Resolve the link yourself, relative to the view, with `Readlink` and further walks.
-5. `Open`, `Create` and `OpenDir` return handles. Send `Flush` on each close of a descriptor for the handle, and `Release` or `ReleaseDir` when the last one closes.
-6. Read the `Effect` of every failure. After `EffectPossible`, the request may have taken effect: never replay a mutation automatically. Report the failure, or inspect the state with `GetAttr` or `Lookup` first.
+5. `Open`, `Create` and `OpenDir` open a handle under a [handle ID](#handles) the client chooses. Keep one `sandboxfs.HandleIDs` per attachment, across all of its streams, and take each ID from it. Send `Flush` on each close of a descriptor for the handle, and `Release` or `ReleaseDir` when the last one closes.
+6. Set `Append` on each `Write` made while the descriptor is in append mode. Append is a property of the write, not of the handle.
+7. Read the `Effect` of every failure. After `EffectPossible`, the request may have taken effect: never replay a mutation automatically. Report the failure, or inspect the state with `GetAttr` or `Lookup` first. A failure with a [retryable](#failures) code and `EffectNone` may be resent unchanged.
+8. Clean up an acquisition whose outcome is unknown, because its reply was lost or its call was cancelled, with `Release` or `ReleaseDir` of its ID. After a stream fails, resume on a new stream of the same attachment, which the service serves only after the failed stream's requests have finished, and clean up there: an uncertain `Attach` with `Detach`, and each uncertain acquisition with `Release` or `ReleaseDir`. [Handles](#handles) says what the cleanup proves.
 
 Cancelling a call's context returns at once with `Cancelled` or `DeadlineExceeded`. A call cancelled before its request is written fails with `EffectNone`. After the request is written, the client sends `CancelRequest` for it and discards the late response, and the failure is `EffectNone` for a [side-effect-free request](#effects-and-cancellation) and `EffectPossible` for every other one. Cancelling a call while its request is being written fails the stream instead, because a partial frame cannot be withdrawn. A cancel that races the completion of a write may still fail the stream, and the requests in flight then fail with `EffectPossible`.
 
@@ -30,13 +32,15 @@ When the stream fails, every request in flight fails with `Unknown` and `EffectP
 
 ## Implement a service
 
-Implement `sandboxfs.Service` and serve each stream with `sandboxfs.Serve(ctx, stream, service, attachment)`. `Serve`:
+Implement `sandboxfs.Service`, create one `sandboxfs.NewServer(service)`, and serve every stream with `server.Serve(ctx, stream, attachment, seq)`, where `seq` is the stream's [Link bind sequence](sandbox-link-protocol.md#implement-a-serve-peer). One `Server` serves all of a service's streams, because the [succession fence](#stream-succession) spans them. `Serve`:
 
 - refuses an attachment without an ID, a `ServerInstanceID`, a lease or at least one valid export grant with unique IDs;
+- admits one stream per `(ServerInstanceID, AttachmentID)` at a time, in bind order: a successor stream waits, without a deadline, until its predecessor has drained, the superseded `Serve` returns `sandboxfs.ErrSuperseded`, and so does the `Serve` of a stream bound before one already admitted, without dispatching any of its requests;
 - decodes and validates each request, and answers a malformed payload with `InvalidArgument` and `EffectNone`;
 - ends the stream on a framing violation: an unknown tag, a frame that is not a request, or a RequestID that does not increase;
 - holds up to `sandboxfs.MaxInFlight` (256) requests, each from admission until its response is written, and answers any more with `ResourceExhausted` and `EffectNone`, so a `CancelRequest` arrives while the client reads responses;
 - answers `CancelRequest` itself by cancelling the target's context;
+- refuses an `Open`, `Create` or `OpenDir` whose handle ID another acquisition on the stream is still using, with `InvalidArgument` and `EffectNone`, and runs a `Release` or `ReleaseDir` of an ID only after the running acquisition of that ID has finished. Together with the succession fence, a service never runs two acquisitions of one ID at once, or a release concurrently with the acquisition of its ID;
 - returns a method's `*Failure` as the typed failure, and reports any other error, or a response that fails validation, as `Unknown` with `EffectPossible`;
 - cancels every request's context when the stream ends.
 
@@ -44,6 +48,7 @@ A service must:
 
 - generate a new `ServerInstanceID` whenever it loses its node and handle tables, and answer a request whose `Attachment.ServerInstanceID` is not its own with `InstanceChanged`;
 - answer `StaleAttachment` while the attachment is not attached or after its lease ends, and `StaleNode` or `StaleHandle` for a reference or handle the attachment does not hold. A node ID is reused only with a new generation;
+- reserve the handle ID of an `Open`, `Create` or `OpenDir` atomically before any file-system effect, as [Handles](#handles) describes, and publish every state a request creates before its method returns;
 - call `Capabilities.Admit(request, readOnly)` before running a request and return the failure it reports. Limits that depend on service state, such as `MaxOpenHandles`, stay with the service;
 - advertise only what it enforces, and advertise locks only when they interoperate with native processes in the sandbox;
 - act as its own process identity, never as an identity a request supplies, and apply requested permission bits exactly;
@@ -57,7 +62,7 @@ A service must:
 - Each node holds an `O_PATH|O_NOFOLLOW` descriptor. In an attachment a node is one mount ID, device and inode, so hard links share a node while a bind mount and its source stay two. The mount ID comes from `statx` with `STATX_MNT_ID`, or from the `mnt_id` line of `/proc/self/fdinfo/<fd>` on kernels older than 5.8.
 - A lookup opens one component with `openat` and `O_NOFOLLOW` on its parent's descriptor. A symlink, including a proc magic link such as `/proc/<pid>/cwd`, is a node of its own and is never traversed: `Lookup` and `Readlink` return the link itself, a directory operation on it fails with `Errno` `NotDirectory`, and `Open` fails with `SymlinkLoop`.
 - Operations on a node, such as opening, truncating, changing its mode or times and linking it, go through the `/proc/self/fd` name of the descriptor the service holds for it. That name resolves to the descriptor's own object, never to a symlink's target, and an open through it first checks the object's file type.
-- An open handle holds its own descriptor, so it keeps working after its file is unlinked or renamed.
+- An open handle holds its own descriptor, so it keeps working after its file is unlinked or renamed. Files are opened without `O_APPEND`. A handle's writes run one at a time, and each first sets or clears the descriptor's `O_APPEND` to match its `Append`; an append is then one `write` call. The service does not use `pwritev2` with `RWF_APPEND`, which overlayfs on some kernels drops, writing at the offset instead. A short append is reported as it is and never continued by another append.
 - `Rename` uses `renameat2`. The service declares `RenameNoReplace` and `RenameExchange` only when a probe at start succeeds.
 - `LockFlock` locks the handle's descriptor, so it interoperates with native `flock`. `POSIXLocks` is false, and `GetLock` and `LockPOSIX` return `Unsupported`.
 - `ReadDir` cookies are the kernel's directory offsets. `Attr.Ino` combines the device and the inode number as go-fuse's loopback does.
@@ -79,14 +84,14 @@ Requests use tags 1 to 30; the response to tag `t` uses `t | 0x8000`.
 | 6 | `GetAttr` | `Target` | `Attr` | Attributes of a node or open handle |
 | 7 | `SetAttr` | `Target`, `Set`, selected values | `Attr` | Change the selected attributes |
 | 8 | `Access` | `Node`, `Mask` | – | Check permissions as the service's identity |
-| 9 | `Open` | `Node`, `Access`, `Flags` | `Handle` | Open a regular file |
-| 10 | `Create` | `Parent`, `Name`, `Mode`, `Access`, `Flags`, `Exclusive` | `Entry`, `Handle` | Create and open a regular file |
+| 9 | `Open` | `Handle`, `Node`, `Access`, `Flags` | – | Open a regular file as `Handle` |
+| 10 | `Create` | `Handle`, `Parent`, `Name`, `Mode`, `Access`, `Flags`, `Exclusive` | `Entry` | Create and open a regular file as `Handle` |
 | 11 | `Read` | `Handle`, `Offset`, `Size` | `Data` | Fewer bytes than asked means end of file |
-| 12 | `Write` | `Handle`, `Offset`, `Data` | `Written`, optional `Failure` | Write at `Offset`, or append on an append-opened handle |
+| 12 | `Write` | `Handle`, `Offset`, `Append`, `Data` | `Written`, optional `Failure` | Write at `Offset`, or at the end of the file when `Append` is set |
 | 13 | `Flush` | `Handle`, `Owner` | – | One descriptor for the handle closed |
 | 14 | `Fsync` | `Handle`, `DataOnly` | – | Make the file's data, and its metadata unless `DataOnly`, durable |
 | 15 | `Release` | `Handle` | – | Close a file handle |
-| 16 | `OpenDir` | `Node` | `Handle` | Open a directory |
+| 16 | `OpenDir` | `Handle`, `Node` | – | Open a directory as `Handle` |
 | 17 | `ReadDir` | `Handle`, `Cookie`, `Limit`, `WithAttrs` | `Entries`, `End` | Read entries after `Cookie` |
 | 18 | `ReleaseDir` | `Handle` | – | Close a directory handle |
 | 19 | `Mkdir` | `Parent`, `Name`, `Mode` | `Entry` | Create a directory |
@@ -119,19 +124,17 @@ GetAttrResponse     Attr
 SetAttr             Target, Set u32, then for each selected bit in order: Size u64, Mode u32, UID u32, GID u32, Atime Timestamp, Mtime Timestamp
 SetAttrResponse     Attr
 Access              Node NodeRef, Mask u32; response (no fields)
-Open                Node NodeRef, Access enum, Flags u32
-OpenResponse        Handle u64
-Create              Parent NodeRef, Name bytes, Mode u32, Access enum, Flags u32, Exclusive bool
-CreateResponse      Entry, Handle u64
+Open                Handle u64, Node NodeRef, Access enum, Flags u32; response (no fields)
+Create              Handle u64, Parent NodeRef, Name bytes, Mode u32, Access enum, Flags u32, Exclusive bool
+CreateResponse      Entry
 Read                Handle u64, Offset u64, Size u32
 ReadResponse        Data bytes
-Write               Handle u64, Offset u64, Data bytes
+Write               Handle u64, Offset u64, Append bool, Data bytes
 WriteResponse       Written u32, Failure optional Failure
 Flush               Handle u64, Owner u64; response (no fields)
 Fsync               Handle u64, DataOnly bool; response (no fields)
 Release             Handle u64; response (no fields)
-OpenDir             Node NodeRef
-OpenDirResponse     Handle u64
+OpenDir             Handle u64, Node NodeRef; response (no fields)
 ReadDir             Handle u64, Cookie u64, Limit u32, WithAttrs bool
 ReadDirResponse     Entries count of DirEntry, End bool
 ReleaseDir          Handle u64; response (no fields)
@@ -154,13 +157,13 @@ SetLock             Handle u64, Kind enum, Owner u64, Lock, Wait bool; response 
 CancelRequest       Target u64; response (no fields)
 ```
 
-[`testdata`](../internal/sandboxfs/testdata) holds annotated golden frames of `Describe`, `Walk`, `Create`, a short `Write`, `ReadDir` with a cookie, `Rename` and a failure.
+[`testdata`](../internal/sandboxfs/testdata) holds annotated golden frames of `Describe`, `Walk`, `Create`, an append `Write`, a short `Write`, `ReadDir` with a cookie, `Rename` and a failure.
 
 ### Shared types
 
 ```text
 NodeRef       ID u64, Generation u64                  // both nonzero
-HandleID      u64                                     // nonzero, opaque
+HandleID      u64                                     // nonzero, chosen by the client
 Timestamp     Sec i64, Nsec u32                       // Nsec below one billion
 Attr          Ino u64, Mode u32, Nlink u32, UID u32, GID u32, Rdev u64, Size u64, Blocks u64, Blksize u32, Atime Timestamp, Mtime Timestamp, Ctime Timestamp
 Entry         Node NodeRef, Attr
@@ -192,7 +195,7 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 | `MaxReadDirBytes` | u32 | Largest `ReadDir` limit, 1 to 256 KiB |
 | `MaxOpenHandles` | u32 | Most open handles per attachment, at least 1 |
 | `ReadOnly` | bool | The service accepts only read-only attachments |
-| `AtomicAppend` | bool | Appends from several handles never interleave within a write |
+| `AtomicAppend` | bool | `Write` supports `Append`, and appends from several handles never interleave within a write |
 | `AtomicRename` | bool | `RenameReplace` replaces the destination atomically |
 | `RenameNoReplace`, `RenameExchange` | bool | The rename mode is supported |
 | `HardLinks`, `Symlinks` | bool | `Link` and `Symlink` are supported |
@@ -237,13 +240,28 @@ Unknown bits are rejected, `AttrAtime` excludes `AttrAtimeNow` and `AttrMtime` e
 ### Files
 
 - `AccessMode` is `AccessRead` (1), `AccessWrite` (2) or `AccessReadWrite` (3).
-- `OpenFlags` are `OpenAppend` (1), `OpenTruncate` (2), `OpenNoFollow` (4), `OpenSync` (8) and `OpenDataSync` (16); unknown flags are rejected.
+- `OpenFlags` are `OpenTruncate` (1), `OpenNoFollow` (2), `OpenSync` (4) and `OpenDataSync` (8); unknown flags are rejected.
 - `Open` opens a regular file node. A node is an object, not a path, so `Open` never follows a symlink: a directory fails with `Errno` `IsDirectory`, a symlink with `SymlinkLoop`, and a special file with `Unsupported`.
 - `Create` creates a regular file with exactly the requested permission bits; no umask applies. With `Exclusive`, an existing entry fails with `Errno` `Exists`. Without it, an existing regular file is opened, and `OpenTruncate` truncates it.
-- `Read` takes an offset up to 2^63−1. A positioned `Write` must end at or before 2^63−1, or it fails with `InvalidArgument`. A handle opened with `OpenAppend` appends each write atomically and ignores `Offset`.
+- `Read` takes an offset up to 2^63−1. A positioned `Write` must end at or before 2^63−1, or it fails with `InvalidArgument`.
+- A `Write` with `Append` ignores `Offset` and writes its data atomically at the end of the file. Any handle that may write takes both kinds of write, in any order, as a native descriptor does when `fcntl` sets or clears `O_APPEND`. A service without `AtomicAppend` refuses `Append` with `Unsupported`.
 - A successful `WriteResponse` carries the exact number of bytes written. When a write stops after a nonzero prefix, `Written` counts the prefix and `Failure` says why it stopped; a write that wrote nothing is a failure response.
 - `Flush` is neither `Fsync` nor `Release`. It reports the errors of closing one descriptor for the handle, and `Owner` names the closing lock owner.
 - A file operation on a directory handle, or a directory operation on a file handle, fails with `Errno` `IsDirectory`, `NotDirectory` or `BadDescriptor`.
+
+### Handles
+
+- The client chooses the `HandleID` of each `Open`, `Create` and `OpenDir`: nonzero, and never used before in the attachment, on any of its streams. `sandboxfs.HandleIDs` allocates IDs in increasing order.
+- The service reserves the ID before the request has any file-system effect. A reserved ID counts toward `MaxOpenHandles` while its acquisition runs. An acquisition whose ID is reserved or open fails with `InvalidArgument` and `EffectNone`.
+- Other requests that name a reserved ID fail with `StaleHandle`, except `Release` and `ReleaseDir`: the server runs them only after the acquisition of that ID has finished, so they close the handle it opened.
+- `Release` or `ReleaseDir` of an ID settles an acquisition whose outcome is unknown, whether its reply was lost with the stream or its call was cancelled. Success or `StaleHandle` proves that no handle with that ID remains. It does not prove that the acquisition changed nothing: a `Create` may have created its file, and a truncating `Open` may have truncated it.
+- A node reference acquired by a `Create`, `Lookup`, `Walk`, `Mkdir`, `Symlink`, `Link` or `ReadDir` with `WithAttrs` whose reply was lost cannot be forgotten, because the client never learned the `NodeRef`. It stays held, with the descriptor the service keeps for its node, until the attachment detaches or its lease ends. Only the requests in flight when a stream fails, at most `MaxInFlight`, leave such references. To cancel one of these requests without losing its reply, interrupt it with `sandboxfs.WithInterrupt` and forget what it returns.
+
+### Stream succession
+
+For each `(ServerInstanceID, AttachmentID)` the server admits one File stream at a time. Before it dispatches any request of a successor stream, it stops admission on the predecessor, closes and cancels the predecessor's requests, and waits for every admitted handler and state-publication task to finish. The predecessor's replies are discarded. The gate exists before `Attach` creates any state.
+
+Succession follows Link's bind order, not the order in which streams reach the server: a stream bound before one already admitted is refused before it dispatches anything. No timeout ends the wait, because a handler may still change state after its cancellation. Effects that completed stay. A request the successor sends therefore sees everything its predecessor's requests did: a `Detach` cleans up an `Attach` whose reply was lost, and a `Release` cleans up a lost acquisition.
 
 ### Directories
 
@@ -275,18 +293,20 @@ Failure
 
 | Code | Name | Returned when |
 | --- | --- | --- |
-| 1 | `InvalidArgument` | A payload fails validation, a request exceeds a declared limit, the export is unknown, the attachment is already attached, or `Forget` exceeds the references held |
+| 1 | `InvalidArgument` | A payload fails validation, a request exceeds a declared limit, the export is unknown, the attachment is already attached, an acquisition names a reserved or open handle ID, or `Forget` exceeds the references held |
 | 2 | `Unsupported` | The capabilities do not declare the operation or option, or the request needs a feature phase 1 excludes |
 | 3 | `Unauthorized` | `Attach` names an export the Link binding does not grant, or asks for write access to a read-only grant |
 | 4 | `StaleAttachment` | The attachment is not attached, has detached or its lease ended |
 | 5 | `InstanceChanged` | The stream is bound to another service incarnation |
 | 6 | `StaleNode` | The attachment holds no such `NodeRef` |
 | 7 | `StaleHandle` | The attachment has no such open handle |
-| 8 | `ResourceExhausted` | The stream holds `MaxInFlight` requests, or the attachment has `MaxOpenHandles` handles |
+| 8 | `ResourceExhausted` | The stream holds `MaxInFlight` requests, or the attachment has `MaxOpenHandles` handles, counting reserved IDs |
 | 9 | `Cancelled` | The request was cancelled |
 | 10 | `DeadlineExceeded` | The caller's deadline passed |
 | 11 | `Errno` | A file-system call failed; `Errno` says how |
 | 12 | `Unknown` | The stream failed, or the service failed without a typed error |
+
+`ResourceExhausted` is transient: the same request may succeed later, and `ErrorCode.Retryable` reports it. A client may resend a request that failed with a retryable code and `EffectNone` unchanged, and never resends one that failed with `EffectPossible`. Every other code is final for the request, or reports the caller's own cancellation.
 
 `Errno` is a semantic enum, numbered from 1 in this order: `PermissionDenied`, `OperationNotPermitted`, `NotFound`, `Exists`, `NotDirectory`, `IsDirectory`, `DirectoryNotEmpty`, `InvalidArgument`, `BadDescriptor`, `TooManyOpenFiles`, `NoSpace`, `QuotaExceeded`, `ReadOnlyFilesystem`, `CrossDevice`, `NameTooLong`, `SymlinkLoop`, `FileTooLarge`, `Overflow`, `Busy`, `Again`, `Interrupted`, `IO`, `NoDevice`, `NoSuchDeviceOrAddress`, `BrokenPipe`, `NotSupported`, `NoLocks`, `Deadlock`. Each service converts its native errors; an unknown native error is `IO`, and success is never fabricated.
 
@@ -298,7 +318,7 @@ Every failure carries `EffectNone`, when the request certainly changed nothing, 
 
 An ambiguous mutation is never replayed automatically. This includes `Create`, a truncating `Open`, `SetAttr`, `Write` and a lock acquisition.
 
-`CancelRequest` asks the server to stop an outstanding request. Its acknowledgement is not the target's result and never proves that a mutation did not happen; the target's own response still follows.
+`CancelRequest` asks the server to stop an outstanding request. Its acknowledgement is not the target's result and never proves that a mutation did not happen; the target's own response still follows. A cancelled acquisition is settled with `Release` or `ReleaseDir` of its ID, as [Handles](#handles) describes.
 
 ### Uncached profile
 
@@ -327,4 +347,4 @@ Capabilities may declare smaller limits.
 
 ## Verification
 
-`go test ./internal/sandboxfs` covers the golden frames, a round trip of every message, decode rejection and admission while responses go unread. `go test -run '^$' -fuzz FuzzDecode ./internal/sandboxfs` fuzzes the decoder. `go test ./apps/sandboxio/...` runs the Linux service over an in-memory stream against a temporary export, including exclusive create, atomic append, rename modes, directory paging, the root-escape attempts, opaque symlinks and proc magic links, bind-mount aliases, flock against native `flock`, export grants, an incarnation change and transport loss. The bind-mount test reruns itself under `unshare -Urm` and is skipped where unprivileged user namespaces are unavailable.
+`go test ./internal/sandboxfs` covers the golden frames, a round trip of every message, decode rejection, the retryable codes, admission while responses go unread, the succession fence for `Attach` then `Detach` and `Open` then `Release`, and a `Release` that follows a cancelled, still running `Open`. `go test -run '^$' -fuzz FuzzDecode ./internal/sandboxfs` fuzzes the decoder. `go test ./apps/sandboxio/...` runs the Linux service over an in-memory stream against a temporary export, including exclusive create, per-write and atomic append, a lost `Open` reply released on the next stream, duplicate handle IDs, rename modes, directory paging, the root-escape attempts, opaque symlinks and proc magic links, bind-mount aliases, flock against native `flock`, export grants, an incarnation change and transport loss. The bind-mount test reruns itself under `unshare -Urm` and is skipped where unprivileged user namespaces are unavailable.

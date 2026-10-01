@@ -1,11 +1,12 @@
-# Exclusive Create of an append-mode file.
-00000027                          # PayloadLength 39
+# Exclusive Create of a synchronous-write file as the client's handle 9.
+0000002f                          # PayloadLength 47
 000a                              # MessageType: Create (10)
 0000                              # Flags
 0000000000000003                  # RequestID 3
+0000000000000009                  # Handle 9
 0000000000000001 0000000000000007 # Parent: ID 1, Generation 7
 00000008 6e6f7465732e6d64         # Name "notes.md"
 000001a4                          # Mode 0644
 0003                              # Access: ReadWrite
-00000001                          # Flags: OpenAppend
+00000004                          # Flags: OpenSync
 01                                # Exclusive

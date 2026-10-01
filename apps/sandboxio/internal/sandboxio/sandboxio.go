@@ -85,6 +85,7 @@ func run(ctx context.Context, bootstrapPath string, opt options) error {
 		return &StartupError{StepFileService, err}
 	}
 	defer files.Close()
+	fileServer := sandboxfs.NewServer(files)
 
 	// down records that a link attempt failed since the last accepted Hello,
 	// so each drop is logged once rather than on every reconnect attempt.
@@ -98,8 +99,8 @@ func run(ctx context.Context, bootstrapPath string, opt options) error {
 		// incarnation, so the link announces that one.
 		ServerInstanceID: files.InstanceID(),
 		Services: []sandboxlink.ServiceHandler{
-			{Service: sandboxlink.ServiceFile, Version: sandboxfs.Version, Serve: func(ctx context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
-				sandboxfs.Serve(ctx, s, files, sandboxfs.Attachment{ID: b.AttachmentID, ServerInstanceID: b.ExpectedServerInstanceID, Lease: ctx, Exports: b.Exports})
+			{Service: sandboxlink.ServiceFile, Version: sandboxfs.Version, Serve: func(ctx context.Context, b sandboxlink.Bind, seq uint64, s sandboxlink.Stream) {
+				fileServer.Serve(ctx, s, sandboxfs.Attachment{ID: b.AttachmentID, ServerInstanceID: b.ExpectedServerInstanceID, Lease: ctx, Exports: b.Exports}, seq)
 			}},
 			{Service: sandboxlink.ServiceProcess, Version: sandboxprocess.Version, Serve: func(ctx context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 				sandboxprocess.Serve(ctx, s, sandboxprocess.Attachment{ID: b.AttachmentID}, procs)

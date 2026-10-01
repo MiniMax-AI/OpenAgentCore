@@ -247,6 +247,42 @@ func TestInstanceChanged(t *testing.T) {
 	}
 }
 
+// Append is a property of each write: fcntl(F_SETFL) clears and sets O_APPEND on an open descriptor, as on a native file.
+func TestAppendFollowsFcntl(t *testing.T) {
+	requireFUSE(t)
+	backing := t.TempDir()
+	writeFile(t, filepath.Join(backing, "f"), "abc")
+	m, err := serve(t, backing, 0)
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	fd, err := unix.Open(filepath.Join(m.dir, "f"), unix.O_RDWR|unix.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+	want := func(content string) {
+		t.Helper()
+		if b, err := os.ReadFile(filepath.Join(backing, "f")); err != nil || string(b) != content {
+			t.Fatalf("file = %q, %v; want %q", b, err, content)
+		}
+	}
+	if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFL, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Pwrite(fd, []byte("X"), 0); err != nil {
+		t.Fatal(err)
+	}
+	want("Xbc")
+	if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFL, unix.O_APPEND); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Pwrite(fd, []byte("Y"), 0); err != nil {
+		t.Fatal(err)
+	}
+	want("XbcY")
+}
+
 // Stop returns within its bound when the service has become unreachable, although Detach must redial.
 func TestStopUnreachable(t *testing.T) {
 	requireFUSE(t)
@@ -283,7 +319,7 @@ func (u unanswered) Attach(ctx context.Context, _ sandboxfs.Attachment, _ *sandb
 	return nil, ctx.Err()
 }
 
-// A Start that ends while Attach is unanswered keeps the world's report that the attachment must be ended.
+// A Start that ends while Attach is unanswered reports the cancellation, and the world's Detach on a new stream leaves nothing for the attachment's owner to end.
 func TestStartEndsDuringAttach(t *testing.T) {
 	requireFUSE(t)
 	srv, err := fileservicetest.New(t.TempDir())
@@ -304,8 +340,8 @@ func TestStartEndsDuringAttach(t *testing.T) {
 		StagingParent: t.TempDir(),
 		Process:       sessionview.Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: 1000, GID: 1000, Stderr: os.Stderr},
 	})
-	if !errors.Is(err, worldfs.ErrAttachmentDirty) || !errors.Is(err, context.Canceled) {
-		t.Fatalf("Start = %v, want ErrAttachmentDirty with the cancellation", err)
+	if errors.Is(err, worldfs.ErrAttachmentDirty) || !errors.Is(err, context.Canceled) {
+		t.Fatalf("Start = %v, want the cancellation without ErrAttachmentDirty", err)
 	}
 }
 

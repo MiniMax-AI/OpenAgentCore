@@ -26,6 +26,8 @@ type Server struct {
 
 	mu      sync.Mutex
 	svc     *fileservice.Service
+	files   *sandboxfs.Server // serves svc, as wrapped, to every stream
+	binds   uint64            // stands in for Link's bind sequence: streams are bound in Dial order
 	conns   []net.Conn
 	stalled bool
 	wrap    func(sandboxfs.Service) sandboxfs.Service
@@ -37,7 +39,18 @@ func New(dir string) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Server{dir: dir, id: sandboxwire.NewID(), svc: svc}, nil
+	s := &Server{dir: dir, id: sandboxwire.NewID(), svc: svc}
+	s.serveLocked()
+	return s, nil
+}
+
+// serveLocked starts serving the current incarnation, as wrapped, to later streams.
+func (s *Server) serveLocked() {
+	var svc sandboxfs.Service = s.svc
+	if s.wrap != nil {
+		svc = s.wrap(svc)
+	}
+	s.files = sandboxfs.NewServer(svc)
 }
 
 // Dial opens a stream to the current service incarnation. While the server is stalled it waits for ctx to end.
@@ -60,19 +73,19 @@ func (s *Server) Dial(ctx context.Context) (io.ReadWriteCloser, error) {
 		Lease:            context.Background(),
 		Exports:          []sandboxlink.ExportGrant{{ID: Export}},
 	}
-	var svc sandboxfs.Service = s.svc
-	if s.wrap != nil {
-		svc = s.wrap(svc)
-	}
-	go sandboxfs.Serve(context.Background(), server, svc, a)
+	s.binds++
+	go s.files.Serve(context.Background(), server, a, s.binds)
 	return client, nil
 }
 
-// Intercept wraps the service each later stream serves, so a test can change what it answers.
+// Intercept wraps the service each later stream serves, so a test can change what it answers. Streams dialed before and after it are not fenced against each other, so a test calls it before the first Dial.
 func (s *Server) Intercept(wrap func(sandboxfs.Service) sandboxfs.Service) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.wrap = wrap
+	if s.svc != nil {
+		s.serveLocked()
+	}
 }
 
 // Break closes every open stream, as a lost transport does.
@@ -106,8 +119,13 @@ func (s *Server) Restart() error {
 		s.svc.Close()
 	}
 	svc, err := fileservice.New(s.dir)
+	if err != nil {
+		s.svc = nil
+		return err
+	}
 	s.svc = svc
-	return err
+	s.serveLocked()
+	return nil
 }
 
 // Close closes every stream and the service.

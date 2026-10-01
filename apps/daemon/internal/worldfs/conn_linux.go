@@ -126,10 +126,10 @@ func unsent(err error) bool {
 	return errors.Is(err, ErrConnect) || errors.As(err, &fail) && fail.Effect == sandboxwire.EffectNone && errors.Is(err, sandboxfs.ErrTransport)
 }
 
-// retryable reports whether a request certainly did nothing and may succeed when sent again: it was never sent, or the service refused it for now with ResourceExhausted and EffectNone.
+// retryable reports whether a request certainly did nothing and may succeed when sent again: it was never sent, or the service refused it for now with a retryable code and EffectNone.
 func retryable(err error) bool {
 	var fail *sandboxfs.Failure
-	return unsent(err) || errors.As(err, &fail) && fail.Code == sandboxfs.CodeResourceExhausted && fail.Effect == sandboxwire.EffectNone
+	return unsent(err) || errors.As(err, &fail) && fail.Code.Retryable() && fail.Effect == sandboxwire.EffectNone
 }
 
 // noEffect reports whether a request certainly changed nothing.

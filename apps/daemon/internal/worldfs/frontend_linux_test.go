@@ -26,10 +26,13 @@ import (
 
 // These tests drive the frontend's FUSE methods directly, without a mount, so they need no privileges.
 
-// counts records what the service ran. It refuses Releases while refuse is positive, and when held is set it closes held once a waiting lock request arrives and ends that request Cancelled with EffectPossible once it is cancelled.
+// counts records what the service ran. It refuses Releases while refuse is positive, and when held is set it closes held once a waiting lock request arrives and ends that request Cancelled with EffectPossible once it is cancelled. When cut is set, the next Open runs and then breaks every stream, so its response is lost.
 type counts struct {
+	srv      *fileservicetest.Server
 	refuse   atomic.Int32
+	opened   atomic.Int32
 	released atomic.Int32
+	cut      atomic.Bool
 	held     chan struct{}
 
 	mu    sync.Mutex
@@ -51,6 +54,17 @@ func (c counting) Release(ctx context.Context, a sandboxfs.Attachment, q *sandbo
 	r, err := c.Service.Release(ctx, a, q)
 	if err == nil {
 		c.released.Add(1)
+	}
+	return r, err
+}
+
+func (c counting) Open(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.OpenRequest) (*sandboxfs.OpenResponse, error) {
+	r, err := c.Service.Open(ctx, a, q)
+	if err == nil {
+		c.opened.Add(1)
+	}
+	if c.cut.CompareAndSwap(true, false) {
+		c.srv.Break()
 	}
 	return r, err
 }
@@ -77,7 +91,7 @@ func newServer(t *testing.T) (*fileservicetest.Server, *counts, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { srv.Close() })
-	c := &counts{}
+	c := &counts{srv: srv}
 	srv.Intercept(func(s sandboxfs.Service) sandboxfs.Service { return counting{s, c} })
 	return srv, c, path
 }
@@ -230,6 +244,69 @@ func TestReleaseQueuedAfterRedial(t *testing.T) {
 	f.Release(nil, &fuse.ReleaseIn{Fh: fh})
 	draining(t, f)
 	eventually(t, "the queued Release", func() bool { return c.released.Load() == 1 })
+}
+
+// An Open whose response is lost fails with EIO, and its handle ID is released on the next stream once the service has finished the Open, so the service holds no handle.
+func TestLostOpenIsReleased(t *testing.T) {
+	srv, c, _ := newServer(t)
+	f := attached(t, srv.Dial)
+	var e fuse.EntryOut
+	if st := f.Lookup(nil, &fuse.InHeader{NodeId: f.root.id}, "f", &e); !st.Ok() {
+		t.Fatalf("Lookup: %v", st)
+	}
+	c.cut.Store(true)
+	var o fuse.OpenOut
+	if st := f.Open(nil, &fuse.OpenIn{InHeader: fuse.InHeader{NodeId: e.NodeId}, Flags: syscall.O_RDWR}, &o); st != fuse.EIO {
+		t.Fatalf("Open with its response lost: %v, want EIO", st)
+	}
+	if c.opened.Load() != 1 || c.released.Load() != 1 {
+		t.Fatalf("%d opened and %d released, want the lost handle released", c.opened.Load(), c.released.Load())
+	}
+}
+
+// lateAttach closes attaching when Attach arrives and attaches only once the request was cancelled, as a handler that outlives its stream does.
+type lateAttach struct {
+	sandboxfs.Service
+	attaching chan struct{}
+}
+
+func (l lateAttach) Attach(ctx context.Context, a sandboxfs.Attachment, q *sandboxfs.AttachRequest) (*sandboxfs.AttachResponse, error) {
+	close(l.attaching)
+	<-ctx.Done()
+	if _, err := l.Service.Attach(context.WithoutCancel(ctx), a, q); err != nil {
+		return nil, err
+	}
+	return nil, ctx.Err()
+}
+
+// A Serve whose context ends while Attach is in doubt detaches on a new stream, which the service serves after the late Attach took effect, so the attachment holds nothing and the failure is not ErrAttachmentDirty.
+func TestUncertainAttachIsDetached(t *testing.T) {
+	srv, err := fileservicetest.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv.Close() })
+	attaching := make(chan struct{})
+	srv.Intercept(func(s sandboxfs.Service) sandboxfs.Service { return lateAttach{s, attaching} })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-attaching
+		cancel()
+	}()
+	if _, _, err := New(fileservicetest.Export, srv.Dial).Serve(ctx, nil, sessionview.WorldMount{}); !errors.Is(err, context.Canceled) || errors.Is(err, ErrAttachmentDirty) {
+		t.Fatalf("Serve = %v, want the cancellation without ErrAttachmentDirty", err)
+	}
+	rw, err := srv.Dial(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := sandboxfs.NewClient(rw)
+	defer c.Close()
+	var fail *sandboxfs.Failure
+	if _, err := c.Detach(context.Background(), &sandboxfs.DetachRequest{}); !errors.As(err, &fail) || fail.Code != sandboxfs.CodeStaleAttachment {
+		t.Fatalf("Detach after Serve: %v, want StaleAttachment", err)
+	}
 }
 
 // stalled returns a frontend whose stream has failed and whose service is unreachable, with fh open, and a channel closed once a redial waits.

@@ -31,6 +31,15 @@ type Client struct {
 	afterWrite func() // test seam: runs once a frame is recorded as written
 }
 
+// HandleIDs allocates the handle IDs a client chooses for Open, Create and
+// OpenDir: 1, 2, 3 and so on. An attachment keeps one allocator across all of
+// its streams, so it never uses an ID twice. Its methods are safe for
+// concurrent use.
+type HandleIDs struct{ last atomic.Uint64 }
+
+// Next returns an ID the attachment has not used.
+func (h *HandleIDs) Next() HandleID { return HandleID(h.last.Add(1)) }
+
 type call struct {
 	op Op
 	ch chan outcome

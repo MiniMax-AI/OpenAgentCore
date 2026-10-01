@@ -19,7 +19,7 @@ func openFlags(access sandboxfs.AccessMode, flags sandboxfs.OpenFlags) int {
 	f := map[sandboxfs.AccessMode]int{sandboxfs.AccessRead: unix.O_RDONLY, sandboxfs.AccessWrite: unix.O_WRONLY, sandboxfs.AccessReadWrite: unix.O_RDWR}[access]
 	f |= unix.O_NOCTTY
 	for bit, o := range map[sandboxfs.OpenFlags]int{
-		sandboxfs.OpenAppend: unix.O_APPEND, sandboxfs.OpenTruncate: unix.O_TRUNC, sandboxfs.OpenNoFollow: unix.O_NOFOLLOW,
+		sandboxfs.OpenTruncate: unix.O_TRUNC, sandboxfs.OpenNoFollow: unix.O_NOFOLLOW,
 		sandboxfs.OpenSync: unix.O_SYNC, sandboxfs.OpenDataSync: unix.O_DSYNC,
 	} {
 		if flags&bit != 0 {
@@ -77,7 +77,7 @@ func (s *Service) Open(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.O
 	if err := openable(n.typ); err != nil {
 		return nil, failure(err, none)
 	}
-	if err := st.reserve(); err != nil {
+	if err := st.reserve(r.Handle); err != nil {
 		return nil, err
 	}
 	var fd int
@@ -86,14 +86,13 @@ func (s *Service) Open(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.O
 		return err
 	})
 	if err != nil {
-		st.unreserve()
+		st.unreserve(r.Handle)
 		return nil, failure(err, none)
 	}
-	id, err := st.addHandle(&handle{f: os.NewFile(uintptr(fd), ""), append: r.Flags&sandboxfs.OpenAppend != 0})
-	if err != nil {
+	if err := st.publish(r.Handle, &handle{f: os.NewFile(uintptr(fd), "")}); err != nil {
 		return nil, failure(err, possible)
 	}
-	return &sandboxfs.OpenResponse{Handle: id}, nil
+	return &sandboxfs.OpenResponse{}, nil
 }
 
 // Create creates the entry with O_EXCL first, so it never opens a special
@@ -108,7 +107,7 @@ func (s *Service) Create(_ context.Context, a sandboxfs.Attachment, r *sandboxfs
 	if err != nil {
 		return nil, err
 	}
-	if err := st.reserve(); err != nil {
+	if err := st.reserve(r.Handle); err != nil {
 		return nil, err
 	}
 	flags := openFlags(r.Access, r.Flags) | unix.O_NOFOLLOW
@@ -141,20 +140,19 @@ func (s *Service) Create(_ context.Context, a sandboxfs.Attachment, r *sandboxfs
 		return err
 	})
 	if err != nil {
-		st.unreserve()
+		st.unreserve(r.Handle)
 		return nil, failure(err, effect)
 	}
 	n, err := st.addNode(pathFD, &sb)
 	if err != nil {
-		st.unreserve()
+		st.unreserve(r.Handle)
 		unix.Close(fd)
 		return nil, failure(err, possible)
 	}
-	id, err := st.addHandle(&handle{f: os.NewFile(uintptr(fd), ""), append: r.Flags&sandboxfs.OpenAppend != 0})
-	if err != nil {
+	if err := st.publish(r.Handle, &handle{f: os.NewFile(uintptr(fd), "")}); err != nil {
 		return nil, failure(err, possible)
 	}
-	return &sandboxfs.CreateResponse{Entry: sandboxfs.Entry{Node: n.ref, Attr: st.attr(&sb)}, Handle: id}, nil
+	return &sandboxfs.CreateResponse{Entry: sandboxfs.Entry{Node: n.ref, Attr: st.attr(&sb)}}, nil
 }
 
 // openExisting opens an existing regular file without following a symlink.
@@ -209,8 +207,10 @@ func (s *Service) Read(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.R
 	return &sandboxfs.ReadResponse{Data: buf[:total]}, nil
 }
 
-// Write writes at the offset, or appends atomically with one write(2) on an
-// append handle. It reports the written prefix and the error that stopped it.
+// Write writes at the offset, or appends atomically with one write on the
+// descriptor with O_APPEND set. It reports the written prefix and the error
+// that stopped it; a short append is reported as it is, never continued by
+// another append.
 func (s *Service) Write(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.WriteRequest) (*sandboxfs.WriteResponse, error) {
 	st, err := s.enter(a, r)
 	if err != nil {
@@ -220,12 +220,17 @@ func (s *Service) Write(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.
 	if err != nil {
 		return nil, err
 	}
-	if !h.append && r.Offset > math.MaxInt64-uint64(len(r.Data)) {
+	if !r.Append && r.Offset > math.MaxInt64-uint64(len(r.Data)) {
 		return nil, sandboxfs.NewFailure(sandboxfs.CodeInvalidArgument, none, "write ends beyond 2^63-1")
 	}
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
 	total := 0
 	err = use(h.f, errStaleHandle, func(fd int) error {
-		if h.append {
+		if err := setAppend(fd, r.Append); err != nil {
+			return err
+		}
+		if r.Append {
 			n, err := eintr(func() (int, error) { return unix.Write(fd, r.Data) })
 			total = max(n, 0)
 			return err
@@ -249,6 +254,18 @@ func (s *Service) Write(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.
 		return nil, failure(err, none)
 	}
 	return &sandboxfs.WriteResponse{Written: uint32(total), Failure: failure(err, none).(*sandboxfs.Failure)}, nil
+}
+
+// setAppend sets or clears O_APPEND on fd. An append uses the descriptor's
+// flag rather than pwritev2's RWF_APPEND: overlayfs on some kernels drops
+// RWF_APPEND and writes at the offset, but every file system honors the flag.
+func setAppend(fd int, on bool) error {
+	fl, err := unix.FcntlInt(uintptr(fd), unix.F_GETFL, 0)
+	if err != nil || (fl&unix.O_APPEND != 0) == on {
+		return err
+	}
+	_, err = unix.FcntlInt(uintptr(fd), unix.F_SETFL, fl^unix.O_APPEND)
+	return err
 }
 
 // Flush closes a duplicate of the handle's descriptor, which is what a close
@@ -322,7 +339,7 @@ func (s *Service) OpenDir(_ context.Context, a sandboxfs.Attachment, r *sandboxf
 	if err != nil {
 		return nil, err
 	}
-	if err := st.reserve(); err != nil {
+	if err := st.reserve(r.Handle); err != nil {
 		return nil, err
 	}
 	var fd int
@@ -334,14 +351,13 @@ func (s *Service) OpenDir(_ context.Context, a sandboxfs.Attachment, r *sandboxf
 		return err
 	})
 	if err != nil {
-		st.unreserve()
+		st.unreserve(r.Handle)
 		return nil, failure(err, none)
 	}
-	id, err := st.addHandle(&handle{f: os.NewFile(uintptr(fd), ""), dir: &cursor{dev: uint64(sb.Dev)}})
-	if err != nil {
+	if err := st.publish(r.Handle, &handle{f: os.NewFile(uintptr(fd), ""), dir: &cursor{dev: uint64(sb.Dev)}}); err != nil {
 		return nil, err
 	}
-	return &sandboxfs.OpenDirResponse{Handle: id}, nil
+	return &sandboxfs.OpenDirResponse{}, nil
 }
 
 func (s *Service) ReadDir(_ context.Context, a sandboxfs.Attachment, r *sandboxfs.ReadDirRequest) (*sandboxfs.ReadDirResponse, error) {

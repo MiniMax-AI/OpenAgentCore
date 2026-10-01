@@ -4,7 +4,7 @@
 //
 // # Mapping
 //
-// A kernel node ID names a NodeRef, and each kernel lookup holds one server lookup reference; FORGET and BATCH_FORGET release the same counts with Forget. A kernel file handle names a HandleID, and a kernel lock owner is the attachment's LockOwner.
+// A kernel node ID names a NodeRef, and each kernel lookup holds one server lookup reference; FORGET and BATCH_FORGET release the same counts with Forget. A kernel file handle names a HandleID the frontend chose with [sandboxfs.HandleIDs] and never reuses within the attachment, and a kernel lock owner is the attachment's LockOwner.
 //
 //	LOOKUP                   Lookup
 //	FORGET, BATCH_FORGET     Forget, batched
@@ -18,7 +18,8 @@
 //	LINK, SYMLINK            Link, Symlink
 //	CREATE                   Create; O_EXCL is Exclusive
 //	OPEN                     Open
-//	READ, WRITE              Read, Write; a write that stopped after a prefix is a short write
+//	READ                     Read
+//	WRITE                    Write; O_APPEND in the write's flags, as open or fcntl(F_SETFL) last set it, is Append; a write that stopped after a prefix is a short write
 //	FLUSH                    Flush with the closing lock owner
 //	FSYNC, FSYNCDIR          Fsync of the file or directory handle
 //	RELEASE, RELEASEDIR      Release, ReleaseDir
@@ -69,7 +70,11 @@
 //
 // # Link loss
 //
-// When the stream fails, requests in flight fail with EIO. The next request redials, sends Describe and continues with the same node and handle tables only when ServerInstanceID is unchanged; a request is sent again only when the stream never sent it. A Forget, Release or ReleaseDir that certainly did nothing, because the stream never sent it or the service refused it with ResourceExhausted and EffectNone, is queued and sent again after the next redial, or after a backoff of up to 2 seconds; one that may have reached the service is never sent again. A new incarnation or an ended attachment marks the world lost: every later request fails with EIO and [World.Lost] closes. The attachment has ended when the service answers StaleAttachment, or when the redial fails with a Link failure that is not retryable (sandboxlink.Code.Retryable), such as LeaseExpired or StaleGeneration; a redial refused with InstanceChanged is a new incarnation.
+// When the stream fails, requests in flight fail with EIO. The next request redials, sends Describe and continues with the same node and handle tables only when ServerInstanceID is unchanged; a request is sent again only when the stream never sent it. The service serves the new stream only after every request of the failed one has finished, so a request on it sees everything the failed stream's requests did.
 //
-// Detach cannot overtake a request still running on a failed stream, so a Serve that fails detaches only when the export was attached on the stream still in use and nothing else is in doubt. When Attach may have taken effect without a response, when a request may still run on a failed stream, or when Detach fails, Serve fails with [ErrAttachmentDirty], and the owner of the Link attachment ends it; the service releases everything the attachment holds when its lease ends. [World.Stop] detaches without sending what is queued, since Detach drops every reference and handle the attachment holds.
+// A Forget that certainly did nothing, because the stream never sent it or the service refused it with a retryable code (sandboxfs.ErrorCode.Retryable) and EffectNone, is queued and sent again after the next redial, or after a backoff of up to 2 seconds; one that may have reached the service is never sent again. A Release or ReleaseDir is queued and sent again in the same way, and also when the stream failed before its answer arrived: handle IDs are never reused, so a repeat of one that ran finds StaleHandle, which settles it as success does. An Open, Create or OpenDir that failed after it may have taken effect is never sent again; the frontend releases its handle ID the same way, which removes any handle it left, though not a file it created or truncated.
+//
+// A new incarnation or an ended attachment marks the world lost: every later request fails with EIO and [World.Lost] closes. The attachment has ended when the service answers StaleAttachment, or when the redial fails with a Link failure that is not retryable (sandboxlink.Code.Retryable), such as LeaseExpired or StaleGeneration; a redial refused with InstanceChanged is a new incarnation.
+//
+// A Serve that fails after Attach was sent closes the stream and sends Detach on a new one, within 5 seconds even when Start's context has ended. Detach then follows everything sent before, including an Attach whose response was lost. Serve fails with [ErrAttachmentDirty], and the owner of the Link attachment ends it, only when that Detach cannot be sent or answered: the service is unreachable, the redial is refused with a retryable Link failure, or Detach fails or its stream fails before the answer. The service releases everything the attachment holds when its lease ends. [World.Stop] detaches without sending what is queued, since Detach drops every reference and handle the attachment holds.
 package worldfs
