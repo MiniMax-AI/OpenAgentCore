@@ -4,7 +4,8 @@
 // ErrUnsupported.
 //
 // Run runs one Session. It admits the Session before any effect: the kind
-// must declare an agent.View, and the request must use only what a view runs.
+// must declare an agent.View, and the request must use only what a view runs
+// and no function tools, whose results Input cannot carry.
 // It then allocates the Session uid, creates the Session directory under
 // Config.StateDir, rewrites the request so the model provider and HTTP MCP
 // reach the network only through the Session's gateway, and calls the view's

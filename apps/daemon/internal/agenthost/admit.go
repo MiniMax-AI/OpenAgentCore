@@ -112,6 +112,9 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 		return nil, unsupported("installed Capabilities and skills")
 	case local.NetworkAccess != "enabled" || len(local.AllowedDomains) > 0:
 		return nil, unsupported("a restricted workspace network")
+	case len(req.FunctionTools) > 0 || req.ToolSearch:
+		// A function call waits for a result that Input cannot deliver.
+		return nil, unsupported("function tools and their discovery")
 	}
 	raw, ok := req.AgentOptions["model_provider"]
 	if !ok {

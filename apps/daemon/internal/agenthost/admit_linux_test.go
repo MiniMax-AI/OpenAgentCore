@@ -76,6 +76,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"capabilities":         {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, []error{ErrUnsupported}},
 		"restricted network":   {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, []error{ErrUnsupported}},
 		"allowed domains only": {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, []error{ErrUnsupported}},
+		"function tools":       {func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "lookup"}} }, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
 		"stdio MCP": {func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
 		}, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
