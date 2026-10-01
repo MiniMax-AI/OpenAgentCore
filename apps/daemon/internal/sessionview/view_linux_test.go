@@ -213,6 +213,44 @@ func TestTeardownIsBounded(t *testing.T) {
 	}
 }
 
+// TestCancelledStartStopsTheWorld checks that Start returns once its context ends while the launcher waits on a world that never answers during the build, and that it stops the world, which lets the launcher exit.
+func TestCancelledStartStopsTheWorld(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	w := &stallWorld{loopbackWorld: loopbackWorld{dir: f.world}, stalled: make(chan struct{}), release: make(chan struct{})}
+	spec := f.spec(&w.loopbackWorld, "noop")
+	spec.World = w.serve
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	started := make(chan error, 1)
+	go func() {
+		v, err := Start(ctx, spec)
+		if err == nil {
+			v.Close()
+		}
+		started <- err
+	}()
+	select {
+	case <-w.stalled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the launcher never looked up /proc in the world")
+	}
+	cancel()
+	select {
+	case err := <-started:
+		if !errors.Is(err, ErrLauncher) || !errors.Is(err, context.Canceled) || errors.Is(err, ErrCleanup) {
+			t.Errorf("Start = %v, want ErrLauncher with context.Canceled and no ErrCleanup", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("Start did not return after its context ended")
+	}
+	select {
+	case <-w.served:
+	default:
+		t.Error("world server still serving")
+	}
+}
+
 // TestViewRefusesSymlinkedMountpoint checks that the launcher still refuses a symlink on the way to a target, so a world that reports a target it did not resolve cannot redirect a mount.
 func TestViewRefusesSymlinkedMountpoint(t *testing.T) {
 	requireView(t)
@@ -453,6 +491,37 @@ func (n *hangNode) Write(context.Context, gofs.FileHandle, []byte, int64) (uint3
 	n.w.hungOnce.Do(func() { close(n.w.hung) })
 	<-n.w.release
 	return 0, syscall.EIO
+}
+
+// stallWorld is a loopbackWorld that answers no lookup of proc until Stop.
+type stallWorld struct {
+	loopbackWorld
+	stalled, release chan struct{} // stalled closes at the first lookup of proc
+	stallOnce        sync.Once
+}
+
+func (w *stallWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
+	root, err := gofs.NewLoopbackRoot(w.dir)
+	if err != nil {
+		return nil, Presentation{}, err
+	}
+	root.(*gofs.LoopbackNode).RootData.NewNode = func(r *gofs.LoopbackRoot, _ *gofs.Inode, name string, _ *syscall.Stat_t) gofs.InodeEmbedder {
+		if name == "proc" {
+			w.stallOnce.Do(func() { close(w.stalled) })
+			<-w.release
+		}
+		return &gofs.LoopbackNode{RootData: r}
+	}
+	_, p, err := w.serveRoot(root, dev, mount)
+	if err != nil {
+		return nil, p, err
+	}
+	return w, p, nil
+}
+
+func (w *stallWorld) Stop() error {
+	close(w.release)
+	return w.loopbackWorld.Stop()
 }
 
 // serveBroker listens in the view's network namespace, as the broker does.

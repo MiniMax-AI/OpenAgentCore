@@ -32,7 +32,7 @@ type World func(ctx context.Context, dev *os.File, mount WorldMount) (WorldServe
 
 // WorldServer is a running world.
 type WorldServer interface {
-	// Stop ends serving and returns within a bound of its own. sessionview calls it once the launcher has exited, while the view's processes may still be ending, and waits for it and for them together. A process blocked on a request the world has not answered cannot exit, and it keeps the view's mount alive, so Stop must end every request still pending rather than only wait for the view to end.
+	// Stop ends serving and returns within a bound of its own. sessionview calls it once, as the view ends or as a failed or cancelled Start tears it down, while the launcher and the view's processes may still be ending, and waits for it and for them together. A process blocked on a request the world has not answered cannot exit, and it keeps the view's mount alive, so Stop must end every request still pending rather than only wait for the view to end. This holds during the build too: a launcher killed while it waits on the world exits only once Stop ends that request.
 	Stop() error
 }
 

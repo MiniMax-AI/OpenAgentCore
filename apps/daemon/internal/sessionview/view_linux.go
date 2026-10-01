@@ -62,7 +62,7 @@ type View struct {
 	err        error
 }
 
-// Start builds a view for spec and starts its process. ctx bounds only the construction.
+// Start builds a view for spec and starts its process. ctx bounds only the construction: once it ends, Start kills the launcher and tears the view down, which stops the world, and returns within the teardown's bound.
 func Start(ctx context.Context, spec Spec) (*View, error) {
 	if err := spec.validate(); err != nil {
 		return nil, err
@@ -74,7 +74,11 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	if err := v.launch(&spec); err != nil {
 		return nil, v.abort(err)
 	}
-	stop := context.AfterFunc(ctx, func() { _ = v.cmd.Process.Kill() })
+	stop := context.AfterFunc(ctx, func() {
+		_ = v.cmd.Process.Kill()
+		// A launcher blocked on a world request that the world read cannot exit, and it keeps its end of the control socket open until the world answers. The handshake stops waiting for it here; abort's teardown then stops the world, which answers the request.
+		v.ctl.interrupt()
+	})
 	err := v.handshake(ctx, &spec)
 	if !stop() {
 		// The world's own error stays: it may say that the attachment must be ended.
