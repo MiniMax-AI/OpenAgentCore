@@ -18,7 +18,8 @@ import (
 )
 
 // launch spawns the process and emits Started or StartFailed, then starts
-// the output readers. The reaper reports the leader's exit.
+// the output readers. The leader's exit follows the output it left buffered;
+// see markLocked.
 func (op *operation) launch(spec sp.ProcessSpec) {
 	l, f := op.spawn(spec)
 	op.mu.Lock()
@@ -37,15 +38,12 @@ func (op *operation) launch(spec sp.ProcessSpec) {
 	op.state = sp.StateRunning
 	op.push(sp.StartedEvent{EventHeader: op.header()})
 	if op.leaderGone {
-		op.exitedLocked()
+		op.markLocked()
 	}
 	cancel, grace := op.cancelPending, op.pendingGrace
 	op.mu.Unlock()
-	// Each stream reads at most its share of the replay limit, so a reader
-	// blocked on an idle stream never holds the space another one needs.
-	chunk := min(int(op.s.caps.MaxDataBytes), int(op.s.caps.MaxReplayBytesPerOperation)/len(l.streams))
 	for _, st := range l.streams {
-		go op.read(st, chunk)
+		go op.read(st)
 	}
 	if cancel {
 		op.cancel(grace)
@@ -228,51 +226,43 @@ func openPTY(spec sp.PTYSpec) (master, tty *os.File, err error) {
 }
 
 // read captures one stream until end of file, a read error, or CloseOutput.
-// Before each read of up to chunk bytes it reserves chunk bytes of the replay
-// limit, so the streams together never exceed it, and it pauses until they
-// are free.
-func (op *operation) read(st *stream, chunk int) {
+// It reads only while the retained output is below the replay limit, and at
+// most the space left, so the streams together never exceed it. Each read
+// and the push of what it read happen under op.mu, so every byte is either
+// still in the kernel's buffer or in an event; markLocked relies on that.
+func (op *operation) read(st *stream) {
 	limit := int(op.s.caps.MaxReplayBytesPerOperation)
-	buf := make([]byte, chunk)
+	buf := make([]byte, op.s.caps.MaxDataBytes)
 	var disp sp.OutputDisposition
-	for disp == 0 {
+	rc, err := st.f.SyscallConn()
+	for err == nil && disp == 0 {
 		op.mu.Lock()
-		for op.retained+op.reserved+chunk > limit && !st.abandoned {
+		for op.retained >= limit && !st.abandoned {
 			op.cond.Wait()
 		}
-		if st.abandoned {
-			op.mu.Unlock()
-			disp = sp.OutputAbandoned
-			break
-		}
-		op.reserved += chunk
 		op.mu.Unlock()
-		n, err := st.f.Read(buf)
-		op.mu.Lock()
-		op.reserved -= chunk
-		if n > 0 {
-			op.push(sp.OutputEvent{EventHeader: op.header(), Stream: st.name, Offset: st.offset, Data: bytes.Clone(buf[:n])})
-			st.offset += uint64(n)
-		} else {
-			op.cond.Broadcast() // the unused reservation is free again
-		}
-		switch {
-		case err == nil:
-		case st.abandoned:
-			disp = sp.OutputAbandoned
-		case err == io.EOF, op.pty != nil && errors.Is(err, syscall.EIO): // EIO: every slave descriptor closed
-			disp = sp.OutputDrained
-		default:
-			disp = sp.OutputLost
-		}
-		op.mu.Unlock()
+		// The callback returns false to wait until the stream is readable.
+		err = rc.Read(func(fd uintptr) bool {
+			op.mu.Lock()
+			defer op.mu.Unlock()
+			var empty bool
+			disp, empty = op.readLocked(st, int(fd), buf)
+			return !empty
+		})
 	}
 	st.f.Close()
 
 	op.mu.Lock()
 	defer op.mu.Unlock()
+	if disp == 0 { // CloseOutput closed the file, or polling it failed
+		disp = sp.OutputLost
+		if st.abandoned {
+			disp = sp.OutputAbandoned
+		}
+	}
 	st.closed = true
 	op.push(sp.StreamClosedEvent{EventHeader: op.header(), Stream: st.name, Offset: st.offset, Disposition: disp})
+	op.exitWhenDrainedLocked()
 	op.worst = max(op.worst, disp)
 	if op.openStreams--; op.openStreams > 0 {
 		return
@@ -284,4 +274,51 @@ func (op *operation) read(st *stream, chunk int) {
 	op.output = &worst
 	op.push(sp.OutputClosedEvent{EventHeader: op.header(), Disposition: worst})
 	op.settleLocked()
+}
+
+// readLocked reads the non-blocking fd once, unless CloseOutput or the replay
+// limit stops it, and pushes what it read. It returns the disposition once
+// the stream ends, and empty when nothing is buffered.
+func (op *operation) readLocked(st *stream, fd int, buf []byte) (disp sp.OutputDisposition, empty bool) {
+	room := int(op.s.caps.MaxReplayBytesPerOperation) - op.retained
+	switch {
+	case st.abandoned:
+		return sp.OutputAbandoned, false
+	case room <= 0:
+		return 0, false
+	}
+	buf = buf[:min(len(buf), room)]
+	n, err := unix.Read(fd, buf)
+	for err == unix.EINTR {
+		n, err = unix.Read(fd, buf)
+	}
+	switch {
+	case err == unix.EAGAIN:
+		// Nothing is buffered, so whatever the mark counted was read or, on a
+		// terminal, discarded by a flush.
+		if st.mark > st.offset {
+			st.mark = st.offset
+			op.exitWhenDrainedLocked()
+		}
+		return 0, true
+	case err == nil && n > 0:
+		op.push(sp.OutputEvent{EventHeader: op.header(), Stream: st.name, Offset: st.offset, Data: bytes.Clone(buf[:n])})
+		st.offset += uint64(n)
+		op.exitWhenDrainedLocked()
+		return 0, false
+	case err == nil, op.pty != nil && err == unix.EIO: // EIO: every slave descriptor closed
+		return sp.OutputDrained, false
+	}
+	return sp.OutputLost, false
+}
+
+// buffered returns the bytes the kernel holds for reading from f: a PTY
+// master's input queue, or a pipe's contents (FIONREAD, the same request). It
+// returns 0 once f is closed.
+func buffered(f *os.File) uint64 {
+	n := 0
+	if rc, err := f.SyscallConn(); err == nil {
+		rc.Control(func(fd uintptr) { n, _ = unix.IoctlGetInt(int(fd), unix.TIOCINQ) })
+	}
+	return uint64(max(n, 0))
 }

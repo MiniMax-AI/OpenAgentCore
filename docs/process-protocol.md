@@ -86,6 +86,8 @@ Ordering:
 
 - `Started` or `StartFailed` comes first.
 - `Exited` and `OutputClosed` are independent. A background process holding a stream open keeps `OutputClosed` pending after `Exited`, and output can close before the leader exits.
+- `Exited` follows every output byte buffered in a captured stream when the service reaps the leader, so the client sees everything the leader wrote before it exited, as a native parent does once `waitpid` returns. Output written later, by processes that still hold the stream, can follow `Exited`, as it does natively.
+- `Exited` never waits for an acknowledgement: when the [replay limit](#output-replay-and-flow-control) stops the service reading, `Exited` follows the output read until then, and the rest follows `Exited`. With a PTY, Linux passes terminal output to the master through an asynchronous kernel queue, so output still in that queue when the service reaps the leader can follow `Exited`.
 - `OutputClosed` follows every output byte the service will deliver, and each `StreamClosed`.
 - Output of different streams has no order relative to each other or to changes in the file system.
 

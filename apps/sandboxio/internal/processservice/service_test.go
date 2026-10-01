@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -228,14 +229,51 @@ func TestStartFailure(t *testing.T) {
 	}
 }
 
-// A background job holding stderr keeps output open after the leader exits.
-func TestExitedBeforeOutputClosed(t *testing.T) {
+// Every byte the leader wrote before it exited precedes Exited, even when
+// it wrote more than a pipe buffer just before exiting. With one P the reaper
+// often runs before the reader has drained the pipe.
+func TestOutputPrecedesExited(t *testing.T) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
 	h := newHarness(t, DefaultConfig())
-	evs := events(t, h.start(h.connect(), pipeSpec("sh", "-c", "sleep 1 >/dev/null & echo hi; exec sleep 0")), sp.EventScopeClosed)
+	c := h.connect()
+	const size = 200 << 10
+	for range 20 {
+		evs := events(t, h.start(c, pipeSpec("head", "-c", strconv.Itoa(size), "/dev/zero")), sp.EventExited)
+		if got := len(output(evs, sp.StreamStdout)); got != size {
+			t.Fatalf("%d of %d bytes before Exited", got, size)
+		}
+	}
+}
+
+// Output a background process writes after the leader exits follows Exited,
+// and keeps OutputClosed pending until it ends.
+func TestLaterOutputFollowsExited(t *testing.T) {
+	h := newHarness(t, DefaultConfig())
+	evs := events(t, h.start(h.connect(), pipeSpec("sh", "-c", "printf a; (sleep 1; printf b) & exit 0")), sp.EventOutputClosed)
 	_, exited := find[sp.ExitedEvent](t, evs)
-	closed, outputClosed := find[sp.OutputClosedEvent](t, evs)
-	if exited > outputClosed || closed.Disposition != sp.OutputDrained || output(evs, sp.StreamStdout) != "hi\n" {
+	closed := evs[len(evs)-1].(sp.OutputClosedEvent)
+	if output(evs[:exited], sp.StreamStdout) != "a" || output(evs[exited:], sp.StreamStdout) != "b" || closed.Disposition != sp.OutputDrained {
 		t.Fatalf("events %v", evs)
+	}
+}
+
+// Exited never waits for an acknowledgement: at the replay limit it follows
+// the output already read, and the rest arrives once acknowledged.
+func TestExitedAtReplayLimit(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxReplayBytesPerOperation = sandboxwire.MaxChunk
+	h := newHarness(t, cfg)
+	const size = sandboxwire.MaxChunk + 1000 // the rest fits in the pipe
+	op := h.start(h.connect(), pipeSpec("head", "-c", strconv.Itoa(size), "/dev/zero"))
+	evs := events(t, op, sp.EventExited)
+	if got := len(output(evs, sp.StreamStdout)); got != sandboxwire.MaxChunk {
+		t.Fatalf("%d bytes before Exited", got)
+	}
+	if err := op.Ack(context.Background(), evs[len(evs)-1].Header().Sequence); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(output(events(t, op, sp.EventOutputClosed), sp.StreamStdout)); got != size-sandboxwire.MaxChunk {
+		t.Fatalf("%d bytes after Exited", got)
 	}
 }
 

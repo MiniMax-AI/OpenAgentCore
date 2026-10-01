@@ -41,12 +41,10 @@ type operation struct {
 	settled      bool
 
 	// log holds the retained events first..last; retained counts their
-	// Output bytes, and reserved the bytes readers may add. acked is the
-	// highest acknowledged sequence.
+	// Output bytes. acked is the highest acknowledged sequence.
 	log         []sp.Event
 	first, last uint64
 	retained    int
-	reserved    int
 	acked       uint64
 
 	// observer is the generation of the stream receiving events, zero when
@@ -67,6 +65,7 @@ type operation struct {
 	worst       sp.OutputDisposition
 
 	// leaderGone is set when the reaper reaps the leader, with its status.
+	// Exited follows the output buffered then; see markLocked.
 	leaderGone bool
 	status     unix.WaitStatus
 	// cu holds the processes proven to be in the session; the spawn sets it.
@@ -88,6 +87,8 @@ type stream struct {
 	offset    uint64
 	abandoned bool
 	closed    bool
+	// mark is the offset Exited waits for once the leader is reaped.
+	mark uint64
 }
 
 func newOperation(s *Service, key opKey, digest [sha256.Size]byte) *operation {
@@ -165,8 +166,42 @@ func (op *operation) reaped(ws unix.WaitStatus) {
 	defer op.mu.Unlock()
 	op.leaderGone, op.status = true, ws
 	if op.state == sp.StateRunning {
-		op.exitedLocked()
+		op.markLocked()
 	}
+}
+
+// markLocked runs once the leader is reaped and the streams are published. It
+// sets each open stream's mark to what it has delivered plus what the kernel
+// still buffers for it, so Exited follows every byte written before the reap.
+// A read and its push happen under op.mu, so no byte is between the two. Linux
+// moves PTY output to the master's input queue, which holds 4 KiB,
+// asynchronously through the tty flip buffer; output still there is not
+// counted and can follow Exited.
+func (op *operation) markLocked() {
+	for _, st := range op.streams {
+		if !st.closed && !st.abandoned {
+			st.mark = st.offset + buffered(st.f)
+		}
+	}
+	op.exitWhenDrainedLocked()
+}
+
+// exitWhenDrainedLocked reports the reaped leader's exit once every stream
+// has delivered its mark or closed. At the replay limit no stream is read
+// until the client acknowledges, so the exit is reported then: it never
+// waits for an acknowledgement.
+func (op *operation) exitWhenDrainedLocked() {
+	if !op.leaderGone || op.state != sp.StateRunning {
+		return
+	}
+	if op.retained < int(op.s.caps.MaxReplayBytesPerOperation) {
+		for _, st := range op.streams {
+			if !st.closed && !st.abandoned && st.offset < st.mark {
+				return
+			}
+		}
+	}
+	op.exitedLocked()
 }
 
 // exitedLocked reports the reaped leader's exit and starts watching the scope.
@@ -358,26 +393,35 @@ func (op *operation) closeStdin(offset uint64) error {
 
 func (op *operation) closeOutput(name sp.Stream) error {
 	op.mu.Lock()
-	defer op.mu.Unlock()
+	st, err := op.abandonLocked(name)
+	op.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	// Outside op.mu: Close waits for a read in progress, which holds op.mu.
+	st.f.Close()
+	return nil
+}
+
+func (op *operation) abandonLocked(name sp.Stream) (*stream, error) {
 	if op.released {
-		return released()
+		return nil, released()
 	}
 	if op.state == sp.StateStarting || op.state == sp.StateStartFailed {
-		return notRunning("the operation has no output")
+		return nil, notRunning("the operation has no output")
 	}
 	for _, st := range op.streams {
 		if st.name != name {
 			continue
 		}
 		if st.closed || st.abandoned {
-			return sp.Fail(sp.CodeOutputClosed, sandboxwire.EffectNone, "stream %d is closed", name)
+			return nil, sp.Fail(sp.CodeOutputClosed, sandboxwire.EffectNone, "stream %d is closed", name)
 		}
 		st.abandoned = true
 		op.cond.Broadcast()
-		st.f.Close()
-		return nil
+		return st, nil
 	}
-	return invalid("the operation does not capture stream %d", name)
+	return nil, invalid("the operation does not capture stream %d", name)
 }
 
 func (op *operation) resize(size sp.WindowSize) error {
