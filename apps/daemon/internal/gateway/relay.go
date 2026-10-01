@@ -54,6 +54,18 @@ func newTransport(roots *x509.CertPool, dial dialFunc) *http.Transport {
 	}
 }
 
+// relayTransport returns a transport for model and MCP relays, which inject
+// credentials. It closes each HTTP/1 connection after its response, so none
+// is ever idle: http.Transport logs the bytes an idle HTTP/1 connection
+// receives, and those can echo the credential. A negative MaxIdleConnsPerHost
+// keeps HTTP/1 connections out of the idle pool; HTTP/2 connections stay
+// shared in their own pool, and the HTTP/2 transport logs no received bytes.
+func relayTransport(roots *x509.CertPool, dial dialFunc) *http.Transport {
+	t := newTransport(roots, dial)
+	t.MaxIdleConnsPerHost = -1
+	return t
+}
+
 // sessionDial binds each dial to the Session as well as to its own context.
 // http.Transport detaches a dial from the request that started it, and
 // CloseIdleConnections cancels only dials that no request waits for.
@@ -112,7 +124,47 @@ func splitHostPort(addr string) (string, uint16, error) {
 // reverseProxy relays one request through t after rewrite. It flushes every
 // write, so event streams pass as they arrive, and relays protocol upgrades.
 func reverseProxy(t http.RoundTripper, rewrite func(*httputil.ProxyRequest)) *httputil.ReverseProxy {
-	return &httputil.ReverseProxy{Rewrite: rewrite, Transport: t, FlushInterval: -1, ErrorLog: quiet, ErrorHandler: relayFailed}
+	return &httputil.ReverseProxy{Rewrite: rewrite, Transport: t, ModifyResponse: checkUpgrade, FlushInterval: -1, ErrorLog: quiet, ErrorHandler: relayFailed}
+}
+
+var errUpgrade = errors.New("the upstream switched to a protocol the request did not ask for")
+
+// checkUpgrade accepts a 101 response only when the request asked for an
+// upgrade, the response switches to that protocol and its body is the
+// connection. ReverseProxy closes the body of a response checkUpgrade
+// rejects, but not after its own upgrade errors. A 101 hands the connection
+// to the relay, so the connection also closes when the request ends, which
+// the end of the Session ends too.
+func checkUpgrade(res *http.Response) error {
+	if res.StatusCode != http.StatusSwitchingProtocols {
+		return nil
+	}
+	body := res.Body
+	context.AfterFunc(res.Request.Context(), func() { body.Close() })
+	want, got := upgradeType(res.Request.Header), upgradeType(res.Header)
+	if _, ok := body.(io.ReadWriteCloser); !ok || want == "" || !printable(want) || !printable(got) || !strings.EqualFold(want, got) {
+		return errUpgrade
+	}
+	return nil
+}
+
+// upgradeType returns the protocol h upgrades to, as httputil.ReverseProxy
+// reads it.
+func upgradeType(h http.Header) string {
+	if !httpguts.HeaderValuesContainsToken(h["Connection"], "Upgrade") {
+		return ""
+	}
+	return h.Get("Upgrade")
+}
+
+// printable reports whether s is printable ASCII.
+func printable(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < ' ' || s[i] > '~' {
+			return false
+		}
+	}
+	return true
 }
 
 // relayFailed answers a request that reached no upstream answer. The body
@@ -142,8 +194,17 @@ func statusOf(err error) int {
 	return http.StatusBadGateway
 }
 
+// sentValue returns v as the HTTP/1 header writer sends it: each CR and LF
+// becomes a space, and surrounding whitespace goes. A relay injects a
+// credential in this form and withholds it in this form, so the filter
+// matches what the upstream received.
+func sentValue(v string) string {
+	return textproto.TrimString(strings.NewReplacer("\n", " ", "\r", " ").Replace(v))
+}
+
 // withhold returns t, or, when secret is set, a transport that keeps secret
-// out of the response headers the Harness receives.
+// out of the response headers the Harness receives. secret is the value as
+// sent.
 func withhold(t http.RoundTripper, secret string) http.RoundTripper {
 	if secret == "" {
 		return t

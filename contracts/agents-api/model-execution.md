@@ -95,7 +95,7 @@ At dispatch, Core sends the snapshot as one confidential provider bundle over th
 The Harness reaches its frozen upstream through a Session-local credential gateway on the agent host. The Harness's native base URL points at the gateway, and the Harness receives only a non-secret placeholder credential, never the key.
 
 - The gateway relays only the declared native routes of the provider's protocol, with the request and response unchanged apart from the credential rules below. An undeclared path or method, or an undeclared WebSocket upgrade, is rejected and never reaches the upstream.
-- It removes every value of each stripped header, matching names case-insensitively, then injects the upstream credential in the protocol's declared header.
+- It removes every value of each stripped header, matching names case-insensitively, then injects the upstream credential in the protocol's declared header, with the key's surrounding whitespace removed.
 - It removes every response header and trailer value that contains the key, in informational responses too. Response bodies pass unchanged, so an upstream that echoes the key in a body discloses it to the Harness. The gateway applies the same rule to the bearer token it injects for an HTTP MCP server.
 - It never follows a redirect with the credential.
 - It never converts between protocols.

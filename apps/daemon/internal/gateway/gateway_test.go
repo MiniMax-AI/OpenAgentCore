@@ -218,3 +218,41 @@ func TestSessionEndEndsBlockedRelays(t *testing.T) {
 		}
 	}
 }
+
+func TestRejectedUpgradeClosesTheUpstream(t *testing.T) {
+	// The upstream switches to a protocol the request did not ask for.
+	closed := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, rw, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: other\r\n\r\n")
+		rw.Flush()
+		io.Copy(io.Discard, c)
+		close(closed)
+	}))
+	defer srv.Close()
+	gw := serveOnLoopback(t, Config{
+		MCP:    []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: srv.URL + "/mcp"}},
+		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
+	})
+
+	req, _ := http.NewRequest("GET", gw.MCP["tools"], nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "test")
+	resp, err := noRedirects.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("answer %d", resp.StatusCode)
+	}
+	select {
+	case <-closed:
+	case <-time.After(wait):
+		t.Fatal("the upstream connection is still open")
+	}
+}

@@ -180,14 +180,17 @@ func build(session context.Context, cfg Config) (*gateway, error) {
 	if n := 1 + len(cfg.Models) + len(cfg.MCP); n > maxListeners {
 		return nil, invalid("%d listeners, at most %d", n, maxListeners)
 	}
-	host := newTransport(cfg.RootCAs, sessionDial(session, (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext))
+	host := relayTransport(cfg.RootCAs, sessionDial(session, (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext))
 	g := &gateway{transports: []*http.Transport{host}}
-	var sandbox *http.Transport
+	// The proxy forwards on its own transport; environment-origin MCP relays
+	// use a relay transport.
+	var forward, sandbox *http.Transport
 	if cfg.OpenNetwork != nil {
-		sandbox = newTransport(cfg.RootCAs, sessionDial(session, sandboxDialer(cfg.OpenNetwork)))
-		g.transports = append(g.transports, sandbox)
+		dial := sessionDial(session, sandboxDialer(cfg.OpenNetwork))
+		forward, sandbox = newTransport(cfg.RootCAs, dial), relayTransport(cfg.RootCAs, dial)
+		g.transports = append(g.transports, forward, sandbox)
 	}
-	g.listeners = append(g.listeners, listener{role: roleProxy, handler: newProxy(cfg.OpenNetwork, sandbox)})
+	g.listeners = append(g.listeners, listener{role: roleProxy, handler: newProxy(cfg.OpenNetwork, forward)})
 
 	names := map[string]bool{}
 	for _, m := range cfg.Models {

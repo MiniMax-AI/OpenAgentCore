@@ -32,7 +32,7 @@ func newMCPRelay(s proto.MCPHTTPServer, t http.RoundTripper) (*mcpRelay, string,
 		if u.Scheme != "https" {
 			return nil, "", errors.New("a bearer token needs an https server URL")
 		}
-		token := *s.BearerToken
+		token := sentValue(*s.BearerToken)
 		m.token = &token
 		m.transport = withhold(t, token)
 	}

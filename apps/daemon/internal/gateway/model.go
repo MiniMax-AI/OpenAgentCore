@@ -34,8 +34,9 @@ func newModelRelay(p modelprovider.Provider, t http.RoundTripper) (*modelRelay, 
 	if err != nil {
 		return nil, err
 	}
+	key := sentValue(p.APIKey)
 	m := &modelRelay{protocol: p.Protocol, scheme: base.Scheme, host: base.Host, targets: map[string]*url.URL{},
-		credential: credential, key: p.APIKey, transport: withhold(t, p.APIKey)}
+		credential: credential, key: key, transport: withhold(t, key)}
 	for _, route := range modelprovider.Routes(p.Protocol) {
 		raw := modelprovider.UpstreamPath(base.EscapedPath(), route.Path)
 		path, err := url.PathUnescape(raw)

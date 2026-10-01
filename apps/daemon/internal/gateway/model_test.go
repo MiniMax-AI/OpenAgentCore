@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
@@ -19,13 +20,14 @@ import (
 
 const upstreamKey = "sk-upstream-key"
 
-// startModel serves one Anthropic upstream at the fake TLS upstream's /anthropic.
-func startModel(t *testing.T, handler http.HandlerFunc) (string, *httptest.Server) {
+// startModel serves one Anthropic upstream with key at the fake TLS
+// upstream's /anthropic.
+func startModel(t *testing.T, key string, handler http.HandlerFunc) (string, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 	eps := serveOnLoopback(t, Config{
-		Models:  []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: srv.URL + "/anthropic", APIKey: upstreamKey}}},
+		Models:  []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: srv.URL + "/anthropic", APIKey: key}}},
 		RootCAs: trust(srv),
 	})
 	return eps.Models["main"], srv
@@ -33,7 +35,7 @@ func startModel(t *testing.T, handler http.HandlerFunc) (string, *httptest.Serve
 
 func TestModelInjectsTheKeyAndNeverThePlaceholder(t *testing.T) {
 	seen := make(chan *http.Request, 1)
-	base, _ := startModel(t, func(w http.ResponseWriter, r *http.Request) {
+	base, _ := startModel(t, upstreamKey, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 		seen <- r
@@ -76,8 +78,15 @@ func TestModelInjectsTheKeyAndNeverThePlaceholder(t *testing.T) {
 
 func TestModelWithholdsTheKeyFromResponseHeaders(t *testing.T) {
 	// The upstream echoes the key it received in an informational response,
-	// in headers and in a trailer.
-	base, _ := startModel(t, func(w http.ResponseWriter, r *http.Request) {
+	// in headers and in a trailer. A configured key with surrounding
+	// whitespace reaches the upstream trimmed.
+	for _, key := range []string{upstreamKey, upstreamKey + " \t"} {
+		withholdsTheKey(t, key)
+	}
+}
+
+func withholdsTheKey(t *testing.T, key string) {
+	base, _ := startModel(t, key, func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("X-Api-Key")
 		w.Header().Set("Link", "<https://cdn.invalid/"+key+">; rel=preload")
 		w.WriteHeader(http.StatusEarlyHints)
@@ -105,22 +114,78 @@ func TestModelWithholdsTheKeyFromResponseHeaders(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || string(body) != "answer" || resp.Header.Get("X-Native") != "kept" || resp.Trailer.Get("X-Done") != "yes" || len(informational) != 1 {
-		t.Fatalf("answer %d %q, header %v, trailer %v, %d informational", resp.StatusCode, body, resp.Header, resp.Trailer, len(informational))
+		t.Fatalf("key %q: answer %d %q, header %v, trailer %v, %d informational", key, resp.StatusCode, body, resp.Header, resp.Trailer, len(informational))
 	}
 	for _, h := range append(informational, resp.Header, resp.Trailer) {
 		for name, values := range h {
 			for _, v := range values {
 				if strings.Contains(v, upstreamKey) {
-					t.Errorf("the Harness received the key in %s", name)
+					t.Errorf("key %q: the Harness received the key in %s", key, name)
 				}
 			}
 		}
 	}
 }
 
+func TestModelKeepsTheKeyOutOfTheLog(t *testing.T) {
+	// The upstream follows an empty answer with bytes that echo the key,
+	// which http.Transport logs if the connection then sits idle.
+	closed := make(chan struct{})
+	base, _ := startModel(t, upstreamKey, func(w http.ResponseWriter, r *http.Request) {
+		c, rw, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		rw.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nX-Echo: " + r.Header.Get("X-Api-Key") + "\r\n\r\n")
+		rw.Flush()
+		io.Copy(io.Discard, c)
+		close(closed)
+	})
+	logged := &syncBuffer{}
+	previous := log.Writer()
+	log.SetOutput(logged)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	resp, err := noRedirects.Post(base+"/v1/messages", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("answer %d", resp.StatusCode)
+	}
+	select {
+	case <-closed:
+	case <-time.After(wait):
+		t.Fatal("the gateway kept the upstream connection")
+	}
+	if strings.Contains(logged.String(), upstreamKey) {
+		t.Fatal("the key reached the log")
+	}
+}
+
+// syncBuffer collects what the global logger writes.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
 func TestModelRejectsUndeclaredRequests(t *testing.T) {
 	var hits atomic.Int32
-	base, _ := startModel(t, func(http.ResponseWriter, *http.Request) { hits.Add(1) })
+	base, _ := startModel(t, upstreamKey, func(http.ResponseWriter, *http.Request) { hits.Add(1) })
 	cases := []struct {
 		method, path string
 		upgrade      bool
@@ -162,7 +227,7 @@ func TestModelStreamsEvents(t *testing.T) {
 		released.Store(true)
 		once.Do(func() { close(release) })
 	})
-	base, _ := startModel(t, func(w http.ResponseWriter, r *http.Request) {
+	base, _ := startModel(t, upstreamKey, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		io.WriteString(w, "data: one\n\n")
 		w.(http.Flusher).Flush()
@@ -188,7 +253,7 @@ func TestModelStreamsEvents(t *testing.T) {
 func TestModelReturnsRedirectsUnfollowed(t *testing.T) {
 	var hits atomic.Int32
 	const location = "https://elsewhere.invalid/v1/messages?x=1"
-	base, _ := startModel(t, func(w http.ResponseWriter, r *http.Request) {
+	base, _ := startModel(t, upstreamKey, func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		http.Redirect(w, r, location, http.StatusTemporaryRedirect)
 	})
