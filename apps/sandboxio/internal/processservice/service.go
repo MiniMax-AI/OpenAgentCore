@@ -85,7 +85,7 @@ func New(cfg Config) (*Service, error) {
 		IOModes:                    []sp.IOMode{sp.IOPipes, sp.IOPTY},
 		Signals:                    signals,
 		SignalTargets:              []sp.SignalTarget{sp.TargetLeader, sp.TargetInitialProcessGroup, sp.TargetPTYForegroundGroup, sp.TargetScope},
-		PTYModes:                   supportedModes(),
+		PTYModes:                   sp.LinuxModes(),
 		MaxStartBytes:              sandboxwire.MaxPayload,
 		MaxDataBytes:               sandboxwire.MaxChunk,
 		MaxActiveOperations:        uint32(cfg.MaxActiveOperations),
