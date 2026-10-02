@@ -30,7 +30,7 @@ class SandboxSetupTests(unittest.TestCase):
         self.root = Path(temporary.name)
         (self.root / "secrets").mkdir()
         (self.root / "secrets/core.key").write_text("fixture-core-key\n")
-        self.config, self.state = config_model.initial("all"), {"installation_id": INSTALLATION}
+        self.config, self.state = config_model.initial(), {"installation_id": INSTALLATION}
 
     def initialize(self, current, selection):
         requests = []

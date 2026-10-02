@@ -15,7 +15,7 @@ pnpm --dir website preview   # serve the build at http://127.0.0.1:4181
 ## How documentation reaches the site
 
 - The content root is the repository root. `docs/**` and `contracts/**` keep their paths as URLs, so `docs/architecture.md` is `/docs/architecture`. `website/index.md` and `website/zh/index.md` are mapped onto `/` and `/zh/`. Chinese sources in `docs/zh/` and `contracts/agents-api/zh/` map to `/zh/docs/` and `/zh/contracts/agents-api/`; the language switch opens the matching page.
-- `docs.json` owns the page list and order. The sidebar, the landing page's documentation index and `/llms.txt` are generated from it at build time; each page's frontmatter `title` is its label. Every Markdown page under `docs/` and `contracts/` is built; listing it in `docs.json` adds it to the sidebar, the landing page and `llms.txt`.
+- `docs.json` owns the page list and order. The sidebar and `/llms.txt` are generated from it at build time; each page's frontmatter `title` is its label. Every Markdown page under `docs/` and `contracts/` is built; listing it in `docs.json` adds it to the sidebar and `llms.txt`.
 - Each page's source Markdown is published next to its HTML (`/docs/architecture.md`), and the `README` paths declared in `docs.json` redirect to their section index.
 - Relative links from a page to a file that is not a published page, such as `CONTRIBUTING.md` or `openapi.yaml`, are rewritten to GitHub at build time, so the Markdown works unchanged on GitHub and on the site.
 
@@ -25,9 +25,11 @@ Site appearance and metadata are configured in `.vitepress/config.mts` and `.vit
 
 The landing page lives in `.vitepress/theme/`. `landing-content.ts` holds its English and Chinese copy; every claim there must be backed by a page in `docs/` or `contracts/`, and its harness protocols follow [Model execution](../contracts/agents-api/model-execution.md).
 
+The landing page has five numbered sections: the interactive combination example, an architecture image, execution lifecycle, console screenshots and installation. Four documentation shortcuts link to the detailed guides. `components/SessionFlow.vue` illustrates native execution, Core orchestration and multiple Session environments through a three-stage hand-drawn animation. It autoplays while visible and offers previous/next buttons, a stage slider and pause/play. Reduced-motion preferences disable autoplay. The diagram uses the locally bundled [Virgil font](https://github.com/excalidraw/virgil); its OFL license is stored beside the font in `.vitepress/theme/assets/fonts/`. Section headings share the hero’s display font with white text and green italic accents.
+
 ### Ecosystem logo wall
 
-`components/LogoWall.vue` places two full-width white logo rows between section 10 and the closing section. The wall is transparent and borderless, allowing the landing page's background and grid to continue through it. Harness and model brands occupy the first row; cloud and compute brands occupy the second. They scroll in opposite directions, pause on hover or row keyboard focus, and have an explicit pause control. Reduced-motion preferences disable animation and leave both rows manually scrollable. Labels and controls use the landing page's English and Chinese copy.
+`components/LogoWall.vue` places two full-width white logo rows between the documentation shortcuts and the closing installation section. The wall is transparent and borderless, allowing the landing page's background and grid to continue through it. Harness and model brands occupy the first row; cloud and compute brands occupy the second. They scroll in opposite directions, pause on hover or row keyboard focus, and have an explicit pause control. Reduced-motion preferences disable animation and leave both rows manually scrollable. Labels and controls use the landing page's English and Chinese copy.
 
 `.vitepress/theme/ecosystem-logos.ts` owns the brand list. These are ecosystem illustrations; supported Harness combinations remain defined by [Model execution](../contracts/agents-api/model-execution.md), and host requirements by [Installation](../docs/getting-started/install.md). Brand artwork does not establish deployment qualification or a partnership.
 

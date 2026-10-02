@@ -94,7 +94,7 @@ The distribution combines the three Harness images into one Runtime image (`depl
 make build-e2b-provider
 ```
 
-Docker builds the Linux amd64 helper with the pinned CPython and Debian 12 image. The Python dependency closure, including PyInstaller, is hash-locked in `services/core/tools/e2b-provider/requirements.lock`; no E2B account key is needed. Set `E2B_PROVIDER_BUILD_DIR` for another output directory and `E2B_SOURCE_REVISION` when building from an exported source tree. The output is `oac-e2b-provider-linux-amd64.tar.gz` with its `.sha256`; it extracts to `oac-e2b-provider/` with the executable, `_internal/`, `licenses/`, `requirements.lock` and `manifest.json`. The Core image and native Core use the same tree; the host needs a compatible glibc and CA certificates, not Python.
+Docker builds the Linux amd64 helper with the pinned CPython and Debian 12 image. The Python dependency closure, including PyInstaller, is hash-locked in `services/core/tools/e2b-provider/requirements.lock`; no E2B account key is needed. Set `E2B_PROVIDER_BUILD_DIR` for another output directory and `E2B_SOURCE_REVISION` when building from an exported source tree. The output is `oac-e2b-provider-linux-amd64.tar.gz` with its `.sha256`; it extracts to `oac-e2b-provider/` with the executable, `_internal/`, `licenses/`, `requirements.lock` and `manifest.json`. The Core image uses that tree; the host needs a compatible glibc and CA certificates, not Python.
 
 **microsandbox helper.** Linux only, with a C compiler:
 

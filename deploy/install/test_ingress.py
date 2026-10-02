@@ -35,7 +35,7 @@ class DomainTests(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
         with contextlib.redirect_stdout(io.StringIO()):
-            run_installer(install, self.bundle, ["--install-dir", self.root, "--sandbox", "none"])
+            run_installer(install, self.bundle, ["--install-dir", self.root])
         self.host.recreated.clear()
 
     def gateway_ports(self):

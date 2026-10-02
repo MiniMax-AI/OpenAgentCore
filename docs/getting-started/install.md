@@ -12,7 +12,7 @@ One command installs Core, the Web console and PostgreSQL on a Linux host. Web i
 6. [Issue a Project API key](#issue-a-project-api-key).
 7. [Add sandbox capacity](#add-sandbox-capacity).
 
-This page follows the default path. Every flag, existing reverse proxies, split and native deployments and offline hosts are in [installation options](./install-options.md).
+This page follows the default path. Every flag, existing reverse proxies and offline hosts are in [installation options](./install-options.md).
 
 ## Prerequisites
 
@@ -92,7 +92,6 @@ Web's **Overview** tracks these steps in a **Getting started** checklist.
 
 Sessions need somewhere to run:
 
-- **Nodes** run the microsandbox backend the installer selected: [add a node](./nodes.md) from Web's **Nodes** page. Docker nodes need `--sandbox docker` at installation, or a [reset](./nodes.md#change-the-sandbox-configuration) to change the backend.
-- **E2B**, which needs no nodes: [change the sandbox configuration](./nodes.md#change-the-sandbox-configuration) in Web, or [choose it during installation](./install-options.md#sandbox-backend).
+- **Nodes** run the microsandbox backend the installer selected: [add a node](./nodes.md) from Web's **Nodes** page. Docker and E2B are chosen later with [Reset deployment](./nodes.md#change-the-sandbox-configuration).
 
 Day-to-day operation, backups and upgrades are in [Operations](./operations.md).

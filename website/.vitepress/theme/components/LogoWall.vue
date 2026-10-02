@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TitleAccent from './TitleAccent.vue'
 import { computed, ref } from 'vue'
 import { agentLogos, computeLogos } from '../ecosystem-logos'
 import { copy, type Lang } from '../landing-content'
@@ -15,7 +16,7 @@ const rows = computed(() => [
 <template>
   <section class="logo-wall" :class="{ paused }" aria-labelledby="ecosystem-title">
     <header class="logo-wall-heading">
-      <h2 id="ecosystem-title">{{ t.title }}</h2>
+      <h2 id="ecosystem-title"><TitleAccent :title="t.title" :accent="t.titleAccent" /></h2>
       <button type="button" :aria-pressed="paused" @click="paused = !paused">
         <span aria-hidden="true">{{ paused ? '▶' : 'Ⅱ' }}</span>
         {{ paused ? t.resume : t.pause }}

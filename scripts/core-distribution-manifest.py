@@ -293,7 +293,7 @@ def package_artifacts(bundle, stage, revision):
 
 # The installation's management command; it runs without the bundle directory.
 OAC_CLI_MODULES = ("oac_cli.py", "config_model.py", "config.schema.json", "configuration.py",
-                  "native_service.py", "distribution.py", "node_spec.py", "ingress.py", "ingress_config.py")
+                  "distribution.py", "node_spec.py", "ingress.py", "ingress_config.py")
 
 
 def bootstraps(bundle, epoch, revision):

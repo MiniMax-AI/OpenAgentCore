@@ -8,13 +8,11 @@ import json
 import os
 import re
 
-MODES = ("all", "core-only", "web-only")
-SERVICES = {"all": ("core", "web", "database"), "core-only": ("core", "database"), "web-only": ("web",)}
+SERVICES = ("core", "web", "database")
 KEYWORDS = {"$schema", "title", "type", "enum", "const", "default", "description", "minimum", "maximum",
             "pattern", "items", "minItems", "uniqueItems", "properties", "required",
             "additionalProperties", "x-oac"}
-ANNOTATIONS = {"changeable", "modes", "restarts", "native_restarts", "sensitive", "derives", "install_flag", "check",
-               "setting"}
+ANNOTATIONS = {"changeable", "restarts", "sensitive", "derives", "install_flag", "check", "setting"}
 
 
 def _schema_text():
@@ -39,16 +37,15 @@ def annotation(node, name, default=None):
     return node.get("x-oac", {}).get(name, default)
 
 
-def leaves(node=None, prefix="", modes=MODES):
-    """Yield (dotted key, schema node, modes) for every leaf, in schema order."""
+def leaves(node=None, prefix=""):
+    """Yield (dotted key, schema node) for every leaf, in schema order."""
     node = SCHEMA if node is None else node
     for name, child in node["properties"].items():
         key = prefix + name
-        child_modes = tuple(annotation(child, "modes", modes))
         if "properties" in child:
-            yield from leaves(child, key + ".", child_modes)
+            yield from leaves(child, key + ".")
         else:
-            yield key, child, child_modes
+            yield key, child
 
 
 def lookup(config, key):
@@ -111,7 +108,7 @@ def _type_ok(value, name):
                               "null": type(None)}[name])
 
 
-def _validate(node, value, key, mode, problems):
+def _validate(node, value, key, problems):
     label = key or "config.json"
     types = node.get("type")
     if types is not None:
@@ -141,7 +138,7 @@ def _validate(node, value, key, mode, problems):
         if node.get("uniqueItems") and len({json.dumps(item, sort_keys=True) for item in value}) != len(value):
             problems.append(f"{label}: lists an item twice")
         for index, item in enumerate(value):
-            _validate(node.get("items", {}), item, f"{label}[{index}]", mode, problems)
+            _validate(node.get("items", {}), item, f"{label}[{index}]", problems)
     if isinstance(value, dict):
         properties = node.get("properties", {})
         for name in node.get("required", []):
@@ -150,19 +147,16 @@ def _validate(node, value, key, mode, problems):
         for name, item in value.items():
             child = f"{key}.{name}" if key else name
             if name in properties:
-                if mode not in annotation(properties[name], "modes", MODES):
-                    problems.append(f'{child}: does not apply when mode is "{mode}"; remove it')
-                else:
-                    _validate(properties[name], item, child, mode, problems)
+                _validate(properties[name], item, child, problems)
             elif isinstance(node.get("additionalProperties"), dict):
-                _validate(node["additionalProperties"], item, child, mode, problems)
+                _validate(node["additionalProperties"], item, child, problems)
             else:
                 problems.append(f"{child}: unknown key")
 
 
-def _complete(node, value, mode):
+def _complete(node, value):
     for name, child in node.get("properties", {}).items():
-        if mode not in annotation(child, "modes", MODES) or not annotation(child, "setting", True):
+        if not annotation(child, "setting", True):
             continue
         if name not in value:
             if "default" in child:
@@ -172,36 +166,25 @@ def _complete(node, value, mode):
             else:
                 continue
         if isinstance(value[name], dict) and "properties" in child:
-            _complete(child, value[name], mode)
+            _complete(child, value[name])
 
 
 def validate(config):
-    """Return config with defaults filled in for every applicable key, or raise ConfigError."""
+    """Return config with defaults filled in for every key, or raise ConfigError."""
     if not isinstance(config, dict):
         raise ConfigError(["config.json: must be a JSON object"])
-    mode = config.get("mode")
-    if mode not in MODES:
-        raise ConfigError([f"mode: must be one of {', '.join(MODES)}"])
     problems = []
-    _validate(SCHEMA, config, "", mode, problems)
+    _validate(SCHEMA, config, "", problems)
     if problems:
         raise ConfigError(problems)
     full = copy.deepcopy(config)
-    _complete(SCHEMA, full, mode)
-    native = full.get("native_core", False)
-    ports = full.get("ports", {})
-    if mode != "web-only" and native != ("database" in ports):
-        problems.append("ports.database: required exactly when native_core is true"
-                        if native else "ports.database: applies only with native_core; remove it")
-    if mode == "web-only" and "core_url" not in full.get("web", {}):
-        problems.append("web.core_url: required for a web-only installation")
+    _complete(SCHEMA, full)
+    ports = full["ports"]
     if len(set(ports.values())) != len(ports):
         problems.append("ports: " + ", ".join(sorted(ports)) + " need different ports")
     from configuration import loopback_listener
     import ingress_config
     managed = ingress_config.enabled(full)
-    if managed and (mode != "all" or native):
-        problems.append("ingress: managed requires a combined Docker installation; select external")
     if managed and full["public_url"]:
         try:
             from urllib.parse import urlsplit
@@ -212,8 +195,8 @@ def validate(config):
             problems.append("public_url: managed HTTPS requires https:// followed by a DNS hostname, without a port")
     if not managed and not loopback_listener(full["host"]) and not (full["public_url"] or "").startswith("https://"):
         problems.append("public_url: an HTTPS origin is required when host is not loopback")
-    core = full.get("core")
-    if core and core["default_harness"] not in core["harnesses"]:
+    core = full["core"]
+    if core["default_harness"] not in core["harnesses"]:
         problems.append("core.default_harness: must be listed in core.harnesses")
     if problems:
         raise ConfigError(problems)
@@ -234,11 +217,9 @@ def ordered(config, node=None):
     return result
 
 
-def initial(mode, native_core=False, **values):
-    """Every applicable field for a new installation, seeded from installer flags."""
-    config = {"$schema": "generated/config.schema.json", "format": 1, "mode": mode}
-    if mode != "web-only":
-        config["native_core"] = native_core
+def initial(**values):
+    """Every field for a new installation, seeded from installer flags."""
+    config = {"$schema": "generated/config.schema.json", "format": 1}
     for key, value in values.items():
         if value is None:
             continue
@@ -250,37 +231,28 @@ def initial(mode, native_core=False, **values):
     return validate(config)
 
 
-def is_setting(key, node, modes, config):
-    return (config["mode"] in modes and annotation(node, "setting", True)
-            and (key != "ports.database" or config.get("native_core", False)))
-
-
 def values(config):
-    """Every applicable setting of a validated config, by dotted key."""
-    return {key: lookup(config, key) for key, node, modes in leaves() if is_setting(key, node, modes, config)}
+    """Every setting of a validated config, by dotted key."""
+    return {key: lookup(config, key) for key, node in leaves() if annotation(node, "setting", True)}
 
 
 def settings(config):
     """The non-secret snapshot Core serves at GET /core/v1/installation."""
-    mode = config["mode"]
     items = []
-    for key, node, modes in leaves():
-        if not is_setting(key, node, modes, config):
+    for key, node in leaves():
+        if not annotation(node, "setting", True):
             continue
         value = lookup(config, key)
         sensitive = annotation(node, "sensitive", False)
         item = {"key": key, "value": None if sensitive else value}
         if sensitive:
             item["configured"] = bool(value)
-        # With native Core some settings restart more; native_restarts names them all.
-        restarts = annotation(node, "native_restarts" if config.get("native_core") and
-                              annotation(node, "native_restarts") else "restarts", [])
         item.update({"default": node.get("default"), "changeable": annotation(node, "changeable", True),
                      "sensitive": sensitive,
-                     "restarts": [name for name in restarts if name in SERVICES[mode]]})
+                     "restarts": [name for name in annotation(node, "restarts", []) if name in SERVICES]})
         items.append(item)
     return items
 
 
 def sensitive_keys():
-    return [key for key, node, _ in leaves() if annotation(node, "sensitive", False)]
+    return [key for key, node in leaves() if annotation(node, "sensitive", False)]

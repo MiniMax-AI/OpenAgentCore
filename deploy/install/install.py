@@ -19,8 +19,6 @@ import re
 import secrets
 import shutil
 import signal
-import socket
-import stat
 import subprocess
 import sys
 import tempfile
@@ -33,29 +31,20 @@ import configuration
 import ingress_config
 from configuration import valid_core_origin
 import native_installers
-import native_service
 import oac_cli
 import sandbox_setup
 import install_output
 import install_display
-from install_output import choose_where
 from install_display import step
 from distribution import DistributionError, artifact, image_identities, ensure_docker_image
 
 SETTING_ARGUMENTS = {
     config_model.annotation(node, "install_flag"): (key, node)
-    for key, node, _ in config_model.leaves()
-    if config_model.annotation(node, "install_flag") and key not in ("mode", "native_core")
+    for key, node in config_model.leaves()
+    if config_model.annotation(node, "install_flag")
 }
-SETTING_FLAGS = ("core_only", "web_only", "native_core", *(
-    flag.removeprefix("--").replace("-", "_") for flag in SETTING_ARGUMENTS))
+SETTING_FLAGS = tuple(flag.removeprefix("--").replace("-", "_") for flag in SETTING_ARGUMENTS)
 AVOID = 20  # An omitted Core or Web port moves at most this far above its default.
-DOCKER_RISKS = """Docker sandboxes isolate less than microsandbox, the default:
-- Containers share the node's kernel, so a container escape reaches the host;
-  microsandbox runs each sandbox in its own microVM.
-- Each node's service account is in the docker group, which is root-equivalent
-  on that host.
-- Choose Docker only for trusted workloads or for node hosts without KVM."""
 
 
 class InstallError(Exception):
@@ -112,12 +101,10 @@ def verify_bundle(bundle):
         if digest(path) != expected:
             raise InstallError("Distribution checksum mismatch: " + name)
     required = {"manifest.json", "install.sh", "install.py", "configuration.py", "config_model.py", "ingress_config.py", "ingress.py",
-                "config.schema.json", "oac_cli.py", "oac.pyz", "native_service.py",
+                "config.schema.json", "oac_cli.py", "oac.pyz",
                 "sandbox_setup.py", "install_output.py", "install_display.py", "standard-sizes.json", "node_spec.py", "node-install.pyz",
                 "distribution.py", "runtime/seccomp.json"}
     required.update(f"images/{name}.tar" for name in ("core", "web", "database", "ingress"))
-    required.update("native/bin/" + name for name in ("oac-core", "oac-core-migrate"))
-    required.add("native/e2b/oac-e2b-provider")
     if not required.issubset(covered):
         raise InstallError("Distribution checksum list is incomplete")
     manifest = json.loads((bundle / "manifest.json").read_text())
@@ -128,12 +115,6 @@ def verify_bundle(bundle):
                  "native/microsandbox/libkrunfw.so.5.6.1"):
         artifact(manifest, name)
     return manifest
-
-
-def database_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def public_origin(value):
@@ -153,24 +134,10 @@ def public_origin(value):
 
 def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--core-only", action="store_true", default=None)
-    modes.add_argument("--web-only", action="store_true", default=None)
-    parser.add_argument("--native-core", action="store_true", default=None, help="Run Core as a systemd user service")
-    parser.add_argument("--sandbox", choices=sandbox_setup.CHOICES,
-                        help="Sandbox backend Core starts with, at Web's Standard size (default: microsandbox; "
-                             "none with --web-only). Add nodes afterwards on the Nodes page in Web")
-    parser.add_argument("--accept-docker-risks", action="store_true",
-                        help="With --sandbox docker: accept its weaker isolation without asking")
-    parser.add_argument("--e2b-api-key-file", type=Path, help="With --sandbox e2b: private file containing the E2B API key")
-    parser.add_argument("--e2b-template", help="With --sandbox e2b: the ready template build, template-id:build-uuid")
-    parser.add_argument("--e2b-api-url", help="With --sandbox e2b: compatible service HTTPS API origin")
-    parser.add_argument("--e2b-domain", help="With --sandbox e2b: compatible service data-plane domain")
     parser.add_argument("--install-dir", type=Path)
     for flag, (_, node) in SETTING_ARGUMENTS.items():
         value_type = int if node.get("type") == "integer" else public_origin if config_model.annotation(node, "check") == "origin" else str
         parser.add_argument(flag, type=value_type, help=node["description"])
-    parser.add_argument("--core-key-file", type=Path, help="Web-only: private file containing the existing Core's Core key")
     parser.add_argument("--config", type=Path, help="Seed a new installation's config.json from this file")
     args = parser.parse_args(argv)
     args.install_dir = args.install_dir or Path.home() / ".oac/core"
@@ -196,50 +163,17 @@ def seed_document(args):
     return document
 
 
-def check_flags(args, document):
-    """Flag combinations for a new installation, before config.json is seeded."""
-    if document is None:
-        mode, native = ("core-only" if args.core_only else "web-only" if args.web_only else "all"), args.native_core
-    else:
-        mode, native = document.get("mode"), document.get("native_core")
-    if mode == "web-only" and args.sandbox not in (None, "none"):
-        raise InstallError("--web-only has no Core; choose the sandbox backend on the Core host")
-    choice = args.sandbox or ("none" if mode == "web-only" else "microsandbox")
-    if args.accept_docker_risks and choice != "docker":
-        raise InstallError("--accept-docker-risks requires --sandbox docker")
-    if choice == "e2b" and not (args.e2b_api_key_file and args.e2b_template):
-        raise InstallError("--sandbox e2b requires --e2b-api-key-file and --e2b-template")
-    if choice != "e2b" and (args.e2b_api_key_file or args.e2b_template or args.e2b_api_url or args.e2b_domain):
-        raise InstallError("E2B flags require --sandbox e2b")
-    if choice == "e2b" and not sandbox_setup.e2b_template(args.e2b_template):
-        raise InstallError("--e2b-template must name a template build as template-id:build-uuid")
-    if choice == "e2b" and not sandbox_setup.e2b_endpoint(args.e2b_api_url, args.e2b_domain):
-        raise InstallError("--e2b-api-url and --e2b-domain must both name public HTTPS compatible-service endpoints")
-    if mode == "web-only" and native:
-        raise InstallError("--web-only cannot install native Core")
-    if mode == "web-only" and not args.core_key_file:
-        raise InstallError("--web-only requires --core-key-file (and --core-url, or web.core_url in --config)")
-    if mode != "web-only" and args.core_key_file:
-        raise InstallError("--core-key-file requires --web-only")
-    return choice
-
-
 def seed_config(args, document):
     """config.json for a new installation, from flags or from --config."""
     if document is not None:
         document.setdefault("$schema", "generated/config.schema.json")
-        if document.get("native_core"):
-            document.setdefault("ports", {}).setdefault("database", database_port())
         return config_model.validate(document)
-    mode = "core-only" if args.core_only else "web-only" if args.web_only else "all"
-    native = bool(args.native_core)
     values = {key: getattr(args, flag.removeprefix("--").replace("-", "_"))
               for flag, (key, _) in SETTING_ARGUMENTS.items()}
-    values["ingress"] = values["ingress"] or ("managed" if mode == "all" and not native else "external")
+    values["ingress"] = values["ingress"] or "managed"
     if values["ingress"] == "managed" and values["host"] is None:
         values["host"] = "0.0.0.0"
-    values["ports.database"] = database_port() if native else None
-    return config_model.initial(mode, native, **values)
+    return config_model.initial(**values)
 
 
 def check_listeners(args, document, config):
@@ -304,58 +238,6 @@ def nodes_reach(public_url):
     return urlsplit(public_url or "").scheme == "https" and not loopback_origin(public_url)
 
 
-def confirm_docker(accepted):
-    """Docker sandboxes need an explicit yes to their weaker isolation, before anything is created."""
-    print(DOCKER_RISKS, flush=True)
-    if accepted:
-        return
-    try:
-        answer = input("Use Docker sandboxes anyway? [y/N] ").strip().lower() if sys.stdin.isatty() else ""
-    except EOFError:
-        answer = ""
-    if answer not in ("y", "yes"):
-        raise InstallError("Docker sandboxes were not confirmed; nothing was installed. Rerun with "
-                           "--accept-docker-risks, or without --sandbox for microsandbox")
-
-
-def check_public_url(config, choice):
-    # E2B's sandboxes reach Core from E2B's cloud; Core would refuse the selection.
-    if choice == "e2b" and not nodes_reach(config["public_url"]):
-        raise InstallError("E2B needs an HTTPS public_url that is not loopback (--public-url, or public_url "
-                           "in the --config file)")
-
-
-def read_private_file(source, name, limit=4096):
-    """The one token in an absolute, private regular file of at most 4 KiB, never through a symlink."""
-    refused = InstallError(f"{name} must be an absolute, private regular file of at most 4 KiB")
-    if not source.is_absolute():
-        raise refused
-    try:
-        # O_NONBLOCK: a FIFO in its place must not hang the installer.
-        descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    except OSError:
-        raise refused from None
-    with os.fdopen(descriptor, "rb") as stream:
-        info = os.fstat(descriptor)
-        if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) & 0o077 or info.st_size > limit:
-            raise refused
-        raw = stream.read(limit + 1)
-    try:
-        token = raw.decode().strip()
-    except UnicodeDecodeError:
-        token = ""
-    if len(raw) > limit or not token or any(c.isspace() for c in token) or "\x00" in token:
-        raise InstallError("Invalid " + name)
-    return token
-
-
-def read_core_key_file(source):
-    token = read_private_file(source, "Core key file")
-    if len(token) < 32:
-        raise InstallError("The Core key must have at least 32 characters")
-    return token
-
-
 def check_compose():
     try:
         version = run(["docker", "compose", "version", "--short"], capture_output=True, text=True,
@@ -378,11 +260,8 @@ def check_host():
                            "account's Docker access; the installer does not require root or invoke sudo") from None
 
 
-def image_names(mode, native, managed=False):
-    if mode == "web-only":
-        return ["web"]
-    names = ["database"] if native else ["core", "database"]
-    return names + (["web"] if mode == "all" else []) + (["ingress"] if managed else [])
+def image_names(managed=False):
+    return ["core", "database", "web"] + (["ingress"] if managed else [])
 
 
 def image_loader(manifest, bundle):
@@ -398,8 +277,6 @@ def image_loader(manifest, bundle):
 
 
 def prepare_node_payload(root, state, bundle):
-    if state["mode"] == "core-only":
-        return
     destination = root / "node-payload"
     # Each release remains immutable and addressable while old nodes retain it.
     # The only mutable publication is a small, atomically replaced active pointer.
@@ -568,32 +445,30 @@ def remove_created(root, state, created):
     return NOTHING_KEPT
 
 
-def create(root, args, config, manifest, images):
+def create(root, config, manifest, images):
     """Write the new installation's state.json, secrets and config.json, in that order."""
-    mode = config["mode"]
-    token = read_core_key_file(args.core_key_file) if mode == "web-only" else secrets.token_hex(32)
+    token = secrets.token_hex(32)
     if root.parent == Path.home() / ".oac":
         oac_cli.private_parent(root)
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(root, 0o700)
     state = {"format": 2, "installation_id": str(uuid.uuid4()), "project": "oac-" + secrets.token_hex(5),
-             "uid": os.getuid(), "gid": os.getgid(), "mode": mode, "native_core": config.get("native_core", False),
+             "uid": os.getuid(), "gid": os.getgid(),
              "source_commit": manifest["source_commit"], "images": images, "secrets_sha256": {},
-             "core_installation_id": None, "generated": {}, "complete": False}
+             "generated": {}, "complete": False}
     if ingress_config.enabled(config):
         state["ingress"] = ingress_config.preflight()
     # state.json first, written whole: it marks everything after it as this installation's.
     oac_cli.save_state(root, state)
-    for name in ["secrets", "generated"] + ([] if mode == "web-only" else ["state", "state/e2b"]):
+    for name in ("secrets", "generated", "state", "state/e2b"):
         (root / name).mkdir(mode=0o700)
     write = oac_cli.create_private
     write(root / "secrets/core.key", token)
-    if mode != "web-only":
-        write(root / "secrets/credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
-        write(root / "secrets/database.password", secrets.token_hex(32))
+    write(root / "secrets/credential.key", base64.b64encode(secrets.token_bytes(32)).decode())
+    write(root / "secrets/database.password", secrets.token_hex(32))
     if ingress_config.enabled(config):
         ingress_config.prepare(root)
-    digests = configuration.secret_digests(root, mode)
+    digests = configuration.secret_digests(root)
     digests.pop("core.key")
     oac_cli.save_state(root, dict(state, secrets_sha256=digests))
     # config.json last: whenever it exists, the installation can be repaired.
@@ -605,12 +480,11 @@ def finish(root, bundle, manifest, fresh=False, selection=None, moved=()):
     state = oac_cli.load_state(root)
     step("Preparing service files")
     prepare_node_payload(root, state, bundle)
-    native_service.prepare(root, state, bundle)
     native_installers.prepare(root, state, bundle)
     install_oac(root, bundle)
     if ingress_config.enabled(oac_cli.load_config(root)):
         ingress_config.prepare(root)
-    args = argparse.Namespace(dry_run=False, yes=False, confirm_public_url_change=None)
+    args = argparse.Namespace(dry_run=False, confirm_public_url_change=None)
     step("Applying settings and starting services as needed")
     try:
         oac_cli._apply(root, args, False, True, sys.stdin.isatty(),
@@ -621,14 +495,8 @@ def finish(root, bundle, manifest, fresh=False, selection=None, moved=()):
         # The installer removes what it created and says how to retry.
         raise InstallError(f"The services did not start: {error.cause}") from None
     config = oac_cli.load_config(root)
-    mode = config["mode"]
-    if mode == "web-only":
-        step("Checking Core connection and authentication")
-    if mode == "web-only" and oac_cli.paired_core(root, config)[0] != 200:
-        where = "--core-key-file and the Core URL" if fresh else "secrets/core.key and web.core_url"
-        raise InstallError(f"Core key authentication failed. Inspect {where}; no model was called")
     if fresh:
-        # The first start finished, Web-only reaching its Core with the key: from now on the installation is kept.
+        # The first start finished: from now on the installation is kept.
         oac_cli.save_state(root, dict(oac_cli.load_state(root), complete=True))
     deployment = failure = None
     if selection:
@@ -640,26 +508,24 @@ def finish(root, bundle, manifest, fresh=False, selection=None, moved=()):
     summary(root, config, fresh, selection, deployment, incomplete=failure is not None, moved=moved)
     if failure:
         raise InstallError(f"{str(failure).rstrip('.')}. Services are installed and running; "
-                           f"choose the sandbox backend {choose_where(mode)}")
+                           "choose the sandbox backend on the Nodes page in Web")
 
 
 def summary(root, config, fresh, selection=None, deployment=None, incomplete=False, moved=()):
-    mode, public_url, ports = config["mode"], config["public_url"], config["ports"]
+    public_url, ports = config["public_url"], config["ports"]
     addresses = []
-    if mode != "core-only":
-        # Web accepts only its configured origin.
-        console = ingress_config.console_origin(config) if ingress_config.enabled(config) else configuration.web_origin(config)
-        addresses.append("Console: " + console + (" (local only)" if loopback_origin(console) else ""))
-    if mode != "web-only":
-        api = configuration.service_origin(config, "core") + "/v1"
-        if public_url and not loopback_origin(public_url):
-            label = "Local-only API on this host: " if configuration.loopback_listener(config["host"]) else "Direct API on this host: "
-            addresses += ["API base URL: " + public_url + "/v1", label + api]
-        elif public_url and origin_port(public_url) != ports.get("web"):
-            addresses.append("API base URL: " + public_url + "/v1 (local only)")
-        else:
-            # The loopback Web port does not serve the public API.
-            addresses.append("API base URL: " + api + " (local only)")
+    # Web accepts only its configured origin.
+    console = ingress_config.console_origin(config) if ingress_config.enabled(config) else configuration.web_origin(config)
+    addresses.append("Console: " + console + (" (local only)" if loopback_origin(console) else ""))
+    api = configuration.service_origin(config, "core") + "/v1"
+    if public_url and not loopback_origin(public_url):
+        label = "Local-only API on this host: " if configuration.loopback_listener(config["host"]) else "Direct API on this host: "
+        addresses += ["API base URL: " + public_url + "/v1", label + api]
+    elif public_url and origin_port(public_url) != ports.get("web"):
+        addresses.append("API base URL: " + public_url + "/v1 (local only)")
+    else:
+        # The loopback Web port does not serve the public API.
+        addresses.append("API base URL: " + api + " (local only)")
     install_output.summary(root, config, addresses, fresh, selection, deployment,
                            nodes_reach(public_url), incomplete, moved)
 
@@ -699,21 +565,9 @@ def check_release(root, manifest):
 
 def prepare_fresh(args):
     document = seed_document(args)
-    choice = check_flags(args, document)
     config = seed_config(args, document)
-    check_public_url(config, choice)
     config, moved = check_listeners(args, document, config)
-    if config["mode"] == "web-only":
-        key = read_core_key_file(args.core_key_file)
-        if oac_cli.core_installation(config["web"]["core_url"], key)[0] == 404:
-            raise InstallError("The paired Core version is not supported; preserve its data and reinstall "
-                               "the current release separately. Nothing was changed.")
-    e2b = ({"api_key": read_private_file(args.e2b_api_key_file, "E2B API key file"), "template": args.e2b_template,
-            **({"api_url": args.e2b_api_url, "domain": args.e2b_domain} if args.e2b_api_url else {})}
-           if choice == "e2b" else None)
-    if choice == "docker":
-        confirm_docker(args.accept_docker_risks)
-    return config, choice, e2b, moved
+    return config, moved
 
 
 def install_locked(args, root, bundle, manifest, prepared, created):
@@ -723,13 +577,8 @@ def install_locked(args, root, bundle, manifest, prepared, created):
             raise InstallError(f"This installation is configured by {root / 'config.json'}. Edit it and run "
                                f"{root / 'oac'} apply; install.sh accepts only --install-dir to repair it")
         state = oac_cli.load_state(root)
-        if state["mode"] == "web-only" and oac_cli.paired_core(root, oac_cli.load_config(root))[0] == 404:
-            raise InstallError("The paired Core version is not supported; preserve its data and reinstall "
-                               "the current release separately. Nothing was changed.")
         step("Checking host requirements for repair")
         check_host()
-        if native_service.is_native(state):
-            native_service.preflight(bundle, root)
         images = image_loader(manifest, bundle)(list(state["images"]))
         if images != state["images"]:
             oac_cli.save_state(root, dict(state, images=images))
@@ -763,17 +612,15 @@ def install_locked(args, root, bundle, manifest, prepared, created):
 
 def install_fresh(args, root, bundle, manifest, prepared):
     """Check the host, load images, create the installation and start it for the first time."""
-    config, choice, e2b, moved = prepared
+    config, moved = prepared
     step("Checking host requirements")
     check_host()
-    if config.get("native_core"):
-        native_service.preflight(bundle, root)
     if ingress_config.enabled(config):
         ingress_config.preflight()
-    selection = None if choice == "none" else sandbox_setup.selection(bundle, manifest, choice, e2b)
-    images = image_loader(manifest, bundle)(image_names(config["mode"], config.get("native_core", False), ingress_config.enabled(config)))
+    selection = sandbox_setup.selection(bundle, manifest, "microsandbox")
+    images = image_loader(manifest, bundle)(image_names(ingress_config.enabled(config)))
     step("Creating installation settings and credentials")
-    create(root, args, config, manifest, images)
+    create(root, config, manifest, images)
     finish(root, bundle, manifest, fresh=True, selection=selection, moved=moved)
 
 

@@ -1,7 +1,7 @@
 ---
 title: "API 命名空间和凭据"
 source: docs/api/index.md
-source_hash: 278dc9cde80bdc89641b98c7c8dd386c9405b386cd2ad82e7addaf73f60a6126
+source_hash: d6483deff36f22b113e3d6df256c399238b8f4ffeeda889a1b0e3f0ddbdb6e67
 ---
 
 Core 提供三个命名空间。每个命名空间都有一种调用方及其独立凭据，凭据只能在其所属命名空间中使用。
@@ -15,6 +15,8 @@ Core 提供三个命名空间。每个命名空间都有一种调用方及其独
 在其他命名空间中使用凭据会返回 401：在 `/core/v1` 或 `/api/v1` 上使用 Project API key，或者在 `/v1` 或 `/api/v1` 上使用 Core key。有关 Project 和密钥的行为，请参阅 [Project 自有资产](../concepts.md#projects-own-assets)。
 
 **路由。** 反向代理将 `/v1` 和 `/api/v1` 发送到 Core，将其他所有请求发送到 Web（[代理设置](../getting-started/install-options.md#https-and-the-reverse-proxy)）。浏览器只能通过 Web 的控制台服务器访问 `/core/v1`；该服务器会在登录后添加 Core key，并对 `/v1` 和 `/api/v1` 返回 404（[控制台服务器](../web/console-server.md)）。操作员脚本通过 Core 的回环端口调用 `/core/v1`（[编写 Core API 脚本](../getting-started/operations.md#script-the-core-api)）。
+
+**API 参考页面。** Core 在 `/docs` 提供三个命名空间的只读 Swagger UI，并在 `/docs/openapi.yaml`、`/docs/core.openapi.yaml` 和 `/docs/runtime.openapi.yaml` 提供页面所渲染的生成文档。这些路由不需要凭据，页面也不会发送 API 请求。反向代理不会把 `/docs` 发送到 Core，因此请通过 Core 自己的地址打开：在 Core 主机上访问 `http://127.0.0.1:<port>/docs`，其中端口为 [`ports.core`](../configuration.md#settings)，默认是 8091。浏览器从 `unpkg.com` 加载 Swagger UI。
 
 ## 机器连接 API {#machine-connection-api}
 

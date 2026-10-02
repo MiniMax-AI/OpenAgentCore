@@ -22,7 +22,7 @@ The values must stay within the bounds that Core and `validSandboxResources` acc
 
 - The Web setup wizard, through `defaultSandboxResources` in `deployment-specification.ts`.
 - The release bundle: `scripts/build-core-distribution.sh` copies this file to `<bundle>/standard-sizes.json`.
-- The Core installer: `deploy/install/sandbox_setup.py` reads the bundled copy when `install.sh` saves the initial Docker or microsandbox deployment (`--sandbox`, microsandbox by default).
+- The Core installer: `deploy/install/sandbox_setup.py` reads the bundled copy when `install.sh` saves the initial microsandbox deployment at the Standard size.
 
 ## Contract
 

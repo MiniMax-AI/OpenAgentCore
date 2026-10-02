@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: ba5e3c73a7e134ed9d1d0500b65e54b9f0b09cd44348fe19979d2d68074187d9
+source_hash: 11e24e329928f4803518aeaf95a202dcbc98ff1c007860c2f94b1ca96adb5d6a
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [安装器设计规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/install/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -96,7 +96,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 make build-e2b-provider
 ```
 
-Docker 使用固定版本的 CPython 和 Debian 12 镜像构建 Linux amd64 辅助程序。Python 依赖闭包（including PyInstaller）在 `services/core/tools/e2b-provider/requirements.lock` 中按哈希锁定；不需要 E2B 账户密钥。要使用其他输出目录，请设置 `E2B_PROVIDER_BUILD_DIR`；从导出的源代码树构建时，请设置 `E2B_SOURCE_REVISION`。输出为 `oac-e2b-provider-linux-amd64.tar.gz` 及其 `.sha256`；解压后会得到 `oac-e2b-provider/`，其中包含可执行文件、`_internal/`、`licenses/`、`requirements.lock` 和 `manifest.json`。Core 镜像和原生 Core 使用同一目录树；主机需要兼容的 glibc 和 CA 证书，而不需要 Python。
+Docker 使用固定版本的 CPython 和 Debian 12 镜像构建 Linux amd64 辅助程序。Python 依赖闭包（including PyInstaller）在 `services/core/tools/e2b-provider/requirements.lock` 中按哈希锁定；不需要 E2B 账户密钥。要使用其他输出目录，请设置 `E2B_PROVIDER_BUILD_DIR`；从导出的源代码树构建时，请设置 `E2B_SOURCE_REVISION`。输出为 `oac-e2b-provider-linux-amd64.tar.gz` 及其 `.sha256`；解压后会得到 `oac-e2b-provider/`，其中包含可执行文件、`_internal/`、`licenses/`、`requirements.lock` 和 `manifest.json`。Core 镜像使用该目录树；主机需要兼容的 glibc 和 CA 证书，而不需要 Python。
 
 **microsandbox 辅助程序。** 仅支持 Linux，并且需要 C 编译器：
 

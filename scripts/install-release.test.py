@@ -99,9 +99,9 @@ class BootstrapTests(unittest.TestCase):
 
     def test_selected_prerelease_is_allowed(self):
         self.metadata.update(tag_name="v2.0.0-rc.1", prerelease=True)
-        bootstrap.main(["--version", "v2.0.0-rc.1", "--core-only"])
+        bootstrap.main(["--version", "v2.0.0-rc.1", "--web-port", "18080"])
         self.assertTrue(self.http.call_args_list[0].args[0].endswith("/releases/tags/v2.0.0-rc.1"))
-        self.assertEqual(self.invoke.call_args.args[1], ["--core-only"])
+        self.assertEqual(self.invoke.call_args.args[1], ["--web-port", "18080"])
 
     def test_latest_never_selects_prerelease_or_draft(self):
         for key in ("prerelease", "draft"):
@@ -173,9 +173,9 @@ class BootstrapTests(unittest.TestCase):
 
     def test_root_uses_the_same_verified_installation_path(self):
         with mock.patch.object(bootstrap.os, "geteuid", return_value=0):
-            bootstrap.main(["--core-only"])
+            bootstrap.main(["--web-port", "18080"])
         root, arguments, lock = self.invoke.call_args.args
-        self.assertEqual(arguments, ["--core-only"])
+        self.assertEqual(arguments, ["--web-port", "18080"])
         self.assertTrue(root.is_relative_to(self.root / ".oac/releases"))
         self.assertEqual(len(list((self.root / ".oac/releases").glob("release-*/" + self.stem + "/install.sh"))), 1)
 

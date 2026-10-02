@@ -17,6 +17,8 @@ import (
 // "METHOD /path"; the method * matches every method.
 var unpublishedRoutes = map[string]string{
 	"GET /healthz":                     "liveness probe, not part of the Agent API",
+	"GET /docs":                        "reference page rendering the published contracts",
+	"GET /docs/{document}":             "the published contract documents themselves",
 	"* /api/v1/agent-daemon/install/*": "public immutable native release content, not an API operation",
 }
 

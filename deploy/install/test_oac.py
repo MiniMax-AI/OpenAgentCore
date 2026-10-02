@@ -6,13 +6,11 @@ from pathlib import Path
 import stat
 import subprocess
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest import mock
 
 import config_model
 import install
-import native_service
 import oac_cli
 from installer_fakes import FakeHost
 
@@ -69,46 +67,6 @@ class OacTests(unittest.TestCase):
                 oac_cli.private_parent(linked / "core")
             self.assertFalse((parent / "core").exists())
 
-    def test_old_paired_core_refuses_apply_without_state_writes(self):
-        self.host.remote_core["https://core.example"] = (200, self.host.core_installation_id)
-        self.install("web-only", **{"web.core_url": "https://core.example"})
-        oac_cli.create_private(self.root / "secrets/core.key.new", "interrupted rotation key")
-        before = {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
-        self.host.remote_core["https://core.example"] = (404, None)
-        with self.assertRaisesRegex(oac_cli.OacError, "not supported;.*reinstall"):
-            self.apply()
-        self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
-        self.assertEqual(self.host.recreated, [])
-
-    def test_web_start_checks_written_core_before_starting_services(self):
-        self.host.remote_core["https://core.example"] = (200, self.host.core_installation_id)
-        self.install("web-only", **{"web.core_url": "https://core.example"})
-        for edited in (False, True):
-            if edited:
-                self.edit(lambda config: config["web"].update(core_url="https://unapplied.example"))
-            for status in (404, 200):
-                with self.subTest(edited=edited, status=status):
-                    oac_cli.stop(self.root, out=self.output.append)
-                    self.host.recreated.clear()
-                    self.host.remote_core["https://core.example"] = (status, self.host.core_installation_id)
-                    self.host.remote_core["https://unapplied.example"] = (200 if status == 404 else 404, None)
-                    before = {str(p.relative_to(self.root)): p.read_bytes()
-                              for p in self.root.rglob("*") if p.is_file()}
-                    with mock.patch.object(oac_cli, "http", wraps=self.host.http) as requests:
-                        if status == 404:
-                            with self.assertRaisesRegex(oac_cli.OacError, "not supported;.*reinstall"):
-                                oac_cli.start(self.root, out=self.output.append)
-                            self.assertEqual(self.host.running(), set())
-                            self.assertEqual(self.host.recreated, [])
-                        else:
-                            oac_cli.start(self.root, out=self.output.append)
-                            self.assertEqual(self.host.running(), {"web"})
-                    urls = [call.args[0] for call in requests.call_args_list]
-                    self.assertIn("https://core.example/core/v1/installation", urls)
-                    self.assertFalse(any("unapplied.example" in url for url in urls))
-                    self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes()
-                                             for p in self.root.rglob("*") if p.is_file()})
-
     def test_foreign_operator_refuses_all_mutations_before_lock_creation(self):
         self.install()
         (self.root / ".oac.lock").unlink()
@@ -119,17 +77,10 @@ class OacTests(unittest.TestCase):
                     operation(self.root)
         self.assertEqual(before, {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
 
-    def install(self, mode="all", native=False, **values):
-        if native:
-            values["ports.database"] = 15432
-        config = config_model.initial(mode, native, **values)
-        key = None
-        if mode == "web-only":
-            key = self.work / "existing.key"
-            key.write_text("k" * 40)
-            key.chmod(0o600)
-        images = {name: IMAGES[name] for name in install.image_names(mode, native)}
-        install.create(self.root, SimpleNamespace(core_key_file=key), config, {"source_commit": "a" * 40}, images)
+    def install(self, **values):
+        config = config_model.initial(**values)
+        images = {name: IMAGES[name] for name in install.image_names()}
+        install.create(self.root, config, {"source_commit": "a" * 40}, images)
         # These tests use finished installations; the installer records that after the first start.
         oac_cli.save_state(self.root, dict(oac_cli.load_state(self.root), complete=True))
         self.apply(start=True)
@@ -169,10 +120,9 @@ class OacTests(unittest.TestCase):
                 self.assertEqual((actual[name]["running"], actual[name]["inputs"]), (True, digest), name)
         for name, text in rendered.files.items():
             self.assertEqual(oac_cli.comparable(name, disk[name]), oac_cli.comparable(name, text), name)
-        if config["mode"] != "web-only":
-            key = (self.root / "secrets/core.key").read_text()
-            url = f'http://127.0.0.1:{config["ports"]["core"]}/core/v1/installation'
-            self.assertEqual(self.host.http(url, oac_cli.bearer(key))[0], 200)
+        key = (self.root / "secrets/core.key").read_text()
+        url = f'http://127.0.0.1:{config["ports"]["core"]}/core/v1/installation'
+        self.assertEqual(self.host.http(url, oac_cli.bearer(key))[0], 200)
         for line in self.status():
             self.assertNotRegex(line, "edited by hand|other inputs|not applied|rejects|unavailable")
 
@@ -193,25 +143,6 @@ class OacTests(unittest.TestCase):
         self.output.clear()
         self.apply()
         self.assertIn("Nothing to apply.", self.output)
-        self.assertConverged()
-
-    def test_native_core_restarts_only_when_its_inputs_change(self):
-        self.install(native=True)
-        self.edit(lambda config: config["ports"].update(web=18080))
-        self.apply()
-        self.assertEqual((self.host.native["restarts"], self.host.recreated), (0, ["web"]))
-        self.host.recreated.clear()
-        self.edit(lambda config: config["ports"].update(core=18091))
-        self.apply()
-        self.assertEqual((self.host.native["restarts"], self.host.native["addr"]), (1, 18091))
-        self.assertEqual(self.host.recreated, ["web"])
-        web = json.loads(self.generated("compose.json"))["services"]["web"]
-        self.assertEqual(web["environment"]["OAC_WEB_UPSTREAM"], "http://127.0.0.1:18091")
-        # A repair (install.sh rerun) applies with start; the active unit still restarts for new inputs.
-        self.edit(lambda config: config["log"].update(level="debug"))
-        self.apply(start=True)
-        self.assertEqual(self.host.native["restarts"], 2)
-        self.assertIn('OAC_LOG_LEVEL="debug"', self.host.native["environment"])
         self.assertConverged()
 
     def test_a_stopped_installation_stays_stopped(self):
@@ -250,10 +181,10 @@ class OacTests(unittest.TestCase):
 
     def test_secrets_fixed_fields_and_directories_are_checked(self):
         self.install()
-        self.edit(lambda config: config.update(native_core=True, ports=dict(config["ports"], database=15432)))
-        with self.assertRaisesRegex(oac_cli.OacError, "native_core is fixed"):
+        self.edit(lambda config: config.update(ingress="managed", host="0.0.0.0"))
+        with self.assertRaisesRegex(oac_cli.OacError, "ingress is fixed"):
             self.apply()
-        self.edit(lambda config: (config.pop("native_core"), config["ports"].pop("database")))
+        self.edit(lambda config: config.update(ingress="external", host="127.0.0.1"))
         (self.root / "generated").chmod(0o755)
         with self.assertRaisesRegex(oac_cli.OacError, "generated/ must be a directory with mode 0700"):
             self.apply()
@@ -282,18 +213,6 @@ class OacTests(unittest.TestCase):
         url = "http://127.0.0.1:8091/core/v1/installation"
         self.assertEqual(self.host.http(url, oac_cli.bearer(old))[0], 401)
         self.assertConverged()
-
-    def test_web_only_neither_rotates_nor_sends_its_key_to_an_unapplied_core(self):
-        self.host.remote_core["https://core.example"] = (200, self.host.core_installation_id)
-        self.install("web-only", **{"web.core_url": "https://core.example"})
-        with self.assertRaisesRegex(oac_cli.OacError, "Core owns the Core key"):
-            oac_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
-        self.edit(lambda config: config["web"].update(core_url="https://other.example"))
-        calls = []
-        with mock.patch.object(oac_cli, "http", side_effect=lambda url, *a, **k: calls.append(url) or (0, b"")):
-            self.apply(dry_run=True)
-        self.assertEqual(calls, [])
-        self.assertIn("web.core_url changes; apply checks which Core it reaches.", self.output)
 
     def test_public_url_change_lists_bindings_and_requires_confirmation(self):
         self.install(public_url="https://core.example")
@@ -348,21 +267,16 @@ class OacTests(unittest.TestCase):
         self.assertConverged()
 
     def test_repeated_rolled_back_applies_leave_no_false_edit(self):
-        for native in (False, True):
-            with self.subTest(native=native):
-                self.root = self.work / f"repeated-{native}"
-                self.host.native_root, self.host.containers = self.root, {}
-                self.host.native.update(active=False, inputs=None, loaded=None)
-                self.install(native=native)
-                self.host.core["rejects"] = lambda environment: 'OAC_EXECUTION_CONCURRENCY="4"' not in environment
-                for value in (5, 6, 7, 8):
-                    self.edit(lambda config: config["core"].update(execution_concurrency=value))
-                    with self.assertRaisesRegex(oac_cli.OacError, "services converged on them"):
-                        self.apply()
-                self.host.core["rejects"] = lambda environment: False
-                self.edit(lambda config: config["core"].update(execution_concurrency=4))
+        self.install()
+        self.host.core["rejects"] = lambda environment: 'OAC_EXECUTION_CONCURRENCY="4"' not in environment
+        for value in (5, 6, 7, 8):
+            self.edit(lambda config: config["core"].update(execution_concurrency=value))
+            with self.assertRaisesRegex(oac_cli.OacError, "services converged on them"):
                 self.apply()
-                self.assertConverged()
+        self.host.core["rejects"] = lambda environment: False
+        self.edit(lambda config: config["core"].update(execution_concurrency=4))
+        self.apply()
+        self.assertConverged()
 
     def test_a_hand_edit_restored_by_a_rollback_is_still_reported(self):
         self.install()
@@ -385,35 +299,29 @@ class OacTests(unittest.TestCase):
             "after Core": (oac_cli, "compose", compose_up()),
             "before health": (oac_cli, "health", lambda *a: True),
         }
-        native_stages = dict(compose_stages, **{
-            "after reload": (native_service, "restart", lambda *a: True),
-            "after Core": (oac_cli, "compose", compose_up()),
-        })
-        for native in (False, True):
-            for stage, (target, name, when) in (native_stages if native else compose_stages).items():
-                for operation in ("apply", "rotate", "rollback"):
-                    with self.subTest(native=native, stage=stage, operation=operation):
-                        self.root = self.work / f"{native}-{stage}-{operation}".replace(" ", "-")
-                        self.host.native_root, self.host.containers = self.root, {}
-                        self.host.native.update(active=False, inputs=None, loaded=None)
-                        self.install(native=native)
-                        if operation == "rotate":
-                            action = lambda: oac_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
-                        else:
-                            self.edit(lambda config: (config["log"].update(level="debug"),
-                                                      config["ports"].update(web=18080)))
-                            action = self.apply
-                        self.host.core.update(fails=operation == "rollback", failed=False)
-                        # A rollback is interrupted in what it does after Core failed.
-                        trigger = (lambda *a, when=when, **k: self.host.core["failed"] and when(*a, **k)) \
-                            if operation == "rollback" else when
-                        with interrupt(target, name, trigger), \
-                                self.assertRaises((KeyboardInterrupt, oac_cli.OacError)) as raised:
-                            action()
-                        self.assertNotIn(": .", str(raised.exception))
-                        self.host.core.update(fails=False, failed=False)
-                        self.apply()
-                        self.assertConverged()
+        for stage, (target, name, when) in compose_stages.items():
+            for operation in ("apply", "rotate", "rollback"):
+                with self.subTest(stage=stage, operation=operation):
+                    self.root = self.work / f"{stage}-{operation}".replace(" ", "-")
+                    self.host.containers = {}
+                    self.install()
+                    if operation == "rotate":
+                        action = lambda: oac_cli.rotate_core_key(self.root, yes=True, out=self.output.append)
+                    else:
+                        self.edit(lambda config: (config["log"].update(level="debug"),
+                                                  config["ports"].update(web=18080)))
+                        action = self.apply
+                    self.host.core.update(fails=operation == "rollback", failed=False)
+                    # A rollback is interrupted in what it does after Core failed.
+                    trigger = (lambda *a, when=when, **k: self.host.core["failed"] and when(*a, **k)) \
+                        if operation == "rollback" else when
+                    with interrupt(target, name, trigger), \
+                            self.assertRaises((KeyboardInterrupt, oac_cli.OacError)) as raised:
+                        action()
+                    self.assertNotIn(": .", str(raised.exception))
+                    self.host.core.update(fails=False, failed=False)
+                    self.apply()
+                    self.assertConverged()
 
     def test_uninstall_removes_the_services_volumes_unused_images_and_directory(self):
         self.install()
@@ -442,7 +350,7 @@ class OacTests(unittest.TestCase):
         self.assertFalse(any("down" in command or "rm" in command for command in self.host.commands))
 
     def test_uninstall_removes_an_installation_that_never_finished(self):
-        install.create(self.root, SimpleNamespace(core_key_file=None), config_model.initial("all", False),
+        install.create(self.root, config_model.initial(),
                        {"source_commit": "a" * 40}, IMAGES)
         (self.root / "config.json").unlink()
         installation = oac_cli.load_state(self.root)["installation_id"]

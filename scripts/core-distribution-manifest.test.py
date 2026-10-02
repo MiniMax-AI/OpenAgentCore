@@ -199,7 +199,7 @@ class DistributionTests(unittest.TestCase):
             self.manifest()
 
     def test_archive_reproducible_and_installer_executable(self):
-        native = self.bundle / "native/bin/oac-core"
+        native = self.bundle / "native/bin/fixture-tool"
         native.parent.mkdir(parents=True, exist_ok=True)
         native.write_bytes(b"native executable")
         native.chmod(0o555)
@@ -215,7 +215,7 @@ class DistributionTests(unittest.TestCase):
         with tarfile.open(archive) as contents:
             self.assertEqual(contents.getmember(self.bundle.name + "/install.sh").mode, 0o755)
             self.assertEqual(contents.getmember(self.bundle.name + "/manifest.json").mode, 0o644)
-            self.assertEqual(contents.getmember(self.bundle.name + "/native/bin/oac-core").mode, 0o555)
+            self.assertEqual(contents.getmember(self.bundle.name + "/native/bin/fixture-tool").mode, 0o555)
 
     def test_compressor_failure_propagates(self):
         real_popen = subprocess.Popen

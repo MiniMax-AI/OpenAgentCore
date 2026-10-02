@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore 文档"
 source: docs/getting-started/index.md
-source_hash: 0cd63b0f22d9fcb06c8f45760bcb42ed35a45091335e512660acff0e6e26310d
+source_hash: b00e7833d6dc323fc53a9e6dd145bd0e08069a421346ee48c9454397494aa5a8
 ---
 
 OpenAgentCore 在你自己的基础设施上运行 AI Agent，并提供 OpenAI Agents API。[架构概览](../architecture.md)介绍各个组成部分。根据你的角色选择指南。
@@ -13,7 +13,7 @@ OpenAgentCore 在你自己的基础设施上运行 AI Agent，并提供 OpenAI A
 | 指南 | 内容 |
 | --- | --- |
 | [安装 Core 和 Web](install.md) | 默认安装流程：从空白主机到第一个 Project API 密钥 |
-| [安装选项](install-options.md) | 安装参数、已有反向代理、分离部署与原生部署、离线主机 |
+| [安装选项](install-options.md) | 安装参数、已有反向代理、离线主机 |
 | [节点](nodes.md) | 添加、修改、移除沙箱节点及排查问题 |
 | [运维](operations.md) | `oac` 命令、Core 密钥、备份、卸载、升级及问题排查 |
 | [配置参考](../configuration.md) | 所有设置、文件和环境变量 |

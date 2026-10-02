@@ -4,7 +4,7 @@
   "description": "Process settings of one installation. Edit config.json, then run oac apply.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "mode"],
+  "required": ["format"],
   "properties": {
     "$schema": {
       "type": "string",
@@ -15,18 +15,6 @@
       "const": 1,
       "description": "Configuration format for this release. Fixed after installation.",
       "x-oac": {"setting": false, "changeable": false}
-    },
-    "mode": {
-      "enum": ["all", "core-only", "web-only"],
-      "default": "all",
-      "description": "Which services this installation runs.",
-      "x-oac": {"changeable": false, "install_flag": "--core-only or --web-only"}
-    },
-    "native_core": {
-      "type": "boolean",
-      "default": false,
-      "description": "Run Core as a systemd user service instead of a container.",
-      "x-oac": {"changeable": false, "modes": ["all", "core-only"], "install_flag": "--native-core"}
     },
     "public_url": {
       "type": ["string", "null"],
@@ -42,7 +30,7 @@
     "host": {
       "type": "string",
       "default": "127.0.0.1",
-      "description": "Listener IP. With managed ingress only the gateway is public; Core stays on loopback. The default combined installer listens on all IPv4 interfaces.",
+      "description": "Listener IP. With managed ingress only the gateway is public; Core stays on loopback. The default installer listens on all IPv4 interfaces.",
       "x-oac": {
         "check": "listen_host",
         "restarts": [
@@ -64,12 +52,10 @@
           "minimum": 1024,
           "maximum": 65535,
           "default": 8091,
-          "description": "Host port of the Core API. With native Core, Web follows it.",
+          "description": "Host port of the Core API.",
           "x-oac": {
-            "modes": ["all", "core-only"],
             "restarts": ["core"],
-            "native_restarts": ["core", "web"],
-            "derives": ["Core port mapping or OAC_ADDR"],
+            "derives": ["Core port mapping"],
             "install_flag": "--core-port"
           }
         },
@@ -80,38 +66,9 @@
           "default": 8080,
           "description": "Host port of Web.",
           "x-oac": {
-            "modes": ["all", "web-only"],
             "restarts": ["web"],
-            "derives": ["Web port mapping or OAC_WEB_ADDR"],
+            "derives": ["Web or gateway port mapping"],
             "install_flag": "--web-port"
-          }
-        },
-        "database": {
-          "type": "integer",
-          "minimum": 1024,
-          "maximum": 65535,
-          "description": "Loopback port of PostgreSQL. Present exactly when native_core is true; the installer picks a free port.",
-          "x-oac": {
-            "modes": ["all", "core-only"],
-            "restarts": ["database", "core"],
-            "derives": ["database port mapping", "OAC_DATABASE_URL"]
-          }
-        }
-      }
-    },
-    "web": {
-      "type": "object",
-      "additionalProperties": false,
-      "x-oac": {"modes": ["web-only"]},
-      "properties": {
-        "core_url": {
-          "type": "string",
-          "description": "Origin of the Core that this Web connects to: HTTPS, or HTTP on a loopback host.",
-          "x-oac": {
-            "check": "origin",
-            "restarts": ["web"],
-            "derives": ["OAC_WEB_UPSTREAM"],
-            "install_flag": "--core-url"
           }
         }
       }
@@ -143,7 +100,6 @@
     "core": {
       "type": "object",
       "additionalProperties": false,
-      "x-oac": {"modes": ["all", "core-only"]},
       "properties": {
         "execution_concurrency": {
           "type": "integer",
@@ -270,7 +226,7 @@
     "ingress": {
       "enum": ["managed", "external"],
       "default": "external",
-      "description": "managed provides automatic HTTPS and Web domain setup for a combined Docker installation; install.sh selects it by default. external uses your existing proxy. Fixed after installation.",
+      "description": "managed provides automatic HTTPS and Web domain setup; install.sh selects it by default. external uses your existing proxy. Fixed after installation.",
       "x-oac": {"changeable": false, "install_flag": "--ingress"}
     }
   }

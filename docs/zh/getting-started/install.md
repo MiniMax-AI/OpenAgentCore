@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 438f23813b1f8d94c9a06048d2a393671c84c09a52151982f3c4be3d8c292108
+source_hash: 7b15a2e8fd3365e0d4e246d9d5a288bd3648a3f79b3fa11ccfc6e3e702d4c77d
 ---
 
 一条命令即可在 Linux 主机上安装 Core、Web 控制台和 PostgreSQL。Web 是管理员控制台：使用 Core 密钥登录，为安装配置域名、设置默认模型并签发 Project API 密钥。应用随后使用这些密钥调用 Core API，Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -14,7 +14,7 @@ source_hash: 438f23813b1f8d94c9a06048d2a393671c84c09a52151982f3c4be3d8c292108
 6. [签发 Project API 密钥](#issue-a-project-api-key)。
 7. [添加沙箱容量](#add-sandbox-capacity)。
 
-本页介绍默认流程。完整参数、已有反向代理、分离部署与原生部署、离线主机请参阅[安装选项](install-options.md)。
+本页介绍默认流程。完整参数、已有反向代理和离线主机请参阅[安装选项](install-options.md)。
 
 ## 前置条件 {#prerequisites}
 
@@ -94,7 +94,6 @@ Web 的 **Overview** 通过 **Getting started** 清单跟踪这些步骤。
 
 Session 需要执行位置：
 
-- **Nodes** 运行安装程序选择的 microsandbox 后端：在 Web 的 **Nodes** 页面[添加节点](nodes.md)。Docker 节点需要安装时传入 `--sandbox docker`，或通过[重置](nodes.md#change-the-sandbox-configuration)更换后端。
-- **E2B** 不需要节点：在 Web 中[修改沙箱配置](nodes.md#change-the-sandbox-configuration)，或[安装时选择它](install-options.md#sandbox-backend)。
+- **Nodes** 运行安装程序选择的 microsandbox 后端：在 Web 的 **Nodes** 页面[添加节点](nodes.md)。Docker 和 E2B 以后通过 [Reset deployment](nodes.md#change-the-sandbox-configuration) 选择。
 
 日常操作、备份和升级见[运维](operations.md)。

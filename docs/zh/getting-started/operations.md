@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: 6201b1c174d83f762051f8c150c9b7322dc3cc530b117969ab48c6dab7dffe3f
+source_hash: 83a7f46bfd82d743be230955a7ac2312efaa9ca8d88b243117e66cc19626e2a4
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -16,19 +16,18 @@ source_hash: 6201b1c174d83f762051f8c150c9b7322dc3cc530b117969ab48c6dab7dffe3f
 
 | 命令 | 功能 |
 | --- | --- |
-| `oac status` | 展示各服务及健康状态、Core 与 Web 健康状态、公开 URL、API 基础 URL、控制台地址、源码提交、反向代理所需路由、尚未应用的 `config.json` 变更和手动修改的生成文件。仅 Web 安装还检查 Core 是否接受其 Core 密钥。服务不可用时以非零状态退出。不调用模型 |
+| `oac status` | 展示各服务及健康状态、Core 与 Web 健康状态、公开 URL、API 基础 URL、控制台地址、源码提交、反向代理所需路由、尚未应用的 `config.json` 变更和手动修改的生成文件。服务不可用时以非零状态退出。不调用模型 |
 | `oac start` | 使用 `apply` 最近写入的文件启动所有服务；提示尚未应用的变更 |
 | `oac stop` | 停止 PostgreSQL、Core 和 Web。保留数据、节点和沙箱，运行中的沙箱工作可能继续 |
 | `oac apply` | 应用 `config.json` 并重启发生变化的服务；参阅 [apply 工作方式](../configuration.md#how-oac-apply-works) |
 | `oac apply --dry-run` | 展示变更的设置、文件与重启计划，不修改任何内容 |
 | `oac apply --discard-edits` | 覆盖手动修改的生成文件，各自保留为 `generated/<file>.edited-<time>` |
 | `oac apply --confirm-public-url-change URL` | 无提示地确认公开 URL 变更；必须与新 URL 相同 |
-| `oac apply --yes` | 仅 Web：无需询问地与不同 Core 配对 |
 | `oac domain HOSTNAME [--confirm-public-url-change URL]` | 托管入口：将公开 URL 设为 `https://HOSTNAME`，对应 Web 的 **Configure domain and HTTPS**；参阅[配置域名和 HTTPS](install.md#configure-the-domain-and-https) |
 | `oac rotate-core-key [--yes]` | 替换 Core 密钥；参阅[轮换 Core 密钥](#rotate-the-core-key) |
 | `oac uninstall [--yes]` | 从主机移除安装及全部数据；参阅[卸载](#uninstall) |
 
-第二个安装使用自己的命令，例如 `~/.oac/web/oac status`。
+第二个安装使用自己的命令，例如 `~/.oac/second/oac status`。
 
 ## 服务健康状态 {#service-health}
 
@@ -49,7 +48,7 @@ docker compose -f "$HOME/.oac/core/generated/compose.json" ps --all
 docker compose -f "$HOME/.oac/core/generated/compose.json" logs --tail 200 core
 ```
 
-原生 Core 写入用户单元日志：`journalctl --user -u <project>-core.service`，其中 `project` 来自 `state.json`。不要将 `docker compose config`、`docker inspect` 或原始日志粘贴到公开问题报告。
+不要将 `docker compose config`、`docker inspect` 或原始日志粘贴到公开问题报告。
 
 ## 停止与重启 {#stop-and-restart}
 
@@ -107,8 +106,6 @@ core() {  # core METHOD PATH [JSON body]
 
 `config.json` 有未应用变更或生成文件被手动修改时，操作被拒绝：先运行 `oac apply`。程序要求确认（`--yes` 跳过），停止 Web，在 `secrets/core.key` 写入新密钥并重新生成摘要文件。安装正在运行时，随后重启 Core、启动 Web，并检查 Core 接受新密钥且拒绝旧密钥；已停止的安装只更新文件，下次 `oac start` 使用新密钥。Core 重启时旧密钥立即失效，所有控制台会话结束：重新登录并更新脚本。命令提前停止时，以 `secrets/core.key` 中的密钥为准；运行 `oac apply` 完成。
 
-独立的仅 Web 安装保留自己的密钥副本。轮换后，从 Core 主机将 `secrets/core.key` 复制到该安装的 `secrets/core.key`（权限 `0600`），并运行其 `oac apply`。它的 `oac status` 会报告 Core 拒绝的密钥。`rotate-core-key` 不允许在仅 Web 安装上运行。
-
 ## Project 和 API 密钥 {#projects-and-api-keys}
 
 在 Web 的 **Projects and keys**，或通过 [Core API](#script-the-core-api)创建 Project、签发密钥。Project 和密钥行为见 [Project 拥有资产](../concepts.md#projects-own-assets)。
@@ -147,7 +144,7 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 ~/.oac/core/oac uninstall
 ```
 
-从主机移除安装：Compose 项目及其容器、网络和数据库卷、原生 Core 服务、安装程序加载的镜像，以及安装目录（包含 `secrets/` 和 `oac` 命令本身）。具有其他标签或被其他容器使用的镜像会保留并报告，例如同一版本的其他安装使用的镜像。
+从主机移除安装：Compose 项目及其容器、网络和数据库卷、安装程序加载的镜像，以及安装目录（包含 `secrets/` 和 `oac` 命令本身）。具有其他标签或被其他容器使用的镜像会保留并报告，例如同一版本的其他安装使用的镜像。
 
 全部数据随之删除：Project 和 API 密钥、Session 历史、存储的凭据和 Core 密钥。没有 `secrets/` 的数据库卷无法使用，因此不会单独保留。要保留数据，请用 `oac stop` 停止安装，或先[备份](#back-up)。
 
@@ -155,7 +152,7 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成；命令展示 Core 正在使用的沙箱数量。
 
-其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。`oac uninstall` 后 Core 已不存在：在各节点主机使用安装时[所用发行包](#installation-version-policy)的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。`oac uninstall` 输出含安装 ID 的命令。仅 Web 安装只移除 Web；Core 保留数据和节点。
+其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。`oac uninstall` 后 Core 已不存在：在各节点主机使用安装时[所用发行包](#installation-version-policy)的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。`oac uninstall` 输出含安装 ID 的命令。
 
 ## 安装版本策略 {#installation-version-policy}
 
@@ -202,7 +199,7 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 | --- | --- | --- |
 | Web | 仅通过 `gateway` 服务访问，它在 `host`（默认所有 IPv4 接口）发布 `ports.web`（8080），HTTPS 启用后还发布 [80 和 443](install-options.md#ports) | `host:ports.web`（默认回环地址），位于反向代理之后 |
 | Core | `127.0.0.1:ports.core`（8091）；网关将 `/v1` 和 `/api/v1` 路由到它 | `host:ports.core`，位于反向代理之后 |
-| PostgreSQL | 不发布端口 | 不发布端口；原生 Core 使用回环端口 |
+| PostgreSQL | 不发布端口 | 不发布端口 |
 
 Web 使用 Core 密钥让管理员登录，检查每个请求来源，并用保留在服务器上的 Core 密钥将已登录的 `/core/v1` 请求转发到 Core。无论请求携带何种凭据，`/v1` 和 `/api/v1` 均返回 404；Web 仅在 `/node-install/` 提供不含密钥的节点文件，没有 Docker 或 KVM 访问权限。`/api/v1` 机器路由使用独立注册和连接凭据。托管入口中，`installation` 服务通过 Docker 套接字应用域名变更；Web 仅通过私有 Unix 套接字访问它，每次请求都检查 Core 密钥。
 

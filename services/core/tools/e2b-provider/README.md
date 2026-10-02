@@ -6,7 +6,7 @@ Core's E2B Sandbox Provider ([`sandbox/e2b`](../../internal/sandbox/e2b)) is a p
 
 The deployment selects E2B with an account key and an immutable `templateID:build_UUID`; [Sandbox deployment](../../../../contracts/agents-api/sandbox-deployment.md) owns the selection, key replacement and reset rules. Build the template with [`build-template.py`](../../deploy/e2b/README.md#build-a-template); it carries the `managed_init.py` startup script that Create runs, and a template without it is rejected as `template_invalid`. The template is deployment configuration, not a public Environment Template.
 
-The account key is stored encrypted in Core's database and is write-only. It reaches the helper only on standard input, never in a template, command argument, inherited environment, receipt or response. The helper, its dependency closure and licenses ship in the Core image and native Core; the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers) builds it. The server needs no Python.
+The account key is stored encrypted in Core's database and is write-only. It reaches the helper only on standard input, never in a template, command argument, inherited environment, receipt or response. The helper, its dependency closure and licenses ship in the Core image; the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers) builds it. The server needs no Python.
 
 ## Operations
 
