@@ -12,6 +12,18 @@ import (
 // credential. Plain HTTP is reserved for explicit loopback development hosts.
 // OAC_PUBLIC_URL must pass it.
 func ValidateCoreURL(value string) error {
+	return validateCoreURL(value, false)
+}
+
+// ValidateCoreURLInsecure accepts every origin ValidateCoreURL accepts and adds
+// plain HTTP for a host that is not loopback. The caller owns that decision:
+// every credential this origin carries, including Project API keys and machine
+// credentials, then travels unencrypted.
+func ValidateCoreURLInsecure(value string) error {
+	return validateCoreURL(value, true)
+}
+
+func validateCoreURL(value string, allowInsecureHTTP bool) error {
 	u, err := url.Parse(value)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.RawFragment != "" || u.Opaque != "" || u.String() != value || u.Host != strings.ToLower(u.Host) {
 		return ErrInvalidInput
@@ -43,7 +55,7 @@ func ValidateCoreURL(value string) error {
 			}
 		}
 	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+	if u.Scheme != "https" && !(u.Scheme == "http" && (loopback || allowInsecureHTTP)) {
 		return ErrInvalidInput
 	}
 	return nil

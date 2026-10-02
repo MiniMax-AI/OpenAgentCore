@@ -44,6 +44,24 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 - 只有在旧地址仍可访问此 Core 时，现有沙箱和执行器才会继续工作。托管域更改会替换先前的域路由。
 - 自托管执行器必须使用新的 `remote_url` 重启，并且其安装程序会拒绝为旧地址进行的安装：请创建新的自托管 Session，然后重新连接其主机。
 
+### 受信网络上的明文 HTTP {#plain-http-on-a-trusted-network}
+
+对于非回环源地址，`install.sh`、`oac apply`、`web.core_url` 和节点安装程序都要求 HTTPS。Core 本身还接受一种情况，适用于你自行启动的部署——[独立 Compose 模板](getting-started/install-options.md#docker-compose-and-hosting-platforms)、你自己的服务单元，或开发用的代码检出：
+
+| 变量 | 值 |
+| --- | --- |
+| `OAC_PUBLIC_URL` | 明文源地址，例如 `http://10.0.0.5:8091` |
+| `OAC_PUBLIC_URL_INSECURE` | `1` |
+
+该选项与 `core.runtime_history.insecure` 一致：默认关闭；与 `https://` 源地址一起使用时会被拒绝；没有源地址时会被拒绝；除 `0` 或 `1` 之外的任何值都会阻止 Core 启动。启用期间，该源地址承载的一切内容——Project API 密钥、守护进程凭据、节点凭据以及守护进程 WebSocket——都以明文传输，因此请仅在你能完全控制的网络中使用。
+
+其他变化与不变之处：
+
+- Core 对该源地址报告 `local_only: false`，因此 Web 不再显示“配置 HTTPS”的提示。
+- Web 仍然只为 HTTPS 源地址生成节点命令，因为节点、其安装程序和 `oac apply` 都保持“HTTPS 或回环 HTTP”规则：不支持通过明文 HTTP 添加节点。
+- 若某个提供程序的访客必须访问 Core（例如 E2B），则仍然需要一个访客可访问的地址；私有地址不属于此类地址。
+- 它是进程环境变量，而不是 `config.json` 的键。`oac apply` 会重新生成 `generated/core.env`，因此 `install.sh` 安装无法保留该选项。
+
 ### 设置 {#settings}
 
 `core.runtime_history.headers` 可以包含导出凭据。这些凭据保存在权限为 `0600` 的 `config.json` 和 Core 读取的生成文件中，绝不会出现在 `oac` 输出或 Core 的设置快照中。模型提供商不属于进程设置；请参阅[默认模型](#default-models)。
@@ -178,6 +196,7 @@ Core 只读取其环境。安装程序会根据 `config.json` 生成 `generated/
 | 变量 | 设置来源 |
 | --- | --- |
 | `OAC_PUBLIC_URL` | `public_url`，或 Core 的回环源地址。Core 从中派生守护进程 WebSocket URL、自托管 `remote_url`、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生。未设置时，Core 不运行 Runtime 网关，也不执行任何 Session |
+| `OAC_PUBLIC_URL_INSECURE` | `0` 或 `1`；为空或省略表示 `0`。`1` 允许在非回环主机上使用明文 `http://` 的 `OAC_PUBLIC_URL`，详见[受信网络上的明文 HTTP](#plain-http-on-a-trusted-network)。与 `https://` 源地址、缺少源地址或任何其他值一起使用时会被拒绝 |
 | `OAC_ADDR` | 安装程序从 `ports.core` 派生原生监听地址，并在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091` |
 | `OAC_DATABASE_URL` | 该安装不含密码的 PostgreSQL URL，并将 `core.database_pool` 作为 `pool_*` 查询参数附加到其中 |
 | `OAC_DATABASE_PASSWORD_FILE` | `secrets/database.password`。此时 URL 不得包含密码；迁移和维护命令也会读取该文件 |

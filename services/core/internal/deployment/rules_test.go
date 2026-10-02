@@ -34,6 +34,32 @@ func TestValidateCoreURL(t *testing.T) {
 	}
 }
 
+// ValidateCoreURLInsecure adds plain HTTP on a host that is not loopback. The
+// installer and the node-side check keep the default rule, so these extra cases
+// stay out of deploy/install/test_install.py.
+func TestValidateCoreURLInsecure(t *testing.T) {
+	for _, value := range []string{
+		"https://core.example", "https://core.example:8443", "https://[2001:db8::1]",
+		"http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091",
+		"http://core.example", "http://core.example:8091", "http://10.0.0.5:8091", "http://[2001:db8::1]:8091", "http://core",
+	} {
+		if err := ValidateCoreURLInsecure(value); err != nil {
+			t.Errorf("valid insecure Core URL %q rejected: %v", value, err)
+		}
+	}
+	for _, value := range []string{
+		"", "wss://core.example", "ws://core.example", "ftp://core.example", "http://core.example/", "http://core.example/path",
+		"http://user:secret@core.example", "http://core.example?", "http://core.example?q=x", "http://core.example#x",
+		"http://CORE.example", "http://core.example:", "http://core.example:0", "http://core.example:65536",
+		"http://core.example:0080", "http://core.example:0443", "http://core.example\\evil", "http://[not-an-ip]",
+		"http://-core.example", "http://core..example", "http://core_example", "http://core.example.", "http://bücher.example",
+	} {
+		if err := ValidateCoreURLInsecure(value); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("invalid insecure Core URL %q accepted: %v", value, err)
+		}
+	}
+}
+
 func TestParseID(t *testing.T) {
 	id := uuid.New()
 	if got, err := parseID(strings.ToUpper(id.String())); err != nil || got != id.String() {

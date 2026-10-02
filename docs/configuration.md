@@ -42,6 +42,24 @@ When nodes, hosted sandboxes or self-hosted executors are bound to the current a
 - Existing sandboxes and executors keep working only while the old address still reaches this Core. A managed domain change replaces the previous domain route.
 - Self-hosted executors must restart with the new `remote_url`, and their installer refuses an installation made for the old address: create new self-hosted Sessions and connect their hosts again.
 
+### Plain HTTP on a trusted network
+
+`install.sh`, `oac apply`, `web.core_url` and the node installer require HTTPS for a non-loopback origin. Core itself accepts one more case, for a deployment you start yourself — the [standalone Compose template](./getting-started/install-options.md#docker-compose-and-hosting-platforms), your own service unit, or a development check-out:
+
+| Variable | Value |
+| --- | --- |
+| `OAC_PUBLIC_URL` | the plain origin, such as `http://10.0.0.5:8091` |
+| `OAC_PUBLIC_URL_INSECURE` | `1` |
+
+The opt-in follows `core.runtime_history.insecure`: it defaults to off, is refused for an `https://` origin and refused without an origin, and any value other than `0` or `1` stops Core at startup. While it is on, everything the origin carries — Project API keys, daemon credentials, node credentials and the daemon WebSocket — travels unencrypted, so keep it on a network you control.
+
+What else changes, and what does not:
+
+- Core reports `local_only: false` for that origin, so Web stops showing the configure-HTTPS notice.
+- Web still issues node commands only for an HTTPS origin, because the node, its installer and `oac apply` keep the HTTPS-or-loopback rule: adding nodes over plain HTTP is not supported.
+- A provider whose guests must reach Core, such as E2B, still needs an address those guests can reach; a private address is not one.
+- It is a process variable, not a `config.json` key. `oac apply` regenerates `generated/core.env`, so an `install.sh` installation cannot keep the opt-in.
+
 ### Settings
 
 `core.runtime_history.headers` may hold export credentials. They stay in the `0600` `config.json` and the generated file Core reads, and never appear in `oac` output or in Core's settings snapshot. Model providers are not process settings; see [Default models](#default-models).
@@ -174,6 +192,7 @@ Core reads only its environment. The installer renders `generated/core.env` from
 | Variable | Set from |
 | --- | --- |
 | `OAC_PUBLIC_URL` | `public_url`, or Core's loopback origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
+| `OAC_PUBLIC_URL_INSECURE` | `0` or `1`; empty or omitted means `0`. `1` accepts a plain `http://` `OAC_PUBLIC_URL` on a host that is not loopback, as described in [Plain HTTP on a trusted network](#plain-http-on-a-trusted-network). Refused with an `https://` origin, refused without an origin, and refused for any other value |
 | `OAC_ADDR` | The installer derives the native listener from `ports.core` and sets `:8091` in the container. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | The installation's PostgreSQL without a password, plus `core.database_pool` as `pool_*` query parameters |
 | `OAC_DATABASE_PASSWORD_FILE` | `secrets/database.password`. The URL must then carry no password; migrations and the maintenance commands read the file too |
