@@ -219,6 +219,8 @@ export interface CoreInstallation {
   api_base_url: string | null;
   /** True when `public_url` is a loopback origin that only the Core host reaches. */
   local_only: boolean;
+  /** True when Core accepts a plain-HTTP `public_url` on a host that is not loopback, so nodes may enroll over it. */
+  insecure_public_url: boolean;
   /** Full source commit Core was built from; null for development builds. */
   source_commit: string | null;
   /** Null when the installer did not start Core. */

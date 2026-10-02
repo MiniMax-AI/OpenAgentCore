@@ -51,7 +51,7 @@ The installer shows each phase as it runs and, once Core confirms the node, a su
 - Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
 - microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
 - CPUs and memory for at least one sandbox of the installation's size, and about 2 GB of disk for the Runtime image.
-- HTTPS access to the console and Core at the public URL; sandboxes reach Core too.
+- HTTPS access to the console and Core at the public URL; sandboxes reach Core too. An installation that opted into [plain HTTP on a trusted network](../configuration.md#plain-http-on-a-trusted-network) is the one exception: its command passes `--allow-insecure-core-url`, and the node accepts that origin.
 
 ### Download through a proxy
 

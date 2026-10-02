@@ -326,7 +326,7 @@ describe("AdminClient installation", () => {
   const port = { key: "ports.core", value: 8091, default: 8091, changeable: true, sensitive: false, restarts: ["core"] };
   const headers = { key: "core.runtime_history.headers", value: null, default: null, configured: true, changeable: true, sensitive: true, restarts: ["core"] };
   const installation = {
-    object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
+    object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1", insecure_public_url: false,
     local_only: false, source_commit: "a".repeat(40),
     configuration: { path: "/home/alice/.oac/core/config.json", apply_command: "/home/alice/.oac/core/oac apply", applied_at: "2026-09-25T09:30:00Z", settings: [port, headers] },
     address_bindings: { nodes: 2, nodes_on_other_address: 1, hosted_sandboxes: 3, self_hosted_executors: 1 },

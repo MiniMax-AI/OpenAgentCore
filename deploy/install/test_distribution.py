@@ -161,6 +161,18 @@ class ArtifactTests(unittest.TestCase):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'link')
 
 
+    def test_plain_http_downloads_need_the_installation_opt_in(self):
+        with self.assertRaises(distribution.DistributionError):
+            distribution.safe_url('http://private.example/node-install/manifest.json')
+        self.addCleanup(distribution.allow_plain_http, False)
+        distribution.allow_plain_http(True)
+        self.assertEqual(distribution.safe_url('http://private.example/node-install/manifest.json'),
+                         'http://private.example/node-install/manifest.json')
+        # Credentials, fragments and paths stay refused even with the opt-in.
+        for value in ('http://user:secret@private.example/a', 'http://private.example/a#f'):
+            with self.subTest(value=value), self.assertRaises(distribution.DistributionError):
+                distribution.safe_url(value)
+
     def test_artifact_downgrades_and_metadata_redirects_are_refused(self):
         self.status = 302
         self.redirect_target = 'http://127.0.0.1:1'

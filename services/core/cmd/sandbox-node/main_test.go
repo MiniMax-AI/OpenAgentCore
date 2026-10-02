@@ -52,10 +52,10 @@ func refreshIdentity(t *testing.T, coreURL string) error {
 		t.Fatal(err)
 	}
 	identity := node.Identity{InstallationID: uuid.NewString(), Provider: "docker", BackendFingerprint: strings.Repeat("1", 64)}
-	if _, err := node.InitIdentity(dir, coreURL, identity); err != nil {
+	if _, err := node.InitIdentity(dir, coreURL, identity, false); err != nil {
 		t.Fatal(err)
 	}
-	_, err := node.RefreshIdentity(t.Context(), dir)
+	_, err := node.RefreshIdentity(t.Context(), dir, false)
 	return err
 }
 

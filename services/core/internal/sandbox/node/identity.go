@@ -99,16 +99,16 @@ func writeIdentity(dir string, s StoredIdentity) error {
 
 // InitIdentity creates the credential before any enrollment request. A lost
 // enrollment response can therefore be recovered by authenticating this identity.
-func InitIdentity(dir, coreURL string, identity Identity) (StoredIdentity, error) {
+func InitIdentity(dir, coreURL string, identity Identity, insecureCoreURL bool) (StoredIdentity, error) {
 	release, err := lockDirectory(dir)
 	if err != nil {
 		return StoredIdentity{}, err
 	}
 	defer release()
-	return initIdentity(dir, coreURL, identity)
+	return initIdentity(dir, coreURL, identity, insecureCoreURL)
 }
-func initIdentity(dir, coreURL string, identity Identity) (StoredIdentity, error) {
-	if _, err := endpoint(coreURL, ""); err != nil {
+func initIdentity(dir, coreURL string, identity Identity, insecureCoreURL bool) (StoredIdentity, error) {
+	if _, err := endpoint(coreURL, "", insecureCoreURL); err != nil {
 		return StoredIdentity{}, err
 	}
 	stored, err := readIdentity(dir)
@@ -150,14 +150,19 @@ func LoadIdentity(dir string) (StoredIdentity, error) {
 	return readIdentity(dir)
 }
 
-func endpoint(raw, path string) (string, error) {
+// endpoint is the one place a node decides which Core origins it accepts. Plain HTTP is
+// reserved for a loopback host, or for the installation's explicit opt-in that the node
+// installer recorded; the caller owns that decision, and every credential this origin
+// carries, including the node credential, then travels unencrypted.
+func endpoint(raw, path string, insecureCoreURL bool) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return "", errors.New("node Core URL must be an origin")
 	}
 	if u.Scheme != "https" {
 		ip := net.ParseIP(u.Hostname())
-		if u.Scheme != "http" || !(u.Hostname() == "localhost" || ip != nil && ip.IsLoopback()) {
+		loopback := u.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
+		if u.Scheme != "http" || !(loopback || insecureCoreURL) {
 			return "", errors.New("remote node Core URL requires HTTPS")
 		}
 	}

@@ -119,7 +119,7 @@ func run(ctx context.Context, args []string) error {
 		if token == "" || len(token) > 4096 {
 			return errors.New("invalid enrollment token")
 		}
-		if _, err = node.InitIdentity(*stateDir, *coreURL, expected); err != nil {
+		if _, err = node.InitIdentity(*stateDir, *coreURL, expected, config.InsecureCoreURL); err != nil {
 			return err
 		}
 		probeCtx, stopProbe := context.WithTimeout(ctx, 5*time.Second)
@@ -128,13 +128,13 @@ func run(ctx context.Context, args []string) error {
 		if err != nil {
 			return fmt.Errorf("local provider readiness check failed (%s): %w", sandbox.NodeDiagnostic(err), err)
 		}
-		stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, node.EnrollmentRequest{Name: *name})
+		stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, node.EnrollmentRequest{Name: *name}, config.InsecureCoreURL)
 		if err != nil {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{MaxActive: stored.Identity.MaxActive, MaxRetained: stored.Identity.MaxRetained, SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
 	}
-	stored, err := node.RefreshIdentity(ctx, *stateDir)
+	stored, err := node.RefreshIdentity(ctx, *stateDir, config.InsecureCoreURL)
 	if err != nil {
 		return err
 	}
@@ -145,5 +145,5 @@ func run(ctx context.Context, args []string) error {
 	if *coreURL != "" && *coreURL != stored.CoreURL {
 		return errors.New("run uses the retained Core URL")
 	}
-	return node.Run(ctx, node.AgentConfig{CoreURL: stored.CoreURL, StateDirectory: *stateDir, Identity: stored.Identity, Credential: stored.Credential, Provider: built.Provider, Probe: probe})
+	return node.Run(ctx, node.AgentConfig{CoreURL: stored.CoreURL, InsecureCoreURL: config.InsecureCoreURL, StateDirectory: *stateDir, Identity: stored.Identity, Credential: stored.Credential, Provider: built.Provider, Probe: probe})
 }

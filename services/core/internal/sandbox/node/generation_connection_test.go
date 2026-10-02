@@ -41,7 +41,7 @@ func TestGenerationWireRoutesOldOwnershipAndCurrentTargetSeparately(t *testing.T
 	defer server.Close()
 	defer hub.Close()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, server.URL, id)
+	stored, err := InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}

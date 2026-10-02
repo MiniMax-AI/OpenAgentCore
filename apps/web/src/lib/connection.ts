@@ -23,12 +23,17 @@ function hasExplicitUserInfo(candidate: string): boolean {
   return authority.includes("@");
 }
 
-export function isValidDirectCoreBaseUrl(value: string): boolean {
+/**
+ * Whether the value is a Core origin a direct caller may use. Plain HTTP qualifies only for a
+ * loopback host, or when the caller says the installation opted into a trusted network; that
+ * decision stays with the caller.
+ */
+export function isValidDirectCoreBaseUrl(value: string, allowInsecureHTTP = false): boolean {
   try {
     const candidate = value.trim();
     if (candidate.includes("?") || candidate.includes("#") || hasExplicitUserInfo(candidate)) return false;
     const url = new URL(candidate);
-    const secureTransport = url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHostname(url.hostname));
+    const secureTransport = url.protocol === "https:" || (url.protocol === "http:" && (allowInsecureHTTP || isLoopbackHostname(url.hostname)));
     return secureTransport && !url.username && !url.password && !url.search && !url.hash;
   } catch {
     return false;

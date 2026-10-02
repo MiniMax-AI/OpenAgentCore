@@ -17,10 +17,15 @@ export function httpsOrigin(value: string): string | null {
  * Where the node commands download the installer, and the `--source-url` they
  * pass it: the installation's public URL, whose reverse proxy sends
  * `/node-install/*` to this console. Unlike the browser's address, it is the
- * same from every machine. Null when other machines can't use it: loopback
- * (`local_only`), missing, or not an HTTPS origin.
+ * same from every machine, and the node, its installer and this console accept
+ * it only as HTTPS — or as plain HTTP on a trusted network, when the
+ * installation opted in (`insecure_public_url`). Null when other machines
+ * can't use it: loopback (`local_only`), missing, or neither of the two.
  */
-export function nodeSourceUrl(installation: Pick<CoreInstallation, "public_url" | "local_only">): string | null {
+export function nodeSourceUrl(installation: Pick<CoreInstallation, "public_url" | "local_only" | "insecure_public_url">): string | null {
   if (installation.local_only || !installation.public_url) return null;
-  return httpsOrigin(installation.public_url);
+  const insecure = installation.insecure_public_url;
+  const candidate = installation.public_url.trim().replace(/\/$/, "");
+  const pattern = insecure ? /^https?:\/\/[^/?#\\\s@]+$/i : /^https:\/\/[^/?#\\\s@]+$/i;
+  return pattern.test(candidate) && isValidDirectCoreBaseUrl(candidate, insecure) ? candidate : null;
 }

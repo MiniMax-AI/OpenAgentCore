@@ -90,6 +90,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // Nodes download from, and reach Core at, the public URL; the browser's address may be a tunnel or loopback.
   // The deployment's core_url is the same address, but the installation is read again on each opening, so a fix shows at once.
   const publicUrl = installation.data ? nodeSourceUrl(installation.data) : null;
+  // Only a plain-HTTP origin needs the installer's opt-in, and nodeSourceUrl returns one only for
+  // an installation that accepted it.
+  const insecureSourceUrl = Boolean(publicUrl?.startsWith("http://"));
   const available = consoleConfig.node_installer;
   const provider = deployment.provider === "docker" || deployment.provider === "microsandbox" ? deployment.provider : null;
   const backend = provider === "microsandbox" ? "microsandbox" : "Docker";
@@ -136,7 +139,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   // Expired only once a read begun after the expiry found no node for the command.
   const expired = lapsed && fresh && checked !== null && checked.startedAt >= expiresAt && checked.nodes === nodes;
   const command = enrollment && provider && available && publicUrl && (registered || !expired) && !ready
-    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256 }) : "";
+    ? nodeInstallCommand({ token: enrollment.token, coreUrl: publicUrl, sourceUrl: publicUrl, provider, installationId: deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, allowInsecureCoreUrl: insecureSourceUrl }) : "";
   const nodeId = node?.id ?? null;
   const polling = open && enrollment !== null && !ready && (registered || !expired);
   const check = useCallback(async () => {

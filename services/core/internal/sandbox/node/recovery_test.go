@@ -33,7 +33,7 @@ func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { mu.Lock(); h := current; mu.Unlock(); h.ServeHTTP(w, r) }))
 	defer server.Close()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, server.URL, id)
+	stored, err := InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestAgentRejectsOwnerEpochRollback(t *testing.T) {
 	}))
 	defer server.Close()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, server.URL, id)
+	stored, err := InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestHeartbeatAcknowledgementKeepsIdleConnectionAlive(t *testing.T) {
 	defer server.Close()
 	defer hub.Close()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, server.URL, id)
+	stored, err := InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 	defer server.Close()
 	defer hub.Close()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, server.URL, id)
+	stored, err := InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,13 +255,13 @@ func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 func TestCorruptOrMismatchedIdentityNeverRotates(t *testing.T) {
 	id := identity()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, "https://core.example.test", id)
+	stored, err := InitIdentity(dir, "https://core.example.test", id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	mismatch := id
 	mismatch.BackendFingerprint = strings.Repeat("2", 64)
-	if _, err = InitIdentity(dir, stored.CoreURL, mismatch); err == nil {
+	if _, err = InitIdentity(dir, stored.CoreURL, mismatch, false); err == nil {
 		t.Fatal("adopted wrong backend")
 	}
 	original, err := LoadIdentity(dir)
@@ -271,7 +271,7 @@ func TestCorruptOrMismatchedIdentityNeverRotates(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(dir, "identity.json"), []byte("corrupt"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = InitIdentity(dir, stored.CoreURL, id); err == nil {
+	if _, err = InitIdentity(dir, stored.CoreURL, id, false); err == nil {
 		t.Fatal("corrupt identity replaced")
 	}
 	if err = os.Remove(filepath.Join(dir, "identity.json")); err != nil {

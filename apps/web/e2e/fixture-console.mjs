@@ -49,7 +49,7 @@ function installation() {
   return {
     // As Core: api_base_url is always public_url followed by /v1; local_only marks a loopback public_url.
     object: "core.installation", installation_id: INSTALLATION_ID, public_url: publicUrl(), api_base_url: `${publicUrl()}/v1`,
-    local_only: local, source_commit: release.source_commit,
+    local_only: local, insecure_public_url: false, source_commit: release.source_commit,
     configuration: {
       path: "/opt/oac/config.json", apply_command: "sudo oac apply", applied_at: "2026-09-24T09:30:00Z",
       settings: [

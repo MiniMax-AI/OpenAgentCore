@@ -44,7 +44,7 @@ When nodes, hosted sandboxes or self-hosted executors are bound to the current a
 
 ### Plain HTTP on a trusted network
 
-`install.sh`, `oac apply`, `web.core_url` and the node installer require HTTPS for a non-loopback origin. Core itself accepts one more case, for a deployment you start yourself — the [standalone Compose template](./getting-started/install-options.md#docker-compose-and-hosting-platforms), your own service unit, or a development check-out:
+`install.sh`, `oac apply` and `web.core_url` require HTTPS for a non-loopback origin. Core itself accepts one more case, for a deployment you start yourself — the [standalone Compose template](./getting-started/install-options.md#docker-compose-and-hosting-platforms), your own service unit, or a development check-out:
 
 | Variable | Value |
 | --- | --- |
@@ -56,7 +56,7 @@ The opt-in follows `core.runtime_history.insecure`: it defaults to off, is refus
 What else changes, and what does not:
 
 - Core reports `local_only: false` for that origin, so Web stops showing the configure-HTTPS notice.
-- Web still issues node commands only for an HTTPS origin, because the node, its installer and `oac apply` keep the HTTPS-or-loopback rule: adding nodes over plain HTTP is not supported.
+- Web issues node commands over that origin too. Core reports `insecure_public_url: true`, and the generated command passes `--allow-insecure-core-url` to the node installer, which records the opt-in in the node's `provider.json`; the node, its installer and the artifacts it downloads then accept the plain origin. The installer refuses the flag when nothing needs it, so a stale console fails instead of widening the policy.
 - A provider whose guests must reach Core, such as E2B, still needs an address those guests can reach; a private address is not one.
 - It is a process variable, not a `config.json` key. `oac apply` regenerates `generated/core.env`, so an `install.sh` installation cannot keep the opt-in.
 

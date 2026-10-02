@@ -96,6 +96,21 @@ def artifact(manifest, name):
     return entry
 
 
+# Plain HTTP reaches another machine only for an installation whose administrator opted into a
+# trusted network. The installer records that, and calls allow_plain_http once before any download,
+# so every guard here stays closed by default.
+_plain_http = False
+
+
+def allow_plain_http(allowed=True):
+    global _plain_http
+    _plain_http = bool(allowed)
+
+
+def plain_http_allowed():
+    return _plain_http
+
+
 def safe_url(value):
     try:
         parsed = urlsplit(value)
@@ -108,18 +123,22 @@ def safe_url(value):
                 pass
         if (not parsed.hostname or parsed.username is not None or parsed.password is not None
                 or parsed.fragment or any(c.isspace() for c in value)
-                or '\\' in value or parsed.scheme != 'https' and not (parsed.scheme == 'http' and loopback)):
+                or '\\' in value or parsed.scheme != 'https'
+                and not (parsed.scheme == 'http' and (loopback or plain_http_allowed()))):
             raise ValueError()
     except ValueError:
-        raise ArtifactError('Artifact downloads require HTTPS; loopback HTTP is only for local testing') from None
+        raise ArtifactError('Artifact downloads require HTTPS; plain HTTP is only for a loopback host '
+                            'or an installation that opted into a trusted network') from None
     return value
 
 
 class ArtifactRedirect(urllib.request.HTTPRedirectHandler):
-    """Only artifact bytes may follow HTTPS redirects; metadata stays on Core."""
+    """Only artifact bytes may follow redirects, and only to an origin safe_url accepts; metadata
+    stays on Core."""
     def redirect_request(self, request, fp, code, msg, headers, newurl):
         safe_url(newurl)
-        if urlsplit(newurl).scheme != 'https' or request.get_method() not in ('GET', 'HEAD'):
+        scheme = urlsplit(newurl).scheme
+        if not (scheme == 'https' or (scheme == 'http' and plain_http_allowed())) or request.get_method() not in ('GET', 'HEAD'):
             raise ArtifactError('Artifact redirects require HTTPS')
         # Carry resume headers, never credentials or cookies, to a release/CDN host.
         forwarded = {name: value for name, value in request.header_items()

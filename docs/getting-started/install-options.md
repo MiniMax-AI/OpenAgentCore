@@ -141,7 +141,7 @@ The proxy must:
 
 Run the proxy on the Core host while Core and Web listen on loopback, the default. `oac status` prints these routes with your addresses and ports.
 
-**No certificate authority, and the network is trusted.** `install.sh`, the node installer and `oac apply` require HTTPS for a non-loopback origin. If you start Core yourself — the [Compose template](#docker-compose-and-hosting-platforms) or your own service — `OAC_PUBLIC_URL_INSECURE=1` accepts a plain `http://` `OAC_PUBLIC_URL`, for example `http://10.0.0.5:8091`; see [plain HTTP on a trusted network](../configuration.md#plain-http-on-a-trusted-network). The console then stops offering node commands, which still require HTTPS.
+**No certificate authority, and the network is trusted.** `install.sh` and `oac apply` require HTTPS for a non-loopback origin. If you start Core yourself — the [Compose template](#docker-compose-and-hosting-platforms) or your own service — `OAC_PUBLIC_URL_INSECURE=1` accepts a plain `http://` `OAC_PUBLIC_URL`, for example `http://10.0.0.5:8091`; see [plain HTTP on a trusted network](../configuration.md#plain-http-on-a-trusted-network). The console then offers node commands over that origin, and the installer records the opt-in in the node it installs.
 
 **Caddy** obtains the certificate itself and passes Host and WebSockets by default:
 

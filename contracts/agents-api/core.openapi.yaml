@@ -443,6 +443,9 @@ definitions:
         description: OAC_INSTALLATION_ID; null when Core runs without the sandbox manager.
         type: string
         x-nullable: true
+      insecure_public_url:
+        description: True when OAC_PUBLIC_URL_INSECURE accepts a plain-HTTP public URL on a host that is not loopback, so nodes may enroll over that origin. False unless the operator opted in.
+        type: boolean
       local_only:
         description: True when public_url names a loopback host, reachable only from the Core host.
         type: boolean

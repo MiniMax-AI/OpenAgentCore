@@ -283,11 +283,11 @@ function projectInstallationSetting(value: unknown): CoreInstallationSetting {
 }
 /** Sensitive settings carry no value, keys are unique and binding counts are consistent. */
 export function projectInstallation(value: unknown): CoreInstallation {
-  const installation = record(value, ["object", "installation_id", "public_url", "api_base_url", "local_only", "source_commit", "configuration", "address_bindings"]);
+  const installation = record(value, ["object", "installation_id", "public_url", "api_base_url", "local_only", "insecure_public_url", "source_commit", "configuration", "address_bindings"]);
   const origin = installation.public_url;
   if (installation.object !== "core.installation" || (installation.installation_id !== null && canonicalUuid(installation.installation_id) === null) ||
     (origin !== null && typeof origin !== "string") || installation.api_base_url !== (typeof origin === "string" ? `${origin}/v1` : null) ||
-    typeof installation.local_only !== "boolean" ||
+    typeof installation.local_only !== "boolean" || typeof installation.insecure_public_url !== "boolean" ||
     (installation.source_commit !== null && (typeof installation.source_commit !== "string" || !/^[0-9a-f]{40}$/.test(installation.source_commit)))) return invalidAdminResponse();
   const bindings = record(installation.address_bindings, ["nodes", "nodes_on_other_address", "hosted_sandboxes", "self_hosted_executors"]);
   if (![bindings.nodes, bindings.nodes_on_other_address, bindings.hosted_sandboxes, bindings.self_hosted_executors].every(isNonnegativeInteger) ||

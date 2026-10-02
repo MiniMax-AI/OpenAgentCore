@@ -26,11 +26,11 @@ func TestCapacityRefreshUsesAuthenticatedCoreIdentity(t *testing.T) {
 	defer server.Close()
 	dir := stateDir(t)
 	var err error
-	stored, err = InitIdentity(dir, server.URL, id)
+	stored, err = InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	refreshed, err := RefreshIdentity(t.Context(), dir)
+	refreshed, err := RefreshIdentity(t.Context(), dir, false)
 	if err != nil || refreshed.Identity.MaxActive != 2 || refreshed.Identity.MaxRetained != 8 || refreshed.Credential != stored.Credential {
 		t.Fatal("approved capacity not refreshed", err)
 	}
@@ -39,7 +39,7 @@ func TestCapacityRefreshUsesAuthenticatedCoreIdentity(t *testing.T) {
 		t.Fatal("approved capacity not persisted", err)
 	}
 	approved.InstallationID = "another-installation"
-	if _, err = RefreshIdentity(t.Context(), dir); err == nil {
+	if _, err = RefreshIdentity(t.Context(), dir, false); err == nil {
 		t.Fatal("foreign identity accepted")
 	}
 	after, _ := LoadIdentity(dir)

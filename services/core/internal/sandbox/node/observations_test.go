@@ -43,7 +43,7 @@ func observationTarget(r sandbox.Reference, installation string) runtimeobs.Targ
 func runObservationNode(t *testing.T, hub *Hub, url string, id Identity, provider sandbox.SandboxProvider) context.CancelFunc {
 	t.Helper()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, url, id)
+	stored, err := InitIdentity(dir, url, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}

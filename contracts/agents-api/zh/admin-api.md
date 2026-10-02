@@ -138,6 +138,7 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 | `public_url` | `public_url` 设置（[设置](../../../docs/zh/configuration.md#settings)）：应用程序、节点、沙箱和自托管执行器使用的源地址。未设置时为 null |
 | `api_base_url` | 在 `public_url` 后附加 `/v1`，即 Project API 密钥使用的 `OPENAI_BASE_URL`。当 `public_url` 为 null 时为 null |
 | `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
+| `insecure_public_url` | 当 `OAC_PUBLIC_URL_INSECURE` 允许在非回环主机上使用明文 `public_url` 时为 True，节点可经该地址注册 |
 | `source_commit` | Core 构建所依据的完整源代码提交；开发构建为 null |
 | `configuration` | 安装器对 `config.json` 的快照；安装器未启动 Core 时为 null |
 | `address_bindings` | 更改 `public_url` 所影响的内容，每次读取都会重新统计 |

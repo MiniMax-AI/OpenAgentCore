@@ -71,22 +71,40 @@ LOCK_WAIT_SECONDS = 600
 NOTHING_CHANGED = " Nothing was changed."
 
 
+def local_origin(value):
+    """True when an origin names a loopback host, which plain HTTP is always allowed for."""
+    parsed = urlsplit(value)
+    try:
+        return parsed.hostname == "localhost" or ipaddress.ip_address(parsed.hostname).is_loopback
+    except (ValueError, TypeError):
+        return parsed.hostname == "localhost"
+
+
 def origin(value):
     try:
         parsed = urlsplit(value)
         parsed.port
     except ValueError:
         raise argparse.ArgumentTypeError("Invalid Core origin") from None
-    try:
-        local = parsed.hostname == "localhost" or ipaddress.ip_address(parsed.hostname).is_loopback
-    except (ValueError, TypeError):
-        local = parsed.hostname == "localhost"
     if (parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username is not None
             or parsed.password is not None or parsed.path not in ("", "/")
-            or any(c.isspace() for c in value) or any(c in value for c in "?#\\")
-            or (parsed.scheme == "http" and not local)):
-        raise argparse.ArgumentTypeError("Use an HTTPS origin, or loopback HTTP for a local node")
+            or any(c.isspace() for c in value) or any(c in value for c in "?#\\")):
+        raise argparse.ArgumentTypeError("Invalid Core origin")
     return value.rstrip("/")
+
+
+def enforce_origin_scheme(parser, args):
+    """Plain HTTP reaches another machine only with the administrator's explicit opt-in, which this
+    installation records and the node then accepts. Everything that origin carries, including the
+    node credential and its WebSocket, then travels unencrypted. The opt-in is refused when nothing
+    needs it, so a forgotten or stale value fails instead of standing in for a policy nothing
+    applies."""
+    plain = [value for value in (args.core_url, args.source_url)
+             if value and urlsplit(value).scheme == "http" and not local_origin(value)]
+    if plain and not args.allow_insecure_core_url:
+        parser.error("Use an HTTPS origin, or --allow-insecure-core-url on a trusted network")
+    if args.allow_insecure_core_url and not plain:
+        parser.error("--allow-insecure-core-url requires a plain-HTTP origin on a host that is not loopback")
 
 
 def checked(arguments, failure, explain=None, **kwargs):
@@ -288,6 +306,8 @@ def micro_home(installation_id):
 def provider_config(root, args, manifest, runtime_image):
     result = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url + "/api/v1",
               "specification": args.configuration["specification"], "generation": args.configuration["generation"]}
+    if getattr(args, "allow_insecure_core_url", False):
+        result["insecure_core_url"] = True
     if args.provider == "docker":
         result["docker"] = {"host": "unix:///var/run/docker.sock", "image": runtime_image,
                             "network": "oac-node-" + args.installation_id,
@@ -1263,6 +1283,8 @@ def main(argv=None):
     parser.add_argument("--provider", choices=("docker", "microsandbox"), help="Optional assertion; Core owns provider selection")
     parser.add_argument("--installation-id", required=True)
     parser.add_argument("--enrollment-token-stdin", action="store_true", help="Read the one-time enrollment token from standard input")
+    parser.add_argument("--allow-insecure-core-url", action="store_true",
+                        help="Accept a plain-HTTP Core URL on a host that is not loopback, for an installation that opted into a trusted network")
     parser.add_argument("--generation-action", choices=("prepare", "collect"), help=argparse.SUPPRESS)
     parser.add_argument("--generation", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--specification-digest", help=argparse.SUPPRESS)
@@ -1298,6 +1320,8 @@ def main(argv=None):
         parser.error("--force applies only to --uninstall")
     if not (args.source_url or args.bundle) or not args.core_url:
         parser.error("--source-url (or --bundle) and --core-url are required")
+    enforce_origin_scheme(parser, args)
+    distribution.allow_plain_http(args.allow_insecure_core_url)
     if args.bundle is not None and (not args.bundle.is_absolute() or args.bundle.resolve() != args.bundle):
         raise InstallError("Local bundle must be an absolute directory without symlinks")
     token = read_token(args)

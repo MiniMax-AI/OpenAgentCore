@@ -24,11 +24,11 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 	if stateDir != filepath.Join(root, "state", "node") {
 		return errors.New("generation state must belong to the installed node root")
 	}
-	stored, err := node.RefreshIdentity(ctx, stateDir)
+	base, err := providerconfig.Load(configFile)
 	if err != nil {
 		return err
 	}
-	base, err := providerconfig.Load(configFile)
+	stored, err := node.RefreshIdentity(ctx, stateDir, base.InsecureCoreURL)
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 		return err
 	}
 	defer manager.Close()
-	return node.Run(ctx, node.AgentConfig{CoreURL: stored.CoreURL, StateDirectory: stateDir, Identity: stored.Identity, Credential: stored.Credential, Generations: manager})
+	return node.Run(ctx, node.AgentConfig{CoreURL: stored.CoreURL, InsecureCoreURL: base.InsecureCoreURL, StateDirectory: stateDir, Identity: stored.Identity, Credential: stored.Credential, Generations: manager})
 }
 
 func buildGeneration(registry *providerconfig.Registry, config providerconfig.Config, stateDir string) (node.GenerationProvider, error) {

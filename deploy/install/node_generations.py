@@ -379,6 +379,9 @@ def prepare(args, installer):
         args.provider = args.configuration["provider"]
         configurations = retained_configs(root, installer)
         base = installer.private_json(root / "provider.json")
+        # Every generation this node serves keeps the opt-in the installation recorded.
+        args.allow_insecure_core_url = bool(base.get("insecure_core_url"))
+        installer.distribution.allow_plain_http(args.allow_insecure_core_url)
         runtime = args.configuration["specification"]["runtime"]
         value = configurations.get(args.generation)
         finalized = target.exists() or base["generation"] == args.generation

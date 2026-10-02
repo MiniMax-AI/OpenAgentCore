@@ -1018,13 +1018,43 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), before)
         self.assertFalse(any("register" in call or "enable" in call for call, _ in self.calls))
 
-    def test_origin_rejects_remote_http_credentials_paths_and_redirects(self):
-        for value in ("http://private.example", "https://user@core.example", "https://@core.example", "https://core.example/v1", "https://core.example?", "https://core.example#", "https://core.example\\path", "https://core.example:bad", ""):
+    def test_origin_rejects_credentials_paths_and_redirects(self):
+        for value in ("https://user@core.example", "https://@core.example", "https://core.example/v1", "https://core.example?", "https://core.example#", "https://core.example\\path", "https://core.example:bad", ""):
             with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
                 installer.origin(value)
         self.assertEqual(installer.origin("http://[::1]:8091/"), "http://[::1]:8091")
+        # The scheme policy needs the administrator's opt-in, so origin() keeps a structurally
+        # valid remote plain-HTTP origin and that check decides.
+        self.assertEqual(installer.origin("http://private.example"), "http://private.example")
+        self.assertFalse(installer.local_origin("http://10.0.0.5:8091"))
+        self.assertTrue(installer.local_origin("http://127.0.0.1:8091"))
         with self.assertRaisesRegex(installer.InstallError, "redirects"):
             installer.NoRedirect().redirect_request(None, None, 302, "", {}, "https://other.example")
+
+    def test_plain_http_origin_needs_the_recorded_opt_in(self):
+        def refused(core_url, source_url, flag):
+            parser = mock.Mock()
+            installer.enforce_origin_scheme(parser, argparse.Namespace(core_url=core_url, source_url=source_url, allow_insecure_core_url=flag))
+            return parser.error.called
+        # A remote plain-HTTP origin is refused without the opt-in, and accepted with it.
+        self.assertTrue(refused("http://private.example", None, False))
+        self.assertFalse(refused("http://private.example", "http://private.example", True))
+        # Loopback plain HTTP needs no opt-in, and the opt-in is refused when nothing needs it.
+        self.assertFalse(refused("http://127.0.0.1:8091", None, False))
+        self.assertTrue(refused("http://127.0.0.1:8091", None, True))
+        self.assertTrue(refused("https://core.example", None, True))
+        self.assertFalse(refused("https://core.example", None, False))
+
+    def test_provider_config_records_the_plain_http_opt_in(self):
+        args = argparse.Namespace(installation_id=self.args.installation_id, provider="docker",
+                                  core_url="https://172.29.144.1:24443", configuration={"specification": {}, "generation": 1})
+        recorded = installer.provider_config(self.root, args, self.manifest, "sha256:" + "b" * 64)
+        self.assertNotIn("insecure_core_url", recorded)
+        args.allow_insecure_core_url = True
+        args.core_url = "http://172.29.144.1:24443"
+        recorded = installer.provider_config(self.root, args, self.manifest, "sha256:" + "b" * 64)
+        self.assertTrue(recorded["insecure_core_url"])
+        self.assertEqual(recorded["core_url"], "http://172.29.144.1:24443/api/v1")
 
 
 class NodePrerequisiteTests(unittest.TestCase):

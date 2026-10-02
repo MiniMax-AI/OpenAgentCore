@@ -17,13 +17,16 @@ import (
 )
 
 type AgentConfig struct {
-	Generations    *GenerationManager
-	CoreURL        string
-	StateDirectory string
-	Identity       Identity
-	Credential     string
-	Provider       sandbox.SandboxProvider
-	Probe          func(context.Context) (Health, error)
+	Generations *GenerationManager
+	CoreURL     string
+	// InsecureCoreURL lets this node use a plain-HTTP Core URL on a host that is not
+	// loopback, as the node installer recorded for an installation that opted in.
+	InsecureCoreURL bool
+	StateDirectory  string
+	Identity        Identity
+	Credential      string
+	Provider        sandbox.SandboxProvider
+	Probe           func(context.Context) (Health, error)
 	// Dialer is optional, primarily for an operator-supplied TLS trust configuration.
 	Dialer *websocket.Dialer
 }
@@ -102,7 +105,7 @@ func Run(ctx context.Context, config AgentConfig) error {
 	if config.CoreURL != stored.CoreURL {
 		return sandbox.ErrOwnership
 	}
-	if _, err = endpoint(config.CoreURL, ""); err != nil {
+	if _, err = endpoint(config.CoreURL, "", config.InsecureCoreURL); err != nil {
 		return err
 	}
 	a := &agent{config: config, stored: stored, queue: make(chan work, maxPending)}
@@ -179,7 +182,7 @@ func (a *agent) health(ctx context.Context, host *hostHealthSampler) (Health, er
 	return h, e
 }
 func (a *agent) connect(ctx context.Context) error {
-	endpointURL, err := endpoint(a.config.CoreURL, "/api/v1/sandbox-node/connect")
+	endpointURL, err := endpoint(a.config.CoreURL, "/api/v1/sandbox-node/connect", a.config.InsecureCoreURL)
 	if err != nil {
 		return err
 	}

@@ -16,7 +16,7 @@ import (
 
 // Enroll consumes a short-lived enrollment token. InitIdentity must have been
 // called with the local provider identity before invoking this function.
-func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentRequest) (StoredIdentity, error) {
+func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentRequest, insecureCoreURL bool) (StoredIdentity, error) {
 	release, err := lockDirectory(dir)
 	if err != nil {
 		return StoredIdentity{}, err
@@ -35,7 +35,7 @@ func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentReq
 	input.CoreURL = coreURL
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	// This also recovers a consumed registration whose success response was lost.
-	target, err := endpoint(coreURL, "/api/v1/sandbox-node/identity")
+	target, err := endpoint(coreURL, "/api/v1/sandbox-node/identity", insecureCoreURL)
 	if err != nil {
 		return StoredIdentity{}, err
 	}
@@ -50,7 +50,7 @@ func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentReq
 			return retainEnrollment(dir, stored, out)
 		}
 	}
-	target, err = endpoint(coreURL, "/api/v1/sandbox-node/enroll")
+	target, err = endpoint(coreURL, "/api/v1/sandbox-node/enroll", insecureCoreURL)
 	if err != nil {
 		return StoredIdentity{}, err
 	}
@@ -111,7 +111,7 @@ func retainEnrollment(dir string, stored StoredIdentity, out EnrollmentResponse)
 
 // RefreshIdentity reads approved capacity using the retained credential before
 // reconnecting. Core remains authoritative after an administrator changes it.
-func RefreshIdentity(ctx context.Context, dir string) (StoredIdentity, error) {
+func RefreshIdentity(ctx context.Context, dir string, insecureCoreURL bool) (StoredIdentity, error) {
 	release, err := lockDirectory(dir)
 	if err != nil {
 		return StoredIdentity{}, err
@@ -121,7 +121,7 @@ func RefreshIdentity(ctx context.Context, dir string) (StoredIdentity, error) {
 	if err != nil {
 		return StoredIdentity{}, err
 	}
-	target, err := endpoint(stored.CoreURL, "/api/v1/sandbox-node/identity")
+	target, err := endpoint(stored.CoreURL, "/api/v1/sandbox-node/identity", insecureCoreURL)
 	if err != nil {
 		return StoredIdentity{}, err
 	}

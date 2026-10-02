@@ -27,6 +27,9 @@ type Installation struct {
 	APIBaseURL *string `json:"api_base_url" extensions:"x-nullable"`
 	// True when public_url names a loopback host, reachable only from the Core host.
 	LocalOnly bool `json:"local_only"`
+	// True when OAC_PUBLIC_URL_INSECURE accepts a plain-HTTP public URL on a host that is not
+	// loopback, so nodes may enroll over that origin. False unless the operator opted in.
+	InsecurePublicURL bool `json:"insecure_public_url"`
 	// Full source commit Core was built from; null for development builds.
 	SourceCommit *string `json:"source_commit" extensions:"x-nullable"`
 	// The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.

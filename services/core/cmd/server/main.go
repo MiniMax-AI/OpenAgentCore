@@ -81,6 +81,10 @@ func run() error {
 	if err := validateProcessConfiguration(); err != nil {
 		return err
 	}
+	insecurePublicURL, err := publicURLInsecure()
+	if err != nil {
+		return err
+	}
 	public, err := publicURL()
 	if err != nil {
 		return err
@@ -178,7 +182,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	installation, err := installationFacts(public)
+	installation, err := installationFacts(public, insecurePublicURL)
 	if err != nil {
 		return err
 	}

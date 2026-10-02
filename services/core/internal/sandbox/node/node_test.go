@@ -97,7 +97,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 	defer server.Close()
 	defer hub.Close()
 	dir := stateDir(t)
-	stored, err := InitIdentity(dir, server.URL, id)
+	stored, err := InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestAgentRejectsDuplicateSequenceAndRetainsEpoch(t *testing.T) {
 	}))
 	defer server.Close()
 	dir := stateDir(t)
-	stored, e := InitIdentity(dir, server.URL, id)
+	stored, e := InitIdentity(dir, server.URL, id, false)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -260,14 +260,14 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 	defer server.Close()
 	dir := stateDir(t)
 	var err error
-	stored, err = InitIdentity(dir, server.URL, id)
+	stored, err = InitIdentity(dir, server.URL, id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = Enroll(context.Background(), server.URL, dir, "enrollment", EnrollmentRequest{Name: "test"}); err == nil {
+	if _, err = Enroll(context.Background(), server.URL, dir, "enrollment", EnrollmentRequest{Name: "test"}, false); err == nil {
 		t.Fatal("lost response reported success")
 	}
-	recovered, err := Enroll(context.Background(), server.URL, dir, "enrollment", EnrollmentRequest{Name: "test"})
+	recovered, err := Enroll(context.Background(), server.URL, dir, "enrollment", EnrollmentRequest{Name: "test"}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,23 +275,35 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 		t.Fatal("enrollment was replayed, identity rotated or approved capacity lost")
 	}
 	id.MaxActive, id.MaxRetained = 0, 0
-	if retry, err := InitIdentity(dir, server.URL, id); err != nil || retry != recovered {
+	if retry, err := InitIdentity(dir, server.URL, id, false); err != nil || retry != recovered {
 		t.Fatal("register retry treated absent local capacity as an override", err)
 	}
-	if _, err := Enroll(t.Context(), server.URL, dir, "consumed", EnrollmentRequest{Name: "test"}); err != nil || enrollments != 1 {
+	if _, err := Enroll(t.Context(), server.URL, dir, "consumed", EnrollmentRequest{Name: "test"}, false); err != nil || enrollments != 1 {
 		t.Fatal("register retry failed to recover approved identity", err)
 	}
 }
 
 func TestCoreURLRejectsRemotePlaintextAndCredentials(t *testing.T) {
 	for _, raw := range []string{"http://example.com", "https://user:pass@example.com", "https://example.com/?token=x", "https://example.com/path"} {
-		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll"); err == nil {
+		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll", false); err == nil {
 			t.Fatalf("accepted %q", raw)
 		}
 	}
 	for _, raw := range []string{"https://core.example.test:9443", "http://127.0.0.1:8080", "http://[::1]:8080"} {
-		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll"); err != nil {
+		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll", false); err != nil {
 			t.Fatalf("rejected %q: %v", raw, err)
+		}
+	}
+	// The installer's recorded opt-in adds plain HTTP on a host that is not loopback, and
+	// nothing else: another scheme, credentials and a path stay refused.
+	for _, raw := range []string{"http://core.internal:8091", "http://10.0.0.5:8091"} {
+		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll", true); err != nil {
+			t.Fatalf("rejected %q with the opt-in: %v", raw, err)
+		}
+	}
+	for _, raw := range []string{"ws://core.internal:8091", "ftp://core.internal:8091", "https://user:pass@example.com", "https://example.com/path"} {
+		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll", true); err == nil {
+			t.Fatalf("accepted %q with the opt-in", raw)
 		}
 	}
 }

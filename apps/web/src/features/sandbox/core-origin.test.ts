@@ -12,9 +12,17 @@ describe("HTTPS origin", () => {
 
 describe("node command source", () => {
   it("is the installation's public URL, never a loopback, missing or plain HTTP one", () => {
-    expect(nodeSourceUrl({ public_url: "https://core.example.com:8443", local_only: false })).toBe("https://core.example.com:8443");
-    expect(nodeSourceUrl({ public_url: "https://127.0.0.1:8091", local_only: true })).toBeNull();
-    expect(nodeSourceUrl({ public_url: null, local_only: false })).toBeNull();
-    expect(nodeSourceUrl({ public_url: "http://core.example.com", local_only: false })).toBeNull();
+    expect(nodeSourceUrl({ public_url: "https://core.example.com:8443", local_only: false, insecure_public_url: false })).toBe("https://core.example.com:8443");
+    expect(nodeSourceUrl({ public_url: "https://127.0.0.1:8091", local_only: true, insecure_public_url: false })).toBeNull();
+    expect(nodeSourceUrl({ public_url: null, local_only: false, insecure_public_url: false })).toBeNull();
+    expect(nodeSourceUrl({ public_url: "http://core.example.com", local_only: false, insecure_public_url: false })).toBeNull();
+  });
+  it("keeps a plain HTTP one only for an installation that opted into a trusted network", () => {
+    expect(nodeSourceUrl({ public_url: "http://core.internal:8091", local_only: false, insecure_public_url: true })).toBe("http://core.internal:8091");
+    expect(nodeSourceUrl({ public_url: " http://core.internal:8091/ ", local_only: false, insecure_public_url: true })).toBe("http://core.internal:8091");
+    for (const public_url of ["http://user:secret@core.internal", "http://core.internal/v1", "ws://core.internal:8091", "https://core.example#", "", "core.internal:8091"]) {
+      expect(nodeSourceUrl({ public_url, local_only: false, insecure_public_url: true })).toBeNull();
+    }
+    expect(nodeSourceUrl({ public_url: "http://127.0.0.1:8091", local_only: true, insecure_public_url: true })).toBeNull();
   });
 });

@@ -46,7 +46,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ### 受信网络上的明文 HTTP {#plain-http-on-a-trusted-network}
 
-对于非回环源地址，`install.sh`、`oac apply`、`web.core_url` 和节点安装程序都要求 HTTPS。Core 本身还接受一种情况，适用于你自行启动的部署——[独立 Compose 模板](getting-started/install-options.md#docker-compose-and-hosting-platforms)、你自己的服务单元，或开发用的代码检出：
+对于非回环源地址，`install.sh`、`oac apply` 和 `web.core_url` 都要求 HTTPS。Core 本身还接受一种情况，适用于你自行启动的部署——[独立 Compose 模板](getting-started/install-options.md#docker-compose-and-hosting-platforms)、你自己的服务单元，或开发用的代码检出：
 
 | 变量 | 值 |
 | --- | --- |
@@ -58,7 +58,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 其他变化与不变之处：
 
 - Core 对该源地址报告 `local_only: false`，因此 Web 不再显示“配置 HTTPS”的提示。
-- Web 仍然只为 HTTPS 源地址生成节点命令，因为节点、其安装程序和 `oac apply` 都保持“HTTPS 或回环 HTTP”规则：不支持通过明文 HTTP 添加节点。
+- Web 也会经该源地址生成节点命令。Core 报告 `insecure_public_url: true`，生成的命令向节点安装程序传递 `--allow-insecure-core-url`，安装程序把该选项记录进节点的 `provider.json`；此后节点、其安装程序以及它下载的构件都接受明文源地址。当没有任何需要时安装程序会拒绝该选项，因此过期的控制台会失败，而不是扩大策略。
 - 若某个提供程序的访客必须访问 Core（例如 E2B），则仍然需要一个访客可访问的地址；私有地址不属于此类地址。
 - 它是进程环境变量，而不是 `config.json` 的键。`oac apply` 会重新生成 `generated/core.env`，因此 `install.sh` 安装无法保留该选项。
 

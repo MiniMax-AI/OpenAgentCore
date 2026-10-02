@@ -136,6 +136,7 @@ Core writes this record in the same transaction that creates the Session. Later 
 | `public_url` | The [`public_url`](../../docs/configuration.md#settings) setting: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset |
 | `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys. Null when `public_url` is null |
 | `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
+| `insecure_public_url` | True when `OAC_PUBLIC_URL_INSECURE` accepts a plain-HTTP `public_url` on a host that is not loopback, so nodes may enroll over it |
 | `source_commit` | The full source commit Core was built from; null for development builds |
 | `configuration` | The installer's snapshot of `config.json`; null when the installer did not start Core |
 | `address_bindings` | What a change of `public_url` affects, counted on each read |

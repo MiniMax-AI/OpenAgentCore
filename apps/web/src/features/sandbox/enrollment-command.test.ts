@@ -32,6 +32,12 @@ $s \${s:+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,N
     expect(nodeUninstallCommand({ sourceUrl: "https://console.example", installationId: "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", scriptDigest: digest, force: true }).split("\n").at(-1))
       .toBe(`$s \${s:+--preserve-env=http_proxy,https_proxy,no_proxy,HTTP_PROXY,HTTPS_PROXY,NO_PROXY} python3 "$d/node-install.pyz" \${NO_COLOR+--no-color} --uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f' --force)`);
   });
+  it("passes the installation's plain-HTTP opt-in only when it asked for it", () => {
+    const args = { token: "secret'onetime", coreUrl: "http://core.internal:8091", sourceUrl: "http://core.internal:8091", provider: "docker" as const, installationId: "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f", scriptDigest: digest };
+    expect(nodeInstallCommand(args).split("\n").at(-1)).toMatch(/--installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+    expect(nodeInstallCommand({ ...args, allowInsecureCoreUrl: true }).split("\n").at(-1)).toMatch(/--installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f' --allow-insecure-core-url\)$/);
+    expect(nodeInstallCommand({ ...args, allowInsecureCoreUrl: false })).toBe(nodeInstallCommand(args));
+  });
   it("points at the system node journal", () => {
     expect(nodeLogCommand("7f3c2a90-fixture")).toBe("sudo journalctl -u oac-node-7f3c2a90-fixture.service");
     expect(nodeLogCommand("a b")).toBe("sudo journalctl -u 'oac-node-a b.service'");

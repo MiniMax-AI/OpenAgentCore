@@ -53,7 +53,7 @@ printf '%s\n' '<enrollment-token>' | $s python3 "$d/node-install.pyz" ${NO_COLOR
 - Docker：正在运行的 rootful Docker Engine，其 `/var/run/docker.sock` 套接字属于 `docker` 组，权限为 `0660`，并强制执行 CPU 和内存限制（cgroup v2）。
 - microsandbox：`/dev/kvm` 属于 `kvm` 组（硬件或嵌套虚拟化），并具有 microsandbox 链接的库（glibc）。
 - CPU 和内存至少足以运行一个所配置规格的沙箱，以及约 2 GB 的 Runtime 镜像磁盘空间。
-- 可通过公开 URL 以 HTTPS 访问控制台和 Core；沙箱也能访问 Core。
+- 可通过公开 URL 以 HTTPS 访问控制台和 Core；沙箱也能访问 Core。唯一例外是[在受信网络上启用了明文 HTTP](../configuration.md#plain-http-on-a-trusted-network) 的安装：其命令会传递 `--allow-insecure-core-url`，节点也接受该源地址。
 
 ### 通过代理下载 {#download-through-a-proxy}
 

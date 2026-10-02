@@ -144,7 +144,7 @@ Docker 和 microsandbox 会按照 Web 的 [`standard-sizes.json`](https://github
 
 按照默认配置，让 Core 和 Web 在回环地址上监听，并在 Core 主机上运行反向代理。`oac status` 会使用你的地址和端口打印这些路由。
 
-**没有证书颁发机构，且网络可信。** 对于非回环源地址，`install.sh`、节点安装程序和 `oac apply` 都要求 HTTPS。如果你自行启动 Core——[Compose 模板](#docker-compose-and-hosting-platforms)或你自己的服务——可用 `OAC_PUBLIC_URL_INSECURE=1` 接受明文 `http://` 的 `OAC_PUBLIC_URL`，例如 `http://10.0.0.5:8091`；请参阅[受信网络上的明文 HTTP](../configuration.md#plain-http-on-a-trusted-network)。此后控制台不再提供节点命令，因为节点命令仍然要求 HTTPS。
+**没有证书颁发机构，且网络可信。** 对于非回环源地址，`install.sh` 和 `oac apply` 要求 HTTPS。如果你自行启动 Core——[Compose 模板](#docker-compose-and-hosting-platforms)或你自己的服务——可用 `OAC_PUBLIC_URL_INSECURE=1` 接受明文 `http://` 的 `OAC_PUBLIC_URL`，例如 `http://10.0.0.5:8091`；请参阅[受信网络上的明文 HTTP](../configuration.md#plain-http-on-a-trusted-network)。此后控制台会经该源地址提供节点命令，安装程序会把该选项记录到它安装的节点中。
 
 **Caddy** 会自行获取证书，默认传递 Host 并支持 WebSockets：
 

@@ -17,13 +17,16 @@ import (
 )
 
 type Config struct {
-	Specification  sandbox.DeploymentSpec `json:"specification"`
-	Generation     uint64                 `json:"generation"`
-	CoreURL        string                 `json:"core_url"`
-	Provider       string                 `json:"provider"`
-	InstallationID string                 `json:"installation_id"`
-	Docker         *Docker                `json:"docker,omitempty"`
-	Microsandbox   *Microsandbox          `json:"microsandbox,omitempty"`
+	Specification sandbox.DeploymentSpec `json:"specification"`
+	Generation    uint64                 `json:"generation"`
+	CoreURL       string                 `json:"core_url"`
+	// Set by the node installer only when the administrator asked for it: this node may use a
+	// plain-HTTP Core URL on a host that is not loopback, as the installation opted into.
+	InsecureCoreURL bool          `json:"insecure_core_url"`
+	Provider        string        `json:"provider"`
+	InstallationID  string        `json:"installation_id"`
+	Docker          *Docker       `json:"docker,omitempty"`
+	Microsandbox    *Microsandbox `json:"microsandbox,omitempty"`
 }
 
 type Docker struct {

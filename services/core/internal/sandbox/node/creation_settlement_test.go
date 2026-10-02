@@ -51,7 +51,7 @@ func TestNodeCarriesCreationSettlementWithoutConvertingFailureToSuccess(t *testi
 			server := httptest.NewServer(hub)
 			defer server.Close()
 			dir := stateDir(t)
-			stored, err := InitIdentity(dir, server.URL, id)
+			stored, err := InitIdentity(dir, server.URL, id, false)
 			if err != nil {
 				t.Fatal(err)
 			}

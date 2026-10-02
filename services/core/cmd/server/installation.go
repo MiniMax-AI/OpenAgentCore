@@ -15,8 +15,9 @@ var sourceCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // installationFacts reports what GET /core/v1/installation serves: Core's own
 // environment and build, plus the installer's settings snapshot. Core never
 // acts on the snapshot; it only reports it.
-func installationFacts(publicURL string) (api.Installation, error) {
+func installationFacts(publicURL string, insecurePublicURL bool) (api.Installation, error) {
 	var facts api.Installation
+	facts.InsecurePublicURL = insecurePublicURL
 	if id := os.Getenv("OAC_INSTALLATION_ID"); id != "" {
 		facts.InstallationID = &id
 	}

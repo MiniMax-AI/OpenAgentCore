@@ -27,10 +27,13 @@ const runInstaller = `$s \${s:+--preserve-env=http_proxy,https_proxy,no_proxy,HT
  * standard input (`printf` is a shell builtin), never in an argument, the
  * environment or sudo's command line.
  */
-export function nodeInstallCommand({ token, coreUrl, sourceUrl, provider, installationId, scriptDigest }: {
+export function nodeInstallCommand({ token, coreUrl, sourceUrl, provider, installationId, scriptDigest, allowInsecureCoreUrl = false }: {
   token: string; coreUrl: string; sourceUrl: string; provider: "docker" | "microsandbox"; installationId: string; scriptDigest: string;
+  /** The installation's opt-in, so the installer and the node accept a plain-HTTP origin on a trusted network. */
+  allowInsecureCoreUrl?: boolean;
 }): string {
-  return `${nodeInstaller(sourceUrl, scriptDigest)}printf '%s\\n' ${quote(token)} | ${runInstaller} --enrollment-token-stdin --source-url ${quote(sourceUrl)} --core-url ${quote(coreUrl)} --provider ${quote(provider)} --installation-id ${quote(installationId)})`;
+  const insecure = allowInsecureCoreUrl ? " --allow-insecure-core-url" : "";
+  return `${nodeInstaller(sourceUrl, scriptDigest)}printf '%s\\n' ${quote(token)} | ${runInstaller} --enrollment-token-stdin --source-url ${quote(sourceUrl)} --core-url ${quote(coreUrl)} --provider ${quote(provider)} --installation-id ${quote(installationId)}${insecure})`;
 }
 
 /**
