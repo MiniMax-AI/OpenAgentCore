@@ -11,8 +11,7 @@ on:
         description: Retain native installers for a release build
         type: boolean
         default: false
-  push:
-    branches: [main]
+  workflow_dispatch:
   pull_request:
 
 permissions:
@@ -177,8 +176,29 @@ jobs:
           node-version: '22'
       - name: Verify Harness catalog and installer schema
         run: make check-harness-catalog
+      - name: Install distribution compressor
+        run: sudo apt-get update && sudo apt-get install -y pigz
       - name: Test distribution, installer and console packaging
         run: make check-distribution
+
+  compose:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'compose')
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Allocate an isolated Compose project
+        run: python3 -c 'import uuid; print("COMPOSE_SMOKE_PROJECT=oac-smoke-" + uuid.uuid4().hex)' >> "$GITHUB_ENV"
+      - name: Start published images and verify the installation
+        timeout-minutes: 17
+        run: python3 scripts/compose-smoke.py
+      - name: Remove test containers and volumes
+        if: always() && env.COMPOSE_SMOKE_PROJECT != ''
+        timeout-minutes: 2
+        run: docker compose --env-file /dev/null -p "$COMPOSE_SMOKE_PROJECT" -f deploy/compose/compose.yaml down --volumes --remove-orphans
 
   harness:
     needs: plan
@@ -190,6 +210,10 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/node
+        with:
+          lockfiles: |
+            packages/claude-sdk-adapter/pnpm-lock.yaml
+            packages/mcode-harness/package-lock.json
       - name: Test and package Harness adapters
         run: make check-claude-sdk check-mcode-harness
 
@@ -203,10 +227,14 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/node
+        with:
+          lockfiles: |
+            example/parsar/pnpm-lock.yaml
+            packages/agents-client/pnpm-lock.yaml
       - name: Install dependencies and example acceptance browser
         run: |
-          make node-deps
-          pnpm exec playwright install --with-deps chrome
+          make example-deps
+          pnpm --filter @oac/parsar-example exec playwright install --with-deps chrome
       - name: Test and build optional example with browser acceptance
         run: make check-example
       - name: Upload browser failure evidence
@@ -231,8 +259,30 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/node
+        with:
+          lockfiles: |
+            apps/web/pnpm-lock.yaml
+            packages/agents-client/pnpm-lock.yaml
       - name: Typecheck, test and build Web and clients
         run: make check-web-unit
+
+  website:
+    needs: plan
+    if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'website')
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: ./.github/actions/node
+        with:
+          lockfiles: |
+            website/pnpm-lock.yaml
+      - name: Build and test the website
+        env:
+          WEBSITE_URL: https://minimax-ai.github.io/OpenAgentCore/
+        run: make check-website
 
   web-acceptance:
     needs: [plan, web]
@@ -240,7 +290,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 15
     steps:
@@ -248,20 +298,24 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: ./.github/actions/node
+        with:
+          lockfiles: |
+            apps/web/pnpm-lock.yaml
+            packages/agents-client/pnpm-lock.yaml
       - name: Install dependencies and Web acceptance browser
         run: |
-          make node-deps
-          pnpm exec playwright install --with-deps chrome
+          make web-deps
+          pnpm --filter @oac/web exec playwright install --with-deps chrome
       - name: Verify Web workflows against isolated fixtures
-        run: make check-web-acceptance OAC_WEB_TEST_SHARD=${{ matrix.shard }}/2
+        run: make check-web-acceptance OAC_WEB_TEST_SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload browser failure evidence
         if: failure()
         uses: actions/upload-artifact@v6
         with:
           name: web-acceptance-${{ matrix.shard }}-${{ github.run_attempt }}
           path: |
-            playwright-report/
-            test-results/
+            apps/web/playwright-report/
+            apps/web/test-results/
           retention-days: 7
           compression-level: 0
           if-no-files-found: ignore
@@ -292,7 +346,7 @@ jobs:
   # Always report the required check, even when planning or a dependency fails.
   check:
     if: always()
-    needs: [plan, hygiene, distribution, backend, harness, example, web, web-acceptance, api, native, lint]
+    needs: [plan, hygiene, distribution, compose, backend, harness, example, web, web-acceptance, website, api, native, lint]
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
     timeout-minutes: 5
     steps:

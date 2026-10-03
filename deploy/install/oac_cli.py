@@ -4,8 +4,8 @@ The installation directory is the directory that holds the command. The bundle i
 was installed from is never needed. config.json is the only file an operator edits;
 apply renders generated/ from it and converges the running services on that render.
 What runs is the truth: each Compose container carries the inputs digest it was
-created with (label io.oac.inputs) and native Core carries it in OAC_INPUTS,
-so an interrupted apply, rotation or rollback is finished by the next apply.
+created with (label io.oac.inputs), so an interrupted apply, rotation or
+rollback is finished by the next apply.
 """
 import argparse
 import contextlib
@@ -35,7 +35,6 @@ from urllib.parse import urlsplit
 import config_model
 import ingress_config
 import configuration
-import native_service
 
 
 SOURCE_COMMIT = None  # Set by the packaged entrypoint from its build revision.
@@ -195,7 +194,7 @@ INSPECT = ('{{index .Config.Labels "com.docker.compose.service"}}\t{{index .Conf
 
 
 def observe(state):
-    """{service: {running, inputs, health}} of this installation's containers and native Core."""
+    """{service: {running, inputs, health}} of this installation's containers."""
     result = {}
     ids = run(["docker", "ps", "-aq", "--filter", f'label=com.docker.compose.project={state["project"]}',
                "--filter", "label=com.docker.compose.oneoff=False"], capture_output=True, text=True).stdout.split()
@@ -204,9 +203,6 @@ def observe(state):
             service, inputs, status, health = (line.split("\t") + ["", "", "", ""])[:4]
             if service:
                 result[service] = {"running": status == "running", "inputs": inputs or None, "health": health}
-    if native_service.is_native(state):
-        inputs = native_service.running_inputs(state)
-        result["core"] = {"running": inputs is not None or native_service.active(state), "inputs": inputs, "health": ""}
     return result
 
 
@@ -283,57 +279,35 @@ def stale(actual, desired, will_run):
         not actual.get(name, {}).get("running") or actual[name]["inputs"] != desired.get(name))}
 
 
-def migrate_native(root):
-    environment = configuration.read_environment((root / "generated/core.env").read_text())
-    run([str(root / "native/bin/oac-core-migrate")], env=dict(os.environ, **environment),
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
 def converge(root, state, desired, will_run, force=()):
     """Bring every service in will_run to the desired inputs; Core first, then the rest.
 
     Compose recreates exactly the containers whose configuration (and so label)
-    differs; native Core restarts when its running OAC_INPUTS differ.
+    differs.
     """
-    native = native_service.is_native(state)
     actual = observe(state)
     todo = stale(actual, desired, will_run) | set(force)
     if not todo:
         return set()
     up = ["up", "--detach", "--wait", "--wait-timeout", "300"]
     if "core" in todo:
-        if native:
-            if "database" in will_run and "database" in stale(actual, desired, {"database"}):
-                compose(root, *up, "database")
-            native_service.daemon_reload()
-            if actual.get("core", {}).get("running"):
-                native_service.restart(state)
-            else:
-                migrate_native(root)
-                native_service.start(root, state)
-        elif "core" in force and not stale(actual, desired, {"core"}):
+        if "core" in force and not stale(actual, desired, {"core"}):
             compose(root, "restart", "core")
         else:
             compose(root, *up, "core")
-    containers = will_run - ({"core"} if native else set())
-    if todo - {"core"} or ("core" in todo and not native):
-        if containers:
-            compose(root, *up)
-        for name in sorted(set(force) & containers - {"core"}):
-            if not stale(actual, desired, {name}):
-                compose(root, "restart", name)
+    if will_run:
+        compose(root, *up)
+    for name in sorted(set(force) & will_run - {"core"}):
+        if not stale(actual, desired, {name}):
+            compose(root, "restart", name)
     return todo
 
 
-def core_error_line(root, state):
+def core_error_line(root):
     """Core's single startup failure line. Core logs no environment values."""
     try:
-        if native_service.is_native(state):
-            output = run(["journalctl", "--user", "--unit", native_service.unit_name(state), "--lines", "200",
-                          "--no-pager", "--output", "cat"], capture_output=True, text=True).stdout
-        else:
-            output = compose(root, "logs", "--no-log-prefix", "--tail", "200", "core",
-                             capture_output=True, text=True).stdout
+        output = compose(root, "logs", "--no-log-prefix", "--tail", "200", "core",
+                         capture_output=True, text=True).stdout
     except (subprocess.CalledProcessError, OSError):
         return None
     lines = [line.strip() for line in output.splitlines() if "oac-core startup failed" in line]
@@ -407,24 +381,19 @@ def health(root, config, expected):
 # Files -------------------------------------------------------------------------
 
 def check_fixed(config, state):
-    """state.json records mode and native_core at installation; it wins over config.json."""
+    """state.json records the ingress images at installation; it wins over config.json."""
     if ingress_config.enabled(config) != ("ingress" in state["images"]):
         raise OacError("ingress is fixed after installation; install separately to change it")
-    for key in ("mode", "native_core"):
-        if config.get(key, False) != state[key]:
-            raise OacError(f"{key} is fixed after installation ({json.dumps(state[key])}). "
-                              "Install into a new directory to change it; nothing was applied.")
 
 
-def check_secrets(root, config, state):
+def check_secrets(root, state):
     reasons = {"credential.key": "Stored credentials can only be read with the original key.",
                "database.password": "PostgreSQL keeps the password it was initialized with."}
-    if config["mode"] != "web-only":
-        for name, reason in reasons.items():
-            data = read_private(root / "secrets" / name, "secrets/" + name)
-            if configuration.sha256(data) != state["secrets_sha256"][name]:
-                raise OacError(f"secrets/{name} changed since installation. {reason} "
-                                  "Restore the original file; nothing was applied.")
+    for name, reason in reasons.items():
+        data = read_private(root / "secrets" / name, "secrets/" + name)
+        if configuration.sha256(data) != state["secrets_sha256"][name]:
+            raise OacError(f"secrets/{name} changed since installation. {reason} "
+                              "Restore the original file; nothing was applied.")
     check_private(root / "secrets/core.key", "secrets/core.key")
     configuration.read_core_key(root)
 
@@ -512,7 +481,7 @@ def render_now(root, config, state, candidate=None):
 
 def old_public_url(root, config, previous, disk, actual):
     """The public URL things are bound to: Core's own answer, else the written core.env."""
-    old_config = applied_view(config, previous) if previous else config
+    old_config = applied_view(previous) if previous else config
     base = core_base(old_config)
     if actual.get("core", {}).get("running"):
         status, body = http(base + "/core/v1/installation", bearer(configuration.read_core_key(root)))
@@ -572,49 +541,13 @@ def confirm_public_url(root, config, old, base, core_answered, args, interactive
         raise OacError(f"Confirm with --confirm-public-url-change {new}; nothing was applied")
 
 
-def paired_core(root, config):
-    """(HTTP status, installation ID) of the Core that web.core_url reaches."""
-    return core_installation(config["web"]["core_url"], configuration.read_core_key(root))
-
-
-def core_installation(origin, key):
-    """Read Core identity with an already validated private key, before or after install."""
-    status, body = http(origin + "/core/v1/installation", bearer(key))
-    return status, (json.loads(body).get("installation_id") if status == 200 else None)
-
-
-def check_paired_core(root, config, state, previous, args, interactive, out):
-    """Web-only: detect a web.core_url that now reaches a different Core."""
-    if args.dry_run and previous is not None and previous.get("web.core_url") != config["web"]["core_url"]:
-        # The Core key goes only to a Core that apply is asked to use.
-        out("web.core_url changes; apply checks which Core it reaches.")
-        return state.get("core_installation_id")
-    status, installation = paired_core(root, config)
-    if status == 401 and state.get("complete") is True:
-        out("Warning: Core rejects this Web host's Core key; the key is out of date. "
-            "Copy secrets/core.key from the Core host, then run oac apply.")
-    elif status == 404:
-        raise OacError("The paired Core version is not supported; preserve its data and reinstall "
-                       "the current release separately. Nothing was applied.")
-    if status != 200:
-        return state.get("core_installation_id")
-    recorded = state.get("core_installation_id")
-    if recorded and installation != recorded:
-        out(f"web.core_url reaches Core installation {installation}, not the paired installation {recorded}.")
-        if args.dry_run:
-            out("Applying this change needs confirmation.")
-        elif not (args.yes or (interactive and input("Type yes to pair Web with this Core: ").strip() == "yes")):
-            raise OacError("Pairing Web with a different Core was not confirmed; nothing was applied")
-    return installation
-
-
 def own_listeners(config, previous, disk, actual):
     """(address, port) of this installation's listeners: those of the settings last written, and
     those of the gateway, which domain setup widens before public_url changes, while it runs as written."""
-    applied = applied_view(config, previous)
+    applied = applied_view(previous)
     own = {(ipaddress.ip_address(listener.host), listener.port) for listener in configuration.listeners(applied)}
     gateway = actual.get("gateway", {})
-    if gateway.get("running") and gateway.get("inputs") == configuration.rendered_inputs(disk, None).get("gateway"):
+    if gateway.get("running") and gateway.get("inputs") == configuration.rendered_inputs(disk).get("gateway"):
         own |= ingress_config.written_listeners(disk.get("compose.json"))
     return own
 
@@ -630,7 +563,7 @@ def check_new_listeners(config, previous, disk, actual, candidate=None):
     """Each listener this change adds must be free; this installation's own listeners do not count."""
     if previous is None:
         return
-    applied = applied_view(config, previous)
+    applied = applied_view(previous)
     if config["host"] != applied["host"] and not address_available(config["host"]):
         raise OacError(f"{config['host']} (host) is not an address of this machine; use one of its addresses. "
                        "Nothing was applied.")
@@ -655,10 +588,10 @@ def finish_apply(root, config, state, gateway_document, will_run, candidate=None
                             "public_url": config["public_url"], "target_url": config["public_url"], "message": None})
 
 
-def apply(root, dry_run=False, yes=False, discard_edits=False, confirm_public_url_change=None,
+def apply(root, dry_run=False, discard_edits=False, confirm_public_url_change=None,
           start=False, interactive=None, out=print, retry=None):
     root = Path(root)
-    args = argparse.Namespace(dry_run=dry_run, yes=yes, confirm_public_url_change=confirm_public_url_change)
+    args = argparse.Namespace(dry_run=dry_run, confirm_public_url_change=confirm_public_url_change)
     interactive = sys.stdin.isatty() if interactive is None else interactive
     with locked(root):
         check_complete(load_state(root))
@@ -672,7 +605,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     config = load_config(root)
     state = load_state(root)
     check_fixed(config, state)
-    check_secrets(root, config, state)
+    check_secrets(root, state)
     rendered, disk, previous = render_now(root, config, state, candidate)
     edited = edited_files(state, disk, rendered)
     if edited and not discard_edits:
@@ -688,18 +621,15 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     will_run = (set(rendered.services) - {"migrate"}) if (start or running) else set()
     todo = stale(actual, rendered.services, will_run)
     force = set()
-    if "core" in will_run and "core" not in todo and config["mode"] != "web-only":
+    if "core" in will_run and "core" not in todo:
         # The digest file follows secrets/core.key; a Core that rejects the key restarts, then Web.
         if http(core_base(config) + "/core/v1/installation", bearer(configuration.read_core_key(root)))[0] == 401:
             force = {"core"} | ({"web"} & will_run)
-    written_inputs = configuration.rendered_inputs(disk, rendered.unit)
+    written_inputs = configuration.rendered_inputs(disk)
     in_sync = bool(running) and all(actual.get(name, {}).get("running") and actual[name]["inputs"] == written_inputs.get(name)
                                     for name in set(written_inputs) - {"migrate"})
 
-    core_installation_id = state.get("core_installation_id")
-    if config["mode"] == "web-only":
-        core_installation_id = check_paired_core(root, config, state, previous, args, interactive, out)
-    elif state.get("generated"):
+    if state.get("generated"):
         old, base, answered = old_public_url(root, config, previous, disk, actual)
         confirm_public_url(root, config, old, base, answered, args, interactive, out)
 
@@ -726,7 +656,6 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     if not (changed or removed or restarts or edited):
         if ingress_config.enabled(config):
             finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run, candidate)
-        state = dict(state, core_installation_id=core_installation_id)
         if record_digests(state, rendered.files) != load_state(root):
             save_state(root, record_digests(state, rendered.files))
         out("Nothing to apply.")
@@ -736,7 +665,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
     for name in edited:
         create_private(root / "generated" / f"{name}.edited-{stamp}", disk[name])
     # Digests first: a file written from here on is recognized as oac's.
-    save_state(root, record_digests(dict(state, core_installation_id=core_installation_id), rendered.files))
+    save_state(root, record_digests(state, rendered.files))
     for name in sorted(set(changed) | set(edited)):
         write_private(root / "generated" / name, rendered.files[name])
     for name in removed:
@@ -745,7 +674,7 @@ def _apply(root, args, discard_edits, start, interactive, out, rollback=True, re
         converge(root, state, rendered.services, will_run, force)
         finish_apply(root, config, state, rendered.files.get("Caddyfile"), will_run, candidate)
     except (OacError, RuntimeError, subprocess.CalledProcessError) as error:
-        line = core_error_line(root, state)
+        line = core_error_line(root)
         if line:
             out(line)
         if not (rollback and in_sync):
@@ -802,10 +731,10 @@ def _remove_last_files(root, state, keep_root):
 
 
 def remove(root, state, keep_root=False, images=False):
-    """Remove one installation: native Core's unit, its Compose project with its volumes, then its files.
+    """Remove one installation: its Compose project with its volumes, then its files.
 
-    state is the loaded state.json. Only this installation's own project and unit are
-    touched. Loaded images are kept unless images is set; see remove_images. keep_root keeps
+    state is the loaded state.json. Only this installation's own project is touched.
+    Loaded images are kept unless images is set; see remove_images. keep_root keeps
     the directory and its .oac.lock, which the caller holds, and removes everything else in
     it. The files stay while a service is left or an image removal fails, so state.json still
     names them. Nothing is printed, so a closed terminal can't stop the removal. Returns a
@@ -819,12 +748,6 @@ def remove(root, state, keep_root=False, images=False):
     if not isinstance(project, str) or not re.fullmatch(r"oac-[0-9a-f]{10}", project):
         raise OacError("state.json names no Compose project of this installation; nothing was removed")
     left, kept = [], []
-    if native_service.is_native(state):
-        unit = native_service.unit_name(state)
-        try:
-            native_service.remove(state)
-        except (RuntimeError, KeyboardInterrupt):
-            left.append((f"native Core unit {unit}", f"systemctl --user disable --now {unit}"))
     # -p without -f, outside any project directory and without COMPOSE_* settings: Compose
     # reads no project file and acts on this project's labels alone.
     down = ["docker", "compose", "-p", project, "down", "--volumes", "--remove-orphans"]
@@ -903,15 +826,13 @@ def written_view(root, state, config):
         if config is None:
             raise OacError("Neither config.json nor generated/settings.json can be read")
         return config
-    return applied_view(state, values)
+    return applied_view(values)
 
 
-def applied_view(fixed, values):
-    """The config the settings last written describe; fixed supplies mode and native_core, which never change."""
-    return {"mode": fixed["mode"], "native_core": fixed.get("native_core", False), "ingress": values.get("ingress"),
-            "public_url": values.get("public_url"), "host": values["host"],
-            "ports": {name: values[f"ports.{name}"] for name in ("core", "web", "database") if f"ports.{name}" in values},
-            "web": {"core_url": values.get("web.core_url")}}
+def applied_view(values):
+    """The config the settings last written describe."""
+    return {"ingress": values.get("ingress"), "public_url": values.get("public_url"), "host": values["host"],
+            "ports": {name: values[f"ports.{name}"] for name in ("core", "web") if f"ports.{name}" in values}}
 
 
 def load_config_or_report(root, out):
@@ -928,75 +849,44 @@ def status(root, out=print):
     loaded = load_config_or_report(root, out)
     state = load_state(root)
     config = written_view(root, state, loaded)
-    mode = config["mode"]
     actual = observe(state)
     rendered = None
-    if loaded is not None and loaded.get("mode") == state["mode"] and loaded.get("native_core", False) == state["native_core"]:
+    if loaded is not None:
         rendered, disk, _ = render_now(root, loaded, state)
     for name, item in sorted(actual.items()):
         line = f'{name}: {"running" if item["running"] else "stopped"} {item["health"]}'.rstrip()
         if rendered and item["running"] and name != "migrate" and item["inputs"] != rendered.services.get(name):
             line += " (runs with other inputs than config.json renders; run oac apply)"
         out(line)
-    required = set(config_model.SERVICES[mode])
+    required = set(config_model.SERVICES)
     if ingress_config.enabled(config):
         required.update(("gateway", "installation"))
     healthy = all(actual.get(name, {}).get("running") and actual[name]["health"] in ("", "healthy") for name in required)
-    if mode != "web-only":
-        core_ok = http(core_base(config) + "/healthz")[0] == 200
-        healthy = healthy and core_ok
-        out("Core API: " + ("healthy" if core_ok else "unavailable"))
-        key = configuration.read_core_key(root)
-        digests = root / "generated/core-key-digests.json"
-        if digests.is_file() and configuration.sha256(key) not in json.loads(digests.read_text()):
-            out("secrets/core.key does not match generated/core-key-digests.json; run oac apply")
-        if core_ok and http(core_base(config) + "/core/v1/installation", bearer(key))[0] == 401:
-            out("Core rejects secrets/core.key because it started with another key; run oac apply")
-            healthy = False
-    if mode != "core-only":
-        web_ok = http(configuration.service_origin(config, "web") + "/healthz")[0] == 200
-        healthy = healthy and web_ok
-        out("Web: " + ("healthy" if web_ok else "unavailable"))
+    core_ok = http(core_base(config) + "/healthz")[0] == 200
+    healthy = healthy and core_ok
+    out("Core API: " + ("healthy" if core_ok else "unavailable"))
+    key = configuration.read_core_key(root)
+    digests = root / "generated/core-key-digests.json"
+    if digests.is_file() and configuration.sha256(key) not in json.loads(digests.read_text()):
+        out("secrets/core.key does not match generated/core-key-digests.json; run oac apply")
+    if core_ok and http(core_base(config) + "/core/v1/installation", bearer(key))[0] == 401:
+        out("Core rejects secrets/core.key because it started with another key; run oac apply")
+        healthy = False
+    web_ok = http(configuration.service_origin(config, "web") + "/healthz")[0] == 200
+    healthy = healthy and web_ok
+    out("Web: " + ("healthy" if web_ok else "unavailable"))
     out("Public URL: " + (config["public_url"] or ("not configured; set up HTTPS in Web" if ingress_config.enabled(config) else "none (local access only)")))
-    if mode != "web-only":
-        out("API base URL: " + configuration.local_public_url(config) + "/v1")
-    if mode != "core-only":
-        out("Console: " + (ingress_config.console_origin(config) if ingress_config.enabled(config) else
-                           config["public_url"] or configuration.service_origin(config, "web")))
+    out("API base URL: " + configuration.local_public_url(config) + "/v1")
+    out("Console: " + (ingress_config.console_origin(config) if ingress_config.enabled(config) else
+                       config["public_url"] or configuration.service_origin(config, "web")))
     out("Source commit: " + state["source_commit"])
-    if loaded is not None:
-        for key in ("mode", "native_core"):
-            if loaded.get(key, False) != state[key]:
-                out(f"config.json sets {key} to {json.dumps(loaded.get(key, False))}, but it is fixed at "
-                    f"{json.dumps(state[key])} for this installation (state.json); restore it")
     if rendered is not None:
         if any(comparable(name, disk.get(name)) != comparable(name, text) for name, text in rendered.files.items()):
             out(f"config.json has changes that are not applied; run {root / 'oac'} apply")
         for name in edited_files(state, disk, rendered):
             out(f"generated/{name} was edited by hand; put the change in config.json and run oac apply --discard-edits")
-    if mode == "web-only":
-        out("Reverse proxy: /v1 and /api/v1 go to Core; everything else goes to " +
-            configuration.service_address(config, "web", connect=True))
-        code, installation = paired_core(root, config)
-        if code == 401:
-            out("Paired Core: rejects this Web host's Core key; the key is out of date. Copy secrets/core.key "
-                "from the Core host, then run oac apply.")
-            healthy = False
-        elif code == 404:
-            out("Paired Core: runs an earlier release without /core/v1/installation; historical versions are unsupported; reinstall the Core separately")
-        elif code != 200:
-            out("Paired Core: unreachable at " + config["web"]["core_url"])
-            healthy = False
-        elif state.get("core_installation_id") not in (None, installation):
-            out(f"Paired Core: web.core_url reaches installation {installation}, "
-                f'not the paired installation {state["core_installation_id"]}')
-        else:
-            out(f"Paired Core: installation {installation}")
-    elif mode == "core-only":
-        out(f'Reverse proxy: /v1 and /api/v1 go to {configuration.service_address(config, "core", connect=True)}; Web runs elsewhere')
-    else:
-        out(f'Reverse proxy: /v1 and /api/v1 go to {configuration.service_address(config, "core", connect=True)}; '
-            f'everything else goes to {configuration.service_address(config, "web", connect=True)}')
+    out(f'Reverse proxy: /v1 and /api/v1 go to {configuration.service_address(config, "core", connect=True)}; '
+        f'everything else goes to {configuration.service_address(config, "web", connect=True)}')
     out("Service health does not prove model execution. This check makes no model requests.")
     check_complete(state)
     if not healthy:
@@ -1017,16 +907,12 @@ def start(root, out=print):
             for name in edited_files(state, disk, rendered):
                 out(f"Warning: generated/{name} was edited by hand.")
         written = written_view(root, state, config)
-        if state["mode"] == "web-only" and paired_core(root, written)[0] == 404:
-            raise OacError("The paired Core version is not supported; preserve its data and reinstall "
-                           "the current release separately. Nothing was started.")
         for name, image in state["images"].items():
             if run(["docker", "image", "inspect", image], check=False, stdin=subprocess.DEVNULL,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
                 raise OacError(f"The {name} image is missing; rerun install.sh from bundle "
                                   f'{state["source_commit"]} to reload images')
-        unit = native_service.unit_name(state) if native_service.is_native(state) else None
-        desired = configuration.rendered_inputs(read_generated(root, {"compose.json"} | ({unit} if unit else set())), unit)
+        desired = configuration.rendered_inputs(read_generated(root, {"compose.json"}))
         will_run = set(desired) - {"migrate"}
         converge(root, state, desired, will_run)
         gateway_document = (root / "generated/Caddyfile").read_text() if ingress_config.enabled(written) else None
@@ -1037,8 +923,7 @@ def start(root, out=print):
 def stop(root, out=print):
     with locked(root):
         check_directories(root)
-        state = load_state(root)
-        native_service.stop(root, state)
+        load_state(root)
         if (root / "generated/compose.json").exists():
             compose(root, "stop")
     out("Control-plane services stopped. Data, nodes and sandbox resources are kept; running sandbox work may continue.")
@@ -1050,9 +935,6 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
         check_directories(root)
         state = load_state(root)
         check_complete(state)
-        if state["mode"] == "web-only":
-            raise OacError("Core owns the Core key. Copy secrets/core.key from the Core host into this "
-                              "installation, then run oac apply.")
         config = load_config(root)
         rendered, disk, _ = render_now(root, config, state)
         if any(comparable(name, disk.get(name)) != comparable(name, text) for name, text in rendered.files.items()) \
@@ -1083,7 +965,6 @@ def rotate_core_key(root, yes=False, interactive=None, out=print):
         if http(url, new)[0] != 200 or http(url, bearer(old_key))[0] != 401:
             raise OacError("Core did not confirm the new key and reject the old one; run oac status")
     out(f"New Core key: {root / 'secrets/core.key'}. Sign in to Web again and update scripts that use the key.")
-    out("A separate Web-only installation keeps its own copy: copy secrets/core.key to that host and run its oac apply.")
 
 
 def core_sandboxes(root, state):
@@ -1116,39 +997,33 @@ def uninstall(root, yes=False, interactive=None, out=print):
         return
     with locked(root):
         state = load_state(root)
-        project, core = state["project"], state["mode"] != "web-only"
+        project = state["project"]
         out(f"This removes the installation in {root} from this host:")
-        out(f"  Compose project {project}: its containers and networks"
-            + (f", and the database volume {project}_database" if core else ""))
-        if native_service.is_native(state):
-            out(f"  Native Core service {native_service.unit_name(state)}")
+        out(f"  Compose project {project}: its containers and networks, and the database volume {project}_database")
         for name, image in sorted(state["images"].items()):
             out(f"  The {name} image {image}, unless another container or a tag uses it")
         out(f"  The directory {root}")
         nodes = []
-        if not core:
-            out("The paired Core and its data are not touched.")
+        out("All data is deleted: the database with every Project, API key, Session and stored credential, and "
+            "the Core key. To keep it, back it up first: docs/getting-started/operations.md#back-up")
+        found = core_sandboxes(root, state)
+        release = ("While Core is still up, archive their Sessions, or choose Reset deployment in Web "
+                   "(System → Manage sandbox configuration) and let it complete.")
+        if found is None:
+            nodes = None
+            out("Core did not answer, so its nodes and sandboxes can't be listed. Nodes stay on their hosts.")
+            out("Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B keeps running, "
+                "and billing for, its sandboxes. " + release)
         else:
-            out("All data is deleted: the database with every Project, API key, Session and stored credential, and "
-                "the Core key. To keep it, back it up first: docs/getting-started/operations.md#back-up")
-            found = core_sandboxes(root, state)
-            release = ("While Core is still up, archive their Sessions, or choose Reset deployment in Web "
-                       "(System → Manage sandbox configuration) and let it complete.")
-            if found is None:
-                nodes = None
-                out("Core did not answer, so its nodes and sandboxes can't be listed. Nodes stay on their hosts.")
-                out("Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B keeps running, "
-                    "and billing for, its sandboxes. " + release)
-            else:
-                nodes, deployment = found
-                if nodes:
-                    out("Nodes registered with this Core, which stay on their hosts: " + ", ".join(
-                        f'{node.get("name")} ({"online" if node.get("online") else "offline"})' for node in nodes))
-                count = (deployment.get("resources") or {}).get("allocations") or 0
-                if count:
-                    where = ("E2B keeps running them, and billing for them" if deployment.get("provider") == "e2b"
-                             else "they keep running on their nodes")
-                    out(f"Core has {count} sandbox(es) in use. Uninstall does not stop them: {where}. {release}")
+            nodes, deployment = found
+            if nodes:
+                out("Nodes registered with this Core, which stay on their hosts: " + ", ".join(
+                    f'{node.get("name")} ({"online" if node.get("online") else "offline"})' for node in nodes))
+            count = (deployment.get("resources") or {}).get("allocations") or 0
+            if count:
+                where = ("E2B keeps running them, and billing for them" if deployment.get("provider") == "e2b"
+                         else "they keep running on their nodes")
+                out(f"Core has {count} sandbox(es) in use. Uninstall does not stop them: {where}. {release}")
         if not yes:
             if not interactive:
                 raise OacError("Confirm the uninstall with --yes, or run it in a terminal; nothing was removed")
@@ -1176,7 +1051,6 @@ def main(argv=None, root=None, out=print):
     commands.add_parser("stop", help="Stop the installed services; data is kept")
     apply_parser = commands.add_parser("apply", help="Apply config.json and restart what changed")
     apply_parser.add_argument("--dry-run", action="store_true", help="Show the plan without changing anything")
-    apply_parser.add_argument("--yes", action="store_true", help="Pair Web-only with a different Core without asking")
     apply_parser.add_argument("--discard-edits", action="store_true",
                               help="Overwrite hand-edited generated files, keeping each edited copy")
     apply_parser.add_argument("--confirm-public-url-change", metavar="URL",
@@ -1194,9 +1068,9 @@ def main(argv=None, root=None, out=print):
         return uninstall(root, yes=args.yes, out=out)
     if not (root / "state.json").exists():
         raise OacError(f"{root} is not an installation directory; run the oac command inside it")
-    state = load_state(root)
+    load_state(root)
     if args.command == "apply":
-        apply(root, dry_run=args.dry_run, yes=args.yes, discard_edits=args.discard_edits,
+        apply(root, dry_run=args.dry_run, discard_edits=args.discard_edits,
               confirm_public_url_change=args.confirm_public_url_change, out=out)
     elif args.command == "domain":
         import ingress

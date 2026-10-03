@@ -67,7 +67,9 @@ test("partial and failed refreshes retain rows with a durable caveat and recover
 
 test("successful empty reads preserve true zero counts and empty states", async ({ page, request }) => {
   await openConsole(page, request, "overview", { fresh: true });
-  await expect(page.locator(".overview-activity .ts-chart-plot").first()).toBeVisible();
+  await expect(page.locator(".overview-activity")).toContainText("Your first Session starts here");
+  await expect(page.locator(".overview-activity .ts-chart-plot")).toHaveCount(0);
+  await expect(page.locator(".getting-started .button.primary")).toHaveCount(1);
   await expect(page.getByRole("article").filter({ hasText: "Running Sessions" }).locator(".metric-tile-sub")).toHaveText("0 total, 0 idle");
   await expect(failed(page)).toHaveCount(0);
   await page.locator(".app-sidebar").getByRole("button", { name: "Session log", exact: true }).click();

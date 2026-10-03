@@ -4,6 +4,9 @@ inputs:
   node-version:
     description: Node.js version
     default: '22'
+  lockfiles:
+    description: Newline-separated lockfile paths consumed by this job
+    required: true
 runs:
   using: composite
   steps:
@@ -21,4 +24,4 @@ runs:
     - uses: actions/cache@v6
       with:
         path: ${{ steps.store.outputs.path }}
-        key: pnpm-v1-${{ runner.os }}-${{ runner.arch }}-node${{ inputs.node-version }}-10.30.3-${{ hashFiles('pnpm-lock.yaml') }}
+        key: pnpm-v1-${{ runner.os }}-${{ runner.arch }}-node${{ inputs.node-version }}-10.30.3-${{ hashFiles(inputs.lockfiles) }}

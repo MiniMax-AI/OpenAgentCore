@@ -1,0 +1,276 @@
+# OpenAgentCore v0.0.3. Images and installer payload are one matched release.
+# Set OAC_PUBLIC_URL to your platform's HTTPS origin when ready; startup defaults to localhost.
+x-ingress-image: &ingress-image ghcr.io/minimax-ai/openagentcore/ingress:v0.0.3@sha256:e485a8cae0b904389501f00bcee6a2c5b35be83412a9ff81a740f93b8cdbf326
+x-core: &core
+  image: ghcr.io/minimax-ai/openagentcore/core:v0.0.3@sha256:6934a26d5cb7c878128ea8187ced446336345de7750c415be510740806663575
+  platform: linux/amd64
+  user: "65532:65532"
+  read_only: true
+  init: true
+  tmpfs: [/tmp:mode=1777]
+  security_opt: [no-new-privileges:true]
+  environment:
+    OAC_PUBLIC_URL: &public-url ${OAC_PUBLIC_URL:-http://localhost:8080}
+    OAC_DATABASE_URL: postgres://agents_api@database:5432/agents_api?sslmode=disable
+    OAC_DATABASE_PASSWORD_FILE: /run/database/password
+    OAC_CREDENTIAL_KEY_FILE: /run/oac/credential.key
+    OAC_CORE_KEY_DIGESTS_FILE: /run/oac/core-key-digests.json
+    OAC_PROVIDER_ROOT: /opt/oac
+    OAC_PROVIDER_STATE_ROOT: /state
+    OAC_NATIVE_INSTALLER_DIR: /opt/oac/native-installers
+    OAC_HARNESSES: claude_sdk,codex,mcode
+  volumes:
+    - core-config:/run/oac:ro
+    - database-secret:/run/database:ro
+    - core-state:/state
+
+services:
+  init:
+    image: *ingress-image
+    platform: linux/amd64
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    command: [python3, /init.py]
+    configs:
+      - source: init-script
+        target: /init.py
+    volumes:
+      - core-config:/data/core
+      - web-secret:/data/web
+      - database-secret:/data/database
+      - core-state:/data/state
+      - node-payload:/data/payload
+      - database:/data/database-data:ro
+
+  database:
+    image: postgres:16-alpine@sha256:1a66d744c1b459e13b05a8fca341da84cb63383e99ce262210efee5a319d4551
+    platform: linux/amd64
+    restart: unless-stopped
+    depends_on:
+      init: {condition: service_completed_successfully}
+    environment:
+      POSTGRES_USER: agents_api
+      POSTGRES_DB: agents_api
+      POSTGRES_PASSWORD_FILE: /run/database/password
+    volumes:
+      - database:/var/lib/postgresql/data
+      - database-secret:/run/database:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U agents_api -d agents_api"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  migrate:
+    <<: *core
+    restart: "no"
+    command: [/usr/local/bin/oac-core-migrate]
+    depends_on:
+      database: {condition: service_healthy}
+
+  core:
+    <<: *core
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -ec
+      - export OAC_INSTALLATION_ID="$$(cat /run/oac/installation.id)"; exec /usr/local/bin/oac-core
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+
+  web:
+    image: ghcr.io/minimax-ai/openagentcore/web:v0.0.3@sha256:d1eb4cc8870aebd080773fd16db92a5a1db205e0aab10066d4db16f1284a88f5
+    platform: linux/amd64
+    user: "65532:65532"
+    restart: unless-stopped
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      init: {condition: service_completed_successfully}
+    environment:
+      OAC_WEB_ORIGIN: *public-url
+      OAC_WEB_UPSTREAM: http://core:8091
+      OAC_WEB_CORE_KEY_FILE: /run/oac/core.key
+      OAC_WEB_NODE_PAYLOAD_DIR: /node-payload
+    volumes:
+      - web-secret:/run/oac:ro
+      - node-payload:/node-payload:ro
+
+  gateway:
+    image: *ingress-image
+    platform: linux/amd64
+    user: "65532:65532"
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:mode=1777]
+    environment:
+      XDG_DATA_HOME: /tmp/data
+      XDG_CONFIG_HOME: /tmp/config
+    command: [caddy, run, --config, /etc/caddy/Caddyfile, --adapter, caddyfile]
+    depends_on: [core, web]
+    expose: ["8080"]
+    configs:
+      - source: gateway-config
+        target: /etc/caddy/Caddyfile
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - |
+          import urllib.request
+          client = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+          for host in ('core:8091', 'web:8080', '127.0.0.1:8080'):
+              with client.open('http://' + host + '/healthz', timeout=3) as response:
+                  assert response.status == 200
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  # Explicit operator action; the key is printed only to the attached terminal.
+  credentials:
+    image: *ingress-image
+    platform: linux/amd64
+    user: "65532:65532"
+    profiles: [tools]
+    read_only: true
+    logging: {driver: none}
+    command: [cat, /run/oac/core.key]
+    volumes:
+      - web-secret:/run/oac:ro
+
+volumes:
+  database:
+  database-secret:
+  core-config:
+  web-secret:
+  core-state:
+  node-payload:
+
+configs:
+  gateway-config:
+    content: |
+      {
+        admin off
+        auto_https off
+        persist_config off
+      }
+      http://:8080 {
+        @core path /v1 /v1/* /api/v1/*
+        handle @core {
+          reverse_proxy core:8091 {
+            flush_interval -1
+          }
+        }
+        handle {
+          reverse_proxy web:8080 {
+            flush_interval -1
+          }
+        }
+      }
+
+  init-script:
+    content: |
+      import base64
+      import fcntl
+      import hashlib
+      import json
+      import os
+      from pathlib import Path
+      import secrets
+      import tarfile
+      import urllib.request
+      import uuid
+
+      REVISION = 'cc7e1aad3bde47598d161d6372e2e211bb61d9cd'
+      BASE = 'https://github.com/MiniMax-AI/OpenAgentCore/releases/download/v0.0.3/'
+      ARCHIVE = 'oac-' + REVISION + '-linux-amd64'
+      CHECKSUM = '579d2d43accfc45a0a8567db5bc33b407c48b05b0d731bea3fed73e6ade558ae'
+      MEMBERS = ('manifest.json', 'SHA256SUMS', 'node-install.pyz', 'runtime/seccomp.json')
+
+      def digest(data):
+          return hashlib.sha256(data).hexdigest()
+
+      def download():
+          print('Downloading and verifying the matched node installation metadata', flush=True)
+          checksum = hashlib.sha256()
+          with urllib.request.urlopen(BASE + ARCHIVE + '.tar.gz', timeout=60) as response:
+              class Reader:
+                  def read(self, count=-1):
+                      data = response.read(count)
+                      checksum.update(data)
+                      return data
+              reader, files = Reader(), {}
+              with tarfile.open(fileobj=reader, mode='r|gz') as archive:
+                  for member in archive:
+                      name = member.name.removeprefix(ARCHIVE + '/')
+                      if member.name == ARCHIVE + '/' + name and name in MEMBERS:
+                          if name in files or not member.isfile() or member.size > 1024 * 1024:
+                              raise RuntimeError('Invalid release metadata member')
+                          files[name] = archive.extractfile(member).read()
+              while reader.read(1024 * 1024):
+                  pass
+          if checksum.hexdigest() != CHECKSUM or set(files) != set(MEMBERS):
+              raise RuntimeError('Release metadata checksum mismatch')
+          manifest = json.loads(files['manifest.json'])
+          if manifest['source_commit'] != REVISION or manifest['platform'] != 'linux/amd64':
+              raise RuntimeError('Release identity mismatch')
+          return files
+
+      def write(path, data):
+          path.parent.mkdir(parents=True, exist_ok=True)
+          temporary = path.with_name(path.name + '.tmp')
+          temporary.write_bytes(data)
+          temporary.chmod(0o600)
+          os.chown(temporary, 65532, 65532)
+          os.replace(temporary, path)
+
+      def initialize(root, fetch=download):
+          for name in ('core', 'web', 'database', 'state', 'payload'):
+              directory = root / name
+              directory.mkdir(exist_ok=True)
+              directory.chmod(0o700)
+              os.chown(directory, 65532, 65532)
+          with (root / 'core/.init.lock').open('w') as lock:
+              fcntl.flock(lock, fcntl.LOCK_EX)
+              marker = root / 'core/installation.json'
+              if marker.exists():
+                  receipt = json.loads(marker.read_text())
+                  if receipt['source_commit'] != REVISION:
+                      raise RuntimeError('This volume belongs to another release; create a new installation')
+                  for name, checksum in receipt['files'].items():
+                      if digest((root / name).read_bytes()) != checksum:
+                          raise RuntimeError('Installation files changed; restore the matching volumes')
+                  print('Existing installation verified', flush=True)
+                  return
+              if any((root / 'database-data').iterdir()) or any((root / 'state').iterdir()):
+                  raise RuntimeError('Existing data requires its original installation volumes')
+              files = fetch()
+              prefix = 'payload/releases/' + REVISION + '/'
+              for name, data in files.items():
+                  write(root / (prefix + name), data)
+              write(root / 'payload/active.json', json.dumps({'source_commit': REVISION}).encode())
+              # Parent directories of the public payload must be traversable by Web.
+              for path in (root / 'payload').rglob('*'):
+                  if path.is_dir():
+                      path.chmod(0o755)
+              generators = {
+                  'web/core.key': lambda: secrets.token_hex(32),
+                  'database/password': lambda: secrets.token_hex(32),
+                  'core/credential.key': lambda: base64.b64encode(secrets.token_bytes(32)).decode(),
+                  'core/installation.id': lambda: str(uuid.uuid4()),
+              }
+              for name, generate in generators.items():
+                  if not (root / name).exists():
+                      write(root / name, (generate() + '\n').encode())
+              key = (root / 'web/core.key').read_text().strip()
+              write(root / 'core/core-key-digests.json', json.dumps([digest(key.encode())]).encode())
+              names = [*generators, 'core/core-key-digests.json', 'payload/active.json',
+                       *(prefix + name for name in MEMBERS)]
+              receipt = {'source_commit': REVISION, 'files': {name: digest((root / name).read_bytes()) for name in names}}
+              write(marker, json.dumps(receipt).encode())
+              print('Installation initialized; use the credentials service to retrieve the sign-in key', flush=True)
+
+      if __name__ == '__main__':
+          os.umask(0o077)
+          initialize(Path('/data'))

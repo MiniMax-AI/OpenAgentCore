@@ -6,13 +6,8 @@
     "dev:web": "pnpm --filter @oac/web dev",
     "build:web": "pnpm --filter @oac/web build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm --filter @oac/claude-sdk-adapter test && pnpm test:web",
+    "test": "pnpm --dir packages/claude-sdk-adapter test && pnpm test:web",
     "test:web": "pnpm --filter @oac/agents-client test && pnpm --filter @oac/web test",
-    "test:web:acceptance": "playwright test"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.63.0",
-    "@types/node": "^26.1.0",
-    "typescript": "^5.8.3"
+    "test:web:acceptance": "pnpm --filter @oac/web test:acceptance"
   }
 }

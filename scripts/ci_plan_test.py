@@ -14,12 +14,19 @@ class SelectionTests(unittest.TestCase):
     def jobs(self, *paths):
         return set(ci.select(paths)["jobs"])
 
-    def test_documents_only_need_repository_integrity(self):
-        for path in ("docs/maintainers.md", "README.md", "contracts/agents-api/admin-api.md", "docs/assets/logo.svg"):
-            self.assertEqual(self.jobs(path), {"hygiene"})
+    def test_published_documents_also_build_the_website(self):
+        for path in ("docs/maintainers.md", "contracts/agents-api/admin-api.md", "docs/assets/logo.svg", "docs.json"):
+            self.assertEqual(self.jobs(path), {"hygiene", "website"})
+        self.assertEqual(self.jobs("README.md"), {"hygiene"})
 
     def test_installer_does_not_download_a_browser_or_run_database_tests(self):
         self.assertEqual(self.jobs("deploy/install/install.py", "scripts/install-release.test.py"), {"hygiene", "distribution"})
+
+    def test_compose_inputs_select_live_and_fixture_checks_without_image_builds(self):
+        for path in ("deploy/compose/compose.yaml", "deploy/compose/local.yaml", "deploy/compose/dokploy.toml",
+                     "scripts/compose-smoke.py", "deploy/install/test_compose.py"):
+            self.assertEqual(self.jobs(path), {"hygiene", "distribution", "compose"})
+            self.assertFalse(ci.select([path])["image"])
 
     def test_web_and_core_have_different_consumers(self):
         self.assertEqual(self.jobs("apps/web/src/app.tsx"), {"hygiene", "web", "web-acceptance"})
@@ -69,8 +76,8 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue({"backend", "api", "distribution"} <= self.jobs(path))
 
-    def test_unknown_inputs_planner_and_empty_diffs_are_full(self):
-        for paths in ([], ["new-component/source.rs"], ["Makefile"], [".github/workflows/new.yml"],
+    def test_shared_inputs_and_planner_are_full(self):
+        for paths in (["Makefile"], [".github/workflows/new.yml"],
                       [".github/actions/new/action.yml"], [".github/workflows/check.yml"], [".github/workflows/release.yml"], ["scripts/ci_plan.py"], ["../outside"], ["/outside"]):
             self.assertEqual(set(ci.select(paths)["jobs"]), set(ci.JOBS))
             self.assertTrue(ci.select(paths)["image"])
@@ -79,6 +86,7 @@ class SelectionTests(unittest.TestCase):
         for workflow, selected in {
             "ci-review": {"hygiene", "lint"},
             "actionlint": {"hygiene", "lint"},
+            "website": {"hygiene", "website", "lint"},
             "native": {"hygiene", "native", "lint"},
             "api-acceptance": {"hygiene", "api", "lint"},
         }.items():
@@ -103,11 +111,34 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.jobs(path), {"hygiene", "backend", "distribution", "api", "native"})
                 self.assertTrue(ci.select([path])["image"])
-        for path in ("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", "packages/tsconfig/base.json"):
+        for path in ("package.json", "pnpm-workspace.yaml", ".npmrc"):
             with self.subTest(path=path):
-                self.assertEqual(self.jobs(path), {"hygiene", "harness", "example", "web", "web-acceptance", "native"})
+                self.assertEqual(self.jobs(path), {"hygiene", "harness", "example", "web", "web-acceptance", "website", "native"})
                 self.assertFalse(ci.select([path])["image"])
         self.assertEqual(self.jobs("tsconfig.base.json"), {"hygiene", "example", "web", "web-acceptance"})
+
+    def test_module_locks_only_select_their_consumers(self):
+        cases = {
+            "website/pnpm-lock.yaml": {"website"},
+            "website/pnpm-workspace.yaml": {"website"},
+            "packages/claude-sdk-adapter/pnpm-workspace.yaml": {"harness", "native", "distribution"},
+            "apps/web/pnpm-lock.yaml": {"web", "web-acceptance"},
+            "apps/web/package.json": {"web", "web-acceptance"},
+            "example/parsar/pnpm-lock.yaml": {"example"},
+            "packages/agents-client/pnpm-lock.yaml": {"web", "web-acceptance", "example"},
+            "packages/claude-sdk-adapter/pnpm-lock.yaml": {"harness", "native", "distribution"},
+            "packages/claude-sdk-adapter/package.json": {"harness", "native", "distribution"},
+            "packages/tsconfig/base.json": {"harness", "native"},
+            "pnpm-lock.yaml": set(),
+        }
+        for path, jobs in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(self.jobs(path), jobs | {"hygiene"})
+        self.assertEqual(self.jobs("website/package.json", "website/pnpm-lock.yaml",
+                                  "website/.vitepress/theme/components/Mermaid.vue"),
+                         {"hygiene", "website"})
+        self.assertEqual(self.jobs("website/pnpm-lock.yaml", "apps/web/pnpm-lock.yaml"),
+                         {"hygiene", "website", "web", "web-acceptance"})
 
     def test_ci_tests_and_metrics_do_not_trigger_product_checks(self):
         for path in ("scripts/ci_plan_test.py", "scripts/ci_metrics.py", "scripts/ci_metrics_test.py"):
@@ -128,13 +159,13 @@ class SelectionTests(unittest.TestCase):
 
     def test_mixed_changes_accumulate(self):
         self.assertEqual(self.jobs("docs/maintainers.md", "deploy/install/install.py", "apps/web/src/app.tsx"),
-                         {"hygiene", "distribution", "web", "web-acceptance"})
+                         {"hygiene", "distribution", "web", "web-acceptance", "website"})
 
     def test_installer_pr_300_replay(self):
         self.assertEqual(self.jobs(
             "deploy/install-release.sh", "deploy/install/README.md", "deploy/install/install.py",
             "deploy/install/install_display.py", "deploy/install/test_install.py", "deploy/install/test_install_output.py",
-            "docs/getting-started/install.md", "scripts/install-release.test.py"), {"hygiene", "distribution"})
+            "docs/getting-started/install.md", "scripts/install-release.test.py"), {"hygiene", "distribution", "website"})
 
     def test_workflow_graph_cannot_silently_omit_or_add_a_gate_dependency(self):
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/check.yml").read_text().split("jobs:\n", 1)[1]
@@ -144,8 +175,49 @@ class SelectionTests(unittest.TestCase):
         dependencies = re.search(r"needs: \[(.+)\]", gate).group(1).split(", ")
         self.assertEqual(set(dependencies), set(ci.JOBS) | {"plan"})
 
-    def test_unknown_markdown_is_not_assumed_to_be_documentation(self):
-        self.assertEqual(self.jobs("new-engine/system-prompt.md"), set(ci.JOBS))
+    def test_only_matching_directory_and_suffix_trigger_product_checks(self):
+        for path in ("services/core/notes.md", "apps/daemon/design.md", "internal/architecture.md",
+                     "apps/web/notes.md", "scripts/build-core.sh.md", "new-component/source.rs",
+                     "services/core/code.go.bak"):
+            self.assertEqual(self.jobs(path), {"hygiene"}, path)
+        self.assertEqual(self.jobs("services/core/code.go"), {"hygiene", "backend", "api"})
+        self.assertEqual(self.jobs("apps/web/src/style.css"), {"hygiene", "web", "web-acceptance"})
+        self.assertEqual(self.jobs("services/core/migrations/123.sql"), {"hygiene", "backend", "api"})
+
+    def test_fixture_and_embedded_resources_keep_checks_regardless_of_suffix(self):
+        for path in ("services/core/tests/testdata/prompt.md", "services/core/tests/testdata/image.jpg"):
+            self.assertTrue({"backend", "api"} <= self.jobs(path))
+        self.assertTrue({"backend", "native"} <= self.jobs("apps/daemon/internal/agent/testdata/prompt.md"))
+        self.assertTrue({"backend", "api", "native", "distribution"} <= self.jobs("services/core/internal/nativeinstaller/assets/archive"))
+        self.assertTrue({"web", "web-acceptance"} <= self.jobs("apps/web/public/logo.svg"))
+        self.assertTrue({"distribution", "web", "web-acceptance"} <= self.jobs("services/web/Dockerfile"))
+
+    def test_tracked_program_sources_have_a_matching_rule(self):
+        root = Path(__file__).resolve().parents[1]
+        paths = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+        for path in filter(None, paths):
+            if Path(path).suffix in {".go", ".sql", ".ts", ".tsx", ".mjs", ".sh", ".ps1"} or path.endswith("Dockerfile"):
+                self.assertNotEqual(self.jobs(path), {"hygiene"}, path)
+
+    def test_verified_empty_diff_only_needs_hygiene(self):
+        self.assertEqual(self.jobs(), {"hygiene"})
+
+    def test_actionlint_config_selects_lint(self):
+        self.assertEqual(self.jobs(".github/actionlint.yaml"), {"hygiene", "lint"})
+
+    def test_ci_and_deployment_have_distinct_triggers(self):
+        root = Path(__file__).resolve().parents[1]
+        check = (root / ".github/workflows/check.yml").read_text()
+        website = (root / ".github/workflows/website.yml").read_text()
+        review = (root / ".github/workflows/ci-review.yml").read_text()
+        self.assertIn("  pull_request:", check)
+        self.assertIn("  workflow_dispatch:", check)
+        self.assertNotIn("  push:", check)
+        self.assertIn("  push:", website)
+        self.assertNotIn("  pull_request:", website)
+        self.assertIn("pull_request.merged == true", review)
+        self.assertIn("ref: ${{ github.event.pull_request.merge_commit_sha }}", review)
+        self.assertNotIn("workflow_run", review)
 
     def test_non_pr_events_always_run_full(self):
         for event in ("push", "workflow_dispatch", "workflow_call"):
@@ -192,7 +264,7 @@ class GitDiffTests(unittest.TestCase):
                 paths = ci.changed_paths(base, "HEAD")
                 self.assertEqual(set(paths), {"docs/old.md", "services/core/deleted.go", "apps/web/renamed\nwith space.ts"})
                 plan = ci.event_plan("pull_request", {"pull_request": {"base": {"sha": base}, "head": {"sha": head}}})
-                self.assertEqual(set(plan["jobs"]), {"hygiene", "backend", "api", "web", "web-acceptance"})
+                self.assertEqual(set(plan["jobs"]), {"hygiene", "backend", "api", "web", "web-acceptance", "website"})
                 (clone / "old.md").write_text("untracked content cannot change the diff\n")
                 self.assertEqual(paths, ci.changed_paths(base, "HEAD"))
             finally:
@@ -212,6 +284,15 @@ class GateTests(unittest.TestCase):
         for state in ("failure", "cancelled", "skipped", "", None):
             with self.subTest(state=state), self.assertRaises(ValueError):
                 ci.check_results(plan, needs | {"web": {"result": state}})
+
+    def test_compose_smoke_must_succeed_when_selected(self):
+        plan = ci.select(["deploy/compose/compose.yaml"])
+        needs = {job: {"result": "success" if job in plan["jobs"] else "skipped"} for job in ci.JOBS}
+        needs["plan"] = {"result": "success"}
+        ci.check_results(plan, needs)
+        for state in ("failure", "cancelled", "skipped"):
+            with self.subTest(state=state), self.assertRaises(ValueError):
+                ci.check_results(plan, needs | {"compose": {"result": state}})
 
     def test_matrix_result_failure_is_not_hidden_by_other_jobs(self):
         plan = ci.full("test")

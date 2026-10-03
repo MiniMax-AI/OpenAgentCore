@@ -63,3 +63,33 @@ func logConfigurationSources() {
 func providerProcessPaths() sandbox.ProcessPaths {
 	return sandbox.ProcessPaths{ArtifactRoot: os.Getenv("OAC_PROVIDER_ROOT"), StateRoot: os.Getenv("OAC_PROVIDER_STATE_ROOT")}
 }
+
+// sandboxCapacity is read once during process construction. The installer derives
+// these variables from core.sandbox_capacity in its configuration schema.
+type sandboxCapacity struct {
+	MaxActive   int
+	MaxRetained int
+}
+
+func configuredSandboxCapacity() (sandboxCapacity, error) {
+	capacity := sandboxCapacity{MaxActive: 100, MaxRetained: 400}
+	for _, setting := range []struct {
+		name   string
+		target *int
+	}{
+		{"OAC_SANDBOX_MAX_ACTIVE", &capacity.MaxActive},
+		{"OAC_SANDBOX_MAX_RETAINED", &capacity.MaxRetained},
+	} {
+		if raw, present := os.LookupEnv(setting.name); present {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value < 1 || value > 100000 {
+				return sandboxCapacity{}, errors.New(setting.name + " must be an integer between 1 and 100000")
+			}
+			*setting.target = value
+		}
+	}
+	if capacity.MaxRetained < capacity.MaxActive {
+		return sandboxCapacity{}, errors.New("OAC_SANDBOX_MAX_RETAINED must be at least OAC_SANDBOX_MAX_ACTIVE")
+	}
+	return capacity, nil
+}

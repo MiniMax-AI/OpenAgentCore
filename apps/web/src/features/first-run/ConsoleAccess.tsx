@@ -38,7 +38,7 @@ export function ConsoleAccountMenu() {
   const toast = useToast();
   if (!account) return null;
   return <div className="console-account-menu">
-    <button type="button" disabled={busy} onClick={async () => {
+    <button type="button" aria-label={t(busy ? "Signing out…" : "Sign out")} title={t("Sign out")} disabled={busy} onClick={async () => {
       setBusy(true);
       try { await account.logout(); } catch { setBusy(false); toast.show(t("Could not sign out. Try again."), { tone: "error" }); }
     }}><LogOut size={14} aria-hidden="true" /><span>{t(busy ? "Signing out…" : "Sign out")}</span></button>

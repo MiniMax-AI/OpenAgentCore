@@ -1,0 +1,83 @@
+# Publishes the website (landing page and documentation) to GitHub Pages from
+# main. Pull request validation belongs to core-check. The website reads the
+# existing docs/, contracts/ and docs.json in place; see website/README.md.
+name: website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - website/**
+      - docs/**
+      - contracts/**
+      - docs.json
+      - package.json
+      - pnpm-workspace.yaml
+      - .npmrc
+      - Makefile
+      - .github/actions/node/**
+      - .github/workflows/website.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  # Never cancel a run that may be deploying main.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-24.04' || 'blacksmith-2vcpu-ubuntu-2404' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # The build reads the site's URL from the Pages API.
+      pages: read
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history gives each page its last-updated date.
+          fetch-depth: 0
+      - uses: ./.github/actions/node
+        with:
+          lockfiles: website/pnpm-lock.yaml
+      - name: Build and test
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Exercise the published project path on pull requests.
+          WEBSITE_URL: https://minimax-ai.github.io/OpenAgentCore/
+        run: |
+          if [[ "$PUBLISH" == "true" ]]; then
+            WEBSITE_URL="$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)"
+            : "${WEBSITE_URL:?The Pages API returned an empty site URL}"
+            export WEBSITE_URL
+          fi
+          make check-website
+      - name: Upload the site
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: website/.vitepress/dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-24.04' || 'blacksmith-2vcpu-ubuntu-2404' }}
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: website-pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

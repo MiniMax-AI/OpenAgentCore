@@ -29,7 +29,7 @@ func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id}
+	s := &managedSetup{capacity: testSandboxCapacity(t), processPaths: paths, registry: providers.Builtin(), installationID: id}
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	_, err := s.prepare(t.Context(), selection)
 	if !errors.Is(err, sandbox.ErrConfigurationSelection) || strings.Contains(err.Error(), "synthetic-private-key") || s.selected.Load() != nil {
@@ -70,7 +70,7 @@ else:
 		Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	allocation := func(context.Context, sandbox.Reference) (deployment.Setup, error) { return selection, nil }
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id,
+	s := &managedSetup{capacity: testSandboxCapacity(t), processPaths: paths, registry: providers.Builtin(), installationID: id,
 		deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&selection), allocationSetup: allocation}}
 	if _, err := s.prepare(t.Context(), selection); err == nil || s.selected.Load() != nil {
 		t.Fatal("invalid new template selection was published", err)
@@ -108,7 +108,7 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t}}
+	s := &managedSetup{capacity: testSandboxCapacity(t), processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t}}
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	candidate, err := s.prepare(t.Context(), selection)
 	disk := int32(24063)
@@ -143,7 +143,7 @@ func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t}}
+	s := &managedSetup{capacity: testSandboxCapacity(t), processPaths: paths, registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t}}
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-team-a", Template: "public-team-b:" + uuid.NewString()}}
 	if _, err := s.prepare(t.Context(), selection); !errors.Is(err, sandbox.ErrCredentialOwnership) || s.selected.Load() != nil {
 		t.Fatal("public readability accepted as team ownership", err)
@@ -151,7 +151,7 @@ func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 }
 
 func TestManagedSetupRoutesProviderWithoutCredentialRequirement(t *testing.T) {
-	s := &managedSetup{}
+	s := &managedSetup{capacity: testSandboxCapacity(t)}
 	config := &execution.RuntimeProvider{ProviderKind: "docker"}
 	candidate, err := s.routeGenerations(
 		execution.PreparedRuntimeDeployment{Config: config},

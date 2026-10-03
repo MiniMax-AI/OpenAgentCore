@@ -65,7 +65,7 @@ export function HelpTip({ children, label, id: fixedId }: { children: ReactNode;
         onClick={() => { if (position && pinned) hide(); else { show(); setPinned(true); } }}
         onKeyDown={(event) => { if (event.key === "Escape") hide(); }}
       >
-        <CircleHelp size={13} strokeWidth={1.7} aria-hidden="true" />
+        <CircleHelp size={13} strokeWidth={1.75} aria-hidden="true" />
       </button>
       {/* The explanation stays in the document for assistive technology; the popover is its visual copy. */}
       <span id={id} className="visually-hidden">{children}</span>
@@ -87,19 +87,24 @@ export function HelpTip({ children, label, id: fixedId }: { children: ReactNode;
 export function PageHeader({
   title,
   help,
+  description,
   actions,
   headingId,
 }: {
   title: ReactNode;
   help?: ReactNode;
+  description?: ReactNode;
   actions?: ReactNode;
   headingId?: string;
 }) {
   return (
     <header className="page-header console-page-header">
-      <div className="console-page-heading">
-        <h1 id={headingId}>{title}</h1>
-        {help ? <HelpTip>{help}</HelpTip> : null}
+      <div className="console-page-intro">
+        <div className="console-page-heading">
+          <h1 id={headingId}>{title}</h1>
+          {help ? <HelpTip>{help}</HelpTip> : null}
+        </div>
+        {description ? <p className="console-page-description">{description}</p> : null}
       </div>
       {actions ? <div className="page-actions">{actions}</div> : null}
     </header>
@@ -132,7 +137,7 @@ export function RefreshButton({
       aria-label={name}
       title={!refreshing && updatedAt ? `${name}\n${t("actions.updatedAt", { time: updatedAt })}` : name}
     >
-      <RefreshCw className={refreshing ? "refresh-spinning" : undefined} size={16} strokeWidth={1.6} aria-hidden="true" />
+      <RefreshCw className={refreshing ? "refresh-spinning" : undefined} size={16} strokeWidth={1.75} aria-hidden="true" />
     </button>
   );
 }
@@ -279,7 +284,7 @@ export function EmptyState({
 }) {
   return (
     <div className="console-empty">
-      {Icon ? <Icon size={20} strokeWidth={1.5} aria-hidden="true" /> : null}
+      {Icon ? <Icon size={24} strokeWidth={1.75} aria-hidden="true" /> : null}
       <p className="console-empty-title">{title}{hint ? <HelpTip>{hint}</HelpTip> : null}</p>
       {description ? <p className="console-empty-description">{description}</p> : null}
       {action ? <div className="console-empty-action">{action}</div> : null}

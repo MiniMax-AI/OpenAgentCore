@@ -16,7 +16,6 @@ import subprocess
 from types import SimpleNamespace
 from unittest import mock
 
-import native_service
 import oac_cli
 import sandbox_setup
 
@@ -58,7 +57,6 @@ class FakeHost:
                                     (oac_cli, "tcp_listeners", lambda: [(ipaddress.ip_address(host), port)
                                                                         for host, port in self.listening()]),
                                     (oac_cli, "time", SimpleNamespace(sleep=lambda seconds: None)),
-                                    (native_service, "_process_environment", self.process_environment),
                                     (sandbox_setup, "send", self.sandbox_send)):
             patcher = mock.patch.object(target, name, value)
             patcher.start()
@@ -320,7 +318,7 @@ MANIFEST = {
     "microsandbox": {"runtime_sha256": "5" * 64, "firmware_sha256": "6" * 64},
 }
 MODULES = ("install.py", "install_output.py", "install_display.py", "configuration.py", "config_model.py", "ingress.py", "ingress_config.py", "config.schema.json", "oac_cli.py",
-           "native_service.py", "sandbox_setup.py", "node_spec.py", "distribution.py", "install.sh")
+           "sandbox_setup.py", "node_spec.py", "distribution.py", "install.sh")
 
 
 def write_checksums(bundle):
@@ -352,9 +350,8 @@ def make_bundle(directory, manifest, commit=None):
     (bundle / "manifest.json").write_text(json.dumps(manifest))
     for name in manifest["images"]:
         (bundle / "images" / (name + ".tar")).write_bytes(("synthetic " + name).encode())
-    for name in ("bin/oac-core", "bin/oac-core-migrate", "bin/oac-microsandbox-provider",
-                 "bin/oac-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1",
-                 "e2b/oac-e2b-provider"):
+    for name in ("bin/oac-microsandbox-provider",
+                 "bin/oac-node", "microsandbox/msb", "microsandbox/libkrunfw.so.5.6.1"):
         path = bundle / "native" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"\x7fELFsynthetic native file " + manifest["source_commit"].encode())
@@ -366,6 +363,5 @@ def run_installer(install, bundle, argv):
     """install.main from the bundle on a Linux amd64 host."""
     with mock.patch.object(install, "__file__", str(bundle / "install.py")), \
             mock.patch.object(install.platform, "system", return_value="Linux"), \
-            mock.patch.object(install.platform, "machine", return_value="x86_64"), \
-            mock.patch.object(install.native_service.platform, "system", return_value="Linux"):
+            mock.patch.object(install.platform, "machine", return_value="x86_64"):
         return install.main([str(item) for item in argv])

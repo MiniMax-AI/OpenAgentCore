@@ -49,39 +49,35 @@ def kind(node):
     return text
 
 
-def rows(node=None, prefix="", modes=config_model.MODES):
+def rows(node=None, prefix=""):
     """Leaves, plus nullable objects such as core.runtime_history, in schema order."""
     node = config_model.SCHEMA if node is None else node
     for name, child in node["properties"].items():
-        child_modes = tuple(config_model.annotation(child, "modes", modes))
         if "properties" not in child or "default" in child:
-            yield prefix + name, child, child_modes
+            yield prefix + name, child
         if "properties" in child:
-            yield from rows(child, prefix + name + ".", child_modes)
+            yield from rows(child, prefix + name + ".")
 
 
 def table():
-    lines = ["| Key | Type | Default | Modes | Change | Restarts | Meaning |",
-             "| --- | --- | --- | --- | --- | --- | --- |"]
-    for key, node, modes in rows():
+    lines = ["| Key | Type | Default | Change | Restarts | Meaning |",
+             "| --- | --- | --- | --- | --- | --- |"]
+    for key, node in rows():
         annotation = lambda name, default=None: config_model.annotation(node, name, default)
         default = code(node["default"]) if "default" in node else "none"
-        scope = "all" if set(modes) == set(config_model.MODES) else ", ".join(f"`{mode}`" for mode in modes)
         change = ("fixed" if not annotation("changeable", True)
                   else "`oac apply`" if annotation("setting", True) else "any time")
         restarts = ", ".join(annotation("restarts", [])) or "none"
-        if annotation("native_restarts"):
-            restarts += " (" + ", ".join(annotation("native_restarts")) + " with native Core)"
         meaning = node.get("description", "")
         if annotation("sensitive"):
             meaning += " Sensitive."
-        lines.append(f"| `{key}` | {kind(node)} | {default} | {scope} | {change} | {restarts} | {meaning.strip()} |")
+        lines.append(f"| `{key}` | {kind(node)} | {default} | {change} | {restarts} | {meaning.strip()} |")
     return "\n".join(lines)
 
 
 def install_flags():
     lines = ["| Flag | config.json field |", "| --- | --- |"]
-    for key, node, _ in rows():
+    for key, node in rows():
         flag = config_model.annotation(node, "install_flag")
         if flag:
             flags = " or ".join(f"`{value}`" for value in flag.split(" or "))

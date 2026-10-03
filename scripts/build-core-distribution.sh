@@ -36,7 +36,7 @@ if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
   printf 'Build the distribution on Linux x86_64 with a glibc compatible with Debian 12\n' >&2
   exit 1
 fi
-for command in docker go node pnpm python3 curl tar sha256sum; do
+for command in docker go node pnpm python3 curl tar sha256sum pigz; do
   command -v "$command" >/dev/null
 done
 build_network="${CORE_DISTRIBUTION_BUILD_NETWORK:-default}"
@@ -100,8 +100,7 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
 fi
 go run ./services/core/cmd/provider-artifacts
 for file in install.sh install.py install_output.py install_display.py node_output.py configuration.py config_model.py config.schema.json ingress.py ingress_config.py oac_cli.py \
-    native_service.py native_installers.py node_install.py provider_assets.py node_spec.py node_generations.py sandbox_setup.py distribution.py \
-    model_provider_sessions.py; do
+    native_installers.py node_install.py provider_assets.py node_spec.py node_generations.py sandbox_setup.py distribution.py; do
   cp "deploy/install/$file" "$bundle/$file"
 done
 # Web owns the Standard sandbox sizes; the installer's first deployment uses this copy.
@@ -130,8 +129,9 @@ if [[ ! -f "$msb_archive" ]]; then
 else
   python3 scripts/core-distribution-manifest.py extract-runtime "$msb_archive" "$stage/core/microsandbox"
 fi
-mkdir -p "$bundle/native"
-cp -R "$stage/core/bin" "$stage/core/microsandbox" "$stage/core/e2b" "$bundle/native/"
+mkdir -p "$bundle/native/bin" "$bundle/native/microsandbox"
+cp "$stage/core/bin/oac-node" "$stage/core/bin/oac-microsandbox-provider" "$bundle/native/bin/"
+cp -R "$stage/core/microsandbox/." "$bundle/native/microsandbox/"
 if [[ -n "${OAC_NATIVE_INSTALLER_BUILD_DIR:-}" ]]; then
   python3 scripts/core-distribution-manifest.py native-catalog "$bundle" "$stage" "$revision" \
     "$OAC_NATIVE_INSTALLER_BUILD_DIR" "$release_base_url"
@@ -146,7 +146,7 @@ docker run --rm --network none --entrypoint /bin/sh \
   'for p in /opt/provider /opt/microsandbox/msb /opt/microsandbox/libkrunfw.so.5.6.1; do ! ldd "$p" | grep "not found"; done; /opt/microsandbox/msb --version'
 
 OAC_DEV_WEB_BUILD_DIR="$stage/web" scripts/build-web.sh
-pnpm install --frozen-lockfile
+pnpm --filter @oac/web... install --frozen-lockfile
 OAC_WEB_OPENAI_HOSTED_SESSIONS=1 OAC_WEB_ENVIRONMENT_FILES=1 pnpm build:web
 cp -R apps/web/dist "$stage/web/dist"
 cp services/web/Dockerfile "$stage/web/Dockerfile"

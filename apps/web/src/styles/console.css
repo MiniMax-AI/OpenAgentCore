@@ -5,34 +5,17 @@
  */
 
 :root {
-  --series-1: #2a78d6;
-  --series-2: #eb6834;
-  --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-5: #e87ba4;
-  --series-6: #008300;
-  --series-other: #a3a3a8;
-  --status-running: var(--series-1);
   /* Meters are ink, not a series colour: colour is reserved for problems. */
   --meter-fill: color-mix(in srgb, var(--ink) 62%, transparent);
   --status-idle: #b4b4b9;
   --meter-track: color-mix(in srgb, var(--ink) 8%, transparent);
-  --frame-radius: 10px;
-  --page-gutter: 28px;
+  --page-gutter: 24px;
   /* Cards sit on the canvas with Beautiful UI's hairline ring and smooth shadow. */
   --card-border: var(--line);
   --card-shadow: var(--shadow-card);
-  --data: var(--accent);
 }
 
 html[data-theme="dark"] {
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
-  --series-6: #008300;
-  --series-other: #6d6d72;
   --status-idle: #5e5e62;
 }
 
@@ -78,9 +61,6 @@ html[data-theme="dark"] {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 12px 8px 4px;
-  font-size: 11.5px;
-  font-weight: 500;
 }
 
 .console-nav .nav-group:last-child {
@@ -114,9 +94,7 @@ html[data-theme="dark"] {
 
 /* Every page header shares one height, title scale and description line. */
 .page-header {
-  min-height: 64px;
   flex: 0 0 auto;
-  padding: 10px var(--page-gutter);
 }
 
 .page-header .console-page-heading h1 {
@@ -247,15 +225,12 @@ html[data-theme="dark"] {
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 28px;
-  padding: 20px var(--page-gutter) 48px;
   overflow: auto;
 }
 
 .console-page-body > * {
   flex-shrink: 0;
 }
-
 
 .page-status {
   margin: 0;
@@ -707,7 +682,6 @@ html[data-theme="dark"] {
   color: var(--fg-muted);
 }
 
-
 .owner-missing {
   color: var(--fg-muted);
 }
@@ -815,31 +789,19 @@ html[data-theme="dark"] {
 
 .table-frame {
   min-width: 0;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--frame-radius);
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
-  line-height: 18px;
 }
 
 .data-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  height: 34px;
-  padding: 0 12px;
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-weight: 500;
   text-align: left;
   white-space: nowrap;
-  background: var(--surface-subtle);
-  border-bottom: 1px solid var(--line);
 }
 
 .data-table tbody th,
@@ -974,7 +936,7 @@ html[data-theme="dark"] {
   border-color: color-mix(in srgb, var(--danger) 22%, var(--line));
 }
 
-/* Empty lists read as an empty table card: same frame, no dashed outline. */
+/* Empty states explain the next task without another enclosing card. */
 .console-empty {
   display: flex;
   flex-direction: column;
@@ -984,8 +946,7 @@ html[data-theme="dark"] {
   color: var(--fg-muted);
   text-align: center;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--frame-radius);
+  border: 0;
 }
 
 .console-empty p {
@@ -1263,32 +1224,8 @@ html[data-theme="dark"] {
   }
 }
 
-
 /* Surfaces -------------------------------------------------------------
    The page sits on a canvas; every frame is a card drawn by Beautiful UI's
    hairline ring and smooth shadow. No borders-inside-borders, no translucency. */
-.app-main {
-  background: var(--canvas);
-}
-
-.app-sidebar {
-  background: var(--surface);
-}
-
-/* The header is solid canvas: content scrolls under it without a blur. */
-.console-page > .page-header {
-  background: var(--canvas);
-  border-bottom-color: transparent;
-}
-
-.kpi-strip,
-.table-frame,
-.chart-grid,
-.overview-card {
-  background: var(--surface);
-  border: 0;
-  border-radius: var(--frame-radius);
-  box-shadow: var(--card-shadow);
-}
 
 /* Session console: a secondary page of the Session log. */

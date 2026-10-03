@@ -15,10 +15,10 @@ git worktree add ../openagentcore-change -b codex/my-change main
 cd ../openagentcore-change
 ```
 
-Install Go at the version in [go.mod](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/go.mod), Node 22.13 or newer, pnpm at the version in [package.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/package.json), and Python 3.9 or newer. The complete gate runs on Linux and needs a dedicated PostgreSQL database, OpenSSL development libraries for the microsandbox helper, and a Playwright browser. Provider and Runtime builds have additional prerequisites in their component guides.
+Install Go at the version in [go.mod](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/go.mod), Node 22.13 or newer, pnpm at the version in [package.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/package.json), and Python 3.9 or newer. The complete gate runs on Linux and needs a dedicated PostgreSQL database, OpenSSL development libraries for the microsandbox helper, pigz for distribution compression, and a Playwright browser. Provider and Runtime builds have additional prerequisites in their component guides.
 
 ```sh
-pnpm install --frozen-lockfile
+make node-deps
 python3 -m venv .venv
 .venv/bin/python -m pip install -r services/core/tests/requirements.txt
 .venv/bin/python - <<'PYTHON'
@@ -32,9 +32,15 @@ subprocess.check_call([
     "git+" + pin["repository"] + "@" + pin["commit"],
 ])
 PYTHON
-pnpm exec playwright install --with-deps chrome
+pnpm --filter @oac/web exec playwright install --with-deps chrome
 export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 ```
+
+### Node dependency boundaries
+
+Each pnpm module owns a `pnpm-lock.yaml` beside its `package.json`. Website and Claude SDK adapter are independent pnpm projects with their own workspace boundaries. The Web/example/client workspace uses `sharedWorkspaceLockfile: false`: it links declared workspace dependencies without sharing dependency resolution or a virtual store. Root scripts only orchestrate module commands and have no installed tool dependencies. Declare build and test tools in the module that imports or executes them. The MiniMax companion uses its own npm manifest and `package-lock.json` and is outside the pnpm workspace.
+
+Install one module with `pnpm --dir website install --frozen-lockfile`, or include its workspace dependencies with `pnpm --filter @oac/web... install --frozen-lockfile`. Add or update dependencies through the same package filter and commit that module's manifest and lockfile. `make node-deps` installs all pnpm modules for full local validation. Web and the example share `packages/agents-client` through explicit `workspace:*` dependencies; their checks install that client too. Component Make targets use filtered installs and checks. CI caches use only the job's dependency locks; the [CI selection policy](./maintainers.md#continuous-integration) owns which checks a change selects.
 
 Set `OAC_TEST_DATABASE_URL` privately to a dedicated PostgreSQL test database. Never point the test suite at an installation or product database. The [test database rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#test-database) list the required role permission.
 
@@ -79,7 +85,7 @@ Use the [protocol map](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGE
 
 ## Validate a change
 
-Run checks for the affected boundary while developing. The repository [required checks](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks) define completion, including `make check` and any changed native component's real acceptance.
+Choose focused checks for the current diff and its directly affected behavior using [Checks for a change](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#checks-for-a-change). The table below lists entry points for each boundary; choose the relevant tests within them.
 
 | Change | Focused validation |
 | --- | --- |
@@ -97,9 +103,9 @@ Fixture browser acceptance uses loopback ports 18092 and 4174. Select unused por
 
 ## Change documentation
 
-The repository-root `docs.json` configures the Mintlify site using the Almond theme, a dark graphite background, green accents and monospace headings. It references the existing Markdown sources; `.mintignore` excludes application code and styles from the site. Connect Mintlify to the repository root on the default branch. Use Node 22 LTS, install the CLI with `npm install -g mint`, and run `mint dev` from the repository root to preview the site. Before publishing, run `mint validate` and inspect its output for parsing errors as well as its exit status, then run `mint broken-links`.
+The [website guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/website/README.md) owns documentation navigation, local preview, validation and GitHub Pages publication.
 
-Use `index.md` for published section indexes: Mintlify excludes `README.md` and `CONTRIBUTING.md` from pages. Keep relative Markdown links explicit (`./page.md` or `../page.md`) so they work in the repository and distribution. Each published Markdown page needs a matching `.md`-to-page redirect in `docs.json` for website navigation. Links to repository-only guides and source files should point to GitHub. Write literal angle-bracket placeholders inside code spans, and use Markdown reference comments (`[//]: # (comment)`) for generated-region markers so the sources render in both GitHub and Mintlify. Change generated content through its generator.
+Use `index.md` for published section indexes. Keep relative Markdown links explicit (`./page.md` or `../page.md`) so they work in the repository and distribution. Links to repository-only guides and source files should point to GitHub. Write literal angle-bracket placeholders inside code spans, and use Markdown reference comments (`[//]: # (comment)`) for generated-region markers so the sources render in both GitHub and VitePress. Change generated content through its generator.
 
 Find the owning source in the [documentation ownership map](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#documentation-ownership) and follow the [documentation rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#documentation). Readers use the authored Markdown in the repository. Generated OpenAPI schemas and the Harness catalog have their own generators; see [Contract and schema rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#contract-and-schema-rules).
 

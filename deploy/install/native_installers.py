@@ -12,8 +12,6 @@ from distribution import digest
 
 
 def prepare(root, state, bundle):
-    if state["mode"] == "web-only":
-        return
     source, target = Path(bundle) / "native-installers", Path(root) / "native-installers"
     if not source.exists():
         return

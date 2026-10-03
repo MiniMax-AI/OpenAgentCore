@@ -1,0 +1,11 @@
+[variables]
+main_domain = "${domain}"
+
+# Enable HTTPS and select a certificate provider for this domain in Dokploy before deployment.
+[config]
+env = ["OAC_PUBLIC_URL=https://${main_domain}"]
+
+[[config.domains]]
+serviceName = "gateway"
+port = 8080
+host = "${main_domain}"

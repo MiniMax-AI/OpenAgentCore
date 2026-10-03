@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify matched distribution inputs and package independently fetched artifacts."""
 
-import gzip
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -86,6 +86,11 @@ def built_image(metadata_file):
     # by its manifest digest; the other value never resolves to itself there.
     config = metadata.get("containerimage.config.digest")
     manifest = metadata.get("containerimage.digest", config)
+    print(resolve_image(config, manifest))
+
+
+def resolve_image(config, manifest):
+    """Resolve the archive identities in either supported Docker image store."""
     if not all(isinstance(value, str) and DIGEST.fullmatch(value) for value in (config, manifest)):
         raise ValueError("Build metadata lacks valid image digests")
     resolved = []
@@ -97,7 +102,7 @@ def built_image(metadata_file):
     if len(resolved) != 1:
         raise ValueError("The local image store does not identify the built image by exactly one of its digests")
     verify_image(resolved[0])
-    print(resolved[0])
+    return resolved[0]
 
 
 def image_identities(archive, build_id):
@@ -248,6 +253,20 @@ def native_offline(bundle, stage):
         os.link(source, path.parent / (platform + ".tar.gz"))
 
 
+@contextmanager
+def compressed_output(path):
+    """Stream deterministic gzip with bounded parallel compression."""
+    command = ["pigz", "-n", "-6", "-p", str(min(4, os.cpu_count() or 1))]
+    with pathlib.Path(path).open("wb") as raw:
+        with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=raw) as compressor:
+            try:
+                yield compressor.stdin
+            finally:
+                compressor.stdin.close()
+            if compressor.wait():
+                raise subprocess.CalledProcessError(compressor.returncode, command)
+
+
 def package_artifacts(bundle, stage, revision):
     """Move optional payload out of Core; the manifest owns every asset digest."""
     assets = stage / "artifacts"
@@ -255,9 +274,8 @@ def package_artifacts(bundle, stage, revision):
     runtime = bundle / "images/runtime.tar"
     compressed = bundle / "images/runtime.tar.gz"
     unpacked = {"unpacked_sha256": sha256(runtime), "unpacked_size": runtime.stat().st_size}
-    with runtime.open("rb") as source, compressed.open("wb") as raw:
-        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=6) as output:
-            shutil.copyfileobj(source, output, 1024 * 1024)
+    with runtime.open("rb") as source, compressed_output(compressed) as output:
+        shutil.copyfileobj(source, output, 1024 * 1024)
     runtime.unlink()
     result = {}
     for logical, suffix in ARTIFACTS.items():
@@ -275,7 +293,7 @@ def package_artifacts(bundle, stage, revision):
 
 # The installation's management command; it runs without the bundle directory.
 OAC_CLI_MODULES = ("oac_cli.py", "config_model.py", "config.schema.json", "configuration.py",
-                  "native_service.py", "distribution.py", "node_spec.py", "ingress.py", "ingress_config.py")
+                  "distribution.py", "node_spec.py", "ingress.py", "ingress_config.py")
 
 
 def bootstraps(bundle, epoch, revision):
@@ -350,8 +368,8 @@ def archive(bundle, epoch, variant=""):
     if variant not in ("", "offline"):
         raise ValueError("Unknown distribution archive variant")
     output = bundle.with_name(bundle.name + ("-" + variant if variant else "") + ".tar.gz")
-    with output.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed:
-        with tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as tar:
+    with compressed_output(output) as compressed:
+        with tarfile.open(fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT) as tar:
             for path in sorted(bundle.rglob("*")):
                 if not path.is_file():
                     continue
@@ -447,12 +465,17 @@ def plain(text):
 
 
 def heading_anchors(text):
-    """GitHub's heading anchors: lowercase, punctuation dropped, spaces to hyphens, repeats numbered."""
+    """Explicit heading IDs, or GitHub slugs for headings without an explicit ID."""
     found, counts = set(), {}
     for line, code in markdown_lines(text):
         match = None if code else HEADING.match(line)
         if match:
-            base = re.sub(r"[^\w\- ]", "", heading_text(match.group(2) or "").strip().lower()).replace(" ", "-")
+            title = match.group(2) or ""
+            explicit = re.search(r"\s+\{#([^\s{}]+)\}\s*$", title)
+            if explicit:
+                found.add(explicit.group(1))
+                continue
+            base = re.sub(r"[^\w\- ]", "", heading_text(title).strip().lower()).replace(" ", "-")
             count = counts.get(base, 0)
             counts[base] = count + 1
             found.add(base if count == 0 else f"{base}-{count}")

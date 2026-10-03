@@ -29,6 +29,10 @@ type managedNodes struct {
 // deployment service; the owner epoch that fences connections and the
 // allocations each generation retains are read from the deployment reader.
 func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, registry *providers.Registry, publicURL string, owner func(context.Context) error) (*managedNodes, error) {
+	capacity, err := configuredSandboxCapacity()
+	if err != nil {
+		return nil, err
+	}
 	setupID := os.Getenv("OAC_INSTALLATION_ID")
 	if setupID == "" {
 		return nil, nil
@@ -100,7 +104,7 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health))
 		},
 	})
-	result.setup = &managedSetup{processPaths: providerProcessPaths(), registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: setupID, publicURL: publicURL}
+	result.setup = &managedSetup{capacity: capacity, processPaths: providerProcessPaths(), registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: setupID, publicURL: publicURL}
 	result.runtime = execution.NewDeferredRuntimeProvider(setupID, result.setup.load, result.setup.prepare)
 	result.runtime.PublishUnconfigured = result.setup.publishUnconfigured
 	success = true

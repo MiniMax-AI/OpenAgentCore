@@ -34,7 +34,7 @@ export function SearchField({
   const { t } = useTranslation();
   return (
     <label className="search-control list-search">
-      <Search size={14} strokeWidth={1.7} aria-hidden="true" />
+      <Search size={14} strokeWidth={1.75} aria-hidden="true" />
       <input type="search" value={value} placeholder={placeholder} aria-label={label ?? t("list.search")} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
@@ -72,7 +72,7 @@ export function CopyIdButton({ id, label }: { id: string; label?: string }) {
   const name = copied ? t("actions.copied") : label ?? t("actions.copyId");
   return (
     <button type="button" className="icon-button ghost copyable-id-button" aria-label={name} title={name} onClick={copy}>
-      {copied ? <Check size={13} strokeWidth={1.7} aria-hidden="true" /> : <Copy size={13} strokeWidth={1.7} aria-hidden="true" />}
+      {copied ? <Check size={13} strokeWidth={1.75} aria-hidden="true" /> : <Copy size={13} strokeWidth={1.75} aria-hidden="true" />}
     </button>
   );
 }

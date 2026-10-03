@@ -112,6 +112,7 @@ export function GettingStarted({ fleet, sessions, localOnly, sandboxReset, onRet
   if (view === "hidden") return null;
 
   const done = states.filter((state) => state === "done").length;
+  const nextStep = states.findIndex((state) => state === "todo") + 1;
   const sandbox = steps.sandboxes;
   const sandboxAction = sandboxReset === true
     ? { label: t("reset.view"), run: () => navigate("system", { id: "sandbox" }) }
@@ -149,16 +150,17 @@ export function GettingStarted({ fleet, sessions, localOnly, sandboxReset, onRet
         </div>
       </header>
       <ol className="getting-started-steps">
-        <Step index={1} state={sandbox.state} title={t("gettingStarted.sandboxes.title")} body={sandboxReset === true ? t("reset.body") : localOnly === "failed" ? t("gettingStarted.sandboxes.addressFailed") : localOnly ? t("gettingStarted.sandboxes.localOnly") : t(sandbox.cloud ? "gettingStarted.sandboxes.bodyCloud" : "gettingStarted.sandboxes.body")} action={sandboxAction} />
-        <Step index={2} state={steps.model} title={t("gettingStarted.model.title")} body={t("gettingStarted.model.body")} action={{ label: t("gettingStarted.model.open"), run: () => navigate("system", {}, "default-model") }} />
-        <Step index={3} state={steps.key.state} title={t("gettingStarted.key.title")} body={t("gettingStarted.key.body")} action={keyAction} />
-        <Step index={4} state={steps.session.state} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={sessionAction} />
+        <Step primary={nextStep === 1} index={1} state={sandbox.state} title={t("gettingStarted.sandboxes.title")} body={sandboxReset === true ? t("reset.body") : localOnly === "failed" ? t("gettingStarted.sandboxes.addressFailed") : localOnly ? t("gettingStarted.sandboxes.localOnly") : t(sandbox.cloud ? "gettingStarted.sandboxes.bodyCloud" : "gettingStarted.sandboxes.body")} action={sandboxAction} />
+        <Step primary={nextStep === 2} index={2} state={steps.model} title={t("gettingStarted.model.title")} body={t("gettingStarted.model.body")} action={{ label: t("gettingStarted.model.open"), run: () => navigate("system", {}, "default-model") }} />
+        <Step primary={nextStep === 3} index={3} state={steps.key.state} title={t("gettingStarted.key.title")} body={t("gettingStarted.key.body")} action={keyAction} />
+        <Step primary={nextStep === 4} index={4} state={steps.session.state} title={t("gettingStarted.session.title")} body={t("gettingStarted.session.body")} action={sessionAction} />
       </ol>
     </section>
   );
 }
 
-function Step({ index, state, title, body, action }: {
+function Step({ primary, index, state, title, body, action }: {
+  primary: boolean;
   index: number;
   state: StepState;
   title: string;
@@ -178,7 +180,7 @@ function Step({ index, state, title, body, action }: {
       </div>
       <StatusDot tone={done ? "ok" : state === null ? "pending" : "neutral"} label={t(`gettingStarted.state.${state ?? "checking"}`)} />
       <div className="getting-started-action">
-        {done ? null : <button className="button outline" type="button" onClick={action.run}>{action.label}</button>}
+        {done ? null : <button className={primary ? "button primary" : "button outline"} type="button" onClick={action.run}>{action.label}</button>}
       </div>
     </li>
   );

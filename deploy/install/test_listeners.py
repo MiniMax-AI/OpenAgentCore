@@ -32,7 +32,7 @@ class ListenerTests(unittest.TestCase):
 
     def install(self, *flags):
         with contextlib.redirect_stdout(self.output):
-            run_installer(install, self.bundle, ["--install-dir", self.root, "--sandbox", "none", "--ingress", "external", *flags])
+            run_installer(install, self.bundle, ["--install-dir", self.root, "--ingress", "external", *flags])
 
     def document(self, name):
         return json.loads((self.root / name).read_text())
@@ -54,41 +54,23 @@ class ListenerTests(unittest.TestCase):
         self.assertTrue(all(request.startswith("http://127.0.0.2:") for request in self.host.requests))
         self.assertIn("Console: http://127.0.0.2:18080", self.output.getvalue())
 
-    def test_core_only_completion_reports_configured_address(self):
-        self.install("--core-only", "--host", "127.0.0.2", "--core-port", "18091")
-        self.assertIn("http://127.0.0.2:18091/core/v1 (local only)", self.output.getvalue())
-        self.assertNotIn("http://127.0.0.1:", self.output.getvalue())
-
-    def test_ipv6_native_and_container_listeners(self):
-        for native in (False, True):
-            config = config_model.initial("all", native, host="::1", **{"ports.database": 15432 if native else None})
-            state = dict(MANIFEST, mode="all", native_core=native, uid=1000, gid=1000,
-                         images={name: "sha256:" + "a" * 64 for name in ("core", "web", "database")},
-                         project="oac-test", installation_id="fixture")
-            services = configuration.compose_config(self.root, config, state)["services"]
-            self.assertEqual(configuration.service_origin(config, "core"), "http://[::1]:8091")
-            if native:
-                self.assertEqual(configuration.core_environment(self.root, config, state)["OAC_ADDR"], "[::1]:8091")
-                self.assertEqual(services["web"]["environment"]["OAC_WEB_ADDR"], "[::1]:8080")
-                self.assertEqual(services["web"]["environment"]["OAC_WEB_UPSTREAM"], "http://[::1]:8091")
-                self.assertEqual(services["database"]["ports"], ["127.0.0.1:15432:5432"])
-            else:
-                self.assertEqual(services["core"]["ports"], ["[::1]:8091:8091"])
-                self.assertEqual(services["web"]["ports"], ["[::1]:8080:8080"])
+    def test_ipv6_listeners(self):
+        config = config_model.initial(host="::1")
+        state = dict(MANIFEST, uid=1000, gid=1000,
+                     images={name: "sha256:" + "a" * 64 for name in ("core", "web", "database")},
+                     project="oac-test", installation_id="fixture")
+        services = configuration.compose_config(self.root, config, state)["services"]
+        self.assertEqual(configuration.service_origin(config, "core"), "http://[::1]:8091")
+        self.assertEqual(configuration.core_environment(self.root, config, state)["OAC_ADDR"], ":8091")
+        self.assertEqual(services["core"]["ports"], ["[::1]:8091:8091"])
+        self.assertEqual(services["web"]["ports"], ["[::1]:8080:8080"])
+        self.assertEqual(services["web"]["environment"]["OAC_WEB_UPSTREAM"], "http://core:8091")
 
     def test_wildcards_use_loopback_for_operator_connections(self):
         for host, address in (("0.0.0.0", "127.0.0.1"), ("::", "[::1]")):
-            config = config_model.initial("all", host=host, public_url="https://core.example")
+            config = config_model.initial(host=host, public_url="https://core.example")
             self.assertEqual(configuration.service_origin(config, "core"), f"http://{address}:8091")
             self.assertEqual(configuration.web_origin(config), "https://core.example")
-
-    def test_web_only_listener_does_not_change_upstream(self):
-        config = config_model.initial("web-only", host="127.0.0.2", **{"ports.web": 18080, "web.core_url": "https://core.example"})
-        services = configuration.compose_config(self.root, config, dict(mode="web-only", uid=1000, gid=1000,
-            project="oac-test", images={"web": "sha256:" + "a" * 64}))["services"]
-        self.assertEqual(set(services), {"web"})
-        self.assertEqual(services["web"]["environment"]["OAC_WEB_ADDR"], "127.0.0.2:18080")
-        self.assertEqual(services["web"]["environment"]["OAC_WEB_UPSTREAM"], "https://core.example")
 
     def test_apply_contacts_previous_host_before_switching_and_status_uses_applied_host(self):
         self.install("--host", "127.0.0.2", "--public-url", "https://core.example")
@@ -132,8 +114,7 @@ class ListenerTests(unittest.TestCase):
     def test_invalid_listener_and_port_fail_before_creating_installation(self):
         for flags in (("--host", "localhost"), ("--host", "https://core.example"),
                       ("--host", "[::1]:8080"), ("--host", "fe80::1%eth0"),
-                      ("--host", "0.0.0.0"), ("--web-port", "65536"), ("--web-port", "8091"),
-                      ("--core-only", "--web-port", "8088")):
+                      ("--host", "0.0.0.0"), ("--web-port", "65536"), ("--core-port", "8080")):
             with self.subTest(flags=flags), self.assertRaises(config_model.ConfigError):
                 self.install(*flags)
             self.assertFalse((self.root / "config.json").exists())
@@ -143,7 +124,7 @@ class ListenerTests(unittest.TestCase):
 
     def test_config_seed_rejects_listener_overrides(self):
         path = self.work / "seed.json"
-        path.write_text(json.dumps(config_model.initial("all")))
+        path.write_text(json.dumps(config_model.initial()))
         for flags in (("--host", "127.0.0.2"), ("--web-port", "8088")):
             with self.assertRaisesRegex(install.InstallError, "--config replaces"):
                 self.install("--config", path, *flags)
