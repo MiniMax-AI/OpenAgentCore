@@ -243,17 +243,6 @@ func TestEnvironmentEnrollmentRejectsWrongIdentityAndWorkspace(t *testing.T) {
 	}
 }
 
-func TestEnvironmentConnectRejectsPairing(t *testing.T) {
-	t.Setenv(connectInlineURLEnv, "")
-	t.Setenv(connectInlineTokenEnv, "")
-	t.Setenv(connectInlineDeviceNameEnv, "")
-	rc := &runContext{stdout: &strings.Builder{}, stderr: &strings.Builder{}}
-	err := runConnect(rc, []string{"--remote", "wss://core/api/v1/agent-daemon/ws", "--environment-id", uuid.NewString(), "--credential-file", "/unused", "--token", "private-pairing-canary"})
-	if err == nil || strings.Contains(err.Error(), "private-pairing-canary") {
-		t.Fatal("pairing accepted or leaked")
-	}
-}
-
 func TestEnvironmentEnrollmentAcceptsPhysicalWorkspaceSelection(t *testing.T) {
 	environment := uuid.NewString()
 	want := environmentEnrollment{uuid.NewString(), uuid.NewString(), environment, "/srv/runtime/workspace"}

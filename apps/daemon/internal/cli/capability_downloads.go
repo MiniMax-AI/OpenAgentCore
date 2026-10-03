@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// Use the paired server address for loopback PG downloads: inside Compose,
+// Use the connected server address for loopback PG downloads: inside Compose,
 // the public loopback address points to the runtime container itself.
 func withCapabilityDownloads(factory agent.Factory, serverURL string) agent.Factory {
 	base, err := url.Parse(serverURL)
@@ -79,7 +79,6 @@ func withExecutorCapabilities(factory agent.ExecutorFactory, serverURL string) a
 		if valid {
 			req = capabilityDownloadRequest(req, base)
 		}
-		req = skillUploadRequest(req, serverURL)
 		return factory(ctx, req)
 	}
 }

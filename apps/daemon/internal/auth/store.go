@@ -1,9 +1,7 @@
-// Package auth persists the credential bundle from
-// /api/v1/runtimes/pair: server URL, runtime row id (= device_id), and
-// the long-lived runner_credential. Stored as JSON per-profile at
-// ~/.oac/daemon/<profile>/auth.json (0o600), written via
-// atomic rename so a half-flushed pair never leaves the daemon paired
-// with garbage state.
+// Package auth reads the daemon credential profile written by
+// oac-core-device: server URL, runtime row id (= device_id), and the
+// long-lived runner_credential. Stored as JSON per-profile at
+// ~/.oac/daemon/<profile>/auth.json (0o600).
 package auth
 
 import (
@@ -11,21 +9,19 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
-// Profile is the on-disk representation of one paired credential.
+// Profile is the on-disk representation of one daemon credential.
 type Profile struct {
 	// ServerURL is the absolute base URL the daemon dials (no
 	// trailing slash). The daemon joins this with paths like
 	// /agent-daemon/bootstrap.
 	ServerURL string `json:"server_url"`
 
-	// RuntimeID is the runtimes row id minted at pair time. The
-	// gateway uses it verbatim as device_id on WS upgrade.
+	// RuntimeID is the runtimes row id. The gateway uses it verbatim
+	// as device_id on WS upgrade.
 	RuntimeID string `json:"runtime_id"`
 
 	// RunnerCredential is the bearer presented on every
@@ -35,57 +31,11 @@ type Profile struct {
 	RunnerCredential string `json:"runner_credential"`
 
 	DeviceName string `json:"device_name,omitempty"`
-
-	Hostname string `json:"hostname,omitempty"`
-
-	// PairedAt is when the credential was minted. `omitzero` because
-	// `omitempty` doesn't elide zero structs like time.Time.
-	PairedAt time.Time `json:"paired_at,omitzero"`
-
-	// RunnerPublicKey is the base64 X25519 public half generated at
-	// pair time. Server stores the matching value in
-	// runtimes.config.runner_public_key for SealAnonymous addressed
-	// to this daemon.
-	RunnerPublicKey string `json:"runner_public_key,omitempty"`
-
-	// RunnerPrivateKey is the base64 X25519 private half — used by
-	// runtimecrypto.OpenSeal to decrypt incoming sealed payloads.
-	// MUST NEVER appear in logs or leave the box.
-	RunnerPrivateKey string `json:"runner_private_key,omitempty"`
 }
 
 // ErrNotPaired is returned by Load when no auth.json exists for the
 // requested profile.
-var ErrNotPaired = errors.New("auth: not paired — use `oac-daemon connect --url ... --token ...`")
-
-// Save writes p atomically to the profile's auth.json (0o600 even if
-// the previous file was world-readable).
-func Save(profile string, p Profile) error {
-	if profile == "" {
-		return fmt.Errorf("auth: profile name required")
-	}
-	dir, err := paths.EnsureProfileDir(profile)
-	if err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return errors.New("auth: could not encode profile")
-	}
-	if err = runtimefs.EnsurePrivateDir(dir); err != nil {
-		return errors.New("auth: private profile unavailable")
-	}
-	held, err := os.OpenRoot(dir)
-	if err != nil {
-		return errors.New("auth: private profile unavailable")
-	}
-	defer held.Close()
-	if err = runtimefs.WritePrivateAtomic(held, "auth.json", raw); err != nil {
-		return errors.New("auth: private profile write failed")
-	}
-
-	return nil
-}
+var ErrNotPaired = errors.New("auth: no daemon credential profile — create one with oac-core-device")
 
 // Load reads the profile's auth.json. Returns ErrNotPaired wrapping
 // fs.ErrNotExist when the file is missing.
