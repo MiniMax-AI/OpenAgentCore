@@ -48,7 +48,7 @@ export async function openConsole(page: Page, request: APIRequestContext, hash =
 export async function selectFixtureE2BBuild(page: Page) {
   await page.getByLabel("E2B API key").fill("fixture-private-key");
   await page.getByLabel("Template", { exact: true }).selectOption("template");
-  await page.getByLabel("Template build").selectOption("template:94be54a1-138c-4f30-bc87-b13686272dbe");
+  await page.getByLabel("Template build", { exact: true }).selectOption("template:94be54a1-138c-4f30-bc87-b13686272dbe");
 }
 
 /** Makes the next matching write fail once with the given status. */

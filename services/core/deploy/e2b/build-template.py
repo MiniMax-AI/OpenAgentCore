@@ -9,6 +9,13 @@ import subprocess
 import tarfile
 import tempfile
 
+from template_manifest import normalize_endpoint, validate_manifest
+
+# Use only explicit selectors and the key file, including for SDK constructors.
+for variable in list(os.environ):
+    if variable.startswith('E2B_'):
+        del os.environ[variable]
+
 from e2b import Template
 
 BASE = 'node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27'
@@ -17,7 +24,13 @@ parser.add_argument('--image', required=True, help='Qualified linux/amd64 Runtim
 parser.add_argument('--name', required=True)
 parser.add_argument('--api-key-file', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--api-url', help='HTTPS API origin; pair with --domain')
+parser.add_argument('--domain', help='Sandbox DNS suffix; pair with --api-url')
 args = parser.parse_args()
+try:
+    api_url, domain = normalize_endpoint(args.api_url, args.domain)
+except ValueError:
+    parser.error('Supply both --api-url and --domain using the provider connection settings')
 if not args.image.startswith('sha256:') or not args.output.is_absolute() or not args.api_key_file.is_absolute():
     parser.error('Use an image digest and absolute private key/output paths')
 image = json.loads(subprocess.check_output(['docker', 'image', 'inspect', args.image]))[0]
@@ -85,9 +98,9 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
                 .set_user('runtime').set_workdir('/environment/workspace'))
     result = Template.build(template, name=args.name, cpu_count=2, memory_mb=2048,
                             on_build_logs=lambda entry: print(entry.message, flush=True),
-                            api_key=args.api_key_file.read_text().strip())
-    report = {'template': result.template_id + ':' + result.build_id, 'image': image['Id'],
-              'runtime_sha256': hashlib.sha256(bundle.read_bytes()).hexdigest(), 'base': BASE}
+                            api_key=args.api_key_file.read_text().strip(), api_url=api_url, domain=domain, debug=False)
+    report = validate_manifest({'api_url': api_url, 'domain': domain, 'template': result.template_id + ':' + result.build_id, 'image': image['Id'],
+              'runtime_sha256': hashlib.sha256(bundle.read_bytes()).hexdigest(), 'base': BASE})
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report))
