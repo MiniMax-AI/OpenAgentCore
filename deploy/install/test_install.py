@@ -493,7 +493,9 @@ class InstallerTests(unittest.TestCase):
                         "Execution nodes need KVM (/dev/kvm). This host needs KVM only if you add it as a node.",
                         "Add nodes: in Web, open Nodes and choose Add node, then run the command on each execution host."):
             self.assertIn(message, output)
-        self.assertNotIn("sandbox", json.dumps(self.document("config.json")))
+        config = self.document("config.json")
+        self.assertNotIn("sandbox", config)
+        self.assertEqual(config["core"]["sandbox_capacity"], {"max_active": 100, "max_retained": 400})
         # A repair never selects again.
         self.host.deployment = {"provider": ""}
         self.install()
