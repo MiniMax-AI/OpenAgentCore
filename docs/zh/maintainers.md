@@ -1,14 +1,14 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 11e24e329928f4803518aeaf95a202dcbc98ff1c007860c2f94b1ca96adb5d6a
+source_hash: c7a280c8367f0b86b4ccc4eeb3e3ee203519804ef5e0a09f874a71b0e78ac6be
 ---
 
-本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [安装器设计规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/install/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
+本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
 
 ## 构建分发包 {#build-a-distribution}
 
-分发包是从同一个提交构建的一组相互匹配的 Linux amd64 发布资源：控制归档（安装器、`oac` 命令，以及 Core、Web、gateway 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装器。
+分发包是从同一个提交构建的一组相互匹配的 Linux amd64 发布资源：控制归档（安装器、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装器。
 
 请在 Linux x86_64 上构建，所需环境包括与 Debian 12 兼容的 glibc、Docker、`go.mod` 中指定的 Go 版本、C 编译器（microsandbox 辅助程序使用 CGO 构建）、Node、pnpm、Python 3.9 或更高版本、curl、tar、pigz 和 sha256sum。源代码必须保持干净并已提交。请先准备固定版本的 Codex 包和 MiniMax Code 配套程序，然后执行构建：
 
@@ -37,7 +37,9 @@ make build-core-distribution
 
 构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交和源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装器在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装器资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
 
-控制归档不包含 Runtime 镜像或节点执行构件；离线归档包含这些内容。[下载契约](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/install/README.md#download-contract)说明了节点如何获取这些内容。
+ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`、`SHA256SUMS`、`node-install.pyz` 与 `runtime/seccomp.json`。构建流程根据与分发包相同的 Runtime 和构件身份生成其清单，再禁用网络验证初始化。节点清单不包含控制平面镜像身份，因此可在 ingress 镜像生成前打包。
+
+控制归档不包含 Runtime 镜像或节点执行构件；离线归档包含这些内容。[下载契约](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#download-contract)说明了节点如何获取这些内容。
 
 分发包会携带 `scripts/core-distribution-manifest.py` 中 `BUNDLED_DOCS` 列出的文档。随包文档之间的链接保持相对路径；其他所有相对链接都会重写为该捆绑包对应提交在 GitHub 上的同一文件。链接或锚点无法解析时，构建会失败；`make check-distribution` 会对 `example/` 之外每个受 Git 跟踪的 Markdown 文件运行相同检查。添加或移动安装器或其输出所引用的文档时，请更新该列表。
 
@@ -96,7 +98,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 make build-e2b-provider
 ```
 
-Docker 使用固定版本的 CPython 和 Debian 12 镜像构建 Linux amd64 辅助程序。Python 依赖闭包（including PyInstaller）在 `services/core/tools/e2b-provider/requirements.lock` 中按哈希锁定；不需要 E2B 账户密钥。要使用其他输出目录，请设置 `E2B_PROVIDER_BUILD_DIR`；从导出的源代码树构建时，请设置 `E2B_SOURCE_REVISION`。输出为 `oac-e2b-provider-linux-amd64.tar.gz` 及其 `.sha256`；解压后会得到 `oac-e2b-provider/`，其中包含可执行文件、`_internal/`、`licenses/`、`requirements.lock` 和 `manifest.json`。Core 镜像使用该目录树；主机需要兼容的 glibc 和 CA 证书，而不需要 Python。
+Docker 使用固定版本的 CPython 和 Debian 12 镜像构建 Linux amd64 辅助程序。Python 依赖闭包（including PyInstaller）在 `services/core/tools/e2b-provider/requirements.lock` 中按哈希锁定；不需要 E2B 账户密钥。要使用其他输出目录，请设置 `E2B_PROVIDER_BUILD_DIR`。构建结果完全由辅助程序源代码、`LICENSE` 和构建脚本决定，因此会按它们的哈希缓存在 `~/.oac/cache/e2b-provider/` 下，仅在它们变化时重新构建。输出为 `oac-e2b-provider-linux-amd64.tar.gz` 及其 `.sha256`；解压后会得到 `oac-e2b-provider/`，其中包含可执行文件、`_internal/`、`licenses/`、`requirements.lock` 和 `manifest.json`。Core 镜像使用该目录树；主机需要兼容的 glibc 和 CA 证书，而不需要 Python。
 
 **microsandbox 辅助程序。** 仅支持 Linux，并且需要 C 编译器：
 
@@ -111,7 +113,7 @@ make check-microsandbox-provider
 
 ### 独立 Core 构建 {#standalone-core-builds}
 
-`make build-core` 会将 `oac-core`、`oac-core-migrate`、`oac-core-device`、`oac-core-environment-key` 和 `oac-node` 构建到 `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`（`OAC_DEV_CORE_BUILD_DIR` 可选择其他绝对目录）。构建过程仅将 `scripts/build-core.sh` 中列出的源文件集（Core 服务、其契约、所需的共享软件包以及根 Go 模块文件）复制到临时上下文，并使用禁用 CGO、只读模块和裁剪路径的方式构建。它不需要 Node、Docker 或其他应用程序。Core 新增共享依赖时，请将该软件包加入列表；绝不能复制整个仓库来使其完成编译。
+`make build-core` 会将 `oac-core`、`oac-core-device`、`oac-core-environment-key` 和 `oac-node` 构建到 `${OAC_DEV_HOME:-$HOME/.oac}/build/oac-core`（`OAC_DEV_CORE_BUILD_DIR` 可选择其他绝对目录）。构建过程仅将 `scripts/build-core.sh` 中列出的源文件集（Core 服务、其契约、所需的共享软件包以及根 Go 模块文件）复制到临时上下文，并使用禁用 CGO、只读模块和裁剪路径的方式构建。它不需要 Node、Docker 或其他应用程序。Core 新增共享依赖时，请将该软件包加入列表；绝不能复制整个仓库来使其完成编译。
 
 `make docker-build-core` 会根据这五个命令和 E2B 辅助程序构建 `oac-core:dev` 镜像（`OAC_DEV_CORE_IMAGE` 可选择其他名称）。基础镜像是通过摘要固定的 `debian:bookworm-slim`，包含 CA 证书以及辅助程序所需的 glibc 运行时；默认用户的 UID/GID 为 65532，Core 监听 `:8091`。该镜像仅支持 Linux amd64，并且不会推送到注册表。对镜像或其构建进行更改时，除了相关的源代码检查外，还必须运行 `make check-core-container`：它会在只读根文件系统上针对该镜像运行官方客户端测试套件，并且需要 Linux Docker、非 root 用户，以及服务检查中的[测试数据库和固定版本 SDK](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#official-client-verification)（`OAC_TEST_DATABASE_URL` 指向一个已应用迁移的 `oac_*_tests` 数据库，并设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`）。
 
@@ -126,27 +128,27 @@ git push origin v1.2.3
 
 标签使用 `vMAJOR.MINOR.PATCH` 格式，可选用 `-rc.1` 等预发布后缀以及 `+build.1` 等构建元数据。预发布后缀会创建 GitHub 预发布版。推送标签即表示发布决定。自动检查用于确定构建和测试结果，而不是真实模型资格：推送标签前应评估实际执行证据。模型凭据和私有证书颁发机构绝不能进入 CI 或发布输入，包含它们的验收镜像也不例外。
 
-工作流会在带标签的提交上运行 `check`，包括完整的本地门禁、官方客户端和镜像验收，以及启用打包构件的原生平台矩阵。检查成功后，GitHub 托管的 `ubuntu-22.04` 上的一个 `build` 作业会准备固定的 Runtime 输入、复用原生安装器、构建分发包，并直接从本地文件发布。此合并作业具有 `contents: write` 和 `packages: write` 权限；检出过程不会保留凭据。发布前会保留一份未压缩的 Actions 构建产物以供恢复使用，正常发布期间不会再次下载该构建产物。
+工作流会在带标签的提交上运行 `check`，包括完整的本地门禁、官方客户端和镜像验收，以及启用打包构件的原生平台矩阵。检查成功后，`blacksmith-4vcpu-ubuntu-2204` 上的一个 `build` 作业会准备固定的 Runtime 输入、复用原生安装器、构建分发包，并直接从本地文件发布。此合并作业具有 `contents: write` 和 `packages: write` 权限；检出过程不会保留凭据。只有发布失败或手动构建不发布时，才会把这些文件保留为未压缩的 Actions 构建产物，供恢复使用。
 
 分发归档和 Runtime 归档使用 `pigz` 级别 6，最多使用四个压缩工作线程，并且 gzip 头部中不包含文件名或时间戳。发布器会验证归档和原生安装器校验和、解析仓库身份、拒绝使用该标签已有的 Release 或草稿，并创建一个具有固定 ID 的草稿。最多四个资源可并发上传，按从大到小的顺序进行，且不会重试。确认完整的远程资源清单后，发布器会验证所有镜像归档和现有注册表标签，再并发推送最多四个镜像。每个镜像配置和注册表清单都会接受验证；任何错误都会使 Release 保持未发布状态。失败操作返回前，正在进行的传输会完成。发布器会按 ID 发布草稿，并在发布前重新检查版本标签。
 
 ### 容器注册表 {#container-registry}
 
-版本发布会将 Linux amd64 镜像发布为 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime` 或 `ingress`。例如，`ghcr.io/minimax-ai/openagentcore/core:v1.2.3`。PostgreSQL 使用其上游镜像，不会重新发布。注册表镜像从发布归档中加载，不会重新构建。仅当现有标签的镜像配置摘要与本次发布相同时才复用该标签；如果镜像不同，则停止发布。不会发布浮动 `latest` 标签。SemVer 构建元数据在容器标签中使用 `_` 代替 `+`；长度超过 128 个字符的版本字符串无法发布到 GHCR。手动草稿构建不会推送镜像。
+版本发布和手动的 `build-<full SHA>` 草稿都会将 Linux amd64 镜像发布为 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime` 或 `ingress`。例如，`ghcr.io/minimax-ai/openagentcore/core:v1.2.3`。草稿使用标签 `build-<full SHA>`。PostgreSQL 使用其上游镜像，不会重新发布。注册表镜像从发布归档中加载，不会重新构建。仅当现有版本标签的镜像配置摘要与本次发布相同时才复用该标签；如果镜像不同，则停止发布。稳定版还会把每个组件的 `latest` 标签移到该镜像。预发布和草稿不会改动 `latest`。SemVer 构建元数据在容器标签中使用 `_` 代替 `+`；长度超过 128 个字符的版本字符串无法发布到 GHCR。镜像验证之后，发布器会上传为该发行版渲染的单个 `compose.yaml` 及其校验和清单。Compose 使用注册表摘要固定 ingress 镜像；如果镜像构建版本与 Compose 版本不同，初始化会拒绝运行。草稿 Release 保持未发布。
 
 合并的构建/发布作业使用具有 `packages: write` 权限的 `GITHUB_TOKEN`。首次发布时，GitHub 会将每个容器软件包创建为私有：软件包管理员必须先在各自的软件包设置中将全部四个软件包改为 **Public**，用户才能匿名拉取。请参阅 [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。更改可见性后，请验证未认证拉取。仅更改仓库可见性并不会使新的容器软件包变为公开。
 
-GHCR 和 GitHub Releases 不共享事务。发布失败后，GHCR 中可能仍会保留一些匹配的版本标签；请保留这些镜像，并使用原始构件按照下文的草稿恢复流程操作。除清单缺失以外，注册表故障都会停止发布。作业摘要会记录按摘要固定的引用；安装归档及其校验和保持不变。这些镜像仍需要[配置](configuration.md)中描述的配置、机密和路由；发布镜像不会提供平台部署模板。
+GHCR 和 GitHub Releases 不共享事务。发布失败后，GHCR 中可能仍会保留一些匹配的版本标签；请保留这些镜像，并使用原始构件按照下文的草稿恢复流程操作。除清单缺失以外，注册表故障都会停止发布。作业摘要会记录按摘要固定的引用。这些镜像和渲染后的 Compose 文件仍需要[配置](configuration.md)中描述的配置、机密和路由。
 
-`install.sh` 会解析一次最新稳定版，或解析 `--version` 指定的发布版，验证控制归档并运行该捆绑包的安装器；其用法见[安装指南](getting-started/install.md#install)。
+`install.sh` 会下载最新稳定版的 Compose 文件，或 `--version` 指定的发布版，校验 SHA-256 后启动该发布版。用法见[安装指南](getting-started/install.md#install)。
 
 Go 检查和构建作业共享 `~/.oac/cache/` 下的 Go 模块和编译器缓存目录，缓存键由运行器 OS 和架构、全部 Go 模块文件、检查/构建分区以及提交确定。分区键可防止并发作业在同一个键下保存不同的编译器子集。发布构建既可以使用后端检查的缓存，也可以使用更早发布构建的缓存。较旧的缓存只会为下载和编译提供初始内容；每项检查仍会运行。发布作业还会缓存 npm 软件包下载内容和固定版本的 microsandbox 归档，并在每次构建时验证后者的校验和。Actions 缓存可见性遵循 GitHub ref 的作用域；特定标签的缓存不会与其他发布标签共享。只有作业成功后才会保存新键。
 
-绝不移动发布标签或覆盖已发布的资源。发布失败时，请先检查 Release：即使响应丢失，发布也可能已经完成。对于完整的已发布 Release，请保持原样。对于不完整的草稿，仅在检查后将其删除，然后使用 `gh run download RUN_ID --name core-release-REVISION --dir ASSET_DIRECTORY` 下载原始 `core-release-<revision>` Actions 构建产物，并使用该确切源代码修订版本的检出运行 `python3 scripts/publish-core-release.py --assets ASSET_DIRECTORY`。将 `GH_REPO`、`GH_TOKEN`、`RELEASE_REVISION`、`RELEASE_TAG` 和 `RELEASE_MODE` 设置为原始发布输入，并将 Docker 登录到 GHCR 以发布版本。该脚本会重新验证资源，并拒绝使用已有 Release。恢复上传失败时，绝不能重新运行合并的构建作业，也绝不能重新创建标签。
+绝不移动发布标签或覆盖已发布的资源。发布失败时，请先检查 Release：即使响应丢失，发布也可能已经完成。对于完整的已发布 Release，请保持原样。对于不完整的草稿，仅在检查后将其删除，然后使用 `gh run download RUN_ID --name core-release-REVISION --dir ASSET_DIRECTORY` 下载原始 `core-release-<revision>` Actions 构建产物，并使用该确切源代码修订版本的检出运行 `python3 scripts/publish-core-release.py --assets ASSET_DIRECTORY`。将 `GH_REPO`、`GH_TOKEN`、`RELEASE_REVISION`、`RELEASE_TAG` 和 `RELEASE_MODE` 设置为原始发布输入，并将 Docker 登录到 GHCR。该脚本会重新验证资源，并拒绝使用已有 Release。恢复上传失败时，绝不能重新运行合并的构建作业，也绝不能重新创建标签。
 
 ### 构建候选版本但不发布 {#build-a-candidate-without-publishing}
 
-手动运行需要完整的提交 SHA，会执行相同的检查和构建，默认生成离线归档，并且绝不发布：
+手动运行需要完整的提交 SHA，会执行相同的检查和构建，默认生成离线归档，并且不会发布 Release：
 
 ```sh
 revision=$(git rev-parse HEAD)
@@ -154,11 +156,11 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
   -f ref="$revision" -f offline=true -f draft_release=true
 ```
 
-设置 `draft_release=true` 时，结果是未发布的 `build-<full SHA>` 草稿 Release；设置 `draft_release=false` 时，文件会保留在 Actions 构建产物中。请使用完全匹配的构件集合；绝不能混用构建结果，也绝不能通过 `latest` 解析组件。
+设置 `draft_release=true` 时，结果是未发布的 `build-<full SHA>` 草稿 Release，其镜像会以该标签推送；设置 `draft_release=false` 时，文件会保留在 Actions 构建产物中。请使用完全匹配的构件集合；绝不能混用构建结果，也绝不能通过 `latest` 解析组件。
 
 ## 持续集成 {#continuous-integration}
 
-每个 PR 都会运行 `core-check` 并报告必需状态 `check`。main 使用 GitHub 分支保护，合并前必须通过此检查且分支必须为最新状态，因此合并不会启动另一份测试套件。所有更改都必须通过经过检查的 PR 提交；管理员绕过检查并不代表 CI 成功。推送到 main 时，如果输入发生变化，就会发布网站。版本标签和手动发布构建会在其确切源代码提交上运行完整的发布门禁。`scripts/ci_plan.py` 管理唯一的输入到检查映射。组件规则要求同时匹配目录或脚本前缀以及文件后缀；确切的依赖项、工作流和共享构建输入都有明确规则。规则会在共享使用方和混合变更之间累加。没有匹配构建/测试规则的路径仅运行 hygiene。引入新组件、语言、构建输入或资源位置时，请添加相应规则。
+每个 PR 都会运行 `core-check` 并报告必需状态 `check`。main 使用 GitHub 分支保护，合并前必须通过此检查且分支必须为最新状态，因此合并不会启动另一份测试套件。所有更改都必须通过经过检查的 PR 提交；管理员绕过检查并不代表 CI 成功。推送到 main 时，如果输入发生变化，就会发布网站，并运行 `cache-warm`：它构建 MiniMax companion、E2B 辅助程序和 pnpm 存储，不运行测试，因为只有 main 上保存的缓存能被每个 PR 和发布标签恢复。版本标签和手动发布构建会在其确切源代码提交上运行完整的发布门禁。`scripts/ci_plan.py` 管理唯一的输入到检查映射。组件规则要求同时匹配目录或脚本前缀以及文件后缀；确切的依赖项、工作流和共享构建输入都有明确规则。规则会在共享使用方和混合变更之间累加。没有匹配构建/测试规则的路径仅运行 hygiene。引入新组件、语言、构建输入或资源位置时，请添加相应规则。
 
 计划器会将 PR 事件所测试的合并提交与其已验证的第一个父提交进行比较。NUL 分隔的 Git 输出和禁用重命名检测会同时保留旧路径和新路径。计划及原因会显示在运行摘要中。历史记录缺失或不一致、检出不匹配、路径无效、计划器/编排发生变更以及共享构建输入发生变化时，都会选择完整门禁。经过验证的空差异仅选择 hygiene。发布、手动和显式 ref 调用始终选择所有组。
 
@@ -166,7 +168,7 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 | --- | --- |
 | `hygiene` | 名称、仓库链接、随包文档完整性以及 CI 计划器/门禁测试；每次变更都会运行 |
 | `distribution` | Harness 目录和安装器模式、安装/应用/恢复/清理测试、Compose 解析和初始化固定数据、发布/下载和捆绑包契约、Go 控制台测试与构建；模板解析需要 Docker Compose，不需要 pnpm install 或浏览器 |
-| `compose` | 使用模板声明的发布镜像从空数据卷实际启动、登录和 API 访问、上传文件和下载节点安装器，然后在保留凭据和数据的同时重新配置 URL 并重新创建容器；需要 Docker 和网络访问，不需要构建镜像或模型凭据 |
+| `compose` | 使用从当前检出构建的镜像从空数据卷实际启动、登录和 API 访问、上传文件和下载节点安装器，然后在保留凭据和数据的同时重新配置 URL 并重新创建容器；需要 Docker、Go 和网络访问，不需要模型凭据 |
 | `backend` | 并行部分，每部分都有专用 PostgreSQL 保护检查：`runtime`（sqlc 新鲜度、Runtime/共享 Go 测试、Linux microsandbox 辅助程序、守护进程构建）、`core`（独立 Core 构建、Core 服务和客户端测试），以及串行 Core 持久化集成包的三个 `store` 分片 |
 | `harness` | Claude SDK 测试和打包、MiniMax 配套脚本 |
 | `example` | 可选的应用程序类型检查、测试、构建和隔离的浏览器验收 |
@@ -179,7 +181,7 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 `.github/actionlint.yaml` 会选择 hygiene 和 lint。已知工作流变更会选择其使用方：CI review 和 actionlint 工作流运行 hygiene 和 lint；原生工作流变更会添加原生检查；API 验收工作流变更会添加启用容器验收的 API 检查；网站工作流变更会添加网站检查。共享 Node 操作会选择使用它的每个作业以及 lint。新工作流或未分类的工作流/操作会选择完整门禁，直至在计划器中声明其使用方。计划器测试和 CI 测量脚本运行 hygiene；更改计划器本身会运行完整门禁。
 
-Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。该测试检查声明的发布镜像和通用 Compose 行为；它不会运行 Dokploy/Coolify 实例，也不会执行模型。
+Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web 和 ingress 镜像都从当前检出构建；Web 提供占位页面而不是控制台构建。构建时的节点元数据来自 `deploy/compose/smoke-pins.json` 固定的发布版本；初始化容器禁用网络运行。该测试检查通用 Compose 行为；它不会运行 Dokploy/Coolify 实例，也不会执行模型。
 
 Go 模块和工作区输入会选择后端、API（包括容器）、原生和分发检查。每个 Node 模块都拥有自己的清单和锁文件。网站依赖项会选择网站检查；Web 依赖项会选择 Web 和浏览器检查；示例依赖项会选择示例检查；共享 TypeScript 客户端依赖项会选择 Web、浏览器和示例检查；Claude 适配器依赖项会选择 Harness、原生和分发检查。共享包管理器配置会选择所有 Node 使用方。根 TypeScript 配置会选择 Web 和示例检查；适配器 TypeScript 配置会选择 Harness 和原生检查。每个所选集合都包含 hygiene。混合变更会累加其使用方，并且每个作业都读取同一计划，而不是维护各自的路径列表。例如，仅修改通知的 PR 会跳过数据库、浏览器和原生作业，而同时修改通知和 Core 的 PR 会添加后端和 API 检查。
 

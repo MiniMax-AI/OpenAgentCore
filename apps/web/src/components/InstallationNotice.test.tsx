@@ -10,10 +10,10 @@ const installation: CoreInstallation = {
 };
 
 describe("local-only installation notice", () => {
-  it("links to domain setup without exposing installer commands", () => {
+  it("links to the public address without exposing installer commands", () => {
     const html = renderToStaticMarkup(<InstallationNotice installation={installation} />);
-    expect(html).toContain("Configure domain and HTTPS");
-    expect(html).toContain("Configure HTTPS before connecting applications and nodes");
+    expect(html).toContain("Review the public address");
+    expect(html).toContain("Set a public address other machines can reach before connecting");
     expect(html).not.toContain("config.json");
     expect(html).not.toContain("oac apply");
   });

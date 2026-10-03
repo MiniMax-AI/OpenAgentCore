@@ -6,6 +6,6 @@ main_domain = "${domain}"
 env = ["OAC_PUBLIC_URL=https://${main_domain}"]
 
 [[config.domains]]
-serviceName = "gateway"
+serviceName = "web"
 port = 8080
 host = "${main_domain}"

@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 0b1593010b41cf81e705ccf5cdb6df3c15e358b6da6b79ab588c552baa903481
+source_hash: 2a4be7b081286e5a95c14380acc517d2d4b4ba955c0bd61338b0977d84c9df16
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -10,7 +10,7 @@ source_hash: 0b1593010b41cf81e705ccf5cdb6df3c15e358b6da6b79ab588c552baa903481
 
 | 接口 | 路径 | 身份验证 | 控制台用途 |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/console/installation/domain`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；Add node 所用的节点安装程序和节点构件；**System → Domain and HTTPS** 上的域设置；用于 Docker 和 microsandbox 设置的发行版 Runtime release。参见 [console server](console-server.md) |
+| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；Add node 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置的发行版 Runtime release。参见 [console server](console-server.md) |
 | Administrator API | `/core/v1/**`，不包括 `/core/v1/sandbox` | Core 密钥，由控制台服务器添加 | 项目、密钥、资源读取和删除、诊断、执行器凭据和安装命令、来源信息、汇总、Core 指标、安装信息、默认模型 |
 | Sandbox administration | `/core/v1/sandbox/**` | Core 密钥，由控制台服务器添加 | Sandbox 配置；Overview 和 Sandbox metrics 中的 Nodes、机群与容量数据；每个项目的 Runtime observations |
 | Agents API | `/v1/**` | 项目 API 密钥 | 不使用。控制台会向开发者说明如何调用它（参见 [Provenance and monitoring](#provenance-and-monitoring)） |
@@ -77,7 +77,7 @@ source_hash: 0b1593010b41cf81e705ccf5cdb6df3c15e358b6da6b79ab588c552baa903481
 | 安装 | `GET /core/v1/installation` | System 的 Installation 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 Startup 设置（`path` 下的 `configuration.settings`，以及 `apply_command` 和 `applied_at`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）；Core 拒绝的 Sandbox 配置旁的 `path` 和 `apply_command`。如果敏感设置包含值，或存在未知成员，读取会失败；`configuration: null` 会显示一条说明 |
 | Core 指标 | `GET /core/v1/metrics?range=` | Core 指标页面；Overview 上的 Core 弹出内容。不存在该路由的 Core（404）会显示为未报告数据，此时弹出内容仅显示 Core 状态。[Core metrics contract](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
 
-如果为 `local_only`，或者 `public_url` 不是 HTTPS 来源，Add node 将无法签发命令，Clean up the host 也无法提供命令。随后 Overview、Nodes 和 System 会显示醒目警告，其中 Core 的配置路径和 apply command 为可复制值；当 `configuration` 为 null 时，它们会说明路径和命令不可用。Nodes 会禁用 Add node 并显示明确原因，Getting started 则将 sandbox 步骤保留为待办项。
+如果为 `local_only`，或者没有 `public_url`，Add node 将无法签发命令，Clean up the host 也无法提供命令。随后 Overview、Nodes 和 System 会显示醒目警告，其中 Core 的配置路径和 apply command 为可复制值；当 `configuration` 为 null 时，它们会说明路径和命令不可用。Nodes 会禁用 Add node 并显示明确原因，Getting started 则将 sandbox 步骤保留为待办项。
 
 无论是在显示新密钥时，还是在活动项目页面没有显示任何密钥时，控制台都会提供 `OPENAI_BASE_URL`（安装的 `api_base_url`）和 `OPENAI_API_KEY`（新密钥，或项目密钥的占位符）的 shell 导出变量，以及针对 `GET /v1/agents` 和 `POST /v1/agents/sessions` 的 `curl` 和 Python 示例，但不会发送其中任何调用。当安装为 `local_only` 时，控制台会说明 API 只能在 Core 所在计算机上访问；当缺少 `api_base_url` 时，则会提示设置 `public_url`。
 
@@ -97,7 +97,7 @@ source_hash: 0b1593010b41cf81e705ccf5cdb6df3c15e358b6da6b79ab588c552baa903481
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 config.json 的 `public_url`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并同时显示安装的配置文件和 apply command，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 System、Sandbox 配置摘要和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 System 和 Nodes 摘要中 |
+| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并同时显示安装的配置文件和 apply command，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 System、Sandbox 配置摘要和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 System 和 Nodes 摘要中 |
 | E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
 | Nodes | `GET /core/v1/sandbox/nodes` | Nodes 页面；Overview 上的机群；Sandbox metrics 中的节点容量。在线节点的 `diagnostic`（`docker_unavailable`、`docker_limits_unsupported`、`runtime_image_unavailable`、`kvm_unavailable`、`microsandbox_artifacts_unavailable`、`capacity_insufficient`、`provider_unavailable`；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在上述每个页面及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，Nodes 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 Old address，而不是健康状态；如果 `core_url` 为空（Core 未注册该节点），则状态为未知，而不是旧地址。**Add node** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |

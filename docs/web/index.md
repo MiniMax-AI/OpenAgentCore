@@ -24,7 +24,7 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
 | Platform | Projects and keys | Create, rename and archive Projects; issue and revoke keys; each Project's usage, write history and how to call the API |
 | Platform | Nodes | Add, edit and remove Docker or microsandbox nodes; each node's readiness, capacity and allocations |
-| Platform | System | The installation's public address, API base URL, ID and source commit; **Domain and HTTPS**; each harness's default model; **Sandbox configuration**; Core's `config.json` startup settings, read-only, with where to change them |
+| Platform | System | The installation's public address, API base URL, ID and source commit; each harness's default model; **Sandbox configuration**; the startup settings Core loaded, read-only |
 
 Missing data is shown as missing (—), never as zero. [Console API usage](./console-api-usage.md) lists what each page reads and how its figures are bounded.
 
@@ -32,7 +32,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 
 | Task | Where |
 | --- | --- |
-| Give the installation an HTTPS address | **System → Domain and HTTPS**, on an installation with managed ingress; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
+| Give the installation an HTTPS address | Set `OAC_PUBLIC_URL` and point a reverse proxy at Web; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
 | Choose the sandbox backend (Docker, microsandbox or E2B), the sandbox size and Runtime, or reset the backend | **System → Sandbox configuration**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | Add or remove execution nodes | **Nodes**; see the [nodes guide](../getting-started/nodes.md) |
 | Set the default model of a harness | **System → Default model configuration**; see [default models](../configuration.md#default-models) |

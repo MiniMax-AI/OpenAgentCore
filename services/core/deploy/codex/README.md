@@ -63,9 +63,9 @@ Every other variant stays unclassified.
 
 | Item | Value |
 | --- | --- |
-| Base | Digest-pinned `debian:bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip`, `nodejs`, `npm` and `ripgrep` |
+| Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep`, the same base and package layer as the Claude and MiniMax images |
 | Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex` (mode 0555) and `/usr/local/codex-resources` |
-| User | `runtime`, UID/GID 1000, home `/home/runtime` |
+| User | UID/GID 1000 with `HOME=/home/runtime` |
 | Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 

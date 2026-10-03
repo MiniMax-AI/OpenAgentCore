@@ -2,7 +2,7 @@
 title: "Console server"
 ---
 
-The console server (`services/web`, the `oac-web` process) serves the built console, signs the administrator in with the Core key and forwards the signed-in browser's `/core/v1` requests to Core with that key. The browser never holds the Core key or any API key. Applications, nodes and self-hosted executors call Core directly; the console forwards none of their traffic.
+The console server (`services/web`, the `oac-web` process) serves the built console, signs the administrator in with the Core key and forwards the signed-in browser's `/core/v1` requests to Core with that key. The browser never holds the Core key or any API key. Applications, nodes and self-hosted executors reach Core through the console, which forwards `/v1`, `/api/v1` and `/docs` unchanged.
 
 [Configuration](../configuration.md#appendix-web-environment-without-the-installer) owns its process settings and defaults.
 
@@ -16,35 +16,34 @@ flowchart LR
   database[("PostgreSQL")]
   application["Application / official SDK"]
   machine["Nodes and Runtime daemons"]
-  installer["Installer domain service"]
 
   browser -->|"same origin: /console/*, /core/v1/*; session cookie"| console
   console -->|"/core/v1/* with the Core key"| core
-  console -->|"domain setup, Unix socket"| installer
-  application -->|"/v1 with a Project API key"| core
-  machine -->|"/api/v1 with machine credentials"| core
+  application -->|"/v1 with a Project API key"| console
+  machine -->|"/api/v1 with machine credentials"| console
+  console -->|"/v1, /api/v1 and /docs unchanged"| core
   core <--> database
 ```
 
-The deployment's reverse proxy routes `/v1` and `/api/v1` to Core and every other path to the console; the [installation options](../getting-started/install-options.md#https-and-the-reverse-proxy) gives the routes. The console handles each path as follows:
+The deployment's reverse proxy sends every path to the console. The console forwards `/v1`, `/api/v1` and `/docs` to Core and serves everything else itself; the [installation options](../getting-started/install-options.md#https-and-the-reverse-proxy) gives the proxy requirements. The console handles each path as follows:
 
 | Path | Sign-in | Handling |
 | --- | --- | --- |
 | `/healthz` | No | `GET` or `HEAD` answers `200 ok` |
-| `/v1`, `/api/v1` and below | — | 404, whatever credential the request carries |
+| `/v1`, `/api/v1` and below | — | Forwarded to Core unchanged, with the caller's credential, streaming and WebSocket upgrades |
+| `/docs`, `/docs/*` | No | The API reference and its OpenAPI documents, forwarded to Core unchanged |
 | `/node-install/*` | No | The node installation payload (see [Node installation payload](#node-installation-payload)) |
 | `/console/auth`, `/console/auth/login`, `/console/auth/logout` | No | [Sign-in](#sign-in) |
 | `/`, `/index.html`, `/favicon.svg`, `/oac-mark.svg`, `/assets/*` | No | Static console assets |
 | `/console/config` | Yes | [Console configuration](#console-configuration) |
-| `/console/installation/domain` | Yes | [Domain setup](#domain-setup) |
 | `/core/v1/*` | Yes | [Forwarded to Core](#forwarding-to-core) |
 | `/core` and other paths under `/core/` | Yes | 404 |
 | Any other path | Yes | Static assets; a path without a file extension falls back to `index.html` |
 
-Every request except `/healthz`, `/v1` and `/api/v1` must pass these checks first:
+Every request except `/healthz`, `/v1`, `/api/v1` and `/docs` must pass these checks first:
 
 1. **Host and origin.** The `Host` header must equal the host of `OAC_WEB_ORIGIN`. An `Origin` header, when present, must equal that origin, and `Sec-Fetch-Site` must be `same-origin` or `none`. A write that carries neither `Origin` nor `Sec-Fetch-Site: same-origin` needs a same-origin `Referer`. Otherwise the console answers 403. `/node-install/*` checks only the host and the path.
-2. **Safe request.** The path must start with `/` and contain no `%`, backslash, NUL, dot segment or empty segment. Absolute-form request targets, `CONNECT`, `TRACE` and any request with an `Upgrade` header get 400. A request can therefore never leave `/core/v1` on Core, and the console carries no WebSocket.
+2. **Safe request.** The path must start with `/` and contain no `%`, backslash, NUL, dot segment or empty segment. Absolute-form request targets, `CONNECT` and `TRACE` get 400. An `Upgrade` header gets 400 except on `/v1`, `/api/v1` and `/docs`, which are forwarded before these checks. A `/core/v1` request can therefore never leave that prefix.
 3. **Sign-in.** Paths that need sign-in answer 401 without a valid session cookie.
 
 Under `/core`, these failures use the Core error envelope with the codes in [console-generated failures](../../contracts/agents-api/core-errors.md#console-generated-failures); elsewhere they return `{"error": "…"}`, or plain text for an unsafe request. Every response carries `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer` and `Content-Security-Policy: frame-ancestors 'none'`.
@@ -97,22 +96,9 @@ Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a meth
 
 With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution's node payload at `/node-install/` without sign-in: `node-install.pyz`, `manifest.json`, `SHA256SUMS`, `runtime/seccomp.json`, and the node artifacts the manifest declares under `artifacts/`. An artifact missing locally redirects (307) to its pinned release download. Node install and uninstall commands download from `<public_url>/node-install/`, so the reverse proxy must send that path to the console. Nodes verify every checksum themselves.
 
-## Domain setup
+## Public address
 
-`GET` and `POST /console/installation/domain` let **System → Domain and HTTPS** configure a managed installation's domain. They are console routes, not Core routes. After the same origin and sign-in checks, the console passes the request body (at most 2 KiB) to the installer's Unix socket at `OAC_WEB_INSTALLATION_SOCKET`, authenticated with the Core key, and returns the installer's JSON answer and status. The request times out after 20 seconds.
-
-| Method | Request | Result |
-| --- | --- | --- |
-| `GET` | No body | The domain status |
-| `POST` | `{"hostname":"core.example.com"}`, optionally with `"confirm_public_url_change":"https://core.example.com"` | 202 and the status; the installer checks and applies the domain in the background |
-
-The status has `supported`, `state` (`unconfigured`, `checking`, `applying`, `ready` or `failed`), and nullable `public_url`, `target_url` and `message`. Installer errors use `{"error":{"code":"…","message":"…"}}`. Changing an address that nodes or executors already use returns 409 `public_url_confirmation_required` until the request confirms the new URL; pending `config.json` edits, an installation that is not applied or not running, hand-edited generated files, and another installation operation holding the lock (`installation_busy`) also return 409.
-
-Without `OAC_WEB_INSTALLATION_SOCKET` (external reverse proxy installations), `GET` reports `supported: false` and `POST` returns 400 `domain_setup_unavailable`. An unreachable installer or an invalid answer returns 502 `installation_unreachable`.
-
-The System page submits a hostname once, polls the status every 2 seconds while it is `checking` or `applying`, and asks for confirmation when the installer requires it. During setup, network failures and HTTP 502/503/504 responses keep polling active. The page allows 30 seconds without a successful status response before showing the disconnected message, and recovers when a poll succeeds. It never retries a write. Applying the domain restarts the console, which ends every session; the page keeps a sign-in link to the new HTTPS address. Only the `ready` state confirms HTTPS; the browser does not probe the new origin. The installer owns certificates, locking and recovery ([managed HTTPS](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/install/README.md#managed-https)).
-
-`OAC_WEB_BOOTSTRAP=1`, which the installer sets while no public URL is configured, lets the console also accept plain HTTP requests addressed to a literal IP address, treating `http://<that address>` as the origin, so an operator can sign in through the server's IP address. Host names still require `OAC_WEB_ORIGIN`, so DNS rebinding cannot reach the console.
+The console does not configure a domain or obtain certificates. The operator's reverse proxy or hosting platform terminates HTTPS and routes to the console, and `OAC_PUBLIC_URL` records the origin that applications, nodes and executors use. The console accepts only the host of `OAC_WEB_ORIGIN`, so DNS rebinding cannot reach it.
 
 ## Verification
 

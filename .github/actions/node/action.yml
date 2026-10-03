@@ -25,3 +25,5 @@ runs:
       with:
         path: ${{ steps.store.outputs.path }}
         key: pnpm-v1-${{ runner.os }}-${{ runner.arch }}-node${{ inputs.node-version }}-10.30.3-${{ hashFiles(inputs.lockfiles) }}
+        # The store is content-addressed; another lockfile's store still supplies shared packages.
+        restore-keys: pnpm-v1-${{ runner.os }}-${{ runner.arch }}-node${{ inputs.node-version }}-10.30.3-

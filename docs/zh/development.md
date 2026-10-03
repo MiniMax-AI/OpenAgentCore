@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: ce56d4c1c55f263c03ba7e39ea8e700eca6c6b3c8a372f20f36e87c9f0ec5330
+source_hash: b7025e9b2072924c33656e0319363cf3564593bb1e2506a891be5be251087c11
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -78,7 +78,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | `services/core/internal/sandbox` | Provider 接口与托管计算资源生命周期 | [Provider 接入](sandbox-provider.md) |
 | `services/web` | 控制台登录与服务端管理代理 | [控制台服务端](web/console-server.md) |
 | `apps/web` 和 `packages/agents-client` | 控制台 UI 与类型化 client | [Web 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md) |
-| `deploy/install` 和 `scripts` | 发行、安装和验证工具 | [维护者指南](maintainers.md) |
+| `deploy` 和 `scripts` | 发行、安装和验证工具 | [维护者指南](maintainers.md) |
 | `contracts/agents-api` | 固定 schema、语义契约和覆盖台账 | [覆盖台账](../../contracts/agents-api/zh/index.md) |
 
 ## 选择扩展边界 {#choose-an-extension-boundary}

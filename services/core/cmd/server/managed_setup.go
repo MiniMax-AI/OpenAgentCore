@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -22,7 +23,7 @@ import (
 // observation. The database owns the selection; this cache is never a writer.
 type managedSetup struct {
 	processPaths sandbox.ProcessPaths
-	capacity     sandboxCapacity
+	capacity     processconfig.SandboxLimits
 	// registry builds the selected direct provider and discovers configuration;
 	// the deployment setup reports what the registration declares.
 	registry       *providers.Registry

@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: e84ced73c64da30f33feba032d7e8e9bc8c33b3062604a47258102460615429b
+source_hash: 06a69e3d0ba245ab27c0b5d7390364a35d10fb8478e2d0f6867749b29368f980
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness；部署可以保持未配置状态，既无节点，也不接受托管准入。
@@ -226,6 +226,6 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 ## 规范的节点规格 {#canonical-node-specification}
 
-`sandbox/deployment_contract.go`负责资源边界、提供商要求、发行版模式和规范字段顺序；`sandbox/deployment.go`在 Core 中应用这些规则。安装程序会使用 `deploy/install/node_spec.py` 中生成的声明，因此不存在第二套限制或模式。请在仓库根目录运行 `go run ./services/core/cmd/specification-contract -write` 重新生成；作为 `make check` 一部分的沙箱 Go 测试会拒绝过时的投影。
+`sandbox/deployment_contract.go`负责资源边界、提供商要求、发行版模式和规范字段顺序；`sandbox/deployment.go`在 Core 中应用这些规则。安装程序会使用 `deploy/node/node_spec.py` 中生成的声明，因此不存在第二套限制或模式。请在仓库根目录运行 `go run ./services/core/cmd/specification-contract -write` 重新生成；作为 `make check` 一部分的沙箱 Go 测试会拒绝过时的投影。
 
 规范摘要是紧凑 UTF-8 JSON 的 SHA-256，其中 `provider` 位于首位，其次是 `resources`，然后在提供商需要时放置 `runtime`。资源和 Runtime 字段遵循契约的声明顺序；值为零的可选磁盘字段会被省略，必填字段则保持存在。发行版标识采用小写 ASCII，摘要绝不会受传入字段顺序或空白字符影响。`services/core/internal/sandbox/testdata/deployment-contract.json`保存共享验收用例、精确的规范字节和摘要，Go 与 Python 测试都会使用这些内容。

@@ -7,31 +7,46 @@ import (
 	"testing"
 )
 
-// Applications (/v1) and machines (/api/v1) reach Core directly through the
-// reverse proxy; the console forwards neither, whatever credential is presented.
-func TestCoreDirectRoutesNeverPassThroughConsole(t *testing.T) {
-	c := coreKeyConsoleConfig(t, http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("direct Core route reached Core through console") }))
+// Applications (/v1) and machines (/api/v1) pass through the console to Core
+// with the caller's own credential. The console key is never added, and the
+// console's own routes stay local.
+func TestCoreDirectRoutesPassThroughWithCallerCredential(t *testing.T) {
+	var seen struct {
+		path, authorization string
+	}
+	c := coreKeyConsoleConfig(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.path, seen.authorization = r.URL.Path, r.Header.Get("Authorization")
+		w.WriteHeader(204)
+	}))
 	h := startConsole(t, c)
 	cookie := signIn(t, h)
-	for _, path := range []string{"/v1", "/v1/agents", "/v1/agents/sessions", "/v1/files/file/content", "/console/api-keys",
+	for _, path := range []string{"/v1", "/v1/agents", "/v1/agents/sessions", "/v1/files/file/content",
 		"/api/v1", "/api/v1/sandbox-node/enroll", "/api/v1/sandbox-node/configuration", "/api/v1/sandbox-node/connect", "/api/v1/agent-daemon/enroll", "/api/v1/agent-daemon/ws"} {
 		for _, method := range []string{"GET", "POST", "DELETE"} {
 			for _, authorization := range []string{"", "Bearer project-key", "Bearer node-token", "Bearer " + testCoreKey, "Basic YWRtaW46cGFzc3dvcmQ="} {
 				for _, upgrade := range []string{"", "websocket"} {
 					r := httptest.NewRequest(method, path, strings.NewReader(`{}`))
-					r.Host = h.host
-					r.Header.Set("Origin", h.origin)
+					r.Host = "node.example"
 					r.Header.Set("Authorization", authorization)
 					r.Header.Set("Upgrade", upgrade)
 					r.AddCookie(cookie)
 					w := httptest.NewRecorder()
 					h.ServeHTTP(w, r)
-					if w.Code != 404 {
-						t.Errorf("%s %s upgrade=%q = %d", method, path, upgrade, w.Code)
+					if w.Code != 204 || seen.path != path || seen.authorization != authorization {
+						t.Errorf("%s %s upgrade=%q = %d, forwarded %s %s", method, path, upgrade, w.Code, seen.path, seen.authorization)
 					}
 				}
 			}
 		}
+	}
+	r := httptest.NewRequest("GET", "/console/api-keys", nil)
+	r.Host = h.host
+	r.Header.Set("Origin", h.origin)
+	r.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 404 {
+		t.Errorf("/console/api-keys = %d", w.Code)
 	}
 }
 

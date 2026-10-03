@@ -9,7 +9,8 @@ import (
 )
 
 // ValidateCoreURL accepts a canonical public origin, never a path or
-// credential. Plain HTTP is reserved for explicit loopback development hosts.
+// credential. It may be http or https: a reverse proxy in front of Web
+// terminates TLS when the installation uses it.
 // OAC_PUBLIC_URL must pass it.
 func ValidateCoreURL(value string) error {
 	u, err := url.Parse(value)
@@ -25,10 +26,7 @@ func ValidateCoreURL(value string) error {
 			return ErrInvalidInput
 		}
 	}
-	loopback := u.Hostname() == "localhost"
-	if ip := net.ParseIP(u.Hostname()); ip != nil {
-		loopback = ip.IsLoopback()
-	} else {
+	if net.ParseIP(u.Hostname()) == nil {
 		if len(u.Hostname()) > 253 || strings.ContainsAny(u.Host, "[]") {
 			return ErrInvalidInput
 		}
@@ -43,7 +41,7 @@ func ValidateCoreURL(value string) error {
 			}
 		}
 	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+	if u.Scheme != "https" && u.Scheme != "http" {
 		return ErrInvalidInput
 	}
 	return nil

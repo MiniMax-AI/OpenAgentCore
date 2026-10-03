@@ -20,7 +20,7 @@ The installer brings its own pinned Node.js and Harness versions (listed in [`sc
 
 The machine needs:
 
-- HTTPS access to Core (plain HTTP only on loopback), and to the release download host unless Core carries an offline copy of the installers;
+- HTTP or HTTPS access to Core, and to the release download host unless Core carries an offline copy of the installers;
 - Bash for environment setup and MiniMax Code tools; on Windows, Git Bash, which Claude Code also requires;
 - Python and pip when the Session's packages need them;
 - any system packages your setup needs. The daemon never runs apt, sudo or another elevation command, so install them through the host's normal administration.

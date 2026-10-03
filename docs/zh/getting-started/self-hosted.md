@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: c560a575e51c02ccb474a629f5655e59779643696826c7677d0b5a949be2e5fc
+source_hash: 800b3eb891c20d34215344c0ea147dbb79b5921d25d6f2405bcfe5edccd88038
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -22,7 +22,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 
 机器需要：
 
-- 通过 HTTPS 访问 Core（仅回环地址允许明文 HTTP），以及访问发布下载主机；如果 Core 已有安装程序的离线副本，则无需后者；
+- 通过 HTTP 或 HTTPS 访问 Core，以及访问发布下载主机；如果 Core 已有安装程序的离线副本，则无需后者；
 - 用于环境设置和 MiniMax Code 工具的 Bash；Windows 上需要 Git Bash，Claude Code 也要求它；
 - Session 的软件包需要时，安装 Python 和 pip；
 - 环境设置所需的系统软件包。守护进程不运行 apt、sudo 或其他提权命令，请通过主机的常规管理方式安装。

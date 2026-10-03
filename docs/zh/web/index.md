@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 59ab5c2c95b32a7fb7e6444bccf64be367372212fe6329b44398891cfe8d730a
+source_hash: 375d6245441e9f484af64798fb23c665d0ec712eb9a5088e7a41e3293374680a
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -26,7 +26,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | Resources | Agents、Environment templates、Skills、Files、Vaults | 检查和允许的删除操作，显示各资源所属 Project 及创建密钥 |
 | Platform | Projects and keys | 创建、重命名和归档 Project；签发与撤销密钥；各 Project 的用量、写入历史和 API 调用方法 |
 | Platform | Nodes | 添加、编辑和移除 Docker 或 microsandbox 节点；各节点的就绪状态、容量和分配 |
-| Platform | System | 安装的公开地址、API 基础 URL、ID 和源码提交；**Domain and HTTPS**；各 Harness 默认模型；**Sandbox configuration**；Core `config.json` 启动设置，只读并注明修改位置 |
+| Platform | System | 安装的公开地址、API 基础 URL、ID 和源码提交；各 Harness 默认模型；**Sandbox configuration**；Core 加载的启动设置，只读 |
 
 缺失数据展示为缺失（—），不会当作零。[控制台 API 使用](console-api-usage.md)列出各页面读取内容及统计边界。
 
@@ -34,7 +34,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 
 | 任务 | 位置 |
 | --- | --- |
-| 为安装设置 HTTPS 地址 | 托管入口安装的 **System → Domain and HTTPS**；参阅[使 Core 可访问](../getting-started/install.md#configure-the-domain-and-https) |
+| 为安装设置 HTTPS 地址 | 设置 `OAC_PUBLIC_URL`，并把反向代理指向 Web；参阅[使 Core 可访问](../getting-started/install.md#configure-the-domain-and-https) |
 | 选择沙箱后端（Docker、microsandbox 或 E2B）、规格和 Runtime，或重置后端 | **System → Sandbox configuration**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | 添加或移除执行节点 | **Nodes**；参阅[节点指南](../getting-started/nodes.md) |
 | 设置 Harness 默认模型 | **System → Default model configuration**；参阅[默认模型](../configuration.md#default-models) |

@@ -3,8 +3,11 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha1"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -132,6 +135,135 @@ func TestAuthenticationAndCrossSiteAdmission(t *testing.T) {
 	}
 }
 
+func TestApplicationAndMachineTrafficPassesThroughUnchanged(t *testing.T) {
+	observed := make(chan *http.Request, 1)
+	server, _ := testConsole(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observed <- r.Clone(context.Background())
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: ok\n\n")
+	}))
+	for _, path := range []string{"/v1/agents", "/api/v1/agent-daemon", "/docs", "/docs/openapi.yaml"} {
+		t.Run(path, func(t *testing.T) {
+			request := consoleRequest(t, server, "POST", path)
+			request.Header.Del("Cookie")
+			request.Header.Del("Origin")
+			request.Header.Del("Sec-Fetch-Site")
+			request.Host = "node.example"
+			request.Header.Set("Authorization", "Bearer project-key")
+			request.Header.Set("Upgrade", "websocket")
+			response, body := responseBody(t, server, request)
+			if response.StatusCode != 200 || body != "data: ok\n\n" {
+				t.Fatalf("status = %d, body = %s", response.StatusCode, body)
+			}
+			forwarded := <-observed
+			if forwarded.URL.Path != path || forwarded.Header.Get("Authorization") != "Bearer project-key" {
+				t.Fatalf("forwarded request = %s %s", forwarded.URL.Path, forwarded.Header.Get("Authorization"))
+			}
+			if forwarded.Header.Get("X-Core-Console-Actor") != "" || strings.Contains(forwarded.Header.Get("Authorization"), "private-core-key") {
+				t.Fatal("console credential leaked onto application traffic")
+			}
+		})
+	}
+}
+
+func TestWebSocketUpgradeReachesCore(t *testing.T) {
+	const key = "dGhlIHNhbXBsZSBub25jZQ=="
+	sum := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"))
+	accept := base64.StdEncoding.EncodeToString(sum[:])
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/agent-daemon/ws" || r.Header.Get("Upgrade") != "websocket" || r.Header.Get("Sec-WebSocket-Key") != key {
+			http.Error(w, "unexpected upgrade", http.StatusBadRequest)
+			return
+		}
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "cannot upgrade", http.StatusInternalServerError)
+			return
+		}
+		conn, buffer, err := hijacker.Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		if _, err = buffer.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n"); err != nil {
+			return
+		}
+		if err = buffer.Flush(); err != nil {
+			return
+		}
+		incoming := make([]byte, 4)
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err = io.ReadFull(conn, incoming); err != nil || string(incoming) != "ping" {
+			return
+		}
+		_, _ = conn.Write([]byte("pong"))
+	}))
+	t.Cleanup(upstream.Close)
+	parsed, err := url.Parse(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dist := t.TempDir()
+	if err = os.WriteFile(filepath.Join(dist, "index.html"), []byte("console"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	handler, err := newConsole(config{origin: testOrigin, upstream: parsed, dist: dist, coreKey: "private-core-key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(handler.Close)
+	if handler.transport.MaxIdleConnsPerHost != 64 {
+		t.Fatalf("idle connections per Core = %d", handler.transport.MaxIdleConnsPerHost)
+	}
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	conn, err := net.Dial("tcp", server.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	request := "GET /api/v1/agent-daemon/ws HTTP/1.1\r\nHost: node.example\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: " + key + "\r\n\r\n"
+	if _, err = conn.Write([]byte(request)); err != nil {
+		t.Fatal(err)
+	}
+	reader := bufio.NewReader(conn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(status, "101") {
+		t.Fatalf("status = %q", status)
+	}
+	headers := make(http.Header)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			break
+		}
+		name, value, ok := strings.Cut(line, ":")
+		if !ok {
+			t.Fatalf("header = %q", line)
+		}
+		headers.Add(strings.TrimSpace(name), strings.TrimSpace(value))
+	}
+	if headers.Get("Sec-WebSocket-Accept") != accept || !strings.EqualFold(headers.Get("Upgrade"), "websocket") {
+		t.Fatalf("upgrade headers = %v", headers)
+	}
+	if _, err = conn.Write([]byte("ping")); err != nil {
+		t.Fatal(err)
+	}
+	reply := make([]byte, 4)
+	if _, err = io.ReadFull(reader, reply); err != nil || string(reply) != "pong" {
+		t.Fatalf("reply = %q, err %v", reply, err)
+	}
+}
+
 func TestProxyUsesOnlyConfiguredCoreCredential(t *testing.T) {
 	observed := make(chan *http.Request, 1)
 	server, _ := testConsole(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -241,8 +373,7 @@ func TestStaticAssetsStayInsideDistAndInternalRoutesStayLocal(t *testing.T) {
 		{"/", 200}, {"/sessions/saved", 200}, {"/assets/main.js", 200},
 		{"/assets/", 404}, {"/missing.js", 404}, {"/leak.key", 404},
 		{"/../caller.key", 400}, {"/%2e%2e/caller.key", 400}, {"/%252e%252e/caller.key", 400},
-		{"/v1/../api/v1/agent-daemon/ws", 404}, {"/v1//agents", 404},
-		{"/api/v1/agent-daemon/ws", 404},
+		{"/v1/../api/v1/agent-daemon/ws", 400}, {"/v1//agents", 400},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			response, body := responseBody(t, server, consoleRequest(t, server, "GET", tc.path))

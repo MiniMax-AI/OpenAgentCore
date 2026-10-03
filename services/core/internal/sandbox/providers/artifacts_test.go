@@ -22,7 +22,7 @@ func TestArtifactProjectionsMatchRegistrations(t *testing.T) {
 	if !reflect.DeepEqual(catalog, providerassets.Catalog()) {
 		t.Fatal("stale Web artifact projection; regenerate provider-artifacts")
 	}
-	raw, err := os.ReadFile("../../../../../deploy/install/provider_assets.py")
+	raw, err := os.ReadFile("../../../../../deploy/node/provider_assets.py")
 	if err != nil {
 		t.Fatal(err)
 	}

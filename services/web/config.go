@@ -15,8 +15,6 @@ type config struct {
 	addr, origin, dist      string
 	coreKey, nodePayloadDir string
 	upstream                *url.URL
-	installationSocket      string
-	bootstrap               bool
 }
 
 func loadConfig() (config, error) {
@@ -46,18 +44,6 @@ func loadConfig() (config, error) {
 	c.nodePayloadDir = os.Getenv("OAC_WEB_NODE_PAYLOAD_DIR")
 	if c.nodePayloadDir != "" && !filepath.IsAbs(c.nodePayloadDir) {
 		return config{}, errors.New("OAC_WEB_NODE_PAYLOAD_DIR must be absolute")
-	}
-	c.installationSocket = os.Getenv("OAC_WEB_INSTALLATION_SOCKET")
-	if c.installationSocket != "" && !filepath.IsAbs(c.installationSocket) {
-		return config{}, errors.New("OAC_WEB_INSTALLATION_SOCKET must be absolute")
-	}
-	bootstrap := envDefault("OAC_WEB_BOOTSTRAP", "0")
-	if bootstrap != "0" && bootstrap != "1" {
-		return config{}, errors.New("OAC_WEB_BOOTSTRAP must be 0 or 1")
-	}
-	c.bootstrap = bootstrap == "1"
-	if c.bootstrap && (origin.Scheme != "http" || c.installationSocket == "") {
-		return config{}, errors.New("HTTP bootstrap requires installation management and an HTTP origin")
 	}
 	return c, nil
 }

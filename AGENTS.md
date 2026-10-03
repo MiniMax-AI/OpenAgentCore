@@ -8,6 +8,8 @@ OpenAgentCore is protocol-first and modular. Core orchestrates operations that p
 
 OpenAgentCore is infrastructure. Change a boundary only when the existing protocol cannot express the behavior, and make that the smallest change that leaves the design intact. Hold the code to the standard of a careful, widely used open-source service.
 
+Keep it concise. Write elegant code that reuses existing code and standard SDKs as far as possible, and avoid redundant code. Expose nothing that does not need to be exposed: no port, route, command or setting without a caller.
+
 ### Protocols at every boundary
 
 - Each boundary between components has exactly one protocol: one code file (interface, wire types and validators) and one document. A protocol change edits both and every implementation in one change, reviewed on its own.
@@ -65,6 +67,7 @@ OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and
 ## Working in this repository
 
 - For each new task, create a new Git worktree. Name its directory after that change's commit subject, in kebab-case, beside the checkout. Run `git pull --ff-only` on the base branch, and create the feature branch in that worktree before development.
+- After every push to a pull request, wait 60 seconds, then run `gh pr checks` and confirm CI passes. Fix any failure before reporting the work as done.
 - [CONTRIBUTING.md](CONTRIBUTING.md): documentation ownership, repository boundary, workflow, independent review, required checks and naming.
 - [Develop OpenAgentCore](docs/development.md): setup, the repository map, focused checks and [each extension boundary](docs/development.md#choose-an-extension-boundary).
 - [API index](docs/api/index.md): each route's caller and credential.

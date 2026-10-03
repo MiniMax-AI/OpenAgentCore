@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	write := flag.Bool("write", false, "update deploy/install/node_spec.py from the repository root")
+	write := flag.Bool("write", false, "update deploy/node/node_spec.py from the repository root")
 	flag.Parse()
 	projection, err := providers.Builtin().PythonDeploymentContract()
 	if err != nil {
@@ -21,7 +21,7 @@ func main() {
 		fmt.Println(projection)
 		return
 	}
-	path := "deploy/install/node_spec.py"
+	path := "deploy/node/node_spec.py"
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		panic(err)
