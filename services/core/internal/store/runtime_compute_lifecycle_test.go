@@ -373,7 +373,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 		f.phase(tenant, env.ID, "running")
 	}
 	if f.provider.captures != 0 {
-		t.Fatal("never-used Session suspended")
+		t.Fatal("recently-created Session suspended")
 	}
 	completed := f.complete(owner)
 	suspended := f.phase(tenant, env.ID, "suspended")
@@ -394,6 +394,28 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	}
 	if f.provider.promptFrames.Load() != 0 {
 		t.Fatal("lifecycle sent native execution input")
+	}
+}
+
+func TestRuntimeComputeLifecycleUnusedSessionSuspendsAndExpires(t *testing.T) {
+	f := newComputeLifecycleFixture(t, 1, 2)
+	tenant, session, env, owner := f.create()
+	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
+	suspended := f.phase(tenant, env.ID, "suspended")
+	if suspended.ComputeRetainedUntil == nil || f.provider.captures != 1 || f.provider.computeKills != 1 || len(f.provider.computes) != 0 || len(f.provider.snapshots) != 1 {
+		t.Fatal("unused Session did not suspend and release active compute")
+	}
+	var turns int
+	if err := f.db.pool.QueryRow(t.Context(), `SELECT count(*) FROM turns WHERE session_id=$1`, session.ID).Scan(&turns); err != nil || turns != 0 {
+		t.Fatal("unused Session gained a Turn", turns, err)
+	}
+	f.sql(`UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID)
+	reconcileManagedState(t, f.worker, f.db, tenant, env.ID, "released")
+	if len(f.provider.computes) != 0 || len(f.provider.snapshots) != 0 || f.provider.snapshotDeletes != 1 || f.provider.promptFrames.Load() != 0 {
+		t.Fatal("unused Session expiry retained resources or sent execution input")
+	}
+	if _, err := f.store.GetSession(t.Context(), tenant, session.ID); err != nil {
+		t.Fatal("resource cleanup removed Session history", err)
 	}
 }
 

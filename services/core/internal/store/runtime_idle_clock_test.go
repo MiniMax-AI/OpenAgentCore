@@ -64,7 +64,7 @@ func verifyManagedIdleClock(t *testing.T, s, w *Store, owner deployment.Allocati
 	observedBefore := runtimeDatabaseTime(t, s)
 	activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
 	observedAfter := runtimeDatabaseTime(t, s)
-	if err != nil || activity.ObservedAt.Before(observedBefore) || activity.ObservedAt.After(observedAfter) || activity.ReadyToSuspend(idleTimeout) || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.Busy || activity.WakeRequested || !activity.HasCompletedTurn {
+	if err != nil || activity.ObservedAt.Before(observedBefore) || activity.ObservedAt.After(observedAfter) || activity.ReadyToSuspend(idleTimeout) || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.Busy || activity.WakeRequested {
 		t.Fatal("idle clock did not use committed terminal ingestion", activity, before, after, err)
 	}
 	until := runtimeDatabaseTime(t, s).Add(time.Hour)

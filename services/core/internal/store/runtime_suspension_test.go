@@ -63,7 +63,7 @@ func runtimeSuspensionStep(t *testing.T, w *Store, owner deployment.Allocation, 
 	return next
 }
 
-func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
+func TestRuntimeSuspensionRequiresIdleAndNoPendingWork(t *testing.T) {
 	cases := []string{"no_completed_turn", "queued", "in_progress", "waiting", "subagent_queued", "subagent_in_progress", "subagent_waiting", "input_reservation", "file_write", "idle"}
 	for _, kind := range cases {
 		t.Run(kind, func(t *testing.T) {
@@ -90,12 +90,12 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantBusy := kind != "idle" && kind != "no_completed_turn"
-			if activity.Busy != wantBusy || activity.HasCompletedTurn != (kind != "no_completed_turn") {
+			if activity.Busy != wantBusy {
 				t.Fatalf("activity lost pending work: %+v", activity)
 			}
 			until := time.Now().Add(time.Hour)
 			_, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
-			if kind == "idle" {
+			if kind == "idle" || kind == "no_completed_turn" {
 				if err != nil {
 					t.Fatal(err)
 				}

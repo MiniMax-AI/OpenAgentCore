@@ -186,7 +186,7 @@ placement 自动完成：environment-to-node placement 与 Session 创建及其 
 
 ### 暂停 {#suspension}
 
-只有至少一个 Turn 已终结、没有根或 Subagent Turn、输入、文件操作或初始化待处理，且真实活动已超过部署空闲时长时，Core 才会暂停。共享数据库时钟、Session 锁和生命周期租约串行化准入；心跳从不重置空闲时间。排队工作和实时 Files 访问请求唤醒；历史和已发布 artifact 不会。daemon 在确认静止前排空原生清理、收据和文件工作。确认丢失只授权精确源实例回滚，绝不授权新捕获。
+初始化完成的 Environment 即使尚未执行 Turn，也会在没有根或 Subagent Turn、输入或文件操作待处理，且真实活动已超过部署空闲时长时暂停。共享数据库时钟、Session 锁和生命周期租约串行化准入；心跳从不重置空闲时间。排队工作和实时 Files 访问请求唤醒；历史和已发布 artifact 不会。daemon 在确认静止前排空原生清理、收据和文件工作。确认丢失只授权精确源实例回滚，绝不授权新捕获。
 
 完整声明的 SuspensionProvider 操作组在直接和节点放置中使用同一生命周期。RetainedState 是绑定分配、源实例和操作的不透明 adapter 收据，其原生 Data 上限为 64 KiB；它不承诺快照语义。Core 从不解释原生 Data。Initial 和 NewCompute 规划精确逻辑实例而不分配资源；不同逻辑代次可保留相同原生 ID。GetCompute 仅观察。RenewCompute 为精确的运行实例续租而不唤醒它；公共运行路径在保持所有权或清除唤醒前先观察并续租。
 

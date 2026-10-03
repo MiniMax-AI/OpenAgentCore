@@ -357,7 +357,7 @@ func loadActivity(ctx context.Context, q *sqlc.Queries, id pgtype.UUID) (deploym
 	if err != nil {
 		return deployment.Activity{}, err
 	}
-	return deployment.Activity{LastActivity: row.LastActivity.Time, ObservedAt: row.ObservedAt.Time, Busy: row.Busy, WakeRequested: row.ComputeWakeRequested, HasCompletedTurn: row.HasCompletedTurn}, nil
+	return deployment.Activity{LastActivity: row.LastActivity.Time, ObservedAt: row.ObservedAt.Time, Busy: row.Busy, WakeRequested: row.ComputeWakeRequested}, nil
 }
 
 func (s *Store) EnvironmentAllocation(ctx context.Context, key deployment.AllocationKey) (deployment.Allocation, error) {
