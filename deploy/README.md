@@ -9,7 +9,7 @@
 
 ## Installation
 
-`install.sh` downloads its release's `compose.yaml`, checks it against `compose-sha256sums.txt`, writes `.env`, and starts Compose. Core applies database migrations when it starts. The host needs Linux amd64 and Docker Compose 2.26 or newer. [Configuration](../docs/configuration.md) owns the installation layout and settings.
+`install.sh` downloads its release's `compose.yaml`, checks it against `compose-sha256sums.txt`, writes `.env`, and starts Compose. Installation commands stream their progress and report elapsed time; [startup diagnostics](../docs/getting-started/operations.md#startup-diagnostics) describes service logs. Core applies database migrations when it starts. The host needs Linux amd64 and Docker Compose 2.26 or newer. [Configuration](../docs/configuration.md) owns the installation layout and settings.
 
 `oac` is a Go command (`services/core/cmd/oac`) in the Core image and the ingress image. The host copy implements `apply`, `core-key` and `rotate-core-key`; `core-key --show` runs `oac-web core-key` in the Web container. Start, stop, logs and removal are `docker compose`. `apply` runs `oac-core check-config` before recreating services. The ingress image runs data initialization as `oac init`, verifies and copies its bundled node metadata without network access, and contains no Python. No service receives a Docker socket.
 

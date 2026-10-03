@@ -11,6 +11,9 @@ services:
     command: [/usr/local/bin/oac, init]
     environment:
       OAC_REVISION: __OAC_REVISION__
+      OAC_LOG_LEVEL: ${OAC_LOG_LEVEL:-}
+      OAC_LOG_FORMAT: ${OAC_LOG_FORMAT:-}
+      OAC_LOG_ADD_SOURCE: ${OAC_LOG_ADD_SOURCE:-}
     volumes:
       - type: bind
         source: ${OAC_DATA_DIR:-./data}

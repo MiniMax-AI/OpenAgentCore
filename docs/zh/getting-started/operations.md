@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: e60a6e96cd61692b6adc7664874ba0ed2ce489982e7da2fe2347631ee2a94c0a
+source_hash: 3158dbf2ec3254f22fe832cd1113b23137eb2f487fb6c04b828d73e40945cf68
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -42,10 +42,26 @@ docker compose -f ~/.oac/core/compose.yaml ps
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
-docker compose -f "$HOME/.oac/core/compose.yaml" logs --tail 200 core
+docker compose -f "$HOME/.oac/core/compose.yaml" logs --tail 200 init database core
 ```
 
 不要将 `docker compose config`、`docker inspect` 或原始日志粘贴到公开问题报告。
+
+### 启动诊断 {#startup-diagnostics}
+
+在默认 `info` 级别下，初始化和 Core 会记录 `Stage started`、`Stage completed` 与 `Stage failed`，包含 `component`、`stage` 以及完成时的 `elapsed_ms`。初始化阶段覆盖目录、安装锁、已有数据检查、元数据验证与发布、机密信息以及安装记录。Core 阶段覆盖配置、数据库迁移与连接、服务、Runtime 配置、执行工作线程以及 HTTP 监听器。`Core HTTP listener ready` 表示套接字已绑定；`running` 阶段的失败发生在启动完成后。正常信号会开始 `shutdown`。
+
+配置校验还会指出配置项和明确的原因，不重复其值。失败日志通过类型化的 `error_kind` 描述原因，不输出任意错误文本。文件系统失败包含 `operation`、`path` 和数字 `errno`；数据库错误可包含 `sqlstate`。日志不包含文件内容、凭据或数据库连接字符串。`unclassified` 表示没有可识别的类型化原因；结合阶段及相邻服务日志排查。
+
+| `error_kind` | 检查内容 |
+| --- | --- |
+| `not_found`、`permission_denied` | 指定文件、挂载来源、所有者与权限 |
+| `connection_refused`、`connection_reset` | 依赖服务的容器状态和日志 |
+| `timeout`、`canceled` | 依赖服务可用性、耗时和停止事件 |
+| `unexpected_eof`、`eof` | 阶段和依赖服务日志；流被中断本身不能确定原因 |
+| `database_error` | PostgreSQL 日志及记录的 `sqlstate` |
+
+宿主机安装器实时显示命令进度，并记录每一步的耗时秒数，包括失败步骤。要查看文件准备细节，设置 `OAC_LOG_LEVEL=debug` 并遵循[进程设置](../configuration.md#process-settings-configjson)。初始化诊断在其容器运行时输出；已经完成的一次性容器不会仅因 Core 重启而再次运行。
 
 ## 停止与重启 {#stop-and-restart}
 

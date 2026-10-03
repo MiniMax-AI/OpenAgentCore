@@ -22,7 +22,7 @@ class InstallScriptTests(unittest.TestCase):
             printf '%s\\n' "$*" >> {log}
             if [ "$1" = compose ] && [ "$2" = version ]; then printf 'v2.29.1\\n'; exit 0; fi
             if [ "$1" = compose ] && [ "$2" = cp ]; then printf '#!/bin/sh\\necho oac_core_fixture\\n' > ./oac; chmod +x ./oac; exit 0; fi
-            if [ "$1" = compose ] && [ "$2" = up ]; then exit {compose_up}; fi
+            if [ "$1" = compose ] && [ "$2" = up ]; then printf 'fixture startup progress\\n'; exit {compose_up}; fi
             exit 0
             """))
         self.write_executable(bin_dir / "curl", textwrap.dedent("""\
@@ -61,6 +61,8 @@ class InstallScriptTests(unittest.TestCase):
             self.assertIn("OAC_PUBLIC_URL=http://10.0.0.5:8080\n", (root / "oac/.env").read_text())
             self.assertIn("Console   http://10.0.0.5:8080", completed.stdout)
             self.assertIn("Core key  oac_core_fixture", completed.stdout)
+            self.assertIn("fixture startup progress", completed.stdout)
+            self.assertIn("Starting services completed (", completed.stdout)
             self.assertNotIn("Only this host", completed.stdout)
 
     def test_without_a_private_address_only_this_host_reaches_web(self):

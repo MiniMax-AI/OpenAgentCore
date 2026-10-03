@@ -73,7 +73,6 @@ if [[ "$version" != latest ]]; then
   asset_base="https://github.com/${repository}/releases/download/${version}"
 fi
 
-log="$(mktemp)"
 cleanup() {
   if [[ "$kept" != 1 && -d "$install_dir" ]]; then
     (
@@ -82,18 +81,23 @@ cleanup() {
       docker compose down --remove-orphans
       # Containers own data/; remove it from a container as well.
       if [[ -d data ]]; then docker compose run --rm --no-deps --volume "$install_dir/data:/data" --entrypoint find database /data -mindepth 1 -delete; fi
-    ) >/dev/null 2>&1 || true
+    ) || true
     rm -rf "$install_dir"
   fi
-  rm -f "$log"
 }
 trap cleanup EXIT
 
-# step DESCRIPTION COMMAND... prints the command's output only when it fails.
+# step DESCRIPTION COMMAND... streams progress and reports elapsed time.
 step() {
-  printf '%s... ' "$1"
+  local description="$1" step_started="$SECONDS"
+  printf '%s...\n' "$description"
   shift
-  if "$@" >"$log" 2>&1; then echo done; else echo failed; cat "$log" >&2; return 1; fi
+  if "$@"; then
+    printf '%s completed (%ss).\n' "$description" "$((SECONDS - step_started))"
+  else
+    printf '%s failed (%ss).\n' "$description" "$((SECONDS - step_started))" >&2
+    return 1
+  fi
 }
 
 # The source address of this host's default route, when it is a private one.
@@ -131,7 +135,6 @@ step "Starting services" docker compose up -d --wait
 key="$(./oac core-key --show)"
 kept=1
 trap - EXIT
-rm -f "$log"
 
 sudo=""
 if [[ "$EUID" == 0 && -n "${SUDO_USER:-}" ]]; then sudo="sudo "; fi

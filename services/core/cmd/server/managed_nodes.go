@@ -34,7 +34,7 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 		return nil, err
 	}
 	if publicURL == "" {
-		return nil, errors.New("OAC_INSTALLATION_ID_FILE requires OAC_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
+		return nil, configurationFailure("OAC_PUBLIC_URL", "is required for nodes and sandboxes to reach Core", nil)
 	}
 	closeProvider := func() {}
 	result := &managedNodes{closeProvider: closeProvider}
@@ -49,7 +49,7 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 		return nil, err
 	}
 	if result.admin == nil {
-		return nil, errors.New("Web sandbox setup requires OAC_CORE_KEY_DIGESTS_FILE with the Core key digest")
+		return nil, configurationFailure("OAC_CORE_KEY_DIGESTS_FILE", "is required for Web sandbox setup", nil)
 	}
 	result.hub = node.NewHub(node.HubOptions{
 		Generations: func(ctx context.Context, n node.Identity, connection string, epoch uint64, health node.Health) error {
@@ -117,13 +117,17 @@ func deploymentAdminAuthenticator() (*api.DeploymentAuthenticator, error) {
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.New("cannot read OAC_CORE_KEY_DIGESTS_FILE")
+		return nil, configurationFailure("OAC_CORE_KEY_DIGESTS_FILE", "cannot read Core key digests file", err)
 	}
 	var digests []string
 	if json.Unmarshal(raw, &digests) != nil || len(digests) == 0 {
-		return nil, errors.New("OAC_CORE_KEY_DIGESTS_FILE must contain a JSON array of Core key SHA-256 digests")
+		return nil, configurationFailure("OAC_CORE_KEY_DIGESTS_FILE", "must contain a JSON array of Core key SHA-256 digests", nil)
 	}
-	return api.NewDeploymentAuthenticator(digests)
+	authenticator, err := api.NewDeploymentAuthenticator(digests)
+	if err != nil {
+		return nil, configurationFailure("OAC_CORE_KEY_DIGESTS_FILE", "must contain unique lowercase SHA-256 digests", nil)
+	}
+	return authenticator, nil
 }
 
 func serverAddress() string {

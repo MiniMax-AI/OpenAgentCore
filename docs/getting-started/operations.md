@@ -40,10 +40,26 @@ Service health does not show that a harness or a model works. Use Session, Turn,
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
-docker compose -f "$HOME/.oac/core/compose.yaml" logs --tail 200 core
+docker compose -f "$HOME/.oac/core/compose.yaml" logs --tail 200 init database core
 ```
 
 Don't paste `docker compose config`, `docker inspect` or raw logs into public issue reports.
+
+### Startup diagnostics
+
+At the default `info` level, initialization and Core log `Stage started`, `Stage completed` and `Stage failed` with `component`, `stage` and completion `elapsed_ms`. Initialization stages cover directories, the installation lock, existing data checks, metadata verification/publication, secrets and the installation receipt. Core stages cover configuration, database migrations/connection, services, Runtime setup, the execution worker and the HTTP listener. `Core HTTP listener ready` means its socket is bound; a failure in `running` occurs after startup. A normal signal starts `shutdown`.
+
+Configuration validation also identifies the setting and an authored reason without repeating its value. Failures report typed `error_kind` facts without arbitrary error text. Filesystem failures include `operation`, `path` and numeric `errno`; database errors can include `sqlstate`. File contents, credentials and database connection strings are excluded. `unclassified` means no supported typed cause was available; use the stage and adjacent service logs to investigate.
+
+| `error_kind` | Check |
+| --- | --- |
+| `not_found`, `permission_denied` | The named file, its mount source, ownership and permissions |
+| `connection_refused`, `connection_reset` | The dependency's container status and logs |
+| `timeout`, `canceled` | Dependency availability, elapsed time and shutdown events |
+| `unexpected_eof`, `eof` | The stage and dependency logs; an interrupted stream alone does not identify its cause |
+| `database_error` | PostgreSQL logs and the reported `sqlstate` |
+
+The host installer streams command progress and reports each step's elapsed seconds, including failures. For file preparation details, set `OAC_LOG_LEVEL=debug` and follow [process settings](../configuration.md#process-settings-configjson). Initialization diagnostics are emitted when its container runs; an already completed one-time container does not run again merely because Core restarts.
 
 ## Stop and restart
 

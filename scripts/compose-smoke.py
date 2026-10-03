@@ -114,7 +114,7 @@ def main():
 
     override.write_text(json.dumps({'services': {'init': {'network_mode': 'none'}}}))
     env = {**os.environ, 'COMPOSE_PROGRESS': 'plain', 'OAC_DATA_DIR': str(data),
-           'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': '0',
+           'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': '0', 'OAC_LOG_LEVEL': 'info', 'OAC_LOG_FORMAT': 'json',
            **{'OAC_IMAGE_' + name.upper(): image for name, image in images.items()}}
     env.pop('OAC_PUBLIC_URL', None)
     command = ['docker', 'compose', '--env-file', os.devnull, '-p', project,
@@ -193,7 +193,9 @@ def main():
                 'Content-Type: text/plain\r\n\r\n').encode() + content + f'\r\n--{boundary}--\r\n'.encode()
         uploaded = get('/v1/files', body=body, headers={**api, 'Content-Type': 'multipart/form-data; boundary=' + boundary})
         assert uploaded['bytes'] == len(content), 'Upload was truncated'
-        private_logs(key, project_key)
+        initial_logs = private_logs(key, project_key)
+        assert '"stage":"metadata_verification"' in initial_logs, 'Initialization progress is missing'
+        assert '"msg":"Core HTTP listener ready"' in initial_logs, 'Core readiness diagnostic is missing'
 
         print('Configuring a reachable URL and recreating containers with the same data directory', flush=True)
         # Retain the assigned port across recreation, without claiming a fixed host port.
@@ -211,7 +213,13 @@ def main():
         assert updated['public_url'] == origin, 'The new public URL did not take effect'
         assert any(p['id'] == project_data['id'] for p in get('/core/v1/projects')['data']), 'Project was lost'
         assert get('/v1/files/' + uploaded['id'], headers=api)['bytes'] == len(content), 'Uploaded file metadata was lost'
-        assert 'Bundled node installation metadata verified' not in private_logs(key, project_key), 'Completed initialization recopied metadata'
+        assert '"stage":"metadata_verification"' not in private_logs(key, project_key), 'Completed initialization recopied metadata'
+        compose('stop', 'core')
+        stopped_logs = private_logs(key, project_key)
+        assert any(
+            '"msg":"Stage completed"' in line and '"stage":"shutdown"' in line for line in stopped_logs.splitlines()
+        ), 'Normal stop did not complete the shutdown stage'
+        assert not any('"msg":"Stage failed"' in line and '"stage":"running"' in line for line in stopped_logs.splitlines()), 'Normal stop was reported as a runtime failure'
         print('PASS: startup, origin validation, sign-in, API, upload, node installer and persistent installation', flush=True)
     except BaseException:
         # Service status identifies failed containers without dumping secret-bearing logs.

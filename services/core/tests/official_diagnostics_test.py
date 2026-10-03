@@ -14,7 +14,7 @@ from official_diagnostics import failure_facts, finish_server
 class DiagnosticsTests(unittest.TestCase):
     def test_failed_owned_process_reports_exit_and_safe_error(self):
         with tempfile.TemporaryFile(mode="w+") as log:
-            code = 'import json; print(json.dumps({"msg":"oac-core startup failed","error":"ERROR: deadlock detected (SQLSTATE 40P01)"})); raise SystemExit(7)'
+            code = 'import json; print(json.dumps({"msg":"Stage failed","component":"core","error_kind":"database_error","sqlstate":"40P01"})); raise SystemExit(7)'
             process = subprocess.Popen([sys.executable, "-c", code], stdout=log, stderr=log)
             self.assertEqual(process.wait(timeout=10), 7)
             diagnostics = io.StringIO()
@@ -31,8 +31,8 @@ class DiagnosticsTests(unittest.TestCase):
 
     def test_secrets_and_untrusted_fields_never_enter_diagnostics(self):
         secret = "dynamic-issued-project-key"
-        lines = [json.dumps({"msg": "oac-core startup failed", "error": secret}),
-                 json.dumps({"msg": "oac-core startup failed", "error": "postgres://user:unknown-password@host/db", "Authorization": "Bearer unknown-key", "body": "private request"}),
+        lines = [json.dumps({"msg": "Stage failed", "component": "core", "error_kind": secret}),
+                 json.dumps({"msg": "Stage failed", "component": "core", "error_kind": "postgres://user:unknown-password@host/db", "Authorization": "Bearer unknown-key", "body": "private request"}),
                  "panic: private request", json.dumps({"msg": ["invalid log"]})]
         diagnostics = io.StringIO()
         primary = RuntimeError("primary")
@@ -68,7 +68,7 @@ class DiagnosticsTests(unittest.TestCase):
         output = io.StringIO()
         finish_server(None, io.StringIO(""), [], None, output)
         self.assertEqual(output.getvalue(), "")
-        self.assertEqual(len(failure_facts('\n'.join([json.dumps({"msg": "oac-core startup failed"})] * 100), [])['events']), 32)
+        self.assertEqual(len(failure_facts('\n'.join([json.dumps({"msg": "Stage failed", "component": "core"})] * 100), [])['events']), 32)
 
 
 if __name__ == "__main__":

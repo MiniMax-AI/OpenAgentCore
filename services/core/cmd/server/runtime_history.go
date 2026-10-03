@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/postgresreader"
@@ -93,16 +94,16 @@ func loadRuntimeHistoryConfig() (runtimeHistoryConfig, error) {
 	if file := os.Getenv("OAC_HISTORY_SETTINGS_FILE"); file != "" {
 		raw, err := os.ReadFile(file)
 		if err != nil {
-			return config, errors.New("cannot read OAC_HISTORY_SETTINGS_FILE")
+			return config, configurationFailure("OAC_HISTORY_SETTINGS_FILE", "cannot read Runtime history settings file", err)
 		}
 		decoder := json.NewDecoder(bytes.NewReader(raw))
 		decoder.DisallowUnknownFields()
 		if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF {
-			return config, errors.New("invalid Runtime history configuration")
+			return config, configurationFailure("OAC_HISTORY_SETTINGS_FILE", "invalid Runtime history configuration", nil)
 		}
 	}
 	if err := validateRuntimeHistoryConfig(config); err != nil {
-		return config, err
+		return config, configurationFailure("OAC_HISTORY_SETTINGS_FILE", err.Error(), nil)
 	}
 	if config.QueueCapacity == 0 {
 		config.QueueCapacity = defaultRuntimeHistoryQueueCapacity
@@ -133,6 +134,9 @@ func runHistoryCleanup(ctx context.Context, prune func(context.Context) (int64, 
 		count, err := prune(pruneCtx)
 		cancel()
 		reportCleanupResult(metrics, "history_cleanup", count, err)
+		if err != nil && ctx.Err() == nil {
+			log.Ctx(ctx).Warn("Runtime history retention cleanup failed", log.ErrorFields(err)...)
+		}
 		select {
 		case <-ctx.Done():
 			return

@@ -1,21 +1,18 @@
 """Bounded failure facts for the real-service official-client fixture."""
 
 import json
-import re
 import subprocess
 import sys
 
 
 EVENTS = {
     "Core process configuration loaded from the process environment": "service_start",
-    "oac-core startup failed": "service_exit",
+    "Stage failed": "service_exit",
 }
-ERRORS = {
-    "context canceled": "context_canceled",
-    "context deadline exceeded": "deadline_exceeded",
-    "conn closed": "connection_closed",
-    "invalid input": "invalid_input",
-}
+ERRORS = {name: name for name in (
+    "canceled", "timeout", "not_found", "permission_denied", "connection_refused",
+    "connection_reset", "unexpected_eof", "eof", "database_error",
+)}
 SQLSTATES = {
     "08006": "connection_failure", "22P02": "invalid_text_representation",
     "23503": "foreign_key_violation", "23505": "unique_violation",
@@ -42,12 +39,15 @@ def failure_facts(output, sensitive):
             omitted += 1
             continue
         event = {"event": EVENTS[entry["msg"]]}
-        error = entry.get("error")
+        if entry["msg"] == "Stage failed" and entry.get("component") != "core":
+            omitted += 1
+            continue
+        error = entry.get("error_kind")
         if isinstance(error, str):
             event["error"] = ERRORS.get(error, "unclassified")
-            match = re.search(r"\(SQLSTATE ([0-9A-Z]{5})\)$", error)
-            if match and match[1] in SQLSTATES:
-                event.update(sqlstate=match[1], error=SQLSTATES[match[1]])
+        state = entry.get("sqlstate")
+        if isinstance(state, str) and state in SQLSTATES:
+            event.update(sqlstate=state, error=SQLSTATES[state])
         events.append(event)
     return {"events": events, "omitted_lines": omitted}
 

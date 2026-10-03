@@ -38,7 +38,7 @@ func runWriteAuditCleanup(ctx context.Context, s writeAuditPruner, retention tim
 		cancel()
 		reportCleanupResult(metrics, "audit_cleanup", count, err)
 		if err != nil && ctx.Err() == nil {
-			log.Ctx(ctx).Warn("Write audit retention cleanup failed")
+			log.Ctx(ctx).Warn("Write audit retention cleanup failed", log.ErrorFields(err)...)
 		}
 		select {
 		case <-ctx.Done():

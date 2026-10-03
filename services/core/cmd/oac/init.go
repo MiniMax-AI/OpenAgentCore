@@ -7,13 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/google/uuid"
 )
 
@@ -89,7 +89,7 @@ func readRelease(root string, release releaseIdentity) (map[string][]byte, error
 	if manifest.SourceCommit != release.revision || manifest.Platform != "linux/amd64" {
 		return nil, errors.New("release identity mismatch")
 	}
-	fmt.Println("Bundled node installation metadata verified")
+	log.Bg().Debug("Bundled node installation metadata verified")
 	return files, nil
 }
 
@@ -107,7 +107,11 @@ func writeOwned(path string, data []byte) error {
 	if err := chown(temporary, 65532, 65532); err != nil {
 		return err
 	}
-	return os.Rename(temporary, path)
+	if err := os.Rename(temporary, path); err != nil {
+		return err
+	}
+	log.Bg().Debug("Installation file prepared", "path", path, "uid", 65532, "mode", "0600")
+	return nil
 }
 
 func ownedDir(path string, mode os.FileMode, uid int) error {
@@ -134,7 +138,10 @@ type installReceipt struct {
 	Files        map[string]string `json:"files"`
 }
 
-func initialize(root string, release releaseIdentity, fetch func() (map[string][]byte, error)) error {
+func initialize(root string, release releaseIdentity, fetch func() (map[string][]byte, error)) (err error) {
+	finish := log.StartStage("directories", "component", "init", "data_dir", root, "revision", release.revision)
+	next := func(stage string) { finish(nil); finish = log.StartStage(stage, "component", "init") }
+	defer func() { finish(err) }()
 	if err := os.Chmod(root, 0o755); err != nil {
 		return err
 	}
@@ -148,6 +155,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 	}
+	next("installation_lock")
 	lock, err := os.OpenFile(filepath.Join(root, "secrets", ".init.lock"), os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
@@ -156,6 +164,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		return err
 	}
+	next("installation_check")
 	marker := filepath.Join(root, "installation.json")
 	if raw, err := os.ReadFile(marker); err == nil {
 		var receipt installReceipt
@@ -174,7 +183,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 				return errors.New("installation files changed; restore the matching data directory")
 			}
 		}
-		fmt.Println("Existing installation verified")
+		log.Bg().Info("Existing installation verified")
 		return nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -188,10 +197,12 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return errors.New("existing data requires its original installation files")
 		}
 	}
+	next("metadata_verification")
 	files, err := fetch()
 	if err != nil {
 		return err
 	}
+	next("metadata_publication")
 	prefix := "node-payload/releases/" + release.revision + "/"
 	names := []string{}
 	for _, name := range releaseMembers {
@@ -215,6 +226,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 	}); err != nil {
 		return err
 	}
+	next("secrets")
 	generators := []struct {
 		name     string
 		generate func() string
@@ -250,6 +262,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 		return err
 	}
 	names = append(names, "secrets/core/core-key-digests.json", "node-payload/active.json")
+	next("installation_receipt")
 	receipt := installReceipt{SourceCommit: release.revision, Files: map[string]string{}}
 	for _, name := range names {
 		if receipt.Files[name], err = fileDigest(filepath.Join(root, name)); err != nil {
@@ -260,7 +273,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 	if err := writeOwned(marker, raw); err != nil {
 		return err
 	}
-	fmt.Println("Installation initialized; print the sign-in key with: docker compose exec web oac-web core-key")
+	log.Bg().Info("Installation initialized", "next_action", "docker compose exec web oac-web core-key")
 	return nil
 }
 

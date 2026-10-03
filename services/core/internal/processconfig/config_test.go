@@ -1,6 +1,8 @@
 package processconfig
 
 import (
+	"errors"
+	"os"
 	"strings"
 	"testing"
 )
@@ -65,5 +67,13 @@ func TestHarnessesDefaultToEveryQualifiedHarness(t *testing.T) {
 	t.Setenv("OAC_HARNESSES", "unqualified")
 	if _, err = Harnesses("codex"); err == nil {
 		t.Fatal("unqualified harness enabled")
+	}
+}
+
+func TestInstallationIDReadErrorRetainsItsCause(t *testing.T) {
+	t.Setenv("OAC_INSTALLATION_ID_FILE", "/missing-oac-installation/installation.id")
+	_, err := InstallationID()
+	if !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), "OAC_INSTALLATION_ID_FILE") {
+		t.Fatalf("err = %v", err)
 	}
 }

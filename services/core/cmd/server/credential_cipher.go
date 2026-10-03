@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/base64"
-	"errors"
 	"os"
 	"strings"
 
@@ -16,11 +15,11 @@ func credentialCipher() (*credentialcrypto.Cipher, error) {
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.New("cannot read OAC_CREDENTIAL_KEY_FILE")
+		return nil, configurationFailure("OAC_CREDENTIAL_KEY_FILE", "cannot read credential key file", err)
 	}
 	key, err := base64.StdEncoding.Strict().DecodeString(strings.TrimSpace(string(content)))
 	if err != nil || len(key) != 32 {
-		return nil, errors.New("OAC_CREDENTIAL_KEY_FILE must contain a base64-encoded random 32-byte key")
+		return nil, configurationFailure("OAC_CREDENTIAL_KEY_FILE", "must contain a base64-encoded random 32-byte key", nil)
 	}
 	return credentialcrypto.New(key)
 }

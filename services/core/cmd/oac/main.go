@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 func main() {
@@ -38,6 +40,7 @@ func usage() {
 func run(ctx context.Context, command string, args []string) error {
 	switch command {
 	case "init":
+		log.Init(log.ConfigFromEnv())
 		return initCommand()
 	}
 	root, err := installDir()

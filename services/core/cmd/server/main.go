@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -81,16 +82,19 @@ func main() {
 		return
 	}
 	if err := run(); err != nil {
-		log.Bg().Error("oac-core startup failed", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run() (runErr error) {
+	log.Init(log.ConfigFromEnv())
+	finish := log.StartStage("configuration", "component", "core", "revision", buildRevision)
+	next := func(stage string) { finish(nil); finish = log.StartStage(stage, "component", "core") }
+	defer func() { finish(runErr) }()
 	if err := processconfig.Check(); err != nil {
+		log.Bg().Error("Core configuration invalid", "error", err)
 		return err
 	}
-	log.Init(log.ConfigFromEnv())
 	public, err := processconfig.PublicURL()
 	if err != nil {
 		return err
@@ -102,10 +106,14 @@ func run() error {
 	logConfigurationSources()
 	databaseURL, err := databaseurl.FromEnvironment()
 	if err != nil {
-		return err
+		return configurationFailure("OAC_DATABASE_URL / OAC_DATABASE_PASSWORD_FILE", err.Error(), nil)
 	}
 	if databaseURL == "" {
-		return errors.New("OAC_DATABASE_URL is required")
+		return configurationFailure("OAC_DATABASE_URL", "is required", nil)
+	}
+	databaseConfig, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return configurationFailure("OAC_DATABASE_URL", "invalid Agents API database configuration", nil)
 	}
 	credentialKey, err := credentialCipher()
 	if err != nil {
@@ -113,22 +121,25 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	next("database_migrations")
 	migrating, cancelMigration := context.WithTimeout(ctx, 2*time.Minute)
 	err = migrations.Apply(migrating, databaseURL)
 	cancelMigration()
 	if err != nil {
 		return fmt.Errorf("Agents API database migration failed: %w", err)
 	}
-	pool, err := pgxpool.New(ctx, databaseURL)
+	next("database_connection")
+	pool, err := pgxpool.NewWithConfig(ctx, databaseConfig)
 	if err != nil {
-		return errors.New("invalid Agents API database configuration")
+		return configurationFailure("OAC_DATABASE_URL", "invalid Agents API database configuration", nil)
 	}
 	defer pool.Close()
 	ready, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := pool.Ping(ready); err != nil {
-		return errors.New("Agents API database connection failed")
+		return fmt.Errorf("Agents API database connection failed: %w", err)
 	}
+	next("services")
 	engine, err := processconfig.DefaultHarness()
 	if err != nil {
 		return err
@@ -213,6 +224,7 @@ func run() error {
 	defer func() { cancelAuditCleanup(); <-auditCleanupDone }()
 	var workerDone chan error
 	var worker *execution.Worker
+	next("runtime_setup")
 	managedNodes, err := configureManagedNodes(deploymentService, deploymentStore, sandboxProviders, public, func(ctx context.Context) error {
 		if worker == nil {
 			return errors.New("sandbox execution owner is unavailable")
@@ -312,8 +324,12 @@ func run() error {
 			Sessions:        sessionService,
 			SessionsReader:  sessionStore,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
+		next("execution_worker")
 		lease, err := pgunit.AcquireLease(ctx, pool)
 		if err != nil {
+			if errors.Is(err, pgunit.ErrLeaseHeld) {
+				log.Bg().Error("Core execution lease unavailable", "reason", "another Core execution service owns this database")
+			}
 			return err
 		}
 		deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey))
@@ -359,7 +375,7 @@ func run() error {
 					_, sampleErr = deploymentStore.SampleHostHistory(sampleCtx)
 				}
 				cancel()
-				if !result.Complete {
+				if !result.Complete && sampleErr == nil {
 					sampleErr = errors.New("incomplete Runtime sampling sweep")
 				}
 				metrics.ReportJob("runtime_sampler", result.CompletedAt, metricPtr(int64(result.Observed)), metricPtr(int64(result.Failed)), sampleErr)
@@ -367,7 +383,7 @@ func run() error {
 				if result.Complete {
 					log.Bg().Debug("Runtime history sampling sweep complete", fields...)
 				} else {
-					log.Bg().Warn("Runtime history sampling sweep incomplete", fields...)
+					log.Bg().Warn("Runtime history sampling sweep incomplete", append(fields, log.ErrorFields(sampleErr)...)...)
 				}
 			},
 		})
@@ -434,6 +450,7 @@ func run() error {
 			ConfigurationDiscovery: managedNodes.setup,
 		}
 	}
+	next("http_listener")
 	handler, err := api.NewHandler(deps)
 	if err != nil {
 		return err
@@ -449,19 +466,33 @@ func run() error {
 	}
 	addr := serverAddress()
 	server := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	log.Bg().Info("Core HTTP listener ready", "address", listener.Addr().String())
+	next("running")
 	done := make(chan error, 1)
-	go func() { done <- server.ListenAndServe() }()
+	go func() { done <- server.Serve(listener) }()
 	select {
 	case err := <-done:
 		return err
 	case err := <-workerDone:
 		workerDone = nil
+		normalStop := ctx.Err() != nil && errors.Is(err, context.Canceled)
+		if normalStop {
+			next("shutdown")
+		}
 		stop()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_ = server.Shutdown(shutdown)
+		shutdownErr := server.Shutdown(shutdown)
+		if normalStop {
+			return shutdownErr
+		}
 		return err
 	case <-ctx.Done():
+		next("shutdown")
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return server.Shutdown(shutdown)

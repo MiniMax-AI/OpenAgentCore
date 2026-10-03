@@ -1,10 +1,12 @@
 // Package processconfig is the process settings Core loads from its environment.
 // Startup and `oac-core check-config` both call Check. Settings reports the
-// effective values for GET /core/v1/installation. Errors name the variable and
-// never include its value.
+// effective values for GET /core/v1/installation. Validation errors name the
+// variable without echoing settings or file contents; file errors retain paths
+// and their typed filesystem causes.
 package processconfig
 
 import (
+	"fmt"
 	"os"
 	"slices"
 	"strconv"
@@ -121,7 +123,7 @@ func InstallationID() (string, error) {
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", configErr("OAC_INSTALLATION_ID_FILE must name a readable file")
+		return "", fmt.Errorf("OAC_INSTALLATION_ID_FILE must name a readable file: %w", err)
 	}
 	value := strings.TrimSpace(string(raw))
 	if id, err := uuid.Parse(value); err != nil || id == uuid.Nil || id.String() != value {
