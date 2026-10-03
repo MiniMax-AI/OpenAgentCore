@@ -100,6 +100,10 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 
 Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
 
+### Direct-provider capacity
+
+Core allows up to 100 active sandboxes and 400 retained sandboxes for a direct Provider with suspension enabled. Retained sandboxes include active and suspended allocations and unconfirmed cleanup. These limits are independent of `core.execution_concurrency`; the latter limits concurrent execution work in Core.
+
 ### Node capacity
 
 Core approves a node's capacity when you generate its Add node command: **Sandboxes at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes** (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later with **Edit node**. Reservations and cleanup that is not confirmed count against capacity; lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
