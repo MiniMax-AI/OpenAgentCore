@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -42,10 +41,6 @@ func environmentBase(remote string) (string, error) {
 	case "wss":
 		u.Scheme = "https"
 	case "ws":
-		ip := net.ParseIP(u.Hostname())
-		if u.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			return "", errors.New("connect: Environment remote_url requires TLS outside loopback")
-		}
 		u.Scheme = "http"
 	default:
 		return "", errors.New("connect: Environment remote_url must use ws or wss")

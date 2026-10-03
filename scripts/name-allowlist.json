@@ -205,6 +205,11 @@
     "reason": "The examples guide describes the explicitly named Parsar application example; it does not rename the Core runtime."
   },
   {
+    "path": "docs/zh/examples.md",
+    "regex": "(?i)parsar",
+    "reason": "The Chinese examples guide describes the explicitly named Parsar application example and its preserved source paths."
+  },
+  {
     "path": "Makefile",
     "regex": "@oac/parsar-example",
     "reason": "The explicitly named Parsar application example retains product branding; it does not rename the Core runtime."

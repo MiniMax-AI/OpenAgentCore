@@ -1,0 +1,25 @@
+name: MiniMax companion
+description: Restore the pinned MiniMax companion into $RUNNER_TEMP/minimax-runtime, building it only when its inputs change.
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/minimax-runtime
+        key: mcode-harness-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('packages/mcode-harness/**', 'scripts/build-mcode-harness.sh') }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        source_repository="$(node -p 'require("./packages/mcode-harness/source.json").repository')"
+        source_revision="$(node -p 'require("./packages/mcode-harness/source.json").revision')"
+        source_version="$(node -p 'require("./packages/mcode-harness/source.json").version')"
+        git init --quiet "$RUNNER_TEMP/mcode-source"
+        git -C "$RUNNER_TEMP/mcode-source" remote add origin "$source_repository"
+        git -C "$RUNNER_TEMP/mcode-source" fetch --depth 1 origin "$source_revision"
+        git -C "$RUNNER_TEMP/mcode-source" checkout --detach FETCH_HEAD
+        npm install --prefix "$RUNNER_TEMP/mcode-native" --no-audit --no-fund --include=optional --install-strategy=nested "@minimax-ai/code@$source_version"
+        MCODE_NATIVE_SOURCE="$RUNNER_TEMP/mcode-source" \
+        MCODE_CLI_DIR="$RUNNER_TEMP/mcode-native/node_modules/@minimax-ai/code" \
+        MCODE_HARNESS_BUILD_DIR="$RUNNER_TEMP/minimax-runtime" \
+          bash scripts/build-mcode-harness.sh

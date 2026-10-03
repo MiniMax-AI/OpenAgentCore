@@ -1,6 +1,6 @@
 import type { AgentSession } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -30,7 +30,7 @@ import { FleetReadNotice, fleetObservationStale } from "../fleet/FleetReadNotice
 import { SandboxResetNotice } from "../fleet/SandboxResetNotice";
 import { fleetSnapshot, useSandboxFleet, type FleetSnapshot, type FleetState } from "../fleet/use-sandbox-fleet";
 import { type InProject } from "../metrics/project-sessions";
-import { FleetTopology, TOPOLOGY_LIMIT, type CloudHost } from "./FleetTopology";
+import { FleetOverview, FLEET_LIMIT, type CloudHost } from "./FleetOverview";
 import { SessionFailure } from "../sessions/session-diagnostics";
 import { useWaitingFor } from "../sessions/SessionStatus";
 import { GettingStarted } from "./GettingStarted";
@@ -170,7 +170,7 @@ export function OverviewPage() {
       <PageHeader
         headingId="overview-heading"
         title={t("title")}
-        help={t("description")}
+        description={t("description")}
         actions={<RefreshButton refreshing={loading} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={refreshAll} />}
       />
       <PageBody>
@@ -182,14 +182,12 @@ export function OverviewPage() {
         {(readFailed || summaryError !== null) && data !== null ? <ReadFailure onRetry={refreshAll} partial /> : null}
         <div className="overview-tiles" aria-label={t("kpi.label")}>
           <MetricTile
-            index={0}
             label={t("kpi.service")}
             help={t("kpi.serviceHelp")}
             value={<><span className={`metric-tile-dot metric-tile-dot-${serviceTone[health]}`} aria-hidden="true" />{t(`health.${health}`)}</>}
             sub={serviceReason}
           />
           <MetricTile
-            index={1}
             label={t("kpi.running")}
             help={t("kpi.runningHelp")}
             value={totals ? <LiveNumber value={totals.sessions.in_progress} /> : MISSING}
@@ -197,7 +195,6 @@ export function OverviewPage() {
           />
           {cloud ? (
             <MetricTile
-              index={2}
               label={t("kpi.cloudRunning")}
               help={t("kpi.cloudRunningHelp")}
               value={<LiveNumber value={cloud.running} />}
@@ -205,7 +202,6 @@ export function OverviewPage() {
             />
           ) : (
             <MetricTile
-              index={2}
               label={t("kpi.slots")}
               help={t("kpi.slotsHelp")}
               value={capacity ? <><LiveNumber value={capacity.active} /><span className="kpi-unit">/ {formatInteger(capacity.maxActive, locale)}</span></> : MISSING}
@@ -217,7 +213,6 @@ export function OverviewPage() {
             />
           )}
           <MetricTile
-            index={3}
             label={t("kpi.attention")}
             help={t("attention.subtitle")}
             value={<LiveNumber value={attentionTotal} />}
@@ -245,18 +240,20 @@ export function OverviewPage() {
               ) : null}
             </header>
             {sessionReadsFailed ? <ReadFailure onRetry={refreshAll} partial={activity !== null} /> : null}
-            {activity ? (
+            {activity && sessionCount === 0 && !sessionReadsFailed && summaryError === null ? (
+              <EmptyState title={t("activity.emptyTitle")} description={t("activity.emptyDescription")} action={<button className="button outline" type="button" onClick={() => navigate("projects")}>{t("gettingStarted.session.open")}</button>} />
+            ) : activity ? (
               <div className="overview-card-body">
                 <TimeSeriesChart
                   label={t("activity.title")}
                   kind="columns"
                   buckets={activity.buckets}
                   bucketSeconds={activity.bucketSeconds}
-                  series={[{ id: "created", label: t("activity.created"), color: "color-mix(in srgb, var(--data) 62%, var(--surface))", values: activity.created, total: formatInteger(activity.created.reduce((sum, value) => sum + value, 0), locale) }]}
+                  series={[{ id: "created", label: t("activity.created"), color: "var(--data)", values: activity.created, total: formatInteger(activity.created.reduce((sum, value) => sum + value, 0), locale) }]}
                   tooltipOnly={[{ id: "failed", label: t("activity.failed"), color: "var(--danger)", values: activity.failed }]}
                   formatValue={(value) => formatInteger(value, locale)}
                   counts
-                  height={196}
+                  height={204}
                 />
               </div>
             ) : sessionReadsFailed ? null : <p className="detail-note overview-card-note" role="status">{t("activity.loading")}</p>}
@@ -300,9 +297,9 @@ export function OverviewPage() {
   );
 }
 
-function MetricTile({ index, label, help, value, sub }: { index: number; label: string; help?: ReactNode; value: ReactNode; sub?: ReactNode }) {
+function MetricTile({ label, help, value, sub }: { label: string; help?: ReactNode; value: ReactNode; sub?: ReactNode }) {
   return (
-    <article className="overview-card metric-tile" style={{ "--i": index } as CSSProperties}>
+    <article className="metric-tile">
       <header className="console-section-title"><span className="metric-tile-label">{label}</span>{help ? <HelpTip label={label}>{help}</HelpTip> : null}</header>
       <div className="metric-tile-value kpi-value">{value}</div>
       {sub ? <p className="metric-tile-sub">{sub}</p> : null}
@@ -321,14 +318,14 @@ function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
   return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending, template: fleet.deployment.configuration?.template || null };
 }
 
-/** Core and its sandbox nodes (or E2B's cloud) as a topology; each opens a popover with the way onward. */
+/** Core and its sandbox nodes (or E2B's cloud) as an inventory; each opens a popover with the way onward. */
 function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; core: CoreStatus; localOnly: boolean }) {
   const { t } = useTranslation("overview");
   const { navigate } = useConsoleNavigation();
   const fleet = fleetSnapshot(fleetState);
   const cloud = cloudHost(fleet);
   const hosts = cloud ? [] : fleet?.nodes ?? [];
-  const hidden = Math.max(0, hosts.length - TOPOLOGY_LIMIT);
+  const hidden = Math.max(0, hosts.length - FLEET_LIMIT);
   useFailureToast(fleetState.status === "ready" && Boolean(fleetState.error), t("fleet.stale"), "overview-fleet-refresh");
   return (
     <section className="overview-card overview-fleet" aria-labelledby="fleet-heading">
@@ -346,7 +343,7 @@ function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; co
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
-        <FleetTopology
+        <FleetOverview
           nodes={hosts}
           cloud={cloud}
           onOpenBackend={() => navigate("system", { id: "sandbox" })}
@@ -357,7 +354,7 @@ function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; co
           onOpenSandboxMetrics={() => navigate("sandbox-metrics")}
           onOpenCoreMetrics={() => navigate("core-metrics")}
         />
-        {hidden ? <button className="text-action fleet-more" type="button" onClick={() => navigate("nodes")}>{t("fleet.more", { n: hidden })}</button> : null}
+        {hidden ? <button className="text-action fleet-more" type="button" onClick={() => navigate("nodes")}>{t("fleet.more", { count: hidden })}</button> : null}
         <FleetFooter state={fleetState} empty={fleet && !cloud ? hosts.length === 0 : false} unset={fleet ? !fleet.deployment.provider : false} />
       </div>
     </section>
@@ -486,7 +483,6 @@ function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: 
             <th scope="col">{t("attention.session")}</th>
             <th scope="col">{tCommon("project.column")}</th>
             <th scope="col">{t("attention.status")}</th>
-            <th scope="col">{t("attention.reason")}</th>
             <th scope="col" className="numeric">{t("attention.lastActive")}</th>
           </tr>
         </thead>
@@ -500,8 +496,10 @@ function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: 
                   <NameCell name={sessionTitle(session)} id={session.id} fallback={t("attention.untitled")} onOpen={() => onOpen(entry)} />
                 </th>
                 <td><ProjectName project={entry.project} /></td>
-                <td><StatusDot tone={failed ? "danger" : "neutral"} label={t(`sessions.${failed ? "failed" : "requires_action"}`)} /></td>
-                <td className="table-truncate" onClick={(event) => event.stopPropagation()}>{failed ? <SessionFailure projectId={entry.project.id} session={session} truncate /> : waitingFor(session).join(" · ")}</td>
+                <td onClick={(event) => event.stopPropagation()}>
+                  <StatusDot tone={failed ? "danger" : "neutral"} label={t(`sessions.${failed ? "failed" : "requires_action"}`)} />
+                  <div className="overview-attention-reason">{failed ? <SessionFailure projectId={entry.project.id} session={session} truncate={false} /> : waitingFor(session).join(" · ")}</div>
+                </td>
                 <td className="numeric">{formatRelative(session.last_active_at, now, locale)}</td>
               </tr>
             );

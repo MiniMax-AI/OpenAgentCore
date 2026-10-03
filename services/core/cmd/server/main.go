@@ -24,6 +24,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -53,6 +54,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/templatepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/vaultpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
@@ -66,10 +68,18 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "check-config" {
+		if err := processconfig.Check(); err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		log.Bg().Error("oac-core startup failed", "error", err)
 		os.Exit(1)
@@ -77,15 +87,15 @@ func main() {
 }
 
 func run() error {
-	log.Init(log.ConfigFromEnv())
-	if err := validateProcessConfiguration(); err != nil {
+	if err := processconfig.Check(); err != nil {
 		return err
 	}
-	public, err := publicURL()
+	log.Init(log.ConfigFromEnv())
+	public, err := processconfig.PublicURL()
 	if err != nil {
 		return err
 	}
-	concurrency, err := executionConcurrency()
+	concurrency, err := processconfig.ExecutionConcurrency()
 	if err != nil {
 		return err
 	}
@@ -103,6 +113,12 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	migrating, cancelMigration := context.WithTimeout(ctx, 2*time.Minute)
+	err = migrations.Apply(migrating, databaseURL)
+	cancelMigration()
+	if err != nil {
+		return fmt.Errorf("Agents API database migration failed: %w", err)
+	}
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		return errors.New("invalid Agents API database configuration")
@@ -113,11 +129,11 @@ func run() error {
 	if err := pool.Ping(ready); err != nil {
 		return errors.New("Agents API database connection failed")
 	}
-	engine := os.Getenv("OAC_DEFAULT_HARNESS")
-	if engine == "" {
-		engine = "codex"
+	engine, err := processconfig.DefaultHarness()
+	if err != nil {
+		return err
 	}
-	kinds, err := enabledHarnesses(engine)
+	kinds, err := processconfig.Harnesses(engine)
 	if err != nil {
 		return err
 	}
@@ -280,13 +296,7 @@ func run() error {
 		}
 		defer runtime.CloseConnections(registry)
 		var catalog *nativeinstaller.Catalog
-		directory := os.Getenv("OAC_NATIVE_INSTALLER_DIR")
-		if directory == "" {
-			if _, err := os.Stat("/opt/oac/native-installers/catalog.json"); err == nil {
-				directory = "/opt/oac/native-installers"
-			}
-		}
-		if directory != "" {
+		if directory := os.Getenv("OAC_NATIVE_INSTALLER_DIR"); directory != "" {
 			catalog, err = nativeinstaller.Load(directory, buildRevision)
 			if err != nil {
 				return err

@@ -6,7 +6,7 @@ import { computed, ref, watch } from 'vue'
 import { withBase } from 'vitepress'
 import { harnesses, protocols, type LandingCopy } from '../landing-content'
 
-const props = defineProps<{ t: LandingCopy['compose'] }>()
+const props = defineProps<{ t: LandingCopy['compose']; lang: 'en' | 'zh' }>()
 
 type HarnessId = (typeof harnesses)[number]['id']
 type Protocol = (typeof protocols)[number]
@@ -141,7 +141,7 @@ const lines = computed<Tok[][]>(() => {
     </div>
     <p class="lab-foot">
       {{ t.footnote }}
-      <a :href="withBase('/contracts/agents-api/harness-capabilities')">{{ t.footnoteLink }} →</a>
+      <a :href="withBase(`${lang === 'zh' ? '/zh' : ''}/contracts/agents-api/harness-capabilities`)">{{ t.footnoteLink }} →</a>
     </p>
   </div>
 </template>

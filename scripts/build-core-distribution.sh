@@ -99,13 +99,9 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   exit 1
 fi
 go run ./services/core/cmd/provider-artifacts
-for file in install.sh install.py install_output.py install_display.py node_output.py configuration.py config_model.py config.schema.json ingress.py ingress_config.py oac_cli.py \
-    native_service.py native_installers.py node_install.py provider_assets.py node_spec.py node_generations.py sandbox_setup.py distribution.py \
-    model_provider_sessions.py; do
-  cp "deploy/install/$file" "$bundle/$file"
+for file in install_display.py node_output.py node_install.py provider_assets.py node_spec.py node_generations.py node_payload.py distribution.py; do
+  cp "deploy/node/$file" "$bundle/$file"
 done
-# Web owns the Standard sandbox sizes; the installer's first deployment uses this copy.
-cp apps/web/src/features/sandbox/standard-sizes.json "$bundle/standard-sizes.json"
 python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch" "$revision"
 # The bundled docs (BUNDLED_DOCS); links that leave them point at this commit on GitHub.
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
@@ -113,7 +109,7 @@ mkdir -p "$bundle/runtime"
 cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
 cp LICENSE "$bundle/"
 
-OAC_DEV_BUILD_REVISION="$revision" E2B_SOURCE_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
+OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
 (
   cd services/core/tools/microsandbox-provider
   GOWORK=off CGO_ENABLED=1 go build -mod=readonly -trimpath \
@@ -130,8 +126,9 @@ if [[ ! -f "$msb_archive" ]]; then
 else
   python3 scripts/core-distribution-manifest.py extract-runtime "$msb_archive" "$stage/core/microsandbox"
 fi
-mkdir -p "$bundle/native"
-cp -R "$stage/core/bin" "$stage/core/microsandbox" "$stage/core/e2b" "$bundle/native/"
+mkdir -p "$bundle/native/bin" "$bundle/native/microsandbox"
+cp "$stage/core/bin/oac-node" "$stage/core/bin/oac-microsandbox-provider" "$bundle/native/bin/"
+cp -R "$stage/core/microsandbox/." "$bundle/native/microsandbox/"
 if [[ -n "${OAC_NATIVE_INSTALLER_BUILD_DIR:-}" ]]; then
   python3 scripts/core-distribution-manifest.py native-catalog "$bundle" "$stage" "$revision" \
     "$OAC_NATIVE_INSTALLER_BUILD_DIR" "$release_base_url"
@@ -152,7 +149,10 @@ cp -R apps/web/dist "$stage/web/dist"
 cp services/web/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"
 
-build_image ingress -f deploy/distribution/Ingress.Dockerfile deploy/distribution
+mkdir -p "$stage/ingress"
+cp deploy/distribution/Ingress.Dockerfile "$stage/ingress/Dockerfile"
+cp "$stage/core/bin/oac" "$stage/ingress/oac"
+build_image ingress "$stage/ingress"
 
 CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/daemon/cmd/oac-daemon
 cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"

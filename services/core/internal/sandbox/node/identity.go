@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -155,11 +154,8 @@ func endpoint(raw, path string) (string, error) {
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
 		return "", errors.New("node Core URL must be an origin")
 	}
-	if u.Scheme != "https" {
-		ip := net.ParseIP(u.Hostname())
-		if u.Scheme != "http" || !(u.Hostname() == "localhost" || ip != nil && ip.IsLoopback()) {
-			return "", errors.New("remote node Core URL requires HTTPS")
-		}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return "", errors.New("node Core URL must use http or https")
 	}
 	u.Path = path
 	return u.String(), nil

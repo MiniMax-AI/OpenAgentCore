@@ -36,7 +36,7 @@ pnpm --filter @oac/web build
 pnpm test:web:acceptance
 ```
 
-`pnpm test:web:acceptance` runs the Playwright tests in `apps/web/e2e` in Chrome against the fixture console. After each test, every spec except `domain.spec.ts` checks that the browser sent nothing to `/v1` and no `Authorization` header. The tests do not exercise `services/web` or a real Core; the console server has its own Go tests. `make check-web` runs all of these; [CONTRIBUTING.md](../../CONTRIBUTING.md) lists the repository's required checks.
+`pnpm test:web:acceptance` runs the Playwright tests in `apps/web/e2e` in Chrome against the fixture console. After each test, every spec checks that the browser sent nothing to `/v1` and no `Authorization` header. The tests do not exercise `services/web` or a real Core; the console server has its own Go tests. `make check-web` runs all of these; [CONTRIBUTING.md](../../CONTRIBUTING.md) lists the repository's required checks.
 
 ## README screenshots
 

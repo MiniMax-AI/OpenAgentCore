@@ -202,11 +202,12 @@ export interface CoreInstallationSetting {
 }
 /** Where process settings change, and their last applied values. */
 export interface CoreInstallationConfiguration {
-  /** Absolute host path of config.json. */
+  /** Absolute host path of config.json. Empty when Core reports the environment it loaded. */
   path: string;
-  /** Command that applies config.json changes. */
+  /** Command that applies config.json changes. Empty when Core reports the environment it loaded. */
   apply_command: string;
-  applied_at: string;
+  /** Null when Core reports the environment it loaded. */
+  applied_at: string | null;
   settings: CoreInstallationSetting[];
 }
 /** `GET /core/v1/installation`: available before any sandbox deployment exists. */
@@ -221,7 +222,7 @@ export interface CoreInstallation {
   local_only: boolean;
   /** Full source commit Core was built from; null for development builds. */
   source_commit: string | null;
-  /** Null when the installer did not start Core. */
+  /** Null when Core was not started. Core reports the process settings it loaded; path and apply_command are empty unless a snapshot was supplied. */
   configuration: CoreInstallationConfiguration | null;
   address_bindings: CoreAddressBindings;
 }

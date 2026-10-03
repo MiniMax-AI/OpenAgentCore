@@ -1,0 +1,52 @@
+name: cache-warm
+
+# Caches saved on main are the only ones every pull request and release tag can
+# restore. This builds the input-addressed caches; it runs no tests.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cache-warm
+  cancel-in-progress: false
+
+jobs:
+  companion:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: blacksmith-2vcpu-ubuntu-2204
+            github-runner: ubuntu-22.04
+          - runner: macos-15
+            github-runner: macos-15
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && matrix.github-runner || matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/node
+        with:
+          node-version: '22.22.0'
+          lockfiles: |
+            packages/claude-sdk-adapter/pnpm-lock.yaml
+            packages/mcode-harness/package-lock.json
+      - run: pnpm --dir packages/claude-sdk-adapter fetch
+      - uses: ./.github/actions/mcode-companion
+
+  linux:
+    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/node
+        with:
+          lockfiles: '**/pnpm-lock.yaml'
+      - name: Fetch every pnpm lockfile into the store
+        run: git ls-files '*pnpm-lock.yaml' | while read -r lockfile; do pnpm --dir "$(dirname "$lockfile")" fetch; done
+      - uses: ./.github/actions/e2b-provider
+      - name: Build the E2B helper
+        run: E2B_PROVIDER_BUILD_DIR="$RUNNER_TEMP/e2b-provider" bash scripts/build-e2b-provider.sh

@@ -69,3 +69,22 @@ test('Mermaid fences become diagrams, not code blocks', () => {
   assert.match(source, /class="oac-mermaid/)
   assert.doesNotMatch(source, /language-mermaid/)
 })
+
+test('Chinese documentation preserves routes, source copies and heading anchors', async () => {
+  const { authoredPages } = await import('../.vitepress/locales.mts')
+  for (const file of authoredPages()) {
+    const page = file.replace(/\.md$/, '')
+    const chinese = `zh/${page}`
+    assert.ok(existsSync(html(chinese)), `${chinese}.html`)
+    assert.ok(existsSync(resolve(dist, `${chinese}.md`)), `${chinese}.md`)
+    const anchors = source => [...source.matchAll(/class="header-anchor" href="#([^"]+)"/g)].map(match => match[1])
+    assert.deepEqual(anchors(readFileSync(html(chinese), 'utf8')), anchors(readFileSync(html(page), 'utf8')), `Heading anchors differ: ${page}`)
+  }
+})
+
+test('Chinese landing and top navigation link to Chinese documentation', () => {
+  const source = readFileSync(resolve(dist, 'zh/index.html'), 'utf8')
+  for (const page of ['docs/getting-started/', 'docs/api/public-agent-api', 'docs/architecture', 'contracts/agents-api/harness-capabilities']) {
+    assert.ok(source.includes(`href="${base}zh/${page}"`), page)
+  }
+})

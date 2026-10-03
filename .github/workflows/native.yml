@@ -108,21 +108,9 @@ jobs:
           rm -rf "$RUNNER_TEMP/claude-runtime/node_modules"
           pnpm --dir "$RUNNER_TEMP/claude-runtime" install --prod --frozen-lockfile --config.node-linker=hoisted --ignore-scripts
           npm install --prefix "$RUNNER_TEMP/native-tools" --no-save @openai/codex@0.153.4
-      - name: Build the pinned MiniMax companion on Unix
+      - name: Restore or build the pinned MiniMax companion on Unix
         if: runner.os != 'Windows'
-        run: |
-          source_repository="$(node -p 'require("./packages/mcode-harness/source.json").repository')"
-          source_revision="$(node -p 'require("./packages/mcode-harness/source.json").revision')"
-          source_version="$(node -p 'require("./packages/mcode-harness/source.json").version')"
-          git init --quiet "$RUNNER_TEMP/mcode-source"
-          git -C "$RUNNER_TEMP/mcode-source" remote add origin "$source_repository"
-          git -C "$RUNNER_TEMP/mcode-source" fetch --depth 1 origin "$source_revision"
-          git -C "$RUNNER_TEMP/mcode-source" checkout --detach FETCH_HEAD
-          npm install --prefix "$RUNNER_TEMP/mcode-native" --no-audit --no-fund --include=optional --install-strategy=nested "@minimax-ai/code@$source_version"
-          MCODE_NATIVE_SOURCE="$RUNNER_TEMP/mcode-source" \
-          MCODE_CLI_DIR="$RUNNER_TEMP/mcode-native/node_modules/@minimax-ai/code" \
-          MCODE_HARNESS_BUILD_DIR="$RUNNER_TEMP/minimax-runtime" \
-            bash scripts/build-mcode-harness.sh
+        uses: ./.github/actions/mcode-companion
       - name: Package and exercise CLI-only installation, additions and reuse
         id: package
         run: |

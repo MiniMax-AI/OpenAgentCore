@@ -19,7 +19,7 @@ import zipapp
 
 RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/install"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/node"))
 import provider_assets
 
 ARTIFACTS = {item["path"]: item["suffix"] for items in provider_assets.CATALOG.values() for item in items}
@@ -291,11 +291,6 @@ def package_artifacts(bundle, stage, revision):
     return result
 
 
-# The installation's management command; it runs without the bundle directory.
-OAC_CLI_MODULES = ("oac_cli.py", "config_model.py", "config.schema.json", "configuration.py",
-                  "native_service.py", "distribution.py", "node_spec.py", "ingress.py", "ingress_config.py")
-
-
 def bootstraps(bundle, epoch, revision):
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Invalid operator source revision")
@@ -308,13 +303,6 @@ def bootstraps(bundle, epoch, revision):
             shutil.copyfile(bundle / original, target)
             os.utime(target, (int(epoch), int(epoch)))
         zipapp.create_archive(directory, bundle / "node-install.pyz", compressed=True)
-    with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
-        for name in OAC_CLI_MODULES:
-            shutil.copyfile(bundle / name, pathlib.Path(directory) / name)
-        (pathlib.Path(directory) / "__main__.py").write_text(f"import oac_cli\n\noac_cli.SOURCE_COMMIT = {revision!r}\noac_cli.entry()\n")
-        for path in pathlib.Path(directory).iterdir():
-            os.utime(path, (int(epoch), int(epoch)))
-        zipapp.create_archive(directory, bundle / "oac.pyz", interpreter="/usr/bin/env python3", compressed=True)
 
 
 def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):
@@ -465,12 +453,17 @@ def plain(text):
 
 
 def heading_anchors(text):
-    """GitHub's heading anchors: lowercase, punctuation dropped, spaces to hyphens, repeats numbered."""
+    """Explicit heading IDs, or GitHub slugs for headings without an explicit ID."""
     found, counts = set(), {}
     for line, code in markdown_lines(text):
         match = None if code else HEADING.match(line)
         if match:
-            base = re.sub(r"[^\w\- ]", "", heading_text(match.group(2) or "").strip().lower()).replace(" ", "-")
+            title = match.group(2) or ""
+            explicit = re.search(r"\s+\{#([^\s{}]+)\}\s*$", title)
+            if explicit:
+                found.add(explicit.group(1))
+                continue
+            base = re.sub(r"[^\w\- ]", "", heading_text(title).strip().lower()).replace(" ", "-")
             count = counts.get(base, 0)
             counts[base] = count + 1
             found.add(base if count == 0 else f"{base}-{count}")

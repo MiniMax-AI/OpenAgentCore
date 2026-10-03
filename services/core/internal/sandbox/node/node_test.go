@@ -283,13 +283,13 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 	}
 }
 
-func TestCoreURLRejectsRemotePlaintextAndCredentials(t *testing.T) {
-	for _, raw := range []string{"http://example.com", "https://user:pass@example.com", "https://example.com/?token=x", "https://example.com/path"} {
+func TestCoreURLRejectsOtherSchemesAndCredentials(t *testing.T) {
+	for _, raw := range []string{"ftp://example.com", "https://user:pass@example.com", "https://example.com/?token=x", "https://example.com/path"} {
 		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll"); err == nil {
 			t.Fatalf("accepted %q", raw)
 		}
 	}
-	for _, raw := range []string{"https://core.example.test:9443", "http://127.0.0.1:8080", "http://[::1]:8080"} {
+	for _, raw := range []string{"https://core.example.test:9443", "http://127.0.0.1:8080", "http://[::1]:8080", "http://core.example.test:8080"} {
 		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll"); err != nil {
 			t.Fatalf("rejected %q: %v", raw, err)
 		}

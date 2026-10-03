@@ -19,6 +19,10 @@ spec = importlib.util.spec_from_file_location(
     "distribution", pathlib.Path(__file__).with_name("core-distribution-manifest.py"))
 distribution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(distribution)
+render_spec = importlib.util.spec_from_file_location(
+    "render_compose", pathlib.Path(__file__).with_name("render-compose.py"))
+render_compose = importlib.util.module_from_spec(render_spec)
+render_spec.loader.exec_module(render_compose)
 
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 
@@ -104,7 +108,7 @@ def registry_image(reference):
     return manifest, selected
 
 
-def publish_images(assets, repository, revision, tag):
+def publish_images(assets, repository, revision, tag, floating_latest=False):
     """Load the checked release archives; never rebuild or replace another image."""
     image_tag = tag.replace("+", "_")
     if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", image_tag):
@@ -167,7 +171,23 @@ def publish_images(assets, repository, revision, tag):
                 raise ValueError("Invalid registry manifest digest")
             print("Verified registry image " + name, flush=True)
             return name, {"tag": reference, "digest": reference.rsplit(":", 1)[0] + "@" + digest}
-        return dict(sorted(parallel_each(push_image, references.items())))
+        result = dict(sorted(parallel_each(push_image, references.items())))
+        if floating_latest:
+            def push_latest(item):
+                name, (reference, config, local, remote) = item
+                latest = reference.rsplit(":", 1)[0] + ":latest"
+                current, _selected = registry_image(latest)
+                if current is not None and current.get("config", {}).get("digest") == config:
+                    return name, latest
+                print("Publishing registry image " + name + ":latest", flush=True)
+                subprocess.run(["docker", "tag", local, latest], check=True)
+                subprocess.run(["docker", "push", latest], check=True)
+                current, selected = registry_image(latest)
+                if current is None or current.get("config", {}).get("digest") != config:
+                    raise ValueError("Registry image verification failed: " + latest)
+                return name, latest
+            parallel_each(push_latest, references.items())
+        return result
 
 
 def publish(assets, repository, revision, tag, mode):
@@ -250,18 +270,31 @@ def publish(assets, repository, revision, tag, mode):
             or any(a["state"] != "uploaded" for a in actual)
             or {a["name"]: a["size"] for a in actual} != expected):
         raise ValueError("Release asset inventory differs from the build")
-    if mode == "draft":
-        return
-    # GHCR is not transactional with Releases. Keep the Release a draft until
-    # every versioned image has been pushed and verified. Matching tags are reusable.
-    images = publish_images(assets, repository, revision, tag)
+    stable = re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:\+[0-9A-Za-z.-]+)?", tag) is not None
+    images = publish_images(assets, repository, revision, tag, floating_latest=mode == "publish" and stable)
+    compose_files = render_compose.write_assets(assets, {
+        "REVISION": revision,
+        "RELEASE_BASE": "https://github.com/" + repository + "/releases/download/" + tag + "/",
+        "ARCHIVE_CHECKSUM": distribution.sha256(assets / (stem + ".tar.gz")),
+    })
+    expected.update({path.name: path.stat().st_size for path in compose_files})
+    parallel_each(upload, compose_files)
+    release = api(repository, endpoint)
+    verify_draft(release, tag, revision)
+    expected.update({path.name: path.stat().st_size for path in compose_files})
+    actual = release["assets"]
+    if (len(actual) != len(expected)
+            or any(a["state"] != "uploaded" for a in actual)
+            or {a["name"]: a["size"] for a in actual} != expected):
+        raise ValueError("Compose asset inventory differs from the build")
     inventory = json.dumps({"source_commit": revision, "images": images}, indent=2) + "\n"
-    # Keep digest receipts in the Actions summary without changing release assets.
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
             summary.write("## GHCR images\n\n```json\n" + inventory + "```\n")
     print(inventory)
-    # Uploads can take minutes. Recheck immediately before the one publish request.
+    if mode == "draft":
+        return
+    # Uploads can take minutes. Recheck the tag immediately before publishing the draft.
     verify_tag(repository, tag, revision)
     result = api(repository, endpoint, "--method", "PATCH", "-F", "draft=false")
     if result["id"] != release_id or result["draft"] or result["tag_name"] != tag:

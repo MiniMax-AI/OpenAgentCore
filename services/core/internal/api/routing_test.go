@@ -275,7 +275,7 @@ func dirtyVariants(clean string) []string {
 // credential, so it can never reach another route group or skip its checks.
 func TestEveryRouteAuthenticatesItsCanonicalPath(t *testing.T) {
 	handler, router, s := routingFixture(t)
-	selfAuthenticated := map[string]bool{"GET /healthz": false, "POST /api/v1/sandbox-node/enroll": false, "GET /api/v1/sandbox-node/identity": false, "GET /api/v1/sandbox-node/configuration": false}
+	selfAuthenticated := map[string]bool{"GET /healthz": false, "GET /docs": false, "GET /docs/{document}": false, "POST /api/v1/sandbox-node/enroll": false, "GET /api/v1/sandbox-node/identity": false, "GET /api/v1/sandbox-node/configuration": false}
 	credentials := []http.Header{{}, withHeaders(beta), withHeaders([]string{"Authorization", "Bearer " + routingAdminKey}, beta),
 		withHeaders([]string{"Authorization", "Basic " + routingKey}, beta), withHeaders([]string{"Authorization", "Bearer wrong"}),
 		withHeaders(project), withHeaders(project, []string{"OpenAI-Beta", "agents=v0"}),

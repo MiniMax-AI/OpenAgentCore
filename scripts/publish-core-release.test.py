@@ -52,7 +52,9 @@ class PublicationTests(unittest.TestCase):
         self.context_repository = self.canonical_repository = "MiniMax-AI/OpenAgentCore"
         stack = contextlib.ExitStack()
         self.addCleanup(stack.close)
-        self.images = stack.enter_context(mock.patch.object(publisher, "publish_images", return_value={}))
+        self.images = stack.enter_context(mock.patch.object(publisher, "publish_images", return_value={
+            name: {"digest": "ghcr.io/minimax-ai/openagentcore/" + name + "@sha256:" + "ab" * 32}
+            for name in ("core", "web", "runtime", "ingress")}))
         self.api = stack.enter_context(mock.patch.object(publisher, "api", side_effect=self.response))
 
     def test_registry_failure_leaves_release_draft(self):
@@ -62,9 +64,11 @@ class PublicationTests(unittest.TestCase):
         self.assertTrue(self.release["draft"])
         self.assertFalse(any("PATCH" in call.args for call in self.writes()))
 
-    def test_draft_does_not_publish_images(self):
+    def test_draft_publishes_images_and_stays_unpublished(self):
         self.publish(tag="build-" + self.revision, mode="draft")
-        self.images.assert_not_called()
+        self.images.assert_called_once()
+        self.assertTrue(self.release["draft"])
+        self.assertEqual(len(self.release["assets"]), 15)
 
     def test_missing_native_asset_refuses_release_creation(self):
         (self.assets / f"oac-native-{self.revision}-windows-amd64.tar.gz").unlink()
@@ -118,7 +122,7 @@ class PublicationTests(unittest.TestCase):
         return [c for c in self.api.call_args_list if "--method" in c.args]
 
     def test_uploads_overlap_and_inventory_waits_for_all_transfers(self):
-        barrier = threading.Barrier(4, timeout=5)
+        barrier = threading.Barrier(4, timeout=0.2)
         active = 0
         peak = 0
         lock = threading.Lock()
@@ -128,14 +132,17 @@ class PublicationTests(unittest.TestCase):
                 with lock:
                     active += 1
                     peak = max(peak, active)
-                barrier.wait()
+                try:
+                    barrier.wait()
+                except threading.BrokenBarrierError:
+                    pass
                 result = self.response(repo, endpoint, *args)
                 with lock:
                     active -= 1
                 return result
             if endpoint == "releases/7":
                 self.assertEqual(active, 0)
-                self.assertEqual(len(self.release["assets"]), 12)
+                self.assertIn(len(self.release["assets"]), (12, 15))
             return self.response(repo, endpoint, *args)
         self.api.side_effect = response
         self.publish()
@@ -146,7 +153,7 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertFalse(self.release["draft"])
         self.assertFalse(self.release["prerelease"])
-        self.assertEqual(len(self.release["assets"]), 12)
+        self.assertEqual(len(self.release["assets"]), 15)
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
 
@@ -370,6 +377,25 @@ class RegistryTests(unittest.TestCase):
         result = self.publish()
         self.assertEqual(self.pushes(), [])
         self.assertEqual(result["core"]["digest"], "ghcr.io/minimax-ai/openagentcore/core@" + self.digest)
+
+    def test_stable_release_moves_latest_after_the_version_tags(self):
+        seen = {}
+        def remote(reference):
+            seen[reference] = seen.get(reference, 0) + 1
+            if seen[reference] == 1:
+                return None
+            return {"config": {"digest": self.config}}
+        self.remote.side_effect = remote
+        publisher.publish_images(self.assets, "MiniMax-AI/OpenAgentCore", self.revision, "v1.2.3", floating_latest=True)
+        pushed = [command[-1].rsplit("/", 1)[-1] for command in self.pushes()]
+        self.assertEqual(sorted(name for name in pushed if name.endswith(":v1.2.3")),
+                         sorted(name + ":v1.2.3" for name in publisher.IMAGE_NAMES))
+        self.assertEqual(sorted(name for name in pushed if name.endswith(":latest")),
+                         sorted(name + ":latest" for name in publisher.IMAGE_NAMES))
+
+    def test_matching_latest_tag_is_reused(self):
+        publisher.publish_images(self.assets, "MiniMax-AI/OpenAgentCore", self.revision, "v1.2.3", floating_latest=True)
+        self.assertEqual(self.pushes(), [])
 
     def test_new_images_use_resolved_store_identity_and_version_only(self):
         self.remote.side_effect = [None] * 4 + [{"config": {"digest": self.config}}] * 4

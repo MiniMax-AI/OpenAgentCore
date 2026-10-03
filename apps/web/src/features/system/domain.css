@@ -1,7 +1,0 @@
-.domain-settings { display: grid; gap: 24px; width: min(100%, 640px); }
-.domain-form { display: grid; gap: 20px; padding: 24px; border-radius: var(--radius-card); background: var(--surface); box-shadow: var(--shadow-card); }
-.domain-security, .domain-actions { display: flex; align-items: center; gap: 10px; }
-.domain-security { color: var(--fg); font-size: 14px; }
-.domain-prerequisites, .domain-state, .domain-error { margin: 0; font-size: 14px; line-height: 1.6; }
-.domain-prerequisites { color: var(--ink-2); }
-.domain-error { color: var(--danger); }

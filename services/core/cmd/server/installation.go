@@ -1,23 +1,24 @@
 package main
 
 import (
-	"errors"
-	"io"
-	"os"
 	"regexp"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 )
 
 var sourceCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 // installationFacts reports what GET /core/v1/installation serves: Core's own
-// environment and build, plus the installer's settings snapshot. Core never
-// acts on the snapshot; it only reports it.
+// environment and build, plus the process settings it loaded.
 func installationFacts(publicURL string) (api.Installation, error) {
 	var facts api.Installation
-	if id := os.Getenv("OAC_INSTALLATION_ID"); id != "" {
+	id, err := processconfig.InstallationID()
+	if err != nil {
+		return facts, err
+	}
+	if id != "" {
 		facts.InstallationID = &id
 	}
 	if publicURL != "" {
@@ -28,19 +29,10 @@ func installationFacts(publicURL string) (api.Installation, error) {
 		revision := buildRevision
 		facts.SourceCommit = &revision
 	}
-	path := os.Getenv("OAC_SETTINGS_FILE")
-	if path == "" {
-		return facts, nil
-	}
-	f, err := os.Open(path)
+	settings, err := processconfig.Settings()
 	if err != nil {
-		return facts, errors.New("cannot read OAC_SETTINGS_FILE")
+		return facts, err
 	}
-	defer f.Close()
-	raw, err := io.ReadAll(io.LimitReader(f, 64<<10+1))
-	if err != nil {
-		return facts, errors.New("cannot read OAC_SETTINGS_FILE")
-	}
-	facts.Configuration, err = api.ParseInstallationConfiguration(raw)
-	return facts, err
+	facts.Configuration = &api.InstallationConfiguration{Settings: settings}
+	return facts, nil
 }

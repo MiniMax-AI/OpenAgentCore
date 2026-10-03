@@ -437,10 +437,10 @@ definitions:
       configuration:
         allOf:
           - $ref: '#/definitions/api.InstallationConfiguration'
-        description: The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.
+        description: The process settings Core loaded. path and apply_command are empty, and applied_at is null, because Core reports its environment rather than an installer file.
         x-nullable: true
       installation_id:
-        description: OAC_INSTALLATION_ID; null when Core runs without the sandbox manager.
+        description: The ID in OAC_INSTALLATION_ID_FILE; null when Core runs without the sandbox manager.
         type: string
         x-nullable: true
       local_only:
@@ -462,12 +462,14 @@ definitions:
   api.InstallationConfiguration:
     properties:
       applied_at:
+        description: Null when Core reports its own environment.
         type: string
+        x-nullable: true
       apply_command:
-        description: Command that applies config.json changes.
+        description: Command that applies config.json changes. Empty when Core reports its own environment.
         type: string
       path:
-        description: Absolute host path of the installation's config.json.
+        description: Absolute host path of config.json. Empty when Core reports its own environment.
         type: string
       settings:
         items:
@@ -3594,7 +3596,7 @@ paths:
         - Deployment Model Providers
   /core/v1/installation:
     get:
-      description: Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the installer's settings snapshot with where to change it, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
+      description: Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the process settings Core loaded, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
       produces:
         - application/json
       responses:

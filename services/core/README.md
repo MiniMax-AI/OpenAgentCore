@@ -6,14 +6,13 @@
 
 | Package | Executable | Purpose |
 | --- | --- | --- |
-| `cmd/server` | `oac-core` | The HTTP service and execution Worker |
-| `cmd/migrate` | `oac-core-migrate` | Applies the embedded database migrations |
+| `cmd/server` | `oac-core` | The HTTP service and execution Worker. It applies the embedded database migrations before serving |
 | `cmd/device` | `oac-core-device` | Provisions or revokes an [operator device profile](../../contracts/agents-api/machine-api.md#operator-device-profile) for `environment: none` engine hosts |
 | `cmd/environment-key` | `oac-core-environment-key` | The [break-glass executor credential command](../../contracts/agents-api/environment-executor-credentials.md#break-glass-command) |
 | `cmd/sandbox-node` | `oac-node` | The sandbox node program; see the [nodes guide](../../docs/getting-started/nodes.md) |
 | `cmd/specification-contract` | None | Regenerates the installer's node specification projection |
 
-`make build-core` builds the five executables into `~/.oac/build/oac-core`; [Standalone Core builds](../../docs/maintainers.md#standalone-core-builds) describes the build and its options. `make build-daemon` builds `oac-daemon`.
+`make build-core` builds the four executables into `~/.oac/build/oac-core`; [Standalone Core builds](../../docs/maintainers.md#standalone-core-builds) describes the build and its options. `make build-daemon` builds `oac-daemon`.
 
 ## Database
 
@@ -21,11 +20,7 @@ Core uses its own PostgreSQL database and account and shares no tables with an a
 
 ## Run from source
 
-1. Create a development database and apply the migrations:
-
-   ```sh
-   OAC_DATABASE_URL='postgres://oac:…@127.0.0.1:5432/oac_dev' go run ./services/core/cmd/migrate
-   ```
+1. Create a development database. Core applies the migrations when it starts.
 
 2. Create a Core key of at least 32 characters and a digest file holding its SHA-256, which Core uses to authenticate `/core/v1`:
 

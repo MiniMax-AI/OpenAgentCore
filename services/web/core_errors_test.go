@@ -62,7 +62,7 @@ func TestCoreProxyPreservesUpstreamEnvelopeAndAuthShape(t *testing.T) {
 	if out.Code != 409 || out.Body.String() != upstream || calls.Load() != 1 {
 		t.Fatal(out.Code, out.Body, calls.Load())
 	}
-	for _, path := range []string{"/core", "/core/", "/core/v1", "/core/retired", "/v1/agents", "/api/v1/sandbox-node/configuration"} {
+	for _, path := range []string{"/core", "/core/", "/core/v1", "/core/retired"} {
 		out := authRequest(h, "GET", path, "", cookie)
 		if out.Code != 404 || calls.Load() != 1 {
 			t.Fatal("non-operation became proxyable", path, out.Code, calls.Load())

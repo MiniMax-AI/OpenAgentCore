@@ -323,7 +323,7 @@ func TestGenerationLeaseReplacementRejectedAfterRestart(t *testing.T) {
 
 func TestPythonAndGoUseTheSameDurableLease(t *testing.T) {
 	root := t.TempDir()
-	installer, err := filepath.Abs("../../../../../deploy/install")
+	installer, err := filepath.Abs("../../../../../deploy/node")
 	if err != nil {
 		t.Fatal(err)
 	}

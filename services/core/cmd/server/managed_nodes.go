@@ -10,10 +10,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
-	"github.com/google/uuid"
 )
 
 type managedNodes struct {
@@ -29,16 +29,12 @@ type managedNodes struct {
 // deployment service; the owner epoch that fences connections and the
 // allocations each generation retains are read from the deployment reader.
 func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, registry *providers.Registry, publicURL string, owner func(context.Context) error) (*managedNodes, error) {
-	setupID := os.Getenv("OAC_INSTALLATION_ID")
-	if setupID == "" {
-		return nil, nil
-	}
-	id, err := uuid.Parse(setupID)
-	if err != nil || id == uuid.Nil || id.String() != setupID {
-		return nil, errors.New("sandbox installation ID must be a canonical UUID")
+	setupID, err := processconfig.InstallationID()
+	if err != nil || setupID == "" {
+		return nil, err
 	}
 	if publicURL == "" {
-		return nil, errors.New("OAC_INSTALLATION_ID requires OAC_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
+		return nil, errors.New("OAC_INSTALLATION_ID_FILE requires OAC_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
 	}
 	closeProvider := func() {}
 	result := &managedNodes{closeProvider: closeProvider}

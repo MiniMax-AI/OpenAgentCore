@@ -114,6 +114,7 @@ jobs:
           path: ${{ runner.temp }}/native-artifacts
       - name: Assemble the native installation catalog
         run: node scripts/build-native-catalog.mjs "$RUNNER_TEMP/native-artifacts" "$RUNNER_TEMP/native-installers"
+      - uses: ./.github/actions/e2b-provider
       - name: Build matched artifacts
         env:
           OAC_NATIVE_INSTALLER_BUILD_DIR: ${{ runner.temp }}/native-installers
@@ -132,17 +133,10 @@ jobs:
           for asset in "$HOME/.oac/build/core-distribution/"*; do
             if [[ -f "$asset" ]]; then ln "$asset" "$HOME/.oac/build/release-upload/"; fi
           done
-          cp deploy/install-release.sh "$HOME/.oac/build/release-upload/install.sh"
+          cp deploy/install.sh "$HOME/.oac/build/release-upload/install.sh"
           (cd "$HOME/.oac/build/release-upload" && sha256sum install.sh > install.sh.sha256)
-      - uses: actions/upload-artifact@v6
-        with:
-          name: core-release-${{ steps.source.outputs.revision }}
-          path: ~/.oac/build/release-upload/*
-          compression-level: 0
-          if-no-files-found: error
-
-      - name: Sign in to GHCR for version releases
-        if: github.event_name == 'push'
+      - name: Sign in to GHCR
+        if: github.event_name == 'push' || inputs.draft_release
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -150,6 +144,7 @@ jobs:
           echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
           printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Publish the version tag or create a manual draft
+        id: publish
         if: github.event_name == 'push' || inputs.draft_release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -159,5 +154,13 @@ jobs:
           RELEASE_MODE: ${{ github.event_name == 'push' && 'publish' || 'draft' }}
         run: python3 scripts/publish-core-release.py --assets "$HOME/.oac/build/release-upload"
       - name: Remove registry credentials
-        if: always() && github.event_name == 'push'
+        if: always() && (github.event_name == 'push' || inputs.draft_release)
         run: rm -f "$RUNNER_TEMP/oac-release-docker/config.json"
+      # Recovering a failed publication reuses these exact assets.
+      - uses: actions/upload-artifact@v6
+        if: (failure() && steps.publish.outcome == 'failure') || (success() && steps.publish.outcome == 'skipped')
+        with:
+          name: core-release-${{ steps.source.outputs.revision }}
+          path: ~/.oac/build/release-upload/*
+          compression-level: 0
+          if-no-files-found: error

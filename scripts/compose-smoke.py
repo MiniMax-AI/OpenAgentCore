@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""Exercise the published Compose installation in an isolated Docker project."""
+"""Exercise the Compose installation in an isolated Docker project.
+
+Core, Web and the gateway image are built from this checkout. Web serves a
+placeholder page instead of the console build. Node metadata comes from the
+release pinned in deploy/compose/smoke-pins.json.
+"""
 
 import hashlib
 import http.cookiejar
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -14,8 +20,50 @@ import urllib.error
 import urllib.request
 import uuid
 
-
 ROOT = Path(__file__).resolve().parents[1]
+render_spec = importlib.util.spec_from_file_location("render_compose", ROOT / "scripts/render-compose.py")
+render_compose = importlib.util.module_from_spec(render_spec)
+render_spec.loader.exec_module(render_compose)
+
+
+def build_images(directory, tag):
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    protocol = re.search(r'const Version = "([^"]+)"', (ROOT / 'internal/agentdaemon/proto/version.go').read_text()).group(1)
+    go_env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
+
+    def go_build(package, output):
+        output.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['go', 'build', '-trimpath', '-ldflags', '-X main.buildRevision=' + revision,
+                        '-o', str(output), './' + package], cwd=ROOT, env=go_env, check=True)
+
+    contexts = {name: directory / ('image-' + name) for name in ('core', 'web', 'ingress')}
+    core = contexts['core']
+    for name, package in (('oac-core', 'server'), ('oac-core-device', 'device'),
+                          ('oac-core-environment-key', 'environment-key'), ('oac', 'oac')):
+        go_build('services/core/cmd/' + package, core / 'bin' / name)
+    (core / 'e2b').mkdir()
+    (core / 'native-installers').mkdir()
+    (core / 'native-installers/catalog.json').write_text(json.dumps({
+        'version': revision, 'protocol_version': protocol, 'artifacts': {'linux-amd64': {
+            'sha256': '0' * 64,
+            'url': f'https://example.invalid/oac-native-{revision}-linux-amd64.tar.gz'}}}))
+    (core / 'Dockerfile').write_bytes((ROOT / 'deploy/distribution/Dockerfile').read_bytes())
+    web = contexts['web']
+    go_build('services/web', web / 'oac-web')
+    (web / 'dist').mkdir()
+    (web / 'dist/index.html').write_text('<!doctype html><html><body>Compose smoke</body></html>\n')
+    (web / 'Dockerfile').write_bytes((ROOT / 'services/web/Dockerfile').read_bytes())
+    ingress = contexts['ingress']
+    go_build('services/core/cmd/oac', ingress / 'oac')
+    (ingress / 'Dockerfile').write_bytes((ROOT / 'deploy/distribution/Ingress.Dockerfile').read_bytes())
+    for path in directory.glob('image-*/**/*'):
+        path.chmod(0o755 if path.is_dir() or os.access(path, os.X_OK) else 0o644)
+    images = {}
+    for name, context in contexts.items():
+        images[name] = f'oac-smoke/{name}:{tag}'
+        subprocess.run(['docker', 'build', '-q', '--platform', 'linux/amd64', '-t', images[name], str(context)],
+                       check=True, stdout=subprocess.DEVNULL)
+    return images
 
 
 def main():
@@ -26,18 +74,28 @@ def main():
     artifacts = Path.home() / '.oac/tests'
     artifacts.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix=project + '-', dir=artifacts))
+    data = directory / 'data'
+    data.mkdir(mode=0o700)
+    pins = json.loads((ROOT / 'deploy/compose/smoke-pins.json').read_text())
+    rendered = directory / 'compose.yaml'
+    rendered.write_text(render_compose.render({
+        'REVISION': pins['revision'], 'RELEASE_BASE': pins['release_base'],
+        'ARCHIVE_CHECKSUM': pins['archive_checksum'],
+    }))
     override = directory / 'ports.json'
+    images = build_images(directory, project.removeprefix('oac-smoke-'))
 
     def publish(port):
-        override.write_text(json.dumps({'services': {'gateway': {'ports': [
+        override.write_text(json.dumps({'services': {'web': {'ports': [
             {'target': 8080, 'published': str(port), 'host_ip': '127.0.0.1'},
         ]}}}))
 
     publish(0)
-    env = {**os.environ, 'COMPOSE_PROGRESS': 'plain'}
+    env = {**os.environ, 'COMPOSE_PROGRESS': 'plain', 'OAC_DATA_DIR': str(data),
+           **{'OAC_IMAGE_' + name.upper(): image for name, image in images.items()}}
     env.pop('OAC_PUBLIC_URL', None)
     command = ['docker', 'compose', '--env-file', os.devnull, '-p', project,
-               '-f', str(ROOT / 'deploy/compose/compose.yaml'), '-f', str(override)]
+               '-f', str(rendered), '-f', str(override)]
 
     def compose(*args, timeout=120):
         result = subprocess.run(command + list(args), env=env, cwd=ROOT, capture_output=True, timeout=timeout)
@@ -85,11 +143,11 @@ def main():
 
     signal.signal(signal.SIGTERM, terminate)
     try:
-        print('Starting published images with an unset public URL and empty volumes', flush=True)
+        print('Starting the images with an unset public URL and an empty data directory', flush=True)
         compose('up', '-d', '--wait', '--wait-timeout', '600', timeout=900)
-        address = 'http://' + compose('port', 'gateway', '8080').decode().strip()
-        key = compose('run', '--rm', '-T', '--no-deps', 'credentials').decode().strip()
-        assert len(key) == 64, 'Missing generated sign-in key'
+        address = 'http://' + compose('port', 'web', '8080').decode().strip()
+        key = compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip()
+        assert re.fullmatch(r'oac_admin_[0-9a-f]{64}', key), 'Missing generated sign-in key'
         request('/healthz')
         assert b'<html' in request('/'), 'Console HTML is unavailable'
         request('/', headers={'Host': 'unconfigured.example.invalid'}, status=403)
@@ -114,7 +172,7 @@ def main():
         assert uploaded['bytes'] == len(content), 'Upload was truncated'
         private_logs(key, project_key)
 
-        print('Configuring a reachable URL and recreating containers with the same volumes', flush=True)
+        print('Configuring a reachable URL and recreating containers with the same data directory', flush=True)
         # Retain the assigned port across recreation, without claiming a fixed host port.
         publish(address.rsplit(':', 1)[1])
         env['OAC_PUBLIC_URL'] = address
@@ -122,7 +180,7 @@ def main():
         compose('up', '-d', '--wait', '--wait-timeout', '120', timeout=180)
         origin = address
         browser = client()
-        assert compose('run', '--rm', '-T', '--no-deps', 'credentials').decode().strip() == key, 'Sign-in key changed'
+        assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == key, 'Sign-in key changed'
         request('/', headers={'Host': 'localhost:8080'}, status=403)
         request('/console/auth/login', {'core_key': key})
         updated = get('/core/v1/installation')
@@ -139,6 +197,7 @@ def main():
         raise
     finally:
         compose('down', '--volumes', '--remove-orphans', timeout=60)
+        subprocess.run(['docker', 'image', 'rm', '-f', *images.values()], capture_output=True, timeout=60)
 
 
 if __name__ == '__main__':

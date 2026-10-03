@@ -10,8 +10,8 @@ export const common = {
   },
   installationNotice: {
     title: "Public address needs attention",
-    body: "Configure HTTPS before connecting applications and nodes from other machines.",
-    configure: "Configure domain and HTTPS",
+    body: "Set a public address other machines can reach before connecting their applications and nodes.",
+    configure: "Review the public address",
     addBlocked: "Add node is unavailable while the public address is local only.",
   },
   actions: {

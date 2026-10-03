@@ -76,7 +76,7 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | `services/core/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](./sandbox-provider.md) |
 | `services/web` | Console login and the server-side management proxy | [Console server](./web/console-server.md) |
 | `apps/web` and `packages/agents-client` | Console UI and typed clients | [Web guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md) |
-| `deploy/install` and `scripts` | Distribution, installation and validation tools | [Maintainers](./maintainers.md) |
+| `deploy` and `scripts` | Distribution, installation and validation tools | [Maintainers](./maintainers.md) |
 | `contracts/agents-api` | Pinned schema, semantic contracts and coverage ledger | [Coverage ledger](../contracts/agents-api/index.md) |
 
 ## Choose an extension boundary

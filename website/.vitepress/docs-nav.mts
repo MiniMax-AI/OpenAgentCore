@@ -1,6 +1,7 @@
 // Builds website navigation from the repository's existing documentation.
 // docs.json owns the page list and order; each page's frontmatter title owns
 // its label. Nothing here copies or rewrites the Markdown sources.
+import { translatedSource, groupLabel } from './locales.mts'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,11 +43,11 @@ export function pageLink(page: string): string {
   return `/${page.replace(/(^|\/)index$/, '$1')}`
 }
 
-export function docsSidebar(): DefaultTheme.SidebarItem[] {
+export function docsSidebar(lang: 'en' | 'zh' = 'en'): DefaultTheme.SidebarItem[] {
   return readDocsJson().navigation.groups.map((group) => ({
-    text: group.group,
+    text: groupLabel(group.group, lang),
     collapsed: false,
-    items: group.pages.map((page) => ({ text: pageTitle(page), link: pageLink(page) })),
+    items: group.pages.map((page) => ({ text: pageTitle(lang === 'zh' ? translatedSource(page) : page), link: pageLink(lang === 'zh' ? `zh/${page}` : page) })),
   }))
 }
 

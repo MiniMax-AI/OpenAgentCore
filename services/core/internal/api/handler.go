@@ -58,6 +58,7 @@ func (h *Handler) routes() *chi.Mux {
 	router.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	registerOpenAPIDocsRoutes(router)
 	router.Group(func(r chi.Router) {
 		r.Use(h.authenticateProject)
 		h.registerSkillRoutes(r)

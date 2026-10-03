@@ -137,17 +137,12 @@ Core writes this record in the same transaction that creates the Session. Later 
 | `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys. Null when `public_url` is null |
 | `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
 | `source_commit` | The full source commit Core was built from; null for development builds |
-| `configuration` | The installer's snapshot of `config.json`; null when the installer did not start Core |
+| `configuration` | The process settings Core loaded from its environment. `path` and `apply_command` are empty, and `applied_at` is null |
 | `address_bindings` | What a change of `public_url` affects, counted on each read |
 
-`configuration` has:
+`configuration.settings` has one entry per setting Core loaded, with its dotted `key`, effective `value`, `default`, whether it is `changeable`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`, `database`).
 
-- `path`: the absolute host path of `config.json`, by default `~/.oac/core/config.json`;
-- `apply_command`: the command that applies changes, by default `~/.oac/core/oac apply`;
-- `applied_at`: when the snapshot was last applied;
-- `settings`: one entry per setting, with its dotted `key`, applied `value`, `default`, whether it is `changeable` after installation, whether it is `sensitive`, and the services it `restarts` (`core`, `web`, `database`).
-
-A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. Core refuses to start when the snapshot breaks this rule, repeats a key or has an unknown member. Core only reports the snapshot; [configuration](../../docs/configuration.md) describes each setting.
+A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. `oac-core check-config` validates the same environment and exits without starting Core or printing a value. [Configuration](../../docs/configuration.md) describes each setting.
 
 | `address_bindings` field | Meaning |
 | --- | --- |

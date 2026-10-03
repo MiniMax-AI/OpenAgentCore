@@ -1,4 +1,0 @@
-# Local access; platforms route directly to gateway:8080 without this override.
-services:
-  gateway:
-    ports: ["127.0.0.1:8080:8080"]

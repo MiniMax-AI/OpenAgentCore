@@ -1,3 +1,4 @@
+import { translationRewrites, sourceRoute } from './locales.mts'
 import { createRequire } from 'node:module'
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -55,6 +56,8 @@ export default defineConfig({
   rewrites: {
     'website/index.md': 'index.md',
     'website/zh/index.md': 'zh/index.md',
+    ...translationRewrites(),
+    'contracts/agents-api/zh/harness-catalog.md': 'zh/contracts/agents-api/harness-catalog.md',
   },
 
   head: [
@@ -78,12 +81,21 @@ export default defineConfig({
       link: '/zh/',
       description: '开源、可自部署的 OpenAI Agents API 实现，支持多种原生 Harness。',
       themeConfig: {
-        // The documentation is written in English; the Chinese landing page links to it.
-        nav: [
-          { text: '文档', link: '/docs/getting-started/' },
-          { text: 'API', link: '/docs/api/public-agent-api' },
-          { text: '架构', link: '/docs/architecture' },
-        ],
+        nav: docsNav.map((item, index) => ({
+          ...item,
+          text: ['文档', 'API', '架构'][index],
+          link: `/zh${item.link}`,
+          activeMatch: item.activeMatch.replace('^/', '^/zh/'),
+        })),
+        langMenuLabel: '切换语言',
+        lastUpdatedText: '最后更新',
+        footer: { message: '基于 MIT 许可证发布。', copyright: 'One core. Many agents.' },
+        returnToTopLabel: '返回顶部',
+        sidebarMenuLabel: '目录',
+        darkModeSwitchLabel: '主题',
+        lightModeSwitchTitle: '切换为浅色主题',
+        darkModeSwitchTitle: '切换为深色主题',
+        editLink: { pattern: `${repo}/edit/main/:path`, text: '在 GitHub 上编辑此页' },
         outline: { label: '本页目录' },
         docFooter: { prev: '上一页', next: '下一页' },
       },
@@ -91,17 +103,18 @@ export default defineConfig({
   },
 
   themeConfig: {
-    // Only the landing page is translated, so switching language opens that locale's home page.
-    i18nRouting: false,
+    i18nRouting: true,
     logo: { src: favicon, alt: '' },
     siteTitle: 'OpenAgentCore',
     socialLinks: [{ icon: 'github', link: repo }],
     sidebar: {
       '/docs/': docsSidebar(),
       '/contracts/': docsSidebar(),
+      '/zh/docs/': docsSidebar('zh'),
+      '/zh/contracts/': docsSidebar('zh'),
     },
     outline: { level: [2, 3] },
-    search: { provider: 'local' },
+    search: { provider: 'local', options: { locales: { zh: { translations: { button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' }, modal: { noResultsText: '没有找到相关内容', resetButtonTitle: '清除搜索', displayDetails: '显示详细内容', footer: { selectText: '选择', navigateText: '切换', closeText: '关闭' } } } } } } },
     editLink: {
       pattern: `${repo}/edit/main/:path`,
       text: 'Edit this page on GitHub',
@@ -148,7 +161,7 @@ export default defineConfig({
 function writeMarkdownCopies(site: SiteConfig) {
   const pages = site.pages.filter((page) => /^(docs|contracts)\//.test(page))
   for (const page of pages) {
-    const target = resolve(site.outDir, page)
+    const target = resolve(site.outDir, sourceRoute(page))
     mkdirSync(dirname(target), { recursive: true })
     copyFileSync(resolve(site.srcDir, page), target)
   }

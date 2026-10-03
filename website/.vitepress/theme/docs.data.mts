@@ -1,6 +1,7 @@
 // Build-time data for the landing page's documentation index. The page list
 // and order come from docs.json; titles and summaries come from each page, so
 // new documentation appears on the landing page without editing the website.
+import { translatedSource, groupLabel } from '../locales.mts'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineLoader } from 'vitepress'
@@ -10,10 +11,12 @@ export interface DocsPage {
   title: string
   link: string
   summary: string
+  zh: { title: string; link: string; summary: string }
 }
 
 export interface DocsGroup {
   group: string
+  zhGroup: string
   pages: DocsPage[]
 }
 
@@ -34,7 +37,7 @@ function summary(page: string): string {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
     .replace(/[`*_]/g, '')
     .replace(/\s+/g, ' ')
-  const sentence = /^(.+?[.!?])(\s|$)/.exec(text)?.[1] ?? text
+  const sentence = /^(.+?(?:[。！？]|[.!?](?=\s|$)))/.exec(text)?.[1] ?? text
   return sentence.length > 180 ? `${sentence.slice(0, 177).trimEnd()}…` : sentence
 }
 
@@ -43,7 +46,8 @@ export default defineLoader({
   load(): DocsGroup[] {
     return readDocsJson().navigation.groups.map((group) => ({
       group: group.group,
-      pages: group.pages.map((page) => ({ title: pageTitle(page), link: pageLink(page), summary: summary(page) })),
+      zhGroup: groupLabel(group.group, 'zh'),
+      pages: group.pages.map((page) => ({ title: pageTitle(page), link: pageLink(page), summary: summary(page), zh: { title: pageTitle(translatedSource(page)), link: pageLink(`zh/${page}`), summary: summary(translatedSource(page)) } })),
     }))
   },
 })

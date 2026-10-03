@@ -27,7 +27,11 @@ import (
 )
 
 func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
-	t.Setenv("OAC_INSTALLATION_ID", uuid.NewString())
+	idFile := filepath.Join(t.TempDir(), "installation.id")
+	if err := os.WriteFile(idFile, []byte(uuid.NewString()+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OAC_INSTALLATION_ID_FILE", idFile)
 	digest := sha256.Sum256([]byte("synthetic-admin"))
 	path := filepath.Join(t.TempDir(), "core-key-digests.json")
 	if err := os.WriteFile(path, []byte(`["`+hex.EncodeToString(digest[:])+`"]`), 0600); err != nil {

@@ -3,12 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { withBase } from 'vitepress'
 import AsciiCanvas from './AsciiCanvas.vue'
 import ComposeLab from './ComposeLab.vue'
-import TypeTerminal, { type TermLine } from './TypeTerminal.vue'
+import LogoWall from './LogoWall.vue'
+import SessionFlow from './SessionFlow.vue'
+import TitleAccent from './TitleAccent.vue'
 import { copy, installCommand, repoUrl, type Lang } from '../landing-content'
-import { data as docsGroups } from '../docs.data.mts'
 import architectureImg from '../../../../docs/assets/architecture.png'
-import componentsImg from '../../../../docs/assets/development-architecture.png'
-import surfacesImg from '../../../../docs/assets/architecture-api-surfaces.png'
 import overviewEn from '../../../../docs/assets/console-overview-en.webp'
 import overviewZh from '../../../../docs/assets/console-overview-zh.webp'
 import metricsEn from '../../../../docs/assets/console-agent-metrics-en.webp'
@@ -17,16 +16,14 @@ import metricsZh from '../../../../docs/assets/console-agent-metrics-zh.webp'
 const props = withDefaults(defineProps<{ lang?: Lang }>(), { lang: 'en' })
 const t = computed(() => copy[props.lang])
 
-const archImages: Record<string, string> = { ecosystem: architectureImg, protocols: componentsImg, surfaces: surfacesImg }
 const consoleImages = computed(() =>
   props.lang === 'zh' ? { overview: overviewZh, metrics: metricsZh } : { overview: overviewEn, metrics: metricsEn },
 )
-const archTab = ref('ecosystem')
 const consoleTab = ref<'overview' | 'metrics'>('overview')
-const archAlt = computed(() => t.value.architecture.tabs.find((tab) => tab.id === archTab.value)!.alt)
 const consoleAlt = computed(() => t.value.observe.tabs.find((tab) => tab.id === consoleTab.value)!.alt)
 
-const pageCount = docsGroups.reduce((n, g) => n + g.pages.length, 0)
+function localLink(path: string) { return withBase(props.lang === 'zh' ? `/zh${path}` : path) }
+
 
 const copied = ref(false)
 async function copyInstall() {
@@ -38,16 +35,6 @@ async function copyInstall() {
     copied.value = false
   }
 }
-
-const termLines = computed<TermLine[]>(() => [
-  { kind: 'comment', text: props.lang === 'zh' ? '# 1. 安装 Core 和 Web' : '# 1. install Core and Web' },
-  { kind: 'cmd', text: installCommand },
-  { kind: 'comment', text: props.lang === 'zh' ? '# 2. 在 Web 中设置默认模型，创建 Project API key' : '# 2. set a default model in Web, issue a Project API key' },
-  { kind: 'cmd', text: 'export OPENAI_BASE_URL=https://core.example/v1' },
-  { kind: 'cmd', text: 'read -rs OPENAI_API_KEY && export OPENAI_API_KEY' },
-  { kind: 'comment', text: props.lang === 'zh' ? '# 3. 用官方 SDK 运行第一个 Session' : '# 3. run your first Session with the official SDK' },
-  { kind: 'cmd', text: 'pip install openai==3.13.0 && python session.py' },
-])
 
 // Scrambles the hero title in from random glyphs.
 const GLYPHS = '01<>/\\{}[]#%&@$=+*'
@@ -119,8 +106,8 @@ onBeforeUnmount(() => {
           </h1>
           <p class="lede">{{ t.hero.lede }}</p>
           <div class="ctas">
-            <a class="btn primary" :href="withBase('/docs/getting-started/quickstart')">{{ t.hero.primary }} <span aria-hidden="true">→</span></a>
-            <a class="btn ghost" :href="withBase('/docs/getting-started/')">{{ t.hero.secondary }}</a>
+            <a class="btn primary" :href="localLink('/docs/getting-started/quickstart')">{{ t.hero.primary }} <span aria-hidden="true">→</span></a>
+            <a class="btn ghost" :href="localLink('/docs/getting-started/')">{{ t.hero.secondary }}</a>
             <a class="btn ghost icon" :href="repoUrl" target="_blank" rel="noreferrer" aria-label="GitHub">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z" /></svg>
               GitHub
@@ -151,237 +138,79 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <!-- 01 Problem -->
-    <section class="sec">
-      <div class="wrap">
-        <header class="sec-head" data-reveal><span class="idx">// {{ t.problem.index }}</span><span class="kicker">{{ t.problem.kicker }}</span></header>
-        <div class="split">
-          <div data-reveal>
-            <h2>{{ t.problem.title }}</h2>
-            <p class="sec-lede">{{ t.problem.lede }}</p>
-          </div>
-          <ol class="qa" data-reveal>
-            <li v-for="(item, i) in t.problem.questions" :key="i" :style="{ '--i': i }">
-              <p class="q"><span class="sigil">?</span>{{ item.q }}</p>
-              <p class="a"><span class="sigil">→</span>{{ item.a }}</p>
-            </li>
-          </ol>
-        </div>
-        <p class="punch" data-reveal>{{ t.problem.punch }}</p>
-      </div>
-    </section>
-
-    <!-- 02 Compose -->
+    <!-- 01 Compose -->
     <section class="sec">
       <div class="wrap">
         <header class="sec-head" data-reveal><span class="idx">// {{ t.compose.index }}</span><span class="kicker">{{ t.compose.kicker }}</span></header>
-        <h2 data-reveal>{{ t.compose.title }}</h2>
+        <h2 data-reveal><TitleAccent :title="t.compose.title" :accent="t.compose.titleAccent" /></h2>
         <p class="sec-lede" data-reveal>{{ t.compose.lede }}</p>
-        <div data-reveal><ComposeLab :t="t.compose" /></div>
-        <ul class="pillars">
-          <li v-for="(p, i) in t.pillars" :key="p.tag" data-reveal :style="{ '--i': i }">
-            <span class="tag">[{{ p.tag }}]</span>
-            <h3>{{ p.title }}</h3>
-            <p>{{ p.body }}</p>
-          </li>
-        </ul>
+        <div data-reveal><ComposeLab :t="t.compose" :lang="lang" /></div>
+
       </div>
     </section>
 
-    <!-- 03 Architecture -->
+    <!-- 02 Architecture -->
     <section class="sec">
       <div class="wrap">
         <header class="sec-head" data-reveal><span class="idx">// {{ t.architecture.index }}</span><span class="kicker">{{ t.architecture.kicker }}</span></header>
-        <h2 data-reveal>{{ t.architecture.title }}</h2>
+        <h2 data-reveal><TitleAccent :title="t.architecture.title" :accent="t.architecture.titleAccent" /></h2>
         <p class="sec-lede" data-reveal>{{ t.architecture.lede }}</p>
-        <div class="figure" data-reveal>
-          <div class="tabs" role="tablist">
-            <button
-              v-for="tab in t.architecture.tabs"
-              :key="tab.id"
-              type="button"
-              role="tab"
-              :aria-selected="archTab === tab.id"
-              :class="{ on: archTab === tab.id }"
-              @click="archTab = tab.id"
-            >{{ tab.label }}</button>
-          </div>
-          <a class="plate" :href="archImages[archTab]" target="_blank" rel="noreferrer" :title="lang === 'zh' ? '查看原图' : 'Open full size'">
-            <img :key="archTab" :src="archImages[archTab]" :alt="archAlt" loading="lazy" decoding="async" />
-          </a>
-        </div>
-        <div class="boundaries" data-reveal>
-          <p class="mono-label">{{ t.architecture.boundariesTitle }}</p>
-          <a v-for="(b, i) in t.architecture.boundaries" :key="b.link" class="boundary" :href="withBase(b.link)" :style="{ '--i': i }">
-            <span class="b-from">{{ b.from }}</span>
-            <span class="b-wire" aria-hidden="true"><i /></span>
-            <span class="b-to">{{ b.to }}</span>
-            <span class="b-doc">{{ b.doc }} <span aria-hidden="true">↗</span></span>
-          </a>
-          <a class="more" :href="withBase('/docs/architecture')">{{ t.architecture.more }} →</a>
-        </div>
+        <a class="architecture-visual" :href="architectureImg" target="_blank" rel="noreferrer" data-reveal>
+          <img :src="architectureImg" :alt="t.architecture.tabs[0].alt" loading="lazy" decoding="async" />
+        </a>
+        <a class="more" :href="localLink('/docs/architecture')">{{ t.architecture.more }} →</a>
       </div>
     </section>
 
-    <!-- 04 Session semantics -->
+    <!-- 03 Session lifecycle -->
     <section class="sec">
       <div class="wrap">
         <header class="sec-head" data-reveal><span class="idx">// {{ t.session.index }}</span><span class="kicker">{{ t.session.kicker }}</span></header>
-        <h2 data-reveal>{{ t.session.title }}</h2>
+        <h2 data-reveal><TitleAccent :title="t.session.title" :accent="t.session.titleAccent" /></h2>
         <p class="sec-lede" data-reveal>{{ t.session.lede }}</p>
-        <ul class="rules">
-          <li v-for="(rule, i) in t.session.rules" :key="i" data-reveal :style="{ '--i': i }">
-            <pre class="art" aria-hidden="true">{{ rule.art }}</pre>
-            <h3>{{ rule.title }}</h3>
-            <p>{{ rule.body }}</p>
-          </li>
-        </ul>
-        <p class="note" data-reveal><span class="sigil">!</span>{{ t.session.honest }}</p>
+        <SessionFlow :lang="lang" />
+        <a class="more" :href="localLink('/docs/api/public-agent-api')">{{ t.session.more }} →</a>
       </div>
     </section>
 
-    <!-- 05 Observe -->
+    <!-- 04 Observe -->
     <section class="sec">
       <div class="wrap">
         <header class="sec-head" data-reveal><span class="idx">// {{ t.observe.index }}</span><span class="kicker">{{ t.observe.kicker }}</span></header>
-        <div class="split narrow-right">
-          <div data-reveal>
-            <h2>{{ t.observe.title }}</h2>
-            <p class="sec-lede">{{ t.observe.lede }}</p>
-            <div class="tabs vertical" role="tablist">
-              <button
-                v-for="tab in t.observe.tabs"
-                :key="tab.id"
-                type="button"
-                role="tab"
-                :aria-selected="consoleTab === tab.id"
-                :class="{ on: consoleTab === tab.id }"
-                @click="consoleTab = tab.id"
-              >{{ tab.label }}</button>
-            </div>
-            <p class="caption">{{ t.observe.caption }}</p>
-          </div>
-          <div class="window" data-reveal>
-            <div class="win-bar"><span class="dots"><i /><i /><i /></span><span>web · {{ consoleTab }}</span></div>
-            <img :key="consoleTab + lang" :src="consoleImages[consoleTab]" :alt="consoleAlt" loading="lazy" decoding="async" />
+        <div class="observe-heading" data-reveal>
+          <div><h2><TitleAccent :title="t.observe.title" :accent="t.observe.titleAccent" /></h2><p class="sec-lede">{{ t.observe.lede }}</p></div>
+          <div class="tabs" :aria-label="t.observe.title">
+            <button v-for="tab in t.observe.tabs" :key="tab.id" type="button" :aria-pressed="consoleTab === tab.id" :class="{ on: consoleTab === tab.id }" @click="consoleTab = tab.id">{{ tab.label }}</button>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- 06 Compare -->
-    <section class="sec">
-      <div class="wrap">
-        <header class="sec-head" data-reveal><span class="idx">// {{ t.compare.index }}</span><span class="kicker">{{ t.compare.kicker }}</span></header>
-        <h2 data-reveal>{{ t.compare.title }}</h2>
-        <div class="table-wrap" data-reveal>
-          <table class="compare">
-            <thead>
-              <tr><th v-for="h in t.compare.head" :key="h" scope="col">{{ h }}</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, i) in t.compare.rows" :key="i" :class="{ ours: i === t.compare.rows.length - 1 }">
-                <th scope="row">{{ row[0] }}</th>
-                <td>{{ row[1] }}</td>
-                <td>{{ row[2] }}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="window console-wide" data-reveal>
+          <div class="win-bar"><span class="dots"><i /><i /><i /></span><span>web · {{ consoleTab }}</span></div>
+          <img :key="consoleTab + lang" :src="consoleImages[consoleTab]" :alt="consoleAlt" loading="lazy" decoding="async" />
         </div>
+        <p class="caption">{{ t.observe.caption }}</p>
       </div>
     </section>
 
-    <!-- 07 Trade-offs -->
-    <section class="sec">
-      <div class="wrap">
-        <header class="sec-head" data-reveal><span class="idx">// {{ t.tradeoffs.index }}</span><span class="kicker">{{ t.tradeoffs.kicker }}</span></header>
-        <p class="motto" data-reveal><span>{{ t.tradeoffs.motto[0] }}</span><span class="accent">{{ t.tradeoffs.motto[1] }}</span></p>
-        <h2 class="sr-only">{{ t.tradeoffs.title }}</h2>
-        <ol class="tradeoffs">
-          <li v-for="(item, i) in t.tradeoffs.items" :key="i" data-reveal :style="{ '--i': i }">
-            <span class="num">0{{ i + 1 }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.body }}</p>
-          </li>
-        </ol>
-      </div>
-    </section>
+    <nav class="wrap doc-shortcuts" :aria-label="t.docs.title">
+      <a v-for="(link, i) in t.docs.links" :key="link.path" :href="localLink(link.path)">
+        <span class="shortcut-index">0{{ i + 1 }}</span><span>{{ link.label }}</span><span aria-hidden="true">↗</span>
+      </a>
+    </nav>
 
-    <!-- 08 Get started -->
-    <section class="sec">
-      <div class="wrap">
-        <header class="sec-head" data-reveal><span class="idx">// {{ t.start.index }}</span><span class="kicker">{{ t.start.kicker }}</span></header>
-        <div class="split">
-          <div data-reveal>
-            <h2>{{ t.start.title }}</h2>
-            <p class="sec-lede">{{ t.start.lede }}</p>
-            <ol class="steps">
-              <li v-for="(step, i) in t.start.steps" :key="i">
-                <span class="step-n">[{{ i + 1 }}]</span>
-                <div><h3>{{ step.title }}</h3><p>{{ step.body }}</p></div>
-              </li>
-            </ol>
-            <div class="ctas">
-              <a class="btn primary" :href="withBase('/docs/getting-started/install')">{{ t.start.cta }} →</a>
-              <a class="btn ghost" :href="withBase('/docs/getting-started/quickstart')">{{ t.start.trial }}</a>
-            </div>
-          </div>
-          <div data-reveal>
-            <TypeTerminal :lines="termLines" title="~/openagentcore — zsh" />
-          </div>
-        </div>
-      </div>
-    </section>
+    <LogoWall :lang="lang" />
 
-    <!-- 09 Roadmap -->
-    <section class="sec">
-      <div class="wrap">
-        <header class="sec-head" data-reveal><span class="idx">// {{ t.roadmap.index }}</span><span class="kicker">{{ t.roadmap.kicker }}</span></header>
-        <h2 data-reveal>{{ t.roadmap.title }}</h2>
-        <p class="sec-lede" data-reveal>{{ t.roadmap.lede }}</p>
-        <ol class="roadmap">
-          <li v-for="(track, i) in t.roadmap.tracks" :key="track.layer" data-reveal :style="{ '--i': i }">
-            <span class="layer">{{ track.layer }}</span>
-            <h3>{{ track.title }}</h3>
-            <p>{{ track.body }}</p>
-          </li>
-        </ol>
-      </div>
-    </section>
-
-    <!-- 10 Docs -->
-    <section class="sec">
-      <div class="wrap">
-        <header class="sec-head" data-reveal><span class="idx">// {{ t.docs.index }}</span><span class="kicker">{{ t.docs.kicker }}</span></header>
-        <h2 data-reveal>{{ t.docs.title }}</h2>
-        <p class="sec-lede" data-reveal>{{ t.docs.lede(pageCount) }}</p>
-        <div class="docs-grid">
-          <section v-for="(group, gi) in docsGroups" :key="group.group" class="docs-group" data-reveal :style="{ '--i': gi }">
-            <h3><span class="dir">{{ String(gi + 1).padStart(2, '0') }}/</span>{{ group.group }}</h3>
-            <ul>
-              <li v-for="page in group.pages" :key="page.link">
-                <a :href="withBase(page.link)">
-                  <span class="doc-title">{{ page.title }}</span>
-                  <span v-if="page.summary" class="doc-summary">{{ page.summary }}</span>
-                </a>
-              </li>
-            </ul>
-          </section>
-        </div>
-      </div>
-    </section>
-
-    <!-- Outro -->
+    <!-- 05 Get started -->
     <section class="outro">
+      <div class="wrap start-compact">
+        <header class="sec-head"><span class="idx">// {{ t.start.index }}</span><span class="kicker">{{ t.start.kicker }}</span></header>
+        <h2><TitleAccent :title="t.start.title" :accent="t.start.titleAccent" /></h2>
+        <p class="install-note">{{ t.hero.installLabel }}</p>
+        <div class="install"><code><span class="prompt">$</span> {{ installCommand }}</code><button type="button" class="copy" @click="copyInstall">{{ copied ? t.hero.copied : t.hero.copy }}</button></div>
+        <ol class="start-path"><li v-for="(step, i) in t.start.steps" :key="step.title"><span>0{{ i + 1 }}</span>{{ step.title }}</li></ol>
+        <div class="ctas"><a class="btn primary" :href="localLink('/docs/getting-started/install')">{{ t.start.cta }} →</a><a class="btn ghost" :href="localLink('/docs/getting-started/quickstart')">{{ t.start.trial }}</a></div>
+      </div>
       <div class="outro-art">
         <AsciiCanvas kind="text" text="ONE CORE.&#10;MANY AGENTS." :cell="11" ramp=" .:░▒▓█" :noise="0.02" :fill="0.82" label="One core. Many agents." />
-      </div>
-      <div class="wrap outro-copy">
-        <p>{{ t.outro.line }}</p>
-        <div class="ctas center">
-          <a class="btn primary" :href="withBase('/docs/getting-started/')">{{ t.outro.primary }} →</a>
-          <a class="btn ghost" :href="repoUrl" target="_blank" rel="noreferrer">★ {{ t.outro.secondary }}</a>
-        </div>
       </div>
     </section>
   </div>
@@ -390,7 +219,7 @@ onBeforeUnmount(() => {
 <style>
 /* ---------- palette ---------- */
 .landing {
-  --l-bg: #f4f6f1;
+  --l-bg: #f3efe3;
   --l-panel: rgba(255, 255, 255, 0.72);
   --l-hover: rgba(21, 128, 61, 0.06);
   --l-text: #0b1510;
@@ -416,6 +245,7 @@ onBeforeUnmount(() => {
   --l-str: #a3e6b8;
   --l-fn: #7dd3fc;
   --l-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --l-display: 'Space Grotesk Variable', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --l-sans: 'Inter Variable', Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
 
   position: relative;
@@ -425,7 +255,7 @@ onBeforeUnmount(() => {
   font-family: var(--l-sans);
 }
 .dark .landing {
-  --l-bg: #080b0a;
+  --l-bg: #111712;
   --l-panel: rgba(18, 24, 21, 0.72);
   --l-hover: rgba(74, 222, 128, 0.06);
   --l-text: #e8f1eb;
@@ -462,7 +292,7 @@ onBeforeUnmount(() => {
   inset: 0;
   pointer-events: none;
   background-image: linear-gradient(var(--l-grid) 1px, transparent 1px), linear-gradient(90deg, var(--l-grid) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background-size: 96px 96px;
   mask-image: linear-gradient(to bottom, #000 0, #000 70%, transparent);
 }
 .bg-grid::after {
@@ -510,7 +340,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   height: 42px;
   padding: 0 18px;
-  border-radius: 8px;
+  border-radius: 2px;
   font: 500 14px/1 var(--l-mono);
   border: 1px solid var(--l-line-strong);
   color: var(--l-text);
@@ -572,7 +402,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   margin: 0;
-  font: 700 clamp(44px, 6vw, 78px) / 1 var(--l-mono);
+  font: 700 clamp(44px, 6vw, 78px) / 0.98 var(--l-display);
   letter-spacing: -0.045em;
   white-space: nowrap;
 }
@@ -595,7 +425,7 @@ onBeforeUnmount(() => {
   margin-top: 26px;
   padding: 6px 6px 6px 14px;
   border: 1px solid var(--l-line);
-  border-radius: 10px;
+  border-radius: 3px;
   background: var(--l-code-bg);
 }
 .install code {
@@ -701,7 +531,7 @@ onBeforeUnmount(() => {
 /* ---------- sections ---------- */
 .sec {
   position: relative;
-  padding: 112px 0 0;
+  padding: 64px 0 0;
 }
 .sec-head {
   display: flex;
@@ -770,92 +600,10 @@ h3 {
   color: var(--l-accent);
 }
 
-/* 01 */
-.qa {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--l-line);
-  border-radius: 12px;
-  background: var(--l-panel);
-  overflow: hidden;
-}
-.qa li {
-  padding: 16px 20px;
-  border-bottom: 1px dashed var(--l-line);
-  transition: background 0.2s;
-}
-.qa li:last-child {
-  border-bottom: 0;
-}
-.qa li:hover {
-  background: var(--l-hover);
-}
-.qa p {
-  display: flex;
-  margin: 0;
-  line-height: 1.55;
-}
-.q {
-  font-weight: 600;
-  font-size: 15px;
-}
-.q .sigil {
-  color: var(--l-danger);
-}
-.a {
-  margin-top: 6px !important;
-  font-size: 14px;
-  color: var(--l-text-2);
-}
-.punch {
-  max-width: 36em;
-  margin: 56px 0 0;
-  padding-left: 18px;
-  border-left: 2px solid var(--l-accent);
-  font: 500 clamp(18px, 2vw, 22px) / 1.55 var(--l-sans);
-}
-
-/* 02 */
-.pillars {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin: 36px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.pillars li {
-  padding: 20px;
-  border: 1px solid var(--l-line);
-  border-radius: 12px;
-  background: var(--l-panel);
-  transition: border-color 0.2s, transform 0.2s;
-}
-.pillars li:hover {
-  border-color: var(--l-accent);
-  transform: translateY(-2px);
-}
-.tag {
-  display: block;
-  margin-bottom: 12px;
-  font: 12px var(--l-mono);
-  color: var(--l-accent);
-}
-.pillars p,
-.rules p,
-.tradeoffs p,
-.roadmap p {
-  margin: 8px 0 0;
-  font-size: 14.5px;
-  line-height: 1.6;
-  color: var(--l-text-2);
-}
-
 /* 03 */
 .figure {
   border: 1px solid var(--l-line);
-  border-radius: 14px;
+  border-radius: 3px;
   background: var(--l-panel);
   overflow: hidden;
 }
@@ -981,13 +729,13 @@ h3 {
 .rules li {
   padding: 20px;
   border: 1px solid var(--l-line);
-  border-radius: 12px;
+  border-radius: 3px;
   background: var(--l-panel);
 }
 .art {
   margin: 0 0 18px;
   padding: 14px 16px;
-  border-radius: 8px;
+  border-radius: 2px;
   background: var(--l-code-bg);
   color: #4ade80;
   font: 12.5px/1.7 var(--l-mono);
@@ -1010,7 +758,7 @@ h3 {
 }
 .window {
   border: 1px solid var(--l-line);
-  border-radius: 12px;
+  border-radius: 3px;
   overflow: hidden;
   background: var(--l-panel);
   box-shadow: 0 40px 100px -50px var(--l-glow);
@@ -1043,195 +791,10 @@ h3 {
 .dots i:nth-child(2) { background: #febc2e; }
 .dots i:nth-child(3) { background: #28c840; }
 
-/* 06 */
-.table-wrap {
-  margin-top: 36px;
-  overflow-x: auto;
-  border: 1px solid var(--l-line);
-  border-radius: 12px;
-  background: var(--l-panel);
-}
-.compare {
-  display: table;
-  width: 100%;
-  margin: 0;
-  border-collapse: collapse;
-  font-size: 14.5px;
-}
-.compare th,
-.compare td {
-  padding: 16px 20px;
-  border: 0;
-  border-bottom: 1px solid var(--l-line);
-  text-align: left;
-  vertical-align: top;
-  line-height: 1.55;
-  background: none;
-}
-.compare thead th {
-  font: 12px var(--l-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--l-muted);
-}
-.compare tbody th {
-  font: 600 14px var(--l-mono);
-  white-space: nowrap;
-}
-.compare td {
-  color: var(--l-text-2);
-}
-.compare tr {
-  background: none;
-  border: 0;
-}
-.compare tr.ours th,
-.compare tr.ours td {
-  border-bottom: 0;
-  background: var(--l-accent-soft);
-}
-.compare tr.ours th {
-  color: var(--l-accent);
-}
-
-/* 07 */
-.motto {
-  display: flex;
-  flex-direction: column;
-  margin: 8px 0 44px;
-  font: 700 clamp(28px, 4.4vw, 56px) / 1.1 var(--l-mono);
-  letter-spacing: -0.035em;
-}
-.tradeoffs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 28px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.tradeoffs li {
-  padding-top: 18px;
-  border-top: 1px solid var(--l-line-strong);
-}
-.num {
-  display: block;
-  margin-bottom: 10px;
-  font: 12px var(--l-mono);
-  color: var(--l-accent);
-}
-
-/* 08 */
-.steps {
-  display: grid;
-  gap: 16px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.steps li {
-  display: flex;
-  gap: 14px;
-}
-.step-n {
-  font: 14px/1.4 var(--l-mono);
-  color: var(--l-accent);
-}
-.steps p {
-  margin: 4px 0 0;
-  font-size: 14.5px;
-  color: var(--l-text-2);
-}
-
-/* 09 */
-.roadmap {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.roadmap li {
-  position: relative;
-  padding: 20px;
-  border: 1px dashed var(--l-line-strong);
-  border-radius: 12px;
-}
-.layer {
-  display: inline-block;
-  margin-bottom: 12px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: var(--l-accent-soft);
-  font: 12px var(--l-mono);
-  color: var(--l-accent);
-}
-
-/* 10 */
-.docs-grid {
-  display: grid;
-  align-items: start;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-.docs-group {
-  padding: 18px;
-  border: 1px solid var(--l-line);
-  border-radius: 12px;
-  background: var(--l-panel);
-}
-.docs-group h3 {
-  margin-bottom: 12px;
-  font: 600 14px var(--l-mono);
-}
-.dir {
-  color: var(--l-accent);
-  margin-right: 4px;
-}
-.docs-group ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.docs-group li + li {
-  border-top: 1px dashed var(--l-line);
-}
-.docs-group a {
-  display: block;
-  padding: 10px 0;
-  color: var(--l-text);
-}
-.doc-title {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  transition: color 0.15s;
-}
-.doc-title::before {
-  content: '› ';
-  color: var(--l-faint);
-  font-family: var(--l-mono);
-}
-.docs-group a:hover .doc-title {
-  color: var(--l-accent);
-}
-.doc-summary {
-  display: -webkit-box;
-  margin-top: 3px;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--l-muted);
-}
-
 /* outro */
 .outro {
   position: relative;
-  margin-top: 120px;
+  margin-top: 24px;
   padding-bottom: 96px;
   border-top: 1px solid var(--l-line);
 }
@@ -1293,9 +856,83 @@ h3 {
 @media (max-width: 560px) {
   .wrap { padding: 0 18px; }
   .pillars, .roadmap, .docs-grid { grid-template-columns: minmax(0, 1fr); }
-  .eyebrow { flex-wrap: wrap; border-radius: 12px; line-height: 1.5; }
+  .eyebrow { flex-wrap: wrap; border-radius: 3px; line-height: 1.5; }
   .hero-title { font-size: clamp(38px, 12vw, 56px); }
   .lede { font-size: 16px; }
   .compare tbody th { white-space: normal; }
 }
+
+/* Editorial typography and ruled sections retain the terminal demonstrations. */
+.hero-title .accent { font-style: italic; }
+.cursor { font-style: normal; }
+.eyebrow { border-radius: 0; background: transparent; border: 0; border-left: 3px solid var(--l-accent); padding-left: 12px; }
+.sec { border-top: 1px solid var(--l-line-strong); padding-bottom: 56px; }
+
+.sec-head { align-items: center; }
+.idx { background: var(--l-accent); color: var(--l-bg); padding: 7px 10px; }
+h2, .motto { font-family: var(--l-display); letter-spacing: -0.045em; }
+h3 { font-family: var(--l-display); }
+.hero-art { border: 1px solid var(--l-line-strong); background: var(--l-panel); transform: rotate(1deg); }
+.ticker { background: var(--l-text); color: var(--l-bg); border-top: 3px solid var(--l-accent); }
+.ticker-run span { color: inherit; }
+.btn.primary { box-shadow: 3px 3px 0 var(--l-text); }
+.btn.primary:hover { box-shadow: 5px 5px 0 var(--l-text); }
+.btn:focus-visible, .copy:focus-visible { outline: 2px solid var(--l-accent); outline-offset: 5px; }
+@media (max-width: 640px) {
+  .hero-art { transform: none; }
+  .hero-title { letter-spacing: -0.05em; }
+}
+</style>
+
+<style scoped>
+.architecture-visual { display: block; max-width: 980px; margin: 0 auto 20px; padding: 16px; background: #fff; border-radius: 4px; }
+.architecture-visual img { display: block; width: 100%; height: auto; }
+.more { display: inline-block; }
+.session-flow { display: flex; align-items: center; justify-content: center; gap: 28px; padding: 32px 24px; margin: 24px 0; border: 1px solid var(--l-line-strong); background: var(--l-panel); }
+.flow-node { display: flex; align-items: center; gap: 12px; padding: 18px 24px; border: 1px solid var(--l-line-strong); font: 500 17px var(--l-mono); }
+.flow-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--l-muted); }
+.flow-node.active { border-color: var(--l-accent); color: var(--l-accent); }
+.active .flow-dot { background: var(--l-accent); box-shadow: 0 0 16px var(--l-glow); }
+.flow-arrow { color: var(--l-accent); font-size: 24px; }
+.flow-outcomes { display: grid; gap: 10px; }
+.compact-rules { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.compact-rules li { padding: 16px; }
+.rule-icon { width: 36px; height: 36px; margin-bottom: 18px; color: var(--l-accent); }
+.compact-rules h3 { font-size: 16px; }
+.compact-rules p { font-size: 13px; }
+.observe-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.observe-heading .tabs { flex-shrink: 0; border: 1px solid var(--l-line); }
+.console-wide { width: 100%; }
+.console-wide img { width: 100%; display: block; }
+.doc-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding-top: 28px; padding-bottom: 28px; }
+.doc-shortcuts a { display: flex; align-items: center; gap: 16px; padding: 22px 16px; border: 1px solid var(--l-line-strong); font: 500 14px var(--l-mono); }
+.doc-shortcuts a:hover { border-color: var(--l-accent); color: var(--l-accent); }
+.doc-shortcuts a > :last-child { margin-left: auto; }
+.shortcut-index { color: var(--l-accent); font-size: 11px; }
+.start-compact { padding-top: 40px; }
+.start-compact .install { max-width: 100%; }
+.start-path { display: flex; gap: 32px; list-style: none; padding: 0; margin: 24px 0; font: 14px var(--l-mono); }
+.start-path li { display: flex; gap: 12px; align-items: center; }
+.start-path span { color: var(--l-accent); }
+.outro { padding-bottom: 0; }
+.outro-art { margin-top: 32px; }
+@media (max-width: 900px) {
+  .compact-rules, .doc-shortcuts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .session-flow { gap: 14px; padding: 24px 12px; }
+  .flow-node { padding: 12px; font-size: 14px; }
+}
+@media (max-width: 640px) {
+  .observe-heading { display: block; }
+  .observe-heading .tabs { margin-bottom: 20px; width: fit-content; }
+  .session-flow { flex-wrap: wrap; gap: 10px; }
+  .flow-node { font-size: 11px; padding: 10px; gap: 6px; }
+  .flow-arrow { font-size: 18px; }
+  .flow-dot { width: 5px; height: 5px; }
+  .start-path { flex-direction: column; gap: 16px; }
+  .doc-shortcuts a { font-size: 12px; gap: 8px; padding: 16px 10px; }
+}
+</style>
+
+<style scoped>
+@font-face { font-family: 'OAC Hand'; src: url('../assets/fonts/Virgil.woff2') format('woff2'); font-weight: 400; font-display: swap; }
 </style>

@@ -199,7 +199,7 @@ class DistributionTests(unittest.TestCase):
             self.manifest()
 
     def test_archive_reproducible_and_installer_executable(self):
-        native = self.bundle / "native/bin/oac-core"
+        native = self.bundle / "native/bin/fixture-tool"
         native.parent.mkdir(parents=True, exist_ok=True)
         native.write_bytes(b"native executable")
         native.chmod(0o555)
@@ -215,7 +215,7 @@ class DistributionTests(unittest.TestCase):
         with tarfile.open(archive) as contents:
             self.assertEqual(contents.getmember(self.bundle.name + "/install.sh").mode, 0o755)
             self.assertEqual(contents.getmember(self.bundle.name + "/manifest.json").mode, 0o644)
-            self.assertEqual(contents.getmember(self.bundle.name + "/native/bin/oac-core").mode, 0o555)
+            self.assertEqual(contents.getmember(self.bundle.name + "/native/bin/fixture-tool").mode, 0o555)
 
     def test_compressor_failure_propagates(self):
         real_popen = subprocess.Popen
@@ -277,16 +277,13 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(json.loads((self.bundle / "manifest.json").read_text())["artifact_base_url"], "")
 
     def test_bootstraps_include_shared_downloader_and_are_reproducible(self):
-        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", *distribution.OAC_CLI_MODULES):
+        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "distribution.py", "node_spec.py"):
             (self.bundle / name).write_text("# " + name + "\n")
         distribution.bootstraps(self.bundle, "1700000000", "a" * 40)
-        first = [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "oac.pyz")]
+        first = (self.bundle / "node-install.pyz").read_bytes()
         distribution.bootstraps(self.bundle, "1700000000", "a" * 40)
-        self.assertEqual(first, [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "oac.pyz")])
-        self.assertTrue(first[1].startswith(b"#!/usr/bin/env python3\n"))
-        with zipfile.ZipFile(self.bundle / "oac.pyz") as contents:
-            self.assertEqual(set(contents.namelist()), {"__main__.py", *distribution.OAC_CLI_MODULES})
-            self.assertIn(("oac_cli.SOURCE_COMMIT = " + repr("a" * 40)).encode(), contents.read("__main__.py"))
+        self.assertEqual(first, (self.bundle / "node-install.pyz").read_bytes())
+        self.assertFalse((self.bundle / "oac.pyz").exists())
         with zipfile.ZipFile(self.bundle / "node-install.pyz") as contents:
             self.assertEqual(set(contents.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"})
             self.assertEqual(contents.read("__main__.py"), (self.bundle / "node_install.py").read_bytes())
@@ -345,6 +342,14 @@ class BundledDocsTests(unittest.TestCase):
                 (self.source / "README.md").write_text("# Title\n" + text + "\n")
                 with self.assertRaises(ValueError):
                     self.bundle_docs()
+
+    def test_explicit_heading_ids_preserve_translated_links(self):
+        (self.source / "docs/install.md").write_text("## 登录 Web {#sign-in-to-web}\n[Here](#sign-in-to-web)\n")
+        self.bundle_docs()
+        self.assertEqual(distribution.heading_anchors("## 登录 Web {#sign-in-to-web}\n"), {"sign-in-to-web"})
+        (self.source / "docs/install.md").write_text("## 登录 Web {#other-id}\n")
+        with self.assertRaises(ValueError):
+            self.bundle_docs()
 
     def test_the_bundle_check_reads_code_span_links(self):
         self.bundle_docs()

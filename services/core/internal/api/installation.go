@@ -16,10 +16,10 @@ import (
 )
 
 // Installation reports Core's installation facts. Core reads them from its
-// environment and build; configuration is the installer's settings snapshot.
+// environment and build; configuration is the process settings it loaded.
 type Installation struct {
 	Object string `json:"object" enums:"core.installation"`
-	// OAC_INSTALLATION_ID; null when Core runs without the sandbox manager.
+	// The ID in OAC_INSTALLATION_ID_FILE; null when Core runs without the sandbox manager.
 	InstallationID *string `json:"installation_id" extensions:"x-nullable"`
 	// OAC_PUBLIC_URL: the origin applications, nodes, sandboxes and self-hosted executors use. Null when unset.
 	PublicURL *string `json:"public_url" extensions:"x-nullable"`
@@ -29,20 +29,22 @@ type Installation struct {
 	LocalOnly bool `json:"local_only"`
 	// Full source commit Core was built from; null for development builds.
 	SourceCommit *string `json:"source_commit" extensions:"x-nullable"`
-	// The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.
+	// The process settings Core loaded. path and apply_command are empty, and applied_at is null, because Core reports its environment rather than an installer file.
 	Configuration   *InstallationConfiguration `json:"configuration" extensions:"x-nullable"`
 	AddressBindings deployment.AddressBindings `json:"address_bindings"`
 }
 
-// InstallationConfiguration says where process settings are changed and what
-// the last applied values were. Sensitive values are never included.
+// InstallationConfiguration is the process settings Core loaded. Path and
+// ApplyCommand are empty, and AppliedAt is null, unless a caller built a
+// snapshot itself.
 type InstallationConfiguration struct {
-	// Absolute host path of the installation's config.json.
+	// Absolute host path of config.json. Empty when Core reports its own environment.
 	Path string `json:"path"`
-	// Command that applies config.json changes.
-	ApplyCommand string                `json:"apply_command"`
-	AppliedAt    time.Time             `json:"applied_at"`
-	Settings     []InstallationSetting `json:"settings"`
+	// Command that applies config.json changes. Empty when Core reports its own environment.
+	ApplyCommand string `json:"apply_command"`
+	// Null when Core reports its own environment.
+	AppliedAt *time.Time            `json:"applied_at" extensions:"x-nullable"`
+	Settings  []InstallationSetting `json:"settings"`
 }
 
 type InstallationSetting struct {
@@ -68,7 +70,7 @@ const maxInstallationSettings = 64 << 10
 // A sensitive setting that carries a value is rejected, so the snapshot cannot
 // leak a secret through this read.
 func ParseInstallationConfiguration(raw []byte) (*InstallationConfiguration, error) {
-	invalid := errors.New("OAC_SETTINGS_FILE must contain the installer's settings snapshot")
+	invalid := errors.New("installation configuration is invalid")
 	if len(raw) > maxInstallationSettings {
 		return nil, invalid
 	}
@@ -78,7 +80,10 @@ func ParseInstallationConfiguration(raw []byte) (*InstallationConfiguration, err
 	if decoder.Decode(&value) != nil || decoder.Decode(new(any)) != io.EOF {
 		return nil, invalid
 	}
-	if !filepath.IsAbs(value.Path) || value.ApplyCommand == "" || len(value.ApplyCommand) > 4096 || value.AppliedAt.IsZero() || value.Settings == nil {
+	if value.Path != "" && !filepath.IsAbs(value.Path) || len(value.ApplyCommand) > 4096 || value.Settings == nil {
+		return nil, invalid
+	}
+	if value.Path != "" && (value.ApplyCommand == "" || value.AppliedAt == nil || value.AppliedAt.IsZero()) {
 		return nil, invalid
 	}
 	seen := make(map[string]bool, len(value.Settings))
@@ -103,7 +108,7 @@ type InstallationBindings interface {
 }
 
 // @Summary Retrieve installation facts and process settings
-// @Description Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the installer's settings snapshot with where to change it, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
+// @Description Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the process settings Core loaded, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
 // @Tags Core Administration
 // @Produce json
 // @Security DeploymentAdminAuth

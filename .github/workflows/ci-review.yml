@@ -61,18 +61,22 @@ jobs:
 
             用 gh pr checks ${{ github.event.pull_request.number }} --repo ${{ github.repository }} 查询这个 PR 已有的检查结果，必要时读取对应 Actions 日志。不要触发新的 CI，也不要把合并本身当作检查通过的证据；管理员可能绕过门禁。检查失败、缺失或尚未完成时如实报告。
 
-            任务：给飞书群发一张中文卡片（Card 2.0）总结这次 CI，尽量 10 轮以内给出结论，工具调用尽可能的并行。
+            任务：给飞书群发一张中文卡片（Card 2.0）总结这次 CI，尽量在 10 轮以内给出结论，工具调用尽可能的并行。
             环境里有 gh（已登录，GH_TOKEN）、git、node 和完整的仓库代码。
 
-            卡片要让手机上的读者快速看懂，如果一切正常，表达的尽可能简单：
+            卡片要让手机上的读者快速看懂，如果一切正常，表达的尽可能简单，如果没有问题，尽量简洁：
             1. 哪个 PR（github id + PR 标题 + 链接）
+              - 如：`github id: jing332, PR 标题: 添加一个新功能, 链接: https://github.com/org/repo/pull/123`
             2. 改了什么（实际行为变化，1–3 条）
+              - 如：`添加了一个新功能、修改了 web 和 backend 的 CI`
             3. 是否符合仓库规则（AGENTS.md、CONTRIBUTING.md 及相关文档）：未发现明确违规 / 发现需修复问题 / 信息不足，无法确认
+              - 如：`符合仓库规则`
             4. CI 哪里失败、可能的原因（可以看日志），全部通过就直接说通过，不要给出细节。如果 CI 失败，则详细说明。
+              - 如：`CI 失败，具体是哪几个失败；全部通过 ✅`
 
             发送：webhook 地址在环境变量 FEISHU_WEBHOOK_URL。
-            响应 code=0 才算成功，失败就排查并重试，直到发出去。最后用一句中文说明结果。
+            响应 code=0 才算成功，失败就排查并重试，直到发出去。最后用一句中文说明结果，如：`CI 结果已发送至飞书群`。
             不要在输出里打印 webhook 地址和密钥。
           claude_args: >-
             --allowedTools Bash Read Write Edit Glob Grep WebFetch WebSearch
-            --max-turns 100
+            --max-turns 30

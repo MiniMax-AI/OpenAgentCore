@@ -25,21 +25,21 @@
 
 :root {
   /* surfaces — cool, blue-tinted neutrals */
-  --page: oklch(0.985 0.001 286.376);
+  --page: #ffffff;
   --canvas: oklch(0.961 0.002 247.84);
   --surface: oklch(1 0 0);
-  --inset: oklch(0.979 0.002 247.839);
+  --inset: #fafafa;
   --hover: oklch(0.97 0.002 247.839);
   --hover-2: oklch(0.933 0.003 247.86);
 
   /* ink ramp */
   --ink: oklch(0.247 0.006 258.361);
   --ink-2: oklch(0.506 0.01 264.477);
-  --ink-3: oklch(0.695 0.009 264.505);
+  --ink-3: oklch(0.55 0.009 264.505);
 
   /* borders — solid and crisp, not alpha */
-  --line: oklch(0.946 0.003 264.542);
-  --line-strong: oklch(0.912 0.005 258.326);
+  --line: oklch(0.90 0.003 264.542);
+  --line-strong: oklch(0.85 0.005 258.326);
   --line-soft: oklch(0.966 0.002 264.542);
   --grid-line: color-mix(in srgb, var(--line) 78%, transparent);
   --field: oklch(0.961 0.001 286.375);
@@ -77,20 +77,20 @@
 }
 
 .dark {
-  --page: oklch(0.209 0.004 264.477);
+  --page: #101215;
   --canvas: oklch(0.231 0.004 264.487);
-  --surface: oklch(0.26 0.006 271.191);
-  --inset: oklch(0.243 0.004 264.492);
+  --surface: #17191e;
+  --inset: #14161a;
   --hover: oklch(0.289 0.006 271.22);
   --hover-2: oklch(0.318 0.007 274.747);
 
   --ink: oklch(0.964 0.002 247.839);
   --ink-2: oklch(0.731 0.008 260.731);
-  --ink-3: oklch(0.541 0.01 264.484);
+  --ink-3: oklch(0.69 0.01 264.484);
 
-  --line: oklch(0.308 0.006 258.354);
+  --line: #2a2d33;
   --line-strong: oklch(0.356 0.007 264.474);
-  --line-soft: oklch(0.278 0.006 258.354);
+  --line-soft: #22262c;
   --field: oklch(0.293 0.006 271.223);
   --stripe: oklch(1 0 0 / 0.055);
   --stripe-bg: oklch(0.226 0.004 264.485);
@@ -109,7 +109,7 @@
   --tooltip-bg: oklch(0.182 0.004 264.459);
   --tooltip-fg: oklch(0.964 0.002 247.839);
   --tooltip-muted: oklch(0.731 0.008 260.731);
-  --tooltip-border: oklch(0.308 0.006 258.354);
+  --tooltip-border: #2a2d33;
 
   --shadow-hairline: 0 0 0 1px var(--line);
   /* Elevation rings go to a subtle *light* hairline in dark mode: the ring
@@ -160,14 +160,10 @@
   --shadow-overlay: var(--shadow-overlay);
 
   /* type */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-console);
   --font-mono: var(--font-mono-face), ui-monospace, "SF Mono", monospace;
 
-  /* radii — chips 6, controls 8, cards 10, windows 14, pills 999 */
-  --radius-chip: 6px;
-  --radius-control: 8px;
-  --radius-card: 10px;
-  --radius-window: 14px;
+  /* Radii are supplied by the console component tokens in system.css. */
 
   /* easing — strong curves; built-ins are too weak */
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
@@ -185,7 +181,6 @@ html {
 
 body {
   color: var(--ink);
-  font-feature-settings: "cv11", "ss01";
   font-size: 14px;
   letter-spacing: -0.01em;
   line-height: 1.5;

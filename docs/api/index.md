@@ -12,7 +12,9 @@ Core serves three namespaces. Each has one kind of caller and its own credential
 
 A credential used in another namespace gets 401: a Project API key on `/core/v1` or `/api/v1`, the Core key on `/v1` or `/api/v1`. How Projects and keys behave is in [Projects own assets](../concepts.md#projects-own-assets).
 
-**Routing.** The reverse proxy sends `/v1` and `/api/v1` to Core and everything else to Web ([proxy setup](../getting-started/install-options.md#https-and-the-reverse-proxy)). Browsers reach `/core/v1` only through Web's console server, which adds the Core key after sign-in and answers 404 for `/v1` and `/api/v1` ([console server](../web/console-server.md)). Operator scripts call `/core/v1` on Core's loopback port ([script the Core API](../getting-started/operations.md#script-the-core-api)).
+**Routing.** Web forwards `/v1`, `/api/v1` and `/docs` to Core unchanged ([console server](../web/console-server.md)). A signed-in browser reaches `/core/v1` through Web, which adds the Core key. Operator scripts call `/core/v1` inside Core's network namespace on the Core host ([script the Core API](../getting-started/operations.md#script-the-core-api)).
+
+**API reference.** Core serves a read-only Swagger UI of the three namespaces at `/docs`, and the documents at `/docs/openapi.yaml`, `/docs/core.openapi.yaml` and `/docs/runtime.openapi.yaml`. No credential is required, and the page sends no API requests. Open it on the console origin, for example `http://localhost:8080/docs`. The browser loads Swagger UI from `unpkg.com`.
 
 ## Machine connection API
 
