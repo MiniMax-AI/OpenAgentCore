@@ -141,7 +141,7 @@ func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T)
 	value := deployment.Setup{InstallationID: "installation", Provider: "docker", Mode: "nodes", Generation: 1}
 	var loadErr error
 	setups := &fakeDeploymentSetups{t: t, setup: func(context.Context) (deployment.Setup, error) { return value, loadErr }}
-	s := &managedSetup{registry: providers.Builtin(), deployment: setups, allocations: &fakeGenerationAllocations{t: t}, installationID: "installation"}
+	s := &managedSetup{capacity: testSandboxCapacity(t), registry: providers.Builtin(), deployment: setups, allocations: &fakeGenerationAllocations{t: t}, installationID: "installation"}
 	cached := &execution.RuntimeProvider{InstallationID: "installation", ProviderKind: "docker", Generation: 1}
 	s.publish(cached)
 	if got, err := s.load(t.Context()); err != nil || got != cached {
@@ -168,7 +168,7 @@ func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 	id := uuid.NewString()
 	committed := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true,
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}}
-	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id,
+	s := &managedSetup{capacity: testSandboxCapacity(t), processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id,
 		deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&committed)}}
 	if _, err := s.load(t.Context()); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("missing local helper must leave administrative recovery available", err)
@@ -179,10 +179,12 @@ func TestMissingE2BHelperReportsProviderUnavailable(t *testing.T) {
 }
 
 func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
+	t.Setenv("OAC_SANDBOX_MAX_ACTIVE", "7")
+	t.Setenv("OAC_SANDBOX_MAX_RETAINED", "31")
 	id := uuid.NewString()
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, publicURL: "https://core.example"}
+	s := &managedSetup{capacity: testSandboxCapacity(t), registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, publicURL: "https://core.example"}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
 	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})
@@ -191,6 +193,9 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	}
 	if s.selected.Load().Config != previous || candidate.Config.ProviderKind != "microsandbox" || candidate.Config.Suspension == nil || candidate.Config.CoreURL != "https://core.example/api/v1" {
 		t.Fatal("preparation published or lost candidate configuration")
+	}
+	if candidate.Config.Suspension.MaxActive != 7 || candidate.Config.Suspension.MaxRetained != 31 {
+		t.Fatal("configured capacity was not propagated")
 	}
 	committed := *candidate.Config
 	committed.Generation, committed.AdmissionPaused = 2, true
@@ -202,7 +207,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 
 func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	id := uuid.NewString()
-	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id}
+	s := &managedSetup{capacity: testSandboxCapacity(t), processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id}
 	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
 	s.publish(previous)
 	_, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true,
@@ -225,7 +230,7 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 			return deployment.Setup{}, ctx.Err()
 		}
 	}
-	s := &managedSetup{registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t, setup: delayed}}
+	s := &managedSetup{capacity: testSandboxCapacity(t), registry: providers.Builtin(), installationID: id, deployment: &fakeDeploymentSetups{t: t, setup: delayed}}
 	done := make(chan error, 1)
 	go func() {
 		provider, err := s.load(t.Context())
@@ -276,7 +281,7 @@ func testProviderPaths(t *testing.T, helper, state string) sandbox.ProcessPaths 
 
 func TestManagedObservationSourceKeepsSelectionAcrossReconfiguration(t *testing.T) {
 	value := deployment.Setup{InstallationID: "installation", Generation: 1}
-	setup := &managedSetup{registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&value)}, installationID: "installation"}
+	setup := &managedSetup{capacity: testSandboxCapacity(t), registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&value)}, installationID: "installation"}
 	if source, err := setup.ResolveObservationSource(t.Context()); source != nil || !errors.Is(err, runtimeobs.ErrUnavailable) {
 		t.Fatal("unconfigured setup did not return typed unavailability", source, err)
 	}
@@ -305,7 +310,7 @@ func TestObservationGenerationIdentityMustMatchRoutedAllocation(t *testing.T) {
 	routed := func(context.Context, sandbox.Reference) (deployment.Setup, error) {
 		return deployment.Setup{Provider: "docker", Mode: "nodes"}, nil
 	}
-	setup := &managedSetup{registry: providers.Builtin(), hub: hub, deployment: &fakeDeploymentSetups{t: t, allocationSetup: routed}, allocations: &fakeGenerationAllocations{t: t}}
+	setup := &managedSetup{capacity: testSandboxCapacity(t), registry: providers.Builtin(), hub: hub, deployment: &fakeDeploymentSetups{t: t, allocationSetup: routed}, allocations: &fakeGenerationAllocations{t: t}}
 	source := &observedGenerationRouter{&generationRouter{setup: setup, providerType: "e2b"}}
 	_, err := source.Observe(t.Context(), runtimeobs.Target{TenantID: "tenant", EnvironmentID: "environment", Instance: runtimeobs.Instance{AllocationID: "allocation"}})
 	if !errors.Is(err, providercontract.ErrContract) {

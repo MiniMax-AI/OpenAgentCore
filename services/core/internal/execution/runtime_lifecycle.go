@@ -106,12 +106,12 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 	if copied.Mode != "" && copied.Mode != "nodes" && copied.Mode != "direct" {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
-	if copied.Mode == "direct" && (copied.ProviderKind == "" || copied.LocalNodeID != "" || copied.Suspension != nil) {
+	if copied.Mode == "direct" && (copied.ProviderKind == "" || copied.LocalNodeID != "") {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if !sandbox.SupportsCheckpoint(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
+		if !sandbox.SupportsSuspension(config.Provider) || policy.IdleTimeout < time.Second || policy.Retention < time.Second || policy.MaxActive < 1 || policy.MaxRetained < policy.MaxActive {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy
@@ -196,7 +196,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		if err := r.computeFreshCapacity(ctx, providerKey); err != nil {
 			return deployment.Allocation{}, err
 		}
-		if policy := r.config.Suspension; policy != nil && r.config.ProviderKind == "" {
+		if policy := r.config.Suspension; policy != nil && (r.config.ProviderKind == "" || r.config.Mode == "direct") {
 			count, err := r.reader.CountRetainedAllocations(ctx, providerKey)
 			if err != nil {
 				return deployment.Allocation{}, err
@@ -440,7 +440,7 @@ func (w *Worker) runManagedRuntimes(ctx context.Context) error {
 
 // Manager deployments reserve capacity with Session placement before provisioning.
 func (r *runtimeLifecycle) computeFreshCapacity(ctx context.Context, key string) error {
-	if r.config.ProviderKind != "" {
+	if r.config.ProviderKind != "" && r.config.Mode != "direct" {
 		return nil
 	}
 	return r.computeCapacity(ctx, key)

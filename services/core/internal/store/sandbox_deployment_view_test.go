@@ -44,7 +44,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	for _, want := range []string{
 		`"specification":{"resources":{"cpus":2,"memory_mib":2048}}`,
 		`"template_build":{"status":"ready","resources":{"cpus":2,"memory_mib":2048,"root_disk_mib":24063}}`,
-		`"suspension":null`,
+		`"suspension":{"idle_seconds":300,"retention_seconds":86400}`,
 	} {
 		if !bytes.Contains(raw, []byte(want)) {
 			t.Fatalf("E2B view lacks %s: %s", want, raw)

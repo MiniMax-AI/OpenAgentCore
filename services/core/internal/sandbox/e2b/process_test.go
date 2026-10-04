@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ func TestTimeoutDoesNotTerminateOwnedHelper(t *testing.T) {
 	marker := filepath.Join(root, "settled")
 	// The private test path contains no shell syntax; the real adapter never puts
 	// credentials or request contents in argv or inherited environment.
-	script := "#!/bin/sh\nsleep 0.15\ntouch '" + marker + "'\nprintf '%s' '{\"Version\":1}'\n"
+	script := "#!/bin/sh\nsleep 0.15\ntouch '" + marker + "'\nprintf '%s' '{\"Version\":" + strconv.Itoa(ProtocolVersion) + "}'\n"
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +51,7 @@ func TestTimeoutDoesNotTerminateOwnedHelper(t *testing.T) {
 func TestEnvironmentDropsProviderSelectorsAndCredentials(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "helper")
-	script := "#!/bin/sh\nif test -n \"${E2B_API_KEY:-}${E2B_API_URL:-}${PRIVATE_MODEL_KEY:-}\"; then exit 1; fi\nprintf '%s' '{\"Version\":1}'\n"
+	script := "#!/bin/sh\nif test -n \"${E2B_API_KEY:-}${E2B_API_URL:-}${PRIVATE_MODEL_KEY:-}\"; then exit 1; fi\nprintf '%s' '{\"Version\":" + strconv.Itoa(ProtocolVersion) + "}'\n"
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +68,7 @@ func TestCredentialFenceWaitsForActualHelperExitAfterCancellation(t *testing.T) 
 	binary := filepath.Join(root, "helper")
 	marker := filepath.Join(root, "started")
 	finish := filepath.Join(root, "finish")
-	script := "#!/bin/sh\ntouch '" + marker + "'\nwhile ! test -f '" + finish + "'; do sleep 0.01; done\nprintf '%s' '{\"Version\":1}'\n"
+	script := "#!/bin/sh\ntouch '" + marker + "'\nwhile ! test -f '" + finish + "'; do sleep 0.01; done\nprintf '%s' '{\"Version\":" + strconv.Itoa(ProtocolVersion) + "}'\n"
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}

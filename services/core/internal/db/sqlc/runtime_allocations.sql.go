@@ -12,8 +12,8 @@ import (
 )
 
 const createRuntimeAllocation = `-- name: CreateRuntimeAllocation :one
-INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, node_id, deployment_generation)
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+INSERT INTO runtime_allocations (id, environment_id, device_id, provider_key, node_id, deployment_generation, compute_state)
+VALUES ($1, $2, $3, $4, $5, $6, jsonb_build_object('protocol_version', $7::text)) RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, kept_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
 type CreateRuntimeAllocationParams struct {
@@ -23,6 +23,7 @@ type CreateRuntimeAllocationParams struct {
 	ProviderKey          pgtype.UUID `json:"provider_key"`
 	NodeID               pgtype.UUID `json:"node_id"`
 	DeploymentGeneration pgtype.Int8 `json:"deployment_generation"`
+	ProtocolVersion      string      `json:"protocol_version"`
 }
 
 func (q *Queries) CreateRuntimeAllocation(ctx context.Context, arg CreateRuntimeAllocationParams) (RuntimeAllocation, error) {
@@ -33,6 +34,7 @@ func (q *Queries) CreateRuntimeAllocation(ctx context.Context, arg CreateRuntime
 		arg.ProviderKey,
 		arg.NodeID,
 		arg.DeploymentGeneration,
+		arg.ProtocolVersion,
 	)
 	var i RuntimeAllocation
 	err := row.Scan(

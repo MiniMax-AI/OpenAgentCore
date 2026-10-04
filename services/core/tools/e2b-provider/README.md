@@ -30,7 +30,7 @@ Compatible endpoints must return the SDK 2.51.0 template-list and template-build
 
 Run `go generate ./services/core/internal/sandbox/e2b` from the repository root after changing these declarations. `make check-e2b-provider` and the Go adapter tests reject stale projections; both languages consume generated valid and invalid exchanges covering wire types, extra fields, operation/reference bounds and managed-bootstrap fields. The helper build copies those fixtures with its source before running the pinned-SDK suite.
 
-The boundary has version 1. The request and credentials arrive on standard input; standard output carries one bounded response with a sanitized error code. The helper removes ambient `E2B_*` and `PYTHON*` variables and calls the SDK only with the request's explicit API origin and sandbox domain. Each receipt is bound to those selectors, and a receipt without them belongs to the official endpoints (`https://api.e2b.app`, `e2b.app`). An endpoint change keeps earlier generations on their original API and sandbox domain; the candidate key must verify all retained ownership before an online switch.
+The boundary has version 2. The request and credentials arrive on standard input; standard output carries one bounded response with a sanitized error code. The helper removes ambient `E2B_*` and `PYTHON*` variables and calls the SDK only with the request's explicit API origin and sandbox domain. Each receipt is bound to those selectors, and a receipt without them belongs to the official endpoints (`https://api.e2b.app`, `e2b.app`). An endpoint change keeps earlier generations on their original API and sandbox domain; the candidate key must verify all retained ownership before an online switch.
 
 ## Receipts and state directory
 
@@ -50,7 +50,7 @@ An unknown Create is never repeated. A Create whose connection material was lost
 
 ## Inspection and cleanup
 
-Inspection uses SDK metadata and ID reads only. SDK `connect` is never used because it can resume paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
+Inspection uses SDK metadata and ID reads only. Inspection never uses SDK `connect`, which is reserved for the explicit managed Resume operation. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
 
 `CreateSettled` proves that the original Create and bootstrap can no longer mutate; it is independent of `BootstrapComplete`. An empty lookup never settles an unknown Create. Kill destroys every matching sandbox, confirms that none remains and only then records a settled tombstone; it returns `State=absent` with `CreateSettled`. A settled rejected Create with no sandbox IDs proves absence without a cloud request, so GetInfo and Kill still succeed when the key is invalid. Ordinary missing compute has no such proof.
 
@@ -71,3 +71,11 @@ make check-e2b-provider
 ```
 
 With `OAC_TEST_E2B_SDK_PYTHON` pointing at the pinned SDK environment, this runs this directory's tests and the [template scripts' tests](../../deploy/e2b/README.md#tests). The helper build runs this directory's suite and checks the relocated helper's `--check` report. These tests create no cloud resources.
+
+## Managed suspension
+
+The adapter implements the complete shared suspension group. Core's common activity rule quiesces the Runtime, then the adapter calls the pinned SDK's memory-preserving `Sandbox.pause`. The private allocation receipt commits the operation before native I/O and reports resource release only after observing the exact sandbox paused.
+
+Resume calls `Sandbox.connect` once with `on_resume=restore` and the existing native timeout. It preserves the native sandbox ID while advancing the shared logical generation. Fresh connection material is persisted before returning running. Unknown pause and connect outcomes are observed without replay; a missing connect receipt keeps execution unavailable. The adapter fences stale generations before commands and deletion. Consumed pause receipt cleanup preserves running compute.
+
+The shared registration owns the 300-second idle duration and 86400-second retention default. Native timeout remains 3600 seconds and automatic native resume remains disabled. SDK calls use the configured official-compatible endpoint. Generated declarations and fixtures own the private helper shape.

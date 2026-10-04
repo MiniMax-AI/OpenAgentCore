@@ -346,6 +346,7 @@ func (f *fakeNodeTx) RefreshServingReadiness(nodeID string, protocol int) error 
 }
 
 type fakeDeploymentTx struct {
+	hasIncompatibleComputeState func(string) (bool, error)
 	t                           testing.TB
 	loadDeployment              func() (Record, error)
 	loadSnapshot                func() (Snapshot, error)
@@ -626,4 +627,12 @@ func (f *fakeReader) CountRetainedAllocations(ctx context.Context, installationI
 		unexpected(f.t, "CountRetainedAllocations")
 	}
 	return f.countRetainedAllocations(ctx, installationID)
+}
+
+func (f *fakeDeploymentTx) HasIncompatibleComputeState(version string) (bool, error) {
+	if f.hasIncompatibleComputeState == nil {
+		f.t.Fatal("unexpected HasIncompatibleComputeState")
+		return false, nil
+	}
+	return f.hasIncompatibleComputeState(version)
 }

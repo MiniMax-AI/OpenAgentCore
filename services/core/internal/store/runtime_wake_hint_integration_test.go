@@ -16,7 +16,7 @@ import (
 )
 
 type wakeHintScanProvider struct {
-	*fakeCheckpointProvider
+	*fakeSuspensionProvider
 	sentinel string
 	release  chan struct{}
 	scans    chan int
@@ -35,7 +35,7 @@ func (p *wakeHintScanProvider) GetCompute(ctx context.Context, reference sandbox
 			}
 		}
 	}
-	return p.fakeCheckpointProvider.GetCompute(ctx, reference, compute)
+	return p.fakeSuspensionProvider.GetCompute(ctx, reference, compute)
 }
 
 type wakeHintIntegrationTarget struct {
@@ -70,7 +70,7 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 	target.owner = f.phase(target.tenant, target.environment.ID, "suspended")
 	f.stop()
 	provider := &wakeHintScanProvider{
-		fakeCheckpointProvider: f.provider, sentinel: sentinel.owner.ID,
+		fakeSuspensionProvider: f.provider, sentinel: sentinel.owner.ID,
 		release: make(chan struct{}), scans: make(chan int, 16),
 	}
 	worker := startWorker(t, t.Context(), f.db, &execution.Dispatcher{

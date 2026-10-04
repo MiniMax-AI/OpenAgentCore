@@ -14,6 +14,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// SuspendControlFile is the packaged private hosted Runtime park/wake location.
+const SuspendControlFile = "/run/oac/daemon-suspend.json"
+
 const Version = 1
 const MaxBytes = 16 * 1024
 

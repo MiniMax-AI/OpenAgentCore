@@ -180,7 +180,7 @@ func TestRegistrationCheckpointPolicy(t *testing.T) {
 		{"missing idle", "microsandbox", 0, 20, false, false},
 		{"missing retention", "microsandbox", 20, 0, false, false},
 		{"overflow", "microsandbox", 1<<63 - 1, 20, false, false},
-		{"direct suspension", "microsandbox", 20, 20, true, false},
+		{"direct suspension", "microsandbox", 20, 20, true, true},
 		{"unsupported suspension", "docker", 20, 20, false, false},
 		{"independent durations", "microsandbox", 300, 30, false, true},
 		{"no suspension", "docker", 0, 0, false, true},
@@ -190,6 +190,7 @@ func TestRegistrationCheckpointPolicy(t *testing.T) {
 			a.IdleSeconds, a.RetentionSeconds = tc.idle, tc.retention
 			if tc.direct {
 				a.Mode, a.BuildLocal, a.BuildDirect = "direct", nil, registry.adapters["e2b"].BuildDirect
+				a.NodeArtifacts = nil
 			}
 			err := ValidateRegistration(a)
 			if (err == nil) != tc.valid || err != nil && !errors.Is(err, providercontract.ErrContract) {

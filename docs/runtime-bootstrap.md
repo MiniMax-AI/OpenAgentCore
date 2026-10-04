@@ -31,6 +31,10 @@ The Runtime validates the input and owns authentication and connection. A succes
 
 Self-hosted executors and operator-provisioned devices get their daemon identity in other ways; the [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists every credential source. All of them enter the same Runtime execution loop.
 
+## Hosted suspension control
+
+The private hosted park/wake control-file path is authored as `SuspendControlFile` in `internal/runtimebootstrap/bootstrap.go`. Core recovery and native Go adapters read that value; the E2B helper contract generator projects it into the template builder. Managed startup prepares its private directory and supplies `OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE` to enable Runtime suspension. This is a packaged protocol setting. The shared Sandbox Provider registration owns idle and retention defaults; the adapter owns its native lease timeout.
+
 ## Verification
 
 `go test ./internal/runtimebootstrap ./apps/daemon/internal/cli` covers the input contract, the exclusivity of credential sources and restart behavior. Provider tests verify delivery and file permissions without relying on the Runtime's private storage.

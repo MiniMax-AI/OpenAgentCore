@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -74,6 +75,9 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	}
 	if owner.Deployment == nil {
 		return nil, errors.New("execution worker requires the deployment execution operations")
+	}
+	if err := owner.Deployment.CheckRuntimeComputeProtocol(ctx, sandbox.SuspensionStateVersion); err != nil {
+		return nil, err
 	}
 	owned.notifications = &executionNotifications{}
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, admission: dispatcher.Store, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}

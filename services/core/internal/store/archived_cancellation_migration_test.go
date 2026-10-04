@@ -22,6 +22,11 @@ func TestArchivedCancellationMigrationDoesNotAdoptOldRevocations(t *testing.T) {
 	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
 		t.Fatal(err)
 	}
+	// Exercise the historical migration with the target schema's disabled
+	// suspension policy, independently of the current provider defaults.
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_deployment SET idle_seconds=0,retention_seconds=0"); err != nil {
+		t.Fatal(err)
+	}
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
 	defer db.Close()
 	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))

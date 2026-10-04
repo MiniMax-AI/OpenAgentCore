@@ -27,14 +27,17 @@ def rendered_compose(directory):
 
 class ComposeTests(unittest.TestCase):
     @classmethod
-    def render(cls, public_url=None):
+    def render(cls, public_url=None, settings=None):
         env = dict(os.environ)
         env.pop('OAC_PUBLIC_URL', None)
         env.pop('OAC_HOST', None)
         env.pop('OAC_WEB_PORT', None)
+        env.pop('OAC_SANDBOX_MAX_ACTIVE', None)
+        env.pop('OAC_SANDBOX_MAX_RETAINED', None)
         for name in ('OAC_IMAGE_CORE', 'OAC_IMAGE_WEB', 'OAC_IMAGE_INGRESS'):
             env.pop(name, None)
         env['OAC_DATA_DIR'] = '/tmp/oac-compose-fixture'
+        env.update(settings or {})
         if public_url is not None:
             env['OAC_PUBLIC_URL'] = public_url
         return json.loads(subprocess.check_output(
@@ -69,8 +72,15 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(services['web']['healthcheck']['test'], ['CMD', '/usr/local/bin/oac-web', 'healthcheck'])
         self.assertNotIn('python3', json.dumps(self.compose))
         self.assertEqual(services['init']['environment']['OAC_REVISION'], 'd' * 40)
-        for name in ('OAC_EXECUTION_CONCURRENCY', 'OAC_DEFAULT_HARNESS', 'OAC_HARNESSES', 'OAC_WRITE_AUDIT_RETENTION', 'OAC_LOG_LEVEL'):
+        for name in ('OAC_SANDBOX_MAX_ACTIVE', 'OAC_SANDBOX_MAX_RETAINED', 'OAC_EXECUTION_CONCURRENCY', 'OAC_DEFAULT_HARNESS', 'OAC_HARNESSES', 'OAC_WRITE_AUDIT_RETENTION', 'OAC_LOG_LEVEL'):
             self.assertEqual(services['core']['environment'][name], '', name)
+
+    def test_direct_sandbox_capacity_reaches_core(self):
+        settings = {'OAC_SANDBOX_MAX_ACTIVE': '7', 'OAC_SANDBOX_MAX_RETAINED': '31'}
+        services = self.render(settings=settings)['services']
+        for key, value in settings.items():
+            self.assertEqual(services['core']['environment'][key], value)
+            self.assertNotIn(key, services['web']['environment'])
 
     def test_public_url_can_be_configured_after_initial_startup(self):
         for value in (None, '', 'https://oac.example.test', 'http://localhost:9080'):

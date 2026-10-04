@@ -50,6 +50,8 @@ To change it, point the reverse proxy at the new address first, then edit `OAC_P
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
 | `OAC_LOG_ADD_SOURCE` | unset | `1` adds source locations |
 | `OAC_EXECUTION_CONCURRENCY` | `4` | Concurrent execution work, from 1 to 1024 |
+| `OAC_SANDBOX_MAX_ACTIVE` | `100` | Active sandbox limit for direct Providers with suspension, from 1 to 100000. Independent of execution concurrency and node capacity |
+| `OAC_SANDBOX_MAX_RETAINED` | `400` | Retained sandbox limit for direct Providers, from 1 to 100000, including active, suspended and unconfirmed cleanup. Must be at least the active limit |
 | `OAC_DEFAULT_HARNESS` | `codex` | Harness used when a request does not name one |
 | `OAC_HARNESSES` | Every registered Harness | Comma-separated Harnesses to enable besides the default one. Unknown names stop startup |
 | `OAC_WRITE_AUDIT_RETENTION` | `2160h` | Minimum `1h` |
@@ -72,6 +74,10 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Executor credentials of a self-hosted Session | **Session log**, then the **Session** page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](./getting-started/self-hosted.md) |
 
 Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); System shows them read-only. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
+
+### Direct Provider capacity
+
+Set `OAC_SANDBOX_MAX_ACTIVE` and `OAC_SANDBOX_MAX_RETAINED` in `.env`, then run `oac apply`. Core uses these limits for direct Providers with suspension enabled. Every unreleased allocation consumes retained capacity. Lowering a limit stops no existing sandbox; new allocations wait until usage falls below both limits. These settings are independent of `OAC_EXECUTION_CONCURRENCY` and enrolled node capacity.
 
 ### Node capacity
 

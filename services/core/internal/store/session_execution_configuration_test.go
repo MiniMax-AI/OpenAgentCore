@@ -246,7 +246,7 @@ func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
 }
 
 func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
-	s, pool := testStore(t)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, executionProjectionInput("agent"))
@@ -290,7 +290,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 			t.Fatal("runtime transition changed execution projection", phase, err)
 		}
 		after, err := deploymentStore(w).Activity(t.Context(), owner.ID)
-		if err != nil || !before.LastActivity.Equal(after.LastActivity) || before.WakeRequested != after.WakeRequested || before.Busy != after.Busy || before.HasCompletedTurn != after.HasCompletedTurn {
+		if err != nil || !before.LastActivity.Equal(after.LastActivity) || before.WakeRequested != after.WakeRequested || before.Busy != after.Busy {
 			t.Fatal("configuration read changed runtime activity", err)
 		}
 	}

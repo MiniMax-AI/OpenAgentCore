@@ -17,11 +17,12 @@ func (*lifecycleOnlySandbox) ProviderOperations() providercontract.Operations {
 		"RunCommand":               {State: providercontract.Supported},
 		"Initial":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"NewCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"RenewCompute":             {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"GetCompute":               {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"Suspend":                  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"Resume":                   {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"KillCompute":              {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
-		"DeleteSnapshot":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"DeleteRetained":           {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"RunCommandCompute":        {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"ResumeCompute":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"ObservationProviderType":  {State: providercontract.Supported},
@@ -35,7 +36,7 @@ func (*lifecycleOnlySandbox) ProviderOperations() providercontract.Operations {
 func (*lifecycleOnlySandbox) Initial(context.Context, sandbox.Reference) (sandbox.Compute, error) {
 	return sandbox.Compute{}, &providercontract.UnsupportedError{Operation: "Initial", Reason: "fixture_operation_not_supported"}
 }
-func (*lifecycleOnlySandbox) NewCompute(context.Context, sandbox.Reference, uint64, *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
+func (*lifecycleOnlySandbox) NewCompute(context.Context, sandbox.Reference, uint64, *sandbox.RetainedState) (sandbox.Compute, error) {
 	return sandbox.Compute{}, &providercontract.UnsupportedError{Operation: "NewCompute", Reason: "fixture_operation_not_supported"}
 }
 func (*lifecycleOnlySandbox) GetCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
@@ -50,8 +51,8 @@ func (*lifecycleOnlySandbox) Resume(context.Context, sandbox.ResumeRequest) (san
 func (*lifecycleOnlySandbox) KillCompute(context.Context, sandbox.Reference, sandbox.Compute) error {
 	return &providercontract.UnsupportedError{Operation: "KillCompute", Reason: "fixture_operation_not_supported"}
 }
-func (*lifecycleOnlySandbox) DeleteSnapshot(context.Context, sandbox.Reference, sandbox.SnapshotIdentity) error {
-	return &providercontract.UnsupportedError{Operation: "DeleteSnapshot", Reason: "fixture_operation_not_supported"}
+func (*lifecycleOnlySandbox) DeleteRetained(context.Context, sandbox.Reference, sandbox.RetainedState) error {
+	return &providercontract.UnsupportedError{Operation: "DeleteRetained", Reason: "fixture_operation_not_supported"}
 }
 func (*lifecycleOnlySandbox) RunCommandCompute(context.Context, sandbox.Reference, sandbox.Compute, sandbox.Command) (sandbox.CommandResult, error) {
 	return sandbox.CommandResult{}, &providercontract.UnsupportedError{Operation: "RunCommandCompute", Reason: "fixture_operation_not_supported"}
@@ -75,4 +76,8 @@ func (*lifecycleOnlySandbox) VerifyCredential(context.Context, []sandbox.Referen
 func (*lifecycleOnlySandbox) ObservationProviderType() string { return "fixture" }
 func (p *lifecycleOnlySandbox) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
 	return p, nil
+}
+
+func (p *lifecycleOnlySandbox) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "RenewCompute", Reason: "fixture_operation_not_supported"}
 }

@@ -49,7 +49,7 @@ func (waitingCleanupCheckpoint) ProviderOperations() providercontract.Operations
 }
 
 type waitingCleanupCheckpoint struct {
-	sandbox.CheckpointProvider
+	sandbox.SuspensionProvider
 	beforeKill func()
 }
 
@@ -105,7 +105,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			}
 			currentCompute := sandbox.Compute{ID: uuid.NewString(), Name: owner.ID + "-g0"}
 			if checkpoint {
-				state, _ := json.Marshal(runtimeCompute{Current: currentCompute})
+				state, _ := json.Marshal(runtimeCompute{Version: sandbox.SuspensionStateVersion, Current: currentCompute})
 				owner, err = leased.Deployment.SetCompute(t.Context(), owner, "running", state, nil, 0)
 				if err != nil {
 					t.Fatal(err)

@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -22,6 +23,7 @@ import (
 // observation. The database owns the selection; this cache is never a writer.
 type managedSetup struct {
 	processPaths sandbox.ProcessPaths
+	capacity     processconfig.SandboxLimits
 	// registry builds the selected direct provider and discovers configuration;
 	// the deployment setup reports what the registration declares.
 	registry       *providers.Registry
@@ -148,7 +150,7 @@ func (s *managedSetup) configuration(setup deployment.Setup) (execution.Prepared
 		CoreURL: s.publicURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	if setup.Suspension != nil {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
-			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}
+			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second, MaxActive: s.capacity.MaxActive, MaxRetained: s.capacity.MaxRetained}
 	}
 	return execution.PreparedRuntimeDeployment{Config: selected, Publish: s.publish}, nil
 }

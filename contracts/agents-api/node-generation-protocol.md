@@ -44,20 +44,21 @@ Each operation carries its own arguments and returns the following result on suc
 | `command` | `RunCommand` | `command` | `command` |
 | `observe` | `Observe` | `observation` | `sample` |
 | `initial` | `Initial` | None | `compute` |
-| `new_compute` | `NewCompute` | Positive compute `generation` and optional `snapshot` | `compute` |
+| `new_compute` | `NewCompute` | Positive `generation` and optional `retained` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
+| `renew_compute` | `RenewCompute` | Exact current `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | None |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
 | `command_compute` | `RunCommandCompute` | `compute` and `command` | `command` |
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
-| `delete_snapshot` | `DeleteSnapshot` | `snapshot` | None |
+| `delete_retained` | `DeleteRetained` | `retained` | None |
 
-A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
+A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not reconciliation-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
 
 The budget is relative: the node anchors `timeout_ms` to its own clock on receipt and consumes it while the request waits in its queue, so the hosts' clocks need not agree. Core still bounds its own wait. A full node queue closes the connection.
 
-The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute` or `delete_snapshot`. A failed response carries an `error_code`:
+The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute` or `delete_retained`. A failed response carries an `error_code`:
 
 | `error_code` | Meaning |
 | --- | --- |

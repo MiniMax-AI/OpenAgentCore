@@ -64,7 +64,7 @@ func (s *Service) view(snapshot Snapshot) (View, error) {
 		result.Configuration = configurationJSON(record.Public)
 		result.Metadata = configurationJSON(record.Metadata)
 		result.CredentialConfigured = d.CredentialStored
-		checkpoint, err := s.registry.SupportsCheckpoint(d.Provider)
+		checkpoint, err := s.registry.SupportsSuspension(d.Provider)
 		if err != nil {
 			return View{}, err
 		}
@@ -122,7 +122,7 @@ func (s *Service) describe(setup Setup, idleSeconds, retentionSeconds int64) (Se
 		return Setup{}, err
 	}
 	setup.Operations = adapter.Operations()
-	checkpoint, err := s.registry.SupportsCheckpoint(setup.Provider)
+	checkpoint, err := s.registry.SupportsSuspension(setup.Provider)
 	if err != nil {
 		return Setup{}, err
 	}

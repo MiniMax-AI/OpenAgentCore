@@ -1,9 +1,11 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -22,12 +24,13 @@ type RuntimeSuspensionPolicy struct {
 }
 
 type runtimeCompute struct {
-	Current   sandbox.Compute           `json:"current"`
-	Target    *sandbox.Compute          `json:"target,omitempty"`
-	Snapshot  *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
-	SuspendID string                    `json:"suspend_id,omitempty"`
-	RestoreID string                    `json:"restore_id,omitempty"`
-	Rollback  bool                      `json:"rollback,omitempty"`
+	Version   string                 `json:"protocol_version"`
+	Current   sandbox.Compute        `json:"current"`
+	Target    *sandbox.Compute       `json:"target,omitempty"`
+	Retained  *sandbox.RetainedState `json:"retained,omitempty"`
+	SuspendID string                 `json:"suspend_id,omitempty"`
+	RestoreID string                 `json:"restore_id,omitempty"`
+	Rollback  bool                   `json:"rollback,omitempty"`
 }
 
 func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) error {
@@ -48,6 +51,7 @@ func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) erro
 	return nil
 }
 func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.Allocation, phase string, state runtimeCompute, until *time.Time) (deployment.Allocation, error) {
+	state.Version = sandbox.SuspensionStateVersion
 	raw, err := json.Marshal(state)
 	if err != nil {
 		return owner, err
@@ -63,7 +67,7 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 	return r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) error {
-	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
+	p, capabilityErr := sandbox.Suspension(r.config.Provider)
 	if capabilityErr != nil {
 		return capabilityErr
 	}
@@ -83,12 +87,12 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.A
 }
 
 func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) error {
-	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
+	p, capabilityErr := sandbox.Suspension(r.config.Provider)
 	if capabilityErr != nil {
 		return capabilityErr
 	}
 	var state runtimeCompute
-	if json.Unmarshal(owner.ComputeState, &state) != nil || state.Current.ID == "" {
+	if decodeRuntimeCompute(owner.ComputeState, &state) != nil || state.Current.ID == "" {
 		return sandbox.ErrOwnership
 	}
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
@@ -122,12 +126,19 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 	}
 }
 
-func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SuspensionProvider, owner deployment.Allocation, state runtimeCompute) error {
 	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
 	if err != nil {
 		return err
 	}
 	if compute.Status != "running" || !compute.BootstrapComplete {
+		return sandbox.ErrComputeUnconfirmed
+	}
+	renewed, err := p.RenewCompute(ctx, runtimeReference(owner), state.Current)
+	if err != nil {
+		return err
+	}
+	if sandbox.ValidateComputeResult(state.Current, renewed.Compute) != nil || renewed.Status != "running" || !renewed.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
 	}
 	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
@@ -189,16 +200,16 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	return r.captureCompute(ctx, p, suspending, state, false)
 }
 
-func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
-	result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Snapshot: state.Snapshot, ObserveOnly: observeOnly})
+func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SuspensionProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
+	result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Retained: state.Retained, ReconcileOnly: observeOnly})
 	if err != nil {
 		return err
 	}
-	if result.Compute.ID != state.Current.ID {
-		return sandbox.ErrOwnership
+	if err := sandbox.ValidateSuspendResult(sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Retained: state.Retained, ReconcileOnly: observeOnly}, result); err != nil {
+		return err
 	}
-	if result.Snapshot == nil {
-		if !observeOnly || result.SourceStopped || (result.Status != "running" && result.Status != "paused") {
+	if result.Retained == nil {
+		if !observeOnly || !result.SuspendSettled || result.ResourcesReleased || (result.Status != "running" && result.Status != "paused") {
 			return sandbox.ErrComputeUnconfirmed
 		}
 		state.Rollback = true
@@ -208,21 +219,12 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Checkpo
 		}
 		return r.wakeCompute(ctx, p, next, state)
 	}
-	state.Snapshot = result.Snapshot
-	// Store the verified artifact before any recovery-path kill. Snapshot failure
-	// or an unknown result cannot silently fall back to a cold Environment.
-	next, err := r.saveCompute(ctx, owner, "suspending", state, owner.ComputeRetainedUntil)
-	if err != nil {
-		return err
-	}
-	if err := ignoreComputeAbsent(p.KillCompute(ctx, runtimeReference(owner), state.Current)); err != nil {
-		return err
-	}
-	_, err = r.saveCompute(ctx, next, "suspended", state, next.ComputeRetainedUntil)
+	state.Retained = result.Retained
+	_, err = r.saveCompute(ctx, owner, "suspended", state, owner.ComputeRetainedUntil)
 	return err
 }
 
-func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.SuspensionProvider, owner deployment.Allocation, state runtimeCompute) error {
 	activity, err := r.reader.Activity(ctx, owner.ID)
 	if err != nil {
 		return err
@@ -233,12 +235,15 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.Che
 	if err := r.computeCapacityForAllocation(ctx, owner); err != nil {
 		return err
 	}
-	if state.Snapshot == nil || state.Target != nil {
+	if state.Retained == nil || state.Target != nil {
 		return sandbox.ErrOwnership
 	}
-	target, err := p.NewCompute(ctx, runtimeReference(owner), state.Current.Generation+1, state.Snapshot)
+	target, err := p.NewCompute(ctx, runtimeReference(owner), state.Current.Generation+1, state.Retained)
 	if err != nil {
 		return err
+	}
+	if target.Name == "" || target.Generation != state.Current.Generation+1 || target.RestoredFrom == nil || *target.RestoredFrom != *state.Retained {
+		return sandbox.ErrOwnership
 	}
 	state.Target, state.RestoreID = &target, uuid.NewString()
 	next, err := r.saveCompute(ctx, owner, "restoring", state, owner.ComputeRetainedUntil)
@@ -247,15 +252,15 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.Che
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
 }
-func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
-	if state.Target == nil || state.Snapshot == nil || state.Rollback {
+func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SuspensionProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
+	if state.Target == nil || state.Retained == nil || state.Rollback {
 		return sandbox.ErrOwnership
 	}
-	result, err := p.Resume(ctx, sandbox.ResumeRequest{Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
+	result, err := p.Resume(ctx, sandbox.ResumeRequest{Reference: runtimeReference(owner), OperationID: state.RestoreID, Retained: *state.Retained, Target: *state.Target, ReconcileOnly: observeOnly})
 	if err != nil {
 		return err
 	}
-	if result.Status != "running" || result.Compute.ID == "" {
+	if result.Status != "running" || !result.BootstrapComplete || sandbox.ValidateComputeResult(*state.Target, result.Compute) != nil {
 		return sandbox.ErrComputeUnconfirmed
 	}
 	state.Current, state.Target = result.Compute, nil
@@ -281,4 +286,16 @@ func (r *runtimeLifecycle) computeCapacityForAllocation(ctx context.Context, own
 		return nil
 	}
 	return r.computeCapacity(ctx, owner.ProviderKey)
+}
+
+func decodeRuntimeCompute(raw []byte, state *runtimeCompute) error {
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(state); err != nil {
+		return err
+	}
+	if d.Decode(new(any)) != io.EOF || state.Version != sandbox.SuspensionStateVersion {
+		return sandbox.ErrOwnership
+	}
+	return nil
 }

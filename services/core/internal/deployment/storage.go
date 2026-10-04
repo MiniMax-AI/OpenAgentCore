@@ -254,6 +254,8 @@ type NodeTx interface {
 
 // DeploymentTx is one leased deployment change.
 type DeploymentTx interface {
+	// HasIncompatibleComputeState checks all unreleased allocation protocol receipts.
+	HasIncompatibleComputeState(version string) (bool, error)
 	LoadDeployment() (Record, error)
 	LoadSnapshot() (Snapshot, error)
 	CountResources() (Resources, error)

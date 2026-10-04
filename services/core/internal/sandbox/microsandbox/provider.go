@@ -16,7 +16,7 @@ type Provider struct {
 }
 
 var _ sandbox.SandboxProvider = (*Provider)(nil)
-var _ sandbox.CheckpointProvider = (*Provider)(nil)
+var _ sandbox.SuspensionProvider = (*Provider)(nil)
 
 func New(c Config) (*Provider, error) { return NewWithCaller(c, &ProcessCaller{}) }
 func NewWithCaller(c Config, caller Caller) (*Provider, error) {
@@ -26,7 +26,7 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 	c.Network.Rules = append([]NetworkRule(nil), c.Network.Rules...)
 	return &Provider{config: c, caller: caller}, nil
 }
-func (p *Provider) Initial(ctx context.Context, r sandbox.Reference) (Compute, error) {
+func (p *Provider) nativeInitial(ctx context.Context, r sandbox.Reference) (Compute, error) {
 	if err := ctx.Err(); err != nil {
 		return Compute{}, err
 	}
@@ -88,7 +88,7 @@ func (p *Provider) responseState(ctx context.Context, q Request, out Response) (
 	}
 	want := q.Compute
 	if q.Operation == "create" {
-		want, e = p.Initial(ctx, q.Reference)
+		want, e = p.nativeInitial(ctx, q.Reference)
 		if e != nil {
 			return State{}, e
 		}
@@ -142,48 +142,48 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	return result, err
 }
 func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
-	c, e := p.Initial(ctx, r)
+	c, e := p.nativeInitial(ctx, r)
 	if e != nil {
 		return sandbox.Info{}, e
 	}
-	s, e := p.GetCompute(ctx, r, c)
+	s, e := p.nativeGetCompute(ctx, r, c)
 	return info(r, s), e
 }
 func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {
 	return p.GetInfo(ctx, r)
 }
 func (p *Provider) Kill(ctx context.Context, r sandbox.Reference) error {
-	c, e := p.Initial(ctx, r)
+	c, e := p.nativeInitial(ctx, r)
 	if e != nil {
 		return e
 	}
-	return p.KillCompute(ctx, r, c)
+	return p.nativeKillCompute(ctx, r, c)
 }
 func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
-	compute, e := p.Initial(ctx, r)
+	compute, e := p.nativeInitial(ctx, r)
 	if e != nil {
 		return sandbox.CommandResult{}, e
 	}
-	return p.RunCommandCompute(ctx, r, compute, c)
+	return p.nativeRunCommandCompute(ctx, r, compute, c)
 }
-func (p *Provider) GetCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
+func (p *Provider) nativeGetCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
 	return p.state(ctx, Request{Operation: "inspect", Reference: r, Compute: c})
 }
-func (p *Provider) KillCompute(ctx context.Context, r sandbox.Reference, c Compute) error {
+func (p *Provider) nativeKillCompute(ctx context.Context, r sandbox.Reference, c Compute) error {
 	_, e := p.call(ctx, Request{Operation: "kill", Reference: r, Compute: c})
 	return e
 }
-func (p *Provider) DeleteSnapshot(ctx context.Context, r sandbox.Reference, s SnapshotIdentity) error {
+func (p *Provider) nativeDeleteSnapshot(ctx context.Context, r sandbox.Reference, s SnapshotIdentity) error {
 	_, e := p.call(ctx, Request{Operation: "delete_snapshot", Reference: r, Snapshot: &s})
 	return e
 }
-func (p *Provider) Suspend(ctx context.Context, q SuspendRequest) (State, error) {
+func (p *Provider) nativeSuspend(ctx context.Context, q SuspendRequest) (State, error) {
 	return p.state(ctx, Request{Operation: "suspend", Reference: q.Reference, Suspend: &q})
 }
-func (p *Provider) Resume(ctx context.Context, q ResumeRequest) (State, error) {
+func (p *Provider) nativeResume(ctx context.Context, q ResumeRequest) (State, error) {
 	return p.state(ctx, Request{Operation: "resume", Reference: q.Reference, Resume: &q})
 }
-func (p *Provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c Compute, command sandbox.Command) (sandbox.CommandResult, error) {
+func (p *Provider) nativeRunCommandCompute(ctx context.Context, r sandbox.Reference, c Compute, command sandbox.Command) (sandbox.CommandResult, error) {
 	out, e := p.call(ctx, Request{Operation: "command", Reference: r, Compute: c, Command: &command})
 	if e != nil {
 		return sandbox.CommandResult{}, e
@@ -196,11 +196,11 @@ func (p *Provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c
 
 // ResumeCompute thaws the exact resident source after an aborted suspension.
 // It never starts stopped compute or restores a checkpoint.
-func (p *Provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
+func (p *Provider) nativeResumeCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
 	return p.state(ctx, Request{Operation: "resume_compute", Reference: r, Compute: c})
 }
 
-func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generation uint64, snapshot *SnapshotIdentity) (Compute, error) {
+func (p *Provider) nativeNewCompute(ctx context.Context, r sandbox.Reference, generation uint64, snapshot *SnapshotIdentity) (Compute, error) {
 	if err := ctx.Err(); err != nil {
 		return Compute{}, err
 	}

@@ -28,11 +28,11 @@ import (
 
 // The controlled provider records external effects independently of DB phases.
 // Lost replies retain those effects so recovery must use observation, not replay.
-type fakeCheckpointProvider struct {
+type fakeSuspensionProvider struct {
 	preparation *initializationPeer
 	lifecycleProvider
 	computes                                                     map[string]sandbox.ComputeState
-	snapshots                                                    map[string]sandbox.SnapshotIdentity
+	snapshots                                                    map[string]sandbox.RetainedState
 	bootstraps                                                   map[string]sandbox.Bootstrap
 	peers                                                        map[string]*websocket.Conn
 	registry                                                     *runtimegateway.Registry
@@ -43,15 +43,16 @@ type fakeCheckpointProvider struct {
 	quiesces, resumes                                            atomic.Int32
 	loseCapture, loseRestore, rejectQuiesce                      bool
 	beforeQuiesce                                                func()
+	renewals                                                     atomic.Int32
 }
 
-func (p *fakeCheckpointProvider) Initial(_ context.Context, r sandbox.Reference) (sandbox.Compute, error) {
+func (p *fakeSuspensionProvider) Initial(_ context.Context, r sandbox.Reference) (sandbox.Compute, error) {
 	return sandbox.Compute{Name: r.AllocationID + "-g0"}, nil
 }
-func (p *fakeCheckpointProvider) NewCompute(_ context.Context, r sandbox.Reference, generation uint64, parent *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
+func (p *fakeSuspensionProvider) NewCompute(_ context.Context, r sandbox.Reference, generation uint64, parent *sandbox.RetainedState) (sandbox.Compute, error) {
 	return sandbox.Compute{Generation: generation, Name: fmt.Sprintf("%s-g%d", r.AllocationID, generation), RestoredFrom: parent}, nil
 }
-func (p *fakeCheckpointProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
+func (p *fakeSuspensionProvider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	info, err := p.lifecycleProvider.Create(ctx, b)
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -61,7 +62,7 @@ func (p *fakeCheckpointProvider) Create(ctx context.Context, b sandbox.Bootstrap
 	p.bootstraps[b.AllocationID] = b
 	return info, err
 }
-func (p *fakeCheckpointProvider) GetCompute(_ context.Context, _ sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+func (p *fakeSuspensionProvider) GetCompute(_ context.Context, _ sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state, ok := p.computes[c.Name]
@@ -73,24 +74,28 @@ func (p *fakeCheckpointProvider) GetCompute(_ context.Context, _ sandbox.Referen
 	}
 	return state, nil
 }
-func (p *fakeCheckpointProvider) Suspend(_ context.Context, q sandbox.SuspendRequest) (sandbox.ComputeState, error) {
+func (p *fakeSuspensionProvider) Suspend(_ context.Context, q sandbox.SuspendRequest) (sandbox.ComputeState, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state, ok := p.computes[q.Source.Name]
 	if !ok {
+		if snapshot, exists := p.snapshots[q.OperationID]; exists && q.ReconcileOnly {
+			p.captureObservations++
+			return sandbox.ComputeState{Compute: q.Source, Status: "suspended", Retained: &snapshot, BootstrapComplete: true, ResourcesReleased: true, SuspendSettled: true}, nil
+		}
 		return sandbox.ComputeState{}, sandbox.ErrNotFound
 	}
 	if state.Compute.ID != q.Source.ID {
 		return sandbox.ComputeState{}, sandbox.ErrOwnership
 	}
-	if q.ObserveOnly {
+	if q.ReconcileOnly {
 		p.captureObservations++
 	} else {
 		p.captures++
 		if _, exists := p.snapshots[q.OperationID]; exists {
 			return sandbox.ComputeState{}, errors.New("capture replayed")
 		}
-		p.snapshots[q.OperationID] = sandbox.SnapshotIdentity{Reference: "snapshot-" + q.OperationID, ID: uuid.NewString(), Digest: "verified", CheckpointID: "checkpoint", CheckpointRoot: "private", OperationID: q.OperationID, SourceGeneration: q.Source.Generation, SourceName: q.Source.Name, SourceID: q.Source.ID}
+		p.snapshots[q.OperationID] = sandbox.RetainedState{Reference: "snapshot-" + q.OperationID, ID: uuid.NewString(), Data: "verified-native-state", OperationID: q.OperationID, SourceGeneration: q.Source.Generation, SourceName: q.Source.Name, SourceID: q.Source.ID}
 		state.Status = "paused"
 		p.computes[q.Source.Name] = state
 		if p.loseCapture {
@@ -99,14 +104,20 @@ func (p *fakeCheckpointProvider) Suspend(_ context.Context, q sandbox.SuspendReq
 		}
 	}
 	if snapshot, exists := p.snapshots[q.OperationID]; exists {
-		state.Snapshot = &snapshot
+		state.Retained = &snapshot
+		state.SuspendSettled = true
+		state.ResourcesReleased = true
+		state.Status = "suspended"
+		delete(p.computes, q.Source.Name)
+		p.computeKills++
 	}
+	state.SuspendSettled = true
 	return state, nil
 }
-func (p *fakeCheckpointProvider) Resume(_ context.Context, q sandbox.ResumeRequest) (sandbox.ComputeState, error) {
+func (p *fakeSuspensionProvider) Resume(_ context.Context, q sandbox.ResumeRequest) (sandbox.ComputeState, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if q.ObserveOnly {
+	if q.ReconcileOnly {
 		p.restoreObservations++
 		state, ok := p.computes[q.Target.Name]
 		if !ok {
@@ -128,7 +139,7 @@ func (p *fakeCheckpointProvider) Resume(_ context.Context, q sandbox.ResumeReque
 	}
 	return state, nil
 }
-func (p *fakeCheckpointProvider) KillCompute(_ context.Context, _ sandbox.Reference, c sandbox.Compute) error {
+func (p *fakeSuspensionProvider) KillCompute(_ context.Context, _ sandbox.Reference, c sandbox.Compute) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	state, ok := p.computes[c.Name]
@@ -142,7 +153,7 @@ func (p *fakeCheckpointProvider) KillCompute(_ context.Context, _ sandbox.Refere
 	delete(p.computes, c.Name)
 	return nil
 }
-func (p *fakeCheckpointProvider) DeleteSnapshot(_ context.Context, _ sandbox.Reference, s sandbox.SnapshotIdentity) error {
+func (p *fakeSuspensionProvider) DeleteRetained(_ context.Context, _ sandbox.Reference, s sandbox.RetainedState) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	old, ok := p.snapshots[s.OperationID]
@@ -156,7 +167,7 @@ func (p *fakeCheckpointProvider) DeleteSnapshot(_ context.Context, _ sandbox.Ref
 	delete(p.snapshots, s.OperationID)
 	return nil
 }
-func (p *fakeCheckpointProvider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+func (p *fakeSuspensionProvider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	state, err := p.GetCompute(ctx, r, c)
 	if err != nil {
 		return state, err
@@ -167,7 +178,7 @@ func (p *fakeCheckpointProvider) ResumeCompute(ctx context.Context, r sandbox.Re
 	p.computes[c.Name] = state
 	return state, nil
 }
-func (p *fakeCheckpointProvider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, command sandbox.Command) (sandbox.CommandResult, error) {
+func (p *fakeSuspensionProvider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, command sandbox.Command) (sandbox.CommandResult, error) {
 	if _, err := p.GetCompute(ctx, r, c); err != nil {
 		return sandbox.CommandResult{}, err
 	}
@@ -180,7 +191,7 @@ func (p *fakeCheckpointProvider) RunCommandCompute(ctx context.Context, r sandbo
 	p.mu.Unlock()
 	return sandbox.CommandResult{}, p.connect(ctx, b)
 }
-func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstrap) error {
+func (p *fakeSuspensionProvider) connect(ctx context.Context, b sandbox.Bootstrap) error {
 	header := http.Header{"Authorization": []string{"Bearer " + b.Credential}}
 	conn, _, err := websocket.DefaultDialer.DialContext(ctx, p.endpoint+"?device_id="+b.DeviceID+"&version="+proto.Version, header)
 	if err != nil {
@@ -262,7 +273,7 @@ type computeLifecycleFixture struct {
 	t        *testing.T
 	store    *store.Store
 	db       fixtureDB
-	provider *fakeCheckpointProvider
+	provider *fakeSuspensionProvider
 	worker   *execution.Worker
 	stop     func()
 	key      string
@@ -273,7 +284,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 	t.Helper()
 	s, db := newManagedTestStoreDB(t)
 	registry := runtimegateway.NewRegistry()
-	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
+	p := &fakeSuspensionProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.RetainedState{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
 	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
@@ -377,7 +388,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 		f.phase(tenant, env.ID, "running")
 	}
 	if f.provider.captures != 0 {
-		t.Fatal("never-used Session suspended")
+		t.Fatal("recently-created Session suspended")
 	}
 	completed := f.complete(owner)
 	suspended := f.phase(tenant, env.ID, "suspended")
@@ -398,6 +409,28 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	}
 	if f.provider.promptFrames.Load() != 0 {
 		t.Fatal("lifecycle sent native execution input")
+	}
+}
+
+func TestRuntimeComputeLifecycleUnusedSessionSuspendsAndExpires(t *testing.T) {
+	f := newComputeLifecycleFixture(t, 1, 2)
+	tenant, session, env, owner := f.create()
+	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
+	suspended := f.phase(tenant, env.ID, "suspended")
+	if suspended.ComputeRetainedUntil == nil || f.provider.captures != 1 || f.provider.computeKills != 1 || len(f.provider.computes) != 0 || len(f.provider.snapshots) != 1 {
+		t.Fatal("unused Session did not suspend and release active compute")
+	}
+	var turns int
+	if err := f.db.pool.QueryRow(t.Context(), `SELECT count(*) FROM turns WHERE session_id=$1`, session.ID).Scan(&turns); err != nil || turns != 0 {
+		t.Fatal("unused Session gained a Turn", turns, err)
+	}
+	f.sql(`UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID)
+	reconcileManagedState(t, f.worker, f.db, tenant, env.ID, "released")
+	if len(f.provider.computes) != 0 || len(f.provider.snapshots) != 0 || f.provider.snapshotDeletes != 1 || f.provider.promptFrames.Load() != 0 {
+		t.Fatal("unused Session expiry retained resources or sent execution input")
+	}
+	if _, err := f.store.GetSession(t.Context(), tenant, session.ID); err != nil {
+		t.Fatal("resource cleanup removed Session history", err)
 	}
 }
 
@@ -568,5 +601,64 @@ func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	}
 	if f.provider.creates != 2 {
 		t.Fatal("retained limit created a third allocation")
+	}
+}
+
+func (p *fakeSuspensionProvider) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	p.renewals.Add(1)
+	return p.GetCompute(ctx, r, c)
+}
+
+func TestRuntimeComputeProtocolUpgradeRefusesOldReceiptsBeforeCleanup(t *testing.T) {
+	f := newComputeLifecycleFixture(t, 1, 2)
+	tenant, _, env, owner := f.create()
+	f.complete(owner)
+	retained := f.phase(tenant, env.ID, "suspended")
+	f.stop()
+	f.sql(`UPDATE runtime_allocations SET compute_state=(compute_state-'protocol_version'-'retained') || jsonb_build_object('snapshot',compute_state->'retained') WHERE id=$1`, owner.ID)
+	deletes := f.provider.snapshotDeletes
+	w, err := startWorkerErr(t.Context(), f.db, &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: f.provider, Suspension: &f.policy}})
+	if err == nil || w != nil || !strings.Contains(err.Error(), "previous release") {
+		t.Fatalf("incompatible state activated: %v", err)
+	}
+	if f.provider.snapshotDeletes != deletes || len(f.provider.snapshots) != 1 {
+		t.Fatal("upgrade lost owned artifact")
+	}
+	var state []byte
+	if err := f.db.pool.QueryRow(t.Context(), `SELECT compute_state FROM runtime_allocations WHERE id=$1`, owner.ID).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(state), `"snapshot"`) {
+		t.Fatal("old receipt was rewritten")
+	}
+	f.sql(`UPDATE runtime_allocations SET compute_state=$2::jsonb WHERE id=$1`, owner.ID, retained.ComputeState)
+	f.start()
+}
+
+func TestRuntimeComputeRepeatedWakeStillRenewsCurrentIncarnation(t *testing.T) {
+	f := newComputeLifecycleFixture(t, 1, 2)
+	tenant, _, env, owner := f.create()
+	before := f.provider.renewals.Load()
+	for range 3 {
+		f.sql(`UPDATE runtime_allocations SET compute_wake_requested=true,compute_activity_at=clock_timestamp() WHERE id=$1`, owner.ID)
+		f.phase(tenant, env.ID, "running")
+	}
+	if f.provider.renewals.Load() < before+3 {
+		t.Fatal("wake requests bypassed native lease renewal")
+	}
+}
+
+func TestRuntimeComputeProtocolRejectsOldDisabledAllocation(t *testing.T) {
+	f := newComputeLifecycleFixture(t, 1, 2)
+	_, _, _, owner := f.create()
+	f.stop()
+	f.sql(`UPDATE runtime_allocations SET compute_phase='disabled',compute_state='{}'::jsonb WHERE id=$1`, owner.ID)
+	before := f.provider.renewals.Load()
+	w, err := startWorkerErr(t.Context(), f.db, &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: f.provider, Suspension: &f.policy}})
+	if err == nil || w != nil || !strings.Contains(err.Error(), "previous release") {
+		t.Fatal("old disabled allocation activated", err)
+	}
+	if f.provider.renewals.Load() != before || len(f.provider.computes) != 1 {
+		t.Fatal("upgrade changed owned native compute")
 	}
 }

@@ -128,7 +128,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		t.Fatal("archive did not commit administrator audit", audits, err)
 	}
 	stop()
-	// Snapshot after shutdown: cancellation and lifecycle draining are complete.
+	// Retained after shutdown: cancellation and lifecycle draining are complete.
 	// A stale handler must not fall back to the still-open admission Store.
 	snapshot := func() string {
 		t.Helper()

@@ -421,3 +421,17 @@ func (e *ExecutionOperations) recordMetadata(tx DeploymentTx, input sandbox.Sele
 	}
 	return tx.RecordConfigurationMetadata(record.Metadata)
 }
+
+// CheckRuntimeComputeProtocol refuses incompatible allocation receipts before activation.
+func (e *ExecutionOperations) CheckRuntimeComputeProtocol(ctx context.Context, version string) error {
+	return e.storage.WithDeployment(ctx, func(tx DeploymentTx) error {
+		incompatible, err := tx.HasIncompatibleComputeState(version)
+		if err != nil {
+			return err
+		}
+		if incompatible {
+			return errors.New("incompatible retained runtime state: use the previous release to archive allocations before upgrading; history is preserved")
+		}
+		return nil
+	})
+}

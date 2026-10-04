@@ -17,7 +17,7 @@ import (
 
 func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, deployment.Allocation) {
 	t.Helper()
-	s, pool := testStore(t)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
@@ -63,7 +63,7 @@ func runtimeSuspensionStep(t *testing.T, w *Store, owner deployment.Allocation, 
 	return next
 }
 
-func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
+func TestRuntimeSuspensionRequiresIdleAndNoPendingWork(t *testing.T) {
 	cases := []string{"no_completed_turn", "queued", "in_progress", "waiting", "subagent_queued", "subagent_in_progress", "subagent_waiting", "input_reservation", "file_write", "idle"}
 	for _, kind := range cases {
 		t.Run(kind, func(t *testing.T) {
@@ -90,12 +90,12 @@ func TestRuntimeSuspensionRequiresCompletedIdleAndNoPendingWork(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantBusy := kind != "idle" && kind != "no_completed_turn"
-			if activity.Busy != wantBusy || activity.HasCompletedTurn != (kind != "no_completed_turn") {
+			if activity.Busy != wantBusy {
 				t.Fatalf("activity lost pending work: %+v", activity)
 			}
 			until := time.Now().Add(time.Hour)
 			_, err = deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
-			if kind == "idle" {
+			if kind == "idle" || kind == "no_completed_turn" {
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -262,7 +262,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 }
 
 func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
-	s, pool := testStore(t)
+	s, pool := newManagedTestStore(t)
 	w := executionWriter(t, s)
 	provider := uuid.NewString()
 	cases := []struct {
@@ -303,16 +303,18 @@ func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
 }
 
 func TestRuntimeSuspensionIdleStartsAfterLastCompletion(t *testing.T) {
-	_, w, pool, owner := runtimeSuspensionFixture(t)
-	turn := runtimeSuspensionCompleted(t, pool, owner)
+	s, w, pool, owner := runtimeSuspensionFixture(t)
+	runtimeSuspensionCompleted(t, pool, owner)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 hours' WHERE id=$1`, owner.ID)
-	var completed time.Time
-	if err := pool.QueryRow(t.Context(), `SELECT completed_at FROM turns WHERE id=$1`, turn).Scan(&completed); err != nil {
+	before := runtimeDatabaseTime(t, s)
+	id, _ := parseID(owner.SessionID)
+	if err := s.queries.RecordRuntimeTerminalActivity(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
+	after := runtimeDatabaseTime(t, s)
 	activity, err := deploymentStore(w).Activity(t.Context(), owner.ID)
-	if err != nil || !activity.LastActivity.Equal(completed) {
-		t.Fatal("long Turn completion did not restart idle interval", activity, completed, err)
+	if err != nil || activity.LastActivity.Before(before) || activity.LastActivity.After(after) || activity.ReadyToSuspend(time.Minute) {
+		t.Fatal("long Turn completion did not restart the ingestion idle interval", activity, before, after, err)
 	}
 }
 
@@ -398,6 +400,12 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 			default:
 				runtimeSuspensionSQL(t, pool, `INSERT INTO environment_file_writes(id,environment_id,device_id,request_sha256,state,created_at,settled_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()-interval '10 minutes',clock_timestamp())`, uuid.NewString(), owner.EnvironmentID, owner.DeviceID, strings.Repeat("a", 64), strings.TrimPrefix(kind, "file_"))
 			}
+			if kind == "root" || kind == "subagent" {
+				id, _ := parseID(owner.SessionID)
+				if err := s.queries.RecordRuntimeTerminalActivity(t.Context(), id); err != nil {
+					t.Fatal(err)
+				}
+			}
 			until := time.Now().Add(time.Hour)
 			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, idleTimeout); !errors.Is(err, deployment.ErrAllocationConflict) {
 				t.Fatal("completion after idle observation did not fence quiesce", err)
@@ -408,6 +416,11 @@ func TestRuntimeSuspensionRechecksCompletionAgainstIdleTimeout(t *testing.T) {
 			}
 			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, 0); !errors.Is(err, deployment.ErrInvalidInput) {
 				t.Fatal("missing idle timeout accepted", err)
+			}
+			// Re-observe the allocation after terminal ingestion advanced its activity fence.
+			owner, err = deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
+			if err != nil {
+				t.Fatal(err)
 			}
 			if _, err := deploymentExecution(t, w).SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond); err != nil {
 				t.Fatal("elapsed idle timeout rejected", err)

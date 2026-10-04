@@ -7,7 +7,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-var _ sandbox.CheckpointProvider = (*Provider)(nil)
+var _ sandbox.SuspensionProvider = (*Provider)(nil)
 var _ sandbox.SelectionDiscoverer = (*Provider)(nil)
 var _ sandbox.CredentialVerifier = (*Provider)(nil)
 var _ runtimeobs.BatchSource = (*Provider)(nil)
@@ -22,11 +22,12 @@ func Operations() providercontract.Operations {
 		"RunCommand":               {State: providercontract.Supported},
 		"Initial":                  {State: providercontract.Supported},
 		"NewCompute":               {State: providercontract.Supported},
+		"RenewCompute":             {State: providercontract.Supported},
 		"GetCompute":               {State: providercontract.Supported},
 		"Suspend":                  {State: providercontract.Supported},
 		"Resume":                   {State: providercontract.Supported},
 		"KillCompute":              {State: providercontract.Supported},
-		"DeleteSnapshot":           {State: providercontract.Supported},
+		"DeleteRetained":           {State: providercontract.Supported},
 		"RunCommandCompute":        {State: providercontract.Supported},
 		"ResumeCompute":            {State: providercontract.Supported},
 		"ObservationProviderType":  {State: providercontract.Supported},

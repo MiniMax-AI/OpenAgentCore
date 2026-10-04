@@ -57,6 +57,7 @@ func Builtin() *Registry {
 		},
 		"e2b": {
 			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
+			IdleSeconds: 300, RetentionSeconds: 86400,
 			Configuration:         e2b.ConfigurationAdapter{},
 			ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
 		},
@@ -84,8 +85,8 @@ func (r *Registry) IsNode(kind string) (bool, error) {
 	return a.Mode == "nodes", nil
 }
 
-// SupportsCheckpoint reports whether the provider declares checkpoint suspension.
-func (r *Registry) SupportsCheckpoint(kind string) (bool, error) {
+// SupportsSuspension reports whether the provider declares checkpoint suspension.
+func (r *Registry) SupportsSuspension(kind string) (bool, error) {
 	a, err := r.Lookup(kind)
 	if err != nil {
 		return false, err

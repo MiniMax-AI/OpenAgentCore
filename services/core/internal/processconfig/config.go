@@ -29,6 +29,9 @@ func Check() error {
 	if _, err := ExecutionConcurrency(); err != nil {
 		return err
 	}
+	if _, err := SandboxCapacity(); err != nil {
+		return err
+	}
 	if _, err := InstallationID(); err != nil {
 		return err
 	}
@@ -56,6 +59,7 @@ func Settings() ([]api.InstallationSetting, error) {
 	}
 	public, _ := PublicURL()
 	concurrency, _ := ExecutionConcurrency()
+	capacity, _ := SandboxCapacity()
 	engineName, _ := DefaultHarness()
 	enabled, _ := Harnesses(engineName)
 	retention := "2160h"
@@ -82,6 +86,8 @@ func Settings() ([]api.InstallationSetting, error) {
 		setting("log.format", format, "auto", true, []string{"core", "web"}),
 		setting("log.add_source", addSource, false, true, []string{"core", "web"}),
 		setting("core.execution_concurrency", concurrency, execution.DefaultExecutionConcurrency, true, []string{"core"}),
+		setting("core.sandbox_capacity.max_active", capacity.MaxActive, defaultSandboxMaxActive, true, []string{"core"}),
+		setting("core.sandbox_capacity.max_retained", capacity.MaxRetained, defaultSandboxMaxRetained, true, []string{"core"}),
 		setting("core.harnesses", enabled, (engine.Catalog{}).Kinds(), true, []string{"core"}),
 		setting("core.default_harness", engineName, "codex", true, []string{"core"}),
 		setting("core.write_audit_retention", retention, "2160h", true, []string{"core"}),

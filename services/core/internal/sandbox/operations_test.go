@@ -34,7 +34,7 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 		{"resolver unsupported", func(o providercontract.Operations) {
 			o["ResolveObservationSource"] = providercontract.Support{State: providercontract.Unsupported, Reason: "no_resolver"}
 		}},
-		{"omitted", func(o providercontract.Operations) { delete(o, "DeleteSnapshot") }},
+		{"omitted", func(o providercontract.Operations) { delete(o, "DeleteRetained") }},
 		{"zero", func(o providercontract.Operations) { o["ObserveBatch"] = providercontract.Support{} }},
 		{"unknown", func(o providercontract.Operations) {
 			o["FutureOperation"] = providercontract.Support{State: providercontract.Supported}

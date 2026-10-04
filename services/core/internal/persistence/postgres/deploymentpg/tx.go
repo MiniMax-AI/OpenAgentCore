@@ -380,3 +380,7 @@ func (t *deploymentTx) RecordAudit(action, installationID string) error {
 func (t *deploymentTx) RecordAuditAs(source adminaudit.Source, action, installationID string) error {
 	return auditpg.RecordDeploymentMutation(adminaudit.WithSource(t.ctx, source), t.q, action, "sandbox_deployment", installationID)
 }
+
+func (t *deploymentTx) HasIncompatibleComputeState(version string) (bool, error) {
+	return t.q.HasIncompatibleRuntimeComputeState(t.ctx, version)
+}

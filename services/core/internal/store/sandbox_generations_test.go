@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -217,14 +218,19 @@ func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
 	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
 		t.Fatal(err)
 	}
+	// Isolate the generation downgrade guard using the target schema's disabled
+	// suspension policy. Active suspension itself is not representable there.
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_deployment SET idle_seconds=0,retention_seconds=0"); err != nil {
+		t.Fatal(err)
+	}
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
 	defer db.Close()
 	migrations, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = migrations.DownTo(t.Context(), 80); err == nil {
-		t.Fatal("downgrade erased old owned allocation")
+	if _, err = migrations.DownTo(t.Context(), 80); err == nil || !strings.Contains(err.Error(), "Cannot downgrade while retained ownership") {
+		t.Fatal("generation ownership guard did not reject downgrade", err)
 	}
 	// Earlier down migrations can commit before the generation guard vetoes
 	// downgrade. Restore the current schema before invoking current Store code.

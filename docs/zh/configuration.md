@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: e697e320a2df0c130cb004f5e8bbda50deff6515ef7727bea066fc0d4f688b7d
+source_hash: 898b76d9d11dc78930a567d4fa7c8903b225bcacb226ecc838e7d6b4e1450b9e
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置。共有两类：
@@ -54,6 +54,8 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
 | `OAC_LOG_ADD_SOURCE` | unset | `1` adds source locations |
 | `OAC_EXECUTION_CONCURRENCY` | `4` | Concurrent execution work, from 1 to 1024 |
+| `OAC_SANDBOX_MAX_ACTIVE` | `100` | 启用暂停能力的直接 Provider 的活跃沙箱上限，范围 1–100000；独立于执行并发度和节点容量 |
+| `OAC_SANDBOX_MAX_RETAINED` | `400` | 直接 Provider 的保留沙箱上限，范围 1–100000，包括活跃、已暂停以及尚未确认清理完成的分配；必须不小于活跃上限 |
 | `OAC_DEFAULT_HARNESS` | `codex` | Harness used when a request does not name one |
 | `OAC_HARNESSES` | Every registered Harness | Comma-separated Harnesses to enable besides the default one. Unknown names stop startup |
 | `OAC_WRITE_AUDIT_RETENTION` | `2160h` | Minimum `1h` |
@@ -76,6 +78,10 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | 自托管 Session 的执行器凭据 | **Session log**，然后进入 **Session** 页面：**Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 请参阅[自托管执行器](getting-started/self-hosted.md) |
 
 哪些 Harness 已启用以及默认 Harness 属于进程设置（`core.harnesses`、`core.default_harness`）；System 会以只读方式显示它们。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
+
+### 直接 Provider 容量 {#direct-provider-capacity}
+
+在 `.env` 中设置 `OAC_SANDBOX_MAX_ACTIVE` 和 `OAC_SANDBOX_MAX_RETAINED`，然后运行 `oac apply`。Core 将这些限制用于启用暂停能力的直接 Provider。每个尚未释放的分配都占用保留容量。降低上限不会终止已有沙箱；新分配会等待使用量低于两项上限。这些设置独立于 `OAC_EXECUTION_CONCURRENCY` 和已注册节点的容量。
 
 ### 节点容量 {#node-capacity}
 

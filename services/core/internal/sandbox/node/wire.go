@@ -17,7 +17,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 4
+const ProtocolVersion = 5
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
@@ -85,15 +85,15 @@ type request struct {
 	TimeoutMillis        int64  `json:"timeout_ms"`
 	// deadline is anchored to the receiving host and never crosses the wire.
 	deadline    time.Time
-	Reference   sandbox.Reference         `json:"reference"`
-	Bootstrap   *sandbox.Bootstrap        `json:"bootstrap,omitempty"`
-	Compute     *sandbox.Compute          `json:"compute,omitempty"`
-	Generation  uint64                    `json:"generation,omitempty"`
-	Command     *sandbox.Command          `json:"command,omitempty"`
-	Suspend     *sandbox.SuspendRequest   `json:"suspend,omitempty"`
-	Resume      *sandbox.ResumeRequest    `json:"resume,omitempty"`
-	Snapshot    *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
-	Observation *runtimeobs.Target        `json:"observation,omitempty"`
+	Reference   sandbox.Reference       `json:"reference"`
+	Bootstrap   *sandbox.Bootstrap      `json:"bootstrap,omitempty"`
+	Compute     *sandbox.Compute        `json:"compute,omitempty"`
+	Generation  uint64                  `json:"generation,omitempty"`
+	Command     *sandbox.Command        `json:"command,omitempty"`
+	Suspend     *sandbox.SuspendRequest `json:"suspend,omitempty"`
+	Resume      *sandbox.ResumeRequest  `json:"resume,omitempty"`
+	Retained    *sandbox.RetainedState  `json:"retained,omitempty"`
+	Observation *runtimeobs.Target      `json:"observation,omitempty"`
 }
 
 type response struct {
@@ -238,7 +238,7 @@ func (q request) validate() error {
 		return sandbox.ErrInvalid
 	}
 	count := 0
-	for _, ok := range []bool{q.Bootstrap != nil, q.Compute != nil, q.Command != nil, q.Suspend != nil, q.Resume != nil, q.Snapshot != nil, q.Observation != nil} {
+	for _, ok := range []bool{q.Bootstrap != nil, q.Compute != nil, q.Command != nil, q.Suspend != nil, q.Resume != nil, q.Retained != nil, q.Observation != nil} {
 		if ok {
 			count++
 		}
@@ -257,10 +257,10 @@ func (q request) validate() error {
 			return nil
 		}
 	case "new_compute":
-		if count == 0 || count == 1 && q.Snapshot != nil {
+		if count == 0 || count == 1 && q.Retained != nil {
 			return nil
 		}
-	case "compute", "kill_compute", "resume_compute":
+	case "compute", "renew_compute", "kill_compute", "resume_compute":
 		if count == 1 && q.Compute != nil {
 			return nil
 		}
@@ -280,8 +280,8 @@ func (q request) validate() error {
 		if count == 1 && q.Resume != nil && q.Resume.Reference == q.Reference {
 			return nil
 		}
-	case "delete_snapshot":
-		if count == 1 && q.Snapshot != nil {
+	case "delete_retained":
+		if count == 1 && q.Retained != nil {
 			return nil
 		}
 	}
@@ -324,7 +324,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
 		out.Command = &command
 	default:
-		cp, checkpointErr := sandbox.Checkpoint(p)
+		cp, checkpointErr := sandbox.Suspension(p)
 		if checkpointErr != nil {
 			err = checkpointErr
 			break
@@ -336,10 +336,13 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 			compute, err = cp.Initial(ctx, q.Reference)
 			out.Compute = &compute
 		case "new_compute":
-			compute, err = cp.NewCompute(ctx, q.Reference, q.Generation, q.Snapshot)
+			compute, err = cp.NewCompute(ctx, q.Reference, q.Generation, q.Retained)
 			out.Compute = &compute
 		case "compute":
 			state, err = cp.GetCompute(ctx, q.Reference, *q.Compute)
+			out.State = &state
+		case "renew_compute":
+			state, err = cp.RenewCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
 		case "suspend":
 			state, err = cp.Suspend(ctx, *q.Suspend)
@@ -349,8 +352,8 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 			out.State = &state
 		case "kill_compute":
 			err = cp.KillCompute(ctx, q.Reference, *q.Compute)
-		case "delete_snapshot":
-			err = cp.DeleteSnapshot(ctx, q.Reference, *q.Snapshot)
+		case "delete_retained":
+			err = cp.DeleteRetained(ctx, q.Reference, *q.Retained)
 		case "resume_compute":
 			state, err = cp.ResumeCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
@@ -379,7 +382,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 }
 
 func requiresReady(q request) bool {
-	return q.Operation == "create" || q.Operation == "resume" && q.Resume != nil && !q.Resume.ObserveOnly
+	return q.Operation == "create" || q.Operation == "resume" && q.Resume != nil && !q.Resume.ReconcileOnly
 }
 
 // setTimeout consumes sender queue time without comparing clocks across hosts.
