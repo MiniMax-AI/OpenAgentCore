@@ -24,12 +24,12 @@ function tokenLimit(text: string): { value: number | undefined; problem: "whole"
   return number > INT32_MAX ? { value: undefined, problem: "large" } : { value: number, problem: null };
 }
 
-function isProviderUrl(value: string): boolean {
+export function isProviderUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    const authority = /^https:\/\/([^/]+)/iu.exec(value)?.[1];
-    return authority !== undefined && url.protocol === "https:" && url.hostname !== "" && !authority.includes("@")
-      && !/[\\\s?#]/u.test(value);
+    const authority = /^https?:\/\/([^/]+)/iu.exec(value)?.[1];
+    return authority !== undefined && (url.protocol === "https:" || url.protocol === "http:") && url.hostname !== ""
+      && !authority.includes("@") && !/[\\\s?#]/u.test(value);
   } catch {
     return false;
   }
@@ -38,7 +38,7 @@ function isProviderUrl(value: string): boolean {
 /**
  * Sets or replaces one harness's model configuration. Non-secret fields start from the
  * current provider; the API key never does. The protocol describes the upstream
- * model provider. The form checks the HTTPS provider URL and whole-number
+ * model provider. The form checks the HTTP or HTTPS provider URL and whole-number
  * limits within Core's range, with max output no larger than the context window.
  * Core's typed rejection is shown beside its field, or beside the form
  * when no editable field applies. Enter saves; a save in flight blocks another.

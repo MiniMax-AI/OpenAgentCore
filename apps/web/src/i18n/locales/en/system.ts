@@ -79,7 +79,7 @@ export const system = {
       setTitle: "Set default model configuration for {{harness}}",
       replaceTitle: "Replace default model configuration for {{harness}}",
       modelName: "Used for new Sessions when the application does not specify a model. Enter an exact model ID accepted by this provider.",
-      baseUrlInvalid: "Enter an HTTPS URL with a hostname and no credentials, query or fragment, such as https://api.example.com/v1.",
+      baseUrlInvalid: "Enter an HTTP or HTTPS URL with a hostname and no credentials, query or fragment, such as http://192.168.20.15:3721.",
       apiKeyHelp: "Required every time. Core encrypts it and never shows it again.",
       contextHelp: "The model's context window, in tokens. Optional.",
       contextHelpRequired: "The model's context window, in tokens. This harness requires it.",
