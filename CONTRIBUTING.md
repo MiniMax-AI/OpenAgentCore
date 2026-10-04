@@ -78,6 +78,7 @@ Record unrelated findings without starting them. Scope compatibility claims to t
 
 ### Implementation conventions
 
+- Apply the [simplicity and performance principles](AGENTS.md#simplicity-and-performance) when adding structure or optimizing execution.
 - Keep one formatter, parser, validator and error mapper per job, and one error mapper per API surface.
 - Share frontend formatting and labels in `apps/web/src/lib/`.
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs. Harness profiles must not copy Runtime tool environment values; see the [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
