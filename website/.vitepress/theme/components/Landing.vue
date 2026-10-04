@@ -4,6 +4,7 @@ import { withBase } from 'vitepress'
 import AsciiCanvas from './AsciiCanvas.vue'
 import ComposeLab from './ComposeLab.vue'
 import LogoWall from './LogoWall.vue'
+import LaunchVideo from './LaunchVideo.vue'
 import SessionFlow from './SessionFlow.vue'
 import TitleAccent from './TitleAccent.vue'
 import { copy, installCommand, repoUrl, type Lang } from '../landing-content'
@@ -113,19 +114,26 @@ onBeforeUnmount(() => {
               GitHub
             </a>
           </div>
+          <div class="hero-install">
           <div class="install">
             <code><span class="prompt">$</span> {{ installCommand }}</code>
             <button type="button" class="copy" @click="copyInstall">{{ copied ? t.hero.copied : t.hero.copy }}</button>
           </div>
           <p class="install-note">{{ t.hero.installLabel }}</p>
+          </div>
         </div>
 
-        <div class="hero-art">
-          <div class="corner tl" aria-hidden="true" /><div class="corner tr" aria-hidden="true" /><div class="corner bl" aria-hidden="true" /><div class="corner br" aria-hidden="true" />
-          <AsciiCanvas kind="logo" :cell="12" :fill="0.68" :shift-y="-0.08" label="OpenAgentCore" />
-          <dl class="hud">
-            <div v-for="[k, v] in t.hero.hud" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></div>
-          </dl>
+        <div class="hero-media">
+          <div class="hero-brand">
+            <div class="hero-art">
+              <div class="corner tl" aria-hidden="true" /><div class="corner tr" aria-hidden="true" /><div class="corner bl" aria-hidden="true" /><div class="corner br" aria-hidden="true" />
+              <AsciiCanvas kind="logo" :cell="8" :fill="0.78" label="OpenAgentCore" />
+            </div>
+            <dl class="hud">
+              <div v-for="[k, v] in t.hero.hud" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></div>
+            </dl>
+          </div>
+          <LaunchVideo :lang="lang" />
         </div>
       </div>
 
@@ -371,7 +379,7 @@ onBeforeUnmount(() => {
 }
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 32px;
   align-items: center;
   min-height: min(72vh, 660px);
@@ -459,12 +467,13 @@ onBeforeUnmount(() => {
   font: 12px var(--l-mono);
   color: var(--l-muted);
 }
+.hero-media { min-width: 0; }
+.hero-brand { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; }
 .hero-art {
   position: relative;
   aspect-ratio: 1 / 1;
-  width: 100%;
-  max-width: 600px;
-  justify-self: end;
+  width: clamp(220px, 22vw, 280px);
+  flex-shrink: 0;
 }
 .corner {
   position: absolute;
@@ -479,11 +488,9 @@ onBeforeUnmount(() => {
 .corner.bl { bottom: 0; left: 0; border-width: 0 0 1px 1px; }
 .corner.br { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
 .hud {
-  position: absolute;
-  left: 14px;
-  bottom: 12px;
+  min-width: 0;
   margin: 0;
-  font: 11px/1.7 var(--l-mono);
+  font: 10px/1.8 var(--l-mono);
   color: var(--l-muted);
   pointer-events: none;
 }
@@ -493,12 +500,14 @@ onBeforeUnmount(() => {
 }
 .hud dt {
   min-width: 6.5em;
+  flex-shrink: 0;
   color: var(--l-accent);
 }
 .hud dt::after {
   content: ':';
 }
 .hud dd {
+  overflow-wrap: anywhere;
   margin: 0;
 }
 
@@ -844,7 +853,11 @@ h3 {
 @media (max-width: 900px) {
   .hero { padding-top: 24px; }
   .hero-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; min-height: 0; }
-  .hero-art { order: -1; width: min(100%, 340px); justify-self: center; }
+  .hero-copy { display: contents; }
+  .hero-media { order: 1; width: 100%; max-width: 600px; justify-self: center; margin-top: 24px; }
+  .hero-install { order: 2; }
+  .hero-brand { justify-content: center; }
+  .hero-art { width: min(60vw, 280px); }
   .hud { display: none; }
   .split, .split.narrow-right { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .tradeoffs { grid-template-columns: minmax(0, 1fr); }
@@ -872,7 +885,7 @@ h3 {
 .idx { background: var(--l-accent); color: var(--l-bg); padding: 7px 10px; }
 h2, .motto { font-family: var(--l-display); letter-spacing: -0.045em; }
 h3 { font-family: var(--l-display); }
-.hero-art { border: 1px solid var(--l-line-strong); background: var(--l-panel); transform: rotate(1deg); }
+.hero-art { background: transparent; }
 .ticker { background: var(--l-text); color: var(--l-bg); border-top: 3px solid var(--l-accent); }
 .ticker-run span { color: inherit; }
 .btn.primary { box-shadow: 3px 3px 0 var(--l-text); }

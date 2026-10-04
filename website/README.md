@@ -27,6 +27,10 @@ The landing page lives in `.vitepress/theme/`. `landing-content.ts` holds its En
 
 The landing page has five numbered sections: the interactive combination example, an architecture image, execution lifecycle, console screenshots and installation. Four documentation shortcuts link to the detailed guides. `components/SessionFlow.vue` illustrates native execution, Core orchestration and multiple Session environments through a three-stage hand-drawn animation. It autoplays while visible and offers previous/next buttons, a stage slider and pause/play. Reduced-motion preferences disable autoplay. The diagram uses the locally bundled [Virgil font](https://github.com/excalidraw/virgil); its OFL license is stored beside the font in `.vitepress/theme/assets/fonts/`. Section headings share the hero’s display font with white text and green italic accents.
 
+### Launch video
+
+`components/LaunchVideo.vue` embeds the CDN-hosted launch film in the hero’s right column, below an interactive ASCII brand panel, in both languages. Green corner marks frame the preview. On narrow screens, the video fills the content width between the hero actions and installation command. The compact preview loops silently and has a pause control; reduced-motion preferences leave it paused. Opening the preview pauses it and continues from the same position in a modal player with native playback and audio controls. The close button, Escape and backdrop dismiss the player and return focus to the preview.
+
 ### Ecosystem logo wall
 
 `components/LogoWall.vue` places two full-width white logo rows between the documentation shortcuts and the closing installation section. The wall is transparent and borderless, allowing the landing page's background and grid to continue through it. Harness and model brands occupy the first row; cloud and compute brands occupy the second. They scroll in opposite directions, pause on hover or row keyboard focus, and have an explicit pause control. Reduced-motion preferences disable animation and leave both rows manually scrollable. Labels and controls use the landing page's English and Chinese copy.

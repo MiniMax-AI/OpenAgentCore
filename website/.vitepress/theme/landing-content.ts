@@ -15,6 +15,7 @@ export interface LandingCopy {
     copy: string
     hud: [string, string][]
   }
+  video: { title: string; expand: string; close: string; pause: string; play: string }
   ticker: string[]
   compose: {
     index: string
@@ -92,6 +93,7 @@ const en: LandingCopy = {
       ['machine', 'linux | macos | windows'],
     ],
   },
+  video: { title: 'Meet OpenAgentCore', expand: 'Watch the launch film', close: 'Close video', pause: 'Pause preview', play: 'Play preview' },
   ticker: ['Codex', 'Claude Code', 'MiniMax Code', 'Responses API', 'Anthropic Messages', 'Chat Completions', 'Docker', 'microsandbox', 'E2B', 'Linux', 'macOS', 'Windows', 'PostgreSQL', 'OpenAI SDK'],
   compose: {
     index: '01',
@@ -193,6 +195,7 @@ const zh: LandingCopy = {
       ['machine', 'linux | macos | windows'],
     ],
   },
+  video: { title: '认识 OpenAgentCore', expand: '观看发布视频', close: '关闭视频', pause: '暂停预览', play: '播放预览' },
   ticker: en.ticker,
   compose: {
     index: '01',
