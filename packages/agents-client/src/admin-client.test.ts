@@ -165,7 +165,7 @@ describe("AdminClient transport boundary", () => {
     const input = { model: "test-model", harness_config: { model_reasoning_effort: "high" }, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key: "write-only", context_window: 200000, max_output_tokens: 8000 } } as const;
     expect(await client.setHarnessModelConfiguration("codex", input)).toEqual(provider);
     expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual(input);
-    for (const unsafe of [{ ...provider, api_key: "leak" }, { ...provider, harness: "mcode" }, { ...provider, model_provider: { ...provider.model_provider, api_key_configured: false } }, { ...provider, model_provider: { ...provider.model_provider, base_url: "http://model.example/v1" } }, { ...provider, model_provider: { ...provider.model_provider, api_key: "leak" } }, { ...provider, model: "" }, { ...provider, harness_config: [] }, { ...provider, extra: 1 }]) {
+    for (const unsafe of [{ ...provider, api_key: "leak" }, { ...provider, harness: "mcode" }, { ...provider, model_provider: { ...provider.model_provider, api_key_configured: false } }, { ...provider, model_provider: { ...provider.model_provider, base_url: "https://user:pw@model.example/v1" } }, { ...provider, model_provider: { ...provider.model_provider, api_key: "leak" } }, { ...provider, model: "" }, { ...provider, harness_config: [] }, { ...provider, extra: 1 }]) {
       await expect(clientWith(unsafe).client.retrieveHarnessModelConfiguration("codex")).rejects.toMatchObject({ code: "invalid_admin_response" });
     }
     for (const unsafe of [{ ...harnesses, data: [{ ...harnesses.data[1], model_configuration: { ...provider, api_key: "leak" } }] }, { ...harnesses, data: [harnesses.data[1], harnesses.data[1]] }, { data: harnesses.data }]) {
@@ -242,7 +242,7 @@ describe("AdminClient response contracts", () => {
     // Core once accepted hosts and ports that URL parsing rejects; one must not fail the list.
     const stored = ["https://p.test:99999/v1", "https://xn--.test", "https://[::1]:8443/v1", "HTTPS://p.test/v1?"].map((url, index) => withURL(url, `agent-${index}`));
     expect((await clientWith(page(stored)).client.listAgents(projectId)).data).toEqual(stored);
-    for (const url of ["http://p.test", "https://user:pw@p.test", "https://p.test/?key=secret", "https://p.test/#secret", "https://:443/v1"]) {
+    for (const url of ["https://user:pw@p.test", "https://p.test/?key=secret", "https://p.test/#secret", "https://:443/v1", "ftp://p.test"]) {
       await expect(clientWith(page([withURL(url)])).client.listAgents(projectId)).rejects.toBeInstanceOf(AgentCoreError);
     }
   });
