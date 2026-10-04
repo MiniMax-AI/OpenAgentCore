@@ -6,13 +6,16 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/google/uuid"
 )
 
@@ -200,5 +203,101 @@ func TestInitRejectsMismatchedImageBeforeTouchingData(t *testing.T) {
 	t.Setenv("OAC_REVISION", strings.Repeat("f", 40))
 	if err := initCommand(); err == nil || !strings.Contains(err.Error(), "image does not match") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func captureInitLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var output bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(log.NewContextHandler(slog.NewJSONHandler(&output, nil))))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &output
+}
+
+func TestInitializationLogsLifecycleWithoutCredentials(t *testing.T) {
+	root, release, files := initFixture(t)
+	output := captureInitLogs(t)
+	if err := initialize(root, release, fixed(files)); err != nil {
+		t.Fatal(err)
+	}
+	for _, message := range []string{"Initialization started", "Node metadata file copied", "Credential file generated", "Installation initialized", "Initialization completed"} {
+		if !strings.Contains(output.String(), message) {
+			t.Fatalf("missing %s", message)
+		}
+	}
+	var traceID string
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatal(err)
+		}
+		if entry["component"] != "oac-init" || entry["revision"] != release.revision {
+			t.Fatalf("missing initialization identity: %v", entry)
+		}
+		trace, ok := entry["trace_id"].(string)
+		if !ok || trace == "" {
+			t.Fatal("missing trace ID")
+		}
+		if traceID == "" {
+			traceID = trace
+		}
+		if traceID != trace {
+			t.Fatal("initialization logs have different trace IDs")
+		}
+		if duration, ok := entry["duration_ms"].(float64); ok && duration < 0 {
+			t.Fatal("negative duration")
+		}
+	}
+	for _, name := range []string{"secrets/web/core.key", "secrets/database/password", "secrets/core/credential.key", "secrets/core/core-key-digests.json"} {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, value := range []string{strings.TrimSpace(string(data)), keyDigest(strings.TrimSpace(string(data)))} {
+			if strings.Contains(output.String(), value) {
+				t.Fatalf("credential or digest leaked from %s", name)
+			}
+		}
+	}
+	output.Reset()
+	if err := initialize(root, release, refuseDownload(t)); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "Existing installation verified") || strings.Contains(output.String(), "Credential file generated") {
+		t.Fatal("restart logs do not describe verification only")
+	}
+	output.Reset()
+	if err := os.Remove(filepath.Join(root, "installation.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := initialize(root, release, fixed(files)); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "Credential file retained") || strings.Contains(output.String(), "Credential file generated") {
+		t.Fatal("interrupted initialization logs do not describe credential reuse")
+	}
+}
+
+func TestInitializationLogsFailureStep(t *testing.T) {
+	root, release, _ := initFixture(t)
+	output := captureInitLogs(t)
+	failure := errors.New("invalid bundled metadata")
+	if err := initialize(root, release, func() (map[string][]byte, error) { return nil, failure }); !errors.Is(err, failure) {
+		t.Fatalf("err = %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if entry["level"] != "ERROR" || entry["step"] != "verify_bundled_metadata" || entry["error"] != failure.Error() {
+		t.Fatalf("failure log = %v", entry)
+	}
+	if _, ok := entry["duration_ms"]; !ok {
+		t.Fatal("failure duration missing")
+	}
+	if strings.Contains(output.String(), "Initialization completed") || strings.Contains(output.String(), "Credential file generated") {
+		t.Fatal("failure logged success or generated credentials")
 	}
 }
