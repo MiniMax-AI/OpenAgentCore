@@ -25,7 +25,7 @@ func TestParseProviderValidatesFrozenBundle(t *testing.T) {
 		{"unknown field", "native_options", map[string]any{}}, {"alias", "protocol", "openai"},
 		{"missing key", "api_key", ""}, {"newline key", "api_key", "fixture\nkey"},
 		{"URL credentials", "base_url", "https://user:secret@model.example/v1"},
-		{"remote HTTP", "base_url", "http://model.example/v1"},
+		{"unsupported scheme", "base_url", "ftp://model.example/v1"},
 		{"query", "base_url", "https://model.example/v1?key=secret"},
 		{"fragment", "base_url", "https://model.example/v1#secret"},
 		{"negative limit", "context_window", -1}, {"excess output", "max_output_tokens", 64001},

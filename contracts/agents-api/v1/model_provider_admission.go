@@ -9,15 +9,14 @@ import (
 	"golang.org/x/net/idna"
 )
 
-// providerScheme is the scheme a model provider base_url must use. Plain HTTP
-// is admitted only where the URL cannot leave the host: the model path already
-// serves the Harness over loopback in plaintext (the credential gateway), so a
-// loopback provider is the same trust boundary. Anything reachable from the
-// network, including a private-network address, stays HTTPS.
-const (
-	providerScheme      = "https"
-	providerPlainScheme = "http"
-)
+// providerSchemes are the schemes a model provider base_url may use. The
+// operator chooses whether the endpoint is served over TLS; a self-hosted
+// provider on another host is as valid a target as a public one. Credentials,
+// query and fragment stay rejected either way.
+var providerSchemes = map[string]bool{
+	"https": true,
+	"http":  true,
+}
 
 // providerHost converts a domain as URL host parsing does (UTS #46 without
 // hyphen or STD3 restrictions), rejecting invalid labels such as bad punycode.
@@ -63,25 +62,7 @@ func validModelProviderBaseURL(base string) bool {
 	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !validModelProviderHost(u) || strings.ContainsAny(base, "\x00\r\n") {
 		return false
 	}
-	switch u.Scheme {
-	case providerScheme:
-		return true
-	case providerPlainScheme:
-		return loopbackModelProviderHost(u.Hostname())
-	default:
-		return false
-	}
-}
-
-// loopbackModelProviderHost reports whether an HTTP provider base_url stays on
-// the machine. Only a loopback host qualifies; a private-network address is
-// still reachable by other hosts, so it keeps the HTTPS requirement.
-func loopbackModelProviderHost(host string) bool {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return providerSchemes[u.Scheme]
 }
 
 // validModelProviderHost requires a usable host: an IP address, or a domain

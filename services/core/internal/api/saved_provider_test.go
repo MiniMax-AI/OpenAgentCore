@@ -134,7 +134,7 @@ func TestSavedProviderInvalidInput(t *testing.T) {
 		`{"model_provider":{"protocol":"responses","base_url":"https://example.test","api_key":"saved-provider-secret","api_key_configured":true}}`,
 		`{"model_provider":{"protocol":"responses","base_url":"https://example.test","api_key":"saved-provider-secret","context_window":null}}`,
 		`{"model_provider":{"protocol":"responses","base_url":"https://example.test","api_key":null}}`,
-		`{"model_provider":{"protocol":"responses","base_url":"http://example.test","api_key":"saved-provider-secret"}}`,
+		`{"model_provider":{"protocol":"responses","base_url":"ftp://example.test","api_key":"saved-provider-secret"}}`,
 		`{"model_provider":{"protocol":"responses","base_url":"https://user:saved-provider-secret@example.test","api_key":"saved-provider-secret"}}`,
 		`{"model_provider":{"protocol":"responses","base_url":"https://example.test","api_key":"saved-provider-secret","API_KEY":"secret"}}`,
 		`{"model_provider":{"protocol":"responses","base_url":"https://example.test","api_key":"saved-provider-secret","api_key":"other"}}`,

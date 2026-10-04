@@ -518,9 +518,8 @@ const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-configuration$/;
 const PROVIDER_FIELDS = new Set(["protocol", "base_url", "api_key", "context_window", "max_output_tokens"]);
 /** Core's one message for a body that is not a complete provider; it never echoes a value. */
 const PROVIDER_SHAPE = "The body must be a complete model provider: protocol, base_url, api_key and optional nonnegative context_window and max_output_tokens.";
-const loopbackHost = (host) => { const name = host.replace(/^\[|\]$/g, "").toLowerCase(); return name === "localhost" || name === "::1" || /^127\./.test(name); };
-/** Core admits https anywhere, and http on a loopback host, without credentials, query or fragment. */
-const providerBaseUrl = (value) => { try { const url = new URL(value); const scheme = url.protocol === "https:" || (url.protocol === "http:" && loopbackHost(url.hostname)); return scheme && Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash; } catch { return false; } };
+/** Core admits http and https on any host, without credentials, query or fragment. */
+const providerBaseUrl = (value) => { try { const url = new URL(value); const scheme = url.protocol === "https:" || url.protocol === "http:"; return scheme && Boolean(url.hostname) && !url.username && !url.password && !url.search && !url.hash; } catch { return false; } };
 /** An omitted limit, or a nonnegative integer that fits Core's int32. */
 const tokenLimit = (value) => value === undefined || (Number.isInteger(value) && value >= 0 && value <= 2 ** 31 - 1);
 const jsonKind = (value) => Array.isArray(value) ? "an array" : typeof value === "string" ? "a string" : typeof value === "boolean" ? "a boolean" : Number.isInteger(value) ? "an integer" : "a number";
@@ -529,7 +528,7 @@ const jsonKind = (value) => Array.isArray(value) ? "an array" : typeof value ===
 function providerProblem(harness, input) {
   if (Object.keys(input).some((key) => !PROVIDER_FIELDS.has(key)) || ["protocol", "base_url", "api_key"].some((key) => typeof input[key] !== "string") ||
     !tokenLimit(input.context_window) || !tokenLimit(input.max_output_tokens)) return PROVIDER_SHAPE;
-  if (!providerBaseUrl(input.base_url)) return "model provider requires an https base_url, or http on a loopback host, without credentials, query or fragment";
+  if (!providerBaseUrl(input.base_url)) return "model provider requires an http or https base_url without credentials, query or fragment";
   if (!["anthropic", "responses", "chat_completions"].includes(input.protocol)) return "unsupported model provider protocol";
   if (!input.api_key.trim() || Buffer.byteLength(input.api_key) > 16384 || /[\0\r\n]/.test(input.api_key)) return "invalid model provider API key";
   if ((input.max_output_tokens ?? 0) > (input.context_window ?? 0)) return "invalid model token limits";

@@ -82,7 +82,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 ```
 
 - `protocol` 指定上游 API（`anthropic`、`responses` 或 `chat_completions`），而不是引擎。所选 Harness 必须原生支持它。
-- `base_url` 使用 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。当模型服务运行在本机时，回环主机（`localhost`、`127.0.0.0/8`、`::1`）上允许使用 HTTP。
+- `base_url` 使用 HTTP 或 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。scheme 由管理员选择：部署在其他主机上的自建 provider 也可以使用明文 HTTP。
 - `api_key` 不得为空，最长为 16 KiB，并且不得包含 NUL、CR 或 LF。
 - `context_window` 和 `max_output_tokens` 是可选的非负整数，输出限制不得大于上下文限制；对于 MiniMax Code，两者都必须为正数。请使用真实模型的限制。
 - `agent.model` 是准确的提供商模型 ID；只要提供该值，就始终会替换部署模型。
