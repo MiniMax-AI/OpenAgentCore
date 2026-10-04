@@ -58,7 +58,7 @@ Each code returns HTTP 400 with `type: "invalid_request_error"`. A missing, malf
 | `invalid_name` | `name` | `max_length`: 128 for Projects and nodes, 80 for Project keys | The name failed the resource's validator |
 | `invalid_node_capacity` | `max_active` or `max_retained` | `min`: 1, `max`: 1000000 | Capacity is invalid; retained capacity must also be at least active capacity |
 | `invalid_model_provider` | null | omitted | A complete model-provider bundle is required |
-| `model_provider_base_url_invalid` | `base_url` | omitted | Requires HTTPS without credentials, query or fragment |
+| `model_provider_base_url_invalid` | `base_url` | omitted | Requires HTTPS, or HTTP on a loopback host, without credentials, query or fragment |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` and `allowed_protocols`, from the build's adapter catalog | The protocol is unknown or unsupported by the selected Harness |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`: 16384 | The key is empty, too long or contains a prohibited character |
 | `model_provider_token_limits_invalid` | `context_window` or `max_output_tokens` | omitted | Limits are invalid, or the Harness requires positive limits that are missing |

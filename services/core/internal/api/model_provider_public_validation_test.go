@@ -17,7 +17,7 @@ func TestModelProviderPublicValidation(t *testing.T) {
 			body := `{"agent":{"model":"fixture"},"environment":{"type":"openai_hosted"},"input":"hello","x_agents_core":{"model_provider":` + tc.provider + `}}`
 			out := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", body)
 			messages := map[string]string{
-				"url":      "model provider requires an HTTPS base_url without credentials, query or fragment",
+				"url":      "model provider requires an https base_url, or http on a loopback host, without credentials, query or fragment",
 				"protocol": "unsupported model provider protocol", "key": "invalid model provider API key",
 				"limits": "invalid model token limits",
 			}

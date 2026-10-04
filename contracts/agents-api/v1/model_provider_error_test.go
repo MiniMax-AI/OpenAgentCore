@@ -11,7 +11,7 @@ func TestModelProviderErrorMessagesAndPrecedence(t *testing.T) {
 		name, harness, code, param, message string
 		change                              func(*ModelProviderInput)
 	}{
-		{"url first", "codex", "model_provider_base_url_invalid", "base_url", "model provider requires an HTTPS base_url without credentials, query or fragment", func(p *ModelProviderInput) {
+		{"url first", "codex", "model_provider_base_url_invalid", "base_url", "model provider requires an https base_url, or http on a loopback host, without credentials, query or fragment", func(p *ModelProviderInput) {
 			p.BaseURL = "http://private.example"
 			p.Protocol = "private"
 			p.APIKey = ""
