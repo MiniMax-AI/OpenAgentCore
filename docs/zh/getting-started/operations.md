@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: e60a6e96cd61692b6adc7664874ba0ed2ce489982e7da2fe2347631ee2a94c0a
+source_hash: 5ac3e57f943b8bb3fadbf9cda0a72399317ad101416ec28ca4037eea07703a82
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -43,7 +43,10 @@ docker compose -f ~/.oac/core/compose.yaml ps
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
 docker compose -f "$HOME/.oac/core/compose.yaml" logs --tail 200 core
+docker compose -f "$HOME/.oac/core/compose.yaml" logs --timestamps init
 ```
+
+`init` 服务在初始化完成后退出。其步骤日志见[部署说明](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation)。
 
 不要将 `docker compose config`、`docker inspect` 或原始日志粘贴到公开问题报告。
 

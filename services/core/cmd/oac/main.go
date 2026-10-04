@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 func main() {
@@ -20,10 +22,15 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+	if os.Args[1] == "init" {
+		log.Init(log.ConfigFromEnv())
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, os.Args[1], os.Args[2:]); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		if os.Args[1] != "init" {
+			fmt.Fprintln(os.Stderr, err.Error())
+		}
 		os.Exit(1)
 	}
 }

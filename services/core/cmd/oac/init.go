@@ -1,19 +1,21 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/google/uuid"
 )
 
@@ -34,10 +36,14 @@ type releaseIdentity struct {
 func initCommand() error {
 	revision := os.Getenv("OAC_REVISION")
 	if revision == "" {
-		return errors.New("OAC_REVISION is required")
+		err := errors.New("OAC_REVISION is required")
+		log.Bg().Error("Initialization failed", "step", "validate_revision", "error", err)
+		return err
 	}
 	if revision != buildRevision {
-		return errors.New("initialization image does not match the Compose release")
+		err := errors.New("initialization image does not match the Compose release")
+		log.Bg().Error("Initialization failed", "step", "validate_revision", "revision", revision, "error", err)
+		return err
 	}
 	syscall.Umask(0o077)
 	release := releaseIdentity{revision}
@@ -89,7 +95,6 @@ func readRelease(root string, release releaseIdentity) (map[string][]byte, error
 	if manifest.SourceCommit != release.revision || manifest.Platform != "linux/amd64" {
 		return nil, errors.New("release identity mismatch")
 	}
-	fmt.Println("Bundled node installation metadata verified")
 	return files, nil
 }
 
@@ -134,7 +139,26 @@ type installReceipt struct {
 	Files        map[string]string `json:"files"`
 }
 
-func initialize(root string, release releaseIdentity, fetch func() (map[string][]byte, error)) error {
+func initialize(root string, release releaseIdentity, fetch func() (map[string][]byte, error)) (err error) {
+	ctx, _ := log.StartBackgroundTrace(context.Background(), "installation.init")
+	logger := log.With("component", "oac-init", "revision", release.revision)
+	started := time.Now()
+	step, stepStarted := "prepare_directories", started
+	logger.InfoContext(ctx, "Initialization started", "data_dir", root)
+	logger.InfoContext(ctx, "Initialization step started", "step", step)
+	nextStep := func(next string) {
+		logger.InfoContext(ctx, "Initialization step completed", "step", step, "duration_ms", time.Since(stepStarted).Milliseconds())
+		step, stepStarted = next, time.Now()
+		logger.InfoContext(ctx, "Initialization step started", "step", step)
+	}
+	defer func() {
+		if err != nil {
+			logger.ErrorContext(ctx, "Initialization failed", "step", step, "duration_ms", time.Since(started).Milliseconds(), "error", err)
+			return
+		}
+		logger.InfoContext(ctx, "Initialization step completed", "step", step, "duration_ms", time.Since(stepStarted).Milliseconds())
+		logger.InfoContext(ctx, "Initialization completed", "duration_ms", time.Since(started).Milliseconds())
+	}()
 	if err := os.Chmod(root, 0o755); err != nil {
 		return err
 	}
@@ -148,6 +172,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 	}
+	nextStep("acquire_lock")
 	lock, err := os.OpenFile(filepath.Join(root, "secrets", ".init.lock"), os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
@@ -156,6 +181,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		return err
 	}
+	nextStep("verify_existing_installation")
 	marker := filepath.Join(root, "installation.json")
 	if raw, err := os.ReadFile(marker); err == nil {
 		var receipt installReceipt
@@ -174,11 +200,12 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 				return errors.New("installation files changed; restore the matching data directory")
 			}
 		}
-		fmt.Println("Existing installation verified")
+		logger.InfoContext(ctx, "Existing installation verified", "file_count", len(receipt.Files))
 		return nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	nextStep("verify_empty_data")
 	for _, name := range []string{"database", "state"} {
 		entries, err := os.ReadDir(filepath.Join(root, name))
 		if err != nil {
@@ -188,16 +215,20 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return errors.New("existing data requires its original installation files")
 		}
 	}
+	nextStep("verify_bundled_metadata")
 	files, err := fetch()
 	if err != nil {
 		return err
 	}
+	logger.InfoContext(ctx, "Bundled node installation metadata verified", "file_count", len(files))
+	nextStep("publish_node_metadata")
 	prefix := "node-payload/releases/" + release.revision + "/"
 	names := []string{}
 	for _, name := range releaseMembers {
 		if err := writeOwned(filepath.Join(root, prefix+name), files[name]); err != nil {
 			return err
 		}
+		logger.InfoContext(ctx, "Node metadata file copied", "file", name)
 		names = append(names, prefix+name)
 	}
 	active, _ := json.Marshal(map[string]string{"source_commit": release.revision})
@@ -215,6 +246,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 	}); err != nil {
 		return err
 	}
+	nextStep("prepare_credentials")
 	generators := []struct {
 		name     string
 		generate func() string
@@ -236,8 +268,11 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			if err := writeOwned(path, []byte(secret.generate()+"\n")); err != nil {
 				return err
 			}
+			logger.InfoContext(ctx, "Credential file generated", "file", secret.name)
 		} else if err != nil {
 			return err
+		} else {
+			logger.InfoContext(ctx, "Credential file retained", "file", secret.name)
 		}
 		names = append(names, secret.name)
 	}
@@ -250,6 +285,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 		return err
 	}
 	names = append(names, "secrets/core/core-key-digests.json", "node-payload/active.json")
+	nextStep("write_installation_receipt")
 	receipt := installReceipt{SourceCommit: release.revision, Files: map[string]string{}}
 	for _, name := range names {
 		if receipt.Files[name], err = fileDigest(filepath.Join(root, name)); err != nil {
@@ -260,7 +296,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 	if err := writeOwned(marker, raw); err != nil {
 		return err
 	}
-	fmt.Println("Installation initialized; print the sign-in key with: docker compose exec web oac-web core-key")
+	logger.InfoContext(ctx, "Installation initialized", "sign_in_key_command", "docker compose exec web oac-web core-key")
 	return nil
 }
 

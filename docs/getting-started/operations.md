@@ -41,7 +41,10 @@ Service health does not show that a harness or a model works. Use Session, Turn,
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
 docker compose -f "$HOME/.oac/core/compose.yaml" logs --tail 200 core
+docker compose -f "$HOME/.oac/core/compose.yaml" logs --timestamps init
 ```
+
+The `init` service exits after initialization. Its step logs are described in [Deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation).
 
 Don't paste `docker compose config`, `docker inspect` or raw logs into public issue reports.
 
