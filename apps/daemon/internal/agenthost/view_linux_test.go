@@ -363,10 +363,7 @@ func startSandbox(t *testing.T, bin string) *sandbox {
 		t.Fatalf("set %s to a static oac-sandbox-io", sandboxIOEnv)
 	}
 	auth := sandboxlinktest.NewAuthority()
-	rl, err := relay.New(relay.Config{Authority: auth})
-	if err != nil {
-		t.Fatal(err)
-	}
+	rl := relay.New(auth)
 	srv := httptest.NewServer(rl)
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { rl.Close() })

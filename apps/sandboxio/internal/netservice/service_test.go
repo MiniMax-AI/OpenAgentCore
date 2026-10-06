@@ -19,7 +19,6 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxnet"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
@@ -61,7 +60,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	auth := sandboxlinktest.NewAuthority()
-	f := &fixture{t: t, auth: auth, srv: sandboxlinktest.StartRelay(t, relay.Config{Authority: auth}), runtime: sandboxwire.NewID(),
+	f := &fixture{t: t, auth: auth, srv: sandboxlinktest.StartRelay(t, auth), runtime: sandboxwire.NewID(),
 		served: make(chan error, 16), blackhole: make(chan struct{}, 16)}
 	dns := f.startDNS()
 	svc := &Service{resolver: &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -81,7 +80,7 @@ func newFixture(t *testing.T) *fixture {
 				Serve: func(ctx context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 					f.served <- sandboxnet.Serve(ctx, s, b.Egress, svc)
 				}}},
-			OnConnected: func(sandboxlink.HelloAccepted) {
+			OnConnected: func() {
 				select {
 				case connected <- struct{}{}:
 				default:

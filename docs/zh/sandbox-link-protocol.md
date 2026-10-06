@@ -1,7 +1,7 @@
 ---
 title: "沙箱 Link 协议"
 source: docs/sandbox-link-protocol.md
-source_hash: 9abde714c7bf20a8b997b7e58031d9d325ae99b2f3045eb5c4c0c5a269bf26eb
+source_hash: d753586c244650329796b8abd17994c2e57aa433b55ebd78c499c86368e8aa6f
 ---
 
 Link 协议通过 relay 连接沙箱 I/O 的两端。Sandbox I/O 服务运行在沙箱内并为其提供服务，是 serve peer。agent host 上的 Runtime 在沙箱外运行 Harness，并通过该服务使用沙箱，是 attach peer。每个 peer 各自向 relay 认证自己的 link。relay 授权 attach peer 打开的每个服务 stream，将其绑定到该资源当前的 serve peer，然后在两个 stream 之间复制字节而不读取内容。服务帧从不携带凭据或 grant。
@@ -43,7 +43,7 @@ attachment 的生命周期长于其 link。重连后，Runtime 使用相同的 b
 
 ## 运行 relay {#run-a-relay}
 
-`relay.New` 接收带 `Authority` 的 `relay.Config`，返回 `*relay.Relay`，它是一个 `http.Handler`。relay endpoint 位于安装实例的 HTTPS ingress 之后，由 ingress 终止 TLS，因此 handler 在 ingress 的明文 HTTP 一跳上接受 upgrade；peer 在拨号时强制 TLS。每条 link 最多承载 256 个并发服务 stream。
+`relay.New` 接收 `Authority`，返回 `*relay.Relay`，它是一个 `http.Handler`。relay endpoint 位于安装实例的 HTTPS ingress 之后，由 ingress 终止 TLS，因此 handler 在 ingress 的明文 HTTP 一跳上接受 upgrade；peer 在拨号时强制 TLS。每条 link 最多承载 256 个并发服务 stream。
 
 relay 的 owner 基于其持久记录实现 `Authority`，relay 对每个 Hello、Open 和续期都咨询它。撤销时，先撤回授权，再调用 `RevokeAttachment` 或 `RevokeResource`，让 relay 关闭其持有的对象。
 
@@ -126,8 +126,7 @@ Hello
     RuntimeID         ID
     Credential        bytes        // 1..4096 bytes
 
-HelloAccepted
-  LinkID            ID
+HelloAccepted       (no fields)
 
 Open
   Service                   enum
@@ -276,6 +275,8 @@ relay 通过 32 KiB 缓冲区复制每个方向的数据，每个 stream 最多�
 | 12 | `ProtocolViolation` | 消息格式错误、出现在不允许的位置，或携带未递增的请求 ID |
 
 `ServiceUnavailable` 和 `LimitExceeded` 是临时失败：相同请求稍后可能成功，`Code.Retryable` 将它们报告为可重试。其他 code 都是最终失败：以相同凭据、attachment 和 generation 重复请求会再次失败。
+
+格式错误的响应，或其请求 ID、操作与请求不符的响应，会使该请求以 `ProtocolViolation` 和 `EffectPossible` 失败，因为请求可能已经生效。
 
 ## 验证 {#verification}
 

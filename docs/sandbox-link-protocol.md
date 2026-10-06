@@ -41,7 +41,7 @@ An attachment outlives its link. After reconnecting, the Runtime opens a stream 
 
 ## Run a relay
 
-`relay.New` takes a `relay.Config` with an `Authority` and returns a `*relay.Relay`, which is an `http.Handler`. The relay endpoint is served behind the installation's HTTPS ingress, which terminates TLS, so the handler accepts the upgrade on the ingress's plain HTTP hop; peers enforce TLS when they dial. Each link carries at most 256 concurrent service streams.
+`relay.New` takes an `Authority` and returns a `*relay.Relay`, which is an `http.Handler`. The relay endpoint is served behind the installation's HTTPS ingress, which terminates TLS, so the handler accepts the upgrade on the ingress's plain HTTP hop; peers enforce TLS when they dial. Each link carries at most 256 concurrent service streams.
 
 The owner of the relay implements `Authority` from its durable records, and the relay consults it for every Hello, Open and renewal. To revoke, withdraw the authority first, then call `RevokeAttachment` or `RevokeResource` so the relay closes what it holds.
 
@@ -124,8 +124,7 @@ Hello
     RuntimeID         ID
     Credential        bytes        // 1..4096 bytes
 
-HelloAccepted
-  LinkID            ID
+HelloAccepted       (no fields)
 
 Open
   Service                   enum
@@ -274,6 +273,8 @@ The relay copies each direction through a 32 KiB buffer and holds at most one 25
 | 12 | `ProtocolViolation` | A message is malformed, not allowed where it arrived, or carries a request ID that does not increase |
 
 `ServiceUnavailable` and `LimitExceeded` are transient: the same request may succeed later, and `Code.Retryable` reports them. Every other code is final: repeating the request with the same credential, attachment and generation fails again.
+
+An answer that is malformed, or that carries another request ID or operation than its request, fails the request with `ProtocolViolation` and `EffectPossible`, since the request may have taken effect.
 
 ## Verification
 

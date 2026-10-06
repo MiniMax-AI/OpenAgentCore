@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -98,7 +97,7 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	auth := &hooked{Authority: sandboxlinktest.NewAuthority()}
-	f := &fixture{t: t, auth: auth, srv: sandboxlinktest.StartRelay(t, relay.Config{Authority: auth}),
+	f := &fixture{t: t, auth: auth, srv: sandboxlinktest.StartRelay(t, auth),
 		runtime: sandboxwire.NewID(), closed: make(chan sandboxlink.AttachmentClosed, 16), lease: time.Minute}
 	auth.AddRuntime([]byte("runtime credential"), f.runtime)
 	link, err := sandboxlink.DialAttach(context.Background(), sandboxlink.AttachConfig{URL: f.srv.URL, TLS: f.srv.TLS,
@@ -117,7 +116,7 @@ func newFixture(t *testing.T) *fixture {
 // stream.
 type servePeer struct {
 	instance  sandboxwire.ID
-	connected chan sandboxlink.HelloAccepted
+	connected chan struct{}
 	conns     chan net.Conn
 	lost      chan sandboxwire.ID
 	restored  chan sandboxwire.ID
@@ -146,7 +145,7 @@ func (f *fixture) serve(generation uint64) *servePeer {
 func (f *fixture) startServe(generation uint64) *servePeer {
 	credential := []byte(fmt.Sprintf("serve credential %d", generation))
 	f.auth.AddServe(credential, sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource(generation)})
-	p := &servePeer{instance: sandboxwire.NewID(), connected: make(chan sandboxlink.HelloAccepted, 16), conns: make(chan net.Conn, 16),
+	p := &servePeer{instance: sandboxwire.NewID(), connected: make(chan struct{}, 16), conns: make(chan net.Conn, 16),
 		lost: make(chan sandboxwire.ID, 16), restored: make(chan sandboxwire.ID, 16), closed: make(chan sandboxlink.CloseReason, 128),
 		binds: make(chan sandboxlink.Bind, 16), echoed: make(chan error, 16), seqs: make(chan uint64, 16), done: make(chan struct{})}
 	echo := func(_ context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
@@ -175,7 +174,7 @@ func (f *fixture) startServe(generation uint64) *servePeer {
 			{Service: sandboxlink.ServiceFile, Version: 1, Serve: echo},
 			{Service: sandboxlink.ServiceProcess, Version: 1, Serve: resetAfterOne},
 		},
-		OnConnected:          func(a sandboxlink.HelloAccepted) { put(p.connected, a) },
+		OnConnected:          func() { put(p.connected, struct{}{}) },
 		OnAttachmentLost:     func(id sandboxwire.ID) { put(p.lost, id) },
 		OnAttachmentRestored: func(id sandboxwire.ID) { put(p.restored, id) },
 		OnAttachmentClosed:   func(_ sandboxwire.ID, r sandboxlink.CloseReason) { put(p.closed, r) },
@@ -516,5 +515,114 @@ func TestBindSequence(t *testing.T) {
 	reconnected := seq(third)
 	if !(0 < earlier && earlier < later && later < reconnected) {
 		t.Fatalf("bind sequences %d, %d, then %d after a reconnect; want them to increase from above zero", earlier, later, reconnected)
+	}
+}
+
+// A request fails with a final ProtocolViolation and EffectPossible when its
+// answer carries another request ID, request ID zero or another operation. The
+// relay passes a Bind's failure on to the Open. A CloseAttachment answer under
+// another request ID is left out: the link drops it as a late answer.
+func TestAnswersMatchTheirRequests(t *testing.T) {
+	for _, op := range []sandboxlink.Op{sandboxlink.OpHello, sandboxlink.OpOpen, sandboxlink.OpBind, sandboxlink.OpCloseAttachment} {
+		for _, kind := range []string{"wrong ID", "zero ID", "wrong op"} {
+			if op == sandboxlink.OpCloseAttachment && kind == "wrong ID" {
+				continue
+			}
+			t.Run(fmt.Sprintf("op %d %s", op, kind), func(t *testing.T) {
+				// answer writes m as the answer to request id, spoiled as kind
+				// says. A fake that fails leaves its caller without a violation.
+				answer := func(w io.Writer, id uint64, m sandboxlink.Message) {
+					switch kind {
+					case "wrong ID":
+						id++
+					case "zero ID":
+						id = 0
+					default:
+						m = sandboxlink.FailureFor(sandboxlink.OpRenewAttachment, sandboxlink.Fail(sandboxlink.ServiceUnavailable))
+					}
+					fr, _ := sandboxlink.Encode(1, m)
+					fr.RequestID = id
+					sandboxwire.WriteFrame(w, fr)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), wait)
+				defer cancel()
+				f, grant := &fixture{t: t}, []byte("grant")
+				var err error
+				if op == sandboxlink.OpBind {
+					f = newFixture(t)
+					grant = f.grant(1)
+					credential := []byte("serve credential")
+					f.auth.AddServe(credential, sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource(1)})
+					conn, err := sandboxlink.DialWebSocket(ctx, f.srv.URL, f.srv.TLS)
+					if err != nil {
+						t.Fatal(err)
+					}
+					sess, _ := sandboxlink.ClientSession(conn)
+					t.Cleanup(func() { sess.Close() })
+					ctl, err := sess.OpenStream(ctx)
+					if err == nil {
+						err = sandboxlink.WriteMessage(ctl, 1, sandboxlink.ServeHello{Version: sandboxlink.Version, Credential: credential, Resource: resource(1),
+							ServerInstanceID: sandboxwire.NewID(), Services: []sandboxlink.ServiceVersion{{Service: sandboxlink.ServiceFile, Version: 1}}})
+					}
+					if err == nil {
+						_, err = sandboxlink.ReadReply(ctl, sandboxlink.OpHello, 1)
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					go func() {
+						st, err := sess.AcceptStream()
+						if err != nil {
+							return
+						}
+						id, _, _ := sandboxlink.ReadMessage(st)
+						answer(st, id, sandboxlink.Bound{})
+					}()
+				} else {
+					client, server := net.Pipe()
+					t.Cleanup(func() { server.Close() })
+					go func() {
+						sess, _ := sandboxlink.ServerSession(server)
+						ctl, err := sess.AcceptStream()
+						if err != nil {
+							return
+						}
+						id, _, _ := sandboxlink.ReadMessage(ctl)
+						if op == sandboxlink.OpHello {
+							answer(ctl, id, sandboxlink.HelloAccepted{})
+							return
+						}
+						sandboxlink.WriteMessage(ctl, id, sandboxlink.HelloAccepted{})
+						if op == sandboxlink.OpCloseAttachment {
+							id, _, _ = sandboxlink.ReadMessage(ctl)
+							answer(ctl, id, sandboxlink.CloseAccepted{})
+							return
+						}
+						st, err := sess.AcceptStream()
+						if err != nil {
+							return
+						}
+						id, m, _ := sandboxlink.ReadMessage(st)
+						o, _ := m.(sandboxlink.Open)
+						answer(st, id, sandboxlink.Opened{AttachmentID: o.AttachmentID, ServerInstanceID: sandboxwire.NewID(), LeaseExpiresAt: time.Now().Add(time.Minute)})
+					}()
+					f.link, err = sandboxlink.DialAttach(ctx, sandboxlink.AttachConfig{RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime credential"),
+						Dial: func(context.Context) (net.Conn, error) { return client, nil }})
+				}
+				switch {
+				case op == sandboxlink.OpHello:
+				case err != nil:
+					t.Fatal(err)
+				case op == sandboxlink.OpCloseAttachment:
+					err = f.link.CloseAttachment(ctx, sandboxwire.NewID())
+				default:
+					_, _, err = f.open(sandboxlink.ServiceFile, sandboxwire.NewID(), 1, grant)
+				}
+				var e *sandboxlink.Error
+				if !errors.As(err, &e) || e.Code != sandboxlink.ProtocolViolation || e.Effect != sandboxwire.EffectPossible || e.Code.Retryable() {
+					t.Fatalf("%v, want a ProtocolViolation with EffectPossible", err)
+				}
+			})
+		}
 	}
 }

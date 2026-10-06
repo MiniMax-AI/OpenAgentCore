@@ -89,7 +89,7 @@ func run(ctx context.Context, bootstrapPath string, opt options) error {
 			}},
 			{Service: sandboxlink.ServiceNetwork, Version: sandboxnet.Version, Serve: netservice.New().Handle},
 		},
-		OnConnected: func(sandboxlink.HelloAccepted) { down.Store(false) },
+		OnConnected: func() { down.Store(false) },
 		OnDisconnected: func(err error) {
 			if !down.Swap(true) {
 				log.Printf("oac-sandbox-io: relay link ended, reconnecting: %v", err)

@@ -316,9 +316,7 @@ type AttachHello struct {
 }
 
 // HelloAccepted answers either Hello.
-type HelloAccepted struct {
-	LinkID sandboxwire.ID
-}
+type HelloAccepted struct{}
 
 // Open is the first message on a service stream the attach peer opens. A zero
 // ExpectedServerInstanceID means no expectation.
@@ -590,11 +588,11 @@ func WriteMessage(w io.Writer, requestID uint64, m Message) error {
 	return sandboxwire.WriteFrame(w, f)
 }
 
-// ReadMessage reads and decodes one frame no larger than maxPayload. The
+// ReadMessage reads and decodes one frame no larger than MaxMessageBytes. The
 // request ID is returned whenever a frame was read, even if it failed to
 // decode, so a reader can answer it.
-func ReadMessage(r io.Reader, maxPayload uint32) (uint64, Message, error) {
-	f, err := sandboxwire.ReadFrame(r, maxPayload)
+func ReadMessage(r io.Reader) (uint64, Message, error) {
+	f, err := sandboxwire.ReadFrame(r, MaxMessageBytes)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -602,31 +600,44 @@ func ReadMessage(r io.Reader, maxPayload uint32) (uint64, Message, error) {
 	return f.RequestID, m, err
 }
 
-// errPossibleViolation answers a request whose response did not fit it.
-var errPossibleViolation = &Error{Code: ProtocolViolation, Effect: sandboxwire.EffectPossible}
-
-// ReadReply reads the response to the request op sent with requestID. A
-// Failure returns its *Error. A frame that cannot be read returns Uncertain,
-// and one with another request ID or for another operation returns
+// violation is the failure of a request whose answer broke the protocol:
 // ProtocolViolation with EffectPossible, since the request may have taken
 // effect.
+func violation(cause error) *Error {
+	return &Error{Code: ProtocolViolation, Effect: sandboxwire.EffectPossible, Cause: cause}
+}
+
+// readError is the failure of a request when reading its answer fails. A
+// failed stream leaves the request Uncertain; a frame that is malformed or does
+// not decode is a violation.
+func readError(err error) *Error {
+	if errors.Is(err, sandboxwire.ErrMalformed) || errors.Is(err, VersionMismatch) {
+		return violation(err)
+	}
+	return Uncertain(err)
+}
+
+// ReadReply reads the response to the request op sent with requestID. A
+// Failure returns its *Error, and a failed stream returns Uncertain. Any other
+// frame, including one with another request ID or for another operation, is a
+// violation.
 func ReadReply(r io.Reader, op Op, requestID uint64) (Message, error) {
-	id, m, err := ReadMessage(r, MaxMessageBytes)
+	id, m, err := ReadMessage(r)
 	if err != nil {
-		return nil, Uncertain(err)
+		return nil, readError(err)
 	}
 	if id != requestID {
-		return nil, errPossibleViolation
+		return nil, violation(nil)
 	}
 	return reply(op, m)
 }
 
 // reply returns m when it answers op and the *Error of a Failure of op. A
 // response's frame type names its operation, so any other message is a
-// ProtocolViolation with EffectPossible.
+// violation.
 func reply(op Op, m Message) (Message, error) {
 	if m.frameType() != sandboxwire.ResponseType(uint16(op)) {
-		return nil, errPossibleViolation
+		return nil, violation(nil)
 	}
 	if f, failed := m.(Failure); failed {
 		return nil, f.Err()
@@ -689,7 +700,7 @@ func decodeRequest(r *reader, op Op) Message {
 func decodeSuccess(r *reader, op Op) Message {
 	switch op {
 	case OpHello:
-		return HelloAccepted{LinkID: r.id()}
+		return HelloAccepted{}
 	case OpOpen:
 		return Opened{AttachmentID: r.id(), ServerInstanceID: r.id(), LeaseExpiresAt: r.time()}
 	case OpBind:
@@ -721,7 +732,7 @@ func (h AttachHello) encode(e *sandboxwire.Encoder) {
 	e.Bytes(h.Credential)
 }
 
-func (a HelloAccepted) encode(e *sandboxwire.Encoder) { e.ID(a.LinkID) }
+func (HelloAccepted) encode(*sandboxwire.Encoder) {}
 
 func (o Open) encode(e *sandboxwire.Encoder) {
 	e.Enum(uint16(o.Service))
@@ -942,7 +953,7 @@ func (h AttachHello) validate() error {
 	return checkIDs(h.RuntimeID)
 }
 
-func (a HelloAccepted) validate() error { return checkIDs(a.LinkID) }
+func (HelloAccepted) validate() error { return nil }
 
 func (o Open) validate() error {
 	if err := checkService(o.Service, o.Version); err != nil {

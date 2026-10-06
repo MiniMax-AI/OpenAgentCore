@@ -1,5 +1,5 @@
 # Link version 1 frames from goldenFrames in protocol_test.go, in order. Hex bytes; text after # is a comment.
-# IDs repeat one byte: 01 tenant, 02 environment, 03 resource, 05 server instance, 06 Runtime, 07 attachment, 08 Session, 09 assignment, 0a link.
+# IDs repeat one byte: 01 tenant, 02 environment, 03 resource, 05 server instance, 06 Runtime, 07 attachment, 08 Session, 09 assignment.
 
 # ServeHello
 00000063 0001 0000 0000000000000001    # header: length 99, OpHello, flags, request 1
@@ -24,9 +24,8 @@
 00000007 72756e74696d65                # Credential "runtime"
 
 # HelloAccepted
-00000012 8001 0000 0000000000000001    # header: length 18, response to OpHello, flags, request 1
+00000002 8001 0000 0000000000000001    # header: length 2, response to OpHello, flags, request 1
 0001                                   # result success
-0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a       # LinkID
 
 # Open
 00000090 0002 0000 0000000000000001    # header: length 144, OpOpen, flags, request 1

@@ -37,7 +37,9 @@ type AttachLink struct {
 
 	mu      sync.Mutex
 	pending map[uint64]chan Message
-	err     error
+	// lost is the failure of the requests pending when the link ended; it is
+	// nil while the link is up.
+	lost error
 }
 
 // ErrLinkClosed is returned for requests on a link that has ended.
@@ -51,7 +53,7 @@ func DialAttach(ctx context.Context, cfg AttachConfig) (*AttachLink, error) {
 	}
 	l := &AttachLink{onClosed: cfg.OnAttachmentClosed, done: make(chan struct{}), write: make(chan struct{}, 1),
 		pending: map[uint64]chan Message{}}
-	sess, ctl, _, err := connect(ctx, dialerFor(cfg.Dial, cfg.URL, cfg.TLS), hello, &l.seq)
+	sess, ctl, err := connect(ctx, dialerFor(cfg.Dial, cfg.URL, cfg.TLS), hello, &l.seq)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +98,7 @@ func (l *AttachLink) OpenService(ctx context.Context, o Open) (Stream, Opened, e
 		if r := m.(Opened); r.AttachmentID == o.AttachmentID {
 			return r, nil
 		}
-		return Opened{}, errPossibleViolation
+		return Opened{}, violation(nil)
 	}()
 	if !stop() {
 		err = Uncertain(ctx.Err())
@@ -117,7 +119,7 @@ func (l *AttachLink) Renew(ctx context.Context, r RenewAttachment) (AttachmentRe
 	if renewed := m.(AttachmentRenewed); renewed.AttachmentID == r.AttachmentID {
 		return renewed, nil
 	}
-	return AttachmentRenewed{}, errPossibleViolation
+	return AttachmentRenewed{}, violation(nil)
 }
 
 // CloseAttachment ends an attachment and all its streams. Closing an unknown
@@ -144,8 +146,9 @@ func notSent(err error) *Error {
 // its *Error. A ctx that ends before the request is sent returns an *Error
 // with EffectNone and leaves the link up; the link's end returns
 // ErrLinkClosed. Once its frame began to be sent, a failure returns an *Error
-// with EffectPossible; a write that ctx interrupts or that fails ends the
-// link, because the control stream may hold a partial frame.
+// with EffectPossible, a ProtocolViolation when the relay broke the protocol;
+// a write that ctx interrupts or that fails ends the link, because the control
+// stream may hold a partial frame.
 func (l *AttachLink) call(ctx context.Context, req Message) (Message, error) {
 	if _, err := Encode(1, req); err != nil {
 		return nil, err
@@ -163,10 +166,10 @@ func (l *AttachLink) call(ctx context.Context, req Message) (Message, error) {
 		return nil, notSent(err)
 	}
 	l.mu.Lock()
-	if l.err != nil {
+	if l.lost != nil {
 		l.mu.Unlock()
 		<-l.write
-		return nil, l.err
+		return nil, ErrLinkClosed
 	}
 	id := l.seq.Next()
 	ch := make(chan Message, 1)
@@ -202,7 +205,7 @@ func (l *AttachLink) call(ctx context.Context, req Message) (Message, error) {
 	select {
 	case m, ok := <-ch:
 		if !ok {
-			return nil, Uncertain(ErrLinkClosed)
+			return nil, l.lost // set before ch was closed
 		}
 		return reply(Op(req.frameType()), m)
 	case <-ctx.Done():
@@ -213,10 +216,11 @@ func (l *AttachLink) call(ctx context.Context, req Message) (Message, error) {
 // read dispatches control messages until the link ends. A request from the
 // relay or an unreadable frame ends the link.
 func (l *AttachLink) read() {
+	var lost error
 	defer func() {
 		l.sess.Close()
 		l.mu.Lock()
-		l.err = ErrLinkClosed
+		l.lost = lost
 		for id, ch := range l.pending {
 			close(ch)
 			delete(l.pending, id)
@@ -225,8 +229,9 @@ func (l *AttachLink) read() {
 		close(l.done)
 	}()
 	for {
-		id, m, err := ReadMessage(l.ctl, MaxMessageBytes)
+		id, m, err := ReadMessage(l.ctl)
 		if err != nil {
+			lost = readError(err)
 			return
 		}
 		switch r := m.(type) {
@@ -236,6 +241,7 @@ func (l *AttachLink) read() {
 			}
 		default:
 			if !sandboxwire.IsResponse(m.frameType()) {
+				lost = violation(nil)
 				return
 			}
 			l.mu.Lock()

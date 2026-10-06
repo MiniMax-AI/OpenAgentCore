@@ -20,7 +20,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxnet"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
@@ -105,7 +104,7 @@ func (s *sandbox) Dial(ctx context.Context, addr netip.AddrPort) (*net.TCPConn, 
 func startSandbox(t *testing.T) *sandbox {
 	t.Helper()
 	auth := sandboxlinktest.NewAuthority()
-	srv := sandboxlinktest.StartRelay(t, relay.Config{Authority: auth})
+	srv := sandboxlinktest.StartRelay(t, auth)
 	resource := sandboxlink.ResourceRef{TenantID: sandboxwire.NewID(), EnvironmentID: sandboxwire.NewID(),
 		Kind: sandboxlink.ResourceAllocation, ID: sandboxwire.NewID(), Generation: 1}
 	auth.AddServe([]byte("serve credential"), sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource})
@@ -122,7 +121,7 @@ func startSandbox(t *testing.T) *sandbox {
 				Serve: func(ctx context.Context, b sandboxlink.Bind, _ uint64, s sandboxlink.Stream) {
 					sandboxnet.Serve(ctx, s, b.Egress, sb)
 				}}},
-			OnConnected: func(sandboxlink.HelloAccepted) {
+			OnConnected: func() {
 				select {
 				case connected <- struct{}{}:
 				default:

@@ -42,7 +42,7 @@ type ServeConfig struct {
 
 	// OnConnected reports each accepted Hello; OnDisconnected reports why a
 	// link ended before the next attempt.
-	OnConnected    func(HelloAccepted)
+	OnConnected    func()
 	OnDisconnected func(error)
 	// An attachment is lost when its last open stream ends while it is still
 	// attached, restored when a stream binds it again, and closed when the
@@ -145,7 +145,7 @@ type served struct {
 // link runs one connection. connected reports whether the Hello was accepted.
 func (s *server) link(ctx context.Context, hello ServeHello) (connected bool, err error) {
 	var seq sandboxwire.RequestSequence
-	sess, ctl, accepted, err := connect(ctx, s.dial, hello, &seq)
+	sess, ctl, err := connect(ctx, s.dial, hello, &seq)
 	if err != nil {
 		return false, err
 	}
@@ -153,7 +153,7 @@ func (s *server) link(ctx context.Context, hello ServeHello) (connected bool, er
 	stop := context.AfterFunc(ctx, func() { sess.Close() })
 	defer stop()
 	if s.cfg.OnConnected != nil {
-		s.cfg.OnConnected(accepted)
+		s.cfg.OnConnected()
 	}
 	done := make(chan error, 1)
 	go func() { done <- s.control(ctl) }()
@@ -180,7 +180,7 @@ func (s *server) link(ctx context.Context, hello ServeHello) (connected bool, er
 func (s *server) control(ctl *yamux.Stream) error {
 	defer ctl.Session().Close()
 	for {
-		_, m, err := ReadMessage(ctl, MaxMessageBytes)
+		_, m, err := ReadMessage(ctl)
 		if err != nil {
 			return err
 		}
@@ -195,7 +195,7 @@ func (s *server) control(ctl *yamux.Stream) error {
 // bind accepts one relay-opened stream and runs its handler.
 func (s *server) bind(ctx context.Context, st *yamux.Stream) {
 	st.SetDeadline(time.Now().Add(HandshakeTimeout))
-	id, m, err := ReadMessage(st, MaxMessageBytes)
+	id, m, err := ReadMessage(st)
 	b, ok := m.(Bind)
 	var h *ServiceHandler
 	if ok {

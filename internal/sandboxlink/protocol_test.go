@@ -43,7 +43,7 @@ var goldenFrames = []golden{
 	{1, ServeHello{Version: 1, Credential: []byte("serve"), Resource: testResource, ServerInstanceID: testID(0x05),
 		Services: []ServiceVersion{{ServiceFile, 1}, {ServiceNetwork, 1}}}},
 	{1, AttachHello{Version: 1, RuntimeID: testID(0x06), Credential: []byte("runtime")}},
-	{1, HelloAccepted{LinkID: testID(0x0a)}},
+	{1, HelloAccepted{}},
 	{1, Open{Service: ServiceFile, Version: 1, Resource: testResource, ExpectedServerInstanceID: testID(0x05), AttachmentID: testID(0x07),
 		SessionID: testID(0x08), AssignmentID: testID(0x09), AssignmentEpoch: 3, AttachGrant: []byte("grant")}},
 	{1, Opened{AttachmentID: testID(0x07), ServerInstanceID: testID(0x05), LeaseExpiresAt: testLease}},
@@ -87,7 +87,7 @@ func TestGolden(t *testing.T) {
 	}
 	r := bytes.NewReader(want)
 	for _, g := range goldenFrames {
-		id, m, err := ReadMessage(r, sandboxwire.MaxPayload)
+		id, m, err := ReadMessage(r)
 		if err != nil || id != g.requestID || !reflect.DeepEqual(m, g.m) {
 			t.Fatalf("decoded %d %#v %v, want %d %#v", id, m, err, g.requestID, g.m)
 		}
@@ -178,29 +178,6 @@ func TestGrantsMatchService(t *testing.T) {
 	auth.Egress = testEgress
 	if err := auth.Validate(&open); !errors.Is(err, sandboxwire.ErrMalformed) {
 		t.Fatalf("file authorization with egress: %v", err)
-	}
-}
-
-// A response answers a request only under the request's ID and for its
-// operation.
-func TestReplyMatchesRequest(t *testing.T) {
-	for _, c := range []struct {
-		op, other Op
-		success   Message
-	}{
-		{OpHello, OpOpen, goldenFrames[2].m},
-		{OpOpen, OpBind, goldenFrames[4].m},
-		{OpBind, OpHello, goldenFrames[8].m},
-	} {
-		for _, r := range []golden{{2, c.success}, {1, FailureFor(c.other, Fail(StaleGeneration))}} {
-			var buf bytes.Buffer
-			if err := WriteMessage(&buf, r.requestID, r.m); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := ReadReply(&buf, c.op, 1); !errors.Is(err, ProtocolViolation) {
-				t.Errorf("%#v with request ID %d answering op %d: %v, want ProtocolViolation", r.m, r.requestID, c.op, err)
-			}
-		}
 	}
 }
 
