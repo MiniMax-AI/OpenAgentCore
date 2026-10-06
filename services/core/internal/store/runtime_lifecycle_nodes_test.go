@@ -158,7 +158,7 @@ func TestRuntimeLifecycleNodeInventoryAndRouting(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET node_id=$1 WHERE id=$2", other, owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	checkRoute(other, nil) // Deletion does not discard cleanup routing.

@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -129,11 +130,11 @@ func TestEnvironmentDirectoryWorkerReadsWithoutExecutionPrerequisites(t *testing
 	if got.err != nil || len(got.value.Entries) != 1 {
 		t.Fatal("directory result", got.err)
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity != nil {
 		t.Fatal("directory read manufactured execution")
 	}
-	bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 	if err != nil || bound.Device.ID != h.device.ID || bound.NativeSessionID != "" {
 		t.Fatal("directory read changed native history identity")
 	}

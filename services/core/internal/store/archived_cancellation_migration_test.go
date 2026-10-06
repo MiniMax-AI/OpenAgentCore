@@ -19,7 +19,7 @@ func TestArchivedCancellationMigrationDoesNotAdoptOldRevocations(t *testing.T) {
 	input := submitMessage(t, s, tenant, session.ID, "waiting")
 	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnInProgress, sessions.TurnWaiting)
-	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
+	if _, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
 		t.Fatal(err)
 	}
 	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))

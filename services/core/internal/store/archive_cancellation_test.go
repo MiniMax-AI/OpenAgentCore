@@ -39,7 +39,6 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			heartbeat := scenario != "receipt_without_heartbeat"
 			s, db := newManagedTestStoreDB(t)
 			leased := executionOwner(t, db, s)
-			writer := leased.Store
 			t.Cleanup(func() {
 				if err := leased.Lease.Close(context.Background()); err != nil {
 					t.Error(err)
@@ -87,7 +86,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 			server := httptest.NewUnstartedServer(nil)
 			wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
+			handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), fixtureSessionStore(db), wsURL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -124,7 +123,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			pending, err := s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+			pending, err := store.SessionService(t, s).ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -143,7 +142,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			if scenario == "cancel_revoke_archive" {
-				if _, err := s.RequestCancel(t.Context(), h.tenant, session.ID, "ordinary-cancel"); err != nil {
+				if _, err := store.RequestCancel(t.Context(), s, h.tenant, session.ID, "ordinary-cancel"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -158,7 +157,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				go func() { revokeDone <- fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
 			}
 
-			archived, err := writer.ArchiveManagedSession(auditCtx, h.tenant, session.ID, 1)
+			archived, err := leased.Deployment.ArchiveSession(auditCtx, h.tenant, session.ID, 1)
 			if err != nil || archived.State != "cleanup_pending" {
 				t.Fatal(archived, err)
 			}
@@ -175,14 +174,14 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			// A repeat archive and cleanup must not recreate an explicitly
 			// cleared marker, nor erase the marker from a fresh archive.
 			repeatAudit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-			if _, err := writer.ArchiveManagedSession(repeatAudit, h.tenant, session.ID, 1); err != nil {
+			if _, err := leased.Deployment.ArchiveSession(repeatAudit, h.tenant, session.ID, 1); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := leased.Deployment.RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
 
-			current, err := s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
+			current, err := store.SessionAdapter(s).GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
 			if err != nil || current.Status != sessions.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}
@@ -199,11 +198,11 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if dialErr == nil || response == nil || response.StatusCode != http.StatusUnauthorized {
 				t.Fatal("revoked Runtime reconnected")
 			}
-			drain, err := s.ArchivedCancellationReceipt(t.Context(), owner.DeviceID, secret, nil)
+			drain, err := fixtureSessionStore(db).ArchivedCancellationReceipt(t.Context(), owner.DeviceID, secret, nil)
 			if err != nil || drain.RunID != "" {
 				t.Fatal("unowned delivery got receipt permission", drain, err)
 			}
-			drain, err = s.ArchivedCancellationReceipt(t.Context(), owner.DeviceID, runtimedevice.HashCredential(secret), []string{input.TurnID})
+			drain, err = fixtureSessionStore(db).ArchivedCancellationReceipt(t.Context(), owner.DeviceID, runtimedevice.HashCredential(secret), []string{input.TurnID})
 			if err != nil || (drain.RunID == input.TurnID) == strings.Contains(scenario, "revoke") {
 				t.Fatal("archive revocation causality lost", drain, err)
 			}

@@ -6,6 +6,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -97,7 +99,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				t.Fatal("unexpected creation outcome", owner, err)
 			}
 			if test.rejectCreate {
-				value, err := s.GetSession(t.Context(), tenant, session.ID)
+				value, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 				if err != nil || value.Environment.Status != "failed" {
 					t.Fatal("rejected configuration did not terminate its retained Session", value, err)
 				}
@@ -119,7 +121,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				}
 				// Exercise the existing authorized deletion lifecycle; no new
 				// deployment cleanup API is introduced by this regression test.
-				if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+				if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -152,7 +154,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 			}
 			if test.rejectCreate {
 				// The rejected Session remains publicly readable after cleanup.
-				if _, err := s.GetSession(t.Context(), tenant, session.ID); err != nil {
+				if _, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, session.ID); err != nil {
 					t.Fatal("configuration rejection deleted Session history", err)
 				}
 			}

@@ -45,6 +45,23 @@ func (u unit) loadDeployment() (sqlc.RuntimeDeployment, error) {
 	return u.q.GetRuntimeDeployment(u.ctx)
 }
 
+var errNoResetSource = errors.New("sandbox reset has no stored administrator source")
+
+// LoadResetSource decodes the administrator source that started the running
+// reset from the stored deployment. Audit entries the reset records later
+// carry that source.
+func (u unit) LoadResetSource() (adminaudit.Source, error) {
+	d, err := u.loadDeployment()
+	if err != nil {
+		return adminaudit.Source{}, err
+	}
+	var source adminaudit.Source
+	if !d.ResetClear.Valid || json.Unmarshal(d.ResetAudit, &source) != nil {
+		return adminaudit.Source{}, errNoResetSource
+	}
+	return source, nil
+}
+
 func (u unit) LoadNode(id string) (deployment.StoredNode, error) {
 	nodeID, err := parseID(id)
 	if err != nil {
@@ -338,27 +355,6 @@ func (t *deploymentTx) StartReset(clear string, deadlineSeconds int32, source ad
 func (t *deploymentTx) ForceReset() error { return t.q.ForceSandboxReset(t.ctx) }
 
 func (t *deploymentTx) CancelReset() error { return t.q.CancelSandboxReset(t.ctx) }
-
-func (t *deploymentTx) LoadResetSource() (adminaudit.Source, error) {
-	d, err := t.loadDeployment()
-	if err != nil {
-		return adminaudit.Source{}, err
-	}
-	return ResetSource(d)
-}
-
-var errNoResetSource = errors.New("sandbox reset has no stored administrator source")
-
-// ResetSource decodes the administrator source that started the running reset
-// from the stored deployment row. Audit entries the reset records later carry
-// that source.
-func ResetSource(d sqlc.RuntimeDeployment) (adminaudit.Source, error) {
-	var source adminaudit.Source
-	if !d.ResetClear.Valid || json.Unmarshal(d.ResetAudit, &source) != nil {
-		return adminaudit.Source{}, errNoResetSource
-	}
-	return source, nil
-}
 
 func (t *deploymentTx) CompleteReset() error {
 	if err := t.q.CompleteSandboxReset(t.ctx); err != nil {

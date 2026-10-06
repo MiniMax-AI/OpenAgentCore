@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -35,7 +36,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		t.Helper()
 		owner = executionOwner(t, db, s)
 		worker, stop := publicOwnedWorker(t, s, db, owner)
-		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker), executorURL("https://offline-executor.example"))
+		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,21 +118,21 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		return value
 	}
 	idleReceipts := receipts(created.IdleKey, "")
-	later, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
+	later, err := store.SessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
 	if err != nil || later.State != sessions.EnvironmentInputPending || later.IsInitial {
 		t.Fatal("could not establish controlled later reservation", err)
 	}
 	pending := map[string]string{created.InitialID: snapshot(created.InitialID), created.LaterID: snapshot(created.LaterID)}
 	transition := func(id, from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(t.Context(), tenant, created.ID, id, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := store.TransitionTurn(t.Context(), s, tenant, created.ID, id, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	start := func() string {
 		t.Helper()
 		// Controlled callbacks isolate HTTP admission; no daemon or model runs in this fixture.
-		input, err := s.SubmitMessage(t.Context(), tenant, created.ID, uuid.NewString(), json.RawMessage(`{"text":"Controlled active work."}`))
+		input, err := store.SendMessage(t.Context(), s, tenant, created.ID, uuid.NewString(), json.RawMessage(`{"text":"Controlled active work."}`))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,13 +153,13 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || len(itemsBefore.Items) != 2 {
 		t.Fatal("controlled partial output was not recorded", err)
 	}
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, created.ID)
+	cursor, err := store.SessionAdapter(s).SessionEventCursor(t.Context(), tenant, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run("active")
 	activeReceipts := receipts(created.ActiveKey, first)
-	turn, err := s.GetTurn(t.Context(), tenant, created.ID, first)
+	turn, err := store.SessionAdapter(s).GetTurn(t.Context(), tenant, created.ID, first)
 	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
 		t.Fatal("202 must admit cancellation without fabricating native completion", err)
 	}
@@ -166,7 +167,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(itemsBefore, itemsAfter) {
 		t.Fatal("cancellation admission changed partial history", err)
 	}
-	afterCursor, err := s.SessionEventCursor(t.Context(), tenant, created.ID)
+	afterCursor, err := store.SessionAdapter(s).SessionEventCursor(t.Context(), tenant, created.ID)
 	if err != nil || afterCursor != cursor {
 		t.Fatal("cancellation admission fabricated an execution event", err)
 	}

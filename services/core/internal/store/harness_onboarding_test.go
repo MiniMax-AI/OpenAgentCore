@@ -22,6 +22,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -62,7 +63,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}()
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	handler, err := publicHandler(t, h.s, h.db, auth, "fixture_harness", workerExecution(worker), withPolicy(policy))
+	handler, err := publicHandler(t, h.s, h.db, auth, "fixture_harness", workerExecution(t, worker), withPolicy(policy))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	if err = json.Unmarshal(res.Body.Bytes(), &created); err != nil || created.ID == "" {
 		t.Fatal(res.Body, err)
 	}
-	h.session, err = h.s.GetSession(ctx, h.tenant, created.ID)
+	h.session, err = store.SessionAdapter(h.s).GetSession(ctx, h.tenant, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,19 +100,19 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"finish"}]}]}]}`, 202)
 	waitTurn(t, h, first.RunID, sessions.TurnCompleted)
-	turn, err := h.s.GetTurn(ctx, h.tenant, created.ID, first.RunID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, created.ID, first.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var result execution.Result
-	inputs, inputErr := h.s.ListTurnInputs(ctx, h.tenant, created.ID, first.RunID, 0, 100)
+	inputs, inputErr := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, created.ID, first.RunID, 0, 100)
 	if inputErr != nil || len(inputs) != 2 {
 		t.Fatal(inputs, inputErr)
 	}
 	if err = json.Unmarshal(turn.Outcome, &result); err != nil || result.AppliedThrough != inputs[1].Sequence || result.Done.Content != "readyfinish" {
 		t.Fatal(string(turn.Outcome), err)
 	}
-	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, created.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, created.ID)
 	if err != nil || bound.NativeSessionID == "" {
 		t.Fatal(bound, err)
 	}
@@ -151,7 +152,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		t.Fatalf("incapable runtime received work: %s", p.RunID)
 	case <-time.After(700 * time.Millisecond):
 	}
-	queued, err := h.s.GetSession(ctx, h.tenant, created.ID)
+	queued, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, created.ID)
 	if err != nil || queued.LastTurn == nil || queued.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal(queued, err)
 	}

@@ -75,11 +75,11 @@ type Result struct {
 
 // Run claims once before subscribing or sending. Uncertain deliveries are not replayed.
 func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string) (sessions.Turn, error) {
-	session, err := d.Store.GetSession(ctx, tenantID, sessionID)
+	session, err := d.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
-	bound, err := d.Store.GetSessionExecutionBinding(ctx, tenantID, sessionID)
+	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
@@ -115,7 +115,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 		return sessions.Turn{}, err
 	}
 	defer prepared.close()
-	if _, err := d.Store.TransitionTurn(ctx, tenantID, sessionID, turnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := d.sessionExecution.TransitionTurn(ctx, tenantID, sessionID, turnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		return sessions.Turn{}, err
 	}
 	req.ConversationID, req.RunID, req.Input = sessionID, turnID, text
@@ -141,11 +141,11 @@ func (d *Dispatcher) finishRun(tenantID, sessionID, turnID, model string, result
 		encoded, _ = json.Marshal(result)
 		status, nativeID = sessions.TurnFailed, ""
 	}
-	turn, err := d.Store.CompleteExecution(finishCtx, tenantID, sessionID, turnID, status, encoded, nativeID, result.AppliedThrough)
+	turn, err := d.sessionExecution.CompleteExecution(finishCtx, tenantID, sessionID, turnID, status, encoded, nativeID, result.AppliedThrough)
 	if errors.Is(err, sessions.ErrUnappliedInputs) {
 		result.ErrorCode = "input_not_applied"
 		encoded, _ = json.Marshal(result)
-		turn, err = d.Store.CompleteExecution(finishCtx, tenantID, sessionID, turnID, sessions.TurnFailed, encoded, nativeID, result.AppliedThrough)
+		turn, err = d.sessionExecution.CompleteExecution(finishCtx, tenantID, sessionID, turnID, sessions.TurnFailed, encoded, nativeID, result.AppliedThrough)
 	}
 	if err == nil {
 		d.observeDeploymentProvider(tenantID, sessionID, turn)

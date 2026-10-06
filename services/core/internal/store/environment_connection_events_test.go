@@ -39,7 +39,7 @@ func retainedEnvironmentEvents(t *testing.T, ctx context.Context, s *store.Store
 	var after int64
 	events := []v1.SessionEvent{}
 	for {
-		changes, err := s.ListSessionEvents(ctx, tenant, session, after)
+		changes, err := store.SessionAdapter(s).ListSessionEvents(ctx, tenant, session, after)
 		if err != nil {
 			t.Fatal(err)
 		}

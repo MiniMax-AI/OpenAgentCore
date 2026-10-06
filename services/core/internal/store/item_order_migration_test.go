@@ -150,7 +150,7 @@ func TestItemOrderMigrationPreservesIndexedHistory(t *testing.T) {
 	}
 	t.Cleanup(migratedPool.Close)
 	s := store.New(migratedPool)
-	if _, err = s.TransitionTurn(ctx, tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = store.TransitionTurn(ctx, s, tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	if err = executionOwner(t, fixtureDB{pool: migratedPool}, s).Sessions.AppendTurnEvents(ctx, tenant, session, turn, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"after-upgrade","delta":"continued"}`)}}); err != nil {

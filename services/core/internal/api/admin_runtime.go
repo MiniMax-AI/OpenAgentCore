@@ -74,7 +74,7 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 	}
 	page, err := h.Admin.ListAdminRuntimeTargets(ctx, tenants, options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	sessions := make([]runtimeobs.SessionIdentity, len(page.Data))

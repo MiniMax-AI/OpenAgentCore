@@ -37,7 +37,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			if _, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("unregistered Runtime was assigned general compute", err)
 			}
-			session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
+			session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, pending.SessionID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -61,7 +61,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			}
 			stop()
 			for _, value := range []sessions.EnvironmentInputReservation{pending, bound} {
-				stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, value.SessionID, value.ID)
+				stored, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, value.SessionID, value.ID)
 				if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(value.Deadline) {
 					t.Fatal("device readiness changed pending input", err)
 				}

@@ -37,7 +37,7 @@ type SessionEvents interface {
 // @Router /agents/sessions/{session_id}/events [get]
 func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	id, tenant := chi.URLParam(r, "session_id"), tenantID(r)
-	session, err := h.Sessions.GetSession(r.Context(), tenant, id)
+	session, err := h.SessionsReader.GetSession(r.Context(), tenant, id)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

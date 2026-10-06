@@ -1,7 +1,7 @@
 ---
 title: "运行时可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: 5da1279a81a6dcb3a85661dbba942c8937f871ae351ed80550db65b2a59156db
+source_hash: f79a077350118f5f9bb3f4e8874242af3cb716e92f5e090f6652b001ae5780a1
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `internal/runtimeobs/otlpexporter`。
@@ -18,7 +18,7 @@ self-hosted: tenant_id -> session_id -> environment_id -> device_id + connection
 none:        tenant_id -> session_id (no Session-owned Runtime instance)
 ```
 
-解析器（`internal/runtimeobs/storeresolver`）从存储中读取 Session、其 Environment、当前分配以及 Session 的实测使用量。Session、守护进程连接、进程、容器和原生 Harness Session 是不同身份，彼此绝不能替代。
+解析器（`services/core/internal/deployment/observation.go`）从数据库中读取 Session、其 Environment、当前分配以及 Session 的实测使用量。Session、守护进程连接、进程、容器和原生 Harness Session 是不同身份，彼此绝不能替代。
 
 托管 Docker、microsandbox 和 E2B 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
 

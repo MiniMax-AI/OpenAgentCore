@@ -89,7 +89,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input sessio
 	var batch []sessions.Input
 	var encodedInput json.RawMessage
 	if len(input.InitialInputs) > 0 {
-		batch, encodedInput, err = validateInitialInputs(input.InitialInputs)
+		batch, encodedInput, err = sessions.ValidateMessageInputs(input.InitialInputs)
 		if err != nil {
 			return sessions.Creation{}, err
 		}
@@ -167,64 +167,18 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input sessio
 	return sessions.Creation{Session: session, Created: row.ID == params.ID, Cursor: row.EventSequence}, err
 }
 
-// GetSession always scopes lookup to the authenticated caller's tenant.
-func (s *Store) GetSession(ctx context.Context, tenantID, sessionID string) (sessions.Session, error) {
-	tenant, err := parseID(tenantID)
+// sessionActivity adds the activity projection to a Session read outside a
+// snapshot, in a snapshot of its own.
+func (s *Store) sessionActivity(ctx context.Context, session sessions.Session, err error) (sessions.Session, error) {
 	if err != nil {
 		return sessions.Session{}, err
 	}
-	id := pgunit.PathID(sessionID)
-	row, err := s.queries.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: id})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return sessions.Session{}, sessions.ErrNotFound
-	}
-	if err != nil {
-		return sessions.Session{}, fmt.Errorf("get session: %w", err)
-	}
-	session, decodeErr := sessionpg.SessionFromRow(row)
-	return s.sessionActivity(ctx, session, decodeErr)
-}
-
-// ListSessions orders by creation time and ID. The cursor is the last returned
-// session ID and must belong to the same tenant; it grants no additional access.
-func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit int, ascending bool, agentID *string) (sessions.Page, error) {
-	tenant, err := parseID(tenantID)
-	if err != nil {
-		return sessions.Page{}, err
-	}
-	if limit < 1 || limit > 100 {
-		return sessions.Page{}, fmt.Errorf("%w: page size must be 1..100", sessions.ErrInvalidInput)
-	}
-	params := sqlc.ListSessionsParams{TenantID: tenant, PageLimit: int32(limit + 1), AfterID: pgtype.UUID{Valid: true}, Ascending: ascending}
-	if agentID != nil {
-		params.AgentID = pgtype.Text{String: *agentID, Valid: true}
-	}
-	if cursor != "" {
-		after, err := s.GetSession(ctx, tenantID, pgunit.LookupCursor(cursor))
-		if err != nil {
-			return sessions.Page{}, err
-		}
-		params.AfterCreated = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
-		params.AfterID, _ = parseID(after.ID)
-	}
-	rows, err := s.queries.ListSessions(ctx, params)
-	if err != nil {
-		return sessions.Page{}, fmt.Errorf("list sessions: %w", err)
-	}
-	page := sessions.Page{Sessions: make([]sessions.Session, 0, min(limit, len(rows)))}
-	if len(rows) > limit {
-		page.NextCursor = uuid.UUID(rows[limit-1].ID.Bytes).String()
-		rows = rows[:limit]
-	}
-	for _, row := range rows {
-		session, err := sessionpg.SessionFromRow(row)
-		session, err = s.sessionActivity(ctx, session, err)
-		if err != nil {
-			return sessions.Page{}, err
-		}
-		page.Sessions = append(page.Sessions, session)
-	}
-	return page, nil
+	err = s.pooled.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var err error
+		session, err = sessionpg.LoadSessionActivity(ctx, s.queries.WithTx(tx), session)
+		return err
+	})
+	return session, err
 }
 
 // parseID translates pgunit's identifier rule into store's invalid-input

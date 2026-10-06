@@ -46,7 +46,7 @@ func TestEnvironmentSetupEncryptedSnapshotAndIsolation(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed setup retried", err)
 	}
-	if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("uninitialized execution admitted", err)
 	}
 }

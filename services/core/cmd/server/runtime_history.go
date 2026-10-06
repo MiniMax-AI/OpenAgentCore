@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/postgresreader"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/otlpexporter"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"golang.org/x/net/http/httpguts"
 )
 
@@ -52,7 +52,7 @@ type runtimeHistoryExporter interface {
 	Close(context.Context) error
 }
 
-func runtimeHistory(ctx context.Context, coreStore *store.Store, executionEnabled bool) (runtimeHistorySetup, error) {
+func runtimeHistory(ctx context.Context, units *pgunit.Pool, executionEnabled bool) (runtimeHistorySetup, error) {
 	config, err := loadRuntimeHistoryConfig()
 	if err != nil {
 		return runtimeHistorySetup{}, err
@@ -70,7 +70,7 @@ func runtimeHistory(ctx context.Context, coreStore *store.Store, executionEnable
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens},
 	}
 	timeout := time.Duration(config.TimeoutSeconds) * time.Second
-	backend, err := postgresreader.New(coreStore, postgresreader.Config{Capabilities: capabilities, QueryTimeout: timeout})
+	backend, err := postgresreader.New(units, postgresreader.Config{Capabilities: capabilities, QueryTimeout: timeout})
 	if err != nil {
 		return runtimeHistorySetup{}, err
 	}

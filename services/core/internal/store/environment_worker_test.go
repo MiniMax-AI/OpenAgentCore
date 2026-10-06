@@ -82,7 +82,7 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	tenant, due := newEnvironmentExpiryReservation(t, h.s)
 	makeEnvironmentExpiryDue(t, pool, &due)
 	waitEnvironmentExpiry(t, h.s, tenant, due)
-	if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, waiting.SessionID, waiting.ID); err != nil {
+	if _, err := store.CancelEnvironmentInput(t.Context(), h.s, h.tenant, waiting.SessionID, waiting.ID); err != nil {
 		t.Fatal(err)
 	}
 	// Distinct Runtime sockets do not promise cross-socket delivery order.
@@ -159,7 +159,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	}
 	stop()
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
-	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
+	stored, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
 	if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
 		t.Fatal("retry or shutdown changed the original reservation", stored, err)
 	}

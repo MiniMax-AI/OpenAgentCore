@@ -156,7 +156,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err := deploymentExecution(t, w).CancelReset(SandboxResetTestContext(t.Context()), id, 1); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("stale resume accepted", err)
 	}
-	if _, err := s.GetSession(t.Context(), tenant, session.ID); err != nil {
+	if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal("historical Session lost", err)
 	}
 }
@@ -311,17 +311,17 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(t.Context(), tenant, history.ID, "history", json.RawMessage(`{"text":"retained request"}`))
+	input, err := sendMessage(t.Context(), s, tenant, history.ID, "history", json.RawMessage(`{"text":"retained request"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := transitionTurn(t.Context(), w, tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	if err := sessionExecution(t, w.lease).AppendTurnEvents(t.Context(), tenant, history.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "output_message", Payload: json.RawMessage(`{"id":"answer","status":"completed","text":"retained answer"}`)}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.TransitionTurn(t.Context(), tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
+	if _, err := transitionTurn(t.Context(), w, tenant, history.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
 	items, err := sessionAdapter(s).ListItems(t.Context(), tenant, history.ID, "", 100, true)
@@ -355,7 +355,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 		t.Fatal("switch rewrote released allocation ownership")
 	}
 	for _, id := range []string{session.ID, history.ID} {
-		if _, err := s.GetSession(t.Context(), tenant, id); err != nil {
+		if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, id); err != nil {
 			t.Fatal("switch lost undeleted Session", err)
 		}
 	}

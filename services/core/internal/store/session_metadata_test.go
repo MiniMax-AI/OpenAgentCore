@@ -32,7 +32,7 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 	}
 	before := snapshot()
 	for _, metadata := range []map[string]string{{"new": "value"}, nil, {}, {"unicode": "中文🧪"}} {
-		updated, err := s.UpdateSessionMetadata(ctx, tenant, first.ID, metadata)
+		updated, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: first.ID, Metadata: metadata})
 		if metadata == nil {
 			metadata = map[string]string{}
 		}
@@ -52,7 +52,7 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 			t.Fatalf("changed creation request: %v", err)
 		}
 	}
-	current, err := s.GetSession(ctx, tenant, first.ID)
+	current, err := sessionAdapter(s).GetSession(ctx, tenant, first.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,11 +68,11 @@ func TestSessionMetadataPreservesCreationAndExecutionData(t *testing.T) {
 		{tenant, "invalid", nil, sessions.ErrNotFound},
 		{tenant, first.ID, map[string]string{"large": strings.Repeat("x", 64*1024)}, sessions.ErrInvalidInput},
 	} {
-		if _, err := s.UpdateSessionMetadata(ctx, test.tenant, test.session, test.metadata); !errors.Is(err, test.want) {
+		if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: test.tenant, SessionID: test.session, Metadata: test.metadata}); !errors.Is(err, test.want) {
 			t.Fatalf("rejected update error = %v, want %v", err, test.want)
 		}
 	}
-	got, err := s.GetSession(ctx, tenant, first.ID)
+	got, err := sessionAdapter(s).GetSession(ctx, tenant, first.ID)
 	if err != nil || !reflect.DeepEqual(got, current) {
 		t.Fatalf("rejected update changed Session: %+v, %v", got, err)
 	}
@@ -92,14 +92,14 @@ func TestSessionMetadataConcurrentReplacement(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			key := fmt.Sprint(i)
-			got, err := s.UpdateSessionMetadata(ctx, tenant, first.ID, map[string]string{key: key})
+			got, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: first.ID, Metadata: map[string]string{key: key}})
 			if err != nil || len(got.Metadata) != 1 || got.Metadata[key] != key {
 				t.Errorf("concurrent update = %+v, %v", got, err)
 			}
 		}()
 	}
 	wg.Wait()
-	got, err := s.GetSession(ctx, tenant, first.ID)
+	got, err := sessionAdapter(s).GetSession(ctx, tenant, first.ID)
 	if err != nil || len(got.Metadata) != 1 {
 		t.Fatalf("concurrent replacements merged or lost metadata: %+v, %v", got, err)
 	}
@@ -114,22 +114,22 @@ func TestSessionMetadataPreservesTerminalActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, status := range []string{sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled} {
-		receipt, err := s.SubmitMessage(ctx, tenant, session.ID, uuid.NewString(), []byte(`{"text":"metadata fixture"}`))
+		receipt, err := sendMessage(ctx, s, tenant, session.ID, uuid.NewString(), []byte(`{"text":"metadata fixture"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err := transitionTurn(ctx, s, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status}); err != nil {
+		if _, err := transitionTurn(ctx, s, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status}); err != nil {
 			t.Fatal(err)
 		}
-		before, err := s.GetSession(ctx, tenant, session.ID)
+		before, err := sessionAdapter(s).GetSession(ctx, tenant, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		before.Metadata = map[string]string{"label": status}
-		updated, err := s.UpdateSessionMetadata(ctx, tenant, session.ID, before.Metadata)
+		updated, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: session.ID, Metadata: before.Metadata})
 		if err != nil || !reflect.DeepEqual(updated, before) {
 			t.Fatalf("metadata changed %s activity: %+v, %v", status, updated, err)
 		}

@@ -60,7 +60,7 @@ func TestSessionWriteAuditCreationReplayNoopAndDeletion(t *testing.T) {
 	if _, err := s.CreateSession(sessionAuditContext(t, tenant, "b"), tenant, input); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSession(sessionAuditContext(t, tenant, "b"), tenant, created.ID); err != nil {
+	if _, err := sessionAdapter(s).GetSession(sessionAuditContext(t, tenant, "b"), tenant, created.ID); err != nil {
 		t.Fatal(err)
 	}
 	sessionAuditCount(t, s, tenant, 2)
@@ -71,15 +71,15 @@ func TestSessionWriteAuditCreationReplayNoopAndDeletion(t *testing.T) {
 		}
 	}
 	for _, action := range []string{"create", "send_events"} {
-		if err := s.AuditSessionOperation(sessionAuditContext(t, tenant, "b"), tenant, created.ID, action); err != nil {
+		if err := sessionService(t, s).AuditSessionOperation(sessionAuditContext(t, tenant, "b"), sessions.AuditSessionOperationCommand{TenantID: tenant, SessionID: created.ID, Action: action}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.UpdateSessionMetadata(sessionAuditContext(t, tenant, "b"), tenant, created.ID, map[string]string{"private": "not in audit"}); err != nil {
+	if _, err := sessionService(t, s).UpdateSessionMetadata(sessionAuditContext(t, tenant, "b"), sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: created.ID, Metadata: map[string]string{"private": "not in audit"}}); err != nil {
 		t.Fatal(err)
 	}
 	for range 2 {
-		if err := s.DeleteSession(sessionAuditContext(t, tenant, "b"), tenant, created.ID); err != nil {
+		if err := sessionService(t, s).DeleteSession(sessionAuditContext(t, tenant, "b"), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: created.ID}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -88,7 +88,7 @@ func TestSessionWriteAuditCreationReplayNoopAndDeletion(t *testing.T) {
 	if err := s.pool.QueryRow(t.Context(), "SELECT jsonb_agg(to_jsonb(o))::text FROM write_audit_operations o WHERE tenant_id=$1", tenant).Scan(&history); err != nil || strings.Contains(history, "not in audit") || strings.Contains(history, "/workspace") {
 		t.Fatal("payload entered audit", err)
 	}
-	if err := s.AuditSessionOperation(sessionAuditContext(t, tenant, "b"), tenant, created.ID, "send_events"); !errors.Is(err, sessions.ErrNotFound) {
+	if err := sessionService(t, s).AuditSessionOperation(sessionAuditContext(t, tenant, "b"), sessions.AuditSessionOperationCommand{TenantID: tenant, SessionID: created.ID, Action: "send_events"}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted no-op accepted", err)
 	}
 	sessionAuditCount(t, s, tenant, 7)
@@ -139,20 +139,20 @@ func TestSessionWriteAuditRollback(t *testing.T) {
 			}
 			switch operation {
 			case "update":
-				_, err = s.UpdateSessionMetadata(ctx, tenant, created.ID, map[string]string{"new": "value"})
+				_, err = sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: created.ID, Metadata: map[string]string{"new": "value"}})
 			case "delete":
-				err = s.DeleteSession(ctx, tenant, created.ID)
+				err = sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: created.ID})
 			case "events":
-				_, err = s.SubmitInputs(ctx, tenant, created.ID, "events", []sessions.Input{messageInput("private")})
+				_, err = submitInputs(ctx, s, tenant, created.ID, "events", []sessions.Input{messageInput("private")})
 			case "noop":
-				err = s.AuditSessionOperation(ctx, tenant, created.ID, "send_events")
+				err = sessionService(t, s).AuditSessionOperation(ctx, sessions.AuditSessionOperationCommand{TenantID: tenant, SessionID: created.ID, Action: "send_events"})
 			case "reserve":
-				_, err = s.ReserveEnvironmentInput(ctx, tenant, created.ID, "reserve", []sessions.Input{messageInput("private")})
+				_, err = sessionService(t, s).ReserveEnvironmentInput(ctx, tenant, created.ID, "reserve", []sessions.Input{messageInput("private")})
 			}
 			if err == nil {
 				t.Fatal("mutation bypassed audit failure")
 			}
-			got, err := s.GetSession(t.Context(), tenant, created.ID)
+			got, err := sessionAdapter(s).GetSession(t.Context(), tenant, created.ID)
 			if err != nil || len(got.Metadata) != 0 {
 				t.Fatal("resource update/deletion survived rollback", got, err)
 			}
@@ -177,10 +177,10 @@ func TestEventsWriteAuditAdmissionAndReplay(t *testing.T) {
 			}
 			submit := func(ctx context.Context) error {
 				if prepared {
-					_, err := s.ReserveEnvironmentInput(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
+					_, err := sessionService(t, s).ReserveEnvironmentInput(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
 					return err
 				}
-				_, err := s.SubmitInputs(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
+				_, err := submitInputs(ctx, s, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
 				return err
 			}
 			first := sessionAuditContext(t, tenant, "a")
@@ -215,7 +215,7 @@ func TestSessionWriteAuditInitialInputAndHistoricalReplay(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := s.AuditSessionOperation(sessionAuditContext(t, tenant, "b"), tenant, legacy.ID, "create"); err != nil {
+			if err := sessionService(t, s).AuditSessionOperation(sessionAuditContext(t, tenant, "b"), sessions.AuditSessionOperationCommand{TenantID: tenant, SessionID: legacy.ID, Action: "create"}); err != nil {
 				t.Fatal(err)
 			}
 			var owners int

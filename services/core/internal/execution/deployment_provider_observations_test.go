@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
@@ -24,7 +25,7 @@ import (
 
 type finishObservationFixture struct {
 	s          *store.Store
-	writer     *store.Store
+	execution  *sessions.ExecutionOperations
 	lease      Ownership
 	pool       *pgxpool.Pool
 	defaults   *modelconfigurationpg.Store
@@ -77,15 +78,17 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	if err != nil {
 		t.Fatal(err)
 	}
-	return finishObservationFixture{s, owner.Store, owner.Lease, pool, defaults, tenant, session, *dispatcher}
+	return finishObservationFixture{s, owner.Sessions, owner.Lease, pool, defaults, tenant, session, *dispatcher}
 }
 func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	t.Helper()
-	receipt, err := f.s.SubmitMessage(t.Context(), f.tenant, f.session.ID, uuid.NewString(), json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`))
+	_, service := testSessions(t, f.pool, nil)
+	receipts, err := service.SubmitInputs(t.Context(), f.tenant, f.session.ID, uuid.NewString(), []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.writer.TransitionTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	receipt := receipts[0]
+	if _, err = f.execution.TransitionTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	return receipt
@@ -194,7 +197,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer conn.Release()
-				turn, err := f.writer.CompleteExecution(t.Context(), f.tenant, f.session.ID, receipt.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "", receipt.Sequence)
+				turn, err := f.execution.CompleteExecution(t.Context(), f.tenant, f.session.ID, receipt.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "", receipt.Sequence)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -224,7 +227,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 			if cleanup != nil {
 				cleanup()
 			}
-			persisted, err := f.s.GetTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID)
+			persisted, err := sessionpg.New(pgunit.NewPool(f.pool), nil).GetTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID)
 			if err != nil || persisted.Status != sessions.TurnCompleted {
 				t.Fatal("terminal outcome lost", err)
 			}

@@ -97,6 +97,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		Agents: struct{ api.Agents }{}, AgentsReader: struct{ api.AgentsReader }{},
 		EnvironmentTemplates: struct{ api.EnvironmentTemplates }{}, EnvironmentTemplatesReader: struct{ api.EnvironmentTemplatesReader }{},
 		Sessions:        struct{ api.Sessions }{},
+		SessionsReader:  struct{ api.SessionsReader }{},
 		SessionCreation: struct{ api.SessionCreation }{},
 		SessionEvents:   struct{ api.SessionEvents }{},
 		Turns:           struct{ api.Turns }{},

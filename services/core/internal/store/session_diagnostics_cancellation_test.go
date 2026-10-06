@@ -33,9 +33,9 @@ func TestDiagnosticSnapshotCancellationReleasesTransaction(t *testing.T) {
 			go func() {
 				var err error
 				if rootTurn {
-					_, err = s.GetTurnDiagnosticsSnapshot(ctx, tenant, session.ID, receipt.TurnID)
+					_, err = sessionAdapter(s).GetTurnDiagnosticsSnapshot(ctx, tenant, session.ID, receipt.TurnID)
 				} else {
-					_, err = s.GetSessionDiagnosticsSnapshot(ctx, tenant, session.ID)
+					_, err = sessionAdapter(s).GetSession(ctx, tenant, session.ID)
 				}
 				done <- err
 			}()
@@ -81,9 +81,9 @@ func TestDiagnosticSnapshotCancellationReleasesTransaction(t *testing.T) {
 				t.Fatal(err)
 			}
 			if rootTurn {
-				_, err = s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+				_, err = sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 			} else {
-				_, err = s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID)
+				_, err = sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 			}
 			if err != nil {
 				t.Fatal("snapshot read did not recover", err)

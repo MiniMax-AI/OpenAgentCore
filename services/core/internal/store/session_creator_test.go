@@ -23,7 +23,7 @@ func TestSessionCreatorIsRequiredBeforeCreation(t *testing.T) {
 			t.Fatalf("invalid creator accepted: %v", err)
 		}
 	}
-	page, err := s.ListSessions(t.Context(), tenant, "", 10, false, nil)
+	page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 10, false, nil)
 	if err != nil || len(page.Sessions) != 0 {
 		t.Fatal("invalid creation wrote resources", page, err)
 	}
@@ -106,7 +106,7 @@ func TestConcurrentSessionCreatorsCannotShareCreationRetry(t *testing.T) {
 			t.Fatal("early recovery ignored creator kind", err)
 		}
 	}
-	if _, err := restarted.GetSession(t.Context(), uuid.NewString(), winner.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(restarted).GetSession(t.Context(), uuid.NewString(), winner.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("creator bypassed project isolation", err)
 	}
 }
@@ -132,11 +132,11 @@ func TestHistoricalUnknownCreatorCannotBeClaimedByRetry(t *testing.T) {
 			if err := pool.QueryRow(ctx, "SELECT to_jsonb(s)::text FROM sessions s WHERE id=$1", created.ID).Scan(&before); err != nil {
 				t.Fatal(err)
 			}
-			read, err := s.GetSession(ctx, tenant, created.ID)
+			read, err := sessionAdapter(s).GetSession(ctx, tenant, created.ID)
 			if err != nil || read.Creator != nil {
 				t.Fatal("historical ownership was invented", read, err)
 			}
-			page, err := s.ListSessions(ctx, tenant, "", 10, false, nil)
+			page, err := sessionAdapter(s).ListSessions(ctx, tenant, "", 10, false, nil)
 			if err != nil || len(page.Sessions) != 1 || page.Sessions[0].Creator != nil {
 				t.Fatal("historical project reads changed", page, err)
 			}

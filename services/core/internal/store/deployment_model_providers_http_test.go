@@ -83,7 +83,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	}
 	providerOf := func(sessionID string) string {
 		t.Helper()
-		provider, err := st.SessionModelExecution(t.Context(), tenant, sessionID)
+		provider, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, sessionID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -194,7 +194,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if providerOf(hostedID) != "deployment-canary" {
 		t.Fatal("hosted Session did not freeze the deployment default")
 	}
-	projection, err := st.GetSessionExecutionConfiguration(t.Context(), tenant, hostedID)
+	projection, err := store.SessionAdapter(st).GetSessionExecutionConfiguration(t.Context(), tenant, hostedID)
 	if err != nil || projection.ModelProvider.Source != "deployment" || projection.ModelProvider.Status != "available" || projection.ModelProvider.Configuration == nil || projection.ModelProvider.Configuration.BaseURL != "https://deployment.example/v1" {
 		t.Fatal("deployment selection not recorded", projection, err)
 	}
@@ -244,7 +244,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	}
 	executor := connectFixtureRuntime(t, h, legacy)
 	// Reserved directly, as a pre-upgrade Core did.
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
+	pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,10 +268,10 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 		t.Fatal("rejected work was queued", before, after)
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "legacy reservation settled", func() bool {
-		got, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
+		got, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
 		return err == nil && got.State == sessions.EnvironmentInputFailed
 	})
-	session, err := h.s.GetSession(t.Context(), h.tenant, legacy.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, legacy.ID)
 	if err != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Failure != "model_provider_required" {
 		t.Fatal("legacy reservation did not fail with its reason", session.EnvironmentInputActivity, err)
 	}
@@ -335,7 +335,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	}
 	key := uuid.NewString()
 	original := create(key)
-	if provider, err := st.SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
+	if provider, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
 		t.Fatal("none Session did not freeze the deployment default", err)
 	}
 	setDefault("rotated-default-key")
@@ -348,7 +348,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	if create(key) != original {
 		t.Fatal("retry after removal created another Session")
 	}
-	if provider, err := st.SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
+	if provider, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
 		t.Fatal("retry changed the frozen provider", err)
 	}
 	var revision uuid.UUID
@@ -401,7 +401,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 	if err = db.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision != original.Revision {
 		t.Fatal("tuple revision changed", err)
 	}
-	frozen, err := st.SessionModelExecution(t.Context(), tenant, session.ID)
+	frozen, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, session.ID)
 	if err != nil || frozen == nil || *frozen != provider {
 		t.Fatal("tuple bundle changed", err)
 	}

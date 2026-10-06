@@ -223,7 +223,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 				if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 					t.Fatal(err)
 				}
-			} else if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+			} else if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 				t.Fatal(err)
 			}
 			changed := input

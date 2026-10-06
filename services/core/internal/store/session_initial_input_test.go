@@ -50,7 +50,7 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	if first.LastTurn == nil {
 		t.Fatal("missing initial Turn")
 	}
-	inputs, err := s.ListTurnInputs(ctx, tenant, first.ID, first.LastTurn.ID, 0, 100)
+	inputs, err := sessionAdapter(s).ListTurnInputs(ctx, tenant, first.ID, first.LastTurn.ID, 0, 100)
 	if err != nil || len(inputs) != 2 {
 		t.Fatal(inputs, err)
 	}
@@ -67,17 +67,17 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnQueued, sessions.TurnInProgress)
 	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnInProgress, sessions.TurnCompleted)
 	// The same caller key at the events endpoint is an independent request.
-	next, err := s.SubmitInputs(ctx, tenant, first.ID, input.IdempotencyKey, []sessions.Input{messageInput("later")})
+	next, err := submitInputs(ctx, s, tenant, first.ID, input.IdempotencyKey, []sessions.Input{messageInput("later")})
 	if err != nil || len(next) != 1 || next[0].TurnID == first.LastTurn.ID {
 		t.Fatal(next, err)
 	}
-	if _, err := s.RequestCancel(ctx, tenant, first.ID, "cancel"); err != nil {
+	if _, err := requestCancel(ctx, s, tenant, first.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpdateSessionMetadata(ctx, tenant, first.ID, map[string]string{"updated": "yes"}); err != nil {
+	if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: first.ID, Metadata: map[string]string{"updated": "yes"}}); err != nil {
 		t.Fatal(err)
 	}
-	events, err := s.ListSessionEvents(ctx, tenant, first.ID, 0)
+	events, err := sessionAdapter(s).ListSessionEvents(ctx, tenant, first.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	if err != nil || retry.ID != first.ID || retry.LastTurn.ID != next[0].TurnID || retry.LastTurn.Status != sessions.TurnCancelled || retry.Metadata["updated"] != "yes" {
 		t.Fatal(retry, err)
 	}
-	after, err := restarted.ListSessionEvents(ctx, tenant, first.ID, 0)
+	after, err := sessionAdapter(restarted).ListSessionEvents(ctx, tenant, first.ID, 0)
 	if err != nil || !reflect.DeepEqual(events, after) {
 		t.Fatal("retry emitted more events", err)
 	}
@@ -112,7 +112,7 @@ func TestInitialInputFailureRollsBackSessionAndWork(t *testing.T) {
 	if got, err := s.CreateSession(ctx, tenant, input); err == nil || got.ID != "" {
 		t.Fatal("partial creation succeeded", got, err)
 	}
-	page, err := s.ListSessions(ctx, tenant, "", 100, true, nil)
+	page, err := sessionAdapter(s).ListSessions(ctx, tenant, "", 100, true, nil)
 	if err != nil || len(page.Sessions) != 0 {
 		t.Fatal("partial Session survived", page, err)
 	}

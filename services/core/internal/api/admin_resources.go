@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -13,11 +12,10 @@ import (
 // Only Core-key-authenticated project resource handlers receive it.
 type adminTenantContextKey struct{}
 
-// Admin reads the administrator's cross-Project views: the asset summary and
-// the Sessions whose Runtime is observed.
+// Admin reads the administrator's cross-Project Session views.
 type Admin interface {
-	ReadAdminSummary(context.Context, string, store.AdminSummaryFilter, func(sessions.Session, *string) error) (store.AdminAssetCounts, error)
-	ListAdminRuntimeTargets(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
+	ReadAdminSummary(context.Context, string, sessions.AdminSummaryFilter, func(sessions.Session, *string) error) (sessions.AdminAssetCounts, error)
+	ListAdminRuntimeTargets(context.Context, []string, string, int, bool) (sessions.AdminRuntimeTargetPage, error)
 }
 
 func (h *Handler) adminResourceScope(next http.Handler) http.Handler {

@@ -13,8 +13,8 @@ import (
 )
 
 // observeItems records the Turn's execution observations as the execution
-// journal does, composing the journal procedure over a pooled Session
-// transaction because the seeder holds no execution lease.
+// journal does. The seeder holds no execution lease, so it composes the
+// execution procedures over pooled Session transactions.
 func observeItems(ctx context.Context, pool *pgxpool.Pool, tenantID, sessionID, turn, status string) error {
 	events := []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"partial answer"}`)},
@@ -31,6 +31,23 @@ func observeItems(ctx context.Context, pool *pgxpool.Pool, tenantID, sessionID, 
 	if err != nil {
 		return err
 	}
+	return inSession(ctx, pool, tenantID, sessionID, func(ctx context.Context, tx *sessionpg.SessionTx) error {
+		return sessions.AppendTurnEvents(ctx, tx, batch)
+	})
+}
+
+// transitionTurn moves the Turn as the execution owner does, running the
+// transition procedure over a pooled Session transaction.
+func transitionTurn(ctx context.Context, pool *pgxpool.Pool, tenantID, sessionID, turn string, transition sessions.TurnTransition) error {
+	return inSession(ctx, pool, tenantID, sessionID, func(ctx context.Context, tx *sessionpg.SessionTx) error {
+		_, err := sessions.TransitionTurn(ctx, tx, turn, transition)
+		return err
+	})
+}
+
+// inSession runs apply in a pooled transaction that holds the tenant's
+// Session lock.
+func inSession(ctx context.Context, pool *pgxpool.Pool, tenantID, sessionID string, apply func(context.Context, *sessionpg.SessionTx) error) error {
 	tenant, err := pgunit.ParseID(tenantID)
 	if err != nil {
 		return err
@@ -40,6 +57,6 @@ func observeItems(ctx context.Context, pool *pgxpool.Pool, tenantID, sessionID, 
 		return err
 	}
 	return sessionpg.WithSession(ctx, pgunit.NewPool(pool), tenant, session, func(ctx context.Context, q *sqlc.Queries, _ sessions.LockedSession) error {
-		return sessions.AppendTurnEvents(ctx, sessionpg.BindSession(q, tenant, session), batch)
+		return apply(ctx, sessionpg.BindSession(q, tenant, session))
 	})
 }

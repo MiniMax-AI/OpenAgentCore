@@ -48,7 +48,7 @@ func TestNativeFunctionImagePublicExecution(t *testing.T) {
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, h.db, auth, kind, workerExecution(worker), withPolicy(h.d.Policy), nativeDeploymentDefaults(model, provider))
+	handler, err := publicHandler(t, h.s, h.db, auth, kind, workerExecution(t, worker), withPolicy(h.d.Policy), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,19 +77,19 @@ func TestNativeFunctionImagePublicExecution(t *testing.T) {
 		if err != nil || !call.Applied {
 			t.Fatal("function delivery acknowledgement missing", err)
 		}
-		inputs, err := h.s.ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
+		inputs, err := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
 		if err != nil || len(inputs) != 2 || inputs[0].Kind != "message" || inputs[1].Kind != "tool_result" {
 			t.Fatal("function result admission duplicated or mutated", err)
 		}
 	}
-	before, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	before, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID == "" {
 		t.Fatal("native binding missing", err)
 	}
 	stop()
 	stop = startNativeEngineDaemon(t, h, home, binary, kind)
 	run("resume")
-	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
 		t.Fatal("native history changed", err)
 	}

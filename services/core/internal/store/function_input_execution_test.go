@@ -20,11 +20,11 @@ func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
 	state := functionState(t, h, 1)
 	raw, _ := json.Marshal(sessions.FunctionResultInput{TurnID: input.TurnID, CallID: state.RequiredActions[0].CallID, Result: json.RawMessage(`{"success":true,"output":"answer"}`)})
 	batch := []sessions.Input{{Kind: "tool_result", Payload: raw}, {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}}
-	receipts, err := h.s.SubmitInputs(t.Context(), h.tenant, h.session.ID, "mixed", batch)
+	receipts, err := store.SubmitInputs(t.Context(), h.s, h.tenant, h.session.ID, "mixed", batch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.s.SubmitInputs(t.Context(), h.tenant, h.session.ID, "mixed", batch); err != nil {
+	if _, err := store.SubmitInputs(t.Context(), h.s, h.tenant, h.session.ID, "mixed", batch); err != nil {
 		t.Fatal(err)
 	}
 	resultSeen, messageSeen := false, false

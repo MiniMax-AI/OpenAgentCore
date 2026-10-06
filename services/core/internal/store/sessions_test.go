@@ -65,10 +65,10 @@ func TestSessionsPersistAndStayTenantScoped(t *testing.T) {
 	if first.ID == other.ID {
 		t.Fatal("idempotency leaked across tenants")
 	}
-	if _, err := s.GetSession(ctx, tenantB, first.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSession(ctx, tenantB, first.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-tenant read: %v", err)
 	}
-	if _, err := s.ListSessions(ctx, tenantB, first.ID, 10, false, nil); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).ListSessions(ctx, tenantB, first.ID, 10, false, nil); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-tenant cursor: %v", err)
 	}
 	for _, key := range []string{"second", "third"} {
@@ -80,14 +80,14 @@ func TestSessionsPersistAndStayTenantScoped(t *testing.T) {
 	// Recreate the pool and Store as a new service process would.
 	pool.Close()
 	recovered, _ := testStore(t)
-	got, err := recovered.GetSession(ctx, tenantA, first.ID)
+	got, err := sessionAdapter(recovered).GetSession(ctx, tenantA, first.ID)
 	if err != nil || !reflect.DeepEqual(got, first) {
 		t.Fatalf("restart read = %+v, %v; want %+v", got, err, first)
 	}
 	seen := map[string]bool{}
 	cursor := ""
 	for {
-		page, err := recovered.ListSessions(ctx, tenantA, cursor, 2, false, nil)
+		page, err := sessionAdapter(recovered).ListSessions(ctx, tenantA, cursor, 2, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,7 +108,7 @@ func TestSessionsPersistAndStayTenantScoped(t *testing.T) {
 	if len(seen) != 3 || !seen[first.ID] || seen[other.ID] {
 		t.Fatalf("pagination lost or leaked sessions: %+v", seen)
 	}
-	empty, err := recovered.ListSessions(ctx, uuid.NewString(), "", 10, false, nil)
+	empty, err := sessionAdapter(recovered).ListSessions(ctx, uuid.NewString(), "", 10, false, nil)
 	if err != nil || empty.Sessions == nil || len(empty.Sessions) != 0 {
 		t.Fatalf("empty tenant = %+v, %v", empty, err)
 	}
@@ -159,7 +159,7 @@ func TestConcurrentSessionCreationIsIdempotent(t *testing.T) {
 			t.Fatalf("changed request = %v", err)
 		}
 	}
-	page, err := s.ListSessions(ctx, tenant, "", 10, false, nil)
+	page, err := sessionAdapter(s).ListSessions(ctx, tenant, "", 10, false, nil)
 	if err != nil || len(page.Sessions) != 1 || !reflect.DeepEqual(page.Sessions[0], replay) {
 		t.Fatalf("retry changed stored session: %+v, %v", page, err)
 	}

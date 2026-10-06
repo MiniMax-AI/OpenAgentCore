@@ -38,7 +38,7 @@ func messageInput(raw json.RawMessage) (proto.MessageInput, error) {
 }
 
 func (d *Dispatcher) initialInput(ctx context.Context, tenant, session, turn string) (proto.MessageInput, int64, error) {
-	inputs, err := d.Store.ListTurnInputs(ctx, tenant, session, turn, 0, 100)
+	inputs, err := d.SessionsReader.ListTurnInputs(ctx, tenant, session, turn, 0, 100)
 	if err != nil {
 		return nil, 0, err
 	}

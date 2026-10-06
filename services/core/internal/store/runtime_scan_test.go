@@ -12,6 +12,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type scanProvider struct {
@@ -87,7 +89,7 @@ func TestManagedRuntimeScanEmptyAfterCleanupAndCanceledCall(t *testing.T) {
 	if len(p.observed) != 0 {
 		t.Fatal("canceled scan reached provider")
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	// EOF must not delay cleanup to a second call, and cancellation must

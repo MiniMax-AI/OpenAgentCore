@@ -58,7 +58,7 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	if request.Events != nil && len(request.Events) == 0 {
 		// Empty batches have no execution identity to reserve or replay.
 		// Authorize the resource even when no executor is configured.
-		if _, err := h.Sessions.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id")); err != nil {
+		if _, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id")); err != nil {
 			writeStoreError(w, r, err)
 			return
 		}

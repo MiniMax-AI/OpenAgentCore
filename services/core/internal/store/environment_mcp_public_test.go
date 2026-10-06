@@ -17,7 +17,7 @@ func TestPublicEnvironmentMCPUsesAttachedVaultSelection(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			s, db, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
 			auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test", TenantID: tenant, TokenSHA256: runtimedevice.HashCredential("test-token")}})
-			handler, err := publicHandler(t, s, db, auth, kind, workerExecution(&execution.Worker{}), executorURL("https://executor.example"))
+			handler, err := publicHandler(t, s, db, auth, kind, workerExecution(t, &execution.Worker{}), executorURL("https://executor.example"))
 			if err != nil {
 				t.Fatal(err)
 			}

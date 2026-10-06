@@ -1,15 +1,17 @@
 -- name: StartSandboxReset :exec
+WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS at)
 UPDATE runtime_deployment SET admission_paused = true, reset_clear = sqlc.arg(clear),
-    reset_requested_at = clock_timestamp(),
+    reset_requested_at = clock.at,
     reset_deadline_at = CASE WHEN sqlc.arg(clear)::text = 'auto'
-        THEN clock_timestamp() + make_interval(secs => sqlc.arg(deadline_seconds)::int) END,
-    reset_forced_at = CASE WHEN sqlc.arg(clear)::text = 'force' THEN clock_timestamp() END,
-    reset_audit = sqlc.arg(audit)::jsonb, updated_at = clock_timestamp()
-WHERE singleton = true;
+        THEN clock.at + make_interval(secs => sqlc.arg(deadline_seconds)::int) END,
+    reset_forced_at = CASE WHEN sqlc.arg(clear)::text = 'force' THEN clock.at END,
+    reset_audit = sqlc.arg(audit)::jsonb, updated_at = clock.at
+FROM clock WHERE singleton = true;
 
 -- name: ForceSandboxReset :exec
-UPDATE runtime_deployment SET reset_clear = 'force', reset_forced_at = clock_timestamp(), updated_at = clock_timestamp()
-WHERE singleton = true AND reset_clear = 'auto';
+WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS at)
+UPDATE runtime_deployment SET reset_clear = 'force', reset_forced_at = clock.at, updated_at = clock.at
+FROM clock WHERE singleton = true AND reset_clear = 'auto';
 
 -- name: CancelSandboxReset :exec
 UPDATE runtime_deployment SET admission_paused = false, reset_clear = NULL,

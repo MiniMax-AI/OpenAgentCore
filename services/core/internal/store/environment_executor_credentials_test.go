@@ -110,7 +110,7 @@ func TestEnvironmentExecutorCredentialLifecycle(t *testing.T) {
 	}
 	check(restarted, next.Token, false)
 	check(restarted, restored.Token, true)
-	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	check(restarted, restored.Token, false)
@@ -172,7 +172,7 @@ func TestEnvironmentExecutorConcurrentIssueAndDeletion(t *testing.T) {
 			t.Error(err)
 		}
 	}()
-	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	wg.Wait()

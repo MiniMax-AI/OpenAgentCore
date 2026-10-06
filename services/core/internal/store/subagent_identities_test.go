@@ -58,7 +58,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 			t.Fatal("foreign write", err)
 		}
 	}
-	before, err := s.SessionEventCursor(ctx, tenant, session.ID)
+	before, err := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 		if err != nil || len(events) != 3 {
 			t.Fatal("partial journal survived", len(events), err)
 		}
-		cursor, err := s.SessionEventCursor(ctx, tenant, session.ID)
+		cursor, err := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 		if err != nil || cursor != before {
 			t.Fatal("partial public projection survived", cursor, err)
 		}
@@ -103,7 +103,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err = journal.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{subagentIdentityEvent("other-child", "root", 101)}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("known root binding ignored", err)
 	}
-	if _, err = w.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
+	if _, err = completeExecution(ctx, t, w, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, w.pool)
@@ -132,7 +132,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(again, saved) {
 		t.Fatal("continuation changed immutable first observation", again, err)
 	}
-	if err = reopened.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+	if err = sessionService(t, reopened).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("running Session deleted", err)
 	}
 	if err = reopened.commitLegacyDeletion(ctx, tenant, session.ID); err != nil {

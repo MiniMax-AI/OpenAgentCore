@@ -85,15 +85,16 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templates,
 		Skills: skillService, SkillsReader: skillStore,
 		Agents: agentService, AgentsReader: agentStore,
-		Sessions:        s,
+		Sessions:        sessionService,
+		SessionsReader:  sessionStore,
 		SessionCreation: s,
-		SessionEvents:   s,
-		Turns:           s,
+		SessionEvents:   sessionStore,
+		Turns:           sessionStore,
 		Items:           sessionStore,
 		Subagents:       sessionStore,
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
-		SessionAdmin:    s, Environments: sessionService, EnvironmentsReader: sessionStore, Admin: s, AdminAudit: audit, WriteAudit: audit,
+		SessionAdmin:    sessionStore, Environments: sessionService, EnvironmentsReader: sessionStore, Admin: sessionStore, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}
 	for _, c := range configure {
@@ -144,28 +145,29 @@ func withPolicy(policy execution.Policy) func(*api.Dependencies) {
 	return func(d *api.Dependencies) { d.Policy = policy }
 }
 
-// storeExecution admits Sessions and inputs through the Store without a
-// Worker, so nothing runs them.
+// storeExecution admits Sessions through the Store and inputs through the
+// Session service without a Worker, so nothing runs them.
 func storeExecution(t testing.TB, s *store.Store) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
 		d.Execution = &api.Execution{
 			ExecutorURL:      testExecutorURL,
 			SessionAdmission: s,
-			InputAdmission:   s,
+			InputAdmission:   store.SessionService(t, s),
 			SessionArchive:   strictStandIn{t},
 			Workspaces:       strictStandIn{t},
 		}
 	}
 }
 
-// workerExecution runs Sessions through worker.
-func workerExecution(worker *execution.Worker) func(*api.Dependencies) {
+// workerExecution runs Sessions through worker. It wires no archive; an
+// archive request fails the test.
+func workerExecution(t testing.TB, worker *execution.Worker) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
 		d.Execution = &api.Execution{
 			ExecutorURL:      testExecutorURL,
 			SessionAdmission: worker,
 			InputAdmission:   worker,
-			SessionArchive:   worker,
+			SessionArchive:   strictStandIn{t},
 			Workspaces:       worker,
 		}
 	}
@@ -261,8 +263,8 @@ func (s strictStandIn) ExecutorConnected(context.Context, string, string) (bool,
 	return false, nil
 }
 
-func (s strictStandIn) ArchiveManagedSession(context.Context, string, string, uint64) (sessions.ManagedArchive, error) {
-	s.unexpected("ArchiveManagedSession")
+func (s strictStandIn) ArchiveSession(context.Context, string, string, uint64) (sessions.ManagedArchive, error) {
+	s.unexpected("ArchiveSession")
 	return sessions.ManagedArchive{}, nil
 }
 

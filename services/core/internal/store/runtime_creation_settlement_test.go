@@ -7,6 +7,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -64,7 +66,7 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("released credential retained authority", err)
 			}
-			value, err := s.GetSession(t.Context(), tenant, session.ID)
+			value, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 			if err != nil || value.Environment.Status != "failed" {
 				t.Fatal("environment not terminated", err)
 			}
@@ -100,7 +102,7 @@ func TestManagedRuntimeObservedSettlementAllowsOwnedCleanup(t *testing.T) {
 	if _, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key); err == nil {
 		t.Fatal("uncertain Create succeeded")
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	reconcileManagedState(t, w, db, tenant, environment.ID, "released")

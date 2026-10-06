@@ -32,7 +32,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 			t.Fatal(action, state.LastTurn)
 		}
 		if index == 2 {
-			if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "native-cancel"); err != nil {
+			if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "native-cancel"); err != nil {
 				t.Fatal(err)
 			}
 			h.finished(running, sessions.TurnCancelled)
@@ -66,7 +66,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 		if !found {
 			t.Fatal("required action identity differs from recovered function item")
 		}
-		bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
+		bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 		if err != nil || bound.NativeSessionID == "" || (nativeID != "" && bound.NativeSessionID != nativeID) {
 			t.Fatal(bound, err)
 		}

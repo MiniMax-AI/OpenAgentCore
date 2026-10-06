@@ -57,7 +57,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	if err != nil || intent.State != "pending" || intent.Identity.DeviceID != h.device.ID {
 		t.Fatal("dispatch preceded durable ownership", intent, err)
 	}
-	if _, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "concurrent", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "concurrent", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("upload admitted concurrent execution", err)
 	}
 	cancel()
@@ -79,7 +79,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 		got, e := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, begin.ID)
 		return e == nil && got.State == "committed"
 	})
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("upload created model execution", err)
 	}
@@ -99,7 +99,7 @@ func TestLocalEnvironmentFileWriteLostReceiptRemainsPending(t *testing.T) {
 	if err != nil || intent.State != "pending" {
 		t.Fatal("disconnect guessed rejection", intent, err)
 	}
-	if _, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "after-loss", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "after-loss", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("unknown upload admitted execution", err)
 	}
 }

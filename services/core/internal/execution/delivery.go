@@ -105,7 +105,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{kind: request.AgentKind, store: d.Store, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
+	functions := &functionExchange{kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -278,7 +278,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				}
 				continue
 			}
-			turn, err := d.Store.GetTurn(ctx, tenantID, sessionID, request.RunID)
+			turn, err := d.SessionsReader.GetTurn(ctx, tenantID, sessionID, request.RunID)
 			if err != nil {
 				result.ErrorCode = "execution_state_unavailable"
 				if ctx.Err() != nil {
@@ -303,7 +303,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				continue
 			}
 			if pending == nil {
-				inputs, err := d.Store.ListTurnInputs(ctx, tenantID, sessionID, request.RunID, result.AppliedThrough, 1)
+				inputs, err := d.SessionsReader.ListTurnInputs(ctx, tenantID, sessionID, request.RunID, result.AppliedThrough, 1)
 				if err != nil {
 					result.ErrorCode = "execution_state_unavailable"
 					if ctx.Err() != nil {

@@ -34,11 +34,11 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(ctx, tenant, session.ID, "start", json.RawMessage(`{"text":"fixture"}`))
+	input, err := store.SendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"fixture"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	functions := executionOwner(t, db, s).Sessions
@@ -104,14 +104,14 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 			}
 		}
 	}
-	history, err := s.ListTurnInputs(ctx, tenant, session.ID, input.TurnID, 0, 100)
+	history, err := store.SessionAdapter(s).ListTurnInputs(ctx, tenant, session.ID, input.TurnID, 0, 100)
 	if err != nil || len(history) != 6 {
 		t.Fatal(history, err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
+	if _, err := store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
 		t.Fatal(err)
 	}
-	next, err := s.SubmitMessage(ctx, tenant, session.ID, "next", json.RawMessage(`{"text":"next"}`))
+	next, err := store.SendMessage(ctx, s, tenant, session.ID, "next", json.RawMessage(`{"text":"next"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,11 +121,11 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err := command.Wait(); err != nil {
 		t.Fatalf("SDK retry: %v %s", err, stderr.String())
 	}
-	history, err = s.ListTurnInputs(ctx, tenant, session.ID, next.TurnID, 0, 100)
+	history, err = store.SessionAdapter(s).ListTurnInputs(ctx, tenant, session.ID, next.TurnID, 0, 100)
 	if err != nil || len(history) != 1 {
 		t.Fatal(history, err)
 	}
-	current, err := s.GetTurn(ctx, tenant, session.ID, next.TurnID)
+	current, err := store.SessionAdapter(s).GetTurn(ctx, tenant, session.ID, next.TurnID)
 	if err != nil || current.Status != sessions.TurnQueued || !current.CancelRequestedAt.IsZero() {
 		t.Fatal(current, err)
 	}

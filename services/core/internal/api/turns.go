@@ -36,7 +36,7 @@ func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, err)
 		return
 	}
-	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -68,7 +68,7 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sessionID := chi.URLParam(r, "session_id")
-	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), sessionID)
+	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

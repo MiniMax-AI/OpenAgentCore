@@ -25,7 +25,7 @@ func preparedDispatchHarness(t *testing.T) (*dispatchHarness, sessions.Environme
 	assertNoRuntimeAllocation(t, h)
 	h.d, h.lease = h.bound(), h.owner().Lease
 	enableWorkerEnvironment(t, h)
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+	pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func readyPreparedDispatch(t *testing.T, h *dispatchHarness, request, handle str
 	if frame.ID != request || frame.DecodePayload(&start) != nil || start.Handle != handle || start.RunID == "" || inputTextForTest(t, start.Input) != "first\n\nsecond" {
 		t.Fatal("Start changed preparation or original batch", frame.ID, start)
 	}
-	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
 	if err != nil || turn.Status != sessions.TurnInProgress {
 		t.Fatal("Start preceded atomic claim", turn, err)
 	}
@@ -81,7 +81,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	if frame.DecodePayload(&prepare) != nil || len(prepare.Configuration.Input) != 0 || prepare.Configuration.RunID != "" || prepare.Configuration.ConversationID != "" || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != h.device.EnvironmentID || prepare.Configuration.DisableExecutionEnvironment {
 		t.Fatal("invalid preparation configuration", prepare)
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("preparation created work before readiness", session, err)
 	}
@@ -106,7 +106,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 		t.Fatal("prepared completion", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
-	bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "retained-prepared-native" {
 		t.Fatal("native identity was not committed", bound, err)
 	}
@@ -128,7 +128,7 @@ func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE id=$1", pending.ID); err != nil {
 		t.Fatal(err)
 	}
-	stored, err := h.d.Store.ExpireEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID)
+	stored, err := h.d.Sessions.ExpireEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID)
 	if err != nil || stored.State != sessions.EnvironmentInputAdmitted {
 		t.Fatal("admitted execution lost its owner to the pending-input deadline", err)
 	}

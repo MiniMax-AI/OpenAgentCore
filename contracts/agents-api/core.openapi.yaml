@@ -196,7 +196,7 @@ definitions:
       agent_id:
         type: string
       assets:
-        $ref: '#/definitions/store.AdminAssetCounts'
+        $ref: '#/definitions/sessions.AdminAssetCounts'
       coverage:
         $ref: '#/definitions/api.AdminUsageCoverage'
       key_id:
@@ -1395,6 +1395,21 @@ definitions:
       source_commit:
         type: string
     type: object
+  sessions.AdminAssetCounts:
+    properties:
+      agents:
+        type: integer
+      credentials:
+        type: integer
+      environment_templates:
+        type: integer
+      files:
+        type: integer
+      skills:
+        type: integer
+      vaults:
+        type: integer
+    type: object
   sessions.ExecutorCredential:
     properties:
       created_at:
@@ -1423,21 +1438,6 @@ definitions:
         type: string
       state:
         type: string
-    type: object
-  store.AdminAssetCounts:
-    properties:
-      agents:
-        type: integer
-      credentials:
-        type: integer
-      environment_templates:
-        type: integer
-      files:
-        type: integer
-      skills:
-        type: integer
-      vaults:
-        type: integer
     type: object
   v1.Agent:
     properties:

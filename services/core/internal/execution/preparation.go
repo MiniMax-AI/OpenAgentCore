@@ -97,7 +97,9 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 		case <-ctx.Done():
 			return pending, ctx.Err()
 		case <-tick.C:
-			current, err := d.Store.ExpireEnvironmentInput(ctx, tenant, session, pending.ID)
+			expire, cancel := context.WithTimeout(ctx, 5*time.Second)
+			current, err := d.Sessions.ExpireEnvironmentInput(expire, tenant, session, pending.ID)
+			cancel()
 			if err != nil || current.State != sessions.EnvironmentInputPending {
 				return current, err
 			}

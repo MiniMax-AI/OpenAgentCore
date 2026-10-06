@@ -52,7 +52,7 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 	if err != nil || initializationState(t, db.pool, owner.TenantID, owner.EnvironmentID) != "pending" || owner.State != "running" || provider.writes.Load() != 0 || provider.kills != 0 {
 		t.Fatal("missing socket consumed initialization or requested cleanup", owner, err, provider.writes.Load(), provider.kills)
 	}
-	if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := store.SessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("ordinary readiness gate bypassed", err)
 	}
 }
