@@ -166,7 +166,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	initialInputs, err := initialSessionInputs(input.Input)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if input.Environment.Type == "none" && len(initialInputs) == 0 {
@@ -179,7 +179,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	creationRequest, err := sessionCreationRequest(input, initialInputs)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
@@ -194,8 +194,8 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := applyTemplateEnvironment(&input, template); err != nil {
-			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) {
-				writeStoreError(w, r, err)
+			if !h.recoverSessionCreation(w, r, key, creationRequest, input.Stream) && !writeFieldError(w, err) {
+				writeSessionsError(w, r, err)
 			}
 			return
 		}
@@ -282,7 +282,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := create(r.Context(), tenantID(r), createInput)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeOperationError(w, r, err)
 		return
 	}
 	if input.Stream {
@@ -305,7 +305,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	h.respondSession(w, r, session)
@@ -318,11 +318,11 @@ func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session
 func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session sessions.Session, status int) {
 	response, err := sessionResponse(session, h.executorURL())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if err := h.addSessionInstallation(w, r, &response); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, status, response)
@@ -352,14 +352,14 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	page, err := h.SessionsReader.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response := v1.SessionList{Data: make([]v1.Session, 0, len(page.Sessions)), HasMore: page.NextCursor != ""}
 	for _, session := range page.Sessions {
 		item, err := sessionResponse(session, h.executorURL())
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 			return
 		}
 		response.Data = append(response.Data, item)

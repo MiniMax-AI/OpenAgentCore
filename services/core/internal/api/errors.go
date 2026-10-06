@@ -9,8 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
@@ -86,18 +84,10 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-// writeStoreError reports a failure of an operation that can meet a sandbox
-// reset or the sandbox deployment, then the Session errors.
-func writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
-	// Admission paused by a reset is Session admission's.
-	if errors.Is(err, placement.ErrResetAdmission) {
-		writeError(w, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
-		return
-	}
-	if errors.Is(err, placement.ErrAdmissionClosed) {
-		writeError(w, http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input.")
-		return
-	}
+// writeOperationError reports a failure of a Session operation that also
+// meets the sandbox deployment: creation, input admission, archive and Runtime
+// observation.
+func writeOperationError(w http.ResponseWriter, r *http.Request, err error) {
 	if writeSandboxError(w, err) {
 		return
 	}
@@ -120,7 +110,7 @@ func writeInternalError(w http.ResponseWriter, r *http.Request) {
 // jsonb cannot store U+0000, and text parameters, including query filters,
 // reject invalid UTF-8.
 func writeTextValueError(w http.ResponseWriter, r *http.Request, err error) bool {
-	if !errors.Is(err, textvalue.ErrUnstorable) && !store.UnstorableText(err) {
+	if !errors.Is(err, textvalue.ErrUnstorable) {
 		return false
 	}
 	writeError(w, http.StatusBadRequest, "invalid_request_error", unstorableTextMessage)

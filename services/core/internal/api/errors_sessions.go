@@ -20,7 +20,7 @@ func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, sessions.ErrTurnConflict):
 		writeError(w, http.StatusConflict, "conflict_error", "The Turn cannot accept this input in its current state.")
 	default:
-		writeStoreError(w, r, err)
+		writeOperationError(w, r, err)
 	}
 }
 

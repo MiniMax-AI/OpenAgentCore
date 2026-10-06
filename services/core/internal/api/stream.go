@@ -39,16 +39,16 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	id, tenant := chi.URLParam(r, "session_id"), tenantID(r)
 	session, err := h.SessionsReader.GetSession(r.Context(), tenant, id)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if _, err = sessionResponse(session, h.executorURL()); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	cursor, err := h.SessionEvents.SessionEventCursor(r.Context(), tenant, id)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	h.serveSessionEvents(w, r, session, cursor, nil, http.StatusOK, nil)
