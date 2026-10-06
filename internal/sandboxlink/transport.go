@@ -169,43 +169,35 @@ func ServerSession(conn net.Conn) (*yamux.Session, error) {
 // connect dials, starts yamux, opens the control stream and exchanges the
 // Hello, which takes the first ID of seq. A refused Hello returns the relay's
 // *Error.
-func connect(ctx context.Context, dial Dialer, hello Message, seq *sandboxwire.RequestSequence) (*yamux.Session, *yamux.Stream, HelloAccepted, error) {
+func connect(ctx context.Context, dial Dialer, hello Message, seq *sandboxwire.RequestSequence) (*yamux.Session, *yamux.Stream, error) {
 	conn, err := dial(ctx)
 	if err != nil {
-		return nil, nil, HelloAccepted{}, err
+		return nil, nil, err
 	}
 	sess, err := ClientSession(conn)
 	if err != nil {
 		conn.Close()
-		return nil, nil, HelloAccepted{}, err
+		return nil, nil, err
 	}
 	stop := context.AfterFunc(ctx, func() { sess.Close() })
 	defer stop()
 	ctl, err := sess.OpenStream(ctx)
 	if err == nil {
 		ctl.SetDeadline(time.Now().Add(HandshakeTimeout))
-		err = WriteMessage(ctl, seq.Next(), hello)
-	}
-	var m Message
-	if err == nil {
-		_, m, err = ReadMessage(ctl, MaxMessageBytes)
-	}
-	if err == nil {
-		switch r := m.(type) {
-		case HelloAccepted:
-			ctl.SetDeadline(time.Time{})
-			return sess, ctl, r, nil
-		case Failure:
-			err = r.Err()
-		default:
-			err = Fail(ProtocolViolation)
+		id := seq.Next()
+		if err = WriteMessage(ctl, id, hello); err == nil {
+			_, err = ReadReply(ctl, OpHello, id)
 		}
+	}
+	if err == nil {
+		ctl.SetDeadline(time.Time{})
+		return sess, ctl, nil
 	}
 	sess.Close()
 	if ctx.Err() != nil {
 		err = ctx.Err()
 	}
-	return nil, nil, HelloAccepted{}, err
+	return nil, nil, err
 }
 
 func dialerFor(dial Dialer, rawURL string, tlsConfig *tls.Config) Dialer {

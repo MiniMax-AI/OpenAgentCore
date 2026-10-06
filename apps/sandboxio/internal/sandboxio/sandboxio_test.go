@@ -23,7 +23,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxnet"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
@@ -110,7 +109,7 @@ func next(t *testing.T, op *sp.Operation) sp.Event {
 func TestServesEachProtocolThroughTheRelay(t *testing.T) {
 	ctx := context.Background()
 	auth := sandboxlinktest.NewAuthority()
-	srv := sandboxlinktest.StartRelay(t, relay.Config{Authority: auth})
+	srv := sandboxlinktest.StartRelay(t, auth)
 	bootstrap, resource := writeBootstrap(t, srv.URL, "serve-credential")
 	auth.AddServe([]byte("serve-credential"), sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: resource})
 	runtimeID := sandboxwire.NewID()
@@ -254,7 +253,7 @@ func TestServesEachProtocolThroughTheRelay(t *testing.T) {
 // A refused serve credential ends the service with the relay's typed failure,
 // and the message never carries the credential.
 func TestRefusedCredentialEndsTheService(t *testing.T) {
-	srv := sandboxlinktest.StartRelay(t, relay.Config{Authority: sandboxlinktest.NewAuthority()})
+	srv := sandboxlinktest.StartRelay(t, sandboxlinktest.NewAuthority())
 	bootstrap, _ := writeBootstrap(t, srv.URL, "unknown-credential")
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()

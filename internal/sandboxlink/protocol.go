@@ -29,8 +29,7 @@ import (
 const Version uint16 = 1
 
 const (
-	// MaxMessageBytes bounds every Link message payload. A relay never
-	// advertises a MaxFrameBytes below it.
+	// MaxMessageBytes bounds every Link message payload.
 	MaxMessageBytes = 16 << 10
 	// MaxCredentialBytes bounds a serve or Runtime credential.
 	MaxCredentialBytes = 4 << 10
@@ -316,13 +315,8 @@ type AttachHello struct {
 	Credential []byte
 }
 
-// HelloAccepted answers either Hello. MaxStreams bounds the link's concurrent
-// service streams and MaxFrameBytes the payload of any frame on the link.
-type HelloAccepted struct {
-	LinkID        sandboxwire.ID
-	MaxStreams    uint32
-	MaxFrameBytes uint32
-}
+// HelloAccepted answers either Hello.
+type HelloAccepted struct{}
 
 // Open is the first message on a service stream the attach peer opens. A zero
 // ExpectedServerInstanceID means no expectation.
@@ -357,7 +351,6 @@ type Opened struct {
 	AttachmentID     sandboxwire.ID
 	ServerInstanceID sandboxwire.ID
 	LeaseExpiresAt   time.Time
-	MaxFrameBytes    uint32
 }
 
 // Bind is the first message on a stream the relay opens to the serve peer. It
@@ -374,7 +367,6 @@ type Bind struct {
 	AssignmentEpoch          uint64
 	LeaseExpiresAt           time.Time
 	ExpectedServerInstanceID sandboxwire.ID
-	MaxFrameBytes            uint32
 	Exports                  []ExportGrant
 	Egress                   []EgressRule
 }
@@ -596,16 +588,61 @@ func WriteMessage(w io.Writer, requestID uint64, m Message) error {
 	return sandboxwire.WriteFrame(w, f)
 }
 
-// ReadMessage reads and decodes one frame no larger than maxPayload. The
+// ReadMessage reads and decodes one frame no larger than MaxMessageBytes. The
 // request ID is returned whenever a frame was read, even if it failed to
 // decode, so a reader can answer it.
-func ReadMessage(r io.Reader, maxPayload uint32) (uint64, Message, error) {
-	f, err := sandboxwire.ReadFrame(r, maxPayload)
+func ReadMessage(r io.Reader) (uint64, Message, error) {
+	f, err := sandboxwire.ReadFrame(r, MaxMessageBytes)
 	if err != nil {
 		return 0, nil, err
 	}
 	m, err := Decode(f)
 	return f.RequestID, m, err
+}
+
+// violation is the failure of a request whose answer broke the protocol:
+// ProtocolViolation with EffectPossible, since the request may have taken
+// effect.
+func violation(cause error) *Error {
+	return &Error{Code: ProtocolViolation, Effect: sandboxwire.EffectPossible, Cause: cause}
+}
+
+// readError is the failure of a request when reading its answer fails. A
+// failed stream leaves the request Uncertain; a frame that is malformed or does
+// not decode is a violation.
+func readError(err error) *Error {
+	if errors.Is(err, sandboxwire.ErrMalformed) || errors.Is(err, VersionMismatch) {
+		return violation(err)
+	}
+	return Uncertain(err)
+}
+
+// ReadReply reads the response to the request op sent with requestID. A
+// Failure returns its *Error, and a failed stream returns Uncertain. Any other
+// frame, including one with another request ID or for another operation, is a
+// violation.
+func ReadReply(r io.Reader, op Op, requestID uint64) (Message, error) {
+	id, m, err := ReadMessage(r)
+	if err != nil {
+		return nil, readError(err)
+	}
+	if id != requestID {
+		return nil, violation(nil)
+	}
+	return reply(op, m)
+}
+
+// reply returns m when it answers op and the *Error of a Failure of op. A
+// response's frame type names its operation, so any other message is a
+// violation.
+func reply(op Op, m Message) (Message, error) {
+	if m.frameType() != sandboxwire.ResponseType(uint16(op)) {
+		return nil, violation(nil)
+	}
+	if f, failed := m.(Failure); failed {
+		return nil, f.Err()
+	}
+	return m, nil
 }
 
 func decodeRequest(r *reader, op Op) Message {
@@ -635,7 +672,7 @@ func decodeRequest(r *reader, op Op) Message {
 		return o
 	case OpBind:
 		b := Bind{AttachmentID: r.id(), Service: r.service(), Version: r.u16(), SessionID: r.id(), AssignmentID: r.id(),
-			AssignmentEpoch: r.u64(), LeaseExpiresAt: r.time(), ExpectedServerInstanceID: r.id(), MaxFrameBytes: r.u32()}
+			AssignmentEpoch: r.u64(), LeaseExpiresAt: r.time(), ExpectedServerInstanceID: r.id()}
 		if r.present() != (b.Service == ServiceFile) && r.err == nil {
 			r.err = invalid("exports presence does not match service %s", b.Service)
 		}
@@ -663,9 +700,9 @@ func decodeRequest(r *reader, op Op) Message {
 func decodeSuccess(r *reader, op Op) Message {
 	switch op {
 	case OpHello:
-		return HelloAccepted{LinkID: r.id(), MaxStreams: r.u32(), MaxFrameBytes: r.u32()}
+		return HelloAccepted{}
 	case OpOpen:
-		return Opened{AttachmentID: r.id(), ServerInstanceID: r.id(), LeaseExpiresAt: r.time(), MaxFrameBytes: r.u32()}
+		return Opened{AttachmentID: r.id(), ServerInstanceID: r.id(), LeaseExpiresAt: r.time()}
 	case OpBind:
 		return Bound{}
 	case OpRenewAttachment:
@@ -695,11 +732,7 @@ func (h AttachHello) encode(e *sandboxwire.Encoder) {
 	e.Bytes(h.Credential)
 }
 
-func (a HelloAccepted) encode(e *sandboxwire.Encoder) {
-	e.ID(a.LinkID)
-	e.U32(a.MaxStreams)
-	e.U32(a.MaxFrameBytes)
-}
+func (HelloAccepted) encode(*sandboxwire.Encoder) {}
 
 func (o Open) encode(e *sandboxwire.Encoder) {
 	e.Enum(uint16(o.Service))
@@ -720,7 +753,6 @@ func (o Opened) encode(e *sandboxwire.Encoder) {
 	e.ID(o.AttachmentID)
 	e.ID(o.ServerInstanceID)
 	e.I64(o.LeaseExpiresAt.UnixMilli())
-	e.U32(o.MaxFrameBytes)
 }
 
 func (b Bind) encode(e *sandboxwire.Encoder) {
@@ -732,7 +764,6 @@ func (b Bind) encode(e *sandboxwire.Encoder) {
 	e.U64(b.AssignmentEpoch)
 	e.I64(b.LeaseExpiresAt.UnixMilli())
 	e.ID(b.ExpectedServerInstanceID)
-	e.U32(b.MaxFrameBytes)
 	e.Present(b.Service == ServiceFile)
 	if b.Service == ServiceFile {
 		e.Count(len(b.Exports))
@@ -814,13 +845,6 @@ func checkSecret(name string, b []byte, max int) error {
 func checkLease(t time.Time) error {
 	if t.UnixMilli() <= 0 {
 		return invalid("lease expiry %d ms", t.UnixMilli())
-	}
-	return nil
-}
-
-func checkFrameBytes(n uint32) error {
-	if n < MaxMessageBytes || n > sandboxwire.MaxPayload {
-		return invalid("max frame bytes %d outside %d..%d", n, MaxMessageBytes, sandboxwire.MaxPayload)
 	}
 	return nil
 }
@@ -929,15 +953,7 @@ func (h AttachHello) validate() error {
 	return checkIDs(h.RuntimeID)
 }
 
-func (a HelloAccepted) validate() error {
-	if a.MaxStreams == 0 {
-		return invalid("zero max streams")
-	}
-	if err := checkFrameBytes(a.MaxFrameBytes); err != nil {
-		return err
-	}
-	return checkIDs(a.LinkID)
-}
+func (HelloAccepted) validate() error { return nil }
 
 func (o Open) validate() error {
 	if err := checkService(o.Service, o.Version); err != nil {
@@ -959,9 +975,6 @@ func (o Opened) validate() error {
 	if err := checkLease(o.LeaseExpiresAt); err != nil {
 		return err
 	}
-	if err := checkFrameBytes(o.MaxFrameBytes); err != nil {
-		return err
-	}
 	return checkIDs(o.AttachmentID, o.ServerInstanceID)
 }
 
@@ -973,9 +986,6 @@ func (b Bind) validate() error {
 		return invalid("zero assignment epoch")
 	}
 	if err := checkLease(b.LeaseExpiresAt); err != nil {
-		return err
-	}
-	if err := checkFrameBytes(b.MaxFrameBytes); err != nil {
 		return err
 	}
 	if err := checkExports(b.Service, b.Exports); err != nil {

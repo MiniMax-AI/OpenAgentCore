@@ -1,7 +1,7 @@
 ---
 title: "沙箱 Link 协议"
 source: docs/sandbox-link-protocol.md
-source_hash: 0d6793b12de0dcb11c3355855c514538f78653fa90008f9865407d1792743859
+source_hash: d753586c244650329796b8abd17994c2e57aa433b55ebd78c499c86368e8aa6f
 ---
 
 Link 协议通过 relay 连接沙箱 I/O 的两端。Sandbox I/O 服务运行在沙箱内并为其提供服务，是 serve peer。agent host 上的 Runtime 在沙箱外运行 Harness，并通过该服务使用沙箱，是 attach peer。每个 peer 各自向 relay 认证自己的 link。relay 授权 attach peer 打开的每个服务 stream，将其绑定到该资源当前的 serve peer，然后在两个 stream 之间复制字节而不读取内容。服务帧从不携带凭据或 grant。
@@ -43,7 +43,7 @@ attachment 的生命周期长于其 link。重连后，Runtime 使用相同的 b
 
 ## 运行 relay {#run-a-relay}
 
-`relay.New` 接收带 `Authority` 的 `relay.Config`，返回 `*relay.Relay`，它是一个 `http.Handler`。relay endpoint 位于安装实例的 HTTPS ingress 之后，由 ingress 终止 TLS，因此 handler 在 ingress 的明文 HTTP 一跳上接受 upgrade；peer 在拨号时强制 TLS。`MaxStreams`（默认 256）限制每条 link 的并发服务 stream，`MaxFrameBytes`（默认 1 MiB）是 relay 通告的帧上限。
+`relay.New` 接收 `Authority`，返回 `*relay.Relay`，它是一个 `http.Handler`。relay endpoint 位于安装实例的 HTTPS ingress 之后，由 ingress 终止 TLS，因此 handler 在 ingress 的明文 HTTP 一跳上接受 upgrade；peer 在拨号时强制 TLS。每条 link 最多承载 256 个并发服务 stream。
 
 relay 的 owner 基于其持久记录实现 `Authority`，relay 对每个 Hello、Open 和续期都咨询它。撤销时，先撤回授权，再调用 `RevokeAttachment` 或 `RevokeResource`，让 relay 关闭其持有的对象。
 
@@ -57,7 +57,7 @@ relay 的 owner 基于其持久记录实现 `Authority`，relay 对每个 Hello�
 
 | 偏移 | 字段 | 类型 | 规则 |
 | --- | --- | --- | --- |
-| 0 | `PayloadLength` | uint32 | 不超过 1 MiB（`sandboxwire.MaxPayload`），且不超过向发送方通告的上限；在读取 payload 前检查 |
+| 0 | `PayloadLength` | uint32 | 不超过 1 MiB（`sandboxwire.MaxPayload`）；在读取 payload 前检查 |
 | 4 | `MessageType` | uint16 | 协议定义的 tag |
 | 6 | `Flags` | uint16 | 零 |
 | 8 | `RequestID` | uint64 | 请求中为非零值，且大于发送方在该 stream 上的上一个请求 ID；响应中为对应请求的 ID；事件中为零 |
@@ -126,10 +126,7 @@ Hello
     RuntimeID         ID
     Credential        bytes        // 1..4096 bytes
 
-HelloAccepted
-  LinkID            ID
-  MaxStreams        u32            // at least 1
-  MaxFrameBytes     u32            // 16 KiB..1 MiB
+HelloAccepted       (no fields)
 
 Open
   Service                   enum
@@ -146,7 +143,6 @@ Opened
   AttachmentID      ID
   ServerInstanceID  ID
   LeaseExpiresAt    i64 ms
-  MaxFrameBytes     u32
 
 Bind
   AttachmentID              ID
@@ -157,7 +153,6 @@ Bind
   AssignmentEpoch           u64
   LeaseExpiresAt            i64 ms
   ExpectedServerInstanceID  ID     // the serve peer's ServerInstanceID as the relay knows it
-  MaxFrameBytes             u32
   Exports                   optional, present exactly when Service is ServiceFile:
                               count 1..64 of ExportGrant, no ID twice
   Egress                    optional, present exactly when Service is ServiceNetwork:
@@ -204,8 +199,6 @@ AttachmentClosed
 4. relay 通过其 Authority 认证 peer，并回复 `HelloAccepted`，或回复失败，随后结束 link。对其他版本的 Hello，relay 不读取版本之后的内容，直接回复 `VersionMismatch`。如果 Authority 裁决 serve Hello 期间发生撤销，relay 会再次询问，因此已撤回的凭据绝不会建立 serve peer。
 
 后续控制请求延续 Hello 的请求 ID。attach link 的请求 ID 未递增时，relay 以 `ProtocolViolation` 结束该 link。`Open` 和 `Bind` 各自是其 stream 上唯一的请求，使用请求 ID 1。
-
-`HelloAccepted.MaxStreams` 限制该 link 的并发服务 stream。`MaxFrameBytes` 限制该 link 服务 stream 上每个帧的 payload。
 
 对于 serve peer，Authority 返回 peer 的身份及该凭据所服务的资源（包括 generation）。该资源必须与 Hello 中的一致，否则回复 `PermissionDenied`。随后 relay 应用 [generation 规则](#authority-and-staleness)，并将该 link 设为资源当前的 serve peer。
 
@@ -282,6 +275,8 @@ relay 通过 32 KiB 缓冲区复制每个方向的数据，每个 stream 最多�
 | 12 | `ProtocolViolation` | 消息格式错误、出现在不允许的位置，或携带未递增的请求 ID |
 
 `ServiceUnavailable` 和 `LimitExceeded` 是临时失败：相同请求稍后可能成功，`Code.Retryable` 将它们报告为可重试。其他 code 都是最终失败：以相同凭据、attachment 和 generation 重复请求会再次失败。
+
+格式错误的响应，或其请求 ID、操作与请求不符的响应，会使该请求以 `ProtocolViolation` 和 `EffectPossible` 失败，因为请求可能已经生效。
 
 ## 验证 {#verification}
 

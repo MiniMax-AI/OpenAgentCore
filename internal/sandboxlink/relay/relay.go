@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	defaultMaxStreams = 256
+	// maxStreams bounds the concurrent service streams of each link.
+	maxStreams = 256
 	// spliceBuffer bounds the bytes a splice holds per direction, on top of
 	// one yamux window per stream.
 	spliceBuffer = 32 << 10
@@ -31,22 +32,11 @@ const (
 	answerQueue = 64
 )
 
-// Config configures a Relay.
-type Config struct {
-	Authority sandboxlink.Authority
-	// MaxStreams bounds the concurrent service streams of each link; zero
-	// selects 256.
-	MaxStreams uint32
-	// MaxFrameBytes is the frame payload limit the relay advertises; zero
-	// selects sandboxwire.MaxPayload.
-	MaxFrameBytes uint32
-}
-
 // Relay accepts Link peers on ServeHTTP. It keeps the current serve peer of
 // each resource, the attachments it has opened and their leases in memory; the
 // Authority stays the durable judge of every grant.
 type Relay struct {
-	cfg    Config
+	auth   sandboxlink.Authority
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -63,27 +53,16 @@ type Relay struct {
 // closures is a set of AttachmentClosed events to write, by attachment.
 type closures map[sandboxwire.ID]sandboxlink.CloseReason
 
-// New returns a relay for cfg.
-func New(cfg Config) (*Relay, error) {
-	if cfg.Authority == nil {
-		return nil, errors.New("sandbox link relay: no authority")
-	}
-	if cfg.MaxStreams == 0 {
-		cfg.MaxStreams = defaultMaxStreams
-	}
-	if cfg.MaxFrameBytes == 0 {
-		cfg.MaxFrameBytes = sandboxwire.MaxPayload
-	}
-	if cfg.MaxFrameBytes < sandboxlink.MaxMessageBytes || cfg.MaxFrameBytes > sandboxwire.MaxPayload {
-		return nil, errors.New("sandbox link relay: max frame bytes out of range")
-	}
+// New returns a relay that asks auth to authenticate peers and authorize their
+// requests.
+func New(auth sandboxlink.Authority) *Relay {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Relay{cfg: cfg, ctx: ctx, cancel: cancel,
+	return &Relay{auth: auth, ctx: ctx, cancel: cancel,
 		generations: map[resourceKey]uint64{},
 		serves:      map[resourceKey]*serveLink{},
 		closures:    map[resourceKey]closures{},
 		attachments: map[sandboxwire.ID]*attachment{},
-	}, nil
+	}
 }
 
 // Close ends every link and stops lease timers.
@@ -325,7 +304,7 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	id, m, err := sandboxlink.ReadMessage(ctl, sandboxlink.MaxMessageBytes)
+	id, m, err := sandboxlink.ReadMessage(ctl)
 	handshake.Stop()
 	l := rl.newLink(sess, ctl)
 	switch hello := m.(type) {
@@ -345,10 +324,6 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (rl *Relay) authorityContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(rl.ctx, sandboxlink.HandshakeTimeout)
-}
-
-func (rl *Relay) accepted() sandboxlink.HelloAccepted {
-	return sandboxlink.HelloAccepted{LinkID: sandboxwire.NewID(), MaxStreams: rl.cfg.MaxStreams, MaxFrameBytes: rl.cfg.MaxFrameBytes}
 }
 
 // refusal returns the failure code for an Authority error.
@@ -373,7 +348,7 @@ func (rl *Relay) serve(l *link, id uint64, hello sandboxlink.ServeHello) {
 		l.sess.Close()
 	}()
 	go func() {
-		sandboxlink.ReadMessage(l.ctl, sandboxlink.MaxMessageBytes)
+		sandboxlink.ReadMessage(l.ctl)
 		l.sess.Close()
 	}()
 	<-l.sess.CloseChan()
@@ -394,7 +369,7 @@ func (rl *Relay) admitServe(l *link, id uint64, hello sandboxlink.ServeHello) (*
 		epoch := rl.epoch
 		rl.mu.Unlock()
 		ctx, cancel := rl.authorityContext()
-		peer, err := rl.cfg.Authority.AuthenticateServe(ctx, hello)
+		peer, err := rl.auth.AuthenticateServe(ctx, hello)
 		cancel()
 		if err == nil && peer.Resource != hello.Resource {
 			err = sandboxlink.Fail(sandboxlink.PermissionDenied)
@@ -445,7 +420,7 @@ func (rl *Relay) installServeLocked(l *link, id uint64, hello sandboxlink.ServeH
 		old.closures = nil
 	}
 	rl.serves[key] = sl
-	sl.send(id, rl.accepted())
+	sl.send(id, sandboxlink.HelloAccepted{})
 	return sl, old, nil
 }
 
@@ -453,7 +428,7 @@ func (rl *Relay) installServeLocked(l *link, id uint64, hello sandboxlink.ServeH
 // the link ends. Its attachments stay open until their leases expire.
 func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
 	ctx, cancel := rl.authorityContext()
-	peer, err := rl.cfg.Authority.AuthenticateAttach(ctx, hello)
+	peer, err := rl.auth.AuthenticateAttach(ctx, hello)
 	cancel()
 	if err == nil && peer.RuntimeID != hello.RuntimeID {
 		err = sandboxlink.Fail(sandboxlink.PermissionDenied)
@@ -465,7 +440,7 @@ func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
 	al := &attachLink{link: l, peer: peer}
 	var seq sandboxwire.RequestSequence
 	seq.Admit(id) // the Hello takes the first ID
-	al.send(id, rl.accepted())
+	al.send(id, sandboxlink.HelloAccepted{})
 	go func() {
 		for {
 			st, err := l.sess.AcceptStream()
@@ -476,7 +451,7 @@ func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
 		}
 	}()
 	for {
-		id, m, err := sandboxlink.ReadMessage(l.ctl, sandboxlink.MaxMessageBytes)
+		id, m, err := sandboxlink.ReadMessage(l.ctl)
 		if err != nil {
 			l.sess.Close()
 			return
@@ -539,7 +514,7 @@ func (rl *Relay) renewLease(al *attachLink, r sandboxlink.RenewAttachment) (sand
 		return sandboxlink.AttachmentRenewed{}, sandboxlink.Fail(sandboxlink.PermissionDenied)
 	}
 	ctx, cancel := rl.authorityContext()
-	auth, err := rl.cfg.Authority.Renew(ctx, al.peer, r)
+	auth, err := rl.auth.Renew(ctx, al.peer, r)
 	cancel()
 	if err != nil {
 		return sandboxlink.AttachmentRenewed{}, err
@@ -644,7 +619,7 @@ func (sp *splice) abortLocked(code sandboxlink.Code) {
 // authorizes it, binds the serve peer and splices the two streams.
 func (rl *Relay) open(al *attachLink, st *yamux.Stream) {
 	st.SetDeadline(time.Now().Add(sandboxlink.HandshakeTimeout))
-	id, m, err := sandboxlink.ReadMessage(st, sandboxlink.MaxMessageBytes)
+	id, m, err := sandboxlink.ReadMessage(st)
 	st.SetDeadline(time.Time{})
 	o, ok := m.(sandboxlink.Open)
 	if err != nil || !ok {
@@ -659,11 +634,11 @@ func (rl *Relay) open(al *attachLink, st *yamux.Stream) {
 	defer rl.finish(sp)
 	sl := sp.serve
 	opened := sandboxlink.Opened{AttachmentID: o.AttachmentID, ServerInstanceID: sl.hello.ServerInstanceID,
-		LeaseExpiresAt: auth.LeaseExpiresAt, MaxFrameBytes: rl.cfg.MaxFrameBytes}
+		LeaseExpiresAt: auth.LeaseExpiresAt}
 	bind := sandboxlink.Bind{AttachmentID: o.AttachmentID, Service: o.Service, Version: o.Version,
 		SessionID: o.SessionID, AssignmentID: o.AssignmentID, AssignmentEpoch: o.AssignmentEpoch,
 		LeaseExpiresAt: auth.LeaseExpiresAt, ExpectedServerInstanceID: sl.hello.ServerInstanceID,
-		MaxFrameBytes: rl.cfg.MaxFrameBytes, Exports: auth.Exports, Egress: auth.Egress}
+		Exports: auth.Exports, Egress: auth.Egress}
 	err = rl.bind(sp, bind)
 	rl.mu.Lock()
 	if sp.aborted != 0 {
@@ -694,7 +669,7 @@ func (rl *Relay) admit(al *attachLink, st *yamux.Stream, o sandboxlink.Open) (*s
 		epoch := rl.epoch
 		rl.mu.Unlock()
 		ctx, cancel := rl.authorityContext()
-		auth, err := rl.cfg.Authority.AuthorizeOpen(ctx, al.peer, o)
+		auth, err := rl.auth.AuthorizeOpen(ctx, al.peer, o)
 		cancel()
 		if err != nil {
 			return nil, auth, err
@@ -728,7 +703,7 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 	a := rl.attachments[o.AttachmentID]
 	var code sandboxlink.Code
 	switch {
-	case al.streams >= rl.cfg.MaxStreams || (sl != nil && sl.streams >= rl.cfg.MaxStreams):
+	case al.streams >= maxStreams || (sl != nil && sl.streams >= maxStreams):
 		code = sandboxlink.LimitExceeded
 	case rl.generations[key] > generation:
 		code = sandboxlink.StaleGeneration
@@ -786,18 +761,11 @@ func (rl *Relay) bind(sp *splice, b sandboxlink.Bind) error {
 	if err := sandboxwire.WriteFrame(ss, f); err != nil {
 		return sandboxlink.Uncertain(err)
 	}
-	_, m, err := sandboxlink.ReadMessage(ss, sandboxlink.MaxMessageBytes)
-	if err != nil {
-		return sandboxlink.Uncertain(err)
+	if _, err := sandboxlink.ReadReply(ss, sandboxlink.OpBind, f.RequestID); err != nil {
+		return err
 	}
-	switch r := m.(type) {
-	case sandboxlink.Bound:
-		ss.SetDeadline(time.Time{})
-		return nil
-	case sandboxlink.Failure:
-		return r.Err()
-	}
-	return &sandboxlink.Error{Code: sandboxlink.ProtocolViolation, Effect: sandboxwire.EffectPossible}
+	ss.SetDeadline(time.Time{})
+	return nil
 }
 
 // abortError answers an Open that a close interrupted during bind, whose own

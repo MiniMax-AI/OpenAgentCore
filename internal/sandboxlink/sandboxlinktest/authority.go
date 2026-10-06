@@ -82,13 +82,6 @@ func (a *Authority) AddGrant(grant []byte, g Grant) {
 	a.grants[string(grant)] = g
 }
 
-// RemoveGrant withdraws an attachment grant.
-func (a *Authority) RemoveGrant(grant []byte) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	delete(a.grants, string(grant))
-}
-
 func (a *Authority) AuthenticateServe(_ context.Context, hello sandboxlink.ServeHello) (sandboxlink.ServePeer, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

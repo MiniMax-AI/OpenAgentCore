@@ -41,7 +41,7 @@ An attachment outlives its link. After reconnecting, the Runtime opens a stream 
 
 ## Run a relay
 
-`relay.New` takes a `relay.Config` with an `Authority` and returns a `*relay.Relay`, which is an `http.Handler`. The relay endpoint is served behind the installation's HTTPS ingress, which terminates TLS, so the handler accepts the upgrade on the ingress's plain HTTP hop; peers enforce TLS when they dial. `MaxStreams` (default 256) bounds each link's concurrent service streams and `MaxFrameBytes` (default 1 MiB) is the frame limit the relay advertises.
+`relay.New` takes an `Authority` and returns a `*relay.Relay`, which is an `http.Handler`. The relay endpoint is served behind the installation's HTTPS ingress, which terminates TLS, so the handler accepts the upgrade on the ingress's plain HTTP hop; peers enforce TLS when they dial. Each link carries at most 256 concurrent service streams.
 
 The owner of the relay implements `Authority` from its durable records, and the relay consults it for every Hello, Open and renewal. To revoke, withdraw the authority first, then call `RevokeAttachment` or `RevokeResource` so the relay closes what it holds.
 
@@ -55,7 +55,7 @@ A frame is a 16-byte header followed by the payload. Integers are big-endian.
 
 | Offset | Field | Type | Rule |
 | --- | --- | --- | --- |
-| 0 | `PayloadLength` | uint32 | At most 1 MiB (`sandboxwire.MaxPayload`) and at most the limit advertised to the sender; checked before the payload is read |
+| 0 | `PayloadLength` | uint32 | At most 1 MiB (`sandboxwire.MaxPayload`); checked before the payload is read |
 | 4 | `MessageType` | uint16 | A tag the protocol defines |
 | 6 | `Flags` | uint16 | Zero |
 | 8 | `RequestID` | uint64 | For a request, nonzero and greater than the sender's previous request ID on the stream; the request's ID in its response; zero for an event |
@@ -124,10 +124,7 @@ Hello
     RuntimeID         ID
     Credential        bytes        // 1..4096 bytes
 
-HelloAccepted
-  LinkID            ID
-  MaxStreams        u32            // at least 1
-  MaxFrameBytes     u32            // 16 KiB..1 MiB
+HelloAccepted       (no fields)
 
 Open
   Service                   enum
@@ -144,7 +141,6 @@ Opened
   AttachmentID      ID
   ServerInstanceID  ID
   LeaseExpiresAt    i64 ms
-  MaxFrameBytes     u32
 
 Bind
   AttachmentID              ID
@@ -155,7 +151,6 @@ Bind
   AssignmentEpoch           u64
   LeaseExpiresAt            i64 ms
   ExpectedServerInstanceID  ID     // the serve peer's ServerInstanceID as the relay knows it
-  MaxFrameBytes             u32
   Exports                   optional, present exactly when Service is ServiceFile:
                               count 1..64 of ExportGrant, no ID twice
   Egress                    optional, present exactly when Service is ServiceNetwork:
@@ -202,8 +197,6 @@ AttachmentClosed
 4. The relay authenticates the peer with its Authority and answers `HelloAccepted`, or a failure after which the link ends. A Hello of another version is answered `VersionMismatch` without reading past its version. When a revocation lands while the Authority decides a serve Hello, the relay asks again, so a withdrawn credential never installs a serve peer.
 
 Later control requests continue the Hello's request IDs. The relay ends an attach link whose request ID does not increase with `ProtocolViolation`. `Open` and `Bind` are each the only request on their stream and use request ID 1.
-
-`HelloAccepted.MaxStreams` bounds the link's concurrent service streams. `MaxFrameBytes` bounds the payload of every frame on the link's service streams.
 
 For a serve peer, the Authority returns the peer's identity and the resource, including generation, that the credential serves. The resource must equal the Hello's, otherwise the answer is `PermissionDenied`. The relay then applies the [generation rule](#authority-and-staleness) and makes the link the resource's current serve peer.
 
@@ -280,6 +273,8 @@ The relay copies each direction through a 32 KiB buffer and holds at most one 25
 | 12 | `ProtocolViolation` | A message is malformed, not allowed where it arrived, or carries a request ID that does not increase |
 
 `ServiceUnavailable` and `LimitExceeded` are transient: the same request may succeed later, and `Code.Retryable` reports them. Every other code is final: repeating the request with the same credential, attachment and generation fails again.
+
+An answer that is malformed, or that carries another request ID or operation than its request, fails the request with `ProtocolViolation` and `EffectPossible`, since the request may have taken effect.
 
 ## Verification
 
