@@ -32,6 +32,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
@@ -43,12 +44,14 @@ import (
 )
 
 // The view suite needs root with CAP_SYS_ADMIN and CAP_NET_ADMIN, /dev/fuse,
-// no AppArmor confinement and a static oac-sandbox-io, whose world is the
-// container's /. Run it in a throwaway container:
+// no AppArmor confinement, a private cgroup namespace, in which
+// sessionviewtest mounts a writable cgroup v2 hierarchy for the views, and a
+// static oac-sandbox-io, whose world is the container's /. Run it in a
+// throwaway container:
 //
 //	CGO_ENABLED=0 go build -o /tmp/oac-sandbox-io ./apps/sandboxio/cmd/oac-sandbox-io
 //	CGO_ENABLED=0 go test -c -o /tmp/agenthost.test ./apps/daemon/internal/agenthost
-//	docker run --rm --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
+//	docker run --rm --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
 //	  -e OAC_TEST_AGENTHOST=1 -e OAC_TEST_SANDBOXIO=/sandboxio -v /tmp/oac-sandbox-io:/sandboxio:ro \
 //	  -v /tmp/agenthost.test:/t.test:ro debian:bookworm-slim /t.test -test.v
 const (
@@ -81,6 +84,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	reg := agent.NewRegistry()
 	cfg := newConfig(t, reg, upstream.Certificate())
 	cfg.RelayURL = sb.url
+	cfg.ViewCgroups = sessionviewtest.CgroupParent(t)
 	closure := t.TempDir()
 	if err := os.Chmod(closure, 0o755); err != nil {
 		t.Fatal(err)
@@ -103,6 +107,11 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	})
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
 	sb.ready(t, cfg)
+	h, err := Open(cfg)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer h.Close()
 	workspace, err := os.MkdirTemp("/tmp", "agenthost-workspace-")
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +122,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	}
 
 	t.Run("one Session", func(t *testing.T) {
-		s := startSession(t, cfg, sb, request("test", workspace, upstream.URL, upstreamKey), 2*time.Second)
+		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), 2*time.Second)
 		r := s.turn(t, "check")
 		for _, name := range harnessChecks {
 			if msg, ok := r.Checks[name]; !ok || msg != "" {
@@ -153,7 +162,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	})
 
 	t.Run("a command runs in the sandbox through the shim", func(t *testing.T) {
-		s := startSession(t, cfg, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
+		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
 		if r := s.turn(t, "shim"); r.Stdout != "42\n" || r.Code != 3 {
 			t.Errorf("the forwarded command printed %q and exited %d, want 42 and 3; stderr %s", r.Stdout, r.Code, r.Stderr)
 		}
@@ -165,7 +174,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	})
 
 	t.Run("a lost relay fails the Session", func(t *testing.T) {
-		s := startSession(t, cfg, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
+		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
 		s.send(t, "wait")
 		beat := filepath.Join(workspace, "beat")
 		defer os.Remove(beat)
@@ -188,7 +197,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 	})
 
 	t.Run("a restarted sandbox service fails the Session", func(t *testing.T) {
-		s := startSession(t, cfg, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
+		s := startSession(t, h, sb, request("test", workspace, upstream.URL, upstreamKey), time.Minute)
 		s.send(t, "wait")
 		beat := filepath.Join(workspace, "beat")
 		for deadline := time.Now().Add(wait); ; time.Sleep(50 * time.Millisecond) {
@@ -445,12 +454,12 @@ type sessionRun struct {
 	done    chan error
 }
 
-func startSession(t *testing.T, cfg Config, sb *sandbox, req proto.PromptRequestPayload, lease time.Duration) *sessionRun {
+func startSession(t *testing.T, h *Host, sb *sandbox, req proto.PromptRequestPayload, lease time.Duration) *sessionRun {
 	s, in, out := newSession(sb.resource, req)
-	sb.grant(s.Binding, cfg.RuntimeID, lease)
+	sb.grant(s.Binding, h.cfg.RuntimeID, lease)
 	r := &sessionRun{binding: s.Binding, in: in, out: out, done: make(chan error, 1)}
 	go func() {
-		r.done <- run(context.Background(), cfg, s, deps{dial: relayDial(cfg), procs: procfs{}})
+		r.done <- h.Run(context.Background(), s)
 	}()
 	return r
 }
@@ -504,11 +513,15 @@ func (r *sessionRun) wait(t *testing.T) error {
 	}
 }
 
-// checkReleased checks that no Session directory, mount or process remains.
+// checkReleased checks that no Session directory, view cgroup, mount or
+// running process with a Session uid remains.
 func checkReleased(t *testing.T, cfg Config) {
 	t.Helper()
 	if left := leftSessions(t, cfg); len(left) != 0 {
 		t.Errorf("%d Session directories remain", len(left))
+	}
+	if left := leftCgroups(t, cfg); len(left) != 0 {
+		t.Errorf("view cgroups remain: %v", left)
 	}
 	mounts, err := os.ReadFile("/proc/self/mountinfo")
 	if err != nil {
@@ -517,25 +530,8 @@ func checkReleased(t *testing.T, cfg Config) {
 	if strings.Contains(string(mounts), cfg.StateDir) {
 		t.Error("a mount under the state directory remains")
 	}
-	procs, err := os.ReadDir("/proc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, p := range procs {
-		if _, err := strconv.Atoi(p.Name()); err != nil {
-			continue
-		}
-		status, err := os.ReadFile(filepath.Join("/proc", p.Name(), "status"))
-		if err != nil {
-			continue
-		}
-		for line := range strings.Lines(string(status)) {
-			if fields := strings.Fields(line); len(fields) > 1 && fields[0] == "Uid:" {
-				if uid, _ := strconv.ParseUint(fields[1], 10, 32); uid >= uint64(cfg.UIDs.First) && uid < uint64(cfg.UIDs.First+cfg.UIDs.Count) {
-					t.Errorf("process %s runs with Session uid %d", p.Name(), uid)
-				}
-			}
-		}
+	if held, err := heldUIDs(procfs{}, cfg.UIDs); err != nil || len(held) != 0 {
+		t.Errorf("Session uids held: %v, %v", held, err)
 	}
 }
 

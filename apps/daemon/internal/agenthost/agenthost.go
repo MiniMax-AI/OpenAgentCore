@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
@@ -20,12 +21,19 @@ import (
 // StateDir or the UIDs of an earlier one.
 type Config struct {
 	// StateDir is an absolute host directory private to the agent host. Each
-	// Session's directory is StateDir/sessions/<Session ID>.
+	// Session's directory is StateDir/sessions/<Session ID>, and
+	// StateDir/lock is the installation lock.
 	StateDir string
 	// UIDs is the range Session uids are allocated from; each Session's gid
 	// equals its uid. Only one agent host runs per kernel, and nothing else
 	// uses the range or starts session views.
 	UIDs UIDRange
+	// ViewCgroups is the absolute path of a cgroup v2 directory delegated to
+	// the agent host, which runs outside it. Each view runs in a cgroup of its
+	// own there, and every cgroup there counts as one of this agent host's
+	// views. It is unrelated to the Process protocol's cgroup scope, which
+	// belongs to the sandbox's process service.
+	ViewCgroups string
 	// RelayURL and TLS reach the Link relay, as sandboxlink.DialAttach takes
 	// them. A nil TLS uses the system roots.
 	RelayURL string
@@ -95,16 +103,22 @@ type Input struct {
 	Message proto.MessageInput
 }
 
-// Error kinds. Every error Run returns matches one of them with errors.Is.
+// Error kinds. Every error Open and Run return matches one of them with
+// errors.Is.
 var (
-	// ErrUnsupported is a platform other than Linux, or a Session that asks
-	// for what the agent host does not run. A Session's error also matches
-	// agent.ErrUnsupportedKind, agent.ErrUnsupportedOperation,
-	// agent.ErrViewHandoff, or agent.ErrInvalidView for a view whose paths
-	// meet the agent host's own overlays.
+	// ErrUnsupported is a platform other than Linux, a host that lacks a
+	// requirement, or a Session that asks for what the agent host does not
+	// run. A missing requirement also matches the sessionview error that
+	// names it. A Session's error also matches agent.ErrUnsupportedKind,
+	// agent.ErrUnsupportedOperation, agent.ErrViewHandoff, or
+	// agent.ErrInvalidView for a view whose paths meet the agent host's own
+	// overlays.
 	ErrUnsupported = errors.New("agenthost: unsupported")
-	// ErrInvalidConfig is a Config that Run rejects.
+	// ErrInvalidConfig is a Config that Open or Run rejects.
 	ErrInvalidConfig = errors.New("agenthost: invalid configuration")
+	// ErrStateLocked means another agent host holds the StateDir's
+	// installation lock.
+	ErrStateLocked = errors.New("agenthost: state directory in use")
 	// ErrInvalidSession is a malformed Session.
 	ErrInvalidSession = errors.New("agenthost: invalid session")
 	// ErrCapacity means every Session uid is in use.
@@ -127,9 +141,23 @@ var (
 	// ErrTurn is a Turn that failed or left its Executor unusable.
 	ErrTurn = errors.New("agenthost: turn failed")
 	// ErrTeardown is a Session resource that could not be released, such as
-	// a view whose teardown did not finish (sessionview.ErrCleanup).
+	// a view whose teardown did not finish (sessionview.ErrCleanup), or what
+	// an earlier agent host left that Open could not recover.
 	ErrTeardown = errors.New("agenthost: teardown incomplete")
 )
+
+// Host is a running agent host. It holds the installation lock on its
+// StateDir from Open until Close.
+type Host struct {
+	cfg  Config
+	lock *os.File
+}
+
+// Close releases the installation lock. Call it once every Run has
+// returned.
+func (h *Host) Close() error {
+	return h.lock.Close()
+}
 
 // Error is a typed agent host failure. It matches Kind and, when present,
 // Err. Its message never includes a credential.

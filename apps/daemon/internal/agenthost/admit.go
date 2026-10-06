@@ -49,6 +49,8 @@ func checkConfig(cfg Config) (*x509.CertPool, error) {
 	switch {
 	case !isHostPath(cfg.StateDir):
 		return nil, invalidConfig("state directory %q is not absolute and clean", cfg.StateDir)
+	case !isHostPath(cfg.ViewCgroups):
+		return nil, invalidConfig("view cgroups %q is not absolute and clean", cfg.ViewCgroups)
 	case !cfg.UIDs.valid():
 		return nil, invalidConfig("uid range %d+%d", cfg.UIDs.First, cfg.UIDs.Count)
 	case sandboxlink.CheckRelayURL(cfg.RelayURL) != nil:

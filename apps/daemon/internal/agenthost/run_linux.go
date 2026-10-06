@@ -38,9 +38,9 @@ type deps struct {
 // then tears it down. It returns nil after Input closed and every Turn
 // settled, ctx's error when ctx ended the Session, and otherwise the error
 // that ended it, joined with any view cleanup and teardown failure. A failure
-// recorded during teardown counts.
-func Run(ctx context.Context, cfg Config, s Session) error {
-	return run(ctx, cfg, s, deps{dial: relayDial(cfg), procs: procfs{}})
+// recorded during teardown counts. Sessions may run concurrently.
+func (h *Host) Run(ctx context.Context, s Session) error {
+	return run(ctx, h.cfg, s, deps{dial: relayDial(h.cfg), procs: procfs{}})
 }
 
 // session is one running Session.
