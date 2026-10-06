@@ -94,7 +94,7 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		Subagents:       sessionStore,
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
-		SessionAdmin:    sessionStore, Environments: sessionService, EnvironmentsReader: sessionStore, Admin: s, AdminRuntimeTargets: sessionStore, AdminAudit: audit, WriteAudit: audit,
+		SessionAdmin:    sessionStore, Environments: sessionService, EnvironmentsReader: sessionStore, Admin: sessionStore, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}
 	for _, c := range configure {

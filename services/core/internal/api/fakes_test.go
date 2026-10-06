@@ -23,7 +23,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
@@ -42,23 +41,19 @@ func unexpectedCall(t testing.TB, method string) {
 }
 
 type fakeAdmin struct {
-	t                testing.TB
-	readAdminSummary func(context.Context, string, store.AdminSummaryFilter, func(sessions.Session, *string) error) (store.AdminAssetCounts, error)
+	t                       testing.TB
+	readAdminSummary        func(context.Context, string, sessions.AdminSummaryFilter, func(sessions.Session, *string) error) (sessions.AdminAssetCounts, error)
+	listAdminRuntimeTargets func(context.Context, []string, string, int, bool) (sessions.AdminRuntimeTargetPage, error)
 }
 
-func (f *fakeAdmin) ReadAdminSummary(a0 context.Context, a1 string, a2 store.AdminSummaryFilter, a3 func(sessions.Session, *string) error) (store.AdminAssetCounts, error) {
+func (f *fakeAdmin) ReadAdminSummary(a0 context.Context, a1 string, a2 sessions.AdminSummaryFilter, a3 func(sessions.Session, *string) error) (sessions.AdminAssetCounts, error) {
 	if f.readAdminSummary == nil {
 		unexpectedCall(f.t, "ReadAdminSummary")
 	}
 	return f.readAdminSummary(a0, a1, a2, a3)
 }
 
-type fakeAdminRuntimeTargets struct {
-	t                       testing.TB
-	listAdminRuntimeTargets func(context.Context, []string, string, int, bool) (sessions.AdminRuntimeTargetPage, error)
-}
-
-func (f *fakeAdminRuntimeTargets) ListAdminRuntimeTargets(a0 context.Context, a1 []string, a2 string, a3 int, a4 bool) (sessions.AdminRuntimeTargetPage, error) {
+func (f *fakeAdmin) ListAdminRuntimeTargets(a0 context.Context, a1 []string, a2 string, a3 int, a4 bool) (sessions.AdminRuntimeTargetPage, error) {
 	if f.listAdminRuntimeTargets == nil {
 		unexpectedCall(f.t, "ListAdminRuntimeTargets")
 	}

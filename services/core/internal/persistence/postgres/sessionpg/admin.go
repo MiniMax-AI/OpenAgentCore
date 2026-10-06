@@ -3,6 +3,7 @@ package sessionpg
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -52,4 +53,55 @@ func (s *Store) ListAdminRuntimeTargets(ctx context.Context, tenantIDs []string,
 		page.Data = append(page.Data, sessions.AdminRuntimeTarget{SessionID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String()})
 	}
 	return page, nil
+}
+
+func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter sessions.AdminSummaryFilter, visit func(sessions.Session, *string) error) (sessions.AdminAssetCounts, error) {
+	var counts sessions.AdminAssetCounts
+	tenant, err := parseID(tenantID)
+	if err != nil {
+		return counts, err
+	}
+	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := sqlc.New(tx)
+		raw, err := q.AdminAssetCounts(ctx, tenant)
+		if err != nil {
+			return err
+		}
+		counts = sessions.AdminAssetCounts(raw)
+		params := sqlc.AdminSummarySessionsParams{TenantID: tenant, CreatedAfter: timestamp(filter.CreatedAfter), CreatedBefore: timestamp(filter.CreatedBefore), AfterID: pgtype.UUID{Valid: true}}
+		for {
+			rows, err := q.AdminSummarySessions(ctx, params)
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				session, err := SessionFromRow(row.Session)
+				if err != nil {
+					return err
+				}
+				if session, err = LoadSessionActivity(ctx, q, session); err != nil {
+					return err
+				}
+				var creator *string
+				if row.CreationKeyID.Valid {
+					creator = &row.CreationKeyID.String
+				}
+				if err := visit(session, creator); err != nil {
+					return err
+				}
+				params.AfterID = row.Session.ID
+			}
+			if len(rows) < 100 {
+				return nil
+			}
+		}
+	})
+	return counts, err
+}
+
+func timestamp(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *value, Valid: true}
 }
