@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
@@ -59,7 +60,7 @@ func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 			last = pending
 		}
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, last.SessionID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, last.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}

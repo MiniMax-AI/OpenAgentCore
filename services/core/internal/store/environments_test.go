@@ -62,7 +62,7 @@ func TestEnvironmentOwnershipPersistsAndStaysScoped(t *testing.T) {
 			if _, err := s.CreateSession(ctx, tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal("changed configuration accepted", err)
 			}
-			if _, err := s.UpdateSessionMetadata(ctx, tenant, session.ID, map[string]string{"updated": "yes"}); err != nil {
+			if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: session.ID, Metadata: map[string]string{"updated": "yes"}}); err != nil {
 				t.Fatal(err)
 			}
 			pool.Close()
@@ -153,7 +153,7 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 		t.Fatal(reservations, err)
 	}
 	environmentInputHistory(t, pool, first.creation.Session.ID, 0, 0)
-	events, err := s.ListSessionEvents(ctx, tenant, first.creation.Session.ID, 0)
+	events, err := sessionAdapter(s).ListSessionEvents(ctx, tenant, first.creation.Session.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(environment, first.environment) {
 		t.Fatal(environment, err)
 	}
-	after, err := restarted.ListSessionEvents(ctx, tenant, found.Session.ID, 0)
+	after, err := sessionAdapter(restarted).ListSessionEvents(ctx, tenant, found.Session.ID, 0)
 	if err != nil || !reflect.DeepEqual(events, after) {
 		t.Fatal("retry emitted work", err)
 	}
@@ -242,7 +242,7 @@ func TestEnvironmentDeletionHidesWithoutDestroyingOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sessionAdapter(s).GetEnvironment(ctx, tenant, environment.ID); !errors.Is(err, sessions.ErrNotFound) {

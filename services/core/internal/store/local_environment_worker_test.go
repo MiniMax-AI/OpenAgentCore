@@ -81,7 +81,7 @@ func TestLocalEnvironmentWorkerDirectoryUsesExactAuthorityWithoutModel(t *testin
 	if got := awaitDirectoryResult(t, result); got.err != nil || len(got.value.Entries) != 1 {
 		t.Fatal("local directory failed", got.err)
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity != nil {
 		t.Fatal("local read admitted execution", err)
 	}
@@ -126,7 +126,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {
 		t.Fatal("local preparation lost identity")
 	}
-	before, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	before, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || before.LastTurn != nil {
 		t.Fatal("preparation admitted execution before readiness", err)
 	}

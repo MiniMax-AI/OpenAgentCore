@@ -26,7 +26,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			}
 			turnID := got.Receipts[0].TurnID
 			if deleted {
-				if err := s.DeleteSession(t.Context(), tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: pending.SessionID}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("claimed Session deleted", err)
 				}
 				if err := s.CommitLegacyDeletion(t.Context(), tenant, pending.SessionID); err != nil {

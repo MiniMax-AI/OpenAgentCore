@@ -61,7 +61,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				}
 				// A reader without the encryption key can use the safe snapshot after restart.
 				reader := New(pool)
-				frozen, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
+				frozen, err := sessionAdapter(reader).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -90,13 +90,13 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				if err != nil || replay.ID != session.ID {
 					t.Fatal("projection metadata changed retry identity", err)
 				}
-				if _, err := s.UpdateSessionMetadata(t.Context(), tenant, session.ID, map[string]string{"edited": "yes"}); err != nil {
+				if _, err := sessionService(t, s).UpdateSessionMetadata(t.Context(), sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: session.ID, Metadata: map[string]string{"edited": "yes"}}); err != nil {
 					t.Fatal(err)
 				}
 				if _, err := pool.Exec(t.Context(), "UPDATE session_model_execution SET encrypted_config='\\x00'::bytea WHERE session_id=$1", session.ID); err != nil {
 					t.Fatal(err)
 				}
-				got, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
+				got, err := sessionAdapter(reader).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 				if err != nil || !reflect.DeepEqual(got, frozen) {
 					t.Fatal("snapshot changed or reader decrypted a secret", err)
 				}
@@ -105,19 +105,19 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 					if _, err := pool.Exec(t.Context(), `UPDATE session_execution_configuration SET configuration = jsonb_set(configuration, '{model_provider}', '{"source":"deployment","status":"redacted","configuration":null}') WHERE session_id=$1`, session.ID); err != nil {
 						t.Fatal(err)
 					}
-					if historical, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID); err != nil || historical.ModelProvider.Status != "redacted" || historical.ModelProvider.Configuration != nil {
+					if historical, err := sessionAdapter(reader).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID); err != nil || historical.ModelProvider.Status != "redacted" || historical.ModelProvider.Configuration != nil {
 						t.Fatal("historical deployment selection changed", err)
 					}
 				}
 				for _, lookup := range []struct{ tenant, id string }{{uuid.NewString(), session.ID}, {tenant, uuid.NewString()}, {tenant, "malformed"}} {
-					if _, err := reader.GetSessionExecutionConfiguration(t.Context(), lookup.tenant, lookup.id); !errors.Is(err, sessions.ErrNotFound) {
+					if _, err := sessionAdapter(reader).GetSessionExecutionConfiguration(t.Context(), lookup.tenant, lookup.id); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("foreign/missing projection read differed", err)
 					}
 				}
-				if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+				if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := reader.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+				if _, err := sessionAdapter(reader).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("deleted Session projection remained public", err)
 				}
 			})
@@ -134,7 +134,7 @@ func TestSessionExecutionConfigurationHistoricalProvenance(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := s.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
+		got, err := sessionAdapter(s).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -222,7 +222,7 @@ func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			got, err := s.GetSessionExecutionConfiguration(t.Context(), tenant, created.Session.ID)
+			got, err := sessionAdapter(s).GetSessionExecutionConfiguration(t.Context(), tenant, created.Session.ID)
 			if err != nil {
 				t.Error(err)
 				return
@@ -253,7 +253,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frozen, err := s.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestSessionExecutionConfigurationSurvivesSuspendResume(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := s.GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
+		got, err := sessionAdapter(s).GetSessionExecutionConfiguration(t.Context(), tenant, session.ID)
 		if err != nil || !reflect.DeepEqual(got, frozen) {
 			t.Fatal("runtime transition changed execution projection", phase, err)
 		}

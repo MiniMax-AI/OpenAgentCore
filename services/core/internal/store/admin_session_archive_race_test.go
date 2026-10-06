@@ -36,7 +36,7 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 	}
 	onlineManagerNode(t, s, nodeID)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	result, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
+	result, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
 	if err != nil || result.State != "released" {
 		t.Fatal(result, err)
 	}
@@ -67,7 +67,7 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
+			_, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
 			if err != nil {
 				t.Error(err)
 			}
@@ -78,7 +78,7 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 		if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM environment_input_reservations WHERE session_id=$1 AND state='pending'", session.ID).Scan(&pending); err != nil || pending != 0 {
 			t.Fatal("input survived concurrent archive", pending, err)
 		}
-		if row, err := s.GetSession(t.Context(), tenant, session.ID); err != nil || row.Environment.Status != "expired" {
+		if row, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID); err != nil || row.Environment.Status != "expired" {
 			t.Fatal("concurrent input revived Environment", row, err)
 		}
 	}
@@ -87,7 +87,7 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 func TestManagedSessionArchiveRejectsFileManagedDeployment(t *testing.T) {
 	s, w, _ := managerFixture(t, 1, 1)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 0); !errors.Is(err, deployment.ErrConflict) {
+	if _, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 0); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("archive accepted file-managed deployment", err)
 	}
 }

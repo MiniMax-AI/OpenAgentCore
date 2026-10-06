@@ -3,6 +3,9 @@ package store_test
 import (
 	"slices"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *testing.T) {
@@ -13,7 +16,7 @@ func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *test
 		expected = append(expected, session.ID)
 	}
 	slices.Sort(expected)
-	if err := s.DeleteSession(t.Context(), sessionTenant(t, db, expected[2]), expected[2]); err != nil {
+	if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: sessionTenant(t, db, expected[2]), SessionID: expected[2]}); err != nil {
 		t.Fatal(err)
 	}
 	expected = append(expected[:2], expected[3:]...)

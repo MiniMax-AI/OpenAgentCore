@@ -16,7 +16,7 @@ self-hosted: tenant_id -> session_id -> environment_id -> device_id + connection
 none:        tenant_id -> session_id (no Session-owned Runtime instance)
 ```
 
-The resolver (`internal/runtimeobs/storeresolver`) reads the Session, its Environment, the current allocation and the Session's measured usage from the store. A Session, daemon connection, process, container and native Harness Session are different identities and never stand in for one another.
+The resolver (`services/core/internal/deployment/observation.go`) reads the Session, its Environment, the current allocation and the Session's measured usage from the database. A Session, daemon connection, process, container and native Harness Session are different identities and never stand in for one another.
 
 Managed Docker, microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
 

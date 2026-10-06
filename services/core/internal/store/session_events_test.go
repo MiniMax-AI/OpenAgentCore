@@ -31,7 +31,7 @@ func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
 		if err = sqlc.New(tx).AppendSessionEvent(ctx, sqlc.AppendSessionEventParams{ID: pgtype.UUID{Bytes: uuid.MustParse(session.ID), Valid: true}, Payload: []byte(`{"event":{"type":"agent.session.idle"}}`)}); err != nil {
 			t.Fatal(err)
 		}
-		if changes, err := s.ListSessionEvents(ctx, tenant, session.ID, 0); err != nil || len(changes) != 0 {
+		if changes, err := store.SessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0); err != nil || len(changes) != 0 {
 			t.Fatal("uncommitted events were visible", changes, err)
 		}
 		if commit {
@@ -43,7 +43,7 @@ func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if changes, err := s.ListSessionEvents(ctx, tenant, session.ID, 0); err != nil || len(changes) != 1 || changes[0].Sequence != 1 {
+	if changes, err := store.SessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0); err != nil || len(changes) != 1 || changes[0].Sequence != 1 {
 		t.Fatal("commit or rollback changed sequence continuity", changes, err)
 	}
 }
@@ -61,14 +61,14 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, err := s.SessionEventCursor(ctx, tenant, session.ID)
+	before, err := store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.SubmitMessage(ctx, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`)); err != nil {
 		t.Fatal(err)
 	}
-	after, _ := s.SessionEventCursor(ctx, tenant, session.ID)
+	after, _ := store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if before != after {
 		t.Fatal("input retry published duplicate events")
 	}
@@ -86,14 +86,14 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
+	before, _ = store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"discarded","delta":"rollback"}`)},
 		{Kind: "output_message", Payload: json.RawMessage(`{"status":"invalid"}`)},
 	}); err == nil {
 		t.Fatal("invalid projection accepted")
 	}
-	after, _ = s.SessionEventCursor(ctx, tenant, session.ID)
+	after, _ = store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if before != after {
 		t.Fatal("failed transaction published events")
 	}
@@ -103,7 +103,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	var all []sessions.SessionChange
 	cursor := int64(0)
 	for {
-		page, err := store.New(pool).ListSessionEvents(ctx, tenant, session.ID, cursor)
+		page, err := store.SessionAdapter(store.New(pool)).ListSessionEvents(ctx, tenant, session.ID, cursor)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -139,14 +139,14 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if counts["agent.session.turn.output_text.delta"] != 3 || counts["agent.session.turn.item.done"] != 2 {
 		t.Fatal(counts)
 	}
-	if _, err = s.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = store.SessionAdapter(s).ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign event access", err)
 	}
-	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
+	before, _ = store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
 		t.Fatal(err)
 	}
-	after, _ = s.SessionEventCursor(ctx, tenant, session.ID)
+	after, _ = store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if before != after {
 		t.Fatal("history read published live events")
 	}
@@ -178,17 +178,17 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	if err = pool.QueryRow(ctx, "SELECT count(*) FROM session_events WHERE session_id=$1", session.ID).Scan(&count); err != nil || count != 256 {
 		t.Fatal(count, err)
 	}
-	if _, err = s.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrStreamGap) {
+	if _, err = store.SessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrStreamGap) {
 		t.Fatal("lagging reader did not detect missing events", err)
 	}
-	cursor, err := s.SessionEventCursor(ctx, tenant, session.ID)
+	cursor, err := store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.RequestCancel(ctx, tenant, session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	changes, err := s.ListSessionEvents(ctx, tenant, session.ID, cursor)
+	changes, err := store.SessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, cursor)
 	if err != nil || len(changes) != 2 || changes[0].Event.Type != "agent.session.turn.cancelled" || changes[1].Event.Type != "agent.session.idle" {
 		t.Fatal(changes, err)
 	}

@@ -194,7 +194,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if providerOf(hostedID) != "deployment-canary" {
 		t.Fatal("hosted Session did not freeze the deployment default")
 	}
-	projection, err := st.GetSessionExecutionConfiguration(t.Context(), tenant, hostedID)
+	projection, err := store.SessionAdapter(st).GetSessionExecutionConfiguration(t.Context(), tenant, hostedID)
 	if err != nil || projection.ModelProvider.Source != "deployment" || projection.ModelProvider.Status != "available" || projection.ModelProvider.Configuration == nil || projection.ModelProvider.Configuration.BaseURL != "https://deployment.example/v1" {
 		t.Fatal("deployment selection not recorded", projection, err)
 	}
@@ -271,7 +271,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 		got, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
 		return err == nil && got.State == sessions.EnvironmentInputFailed
 	})
-	session, err := h.s.GetSession(t.Context(), h.tenant, legacy.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, legacy.ID)
 	if err != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Failure != "model_provider_required" {
 		t.Fatal("legacy reservation did not fail with its reason", session.EnvironmentInputActivity, err)
 	}

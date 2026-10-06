@@ -49,7 +49,7 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 		t.Fatal("rejected promotion lost its pending owner", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("blocked promotion started a Turn", session, err)
 	}

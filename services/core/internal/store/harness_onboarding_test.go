@@ -63,7 +63,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}()
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
-	handler, err := publicHandler(t, h.s, h.db, auth, "fixture_harness", workerExecution(worker), withPolicy(policy))
+	handler, err := publicHandler(t, h.s, h.db, auth, "fixture_harness", workerExecution(t, worker), withPolicy(policy))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	if err = json.Unmarshal(res.Body.Bytes(), &created); err != nil || created.ID == "" {
 		t.Fatal(res.Body, err)
 	}
-	h.session, err = h.s.GetSession(ctx, h.tenant, created.ID)
+	h.session, err = store.SessionAdapter(h.s).GetSession(ctx, h.tenant, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		t.Fatalf("incapable runtime received work: %s", p.RunID)
 	case <-time.After(700 * time.Millisecond):
 	}
-	queued, err := h.s.GetSession(ctx, h.tenant, created.ID)
+	queued, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, created.ID)
 	if err != nil || queued.LastTurn == nil || queued.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal(queued, err)
 	}

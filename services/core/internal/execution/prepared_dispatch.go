@@ -26,7 +26,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
-	session, err := d.Store.GetSession(ctx, tenantID, sessionID)
+	session, err := d.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
 		return run, err
 	}

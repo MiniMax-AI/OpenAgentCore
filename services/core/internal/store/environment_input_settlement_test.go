@@ -236,7 +236,7 @@ func TestEnvironmentInputDeletionSettlesPendingAndFencesPromotion(t *testing.T) 
 				}()
 			}
 			if !concurrent {
-				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("pending input deleted", err)
 				}
 			}

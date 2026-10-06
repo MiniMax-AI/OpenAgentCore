@@ -170,7 +170,7 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 	if err != nil || !retry.Replayed || retry.ID != owner.ID || p.creates != 1 {
 		t.Fatal("restart replayed Create")
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	// A scan may first exhaust its previous cursor before starting a new cycle.
@@ -194,7 +194,7 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected uncertain creation")
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	reconcileManagedState(t, w, db, tenant, env.ID, "cleanup_pending")

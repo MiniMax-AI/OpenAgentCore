@@ -29,6 +29,7 @@ type testFakes struct {
 	agents                 *fakeAgents
 	agentsReader           *fakeAgentsReader
 	sessions               *fakeSessions
+	sessionsReader         *fakeSessionsReader
 	sessionCreation        *fakeSessionCreation
 	sessionEvents          *fakeSessionEvents
 	turns                  *fakeTurns
@@ -77,6 +78,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		skills: &fakeSkills{t: t}, skillsReader: &fakeSkillsReader{t: t},
 		agents: &fakeAgents{t: t}, agentsReader: &fakeAgentsReader{t: t},
 		sessions:        &fakeSessions{t: t},
+		sessionsReader:  &fakeSessionsReader{t: t},
 		sessionCreation: &fakeSessionCreation{t: t},
 		sessionEvents:   &fakeSessionEvents{t: t},
 		turns:           &fakeTurns{t: t},
@@ -104,6 +106,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		Skills: f.skills, SkillsReader: f.skillsReader,
 		Agents: f.agents, AgentsReader: f.agentsReader,
 		Sessions:        f.sessions,
+		SessionsReader:  f.sessionsReader,
 		SessionCreation: f.sessionCreation,
 		SessionEvents:   f.sessionEvents,
 		Turns:           f.turns,

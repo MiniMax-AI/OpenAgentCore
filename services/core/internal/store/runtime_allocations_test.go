@@ -52,7 +52,7 @@ func TestRuntimeAllocationAtomicOwnershipAndRecovery(t *testing.T) {
 	if err != nil || !ok || credential.CredentialHash != runtimedevice.HashCredential(secret) {
 		t.Fatal("retry rewrote bootstrap credential")
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	retained, err := deploymentStore(next).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})

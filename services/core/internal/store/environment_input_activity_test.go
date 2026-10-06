@@ -14,7 +14,7 @@ import (
 
 func requireEnvironmentInputActivity(t *testing.T, s *Store, tenant, session, status, environment string) sessions.Session {
 	t.Helper()
-	value, err := s.GetSession(t.Context(), tenant, session)
+	value, err := sessionAdapter(s).GetSession(t.Context(), tenant, session)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func requireEnvironmentInputActivity(t *testing.T, s *Store, tenant, session, st
 	} else if activity == nil || activity.Status != status || activity.EnvironmentID != environment || activity.LastActiveAt.IsZero() {
 		t.Fatal("input activity", activity, status, environment)
 	}
-	page, err := s.ListSessions(t.Context(), tenant, "", 100, false, nil)
+	page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 100, false, nil)
 	if err != nil || len(page.Sessions) != 1 || !reflect.DeepEqual(page.Sessions[0].EnvironmentInputActivity, activity) {
 		t.Fatal("list and retrieve activity differ", err)
 	}
@@ -47,7 +47,7 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 		t.Fatal("waiting input fabricated a Turn")
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
-	first, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	first, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 	if err != nil || len(first) != 1 || first[0].Event.Type != "agent.session.requires_action" || first[0].Turn != nil || first[0].EnvironmentInputActivity == nil {
 		t.Fatal("missing pre-Turn snapshot", first, err)
 	}
@@ -64,7 +64,7 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 	if idle.LastTurn != nil {
 		t.Fatal("connection fabricated readiness or Turn")
 	}
-	changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 	if err != nil || len(changes) != 3 || changes[1].Event.Type != "agent.session.environment.connected" || changes[2].Event.Type != "agent.session.idle" {
 		t.Fatal("connection/action order", changes, err)
 	}
@@ -92,7 +92,7 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 	if active.LastTurn == nil || active.LastTurn.Status != sessions.TurnInProgress {
 		t.Fatal("normal Turn did not take ownership")
 	}
-	if _, err := s.GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Session activity visible", err)
 	}
 }
@@ -111,11 +111,11 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 				t.Fatal(err)
 			}
 			reservation := reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
-			value, err := s.GetSession(t.Context(), tenant, session.ID)
+			value, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 			if err != nil || value.LastTurn.Status != sessions.TurnFailed || value.EnvironmentInputActivity.Status != "requires_action" || !value.PendingInput {
 				t.Fatal("prior failure hid waiting input", err)
 			}
-			waitingCursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+			waitingCursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -143,16 +143,16 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 			// The settled later reservation no longer counts as pending input, so
 			// creation streams can end instead of waiting for work that cannot start.
 			settled := requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
-			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, waitingCursor)
+			events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, waitingCursor)
 			if err != nil || settled.PendingInput || len(events) != 1 || events[0].Event.Type != "agent.session.idle" || events[0].Turn != nil || !events[0].Settled {
 				t.Fatal("settled reservation remained pending", settled.EnvironmentInputActivity, events, err)
 			}
-			cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+			cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
-			if after, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || after != cursor {
+			if after, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID); err != nil || after != cursor {
 				t.Fatal("settled retry repeated activity", after, cursor, err)
 			}
 			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "newer", []sessions.Input{messageInput("newer")}); err != nil {
@@ -231,27 +231,27 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 	if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(reservation.Deadline) {
 		t.Fatal("recovery changed waiting input or its deadline", got, err)
 	}
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+	cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := sessionExecution(t, next.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 2, true); err != nil {
 		t.Fatal(err)
 	}
-	if after, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || after != cursor {
+	if after, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID); err != nil || after != cursor {
 		t.Fatal("retired generation changed activity", after, cursor, err)
 	}
 	environmentInputHistory(t, pool, session.ID, 0, 0)
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("waiting input deleted", err)
 	}
 	if err := s.commitLegacyDeletion(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted activity remained visible", err)
 	}
-	if _, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted activity events remained visible", err)
 	}
 }

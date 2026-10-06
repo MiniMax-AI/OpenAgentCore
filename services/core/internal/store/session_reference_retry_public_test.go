@@ -32,7 +32,7 @@ func TestSavedReferenceRetryOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker))
+	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, worker))
 	if err != nil {
 		t.Fatal(err)
 	}

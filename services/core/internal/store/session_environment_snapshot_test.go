@@ -29,7 +29,7 @@ func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 	if err != nil || pending.State != sessions.EnvironmentInputPending {
 		t.Fatal(pending, err)
 	}
-	events, err := s.ListSessionEvents(t.Context(), tenant, created.Session.ID, created.Cursor)
+	events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, created.Session.ID, created.Cursor)
 	if err != nil || len(events) != 1 || events[0].Event.Type != "agent.session.requires_action" {
 		t.Fatal("creation cursor lost subsequent activity", events, err)
 	}
@@ -59,7 +59,7 @@ func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 	if _, err := s.FindSessionCreation(t.Context(), tenant, input.IdempotencyKey, input.CreationRequest, changedCreator); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("retry creator isolation", err)
 	}
-	current, err := s.GetSession(t.Context(), tenant, created.Session.ID)
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, created.Session.ID)
 	if err != nil || current.EnvironmentInputActivity == nil || current.EnvironmentInputActivity.Status != "requires_action" {
 		t.Fatal("ordinary read lost current activity", current, err)
 	}

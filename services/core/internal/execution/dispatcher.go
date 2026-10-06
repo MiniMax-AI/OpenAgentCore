@@ -75,7 +75,7 @@ type Result struct {
 
 // Run claims once before subscribing or sending. Uncertain deliveries are not replayed.
 func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string) (sessions.Turn, error) {
-	session, err := d.Store.GetSession(ctx, tenantID, sessionID)
+	session, err := d.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
 		return sessions.Turn{}, err
 	}

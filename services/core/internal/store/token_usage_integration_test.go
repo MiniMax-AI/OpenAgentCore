@@ -85,7 +85,7 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 	}
 	defer restored.Close()
 	fresh := store.New(restored)
-	got, err := fresh.GetSession(ctx, tenant, session.ID)
+	got, err := store.SessionAdapter(fresh).GetSession(ctx, tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,11 +96,11 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 	if total.InputTokens != 40 || total.OutputTokens != 6 || total.TotalTokens != 46 || total.InputTokensDetails.CachedTokens != 8 || total.OutputTokensDetails.ReasoningTokens != 4 {
 		t.Fatalf("double counted totals: %+v", total)
 	}
-	page, err := fresh.ListSessions(ctx, tenant, "", 100, true, nil)
+	page, err := store.SessionAdapter(fresh).ListSessions(ctx, tenant, "", 100, true, nil)
 	if err != nil || len(page.Sessions) != 1 || string(page.Sessions[0].Usage) != string(got.Usage) {
 		t.Fatalf("list totals: %+v %v", page, err)
 	}
-	if _, err = fresh.GetSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = store.SessionAdapter(fresh).GetSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 }
@@ -156,22 +156,22 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	// included, and is scoped to the tenant.
 	measured := func(want int64) {
 		t.Helper()
-		got, err := s.MeasuredSessionUsage(ctx, tenant, session.ID)
+		got, err := store.SessionAdapter(s).MeasuredSessionUsage(ctx, tenant, session.ID)
 		var value v1.TokenUsage
 		if err != nil || (want < 0) != (got == nil) || (want >= 0 && (json.Unmarshal(got, &value) != nil || value.TotalTokens != want)) {
 			t.Fatalf("measured usage = %s %v, want total %d", got, err, want)
 		}
-		if foreign, err := s.MeasuredSessionUsage(ctx, uuid.NewString(), session.ID); err != nil || foreign != nil {
+		if foreign, err := store.SessionAdapter(s).MeasuredSessionUsage(ctx, uuid.NewString(), session.ID); err != nil || foreign != nil {
 			t.Fatalf("foreign measured usage: %s %v", foreign, err)
 		}
 	}
 	total := func(want int64) {
 		t.Helper()
-		got, err := s.GetSession(ctx, tenant, session.ID)
+		got, err := store.SessionAdapter(s).GetSession(ctx, tenant, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		page, err := s.ListSessions(ctx, tenant, "", 100, true, nil)
+		page, err := store.SessionAdapter(s).ListSessions(ctx, tenant, "", 100, true, nil)
 		if err != nil || len(page.Sessions) != 1 || string(page.Sessions[0].Usage) != string(got.Usage) {
 			t.Fatalf("list usage: %+v %v", page, err)
 		}
@@ -208,7 +208,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	}
 	lastIdleUsage := func() json.RawMessage {
 		t.Helper()
-		changes, err := s.ListSessionEvents(ctx, tenant, session.ID, 0)
+		changes, err := store.SessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0)
 		if err != nil || len(changes) == 0 || changes[len(changes)-1].Event.Type != "agent.session.idle" {
 			t.Fatal(changes, err)
 		}

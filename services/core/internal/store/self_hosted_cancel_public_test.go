@@ -36,7 +36,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		t.Helper()
 		owner = executionOwner(t, db, s)
 		worker, stop := publicOwnedWorker(t, s, db, owner)
-		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker), executorURL("https://offline-executor.example"))
+		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,7 +153,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || len(itemsBefore.Items) != 2 {
 		t.Fatal("controlled partial output was not recorded", err)
 	}
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, created.ID)
+	cursor, err := store.SessionAdapter(s).SessionEventCursor(t.Context(), tenant, created.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(itemsBefore, itemsAfter) {
 		t.Fatal("cancellation admission changed partial history", err)
 	}
-	afterCursor, err := s.SessionEventCursor(t.Context(), tenant, created.ID)
+	afterCursor, err := store.SessionAdapter(s).SessionEventCursor(t.Context(), tenant, created.ID)
 	if err != nil || afterCursor != cursor {
 		t.Fatal("cancellation admission fabricated an execution event", err)
 	}

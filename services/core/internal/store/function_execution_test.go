@@ -47,7 +47,7 @@ func functionState(t *testing.T, h *dispatchHarness, count int) sessions.Session
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
-		state, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+		state, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}

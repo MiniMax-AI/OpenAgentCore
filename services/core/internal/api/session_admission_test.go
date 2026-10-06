@@ -15,7 +15,7 @@ import (
 // testHandler serves, so any access fails the test.
 func forbidSessionAccess(_ *Dependencies, f *testFakes) {
 	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = nil, nil
-	f.sessions.getSession, f.sessions.listSessions = nil, nil
+	f.sessionsReader.getSession, f.sessionsReader.listSessions = nil, nil
 	f.modelProviders.resolve = nil
 }
 

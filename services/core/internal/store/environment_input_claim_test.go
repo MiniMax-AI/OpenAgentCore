@@ -12,7 +12,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 	writer := executionWriter(t, s)
 	tenant, session := environmentInputSession(t, s)
 	pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
-	reservationCursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+	reservationCursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 		t.Fatal("promotion did not persist its execution claim", turn, err)
 	}
 	environmentInputHistory(t, pool, session.ID, 1, 2)
-	changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, reservationCursor)
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, reservationCursor)
 	if err != nil || len(changes) < 2 {
 		t.Fatal("missing promotion events", changes, err)
 	}
@@ -77,7 +77,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 	}
 	transition(t, writer, tenant, session.ID, turnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	later := reserveEnvironmentInput(t, s, tenant, session.ID, "later")
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+	cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 	if err != nil || len(retry.Receipts) != 2 || !retry.Receipts[0].Replayed || retry.Receipts[0].TurnID != turnID {
 		t.Fatal("terminal retry reclaimed execution", retry, err)
 	}
-	after, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+	after, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil || after != cursor {
 		t.Fatal("terminal retry published events", after, cursor, err)
 	}

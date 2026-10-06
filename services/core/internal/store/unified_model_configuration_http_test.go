@@ -106,7 +106,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 			}
 		}
 		equalJSON(publicNative, native)
-		snapshot, err := st.GetSessionExecutionConfiguration(t.Context(), tenant, id)
+		snapshot, err := store.SessionAdapter(st).GetSessionExecutionConfiguration(t.Context(), tenant, id)
 		if err != nil {
 			t.Fatal(err)
 		}

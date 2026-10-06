@@ -148,7 +148,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				}
 				defer release()
 			}
-			if _, err := writer.ArchiveManagedSession(audit, project.TenantID, session.ID, 1); err != nil {
+			if _, err := leased.Deployment.ArchiveSession(audit, project.TenantID, session.ID, 1); err != nil {
 				t.Fatal(err)
 			}
 			owner, err = reader.EnvironmentAllocation(t.Context(), key)

@@ -74,7 +74,7 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 			t.Fatal("expiry/promotion race started work", got)
 		}
 	}
-	events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 	if err != nil || len(events) != 2 || events[1].Event.Type != "agent.session.failed" {
 		t.Fatal("racing settlement duplicated or lost failure", events, err)
 	}
@@ -116,7 +116,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 				status, actionEnvironment = "", ""
 			}
 			requireEnvironmentInputActivity(t, s, tenant, session.ID, status, actionEnvironment)
-			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, creation.Cursor)
+			events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, creation.Cursor)
 			expectedEvents := 1
 			if kind == "openai_hosted" {
 				expectedEvents = 0
@@ -172,7 +172,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 				t.Fatal(err)
 			}
 			environmentInputHistory(t, pool, session.ID, 1, 2)
-			after, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			after, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			if err != nil || !reflect.DeepEqual(events, after[:len(events)]) {
 				t.Fatal("initial snapshot changed after promotion", err)
 			}
@@ -221,7 +221,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if failed.Environment.Status != "pending" || failed.LastTurn != nil || failed.PendingInput || !failed.EnvironmentInputActivity.LastActiveAt.Equal(*reservation.SettledAt) {
 				t.Fatal("input expiry changed Environment/Turn", failed)
 			}
-			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			expectedEvents := 2
 			if kind == "openai_hosted" {
 				expectedEvents = 1
@@ -261,21 +261,21 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 				t.Fatal("later submission inferred initial origin")
 			}
 			requireEnvironmentInputActivity(t, reopened, tenant, session.ID, "idle", "")
-			after, err := reopened.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			after, err := sessionAdapter(reopened).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			if err != nil || len(after) < len(events) || !reflect.DeepEqual(events, after[:len(events)]) {
 				t.Fatal("later work changed historical failure", err)
 			}
 			// The later input is still pending, so deletion waits for it to settle.
-			if err := reopened.DeleteSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+			if err := sessionService(t, reopened).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 				t.Fatal("pending later input deleted", err)
 			}
 			if _, err := reopened.CancelEnvironmentInput(t.Context(), tenant, session.ID, later.ID); err != nil {
 				t.Fatal(err)
 			}
-			if err := reopened.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+			if err := sessionService(t, reopened).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := reopened.GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sessionAdapter(reopened).GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("deleted initial Session remained visible", err)
 			}
 		})

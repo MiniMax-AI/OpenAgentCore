@@ -29,13 +29,13 @@ func TestInitialSessionInputOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(worker))
+	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, worker))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	unsupported, err := publicHandler(t, s, db, auth, "fake_alpha", workerExecution(worker))
+	unsupported, err := publicHandler(t, s, db, auth, "fake_alpha", workerExecution(t, worker))
 	if err != nil {
 		t.Fatal(err)
 	}

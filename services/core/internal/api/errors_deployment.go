@@ -22,8 +22,6 @@ func writeDeploymentError(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not available on this service.")
 	case errors.Is(err, deployment.ErrNotFound):
 		writeError(w, http.StatusNotFound, "not_found_error", "Resource not found.")
-	case errors.Is(err, deployment.ErrInvalidInput):
-		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
 		if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
 			return
@@ -106,6 +104,8 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusServiceUnavailable, "sandbox_nodes_preparing", "Sandbox nodes are preparing the requested Runtime.")
 	case errors.Is(err, placement.ErrNodeUnavailable):
 		writeError(w, http.StatusServiceUnavailable, "runtime_node_unavailable", "The selected sandbox node is unavailable or has no capacity.")
+	case errors.Is(err, deployment.ErrInvalidInput):
+		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	default:
 		return false
 	}

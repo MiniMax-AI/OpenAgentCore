@@ -27,7 +27,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 				t.Fatal(err)
 			}
 		case "deleted":
-			if err := h.s.DeleteSession(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotIdle) {
+			if err := store.SessionService(t, h.s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: pending.SessionID}); !errors.Is(err, sessions.ErrNotIdle) {
 				t.Fatal("pending input deleted", err)
 			}
 			if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, pending.SessionID); err != nil {

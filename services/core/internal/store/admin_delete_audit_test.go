@@ -161,7 +161,7 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 		t.Fatal("artifact fixture", err)
 	}
 	verify := func() {
-		if _, err := s.GetSession(t.Context(), tenant, session); err != nil {
+		if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, session); err != nil {
 			t.Fatal("Session was not restored", err)
 		}
 		for _, artifact := range page.Artifacts {
@@ -181,7 +181,9 @@ func prepareAdminHistoryDelete(t *testing.T, s *Store, name string) (string, res
 		}
 	}
 	if name == "session_delete" {
-		return tenant, resourceAuditMutation{action: "delete", kind: "session", run: func(ctx context.Context) (string, error) { return session, s.DeleteSession(ctx, tenant, session) }}, verify, 2
+		return tenant, resourceAuditMutation{action: "delete", kind: "session", run: func(ctx context.Context) (string, error) {
+			return session, sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session})
+		}}, verify, 2
 	}
 	artifact := page.Artifacts[0]
 	return tenant, resourceAuditMutation{action: "delete", kind: "artifact", parent: session, run: func(ctx context.Context) (string, error) {
@@ -194,7 +196,7 @@ func assertAdminDeletedResource(t *testing.T, s *Store, tenant string, mutation 
 	var err error
 	switch mutation.kind {
 	case "session":
-		_, err = s.GetSession(t.Context(), tenant, id)
+		_, err = sessionAdapter(s).GetSession(t.Context(), tenant, id)
 	case "artifact":
 		_, err = sessionAdapter(s).GetSessionArtifact(t.Context(), tenant, mutation.parent, id)
 	default:

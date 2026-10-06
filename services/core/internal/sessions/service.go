@@ -19,4 +19,5 @@ type Storage interface {
 	ArtifactStorage
 	DeviceStorage
 	ExecutorCredentialStorage
+	SessionStorage
 }

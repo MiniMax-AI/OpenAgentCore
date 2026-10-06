@@ -61,9 +61,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
-	historystoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
-	observationstoreresolver "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/storeresolver"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
@@ -230,7 +228,7 @@ func run() error {
 		managed = managedNodes.runtime
 		observationSources[managed.InstallationID] = managedNodes.setup
 	}
-	observationResolver, err := observationstoreresolver.NewResolver(executionStore, deploymentStore)
+	observationResolver, err := deployment.NewObservationResolver(sessionStore, deploymentStore)
 	if err != nil {
 		return err
 	}
@@ -274,11 +272,7 @@ func run() error {
 	if err := api.ValidateCredentialSeparation(ctx, keyAdmin, projectStore); err != nil {
 		return err
 	}
-	historyResolver, err := historystoreresolver.NewResolver(sessionStore)
-	if err != nil {
-		return err
-	}
-	historyService, err := runtimehistory.NewService(historyResolver, history.Reader)
+	historyService, err := runtimehistory.NewService(sessionStore, history.Reader)
 	if err != nil {
 		return err
 	}
@@ -307,6 +301,7 @@ func run() error {
 			nativeInstaller = &api.NativeInstaller{Version: buildRevision, Catalog: catalog}
 		}
 	}
+	var deploymentExecution *deployment.ExecutionOperations
 	if registry != nil {
 		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
 			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
@@ -317,7 +312,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey))
+		deploymentExecution, err = deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey))
 		if err != nil {
 			return errors.Join(err, lease.Close(ctx))
 		}
@@ -403,15 +398,16 @@ func run() error {
 		EnvironmentTemplates: environmentTemplates, EnvironmentTemplatesReader: templateStore,
 		Files: fileService, FilesReader: fileStore,
 		Agents: agentService, AgentsReader: agentStore,
-		Sessions:        executionStore,
+		Sessions:        sessionService,
+		SessionsReader:  sessionStore,
 		SessionCreation: executionStore,
-		SessionEvents:   executionStore,
+		SessionEvents:   sessionStore,
 		Turns:           sessionStore,
 		Items:           sessionStore,
 		Subagents:       sessionStore,
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
-		SessionAdmin:    executionStore,
+		SessionAdmin:    sessionStore,
 		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
 		Admin: executionStore, AdminRuntimeTargets: sessionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
@@ -421,7 +417,7 @@ func run() error {
 			ExecutorURL:      executorURL,
 			SessionAdmission: worker,
 			InputAdmission:   worker,
-			SessionArchive:   worker,
+			SessionArchive:   deploymentExecution,
 			Workspaces:       worker,
 			NativeInstaller:  nativeInstaller,
 		}

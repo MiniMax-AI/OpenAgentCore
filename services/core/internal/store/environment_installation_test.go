@@ -94,7 +94,7 @@ func TestEnvironmentInstallationClaimLifetimeAndRetries(t *testing.T) {
 	if err := installations.ClaimEnvironmentInstallation(ctx, token, "build", secrets[winner]); !errors.Is(err, sessions.ErrExecutorCredentialExists) {
 		t.Fatal("revoked key resurrected", err)
 	}
-	if err := s.DeleteSession(ctx, p.TenantID, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: p.TenantID, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := installations.ValidateEnvironmentInstallation(ctx, token, "build"); !errors.Is(err, sessions.ErrInstallationAuthorization) {

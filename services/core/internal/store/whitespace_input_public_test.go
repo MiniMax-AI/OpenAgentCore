@@ -106,7 +106,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 		}
 	})
 	serve := func(engine string) pathIDClient {
-		handler, err := publicHandler(t, s, db, auth, engine, workerExecution(worker), executorURL("https://offline-executor.example"))
+		handler, err := publicHandler(t, s, db, auth, engine, workerExecution(t, worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}

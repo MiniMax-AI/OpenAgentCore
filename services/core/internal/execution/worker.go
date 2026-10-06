@@ -122,7 +122,7 @@ func (w *Worker) CheckOwnership(ctx context.Context) error {
 }
 
 func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
-	value, err := w.admission.GetSession(ctx, tenant, session)
+	value, err := w.dispatcher.SessionsReader.GetSession(ctx, tenant, session)
 	if err != nil {
 		return nil, err
 	}

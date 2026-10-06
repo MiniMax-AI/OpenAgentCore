@@ -44,7 +44,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Helper()
 		enabled := []func(*api.Dependencies){acceptUnavailable(t)}
 		if worker != nil {
-			enabled = append(enabled, workerExecution(worker), executorURL(origin))
+			enabled = append(enabled, workerExecution(t, worker), executorURL(origin))
 		} else {
 			// Without a Worker, Core keeps its executor URL but admits nothing.
 			enabled = append(enabled, func(d *api.Dependencies) {

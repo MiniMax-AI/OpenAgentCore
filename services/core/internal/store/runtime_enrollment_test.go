@@ -137,7 +137,7 @@ func TestRuntimeEnrollmentConcurrentAndDeletion(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
 		t.Fatalf("enrollment allocated compute: %d %v", allocations, err)
 	}
-	if err := s.DeleteSession(t.Context(), p.TenantID, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: p.TenantID, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {

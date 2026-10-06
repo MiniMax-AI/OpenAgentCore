@@ -94,6 +94,9 @@ type fakeTx struct {
 	hasUnappliedInputs    func() (bool, error)
 	rememberNativeSession func() error
 	beginArtifactCapture  func() error
+
+	applyDeletion       func() error
+	recordDeletionAudit func() error
 }
 
 var (
@@ -111,6 +114,7 @@ var (
 	_ TurnTx                   = (*fakeTx)(nil)
 
 	_ EnvironmentExecutorCredentialTx = (*fakeTx)(nil)
+	_ SessionDeletionTx               = (*fakeTx)(nil)
 )
 
 func (f *fakeTx) record(name string, set bool, detail ...string) {
@@ -119,6 +123,16 @@ func (f *fakeTx) record(name string, set bool, detail ...string) {
 		f.t.Fatalf("unexpected call to %s", name)
 	}
 	f.calls = append(f.calls, strings.Join(append([]string{name}, detail...), " "))
+}
+
+func (f *fakeTx) ApplyDeletion(context.Context) error {
+	f.record("ApplyDeletion", f.applyDeletion != nil)
+	return f.applyDeletion()
+}
+
+func (f *fakeTx) RecordDeletionAudit(context.Context) error {
+	f.record("RecordDeletionAudit", f.recordDeletionAudit != nil)
+	return f.recordDeletionAudit()
 }
 
 func (f *fakeTx) LoadUsage(context.Context) (json.RawMessage, error) {

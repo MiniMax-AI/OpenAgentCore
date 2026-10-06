@@ -2,8 +2,12 @@ package runtimehistory
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 var (
@@ -13,31 +17,27 @@ var (
 	ErrUnsupported   = errors.New("Runtime history is unsupported for this Session")
 )
 
-type ScopeResolver interface {
-	ResolveRuntimeHistoryScope(context.Context, string, string) (Scope, error)
-}
-
 type Reader interface {
 	Capabilities() Capabilities
 	Query(context.Context, Query) (Result, error)
 }
 
 type Service struct {
-	resolver     ScopeResolver
+	environments sessions.EnvironmentReader
 	reader       Reader
 	capabilities Capabilities
 	now          func() time.Time
 }
 
-func NewService(resolver ScopeResolver, reader Reader) (*Service, error) {
-	if resolver == nil || reader == nil {
-		return nil, errors.New("Runtime history resolver and reader are required")
+func NewService(environments sessions.EnvironmentReader, reader Reader) (*Service, error) {
+	if environments == nil || reader == nil {
+		return nil, errors.New("Runtime history Environments and reader are required")
 	}
 	capabilities := reader.Capabilities()
 	if err := capabilities.Validate(); err != nil {
 		return nil, err
 	}
-	return &Service{resolver: resolver, reader: reader, capabilities: cloneCapabilities(capabilities), now: time.Now}, nil
+	return &Service{environments: environments, reader: reader, capabilities: cloneCapabilities(capabilities), now: time.Now}, nil
 }
 
 func (s *Service) Capabilities() Capabilities {
@@ -52,12 +52,9 @@ func (s *Service) QuerySession(ctx context.Context, tenantID, sessionID string, 
 	if !validPublicBoundary(requested.Start) || !validPublicBoundary(requested.End) || !requested.End.After(requested.Start) || requested.End.After(requestNow.Add(time.Second)) || requested.End.Sub(requested.Start) > s.capabilities.MaximumRange || requested.MaxPoints < 2 || requested.MaxPoints > s.capabilities.MaximumPoints {
 		return Response{}, ErrInvalidRange
 	}
-	scope, err := s.resolver.ResolveRuntimeHistoryScope(ctx, tenantID, sessionID)
+	scope, err := s.resolveScope(ctx, tenantID, sessionID)
 	if err != nil {
 		return Response{}, err
-	}
-	if scope.TenantID != tenantID || scope.SessionID != sessionID {
-		return Response{}, ErrInvalidResult
 	}
 	if err := scope.validate(); err != nil {
 		return Response{}, ErrInvalidResult
@@ -85,6 +82,30 @@ func (s *Service) QuerySession(ctx context.Context, tenantID, sessionID string, 
 		Series:       cloneSeries(result.Series),
 		TokenUsage:   append([]TokenUsagePoint(nil), result.TokenUsage...),
 	}, nil
+}
+
+// resolveScope authorizes the Session and returns only durable Core identity.
+// It does not resolve a current allocation: retained history may contain
+// earlier allocations, and the Reader keeps each durable allocation as one
+// continuous series.
+func (s *Service) resolveScope(ctx context.Context, tenantID, sessionID string) (Scope, error) {
+	environment, err := s.environments.GetSessionEnvironment(ctx, tenantID, sessionID)
+	if err != nil {
+		return Scope{}, fmt.Errorf("resolve Runtime history Environment: %w", err)
+	}
+	if environment.TenantID != tenantID || environment.SessionID != sessionID {
+		return Scope{}, errors.New("Runtime history Environment does not match resolved ownership")
+	}
+	var configuration struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(environment.Configuration, &configuration) != nil || configuration.Type == "" {
+		return Scope{}, errors.New("invalid stored Runtime history environment configuration")
+	}
+	if configuration.Type != "openai_hosted" {
+		return Scope{}, ErrUnsupported
+	}
+	return Scope{TenantID: tenantID, SessionID: sessionID, EnvironmentID: environment.ID}, nil
 }
 
 func resolution(duration time.Duration, maxPoints int, minimum time.Duration) time.Duration {

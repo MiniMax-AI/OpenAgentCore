@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T) {
@@ -33,11 +34,11 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 				current, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
 				return err == nil && current.State == sessions.EnvironmentInputFailed
 			})
-			session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+			session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 			if err != nil || session.PendingInput || session.LastTurn != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Failure != "runtime_preparation_failed" {
 				t.Fatal("preparation did not release input with a safe failure", err)
 			}
-			changes, err := h.s.ListSessionEvents(t.Context(), h.tenant, h.session.ID, 0)
+			changes, err := store.SessionAdapter(h.s).ListSessionEvents(t.Context(), h.tenant, h.session.ID, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

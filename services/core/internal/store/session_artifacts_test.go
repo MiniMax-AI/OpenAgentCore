@@ -176,7 +176,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 			t.Fatalf("deleted metadata retained: %v", err)
 		}
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session}); err != nil {
 		t.Fatal(err)
 	}
 	if count := largeObjectCount(t, pool); count != before {
@@ -228,7 +228,7 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 			want := sessions.ErrNotFound
 			if operation == "delete" {
 				// The idle-only decision itself is not blocked by the transfer.
-				if err := s.DeleteSession(ctx, tenant, session); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatalf("transfer blocked or bypassed the deletion rule: %v", err)
 				}
 				if err := s.commitLegacyDeletion(ctx, tenant, session); err != nil {
@@ -420,7 +420,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 		t.Fatalf("other Session first Turn published %v", got)
 	}
 	for _, id := range []string{session, other.ID} {
-		if err := s.DeleteSession(t.Context(), tenant, id); err != nil {
+		if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: id}); err != nil {
 			t.Fatal(err)
 		}
 	}

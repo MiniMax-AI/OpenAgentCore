@@ -34,7 +34,7 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+	snap, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil || len(snap.Items) != 2 {
 		t.Fatal(snap, err)
 	}
@@ -58,7 +58,7 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	transition(t, s, tenant, session.ID, receipt.TurnID, sessions.TurnInProgress, sessions.TurnFailed)
-	snap, err = s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+	snap, err = sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil || snap.Items[1].CompletedAt != nil {
 		t.Fatal("historical settlement synthesized", snap, err)
 	}
@@ -81,7 +81,7 @@ func TestDiagnosticForceSettlementIgnoresNativeClock(t *testing.T) {
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("public native completion changed", completed, err)
 			}
-			snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn)
+			snap, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn)
 			if err != nil || len(snap.Items) != 2 {
 				t.Fatal(snap, err)
 			}
@@ -145,7 +145,7 @@ func TestDiagnosticSettlementWaitsForSessionLock(t *testing.T) {
 	if err = <-done; err != nil {
 		t.Fatal(err)
 	}
-	snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+	snap, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestDiagnosticTimingBoundOrderAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+	snap, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil || len(snap.Items) != 1000 || !snap.ItemsTruncated {
 		t.Fatal("unbounded diagnostics", len(snap.Items), snap.ItemsTruncated, err)
 	}
@@ -179,20 +179,20 @@ func TestDiagnosticTimingBoundOrderAndIsolation(t *testing.T) {
 		}
 	}
 	runtimeSuspensionSQL(t, pool, "DELETE FROM session_items WHERE turn_id=$1 AND created_at>'2020-01-01T00:00:00Z'", receipt.TurnID)
-	exact, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+	exact, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil || len(exact.Items) != 1000 || exact.ItemsTruncated {
 		t.Fatal("exact limit falsely truncated", len(exact.Items), exact.ItemsTruncated, err)
 	}
 	for _, ids := range [][3]string{{uuid.NewString(), session.ID, receipt.TurnID}, {tenant, "malformed", receipt.TurnID}, {tenant, session.ID, uuid.NewString()}} {
-		if _, err := s.GetTurnDiagnosticsSnapshot(t.Context(), ids[0], ids[1], ids[2]); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), ids[0], ids[1], ids[2]); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("scope leaked", ids, err)
 		}
 	}
 	runtimeSuspensionSQL(t, pool, "UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=$1", session.ID)
-	if _, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted root visible", err)
 	}
-	if _, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted Session visible", err)
 	}
 }
@@ -233,11 +233,11 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	if err = sessionExecution(t, writer.lease).FailEnvironmentInitialization(t.Context(), preparation, failure); err != nil {
 		t.Fatal(err)
 	}
-	snap, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID)
+	snap, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || snap.EnvironmentFailure == nil || snap.EnvironmentFailure.Detail == nil || *snap.EnvironmentFailure.Detail.Index != 2 || *snap.EnvironmentFailure.Detail.ExitCode != 7 {
 		t.Fatal("detail not persisted", snap.EnvironmentFailure, err)
 	}
-	events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	}
 	// Historical reasons are never parsed into structured detail; corrupted private fields are sanitized.
 	runtimeSuspensionSQL(t, pool, "UPDATE environments SET failure_detail=$2 WHERE id=$1", owner.EnvironmentID, `{"step":"secret-provider-token","index":3,"exit_code":2}`)
-	snap, err = s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID)
+	snap, err = sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || snap.EnvironmentFailure.Detail != nil {
 		t.Fatal("unsafe private detail projected", snap.EnvironmentFailure, err)
 	}
@@ -271,7 +271,7 @@ func TestDiagnosticPutItemRollsBack(t *testing.T) {
 	if err = tx.Rollback(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+	snap, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil || len(snap.Items) != 1 {
 		t.Fatal("rolled back receipt visible", snap, err)
 	}
@@ -287,7 +287,7 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 1, events); err != nil {
 		t.Fatal(err)
 	}
-	first, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+	first, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func TestDiagnosticFirstSettlementSurvivesStoredStatusRegression(t *testing.T) {
 		} else if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, events[1:]); err != nil {
 			t.Fatal(err)
 		}
-		got, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+		got, err := sessionAdapter(s).GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 		if err != nil || got.Items[1].CompletedAt == nil || !got.Items[1].CompletedAt.Equal(*item.CompletedAt) {
 			t.Fatal("first settlement overwritten", force, got, err)
 		}
@@ -318,7 +318,7 @@ func TestDiagnosticRootReadRejectsActualChildTurn(t *testing.T) {
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO turn_events(session_id,turn_id,ordinal,kind,payload) VALUES($1,$2,1,'subagent','{}')`, owner.SessionID, root)
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_identities(id,session_id,device_id,engine,native_id,parent_native_id,native_created_at,first_turn_id,first_event_ordinal) VALUES($1,$2,$3,'codex','child','root',1,$4,1)`, child, owner.SessionID, owner.DeviceID, root)
 	runtimeSuspensionSQL(t, s.pool, `INSERT INTO subagent_turns(id,session_id,subagent_id,native_id,status,created_at) VALUES($1,$2,$3,'child-turn','in_progress',clock_timestamp())`, turn, owner.SessionID, child)
-	if _, err := w.GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(w).GetTurnDiagnosticsSnapshot(t.Context(), owner.TenantID, owner.SessionID, turn); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn became root diagnostics", err)
 	}
 }
@@ -357,7 +357,7 @@ func TestDiagnosticSessionSnapshotConcurrentCommitConsistency(t *testing.T) {
 		done <- nil
 	}()
 	for i := 0; i < 150; i++ {
-		snapshot, err := s.GetSessionDiagnosticsSnapshot(t.Context(), tenant, session.ID)
+		snapshot, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -27,7 +27,7 @@ func TestDiagnosticPublicCompatibility(t *testing.T) {
 	key := callerBinding()
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
-	databaseSessionReads(s, pool)(&deps, fakes)
+	databaseSessionReads(pool)(&deps, fakes)
 	h := newTestHandler(t, deps)
 	session, err := s.CreateSession(t.Context(), key.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
@@ -64,13 +64,12 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 	return w
 }
 
-// databaseSessionReads serves Session, Turn and diagnostic reads from s, and
-// Item reads from the Session adapter on pool.
-func databaseSessionReads(s *store.Store, pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
+// databaseSessionReads serves Session, Turn, diagnostic and Item reads from
+// the Session adapter on pool.
+func databaseSessionReads(pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 	return func(d *Dependencies, _ *testFakes) {
-		d.Sessions, d.SessionAdmin = s, s
-		reads := sessionpg.New(pgunit.NewPool(pool), nil)
-		d.Items, d.Turns = reads, reads
+		reader := sessionpg.New(pgunit.NewPool(pool), nil)
+		d.SessionsReader, d.SessionAdmin, d.Items, d.Turns = reader, reader, reader, reader
 	}
 }
 

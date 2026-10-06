@@ -74,10 +74,10 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	if _, err := s.RequestCancel(ctx, tenant, first.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpdateSessionMetadata(ctx, tenant, first.ID, map[string]string{"updated": "yes"}); err != nil {
+	if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: first.ID, Metadata: map[string]string{"updated": "yes"}}); err != nil {
 		t.Fatal(err)
 	}
-	events, err := s.ListSessionEvents(ctx, tenant, first.ID, 0)
+	events, err := sessionAdapter(s).ListSessionEvents(ctx, tenant, first.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	if err != nil || retry.ID != first.ID || retry.LastTurn.ID != next[0].TurnID || retry.LastTurn.Status != sessions.TurnCancelled || retry.Metadata["updated"] != "yes" {
 		t.Fatal(retry, err)
 	}
-	after, err := restarted.ListSessionEvents(ctx, tenant, first.ID, 0)
+	after, err := sessionAdapter(restarted).ListSessionEvents(ctx, tenant, first.ID, 0)
 	if err != nil || !reflect.DeepEqual(events, after) {
 		t.Fatal("retry emitted more events", err)
 	}
@@ -112,7 +112,7 @@ func TestInitialInputFailureRollsBackSessionAndWork(t *testing.T) {
 	if got, err := s.CreateSession(ctx, tenant, input); err == nil || got.ID != "" {
 		t.Fatal("partial creation succeeded", got, err)
 	}
-	page, err := s.ListSessions(ctx, tenant, "", 100, true, nil)
+	page, err := sessionAdapter(s).ListSessions(ctx, tenant, "", 100, true, nil)
 	if err != nil || len(page.Sessions) != 0 {
 		t.Fatal("partial Session survived", page, err)
 	}
