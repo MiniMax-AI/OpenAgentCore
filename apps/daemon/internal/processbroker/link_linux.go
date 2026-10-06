@@ -67,7 +67,9 @@ func (l *link) get(ctx context.Context) (*stream, error) {
 			l.mu.Unlock()
 			return s, nil
 		}
-		l.log.Warn("process stream unavailable", "error", err, "retry", backoff)
+		if ctx.Err() == nil {
+			l.log.Warn("process stream unavailable", "error", err, "retry", backoff)
+		}
 		select {
 		case <-time.After(backoff):
 		case <-ctx.Done():

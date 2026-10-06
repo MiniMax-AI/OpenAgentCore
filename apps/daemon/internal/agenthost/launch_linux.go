@@ -325,6 +325,7 @@ func (h *ownedView) watch() {
 			// and the relay was lost while the Harness ran. A failed one
 			// means that the view is ending, and Wait reports how.
 			if h.v.Signal(0) == nil {
+				h.s.log.Error("process relay lost", "error", h.broker.Err())
 				h.s.brokerFailed("relay", h.broker.Err())
 				return
 			}

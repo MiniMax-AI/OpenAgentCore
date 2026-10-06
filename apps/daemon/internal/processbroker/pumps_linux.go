@@ -436,7 +436,7 @@ func (inv *invocation) signal(s processshim.Signaled) {
 	if err == nil {
 		return
 	}
-	if f := asFailure(err); f.Code != sp.CodeNotRunning && f.Code != sp.CodeReleased {
+	if f := asFailure(err); f.Code != sp.CodeNotRunning && f.Code != sp.CodeReleased && inv.b.ctx.Err() == nil {
 		inv.log.Info("signal not delivered", "signal", n, "error", err)
 	}
 }
