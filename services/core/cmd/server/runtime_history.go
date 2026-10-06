@@ -13,8 +13,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/runtimehistorypg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/postgresreader"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs/otlpexporter"
 	"golang.org/x/net/http/httpguts"
@@ -70,7 +70,7 @@ func runtimeHistory(ctx context.Context, units *pgunit.Pool, executionEnabled bo
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens},
 	}
 	timeout := time.Duration(config.TimeoutSeconds) * time.Second
-	backend, err := postgresreader.New(units, postgresreader.Config{Capabilities: capabilities, QueryTimeout: timeout})
+	backend, err := runtimehistorypg.New(units, runtimehistorypg.Config{Capabilities: capabilities, QueryTimeout: timeout})
 	if err != nil {
 		return runtimeHistorySetup{}, err
 	}

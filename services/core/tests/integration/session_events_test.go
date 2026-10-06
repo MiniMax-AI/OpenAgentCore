@@ -1,0 +1,205 @@
+package integration
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"slices"
+	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
+	ctx := context.Background()
+	s, pool := testStore(t)
+	tenant := uuid.NewString()
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "commit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, commit := range []bool{false, true} {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		if err = sqlc.New(tx).AppendSessionEvent(ctx, sqlc.AppendSessionEventParams{ID: pgtype.UUID{Bytes: uuid.MustParse(session.ID), Valid: true}, Payload: []byte(`{"event":{"type":"agent.session.idle"}}`)}); err != nil {
+			t.Fatal(err)
+		}
+		if changes, err := sessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0); err != nil || len(changes) != 0 {
+			t.Fatal("uncommitted events were visible", changes, err)
+		}
+		if commit {
+			err = tx.Commit(ctx)
+		} else {
+			err = tx.Rollback(ctx)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if changes, err := sessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0); err != nil || len(changes) != 1 || changes[0].Sequence != 1 {
+		t.Fatal("commit or rollback changed sequence continuity", changes, err)
+	}
+}
+
+func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
+	ctx := context.Background()
+	s, pool := testStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
+	tenant := uuid.NewString()
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "stream"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`)); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
+	if before != after {
+		t.Fatal("input retry published duplicate events")
+	}
+	if _, err = transitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		t.Fatal(err)
+	}
+	batch := []sessions.ExecutionEvent{
+		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":"partial"}`)},
+		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":" partial"}`)},
+		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"first","delta":" partial"}`)},
+		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"cmd","stage":"before","observation":{"status":"in_progress","kind":"command","command":"sleep 10"}}`)},
+	}
+	for range 2 {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{
+		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"discarded","delta":"rollback"}`)},
+		{Kind: "output_message", Payload: json.RawMessage(`{"status":"invalid"}`)},
+	}); err == nil {
+		t.Fatal("invalid projection accepted")
+	}
+	after, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
+	if before != after {
+		t.Fatal("failed transaction published events")
+	}
+	if _, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"private":"must not escape"}`), "", input.Sequence); err != nil {
+		t.Fatal(err)
+	}
+	var all []sessions.SessionChange
+	cursor := int64(0)
+	for {
+		page, err := sessionAdapter(New(pool)).ListSessionEvents(ctx, tenant, session.ID, cursor)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		all = append(all, page...)
+		cursor = page[len(page)-1].Sequence
+	}
+	if all[0].Event.Type != "agent.session.turn.created" || all[0].Turn.Status != sessions.TurnQueued || all[len(all)-1].Event.Type != "agent.session.idle" || all[len(all)-1].Turn.Status != sessions.TurnCancelled {
+		t.Fatalf("transition snapshots changed: %+v", all)
+	}
+	counts := map[string]int{}
+	var deltas []string
+	for _, change := range all {
+		counts[change.Event.Type]++
+		if change.Event.Type == "agent.session.turn.output_text.delta" {
+			deltas = append(deltas, *change.Event.Delta)
+		}
+		if change.Event.Type == "agent.session.turn.item.done" && change.Event.Item.Type == "message" && *change.Event.Item.Content[0].Text != "partial partial partial" {
+			t.Fatal("cancelled message lost accumulated text", change.Event.Item)
+		}
+		if change.Turn != nil && len(change.Turn.Outcome) > 0 && string(change.Turn.Outcome) != "null" {
+			t.Fatal("raw outcome retained in public notification")
+		}
+		if change.Event.Type == "agent.session.turn.item.done" && change.Event.Item.Status != "incomplete" {
+			t.Fatal("cancelled unfinished item reported complete")
+		}
+	}
+	if !slices.Equal(deltas, []string{"partial", " partial", " partial"}) {
+		t.Fatalf("public deltas were not incremental: %q", deltas)
+	}
+	if counts["agent.session.turn.output_text.delta"] != 3 || counts["agent.session.turn.item.done"] != 2 {
+		t.Fatal(counts)
+	}
+	if _, err = sessionAdapter(s).ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatal("foreign event access", err)
+	}
+	before, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
+	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
+		t.Fatal(err)
+	}
+	after, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
+	if before != after {
+		t.Fatal("history read published live events")
+	}
+}
+
+func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
+	ctx := context.Background()
+	s, pool := testStore(t)
+	tenant := uuid.NewString()
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "retention"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx, "DELETE FROM session_events WHERE session_id=$1", session.ID); err != nil {
+			t.Error(err)
+		}
+	})
+	inputs := make([]sessions.Input, 64)
+	for i := range inputs {
+		inputs[i] = sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"input"}`)}
+	}
+	for range 5 {
+		if _, err = submitInputs(ctx, s, tenant, session.ID, uuid.NewString(), inputs); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var count int
+	if err = pool.QueryRow(ctx, "SELECT count(*) FROM session_events WHERE session_id=$1", session.ID).Scan(&count); err != nil || count != 256 {
+		t.Fatal(count, err)
+	}
+	if _, err = sessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrStreamGap) {
+		t.Fatal("lagging reader did not detect missing events", err)
+	}
+	cursor, err := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = requestCancel(ctx, s, tenant, session.ID, "cancel"); err != nil {
+		t.Fatal(err)
+	}
+	changes, err := sessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, cursor)
+	if err != nil || len(changes) != 2 || changes[0].Event.Type != "agent.session.turn.cancelled" || changes[1].Event.Type != "agent.session.idle" {
+		t.Fatal(changes, err)
+	}
+	// Force byte retention independently of the event-count limit.
+	if _, err = pool.Exec(ctx, "UPDATE session_events SET payload=jsonb_build_object('padding',repeat('x',524288)) WHERE session_id=$1", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 1, true); err != nil {
+		t.Fatal(err)
+	}
+	var bytes int64
+	if err = pool.QueryRow(ctx, "SELECT sum(payload_bytes) FROM session_events WHERE session_id=$1", session.ID).Scan(&bytes); err != nil || bytes > 64*1024*1024 {
+		t.Fatal(bytes, err)
+	}
+}
