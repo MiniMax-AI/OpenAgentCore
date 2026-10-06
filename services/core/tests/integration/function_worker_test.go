@@ -42,7 +42,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					}
 				}
 				if prebound && isMCP {
-					if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
+					if err := bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -66,7 +66,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				input := h.message("queued", "Look up ticket")
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
-				worker := startWorker(t, ctx, h.db, h.d)
+				worker := startWorker(t, ctx, h.s, h.d)
 				done := make(chan error, 1)
 				go func() { done <- worker.Run(ctx) }()
 				defer func() {
@@ -83,7 +83,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					t.Fatal(current, err)
 				}
 				if !prebound {
-					if _, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
+					if _, err := sessionAdapter(h.s).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
@@ -125,8 +125,8 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.s, h.db = NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	_, service, err := fixtureVaults(h.db)
+	h.s = NewWithCredentialCipher(pool, cipher)
+	_, service, err := fixtureVaults(h.s)
 	if err != nil {
 		t.Fatal(err)
 	}

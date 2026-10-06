@@ -22,7 +22,7 @@ func claudeSession(t *testing.T, h *dispatchHarness, configuration string, prebo
 		t.Fatal(err)
 	}
 	if prebound {
-		if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
+		if err := bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -54,7 +54,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			input := h.message("start", "Look up ticket")
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker := startWorker(t, ctx, h.db, h.d)
+			worker := startWorker(t, ctx, h.s, h.d)
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
 			defer func() {
@@ -72,7 +72,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 					t.Fatal(turn, err)
 				}
 				if !prebound {
-					if _, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
+					if _, err := sessionAdapter(h.s).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}
@@ -122,7 +122,7 @@ func TestClaudeDispatcherRejectsUnsupportedConfigurationBeforeClaim(t *testing.T
 func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T) {
 	h := newDispatchHarness(t)
 	claudeSession(t, h, functionConfiguration, false)
-	worker := startOwnedWorker(t, t.Context(), h.db, h.d, h.owner())
+	worker := startOwnedWorker(t, t.Context(), h.s, h.d, h.owner())
 	defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 	input := h.message("start", "Run")
 	if _, err := transitionTurn(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
@@ -143,7 +143,7 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal(err)
 	}
-	saved, err := FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, call.CallID)
+	saved, err := FixtureFunctionCall(t.Context(), h.s.pool, h.tenant, h.session.ID, input.TurnID, call.CallID)
 	if err != nil || saved.Result != nil || saved.Applied {
 		t.Fatal(saved, err)
 	}

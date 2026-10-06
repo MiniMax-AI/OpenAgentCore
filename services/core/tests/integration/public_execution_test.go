@@ -27,7 +27,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	h.session = publicSession(t, h, "public")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	worker := startWorker(t, ctx, h.db, h.d)
+	worker := startWorker(t, ctx, h.s, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	t.Cleanup(func() {
@@ -38,7 +38,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 			t.Error("worker did not stop")
 		}
 	})
-	if second, err := startWorkerErr(ctx, h.db, h.d); err == nil {
+	if second, err := startWorkerErr(ctx, h.s, h.d); err == nil {
 		cancel()
 		go second.Run(ctx)
 		t.Fatal("second service acquired database")
@@ -63,7 +63,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	if inputTextForTest(t, prompt.Input) != "First\n\nSecond" || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) || prompt.AgentOptions["web_search"] != nil || prompt.AgentOptions["model_verbosity"] != nil {
 		t.Fatal(prompt)
 	}
-	bound, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID)
+	bound, err := sessionAdapter(h.s).GetSessionDevice(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.ID != h.device.ID {
 		t.Fatal(bound, err)
 	}
@@ -73,7 +73,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	}
 	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "Answer", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "worker-native"}})
 	waitTurn(t, h, receipts[0].TurnID, sessions.TurnCompleted)
-	items, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+	items, err := sessionAdapter(h.s).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil || len(items.Items) != 3 {
 		t.Fatal(items, err)
 	}
@@ -147,7 +147,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if _, err := sendMessage(ctx, h.s, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
 		t.Fatal(err)
 	}
-	worker := startOwnedWorker(t, ctx, h.db, h.d, h.owner())
+	worker := startOwnedWorker(t, ctx, h.s, h.d, h.owner())
 	stopped, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := worker.Run(stopped); err != context.Canceled {
@@ -168,7 +168,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err != nil || pending.LastTurn.Status != sessions.TurnCancelled {
 		t.Fatal(pending, err)
 	}
-	restarted, err := startWorkerErr(ctx, h.db, h.d)
+	restarted, err := startWorkerErr(ctx, h.s, h.d)
 	if err != nil {
 		t.Fatal("lease not released", err)
 	}

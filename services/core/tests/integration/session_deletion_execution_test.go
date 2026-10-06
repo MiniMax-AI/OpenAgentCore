@@ -15,7 +15,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	h := newFunctionHarness(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	worker := startOwnedWorker(t, ctx, h.db, h.d, h.owner())
+	worker := startOwnedWorker(t, ctx, h.s, h.d, h.owner())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {
@@ -77,7 +77,7 @@ func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 	if err := h.s.commitLegacyDeletion(ctx, h.tenant, h.session.ID); err != nil {
 		t.Fatal(err)
 	}
-	worker := startWorker(t, ctx, h.db, h.d)
+	worker := startWorker(t, ctx, h.s, h.d)
 	stopped, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := worker.Run(stopped); !errors.Is(err, context.Canceled) {
@@ -98,7 +98,7 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	h := newFunctionHarness(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	worker := startWorker(t, ctx, h.db, h.d)
+	worker := startWorker(t, ctx, h.s, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {

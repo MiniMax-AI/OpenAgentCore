@@ -52,7 +52,7 @@ func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
 	}
 	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
 	h.finished(running, sessions.TurnCompleted)
-	saved, err := FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, state.RequiredActions[0].CallID)
+	saved, err := FixtureFunctionCall(t.Context(), h.s.pool, h.tenant, h.session.ID, input.TurnID, state.RequiredActions[0].CallID)
 	if err != nil || !saved.Applied {
 		t.Fatal(saved, err)
 	}

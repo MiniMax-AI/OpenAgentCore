@@ -14,5 +14,5 @@ func newManagedTestStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.OpenIsolated(t, nil)
 	// Hosted Sessions freeze a model provider, which needs a credential key.
-	return withPlacement(t, NewWithCredentialCipher(pool, fixtureCipher)), pool
+	return NewWithCredentialCipher(pool, fixtureCipher), pool
 }

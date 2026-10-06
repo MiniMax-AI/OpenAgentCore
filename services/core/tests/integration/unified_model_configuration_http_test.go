@@ -14,14 +14,14 @@ import (
 )
 
 func TestUnifiedModelConfigurationHTTP(t *testing.T) {
-	st, db := newManagedTestStoreDB(t)
+	st, _ := newManagedTestStore(t)
 	tenant, token, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "model-configuration", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, db), withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
 	if err != nil {
 		t.Fatal(err)
 	}

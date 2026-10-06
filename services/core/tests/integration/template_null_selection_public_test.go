@@ -33,9 +33,6 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, reopenedStore := NewWithCredentialCipher(pool, cipher), NewWithCredentialCipher(pool, cipher)
-	db := fixtureDB{pool: pool, cipher: cipher} // built both Stores
-	s.SetPlacement(fixtureRules(t, db))
-	reopenedStore.SetPlacement(fixtureRules(t, db))
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
@@ -43,7 +40,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 	})
 	serve := func(current *Store) *httptest.Server {
 		t.Helper()
-		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, db), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, auth, "codex", storeExecution(t, current), managedSandboxes(t, current), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +92,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 			t.Fatalf("missing expectation for %s", label)
 		}
 		// A reader built after the requests reads the frozen setup and files.
-		current := fixtureSessionStore(db)
+		current := sessionAdapter(s)
 		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
 		if err != nil {
 			t.Fatalf("%s frozen setup: %v", label, err)

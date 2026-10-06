@@ -24,7 +24,7 @@ func newFunctionHarness(t *testing.T) *dispatchHarness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})}}})
@@ -88,7 +88,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		var reply proto.FunctionResultPayload
 		_ = h.read(proto.TypeFunctionResult).DecodePayload(&reply)
 		public := items.Identity(input.TurnID, "tool:"+reply.CallID)
-		saved, err := FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, public)
+		saved, err := FixtureFunctionCall(t.Context(), h.s.pool, h.tenant, h.session.ID, input.TurnID, public)
 		if err != nil || saved.Applied || reply.DeliveryID != "function:"+public || len(reply.Content) != 1 || *reply.Content[0].Text != "saved" {
 			t.Fatal(saved, reply, err)
 		}
@@ -159,7 +159,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 					t.Fatal(bound, err)
 				}
 			}
-			saved, err := FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, id)
+			saved, err := FixtureFunctionCall(t.Context(), h.s.pool, h.tenant, h.session.ID, input.TurnID, id)
 			if err != nil || saved.Applied || len(saved.Result) == 0 {
 				t.Fatal(saved, err)
 			}
@@ -194,7 +194,7 @@ func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.session = session
-	if err := bindSessionDevice(t, h.db, h.tenant, session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.s, h.tenant, session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	input := h.message("start", "Run")

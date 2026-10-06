@@ -17,7 +17,7 @@ func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})}}})
 	h.session = publicSession(t, h, "active")
 	queued := publicSession(t, h, "queued")
-	worker := startWorker(t, t.Context(), h.db, h.d)
+	worker := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -71,7 +71,7 @@ func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	if err != nil || active.Status != sessions.TurnInProgress {
 		t.Fatal("lost owner persisted fallback completion", active, err)
 	}
-	successor := startWorker(t, t.Context(), h.db, h.d)
+	successor := startWorker(t, t.Context(), h.s, h.d)
 	stopped, stop := context.WithCancel(t.Context())
 	stop()
 	if err = successor.Run(stopped); err != context.Canceled {

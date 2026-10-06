@@ -18,7 +18,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	nativeID := ""
@@ -48,11 +48,11 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 			}
 		}
 		h.finished(running, sessions.TurnCompleted)
-		saved, err := FixtureFunctionCall(ctx, h.db.pool, h.tenant, h.session.ID, input.TurnID, action.CallID)
+		saved, err := FixtureFunctionCall(ctx, h.s.pool, h.tenant, h.session.ID, input.TurnID, action.CallID)
 		if err != nil || !saved.Applied {
 			t.Fatal(saved, err)
 		}
-		page, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+		page, err := sessionAdapter(h.s).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 		if err != nil {
 			t.Fatal(err)
 		}

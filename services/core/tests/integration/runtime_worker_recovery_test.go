@@ -60,7 +60,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker := startWorker(t, t.Context(), h.db, h.d)
+	worker := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -73,7 +73,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		}
 	})
 	frames := workerFrames(t, h)
-	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, turn, h.session.ID); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := startWorkerErr(t.Context(), h.db, h.d)
+	worker, err := startWorkerErr(t.Context(), h.s, h.d)
 	if err != nil {
 		t.Fatal("queued wake blocked Core startup", err)
 	}

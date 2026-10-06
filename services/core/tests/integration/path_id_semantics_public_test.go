@@ -91,14 +91,14 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s := NewWithCredentialCipher(pool, cipher)
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "path-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestMalformedPathIDsMatchMissingPostgres(t *testing.T) {
 	}
 
 	// Storage availability checks also run before the lookup of a missing identifier.
-	h, err = publicHandler(t, New(pool), fixtureDB{pool: pool}, auth, "codex")
+	h, err = publicHandler(t, New(pool), auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

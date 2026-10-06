@@ -37,7 +37,7 @@ func TestNativePublicFunctionStreamHelper(t *testing.T) {
 		t.Fatal(proof, err)
 	}
 	for i, callID := range proof.Calls {
-		call, err := FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, proof.Turns[i], callID)
+		call, err := FixtureFunctionCall(ctx, h.s.pool, h.tenant, proof.Session, proof.Turns[i], callID)
 		if err != nil || !call.Applied {
 			t.Fatal(call, err)
 		}

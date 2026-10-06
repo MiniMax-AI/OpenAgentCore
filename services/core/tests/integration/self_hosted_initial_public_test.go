@@ -30,7 +30,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, db := newModelTestStoreDB(t)
+	s, _ := NewModelTestStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
@@ -39,7 +39,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: foreignTenant, SubjectKind: "service_account", SubjectID: "initial-creator", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
 	const origin = "https://offline-executor.example"
-	serve := func(s *Store, db fixtureDB, worker *execution.Worker) *httptest.Server {
+	serve := func(s *Store, worker *execution.Worker) *httptest.Server {
 		t.Helper()
 		enabled := []func(*api.Dependencies){acceptUnavailable(t)}
 		if worker != nil {
@@ -56,7 +56,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 				}
 			})
 		}
-		handler, err := publicHandler(t, s, db, auth, "codex", enabled...)
+		handler, err := publicHandler(t, s, auth, "codex", enabled...)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,8 +64,8 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Cleanup(server.Close)
 		return server
 	}
-	worker, stop := publicInitialWorker(t, s, db)
-	server := serve(s, db, worker)
+	worker, stop := publicInitialWorker(t, s)
+	server := serve(s, worker)
 	settings := map[string]any{"base": server.URL, "token": token, "peer_token": peer, "foreign_token": foreign, "remote_url": origin}
 	run := func(phase string) json.RawMessage {
 		t.Helper()
@@ -129,7 +129,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			if !reflect.DeepEqual(texts, item.Texts) {
 				t.Fatal("public initial text order changed")
 			}
-			environment, err := sessionReads(pool).GetSessionEnvironment(t.Context(), tenant, item.ID)
+			environment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, item.ID)
 			if err != nil || environment.ID != item.EnvironmentID || environment.Status != "pending" {
 				t.Fatal("public initial Environment identity changed", err)
 			}
@@ -144,23 +144,23 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		}
 		return result
 	}
-	before := reservations(s, db.pool)
+	before := reservations(s, s.pool)
 	for _, reservation := range before {
 		if reservation.State != sessions.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute {
 			t.Fatal("public initial creation did not retain its database deadline")
 		}
 	}
-	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 	stop(false)
 	awaitRelease()
 	server.Close()
-	db.pool.Close()
-	reopened, reopenedDB := newModelTestStoreDB(t)
-	worker, stop = publicInitialWorker(t, reopened, reopenedDB)
-	server = serve(reopened, reopenedDB, worker)
+	s.pool.Close()
+	reopened, _ := NewModelTestStore(t)
+	worker, stop = publicInitialWorker(t, reopened)
+	server = serve(reopened, worker)
 	settings["base"], settings["accepted"] = server.URL, accepted
 	run("reopen")
-	if !reflect.DeepEqual(before, reservations(reopened, reopenedDB.pool)) {
+	if !reflect.DeepEqual(before, reservations(reopened, reopened.pool)) {
 		t.Fatal("reopened public retry changed reservation identity or deadline")
 	}
 	failureID := created.Cases[0].ID
@@ -170,7 +170,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			return
 		}
 		// Advance one known deadline; the running Worker still owns settlement and events.
-		tag, err := reopenedDB.pool.Exec(r.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial AND state='pending'", failureID)
+		tag, err := reopened.pool.Exec(r.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial AND state='pending'", failureID)
 		if err != nil || tag.RowsAffected() != 1 {
 			t.Error("controlled initial deadline update failed", err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -181,7 +181,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	defer control.Close()
 	settings["expiry_control"] = control.URL
 	run("expire")
-	after := reservations(reopened, reopenedDB.pool)
+	after := reservations(reopened, reopened.pool)
 	for id, reservation := range after {
 		if id == failureID {
 			if reservation.ID != before[id].ID || reservation.State != sessions.EnvironmentInputExpired || reservation.SettledAt == nil {
@@ -192,7 +192,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		}
 	}
 	var pid uint32
-	err := reopenedDB.pool.QueryRow(t.Context(), `SELECT pid FROM pg_locks WHERE locktype='advisory'
+	err := reopened.pool.QueryRow(t.Context(), `SELECT pid FROM pg_locks WHERE locktype='advisory'
 		AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
 		AND classid=(706172736172::bigint >> 32)::oid
 		AND objid=(706172736172::bigint & 4294967295)::oid AND objsubid=1 AND granted`).Scan(&pid)
@@ -200,27 +200,27 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	var killed bool
-	if err := reopenedDB.pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", pid).Scan(&killed); err != nil || !killed {
+	if err := reopened.pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", pid).Scan(&killed); err != nil || !killed {
 		t.Fatal("could not end the fixture Worker's execution lease", err)
 	}
 	stop(true)
-	settings["disabled_base"] = serve(reopened, reopenedDB, nil).URL
+	settings["disabled_base"] = serve(reopened, nil).URL
 	run("unavailable")
-	if !reflect.DeepEqual(after, reservations(reopened, reopenedDB.pool)) {
+	if !reflect.DeepEqual(after, reservations(reopened, reopened.pool)) {
 		t.Fatal("unavailable execution or recorded retry changed initial work")
 	}
 }
 
-func publicInitialWorker(t *testing.T, s *Store, db fixtureDB) (*execution.Worker, func(bool)) {
+func publicInitialWorker(t *testing.T, s *Store) (*execution.Worker, func(bool)) {
 	t.Helper()
-	return publicOwnedWorker(t, s, db, executionOwner(t, db))
+	return publicOwnedWorker(t, s, executionOwner(t, s))
 }
 
 // publicOwnedWorker is publicInitialWorker on owner, for tests that also write
 // as the Worker's execution owner.
-func publicOwnedWorker(t *testing.T, s *Store, db fixtureDB, owner execution.Owner) (*execution.Worker, func(bool)) {
+func publicOwnedWorker(t *testing.T, s *Store, owner execution.Owner) (*execution.Worker, func(bool)) {
 	t.Helper()
-	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()}, owner)
+	worker := startOwnedWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()}, owner)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()

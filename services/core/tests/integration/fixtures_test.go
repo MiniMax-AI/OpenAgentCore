@@ -26,7 +26,7 @@ var fixtureCipher, _ = credentialcrypto.New(bytes.Repeat([]byte{61}, 32))
 // can freeze a model provider.
 func NewModelTestStore(t *testing.T) (*Store, *pgxpool.Pool) {
 	_, pool := testStore(t)
-	return withPlacement(t, NewWithCredentialCipher(pool, fixtureCipher)), pool
+	return NewWithCredentialCipher(pool, fixtureCipher), pool
 }
 
 // FixtureModelProvider is a valid bundle for the harness. Hosted and self-hosted

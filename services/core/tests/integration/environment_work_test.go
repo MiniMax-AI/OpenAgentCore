@@ -40,7 +40,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 		default:
 			runtime := h.environments[pending.SessionID]
 			if state == "revoked" {
-				if err := fixtureSessionService(t, h.db).RevokeDevice(t.Context(), h.tenant, runtime.device.ID); err != nil {
+				if err := sessionService(t, h.s).RevokeDevice(t.Context(), h.tenant, runtime.device.ID); err != nil {
 					t.Fatal(err)
 				}
 				work, err := sessionAdapter(h.s).ListEnvironmentInputWork(t.Context(), "", []string{runtime.device.ID})

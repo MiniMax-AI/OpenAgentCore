@@ -21,7 +21,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, db := newModelTestStoreDB(t)
+	s, _ := NewModelTestStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	principal := FixtureExecutorPrincipal(t, s, tenant)
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
@@ -33,7 +33,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if err := s.EnsureProjectScopes(t.Context(), []identity.ProjectScope{{TenantID: tenant, OrganizationID: principal.OrganizationID, ProjectID: tenant}, {TenantID: foreignTenant, OrganizationID: principal.OrganizationID, ProjectID: foreignTenant}}); err != nil {
 		t.Fatal(err)
 	}
-	executor, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), "")
+	executor, err := sessionService(t, s).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,12 +42,12 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		if !revoked {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := fixtureSessionService(t, db).RevokeExecutorCredential(ctx, principal, executor.KeyID); err != nil {
+			if err := sessionService(t, s).RevokeExecutorCredential(ctx, principal, executor.KeyID); err != nil {
 				t.Error("owned executor credential cleanup failed", err)
 			}
 		}
 	}()
-	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://private-registry.example"))
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://private-registry.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,18 +75,18 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		return result
 	}
 	result := run()
-	before, err := fixtureSessionStore(db).GetEnvironment(t.Context(), tenant, result["environment_id"])
+	before, err := sessionAdapter(s).GetEnvironment(t.Context(), tenant, result["environment_id"])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fixtureSessionService(t, db).RevokeExecutorCredential(t.Context(), principal, executor.KeyID); err != nil {
+	if err := sessionService(t, s).RevokeExecutorCredential(t.Context(), principal, executor.KeyID); err != nil {
 		t.Fatal(err)
 	}
 	revoked = true
 	server.Close()
-	db.pool.Close()
-	reopened, reopenedDB := newModelTestStoreDB(t)
-	handler, err = publicHandler(t, reopened, reopenedDB, auth, "codex")
+	s.pool.Close()
+	reopened, _ := NewModelTestStore(t)
+	handler, err = publicHandler(t, reopened, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,12 +97,12 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		settings[key] = value
 	}
 	run()
-	after, err := fixtureSessionStore(reopenedDB).GetEnvironment(t.Context(), tenant, before.ID)
+	after, err := sessionAdapter(reopened).GetEnvironment(t.Context(), tenant, before.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("public retrieval changed durable Environment state", err)
 	}
 	var history int
-	if err := reopenedDB.pool.QueryRow(t.Context(), `SELECT
+	if err := reopened.pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM turns WHERE session_id=$1) +
 		(SELECT count(*) FROM environment_input_reservations WHERE session_id=$1) +
 		(SELECT count(*) FROM session_events WHERE session_id=$1)`, before.SessionID).Scan(&history); err != nil || history != 0 {

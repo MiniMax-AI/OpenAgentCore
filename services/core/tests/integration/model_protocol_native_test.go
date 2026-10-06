@@ -61,7 +61,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Minute)
 	defer cancel()
-	worker, err := startWorkerErr(ctx, h.db, h.d)
+	worker, err := startWorkerErr(ctx, h.s, h.d)
 	if err != nil {
 		t.Fatal("cannot start native execution worker")
 	}
@@ -78,7 +78,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
 	providerRevision := uuid.New()
-	handler, err := publicHandler(t, h.s, h.db, auth, options.Engine, workerExecution(t, worker), withPolicy(h.d.Policy), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+	handler, err := publicHandler(t, h.s, auth, options.Engine, workerExecution(t, worker), withPolicy(h.d.Policy), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 		return &modelconfiguration.Snapshot{Model: options.Model, HarnessConfig: options.HarnessConfig, Provider: &options.Provider, Revision: providerRevision}, nil
 	}))
 	if err != nil {
@@ -120,7 +120,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	}
 	failed := 0
 	for _, item := range proof.Calls {
-		call, err := FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, item.Turn, item.Call)
+		call, err := FixtureFunctionCall(ctx, h.s.pool, h.tenant, proof.Session, item.Turn, item.Call)
 		if err != nil || !call.Applied {
 			t.Fatal("public function result lacks native delivery acknowledgement")
 		}

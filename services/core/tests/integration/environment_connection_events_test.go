@@ -6,14 +6,13 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func awaitEnvironmentConnectionState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, tenant, environment, status string) {
+func awaitEnvironmentConnectionState(t *testing.T, ctx context.Context, s *Store, tenant, environment, status string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		value, err := sessionReads(pool).GetEnvironment(ctx, tenant, environment)
+		value, err := sessionAdapter(s).GetEnvironment(ctx, tenant, environment)
 		if err != nil {
 			t.Fatal(err)
 		}

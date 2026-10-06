@@ -7,7 +7,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -16,8 +15,8 @@ import (
 // tenant's hosted Environment on pool through the procedure the managed
 // Runtime allocation runs, without the allocation.
 func FixtureEnvironmentDevice(ctx context.Context, pool *pgxpool.Pool, tenant, environment, name, credentialHash string) (sessions.ExecutionDevice, error) {
-	units := pgunit.NewPool(pool)
-	current, err := sessionpg.New(units, nil).GetEnvironment(ctx, tenant, environment)
+	s := New(pool)
+	current, err := sessionAdapter(s).GetEnvironment(ctx, tenant, environment)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
@@ -30,7 +29,7 @@ func FixtureEnvironmentDevice(ctx context.Context, pool *pgxpool.Pool, tenant, e
 		return sessions.ExecutionDevice{}, err
 	}
 	device := sessions.ExecutionDevice{ID: uuid.NewString(), Name: registration.Name, EnvironmentID: current.ID}
-	err = sessionpg.WithSession(ctx, units, lookup.TenantID, lookup.ID, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
+	err = sessionpg.WithSession(ctx, s.pooled, lookup.TenantID, lookup.ID, func(ctx context.Context, q *sqlc.Queries, locked sessions.LockedSession) error {
 		if err := locked.Public(); err != nil {
 			return err
 		}

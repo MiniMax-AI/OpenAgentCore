@@ -24,9 +24,8 @@ import (
 func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	s.SetPlacement(fixtureRules(t, db))
-	deployments := fixtureDeployment(t, db)
+	s := NewWithCredentialCipher(pool, cipher)
+	deployments := deploymentService(t, s)
 	id := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	var fail atomic.Bool
@@ -44,7 +43,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 		}
 		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p}}, nil
 	})
-	w := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
+	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()
@@ -146,7 +145,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), cloud); err != nil {
 		t.Fatal("setup after unconfigured publication", err)
 	}
-	tenant, session, environment := managedSession(t, s, db)
+	tenant, session, environment := managedSession(t, s)
 	allocation, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, id)
 	if err != nil || allocation.NodeID != "" || allocation.State != "running" {
 		t.Fatal("direct provider not available after resume", allocation, err)
@@ -158,7 +157,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, db, tenant, environment.ID, "released")
+	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
 	empty = reset(4)
 	next.ExpectedGeneration = empty.Generation
 	if _, err := w.InitializeSandboxDeployment(t.Context(), next); err != nil {

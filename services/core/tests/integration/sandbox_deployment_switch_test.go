@@ -37,7 +37,7 @@ func TestSandboxResetClearsCustomE2BEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
@@ -78,7 +78,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
@@ -164,7 +164,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{5}, 32))
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	nodes := deploymentService(t, s)
@@ -239,7 +239,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{6}, 32))
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	id := uuid.NewString()
@@ -283,7 +283,7 @@ func TestSandboxResetSerializesFreshDirectSessions(t *testing.T) {
 func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()
@@ -368,7 +368,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	_, pool := newManagedTestStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{7}, 32))
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	nodes := deploymentService(t, s)

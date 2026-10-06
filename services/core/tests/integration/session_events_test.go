@@ -50,7 +50,7 @@ func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
 func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := testStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
+	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "stream"})
 	if err != nil {
@@ -142,7 +142,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 		t.Fatal("foreign event access", err)
 	}
 	before, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
-	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
+	if _, err = sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true); err != nil {
 		t.Fatal(err)
 	}
 	after, _ = sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
@@ -195,7 +195,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	if _, err = pool.Exec(ctx, "UPDATE session_events SET payload=jsonb_build_object('padding',repeat('x',524288)) WHERE session_id=$1", session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 1, true); err != nil {
+	if _, err = sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 1, true); err != nil {
 		t.Fatal(err)
 	}
 	var bytes int64

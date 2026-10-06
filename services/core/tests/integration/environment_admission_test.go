@@ -23,7 +23,7 @@ func newEnvironmentAdmission(t *testing.T) (*dispatchHarness, *execution.Worker)
 	t.Helper()
 	h := newDispatchHarness(t)
 	enableWorkerEnvironment(t, h)
-	worker := startWorker(t, t.Context(), h.db, h.d)
+	worker := startWorker(t, t.Context(), h.s, h.d)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

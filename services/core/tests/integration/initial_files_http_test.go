@@ -19,12 +19,11 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	s.SetPlacement(fixtureRules(t, db))
+	s := NewWithCredentialCipher(pool, cipher)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	// Exercise HTTP parsing and durable storage without starting a Runtime.
-	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), managedSandboxes(t, db), fixtureDeploymentProvider())
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), managedSandboxes(t, s), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +58,7 @@ func TestInitialFilesHTTPInlineLimitsAndRetry(t *testing.T) {
 			id = response.ID
 		}
 		for position := range files {
-			_, actual, err := fixtureSessionStore(db).ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
+			_, actual, err := sessionAdapter(s).ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
 			if err != nil || !bytes.Equal(actual, data) {
 				t.Fatal("large HTTP snapshot differs", err)
 			}

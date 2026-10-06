@@ -30,7 +30,6 @@ type dispatchHarness struct {
 	admissions   map[string]fixtureAdmission
 	t            *testing.T
 	s            *Store
-	db           fixtureDB
 	d            *execution.Dispatcher
 	lease        execution.Ownership // held by tests that run execution operations without a Worker
 	owned        *execution.Owner    // the Owner that bound binds, acquired on first use
@@ -51,8 +50,8 @@ func newDispatchHarness(t *testing.T) *dispatchHarness {
 
 func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool) *dispatchHarness {
 	t.Helper()
-	s, db := newModelTestStoreDB(t)
-	h := &dispatchHarness{t: t, s: s, db: db, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
+	s, _ := NewModelTestStore(t)
+	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error
 	h.session, err = s.CreateSession(ctx, h.tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "session", Configuration: configuration}))
@@ -68,26 +67,26 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	_ = json.Unmarshal(configuration, &snapshot)
 	if snapshot.Environment.Type == "self_hosted" {
-		h.device, h.credential = enrollFixtureSession(t, s, db, h.tenant, h.session)
+		h.device, h.credential = enrollFixtureSession(t, s, h.tenant, h.session)
 		secret = h.credential
 	} else if local {
-		environment, getErr := fixtureSessionStore(db).GetSessionEnvironment(ctx, h.tenant, h.session.ID)
+		environment, getErr := sessionAdapter(s).GetSessionEnvironment(ctx, h.tenant, h.session.ID)
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		h.device, err = FixtureEnvironmentDevice(ctx, db.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
+		h.device, err = FixtureEnvironmentDevice(ctx, s.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
 	} else {
-		h.device, err = fixtureSessionService(t, db).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
+		h.device, err = sessionService(t, s).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = bindSessionDevice(t, db, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), fixtureSessionStore(db), wsURL)
+	server.Config.Handler, h.registry, err = runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,11 +114,12 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	sessionStore, sessionService, err := fixtureSessions(db)
+	sessionStore := sessionAdapter(s)
+	sessionService, err := newSessionService(s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.d = &execution.Dispatcher{Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}
+	h.d = &execution.Dispatcher{Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(s.pool), s.credentialCipher), Sessions: sessionService, SessionsReader: sessionStore}
 	return h
 }
 
@@ -182,7 +182,7 @@ type runResult struct {
 func (h *dispatchHarness) owner() execution.Owner {
 	h.t.Helper()
 	if h.owned == nil {
-		owner := executionOwner(h.t, h.db)
+		owner := executionOwner(h.t, h.s)
 		h.owned = &owner
 	}
 	return *h.owned
@@ -259,13 +259,13 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 		t.Fatalf("missing result: %+v", outcome)
 	}
 	// Restart Core: a new Store and execution owner continue the native Session.
-	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, h.db.pool)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, h.s.pool)
 	if err := h.owner().Lease.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	newStore, db := newTestStoreDB(t)
-	h.s, h.db, h.owned = newStore, db, nil
+	newStore, _ := testStore(t)
+	h.s, h.owned = newStore, nil
 	bound, err := sessionAdapter(newStore).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {
 		t.Fatalf("native binding lost: %+v %v", bound, err)

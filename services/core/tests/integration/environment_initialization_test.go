@@ -20,26 +20,25 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func initializationState(t *testing.T, pool *pgxpool.Pool, tenant, environment string) string {
+func initializationState(t *testing.T, s *Store, tenant, environment string) string {
 	t.Helper()
-	value, err := sessionReads(pool).GetEnvironment(t.Context(), tenant, environment)
+	value, err := sessionAdapter(s).GetEnvironment(t.Context(), tenant, environment)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return value.Initialization
 }
 
-func awaitInitialization(t *testing.T, pool *pgxpool.Pool, tenant, environment, state string) {
+func awaitInitialization(t *testing.T, s *Store, tenant, environment, state string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if initializationState(t, pool, tenant, environment) == state {
+		if initializationState(t, s, tenant, environment) == state {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -55,7 +54,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+			s := NewWithCredentialCipher(pool, cipher)
 			principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
 			session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
 				Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -66,23 +65,23 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+			environment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+			key, err := sessionService(t, s).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			enrolled, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
+			enrolled, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 			if err != nil {
 				t.Fatal(err)
 			}
 			registry := runtimegateway.NewRegistry()
-			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
+			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
-			worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: registry})
+			worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry})
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
@@ -111,7 +110,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				actions = append(actions, action)
 				mu.Unlock()
 				if outcome == "revoked" {
-					if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), principal.TenantID, enrolled.DeviceID); err != nil {
+					if err := sessionService(t, s).RevokeDevice(t.Context(), principal.TenantID, enrolled.DeviceID); err != nil {
 						t.Error(err)
 					}
 					return completedInitialization(request, data)
@@ -122,7 +121,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				return completedInitialization(request, data)
 			}
 			time.Sleep(350 * time.Millisecond)
-			if initializationState(t, db.pool, principal.TenantID, environment.ID) != "pending" {
+			if initializationState(t, s, principal.TenantID, environment.ID) != "pending" {
 				t.Fatal("unconnected preparation was consumed")
 			}
 			bootstrap := sandbox.Bootstrap{DeviceID: enrolled.DeviceID, Credential: key.Token}
@@ -133,8 +132,8 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			if outcome != "completed" {
 				want = "failed"
 			}
-			awaitInitialization(t, db.pool, principal.TenantID, environment.ID, want)
-			if _, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: principal.TenantID, EnvironmentID: environment.ID}); !errors.Is(err, deployment.ErrNotFound) {
+			awaitInitialization(t, s, principal.TenantID, environment.ID, want)
+			if _, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: principal.TenantID, EnvironmentID: environment.ID}); !errors.Is(err, deployment.ErrNotFound) {
 				t.Fatal("self-hosted preparation fabricated allocation", err)
 			}
 			if outcome == "completed" {
@@ -171,7 +170,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 // Revocation can commit after the worker observes a connected peer but before
 // it claims preparation. It must remain a per-Environment admission result.
 func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
+	s, _ := newManagedTestStore(t)
 	principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
 	create := func() sessions.EnvironmentInitialization {
 		t.Helper()
@@ -183,23 +182,23 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+		environment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		key, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+		key, err := sessionService(t, s).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
-		enrolled, err := fixtureSessionService(t, db).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
+		enrolled, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, runtimedevice.HashCredential(key.Token))
 		if err != nil {
 			t.Fatal(err)
 		}
 		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
-	owned := executionOwner(t, db).Sessions
-	if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
+	owned := executionOwner(t, s).Sessions
+	if err := sessionService(t, s).RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), revoked); !errors.Is(err, sessions.ErrNotFound) {
@@ -210,7 +209,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), stale); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("stale binding escaped normal admission handling: %v", err)
 	}
-	if initializationState(t, db.pool, other.TenantID, other.EnvironmentID) != "pending" {
+	if initializationState(t, s, other.TenantID, other.EnvironmentID) != "pending" {
 		t.Fatal("stale claim changed preparation state")
 	}
 	if err := owned.ClaimEnvironmentInitialization(t.Context(), other); err != nil {

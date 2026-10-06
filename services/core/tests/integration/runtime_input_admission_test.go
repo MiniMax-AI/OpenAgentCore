@@ -13,15 +13,15 @@ import (
 )
 
 func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
-	tenant, session, _ := managedSession(t, s, db)
+	s, _ := newManagedTestStore(t)
+	tenant, session, _ := managedSession(t, s)
 	inputs := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"accepted work"}`)}}
 	accepted, err := submitInputs(t.Context(), s, tenant, session.ID, "work", inputs)
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, stop := managedWorkerMode(t, s, db, uuid.NewString(), p, true)
+	w, stop := managedWorkerMode(t, s, uuid.NewString(), p, true)
 	defer stop()
 	if _, err := w.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("maintenance accepted new hosted Session", err)

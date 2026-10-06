@@ -21,7 +21,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, db := newTestStoreDB(t)
+	s, _ := testStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
@@ -36,7 +36,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner := executionOwner(t, db)
+	owner := executionOwner(t, s)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -44,7 +44,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 		}
 	}
 	var reservation string
-	if err := db.pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial RETURNING id", session.ID).Scan(&reservation); err != nil {
+	if err := s.pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial RETURNING id", session.ID).Scan(&reservation); err != nil {
 		t.Fatal(err)
 	}
 	if result, err := sessionService(t, s).ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation); err != nil || result.State != sessions.EnvironmentInputExpired {

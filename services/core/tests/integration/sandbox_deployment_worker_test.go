@@ -18,8 +18,8 @@ import (
 )
 
 func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
-	deployments := fixtureDeployment(t, db)
+	s, _ := newManagedTestStore(t)
+	deployments := deploymentService(t, s)
 	id := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	configuration := execution.NewDeferredRuntimeProvider(id, func(ctx context.Context) (*execution.RuntimeProvider, error) {
@@ -34,7 +34,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	})
 	start := func() (*execution.Worker, func()) {
 		t.Helper()
-		w := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
+		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
 		var once sync.Once
 		stop := func() {
 			once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
@@ -63,7 +63,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	}
 	connect := func() {
 		t.Helper()
-		epoch := fixtureOwnerEpoch(t, db)
+		epoch := fixtureOwnerEpoch(t, s)
 		connection := uuid.NewString()
 		if err := deployments.ConnectNode(t.Context(), nodeID, connection, epoch); err != nil {
 			t.Fatal(err)
@@ -73,7 +73,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		}
 	}
 	connect()
-	tenant, _, environment := managedSession(t, s, db)
+	tenant, _, environment := managedSession(t, s)
 	allocation, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, id)
 	if err != nil || allocation.NodeID != nodeID || p.creates != 1 {
 		t.Fatal("activation failed", allocation, err)

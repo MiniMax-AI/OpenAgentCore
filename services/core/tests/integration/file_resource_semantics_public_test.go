@@ -32,8 +32,8 @@ func TestFileResourceSemanticsOfficialClientPostgres(t *testing.T) {
 	})
 	newServer := func() *httptest.Server {
 		t.Helper()
-		s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-		h, err := publicHandler(t, s, db, auth, "codex")
+		s := NewWithCredentialCipher(pool, cipher)
+		h, err := publicHandler(t, s, auth, "codex")
 		if err != nil {
 			t.Fatal(err)
 		}

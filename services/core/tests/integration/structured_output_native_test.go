@@ -28,7 +28,7 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Minute)
 	defer cancel()
-	worker := startWorker(t, ctx, h.db, h.d)
+	worker := startWorker(t, ctx, h.s, h.d)
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {
@@ -44,7 +44,7 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, h.db, auth, "claude_sdk", workerExecution(t, worker), nativeDeploymentDefaults(model, provider))
+	handler, err := publicHandler(t, h.s, auth, "claude_sdk", workerExecution(t, worker), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 	if err != nil || json.Unmarshal(raw, &proof) != nil {
 		t.Fatal("invalid evidence", err)
 	}
-	call, err := FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, proof.Turn, proof.Call)
+	call, err := FixtureFunctionCall(ctx, h.s.pool, h.tenant, proof.Session, proof.Turn, proof.Call)
 	if err != nil || !call.Applied {
 		t.Fatal("function application receipt missing", err)
 	}

@@ -37,7 +37,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	for _, stream := range []bool{false, true} {
 		for _, source := range []string{"session", "agent", "deployment"} {
 			t.Run(source+map[bool]string{false: "/ordinary", true: "/stream"}[stream], func(t *testing.T) {
@@ -165,7 +165,7 @@ func TestSessionExecutionConfigurationRollbackAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	tenant := uuid.NewString()
 	for _, kind := range []string{"model", "harness", "source", "provider", "provider_mismatch", "post_projection_failure"} {
 		input := executionProjectionInput("session")

@@ -24,13 +24,13 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s := NewWithCredentialCipher(pool, cipher)
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "config-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "config-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 	saved := func(tools string) string {
 		return `{"model":"config-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":` + tools + `}`
 	}
-	_, agentService := fixtureAgents(t, db)
+	_, agentService := fixtureAgents(t, s)
 	legacy, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(saved(`[{"type":"function","name":"lookup","description":"","parameters":{"type":"string"},"defer_loading":false}]`))})
 	if err != nil {
 		t.Fatal(err)

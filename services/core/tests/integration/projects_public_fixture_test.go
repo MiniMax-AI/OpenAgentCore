@@ -10,10 +10,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 )
 
-// fixtureProjects builds the Project adapter and service on db.
-func fixtureProjects(t testing.TB, db fixtureDB) (*projectpg.Store, *projects.Service) {
+// fixtureProjects builds the Project adapter and service on s.
+func fixtureProjects(t testing.TB, s *Store) (*projectpg.Store, *projects.Service) {
 	t.Helper()
-	projectStore := projectpg.New(pgunit.NewPool(db.pool))
+	projectStore := projectpg.New(pgunit.NewPool(s.pool))
 	projectService, err := projects.NewService(projectStore)
 	if err != nil {
 		t.Fatal(err)

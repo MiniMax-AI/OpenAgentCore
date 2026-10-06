@@ -84,7 +84,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("preparation created work before readiness", session, err)
 	}
-	items, err := sessionReads(h.db.pool).ListItems(t.Context(), h.tenant, h.session.ID, "", 100, true)
+	items, err := sessionAdapter(h.s).ListItems(t.Context(), h.tenant, h.session.ID, "", 100, true)
 	if err != nil || len(items.Items) != 0 {
 		t.Fatal("preparation published input history", items, err)
 	}

@@ -36,11 +36,10 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	s.SetPlacement(fixtureRules(t, db))
+	s := NewWithCredentialCipher(pool, cipher)
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	deployments := fixtureDeployment(t, db)
+	deployments := deploymentService(t, s)
 	providerConfig := func(setup deployment.Setup) *execution.RuntimeProvider {
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	}
@@ -57,11 +56,11 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := fixtureOwner(db, lease)
+	owner, err := fixtureOwner(s, lease)
 	if err != nil {
 		t.Fatal(errors.Join(err, lease.Close(t.Context())))
 	}
-	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration}, owner)
+	worker := startOwnedWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration}, owner)
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {
@@ -77,7 +76,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	}
 	projectID := uuid.NewString()
 	ctx := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-	_, management := fixtureProjects(t, db)
+	_, management := fixtureProjects(t, s)
 	project, err := management.CreateProject(ctx, projects.CreateProject{ID: projectID, Name: "Archive HTTP fixture"})
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +102,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), workerExecution(t, worker), func(d *api.Dependencies) { d.Execution.SessionArchive = owner.Deployment }, withCoreKeys(admin))
+	handler, err := publicHandler(t, s, nil, "codex", storeKeys(s), workerExecution(t, worker), func(d *api.Dependencies) { d.Execution.SessionArchive = owner.Deployment }, withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +120,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &archived) != nil || archived.State != "cleanup_pending" || archived.SessionID != active.ID {
 		t.Fatalf("archive failed: %d %s", w.Code, w.Body)
 	}
-	allocation, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: active.Environment.ID})
+	allocation, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: active.Environment.ID})
 	if err != nil || allocation.ID != allocated.ID || allocation.State != "cleanup_pending" {
 		t.Fatal("archive did not retain cleanup ownership", allocation, err)
 	}

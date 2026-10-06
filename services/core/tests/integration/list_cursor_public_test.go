@@ -226,24 +226,23 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	s.SetPlacement(fixtureRules(t, db))
+	s := NewWithCredentialCipher(pool, cipher)
 	owner, foreign := uuid.NewString(), uuid.NewString()
 	ownerTenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "cursor-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: foreignTenant},
 	})
-	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	leased := executionOwner(t, db)
-	skillService := SkillService(t, db.pool, db.cipher)
-	_, sessionService, err := fixtureSessions(db)
+	leased := executionOwner(t, s)
+	skillService := SkillService(t, s.pool, s.credentialCipher)
+	sessionService, err := newSessionService(s)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -59,13 +59,13 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(other), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(t, w))
+	handler, err := publicHandler(t, h.s, auth, "codex", workerExecution(t, w))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
-	fileStore, fileService := fixtureFiles(t, h.db)
+	fileStore, fileService := fixtureFiles(t, h.s)
 	source, err := fileService.Create(t.Context(), files.CreateCommand{TenantID: h.tenant, Upload: func(out io.Writer) (files.Upload, error) {
 		_, err := out.Write([]byte("src"))
 		return files.Upload{Filename: "source.txt", Purpose: files.PurposeUserData}, err
@@ -140,7 +140,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		done := post(token, environment.ID, tc.body)
 		id := serveFileWrite(h, rejected(tc.reason))
 		assertError(await(done), tc.message)
-		if intent, err := FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, id); err != nil || intent.State != "rejected" {
+		if intent, err := FixtureFileWrite(t.Context(), h.s.pool, h.tenant, environment.ID, id); err != nil || intent.State != "rejected" {
 			t.Fatal("rejection did not settle", intent, err)
 		}
 	}
