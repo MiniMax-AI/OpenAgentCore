@@ -29,6 +29,12 @@ type launchOptions struct {
 	// the CLI entry when the binary is node rather than the CLI itself.
 	start  func(clirunner.StartOptions) (*clirunner.Process, error)
 	script string
+	// spawn runs the Subagent history reader beside the native process in an
+	// agent-host view, with reader's node, script and data directory as the
+	// view presents them. nil runs the installed reader on the host over
+	// DataDir.
+	spawn  func(clirunner.StartOptions) (*clirunner.Process, error)
+	reader clirunner.StartOptions
 	// home is an agent-host view's Session home on the host. It contains
 	// DataDir and belongs to the Session user, so the daemon reads DataDir
 	// only within it.
@@ -43,6 +49,11 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	var result launchOptions
 	if err := validateOptions(req); err != nil {
 		return result, err
+	}
+	if req.StrictResume && !req.DisableSubagents {
+		if _, _, err := subagentReader(); err != nil {
+			return result, err
+		}
 	}
 	root, err := agent.ManagedSkillsRoot("mcode", req.AgentStateKey, req.ConversationID, req.RunID)
 	if err != nil {
