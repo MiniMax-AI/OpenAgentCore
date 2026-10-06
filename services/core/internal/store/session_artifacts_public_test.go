@@ -37,7 +37,7 @@ func hostedArtifactSession(t *testing.T, s *store.Store, tenant, key string) (se
 // through artifacts and settled as completed, and returns the Turn ID.
 func completeArtifactTurn(t *testing.T, s *store.Store, artifacts *sessions.Service, tenant, session, environment, key string, outputs map[string]string) string {
 	t.Helper()
-	receipt, err := s.SubmitMessage(t.Context(), tenant, session, key, json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"publish outputs"}]}]}`))
+	receipt, err := store.SendMessage(t.Context(), s, tenant, session, key, json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"publish outputs"}]}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -72,7 +72,7 @@ func (s *Store) ListTurns(ctx context.Context, tenant, session, cursor string, l
 }
 
 func (s *Store) ListExecutionWork(ctx context.Context, after string, statuses, connectedDevices []string) ([]sessions.ExecutionWork, error) {
-	id, devices, err := ExecutionWorkCursor(after, connectedDevices)
+	id, devices, err := executionWorkCursor(after, connectedDevices)
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +87,10 @@ func (s *Store) ListExecutionWork(ctx context.Context, after string, statuses, c
 	return work, nil
 }
 
-// ExecutionWorkCursor parses the cursor and connected devices of an execution
+// executionWorkCursor parses the cursor and connected devices of an execution
 // work scan; an empty cursor starts at the first ID. A malformed ID is
 // sessions.ErrInvalidInput.
-func ExecutionWorkCursor(after string, connectedDevices []string) (pgtype.UUID, []pgtype.UUID, error) {
+func executionWorkCursor(after string, connectedDevices []string) (pgtype.UUID, []pgtype.UUID, error) {
 	id := pgtype.UUID{Valid: true}
 	var err error
 	if after != "" {

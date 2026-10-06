@@ -21,7 +21,7 @@ func initialEnvironmentReservation(t *testing.T, s *Store, pool *pgxpool.Pool, t
 	if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", session).Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	reservation, err := s.GetEnvironmentInputReservation(t.Context(), tenant, session, id)
+	reservation, err := sessionAdapter(s).GetEnvironmentInputReservation(t.Context(), tenant, session, id)
 	if err != nil || !reservation.IsInitial {
 		t.Fatal("missing initial origin", reservation, err)
 	}
@@ -49,7 +49,7 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 		_, _ = pool.Exec(context.Background(), "ALTER TABLE session_events DROP CONSTRAINT IF EXISTS "+constraint)
 	})
 	writer := executionWriter(t, s)
-	if _, err := writer.ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID); err == nil {
+	if _, err := sessionService(t, writer).ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID); err == nil {
 		t.Fatal("expiry committed without its failure event")
 	}
 	retained := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
@@ -65,7 +65,7 @@ func TestEnvironmentInitialExpiryRollsBackWithFailureEventAndSerializesPromotion
 		err         error
 	}
 	results := make(chan result, 2)
-	for _, settle := range []func(context.Context, string, string, string) (sessions.EnvironmentInputReservation, error){writer.PromoteEnvironmentInput, s.ExpireEnvironmentInput} {
+	for _, settle := range []func(context.Context, string, string, string) (sessions.EnvironmentInputReservation, error){sessionExecution(t, writer.lease).PromoteEnvironmentInput, sessionService(t, s).ExpireEnvironmentInput} {
 		go func() { r, err := settle(t.Context(), tenant, session.ID, reservation.ID); results <- result{r, err} }()
 	}
 	for i := 0; i < 2; i++ {
@@ -156,7 +156,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			}
 			requireEnvironmentInputActivity(t, s, tenant, session.ID, connectedStatus, "")
 			environmentInputHistory(t, pool, session.ID, 0, 0)
-			promoted, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
+			promoted, err := sessionExecution(t, writer.lease).PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
 			if err != nil || promoted.State != sessions.EnvironmentInputAdmitted || !promoted.IsInitial || len(promoted.Receipts) != 2 {
 				t.Fatal("initial batch did not promote", promoted, err)
 			}
@@ -164,7 +164,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			if active.LastTurn == nil || active.LastTurn.Status != sessions.TurnInProgress || active.PendingInput {
 				t.Fatal("promotion did not claim its Turn", active.LastTurn)
 			}
-			replay, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
+			replay, err := sessionExecution(t, writer.lease).PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
 			if err != nil || len(replay.Receipts) != 2 || !replay.Receipts[0].Replayed || !replay.Receipts[1].Replayed {
 				t.Fatal("promotion retry granted fresh receipts", replay, err)
 			}
@@ -211,7 +211,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			}
 			writer := executionWriter(t, s)
 			for reservation.State == sessions.EnvironmentInputPending {
-				count, err := writer.ExpireEnvironmentInputs(t.Context())
+				count, err := sessionExecution(t, writer.lease).ExpireEnvironmentInputs(t.Context())
 				if err != nil || count < 1 || count > 32 {
 					t.Fatal("expiry made no bounded progress", count, err)
 				}
@@ -250,7 +250,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation, 1, true); err != nil {
 				t.Fatal(err)
 			}
-			late, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
+			late, err := sessionExecution(t, writer.lease).PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
 			if err != nil || late.State != sessions.EnvironmentInputExpired || len(late.Receipts) != 0 {
 				t.Fatal("late connection resurrected initial input", late, err)
 			}
@@ -269,7 +269,7 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 			if err := sessionService(t, reopened).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 				t.Fatal("pending later input deleted", err)
 			}
-			if _, err := reopened.CancelEnvironmentInput(t.Context(), tenant, session.ID, later.ID); err != nil {
+			if _, err := cancelEnvironmentInput(t.Context(), reopened, tenant, session.ID, later.ID); err != nil {
 				t.Fatal(err)
 			}
 			if err := sessionService(t, reopened).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {

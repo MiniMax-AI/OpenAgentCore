@@ -145,7 +145,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	}
 	checkMeasurement(false)
 	queued := publicSession(t, h, "queued")
-	if _, err := h.s.SubmitMessage(ctx, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
+	if _, err := store.SendMessage(ctx, h.s, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
 		t.Fatal(err)
 	}
 	worker := startOwnedWorker(t, ctx, h.db, h.d, h.owner())
@@ -162,7 +162,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err != nil || pending.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal(pending, err)
 	}
-	if _, err := h.s.RequestCancel(ctx, h.tenant, queued.ID, "stop-before-dispatch"); err != nil {
+	if _, err := store.RequestCancel(ctx, h.s, h.tenant, queued.ID, "stop-before-dispatch"); err != nil {
 		t.Fatal(err)
 	}
 	pending, err = store.SessionAdapter(h.s).GetSession(ctx, h.tenant, queued.ID)

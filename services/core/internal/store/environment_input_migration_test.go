@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -91,38 +89,4 @@ func TestEnvironmentInputMigrationRetainsHistoryAndRetryIdentity(t *testing.T) {
 	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM turns WHERE session_id=$1", session).Scan(&count); err != nil || count != 0 {
 		t.Fatal("migration manufactured a Turn", count, err)
 	}
-}
-
-func TestEnvironmentInputPromotionUsesCurrentExecutionWriter(t *testing.T) {
-	s, pool := testStore(t)
-	tenant, session := environmentInputSession(t, s)
-	pending := reserveEnvironmentInput(t, s, tenant, session.ID, "pending")
-	if _, err := s.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
-		t.Fatal("pooled Store promoted input without execution ownership")
-	}
-	closed := executionWriter(t, s)
-	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, closed.pool)
-	if err := closed.lease.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	awaitRelease()
-	if _, err := closed.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
-		t.Fatal("closed execution writer promoted pending input")
-	}
-	environmentInputHistory(t, pool, session.ID, 0, 0)
-	writer := executionWriter(t, s)
-	var killed bool
-	if err := pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1, 1000)", executionOwnerPID(t, pool)).Scan(&killed); err != nil || !killed {
-		t.Fatal(killed, err)
-	}
-	successor := executionWriter(t, s)
-	if _, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID); err == nil {
-		t.Fatal("stale execution writer promoted pending input")
-	}
-	environmentInputHistory(t, pool, session.ID, 0, 0)
-	got, err := successor.PromoteEnvironmentInput(t.Context(), tenant, session.ID, pending.ID)
-	if err != nil || got.State != sessions.EnvironmentInputAdmitted {
-		t.Fatal("successor could not promote", got, err)
-	}
-	environmentInputHistory(t, pool, session.ID, 1, 2)
 }

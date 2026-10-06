@@ -143,11 +143,11 @@ func TestSessionWriteAuditRollback(t *testing.T) {
 			case "delete":
 				err = sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: created.ID})
 			case "events":
-				_, err = s.SubmitInputs(ctx, tenant, created.ID, "events", []sessions.Input{messageInput("private")})
+				_, err = submitInputs(ctx, s, tenant, created.ID, "events", []sessions.Input{messageInput("private")})
 			case "noop":
 				err = sessionService(t, s).AuditSessionOperation(ctx, sessions.AuditSessionOperationCommand{TenantID: tenant, SessionID: created.ID, Action: "send_events"})
 			case "reserve":
-				_, err = s.ReserveEnvironmentInput(ctx, tenant, created.ID, "reserve", []sessions.Input{messageInput("private")})
+				_, err = sessionService(t, s).ReserveEnvironmentInput(ctx, tenant, created.ID, "reserve", []sessions.Input{messageInput("private")})
 			}
 			if err == nil {
 				t.Fatal("mutation bypassed audit failure")
@@ -177,10 +177,10 @@ func TestEventsWriteAuditAdmissionAndReplay(t *testing.T) {
 			}
 			submit := func(ctx context.Context) error {
 				if prepared {
-					_, err := s.ReserveEnvironmentInput(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
+					_, err := sessionService(t, s).ReserveEnvironmentInput(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
 					return err
 				}
-				_, err := s.SubmitInputs(ctx, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
+				_, err := submitInputs(ctx, s, tenant, created.ID, "batch", []sessions.Input{messageInput("private")})
 				return err
 			}
 			first := sessionAuditContext(t, tenant, "a")

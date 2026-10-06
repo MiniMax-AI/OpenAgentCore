@@ -92,10 +92,12 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			input, err := s.SubmitMessage(t.Context(), project.TenantID, session.ID, "start", json.RawMessage(`{"text":"run"}`))
+			_, service := testSessions(t, pool, nil)
+			inputs, err := service.SubmitInputs(t.Context(), project.TenantID, session.ID, "start", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"run"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
+			input := inputs[0]
 			// This fixture isolates lifecycle ordering. Protocol-driven waiting is
 			// independently exercised in TestArchiveWaitingCancellationReceipts.
 			for _, transition := range []sessions.TurnTransition{{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}, {ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnWaiting}} {

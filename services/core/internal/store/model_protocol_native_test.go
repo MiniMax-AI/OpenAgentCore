@@ -125,7 +125,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 		if err != nil || !call.Applied {
 			t.Fatal("public function result lacks native delivery acknowledgement")
 		}
-		inputs, err := h.s.ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
+		inputs, err := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
 		if err != nil || len(inputs) != 2 || inputs[0].Kind != "message" || inputs[1].Kind != "tool_result" {
 			t.Fatal("public function result input was lost or duplicated")
 		}

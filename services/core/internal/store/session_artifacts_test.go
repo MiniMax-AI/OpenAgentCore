@@ -235,7 +235,7 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 					t.Fatalf("transfer blocked deletion: %v", err)
 				}
 			} else {
-				if _, err := s.RequestCancel(ctx, tenant, session, "cancel-capture"); err != nil {
+				if _, err := requestCancel(ctx, s, tenant, session, "cancel-capture"); err != nil {
 					t.Fatalf("transfer blocked cancellation: %v", err)
 				}
 				want = sessions.ErrTurnConflict

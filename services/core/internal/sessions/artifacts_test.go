@@ -192,6 +192,11 @@ func (s *fakeArtifactStorage) DeleteSessionArtifact(context.Context, string, str
 	return nil
 }
 
+func (s *fakeArtifactStorage) WithInputs(context.Context, string, string, func(context.Context, InputTx) error) error {
+	s.t.Fatal("unexpected call to WithInputs")
+	return nil
+}
+
 func (s *fakeArtifactStorage) CreateDevice(context.Context, string, DeviceRegistration) (ExecutionDevice, error) {
 	s.t.Fatal("unexpected call to CreateDevice")
 	return ExecutionDevice{}, nil

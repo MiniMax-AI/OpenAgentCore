@@ -89,7 +89,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	inputs, err := h.s.ListTurnInputs(ctx, h.tenant, proof.Session, proof.FirstTurn, 0, 100)
+	inputs, err := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, proof.Session, proof.FirstTurn, 0, 100)
 	if err != nil || len(inputs) != 2 {
 		t.Fatal("steering input not in same turn", err)
 	}

@@ -89,7 +89,7 @@ func (s *Store) createSession(ctx context.Context, tenantID string, input sessio
 	var batch []sessions.Input
 	var encodedInput json.RawMessage
 	if len(input.InitialInputs) > 0 {
-		batch, encodedInput, err = validateInitialInputs(input.InitialInputs)
+		batch, encodedInput, err = sessions.ValidateMessageInputs(input.InitialInputs)
 		if err != nil {
 			return sessions.Creation{}, err
 		}

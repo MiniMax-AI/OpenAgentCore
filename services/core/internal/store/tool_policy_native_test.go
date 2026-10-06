@@ -95,7 +95,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		inputs, err := h.s.ListTurnInputs(ctx, h.tenant, item.ID, item.FirstTurn, 0, 100)
+		inputs, err := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, item.ID, item.FirstTurn, 0, 100)
 		var outcome execution.Result
 		if err != nil || len(inputs) != 1 || json.Unmarshal(turn.Outcome, &outcome) != nil || outcome.AppliedThrough != inputs[0].Sequence {
 			t.Fatal("native text input receipt missing", err)

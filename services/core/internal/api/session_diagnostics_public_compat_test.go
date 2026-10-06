@@ -73,6 +73,20 @@ func databaseSessionReads(pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 	}
 }
 
+// submitMessage admits one message input through the Session service on pool.
+func submitMessage(t *testing.T, pool *pgxpool.Pool, tenant, session, key string, payload json.RawMessage) sessions.InputReceipt {
+	t.Helper()
+	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := service.SubmitInputs(t.Context(), tenant, session, key, []sessions.Input{{Kind: "message", Payload: payload}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return receipts[0]
+}
+
 // transitionTurn moves the Turn as the execution owner does, over a pooled
 // Session transaction.
 func transitionTurn(t *testing.T, pool *pgxpool.Pool, tenant, session, turn string, transition sessions.TurnTransition) {

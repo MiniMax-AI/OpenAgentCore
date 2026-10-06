@@ -107,7 +107,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", item.ID).Scan(&id); err != nil {
 				t.Fatal("public creation did not reserve initial input", err)
 			}
-			reservation, err := s.GetEnvironmentInputReservation(t.Context(), tenant, item.ID, id)
+			reservation, err := store.SessionAdapter(s).GetEnvironmentInputReservation(t.Context(), tenant, item.ID, id)
 			if err != nil || !reservation.IsInitial || len(reservation.Inputs) != 1 || len(reservation.Receipts) != 0 {
 				t.Fatal("invalid public initial reservation", err)
 			}

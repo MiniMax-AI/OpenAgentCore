@@ -127,7 +127,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 func (h *dispatchHarness) message(key, text string) sessions.InputReceipt {
 	h.t.Helper()
 	body, _ := json.Marshal(map[string]string{"text": text})
-	r, err := h.s.SubmitMessage(context.Background(), h.tenant, h.session.ID, key, body)
+	r, err := store.SendMessage(context.Background(), h.s, h.tenant, h.session.ID, key, body)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 			first := h.message("first", "Run")
 			result := h.run(context.Background(), first.TurnID)
 			h.read(testExecutionRequest)
-			_, err := h.s.RequestCancel(context.Background(), h.tenant, h.session.ID, "cancel")
+			_, err := store.RequestCancel(context.Background(), h.s, h.tenant, h.session.ID, "cancel")
 			if err != nil {
 				t.Fatal(err)
 			}

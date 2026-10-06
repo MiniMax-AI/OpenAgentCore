@@ -45,6 +45,8 @@ type fakeStorage struct {
 	deletion       *fakeTx
 	updateMetadata func(encoded string) (Session, error)
 	auditOperation func() error
+	// inputTx is the transaction WithInputs applies in.
+	inputTx *fakeInputTx
 }
 
 func (s *fakeStorage) record(name string, set bool, detail ...string) {

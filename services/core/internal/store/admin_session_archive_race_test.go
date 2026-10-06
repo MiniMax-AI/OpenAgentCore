@@ -59,7 +59,7 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "racing-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"racing"}`)}})
+			_, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "racing-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"racing"}`)}})
 			if err != nil && !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 				t.Error(err)
 			}

@@ -61,10 +61,10 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 	if _, err := next.ReserveEnvironmentFileWrite(ctx, f.tenant, f.env.ID, another); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("restart admitted successor", err)
 	}
-	if _, err := reopened.ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, "new-input", []sessions.Input{messageInput("new")}); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := sessionService(t, reopened).ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, "new-input", []sessions.Input{messageInput("new")}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("unknown write admitted input", err)
 	}
-	if _, err := reopened.SubmitMessage(ctx, f.tenant, f.session.ID, "direct", messageInput("new").Payload); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := sendMessage(ctx, reopened, f.tenant, f.session.ID, "direct", messageInput("new").Payload); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("direct admission bypassed write", err)
 	}
 	if _, err := sessionAdapter(reopened).GetEnvironment(ctx, f.tenant, f.env.ID); err != nil {
@@ -73,7 +73,7 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 	if _, err := sessionAdapter(reopened).GetSession(ctx, f.tenant, f.session.ID); err != nil {
 		t.Fatal("write gate prevented recovery read", err)
 	}
-	if receipt, err := reopened.RequestCancel(ctx, f.tenant, f.session.ID, "idle-cancel"); err != nil || receipt.TurnID != "" {
+	if receipt, err := requestCancel(ctx, reopened, f.tenant, f.session.ID, "idle-cancel"); err != nil || receipt.TurnID != "" {
 		t.Fatal("write gate imposed mutation admission on idle cancellation", receipt, err)
 	}
 	if got, err := FixtureFileWrite(ctx, reopened.pool, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {
@@ -178,7 +178,7 @@ func TestEnvironmentFileWriteSerializesWithInputAndRetry(t *testing.T) {
 		group.Go(func() {
 			<-start
 			var err error
-			pending, err = f.s.ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, inputKey, []sessions.Input{messageInput("race")})
+			pending, err = sessionService(t, f.s).ReserveEnvironmentInput(ctx, f.tenant, f.session.ID, inputKey, []sessions.Input{messageInput("race")})
 			inputs <- err
 		})
 		close(start)
@@ -189,7 +189,7 @@ func TestEnvironmentFileWriteSerializesWithInputAndRetry(t *testing.T) {
 				t.Fatal(err)
 			}
 		} else if inputErr == nil && errors.Is(writeErr, sessions.ErrTurnConflict) {
-			if _, err := f.s.CancelEnvironmentInput(ctx, f.tenant, f.session.ID, pending.ID); err != nil {
+			if _, err := cancelEnvironmentInput(ctx, f.s, f.tenant, f.session.ID, pending.ID); err != nil {
 				t.Fatal(err)
 			}
 		} else {

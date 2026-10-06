@@ -98,6 +98,8 @@ const (
 type EnvironmentInputReservation struct {
 	ID        string
 	SessionID string
+	// Key is the idempotency key the reservation's batch is admitted under.
+	Key       string
 	State     string
 	IsInitial bool
 	Inputs    []Input

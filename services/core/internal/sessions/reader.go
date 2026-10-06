@@ -9,6 +9,7 @@ type Reader interface {
 	DeviceReader
 	EnvironmentReader
 	ExecutorCredentialReader
+	InputReader
 	ItemReader
 	ModelExecutionReader
 	SessionReader

@@ -40,7 +40,6 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
 	leased := executionOwner(t, db, s)
-	writer := leased.Store
 
 	create := func(environment string, initial bool) sessions.Session {
 		t.Helper()
@@ -61,7 +60,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	turn := func(to ...string) string {
 		t.Helper()
 		session := create(none, false)
-		receipt, err := s.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"work"}`))
+		receipt, err := store.SendMessage(ctx, s, tenant, session.ID, "input", json.RawMessage(`{"text":"work"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +68,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 		for _, status := range to {
 			switch status {
 			case "cancel":
-				_, err = s.RequestCancel(ctx, tenant, session.ID, "cancel")
+				_, err = store.RequestCancel(ctx, s, tenant, session.ID, "cancel")
 			case "function":
 				err = leased.Sessions.RecordFunctionCall(ctx, tenant, session.ID, receipt.TurnID, sessions.FunctionCall{CallID: "pending", ExecutorCallID: "native-pending", Name: "lookup", Arguments: json.RawMessage(`{}`)})
 			case sessions.TurnCompleted, sessions.TurnFailed:
@@ -86,7 +85,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	}
 	reserve := func(session sessions.Session) sessions.EnvironmentInputReservation {
 		t.Helper()
-		reservation, err := s.ReserveEnvironmentInput(ctx, tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}})
+		reservation, err := store.SessionService(t, s).ReserveEnvironmentInput(ctx, tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}})
 		if err != nil || reservation.State != sessions.EnvironmentInputPending {
 			t.Fatal(reservation, err)
 		}
@@ -139,12 +138,12 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	if _, err := db.pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1", expired.ID); err != nil {
 		t.Fatal(err)
 	}
-	if count, err := writer.ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
+	if count, err := leased.Sessions.ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
 		t.Fatal("initial input did not expire", count, err)
 	}
 	settled["self_hosted_input_expired"] = expired.ID
 	withdrawn := create(selfHosted, false)
-	if _, err := s.CancelEnvironmentInput(ctx, tenant, withdrawn.ID, reserve(withdrawn).ID); err != nil {
+	if _, err := store.CancelEnvironmentInput(ctx, s, tenant, withdrawn.ID, reserve(withdrawn).ID); err != nil {
 		t.Fatal(err)
 	}
 	settled["later_input_cancelled"] = withdrawn.ID

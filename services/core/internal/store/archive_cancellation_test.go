@@ -123,7 +123,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			pending, err := s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+			pending, err := store.SessionService(t, s).ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -142,7 +142,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 
 			if scenario == "cancel_revoke_archive" {
-				if _, err := s.RequestCancel(t.Context(), h.tenant, session.ID, "ordinary-cancel"); err != nil {
+				if _, err := store.RequestCancel(t.Context(), s, h.tenant, session.ID, "ordinary-cancel"); err != nil {
 					t.Fatal(err)
 				}
 			}

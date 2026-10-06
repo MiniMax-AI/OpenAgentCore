@@ -69,7 +69,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, leased execution.Owner, ski
 	if _, err := store.TransitionTurn(ctx, s, tenant, f.session, f.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnCancelled}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.SubmitMessage(ctx, tenant, f.session, label+"-second", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"second"}]}]}`)); err != nil {
+	if _, err := store.SendMessage(ctx, s, tenant, f.session, label+"-second", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"second"}]}]}`)); err != nil {
 		t.Fatal(err)
 	}
 	f.otherSession = client.created(token, "/v1/agents/sessions", newSession)
@@ -91,7 +91,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, leased execution.Owner, ski
 		if err != nil {
 			t.Fatal(err)
 		}
-		receipt, err := s.SubmitMessage(ctx, tenant, created.ID, key+"-input", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"delegate"}]}]}`))
+		receipt, err := store.SendMessage(ctx, s, tenant, created.ID, key+"-input", json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"delegate"}]}]}`))
 		if err != nil {
 			t.Fatal(err)
 		}

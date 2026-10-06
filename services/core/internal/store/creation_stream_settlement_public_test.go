@@ -171,7 +171,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	created.ended(t, 5*time.Second)
 
 	connect(first.Session.Environment.ID)
-	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
+	if _, err := store.SessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
 		t.Fatal(err)
 	}
 	if current, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, first.Session.ID); err != nil || !current.PendingInput {
@@ -211,7 +211,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if settled, err := s.CancelEnvironmentInput(t.Context(), tenant, session, reservation); err != nil || settled.State != sessions.EnvironmentInputCancelled {
+	if settled, err := store.CancelEnvironmentInput(t.Context(), s, tenant, session, reservation); err != nil || settled.State != sessions.EnvironmentInputCancelled {
 		t.Fatal(settled.State, err)
 	}
 	if after, err := store.SessionAdapter(s).SessionEventCursor(t.Context(), tenant, session); err != nil || after != cursor {

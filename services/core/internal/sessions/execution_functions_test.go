@@ -15,9 +15,11 @@ import (
 // their call on tx, then run apply with tx and locked; without tx they fail
 // the test.
 type fakeExecutionStorage struct {
-	t                *testing.T
-	withFunctionTurn func(ctx context.Context, tenant, session, turn string, apply func(context.Context, FunctionTx, Turn) error) error
-	withTurns        func(ctx context.Context, tenant, session string, apply func(context.Context, TurnTx) error) error
+	t                        *testing.T
+	withFunctionTurn         func(ctx context.Context, tenant, session, turn string, apply func(context.Context, FunctionTx, Turn) error) error
+	withTurns                func(ctx context.Context, tenant, session string, apply func(context.Context, TurnTx) error) error
+	withInputs               func(ctx context.Context, tenant, session string, apply func(context.Context, InputTx) error) error
+	withDueInputReservations func(ctx context.Context, apply func(context.Context, InputTx, string) error) error
 
 	tx     *fakeTx
 	locked LockedSession

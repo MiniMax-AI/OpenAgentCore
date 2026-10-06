@@ -99,16 +99,16 @@ func TestRuntimeSuspensionPromotionRetainsPendingInput(t *testing.T) {
 	s, w, pool, owner := runtimeSuspensionFixture(t)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase='waking',compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, owner.ID)
 	pending := reserveEnvironmentInput(t, s, owner.TenantID, owner.SessionID, "during-wake")
-	if _, err := w.PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := sessionExecution(t, w.lease).PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("waking allocation promoted model input", err)
 	}
-	got, err := s.GetEnvironmentInputReservation(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
+	got, err := sessionAdapter(s).GetEnvironmentInputReservation(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
 	if err != nil || got.State != sessions.EnvironmentInputPending || got.SettledAt != nil || len(got.Receipts) != 0 {
 		t.Fatal("blocked promotion partially committed", got, err)
 	}
 	environmentInputHistory(t, pool, owner.SessionID, 0, 0)
 	runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET compute_phase='running',compute_retained_until=NULL WHERE id=$1`, owner.ID)
-	got, err = w.PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
+	got, err = sessionExecution(t, w.lease).PromoteEnvironmentInput(t.Context(), owner.TenantID, owner.SessionID, pending.ID)
 	if err != nil || got.State != sessions.EnvironmentInputAdmitted || len(got.Receipts) != 2 {
 		t.Fatal("pending request could not resume once running", got, err)
 	}

@@ -34,7 +34,7 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 		}
 	}
 	for n, status := range []string{sessions.TurnFailed, sessions.TurnCancelled} {
-		admission, err := s.SubmitMessage(ctx, tenant, session.ID, fmt.Sprint(n), json.RawMessage(`{"text":"measure"}`))
+		admission, err := store.SendMessage(ctx, s, tenant, session.ID, fmt.Sprint(n), json.RawMessage(`{"text":"measure"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -114,7 +114,7 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	admission, err := s.SubmitMessage(ctx, tenant, session.ID, "start", json.RawMessage(`{"text":"measure"}`))
+	admission, err := store.SendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"measure"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	}
 	submit := func(key string) sessions.InputReceipt {
 		t.Helper()
-		admission, err := s.SubmitMessage(ctx, tenant, session.ID, key, json.RawMessage(`{"text":"measure"}`))
+		admission, err := store.SendMessage(ctx, s, tenant, session.ID, key, json.RawMessage(`{"text":"measure"}`))
 		if err != nil {
 			t.Fatal(err)
 		}

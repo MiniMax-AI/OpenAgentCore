@@ -311,7 +311,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(t.Context(), tenant, history.ID, "history", json.RawMessage(`{"text":"retained request"}`))
+	input, err := sendMessage(t.Context(), s, tenant, history.ID, "history", json.RawMessage(`{"text":"retained request"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

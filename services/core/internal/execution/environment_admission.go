@@ -97,7 +97,7 @@ func (w *Worker) submitEnvironmentInputs(ctx context.Context, session sessions.S
 	changed, unsubscribe := w.dispatcher.notifications.subscribe(session.TenantID, session.ID)
 	defer unsubscribe()
 	reserve, cancel := context.WithTimeout(ctx, 5*time.Second)
-	reservation, err := w.admission.ReserveEnvironmentInput(reserve, session.TenantID, session.ID, key, inputs)
+	reservation, err := w.dispatcher.Sessions.ReserveEnvironmentInput(reserve, session.TenantID, session.ID, key, inputs)
 	cancel()
 	if err != nil {
 		return nil, err
@@ -140,9 +140,9 @@ func (w *Worker) environmentInputOutcome(ctx context.Context, session sessions.S
 	defer cancel()
 	// The database rechecks its clock under the Session lock before settlement.
 	if !time.Now().Before(reservation.Deadline) {
-		return w.admission.ExpireEnvironmentInput(read, session.TenantID, session.ID, reservation.ID)
+		return w.dispatcher.Sessions.ExpireEnvironmentInput(read, session.TenantID, session.ID, reservation.ID)
 	}
-	return w.admission.GetEnvironmentInputReservation(read, session.TenantID, session.ID, reservation.ID)
+	return w.dispatcher.SessionsReader.GetEnvironmentInputReservation(read, session.TenantID, session.ID, reservation.ID)
 }
 
 func (w *Worker) checkAdmissionOwnership(ctx context.Context) error {

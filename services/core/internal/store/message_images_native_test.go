@@ -86,7 +86,7 @@ func TestNativeMessageImagePublicExecution(t *testing.T) {
 	if json.Unmarshal(turn.Outcome, &outcome) != nil || outcome.AppliedThrough < 1 {
 		t.Fatal("native input receipt missing")
 	}
-	inputs, err := h.s.ListTurnInputs(ctx, h.tenant, proof.Session, proof.Turn, 0, 100)
+	inputs, err := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, proof.Session, proof.Turn, 0, 100)
 	if err != nil || len(inputs) != 3 || inputs[0].Kind != "message" || inputs[1].Kind != "message" || inputs[2].Kind != "tool_result" || outcome.AppliedThrough != inputs[2].Sequence {
 		t.Fatal("active image batch was not applied exactly once in the same Turn", err)
 	}

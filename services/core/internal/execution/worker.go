@@ -303,7 +303,7 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 			return err
 		}
 		if maintenance {
-			if _, err := w.dispatcher.Store.ExpireEnvironmentInputs(ctx); err != nil {
+			if _, err := w.dispatcher.sessionExecution.ExpireEnvironmentInputs(ctx); err != nil {
 				w.observeSchedulerPoll(0, err)
 				return err
 			}
