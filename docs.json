@@ -38,6 +38,11 @@
           "docs/runtime-protocol",
           "docs/runtime-bootstrap",
           "docs/sandbox-provider",
+          "docs/sandbox-bootstrap",
+          "docs/sandbox-link-protocol",
+          "docs/file-access-protocol",
+          "docs/process-protocol",
+          "docs/sandbox-network-protocol",
           "contracts/agents-api/harness-onboarding",
           "docs/development"
         ]

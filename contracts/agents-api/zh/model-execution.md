@@ -1,10 +1,10 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: d657e6189ebc5e55ed5201dceaa304b157a6b6ca1f45dcbe9756ef866d63ed05
+source_hash: 98ea700b7eb77e000bead198fb190faf5621c288372e7e8bd196b135793f54fa
 ---
 
-每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
+每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
 
 ## Harness 选择 {#harness-selection}
 
@@ -36,7 +36,7 @@ Session 的 `environment` 和 Environment Templates 用于选择准备流程，�
 | Claude SDK | `anthropic` |
 | MiniMax Code | `anthropic`、`responses`、`chat_completions` |
 
-MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。不存在模型 API 代理、直通网关或跨协议转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
+MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。任何地方都不在协议之间转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
 
 适用来源取决于接收密钥的计算资源由谁拥有：
 
@@ -46,7 +46,7 @@ MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写�
 | `self_hosted` | 接受 | 从不应用 | 400 `model_provider_required` |
 | `none` | 以 400 拒绝 | 已配置时应用 | 接受；模型由设备自身的环境提供 |
 
-部署默认值保存运营方的密钥，因此仅保留在运营方拥有的计算资源上：Core 管理的沙箱和运营方注册的 `none` 设备。`self_hosted` 执行器属于应用程序，由应用程序提供自己的配置包。托管 Runtime 和自托管 Runtime 均不携带自己的模型配置，因此其中的 Session 如果没有配置包，就会在发生任何写入之前被拒绝；错误参数为 `x_agents_core.model_provider`，并会返回说明应配置内容的消息。
+部署默认值保存运营方的密钥，因此仅适用于运营方运行的 Environment：Core 管理的沙箱和运营方注册的 `none` 设备。`self_hosted` 执行器属于应用程序，由应用程序提供自己的配置包。托管 Runtime 和自托管 Runtime 均不携带自己的模型配置，因此其中的 Session 如果没有配置包，就会在发生任何写入之前被拒绝；错误参数为 `x_agents_core.model_provider`，并会返回说明应配置内容的消息。
 
 | 操作 | 省略 | 显式 null |
 | --- | --- | --- |
@@ -92,7 +92,21 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 解析后的提供商配置会在 Session 创建事务中被冻结并加密，使用自己的加密用途，并绑定到 Project 和 Session。创建重试会将其纳入请求哈希，因此使用相同 Idempotency-Key 时，更改密钥或端点会产生冲突；密钥进入任何存储哈希时，只会表现为由部署凭据密钥加键控的指纹。任何公开的 Session、Agent、Environment、事件或常规配置均不包含该密钥。顶层扩展仅可写入，无法更新。
 
-在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器会原生应用该配置并直接连接提供商。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。执行器主机将该配置包存放在其原生 Harness home 中，与托管 Runtime 的做法相同。原生工具以启动账户的权限运行，并且可以读取该账户有权读取的内容；吊销凭据不会擦除已经交付的配置包。
+在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器通过原生配置让 Harness 指向[凭据网关](#credential-gateway)。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。网关在 Session 期间将密钥保存在内存中，密钥从不进入 Harness 的环境、配置或 home，也不进入沙箱。
+
+## 凭据网关 {#credential-gateway}
+
+Harness 通过 agent host 上 Session 本地的凭据网关访问其冻结的上游。Harness 的原生 base URL 指向网关，Harness 只收到一个非机密的占位凭据，从不收到密钥。
+
+- 网关只转发提供商协议已声明的原生路由，除下述凭据规则外，请求和响应保持不变。未声明的路径或方法，以及未声明的 WebSocket 升级，都会被拒绝，绝不会到达上游。
+- 它移除每个被剥离 header 的所有值（名称匹配不区分大小写），然后在协议声明的 header 中注入上游凭据，并去除密钥首尾的空白。
+- 它移除所有包含密钥的响应 header 和 trailer 值，informational 响应也不例外。响应 body 原样通过，因此在 body 中回显密钥的上游会把密钥泄露给 Harness。对于 HTTP MCP server，网关注入绑定的 bearer token 和 HTTP header，替换 Harness 的凭据 header 和同名 header，并对每个注入的值应用同一规则。
+- 它从不带着凭据跟随重定向。
+- 它从不在协议之间转换。
+- HTTP MCP server URL 的查询部分也是凭据。带 bearer token、HTTP header 或查询的绑定需要 `https` server URL，含 userinfo 的 server URL 会被拒绝。网关在 Session 启动前拒绝其他任何情况，因此凭据不会以明文跨越网络。
+- Harness 访问 HTTP MCP 绑定的 URL 是其 listener 加上 server URL 的路径，不带查询。listener 将每个请求恰好转发到该 server URL（包括查询）。它以 400 拒绝携带查询的请求，以 404 拒绝其他路径的请求。它移除所有包含该查询或其任一参数值（按发送形式或解码形式）的响应 header 和 trailer 值，因此一个短值也会让包含它的任何 header 值被扣留。
+
+[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 声明每个协议的路由和凭据 header、被剥离的 header 以及占位凭据。其 `LookupRoute` 将请求与路由匹配，`UpstreamPath` 将匹配的路由与上游 base URL 拼接。Harness 调用表中未声明的路由时，需要修改协议，而不是为网关开例外。
 
 ## 原生模型参数 {#native-model-parameters}
 

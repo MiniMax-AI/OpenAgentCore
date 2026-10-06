@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 4f830cdc1d1a73646d466b7de49496b72701b2f23f4842a384116cb75a91e5e5
+source_hash: facf77cd5eb7e4edb8fcb74b38915dea87932ecf77b36e2da92d6532b22dad91
 ---
 
 Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-reference)。可以使用官方 OpenAI SDK 或普通 HTTP。本指南针对每项常见操作同时展示这两种方式，并说明 Core 与 OpenAI 存在差异的地方。
@@ -157,7 +157,7 @@ Core 可以运行多种 harness，并允许接入你自己的模型访问方式�
 harness 是运行 Session 的 Agent 程序：Codex（`codex`）、Claude Code（`claude_sdk`）或 MiniMax Code（`mcode`）。请在 Agent 或内联 `agent` 上设置 `x_agents_core.harness`；如果未设置，则使用安装的默认 harness（[`core.default_harness`](../configuration.md#settings)，除非操作员另行更改，否则为 Codex）。
 
 - **模型。** `model` 是提供商给出的准确模型 ID。`openai_hosted` 或 `none` Session 上的内联 Agent 可以省略此字段，以使用其 harness 的默认模型配置。保存的 Agent 始终必须指定模型。
-- **提供商。** harness 会使用其原生协议之一直接调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[Model execution](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
+- **提供商。** harness 会使用其原生协议之一，经由一个让你的密钥不进入 harness 的[凭据网关](../../../contracts/agents-api/zh/model-execution.md#credential-gateway)调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[Model execution](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
 - **原生参数。** `harness_config` 承载 harness 自身的模型设置；请参阅[原生模型参数](../../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。
 
 并非每种 harness、部署位置和操作组合都受支持；[Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 列出了受支持的组合。

@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: b7025e9b2072924c33656e0319363cf3564593bb1e2506a891be5be251087c11
+source_hash: ca3340a9ecedd589333dbd0b24a89bd344a08b3e789b47977f402771e07782c7
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -55,9 +55,10 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 ```sh
 make build-core
 make build-daemon
+make build-sandbox-io
 ```
 
-Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#standalone-core-builds)。daemon 写入 `${OAC_DEV_HOME:-$HOME/.oac}/build/daemon/oac-daemon`。
+Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#standalone-core-builds)。daemon 写入 `${OAC_DEV_HOME:-$HOME/.oac}/build/daemon/oac-daemon`。Sandbox I/O 服务以静态 Linux 二进制写入 `${OAC_DEV_HOME:-$HOME/.oac}/build/sandbox-io/oac-sandbox-io`。
 
 按照[服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#run-from-source)，使用独立开发数据库运行 Core migrator 和 server。[配置附录](configuration.md#appendix-core-environment-without-the-installer) 负责独立进程设置。如需完整运维安装，使用[安装指南](getting-started/install.md)；单独构建 Core 是独立的贡献者工作流。
 
@@ -73,8 +74,16 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | `services/core/internal/engine` | 对 harness 操作与执行位置进行纯资格验证 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire 类型与验证器 | [Runtime 协议](runtime-protocol.md) |
 | `internal/runtimebootstrap` | Provider 到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
+| `internal/sandboxwire` | 各沙箱 I/O 协议共享的帧头、基本类型编码和 request ID 序列 | [帧格式](sandbox-link-protocol.md#framing) |
+| `internal/sandboxlink` | Link 协议、peer 库和 relay 核心 | [沙箱 Link 协议](sandbox-link-protocol.md) |
+| `internal/sandboxbootstrap` | Provider 到 Sandbox I/O 服务的启动输入 | [沙箱引导](sandbox-bootstrap.md) |
+| `internal/sandboxfs` | Runtime–文件服务的 wire 类型、验证器、客户端和服务端 | [文件访问协议](file-access-protocol.md) |
+| `internal/sandboxprocess` | Runtime–进程服务的 wire 类型、验证器、客户端和服务端 | [进程协议](process-protocol.md) |
+| `internal/sandboxnet` | Runtime–网络服务的 wire 类型、验证器、客户端和服务端 | [沙箱网络协议](sandbox-network-protocol.md) |
+| `apps/sandboxio` | Sandbox I/O 服务二进制 `oac-sandbox-io` 及其 Linux 协议服务 | [沙箱引导](sandbox-bootstrap.md#responsibilities-and-readiness)、[文件访问协议](file-access-protocol.md#the-linux-service)、[进程协议](process-protocol.md#implement-a-service)、[网络协议](sandbox-network-protocol.md#implement-a-service) |
 | `apps/daemon/internal/dispatch` | Runtime 准备、Executor 复用、Turn 和清理所有权 | [Harness 生命周期](../../contracts/agents-api/zh/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | 原生 harness adapter | [原生参考](../../contracts/agents-api/zh/harness-onboarding.md#native-references) |
+| `apps/daemon/internal/agenthost` | agent-host Session：准入、Session 目录、Link attachment、视图和拆除 | [在 agent-host 视图中运行](../../contracts/agents-api/zh/harness-onboarding.md#run-in-an-agent-host-view) |
 | `services/core/internal/sandbox` | Provider 接口与托管计算资源生命周期 | [Provider 接入](sandbox-provider.md) |
 | `services/web` | 控制台登录与服务端管理代理 | [控制台服务端](web/console-server.md) |
 | `apps/web` 和 `packages/agents-client` | 控制台 UI 与类型化 client | [Web 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md) |

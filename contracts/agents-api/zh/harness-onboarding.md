@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 526356d82bd6b69e0c848b570d4944cd4a5872f8bb85eee0fb99124da0f1b8bd
+source_hash: 54cdb8254d7f00fbcd78f8ea4a836556db90f12f21dd606a933adb0ead24f652
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -151,7 +151,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、session 工厂、准备工厂和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不可用描述符和 session 工厂。将版本门控和工厂选择条件保留在适配器内部。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration`、agent-host 视图拒绝的 `ConnectionOptions`（[端点与代理](#endpoints-and-proxy)）和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、session 工厂、准备工厂和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不可用描述符和 session 工厂。将版本门控和工厂选择条件保留在适配器内部。
 
 `Runtime.SessionCapabilityContext` 和 `Runtime.ExecutorCapabilityContext` 会为相应的执行工厂显式请求能力下载 URL 解析和限定范围的产品上传上下文。准备过程绝不会收到这些影响。支持产品工作区创作功能的适配器自行声明 `WorkspaceAuthoring`；通用注册不会授予该能力。
 
@@ -162,8 +162,11 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration, agent.Factory)` | Kind、可用性、版本、`AgentKindCapabilities`、模型配置声明和直接调用工厂。它会重置其他注册项，因此必须首先调用。 |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期；据此派生 `Preparation` 能力 |
 | 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | 可选：针对已认定合格的工作区操作的独立只读工作区准备 |
+| 4 | `RegisterView(kind, connectionOptions, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明，以及声明的 `ConnectionOptions`。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂像 `RegisterExecutor` 一样验证模型配置，并执行[网关规则](#endpoints-and-proxy)。 |
 
 直接调用的 `agent.Factory` 委托给同一个 Executor 实现。
+
+`Runtime.View` 声明 Harness 如何在 agent-host Session 视图中运行，详见[在 agent-host 视图中运行](#run-in-an-agent-host-view)。每个适配器都显式设置它；`View: nil` 表示 agent host 拒绝该 kind，`Registry.ResolveView` 返回包装 `ErrUnsupportedOperation` 的错误。`TestPublicHarnessContractDeclarations` 要求每个声明都包含该字段。
 
 每个 `proto.AgentKindCapabilities` 字段都必须显式设为 `proto.CapabilitySupported` 或 `proto.CapabilityUnsupported`，即使 Harness 不可用也是如此。`proto.CapabilityUnspecified` 无效：零值和省略字段绝不表示 Unsupported。安装探测可以使用 `proto.CapabilityFromBool` 设置单个字段；但不得填充未提及字段或未来字段。可用性通过 `SupportedAgentKind.Available` 单独表示。注册会在更改 registry 之前验证完整声明；线协议会为每个字段携带显式布尔值，因此省略字段和 null 字段均无效。添加新字段时，每个生产声明都必须作出决定。Runtime 使用者应调用 `IsSupported()`，并在原生操作前拒绝不受支持的请求；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致；[Core–Runtime protocol](../../../docs/zh/runtime-protocol.md#capability-declarations) 负责声明的传输方式和冻结方式。
 
@@ -208,7 +211,7 @@ profile 是纯逻辑：它使用现有的公共类型和协议类型，声明受
 
 提供的 `model` 必须是非空字符串，并且显式指定 `model_provider` 时必须提供它。原生所有权连接路径可以省略二者；显式 null 无效。显式为空的声明不接受任何 Provider 或非空原生参数，也不宣称支持 Provider。未知协议格式和重复协议声明会导致注册失败。
 
-声明中的有序 `protocols` 列表是接受协议及默认协议（第一个条目）的唯一来源；它还为 Core 的配置支持描述符提供数据，Core 和 Runtime 通过它拒绝不受支持的组合。适配器通过原生配置直接连接；它们绝不引入模型 API 代理或协议转换器、第二套模型能力 registry，也不会从模型名称推断能力。Claude 的私有 bridge 接收编译后的原生选项，并且只执行结构检查，而不是声明规则的第二份副本。
+声明中的有序 `protocols` 列表是接受协议及默认协议（第一个条目）的唯一来源；它还为 Core 的配置支持描述符提供数据，Core 和 Runtime 通过它拒绝不受支持的组合。适配器通过原生配置和[凭据网关](./model-execution.md#credential-gateway)连接；它们绝不引入自己的模型 API 代理或协议转换器、第二套模型能力 registry，也不会从模型名称推断能力。Claude 的私有 bridge 接收编译后的原生选项，并且只执行结构检查，而不是声明规则的第二份副本。
 
 ## 认定适配器资格 {#qualify-the-adapter}
 
@@ -256,6 +259,84 @@ daemon 的 `clirunner` 为 SDK 会启动原生子进程的适配器提供可选�
 适配器以启动用户的权限无人值守运行原生工具：Codex 使用批准策略 `never` 和完全访问权限；Claude 通过适配器的工具回调，以原生 `default` 权限模式运行，并禁用 SDK sandbox；MiniMax 绕过权限并禁用 sandbox。不要添加权限 profile、bubblewrap 包装器或原生 sandbox 设置；每种 Environment 来源都只有一条执行路径。资源路径属于操作员配置，而不是权限边界。
 
 网络准入遵循 [Restricted network](environments.md#restricted-network)。
+
+## 在 agent-host 视图中运行 {#run-in-an-agent-host-view}
+
+agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness。视图通过[文件访问协议](../../../docs/zh/file-access-protocol.md)在 `/` 呈现沙箱的文件，在 `/.oac` 下呈现 Harness 自己的文件。Harness 未声明为本地的程序通过[进程协议](../../../docs/zh/process-protocol.md)在沙箱中运行。网络只有 loopback，Session 的凭据网关在其上监听。适配器在 `Runtime.View` 中声明其 Harness 所需的内容，agent host 根据该声明和 Session 构建每个视图。支持与否由该声明字段决定：没有 View 的 kind 会以 `ErrUnsupportedOperation` 被拒绝。
+
+### 声明 {#the-declaration}
+
+| 字段 | 声明内容 |
+| --- | --- |
+| `Closure` | 以只读、可执行方式呈现在 `/.oac/<Name>`（`ViewMount.Path`）的主机目录 |
+| `Overlays` | 以只读方式呈现在视图路径上的可信主机文件或目录；`Exec` 使其可执行 |
+| `Masks` | 以空且只读方式呈现的视图路径，设置 `Dir` 时呈现为目录 |
+| `LocalExec` | Harness 进程树在本地执行的每个视图路径 |
+| `Shims` | `/.oac/bin` 上的名称；每个名称在沙箱中运行 Environment 工具 `PATH` 上的同名程序 |
+| `ShimPaths` | 绑定 shim 的视图路径；每个路径在沙箱中运行相同路径 |
+| `ForwardEnv` | 在沙箱中运行的进程保留的 Harness 变量 |
+| `Proxy` | `ViewProxyEnv` 或 `ViewProxyNone` |
+| `Executor` | 在 Session 的视图中准备其 Executor 的 `ViewExecutorFactory` |
+
+`View.Validate` 在不访问主机的情况下检查声明：
+
+- 视图路径和主机路径都是干净的绝对路径；
+- closure 名称是单个路径分量，且不是 `bin`、`home` 和 `run`，这三个由 agent host 用于 shim、Session home 和进程 relay；
+- shim 路径、overlay 和 mask 互不重叠，也不与 `/` 重叠，并且不进入视图自己构建的树：`/.oac`、`/proc` 和 `/dev`（`ViewReserved`）；
+- 每个 `LocalExec` 条目都位于某个 closure 目录或某个 `Exec` overlay 中；
+- shim 名称和 `ForwardEnv` 名称各自唯一，没有 shim 名为 `oac-process-shim`（该名称属于进程 relay），变量名不含 `=`，且 `ForwardEnv` 不指定视图或 broker 设置的变量（[环境](#environment)）；
+- `Proxy` 是两个取值之一，且 `Executor` 非 nil。
+
+`harness.go` 只定义一次视图布局，`sessionview` 据此构建视图。agent host 在构建视图时，用声明检查它自己的 overlay，例如 `/etc/passwd`。
+
+### 可执行文件 {#executables}
+
+只有挂载标志授予执行权限。closure、`Exec` overlay 和 shim 是只读的，也是仅有的可执行挂载；沙箱的文件和 home 都是 noexec。`Launch` 只接受 `LocalExec` 路径作为 `Binary`。动态二进制（例如 `node`）需要把它的 ELF 解释器作为 `Exec` overlay 放在其 `PT_INTERP` 路径上，并且它加载的每个库都要在 closure 中，通过 `LD_LIBRARY_PATH` 找到。任何内容都不从沙箱的文件加载。`viewloader.For` 根据二进制的 ELF header 构建这些内容：解释器所在的主机目录作为 `lib` closure 挂载、解释器 overlay、覆盖 `/etc/ld.so.preload` 和 `/etc/ld.so.cache` 的空 mask，以及 `LD_LIBRARY_PATH` 的值。它无法呈现的布局（例如位于解释器目录之外的库）返回 `ErrUnsupportedOperation`。
+
+### Shim {#shims}
+
+agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在沙箱中运行 `<name>`，每个 `ShimPaths` 条目在沙箱中运行相同路径。按名称运行工具的 Harness 通过包含 `/.oac/bin` 的 `PATH` 找到这些工具。视图的 `/etc/passwd` 为 Session 用户设置登录 shell `/bin/bash` 和 home `/.oac/home`。
+
+### 环境 {#environment}
+
+`Launch` 在 `StartOptions.Env` 中接收完整的 Harness 环境。agent host 自身的环境从不传入，因此视图适配器不从 `os.Environ()` 开始构造。在沙箱中运行的进程获得 broker 的环境：来自 Harness 的 `ForwardEnv` 变量、Environment 固定的沙箱值（`HOME`、`PATH`、`TMPDIR` 和 `LANG`）以及 Environment 的工具环境。broker 是工具环境的唯一归属，视图适配器不向 Harness 传递任何工具环境。
+
+`ForwardEnv` 从不指定视图或 broker 设置的变量：`HOME`、`PATH`、`TMPDIR`、`LANG`、`LD_LIBRARY_PATH`，以及任意大小写的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY` 和 `NO_PROXY`。当 Environment 的工具环境也设置了某个转发变量时，以工具环境的值为准。
+
+### 端点与代理 {#endpoints-and-proxy}
+
+调用工厂之前，agent host 将请求的 `model_provider` 指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header；网关添加声明的凭据和 header。stdio 绑定保持解析结果，并通过声明的 shim 在沙箱中运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器像对待本地 Harness 一样渲染提供商和绑定，从不接触真实凭据。
+
+若适配器的 Harness 从其他 `AgentOptions` key 读取 MCP server、端点、凭据或环境值，适配器在 `Declaration.ConnectionOptions` 中列出这些 key。Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：模型提供商缺失或不是带占位凭据的网关、请求设置了连接选项、请求在 `ViewSession.MCP` 之外携带 MCP，或 HTTP 绑定不是不含凭据的 loopback 端点。
+
+使用 `ViewProxyEnv` 时，`ViewSession.Proxy` 是网关的代理 URL。适配器将 `HTTPS_PROXY` 和 `HTTP_PROXY` 设为该值，将 `NO_PROXY` 设为 `127.0.0.1,localhost`，每个变量都设置大写和小写两种形式。只有在确认 Harness 在本地发出的每个请求都遵循这些变量之后，才声明 `ViewProxyEnv`。忽略这些变量的请求会连接失败，因为视图没有出站路由。
+
+使用 `ViewProxyNone` 时，`ViewSession.Proxy` 为空，视图没有通用代理。准入以 `ErrUnsupportedOperation` 拒绝启用了需要代理的功能的请求。由提供商执行的 Web 工具保持提供商来源。
+
+### Home {#home}
+
+`ViewSession.Home` 是每个 Session 的原生 home。适配器在 `Home.Host` 写入，Harness 在 `Home.View`（`/.oac/home`）看到同一目录，可读写且 noexec。它在 Session 的各个 Executor 之间保留。调用 `Launch` 之前，在其中布置原生目录并写入配置。`Launch` 在不跟随链接的情况下把该目录树交给 Session 用户；此后读取 home 时也不跟随链接。
+
+### 启动 {#launch}
+
+`ViewSession.Launch` 取代 `clirunner.Start`。每次调用构建一个视图并在其中运行 `Binary`，每个 Session 同一时间至多有一个活动视图。`Dir` 是沙箱中的路径，`OwnProcessGroup` 为 true，`Env` 是完整环境。返回的 `clirunner.Process` 遵循[原生进程所有权](#native-process-ownership)：
+
+- Cancel 向视图中的每个进程发送 TERM，并在 `KillTimeout` 后关闭视图。如果 Cancel 发现 Harness 已退出，即使它遗留的进程仍在结束中，也保持其退出结果不变。
+- Harness 退出而仍有其他进程时，除非 Cancel 已发送过 TERM，视图会向它们发送 TERM，并在它们退出或自首次 TERM 起经过 `KillTimeout` 后结束。
+- `Wait` 关闭 stdio 端；当 Cancel 的 TERM 到达运行中的 Harness 且 Harness 随后以 0 退出时，`Wait` 返回 context 错误；`Done` 关闭后，`ExitCode` 报告退出结果。
+
+### 认定视图资格 {#qualify-the-view}
+
+在视图中运行适配器的 Turn、取消和续接，然后逐项认定每个声明条目：
+
+| 条目 | 资格认定 |
+| --- | --- |
+| `Closure`, `Overlays`, `LocalExec` | 每次本地执行都从声明的路径成功。每个动态二进制的解释器 overlay 与其 `PT_INTERP` 一致，`LD_LIBRARY_PATH` 能在 closure 中解析每个库。 |
+| `Masks` | Harness 在被 mask 的路径上读不到沙箱的任何文件。 |
+| `Shims`, `ShimPaths` | Harness 按名称或路径运行的每个工具都在沙箱中运行，其输出、退出状态和信号都能到达 Harness。 |
+| `ForwardEnv` | 在沙箱中运行的进程保留每个声明的变量，且不保留任何其他 Harness 变量。 |
+| `Proxy` | 使用 `ViewProxyEnv` 时，每个本地请求（例如网页抓取、下载和更新检查）都经过代理。使用 `ViewProxyNone` 时，启用需要代理的功能的请求会被拒绝。 |
+| `Home` | 原生历史和配置保存在 `/.oac/home` 下，同一 Session 中后续的 Executor 从中继续。 |
 
 ## 原生参考 {#native-references}
 

@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: a93a477f3de39b2206702995821282404c29ee997ef6b782180d4972bada43f7
+source_hash: a70ea3e004d5b7e2fc48c26296c792a5d888b754a012a7f0c624c3ff597369e7
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -371,7 +371,7 @@ Environment MCP 需要启用的网络。重复的服务器身份会被拒绝。C
 
 ### 有效绑定 {#effective-bindings}
 
-Runtime 会在适配器投影之前，通过 `agent.ResolveMCPBindings` 解析公开 HTTP 声明和已安装 Plugin MCP。每个瞬时绑定都会保留其连接来源、传输、可为 null 的工具允许列表、必需标志、凭据权限以及已安装 stdio 身份。绑定绝不会持久化或记录；重复身份和不可用的选定凭据都会被拒绝。MiniMax 会读取其 Session 私有的原生 runtime 名称注册表，以获取精确的首帧身份，并针对两种传输交叉检查已完成的原生结果；适配器绝不会伪造延迟启动事件或猜测身份。
+Runtime 会在适配器投影之前，通过 `agent.ResolveMCPBindings` 解析公开 HTTP 声明和已安装 Plugin MCP。每个瞬时绑定都会保留其连接来源、传输、可为 null 的工具允许列表、必需标志、凭据权限以及已安装 stdio 身份。绑定绝不会持久化或记录；重复身份和不可用的选定凭据都会被拒绝。MiniMax 会读取其 Session 私有的原生 runtime 名称注册表，以获取精确的首帧身份，并针对两种传输交叉检查已完成的原生结果；适配器绝不会伪造延迟启动事件或猜测身份。在 agent-host 视图中，Session 的[凭据网关](./model-execution.md#credential-gateway)持有每个 HTTP 绑定的 bearer token 和 header，Harness 只收到不含凭据的 loopback URL（[端点与代理](./harness-onboarding.md#endpoints-and-proxy)）。
 
 ### 公开 MCP 连接来源 {#public-mcp-connection-origin}
 

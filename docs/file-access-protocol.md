@@ -1,13 +1,15 @@
-# File access protocol
+---
+title: "File access protocol"
+---
 
 The File access protocol is how a Runtime reads and changes the files of a sandbox. The Sandbox I/O service in the sandbox serves it, and the Runtime is its client. It is a node and handle protocol shaped like the FUSE low-level operations: lookups acquire node references, opens create handles under IDs the client chooses, reads and writes take offsets, directory reads resume at cookies, and locks work against the sandbox's own processes. Phase 1 serves the [Uncached](#uncached-profile) profile only, with no change stream.
 
-[`internal/sandboxfs/protocol.go`](../internal/sandboxfs/protocol.go) is the authored definition: message tags, payload layouts, validators and the `Service` interface. The same package holds the generic client and server. [`apps/sandboxio/internal/fileservice`](../apps/sandboxio/internal/fileservice) is the Linux service. Frames use the shared [framing](sandbox-link-protocol.md#framing), and the Link layer supplies the authenticated attachment of each stream.
+[`internal/sandboxfs/protocol.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxfs/protocol.go) is the authored definition: message tags, payload layouts, validators and the `Service` interface. The same package holds the generic client and server. [`apps/sandboxio/internal/fileservice`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/sandboxio/internal/fileservice) is the Linux service. Frames use the shared [framing](./sandbox-link-protocol.md#framing), and the Link layer supplies the authenticated attachment of each stream.
 
 ## Streams and attachments
 
 - A stream belongs to one attachment, which Link authenticates and hands to the server as a `sandboxfs.Attachment`: its ID, the `ServerInstanceID` the stream was bound to, its lease and the exports it is granted. No request names an attachment, an OS user or a credential.
-- Request IDs follow the [framing](sandbox-link-protocol.md#framing) rule, and a response carries its request's RequestID. Requests on one stream run concurrently, so responses can arrive in any order. The protocol has no events.
+- Request IDs follow the [framing](./sandbox-link-protocol.md#framing) rule, and a response carries its request's RequestID. Requests on one stream run concurrently, so responses can arrive in any order. The protocol has no events.
 - An attachment attaches to one export. Its node references, handles and locks live in the service until it detaches, its lease ends or the service restarts. A new stream of the same attachment in the same incarnation continues with them, after the [succession fence](#stream-succession).
 - A service incarnation is named by `ServerInstanceID`. A request on a stream bound to another incarnation fails with `InstanceChanged`, and nothing is reopened automatically.
 
@@ -28,11 +30,11 @@ Cancelling a call's context returns at once. A call cancelled before its request
 
 To learn what a cancelled request did, interrupt it instead: a call whose context comes from `sandboxfs.WithInterrupt` sends `CancelRequest` when the interrupt channel closes and keeps waiting for the request's own response, so it returns the request's result or the service's failure with its effect. A FUSE frontend uses this for a waiting lock, which may be acquired just before the cancellation arrives.
 
-When the stream fails, every request in flight fails with `Unknown` and `EffectPossible`, and later calls fail with `EffectNone`; `errors.Is(err, sandboxfs.ErrTransport)` matches both. `Client.Done` closes and `Client.Err` returns the cause. To continue, open a new stream for the same attachment with `ExpectedServerInstanceID` set, as the [Sandbox link protocol](sandbox-link-protocol.md) describes. `InstanceChanged` then means every node, handle and lock of the attachment is gone.
+When the stream fails, every request in flight fails with `Unknown` and `EffectPossible`, and later calls fail with `EffectNone`; `errors.Is(err, sandboxfs.ErrTransport)` matches both. `Client.Done` closes and `Client.Err` returns the cause. To continue, open a new stream for the same attachment with `ExpectedServerInstanceID` set, as the [Sandbox link protocol](./sandbox-link-protocol.md) describes. `InstanceChanged` then means every node, handle and lock of the attachment is gone.
 
 ## Implement a service
 
-Implement `sandboxfs.Service`, create one `sandboxfs.NewServer(service)`, and serve every stream with `server.Serve(ctx, stream, attachment, seq)`, where `seq` is the stream's [Link bind sequence](sandbox-link-protocol.md#implement-a-serve-peer). One `Server` serves all of a service's streams, because the [succession fence](#stream-succession) spans them. `Serve`:
+Implement `sandboxfs.Service`, create one `sandboxfs.NewServer(service)`, and serve every stream with `server.Serve(ctx, stream, attachment, seq)`, where `seq` is the stream's [Link bind sequence](./sandbox-link-protocol.md#implement-a-serve-peer). One `Server` serves all of a service's streams, because the [succession fence](#stream-succession) spans them. `Serve`:
 
 - refuses an attachment without an ID, a `ServerInstanceID`, a lease or at least one valid export grant with unique IDs, and returns `sandboxfs.ErrLeaseEnded`, without dispatching anything, when the attachment's lease ended before the stream was admitted;
 - admits one stream per `(ServerInstanceID, AttachmentID)` at a time, in bind order: a successor stream reads its requests at once but hands none to the service, without a deadline, until every earlier stream that handed one over has drained. The superseded `Serve` returns `sandboxfs.ErrSuperseded`, at once when it has handed nothing over, and so does the `Serve` of a stream bound before one already admitted, without dispatching any of its requests;
@@ -57,7 +59,7 @@ A service must:
 
 ### The Linux service
 
-`fileservice.New(root)` serves the absolute directory `root` as the one export `world`, and `Describe` lists `world` only to an attachment granted it. `oac-sandbox-io` passes `/`; the Provider's sandbox setup owns the isolation of everything under it, as the [Sandbox bootstrap](sandbox-bootstrap.md#responsibilities-and-readiness) states, and the service enforces no boundary inside the export. `New` sets the process umask to zero and reports its effective UID and GID as `Identity`. `InstanceID` returns the `ServerInstanceID` to give Link, and `Close` releases every attachment.
+`fileservice.New(root)` serves the absolute directory `root` as the one export `world`, and `Describe` lists `world` only to an attachment granted it. `oac-sandbox-io` passes `/`; the Provider's sandbox setup owns the isolation of everything under it, as the [Sandbox bootstrap](./sandbox-bootstrap.md#responsibilities-and-readiness) states, and the service enforces no boundary inside the export. `New` sets the process umask to zero and reports its effective UID and GID as `Identity`. `InstanceID` returns the `ServerInstanceID` to give Link, and `Close` releases every attachment.
 
 - Each node holds an `O_PATH|O_NOFOLLOW` descriptor. In an attachment a node is one mount ID, device and inode, so hard links share a node while a bind mount and its source stay two. The mount ID comes from `statx` with `STATX_MNT_ID`, or from the `mnt_id` line of `/proc/self/fdinfo/<fd>` on kernels older than 5.8.
 - A lookup opens one component with `openat` and `O_NOFOLLOW` on its parent's descriptor. A symlink, including a proc magic link such as `/proc/<pid>/cwd`, is a node of its own and is never traversed: `Lookup` and `Readlink` return the link itself, a directory operation on it fails with `Errno` `NotDirectory`, and `Open` fails with `SymlinkLoop`.
@@ -157,7 +159,7 @@ SetLock             Handle u64, Kind enum, Owner u64, Lock, Wait bool; response 
 CancelRequest       Target u64; response (no fields)
 ```
 
-[`testdata`](../internal/sandboxfs/testdata) holds annotated golden frames of `Describe`, `Walk`, `Create`, an append `Write`, a short `Write`, `ReadDir` with a cookie, `Rename` and a failure.
+[`testdata`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/sandboxfs/testdata) holds annotated golden frames of `Describe`, `Walk`, `Create`, an append `Write`, a short `Write`, `ReadDir` with a cookie, `Rename` and a failure.
 
 ### Shared types
 
@@ -179,7 +181,7 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 
 ### Describe and capabilities
 
-`DescribeResponse` carries the incarnation, the identity, the capabilities and the declared exports the attachment is granted: 0 to 64 unique `ExportID`s, with the grammar of Link's [export grants](sandbox-link-protocol.md#opening-a-stream). `Identity` is the effective UID and GID the service runs as, which own the files it creates; it is informational, and no request carries or selects an identity.
+`DescribeResponse` carries the incarnation, the identity, the capabilities and the declared exports the attachment is granted: 0 to 64 unique `ExportID`s, with the grammar of Link's [export grants](./sandbox-link-protocol.md#opening-a-stream). `Identity` is the effective UID and GID the service runs as, which own the files it creates; it is informational, and no request carries or selects an identity.
 
 `Capabilities` encodes every field, in this order:
 
@@ -209,7 +211,7 @@ A writable service, one without `ReadOnly`, declares `AtomicAppend`, `AtomicRena
 
 ### Attach
 
-`Attach` selects one export by `ExportID`; it never takes a server path. The export must be one that the attachment's Link binding grants in `Attachment.Exports` (see the [Sandbox link protocol](sandbox-link-protocol.md)), and a read-only grant allows only `ReadOnly` attaches; otherwise `Attach` fails with `Unauthorized`. A granted export the service does not declare fails with `InvalidArgument`, as does a second `Attach` before `Detach`. Every request that changes files on a read-only attachment fails with `Errno` `ReadOnlyFilesystem`: `SetAttr`, `Create`, `Write`, `Mkdir`, `Unlink`, `Rmdir`, `Rename`, `Link`, `Symlink`, and `Open` for writing or with `OpenTruncate`.
+`Attach` selects one export by `ExportID`; it never takes a server path. The export must be one that the attachment's Link binding grants in `Attachment.Exports` (see the [Sandbox link protocol](./sandbox-link-protocol.md)), and a read-only grant allows only `ReadOnly` attaches; otherwise `Attach` fails with `Unauthorized`. A granted export the service does not declare fails with `InvalidArgument`, as does a second `Attach` before `Detach`. Every request that changes files on a read-only attachment fails with `Errno` `ReadOnlyFilesystem`: `SetAttr`, `Create`, `Write`, `Mkdir`, `Unlink`, `Rmdir`, `Rename`, `Link`, `Symlink`, and `Open` for writing or with `OpenTruncate`.
 
 ### Names and paths
 

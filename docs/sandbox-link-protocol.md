@@ -1,8 +1,10 @@
-# Sandbox link protocol
+---
+title: "Sandbox link protocol"
+---
 
 The Link protocol connects the two ends of sandbox I/O through a relay. The Sandbox I/O service runs inside a sandbox and serves it: it is the serve peer. The agent-host Runtime runs a Harness outside the sandbox and uses the sandbox through that service: it is the attach peer. Each peer authenticates its own link to the relay. The relay authorizes every service stream the attach peer opens, binds it to the current serve peer of the resource and then copies bytes between the two streams without reading them. Service frames never carry a credential or a grant.
 
-The authored definition is [`internal/sandboxlink/protocol.go`](../internal/sandboxlink/protocol.go). The same package holds the serve and attach peer libraries; the relay core is [`internal/sandboxlink/relay`](../internal/sandboxlink/relay/relay.go). The service's startup input is the [Sandbox bootstrap](sandbox-bootstrap.md). This document also owns the [frame layout](#framing) every sandbox I/O protocol uses.
+The authored definition is [`internal/sandboxlink/protocol.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxlink/protocol.go). The same package holds the serve and attach peer libraries; the relay core is [`internal/sandboxlink/relay`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxlink/relay/relay.go). The service's startup input is the [Sandbox bootstrap](./sandbox-bootstrap.md). This document also owns the [frame layout](#framing) every sandbox I/O protocol uses.
 
 ## How a link works
 
@@ -18,7 +20,7 @@ A stream ends in one of two ways, and the relay keeps them apart end to end. An 
 
 The Sandbox I/O service runs `sandboxlink.Serve` with a `ServeConfig`:
 
-- `URL`, `Credential` and `Resource` come from the [bootstrap input](sandbox-bootstrap.md). The credential identifies the service, so the Hello carries no peer ID. `ServerInstanceID` is a new ID whenever the service starts without its operation and handle registries.
+- `URL`, `Credential` and `Resource` come from the [bootstrap input](./sandbox-bootstrap.md). The credential identifies the service, so the Hello carries no peer ID. `ServerInstanceID` is a new ID whenever the service starts without its operation and handle registries.
 - `Services` holds one handler per offered service and version. A handler receives the `Bind`, which carries the authorized binding including a File stream's exports, a bind sequence and the stream. It owns the stream and returns when it is done with it. Its context ends when the attachment closes or `Serve` returns. Bind order is the order in which `Serve` assigns bind sequences, under the lock that tracks attachments and before it answers `Bound`; concurrent `Bound` and `Opened` replies can reach the opener in another order, and a handler that runs late keeps its stream's place. The sequence belongs to one `Serve` call and survives reconnects; it increases strictly but has gaps, since all attachments share it, and a service may rely on it to fence succession.
 - `Serve` reconnects with jittered exponential backoff, sending the same `ServerInstanceID`, whenever the link drops. It returns when its context ends or when the relay refuses the Hello with a failure that is not [retryable](#failures), for example `AuthenticationFailed` after the credential is withdrawn or `StaleGeneration` after a newer sandbox took over the resource. Before returning it cancels every handler's context and waits for the handlers.
 - `OnAttachmentLost` fires when an attachment's last open stream ends while the attachment is still open, such as when the link drops. `OnAttachmentRestored` fires when a stream binds a lost attachment again. `OnAttachmentClosed` fires with the reason when the relay reports `AttachmentClosed`. Losing a socket is not closing an attachment: the service keeps an attachment's state until it is closed.
@@ -47,7 +49,7 @@ Tests use `sandboxlinktest.NewAuthority`, which holds static credentials and gra
 
 ## Framing
 
-Every sandbox I/O protocol, including Link, frames its messages the same way. [`internal/sandboxwire`](../internal/sandboxwire/frame.go) implements the frame and the primitives. Each protocol's `protocol.go` owns its tags, payload layouts and validators.
+Every sandbox I/O protocol, including Link, frames its messages the same way. [`internal/sandboxwire`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxwire/frame.go) implements the frame and the primitives. Each protocol's `protocol.go` owns its tags, payload layouts and validators.
 
 A frame is a 16-byte header followed by the payload. Integers are big-endian.
 
@@ -190,11 +192,11 @@ AttachmentClosed
   Reason            enum           // CloseRequested = 1, CloseLeaseExpired = 2, CloseRevoked = 3, CloseStaleGeneration = 4
 ```
 
-[`testdata/link_v1.hex`](../internal/sandboxlink/testdata/link_v1.hex) holds annotated golden frames of these messages.
+[`testdata/link_v1.hex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxlink/testdata/link_v1.hex) holds annotated golden frames of these messages.
 
 ## Handshake
 
-1. The peer dials the relay's URL: `wss://`, or `ws://` only when the host is `localhost` or a loopback address. The URL carries no user, query or fragment, and never a credential. `sandboxlink.CheckRelayURL` applies this rule for both peers and the [bootstrap input](sandbox-bootstrap.md) and refuses any other URL with `sandboxlink.ErrRelayURL`. Over `wss://`, TLS authenticates the relay.
+1. The peer dials the relay's URL: `wss://`, or `ws://` only when the host is `localhost` or a loopback address. The URL carries no user, query or fragment, and never a credential. `sandboxlink.CheckRelayURL` applies this rule for both peers and the [bootstrap input](./sandbox-bootstrap.md) and refuses any other URL with `sandboxlink.ErrRelayURL`. Over `wss://`, TLS authenticates the relay.
 2. The peer starts yamux and opens the control stream.
 3. It sends a Hello as the first request of the control stream, with request ID 1: `ServeHello` from the Sandbox I/O service, `AttachHello` from a Runtime. Credentials travel only in the Hello.
 4. The relay authenticates the peer with its Authority and answers `HelloAccepted`, or a failure after which the link ends. A Hello of another version is answered `VersionMismatch` without reading past its version. When a revocation lands while the Authority decides a serve Hello, the relay asks again, so a withdrawn credential never installs a serve peer.
@@ -220,8 +222,8 @@ An attachment's binding identity is its `AttachmentID`, `Resource`, `SessionID`,
 
 `Bind` carries the authorized binding and never the grant or a credential:
 
-- For a File stream, `Exports` lists 1 to 64 exports the stream may use, each by ID and read-write or `ReadOnly`. An export ID is 1 to 64 lowercase letters, digits, `_` and `-`, and IDs in a list are distinct. Process and Network binds carry no `Exports`. The [Sandbox bootstrap](sandbox-bootstrap.md#responsibilities-and-readiness) states which exports the File service serves.
-- For a Network stream, `Egress` lists the destinations the stream may reach: an address inside a rule's prefix on a port from `PortFirst` to `PortLast`. An empty list denies everything. Each prefix has its host bits zero, `1 ≤ PortFirst ≤ PortLast`, and no rule appears twice. File and Process binds carry no `Egress`. The [Network protocol](sandbox-network-protocol.md#egress-check) states how the service applies it.
+- For a File stream, `Exports` lists 1 to 64 exports the stream may use, each by ID and read-write or `ReadOnly`. An export ID is 1 to 64 lowercase letters, digits, `_` and `-`, and IDs in a list are distinct. Process and Network binds carry no `Exports`. The [Sandbox bootstrap](./sandbox-bootstrap.md#responsibilities-and-readiness) states which exports the File service serves.
+- For a Network stream, `Egress` lists the destinations the stream may reach: an address inside a rule's prefix on a port from `PortFirst` to `PortLast`. An empty list denies everything. Each prefix has its host bits zero, `1 ≤ PortFirst ≤ PortLast`, and no rule appears twice. File and Process binds carry no `Egress`. The [Network protocol](./sandbox-network-protocol.md#egress-check) states how the service applies it.
 
 The exports and egress of a stream are fixed when it opens; a renewal changes only the lease.
 

@@ -24,7 +24,7 @@ const favicon = `data:image/svg+xml,${encodeURIComponent(logoSvg.replace('curren
 const docsNav = [
   { text: 'Docs', link: '/docs/getting-started/', activeMatch: '^/docs/(getting-started|examples|configuration|web)' },
   { text: 'API', link: '/docs/api/public-agent-api', activeMatch: '^/(docs/api|contracts)/' },
-  { text: 'Architecture', link: '/docs/architecture', activeMatch: '^/docs/(architecture|concepts|runtime|sandbox|development)' },
+  { text: 'Architecture', link: '/docs/architecture', activeMatch: '^/docs/(architecture|concepts|runtime|sandbox|file-access|process|development)' },
 ]
 
 export default defineConfig({
