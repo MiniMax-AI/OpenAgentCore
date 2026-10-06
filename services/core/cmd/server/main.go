@@ -409,7 +409,7 @@ func run() error {
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    sessionStore,
 		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
-		Admin: executionStore, AdminRuntimeTargets: sessionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
+		Admin: sessionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 	}
 	if worker != nil {

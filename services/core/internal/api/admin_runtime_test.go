@@ -39,7 +39,7 @@ func adminRuntimeFixture(t *testing.T, catalog []projects.Project, targets []ses
 		return projects.Page{Data: catalog}, nil
 	}
 	management := &adminRuntimeTargets{page: sessions.AdminRuntimeTargetPage{Data: targets, HasMore: true}}
-	fakes.adminRuntimeTargets.listAdminRuntimeTargets = management.ListAdminRuntimeTargets
+	fakes.admin.listAdminRuntimeTargets = management.ListAdminRuntimeTargets
 	observeWith(service)(&deps, fakes)
 	return newTestHandler(t, deps), management
 }
