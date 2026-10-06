@@ -38,7 +38,7 @@ type runningView interface {
 	Wait() (sessionview.Exit, error)
 	Close() error
 	Relay() *os.File
-	Spawn(path string, args, env []string, dir string, stdio [3]*os.File) (*sessionview.Spawned, error)
+	Spawn(ctx context.Context, path string, args, env []string, dir string, stdio [3]*os.File) (*sessionview.Spawned, error)
 }
 
 // viewWorld is the part of *worldfs.World the Session watches.
@@ -116,11 +116,14 @@ func (s *session) spawn(opts clirunner.StartOptions) (*clirunner.Process, error)
 	if v == nil {
 		return nil, &Error{Kind: ErrLaunch, Op: "spawn", Err: agent.ErrNoLiveView}
 	}
+	if opts.Parent == nil {
+		opts.Parent = context.Background()
+	}
 	ends, err := newStdio(opts.NeedStdin)
 	if err != nil {
 		return nil, &Error{Kind: ErrLaunch, Op: "stdio", Err: err}
 	}
-	p, err := v.Spawn(opts.Binary, append([]string{opts.Binary}, opts.Args...), opts.Env, opts.Dir, ends.child)
+	p, err := v.Spawn(opts.Parent, opts.Binary, append([]string{opts.Binary}, opts.Args...), opts.Env, opts.Dir, ends.child)
 	ends.closeChild()
 	var process *clirunner.Process
 	if err == nil {
@@ -132,7 +135,7 @@ func (s *session) spawn(opts clirunner.StartOptions) (*clirunner.Process, error)
 	if err != nil {
 		ends.closeParent()
 		if errors.Is(err, sessionview.ErrExited) || errors.Is(err, sessionview.ErrClosed) || errors.Is(err, sessionview.ErrLauncher) {
-			err = fmt.Errorf("%w: %w", agent.ErrViewEnded, err)
+			err = fmt.Errorf("%w: %w", agent.ErrNoLiveView, err)
 		}
 		return nil, &Error{Kind: ErrLaunch, Op: "spawn", Err: err}
 	}

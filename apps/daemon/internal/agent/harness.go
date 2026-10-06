@@ -154,10 +154,9 @@ var ErrViewHandoff = errors.New("agent: view request carries a connection outsid
 var (
 	// ErrNotLocalExec is a Launch or Spawn whose Binary is not a LocalExec path.
 	ErrNotLocalExec = errors.New("agent: binary is not a LocalExec path")
-	// ErrNoLiveView is a Spawn while the Session has no running view.
+	// ErrNoLiveView is a Spawn while no view runs its Harness: none was
+	// launched yet, or its Harness has exited or its view has ended.
 	ErrNoLiveView = errors.New("agent: the Session has no live view")
-	// ErrViewEnded is a Spawn after the view's Harness exited or its view closed.
-	ErrViewEnded = errors.New("agent: the view has ended")
 )
 
 // View declares how the Harness runs in an agent-host Session view. View
@@ -265,11 +264,13 @@ type ViewSession struct {
 	// process runs as the Harness does: as the same user, in the same
 	// namespaces, view cgroup, world and network, with no capabilities,
 	// no_new_privs and the same seccomp filter, in a process group of its own.
-	// Cancel sends TERM to that group and kills it after KillTimeout, and the
-	// group is killed once the process exits. The view's end ends it too: a
-	// Cancel of the Harness reaches it, and when the Harness exits it is one
-	// of the processes that remain. Spawn returns ErrNotLocalExec,
-	// ErrNoLiveView or ErrViewEnded.
+	// Parent bounds the wait for the start. Cancel sends TERM to that group
+	// and kills it after KillTimeout; once the process has exited, Cancel
+	// delivers nothing and what it left runs on as other processes in the view
+	// do. The view's end ends them all: a Cancel of the Harness reaches them,
+	// and when the Harness exits they are among the processes that remain. A
+	// view that ends after Spawn returned shows in the process's Wait. Spawn
+	// returns ErrNotLocalExec or ErrNoLiveView.
 	Spawn func(clirunner.StartOptions) (*clirunner.Process, error)
 }
 

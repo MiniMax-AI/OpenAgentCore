@@ -143,7 +143,7 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	}
 }
 
-// TestViewDescendantsKeepTheGrace checks that a helper still cleaning up when the Harness exits gets TERM and finishes within the grace.
+// TestViewDescendantsKeepTheGrace checks that helpers still cleaning up when their parent exits, the Harness or a spawned process, get TERM and finish within the grace.
 func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
@@ -155,8 +155,25 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	defer v.Close()
-	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
-		t.Fatalf("helper said %q, %v", line, err)
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	r, wr, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	spawned, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=cleanup", "OAC_VIEW_TOKEN=-spawned"}, "/data", [3]*os.File{null, wr, os.Stderr})
+	wr.Close()
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	for _, stdout := range []io.Reader{v.Stdout(), r} {
+		if line, err := bufio.NewReader(stdout).ReadString('\n'); err != nil || line != "ready\n" {
+			t.Fatalf("helper said %q, %v", line, err)
+		}
 	}
 	started := time.Now()
 	if err := v.Signal(syscall.SIGTERM); err != nil {
@@ -178,12 +195,17 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	if elapsed := time.Since(started); elapsed >= spec.Process.Grace {
 		t.Errorf("view ended after %v, want once the helper exited", elapsed)
 	}
-	if got, err := os.ReadFile(filepath.Join(f.world, "data", "cleaned")); err != nil || string(got) != "done" {
-		t.Errorf("helper cleanup = %q, %v; want it finished", got, err)
+	for _, name := range []string{"cleaned", "cleaned-spawned"} {
+		if got, err := os.ReadFile(filepath.Join(f.world, "data", name)); err != nil || string(got) != "done" {
+			t.Errorf("helper cleanup %s = %q, %v; want it finished", name, got, err)
+		}
+	}
+	if code, err := spawned.Wait(); err != nil || code != 7 {
+		t.Errorf("spawned Wait = %d, %v; want exit code 7", code, err)
 	}
 }
 
-// TestSpawnRunsInTheView checks that a spawned process runs as the process's user, unprivileged and in the view's cgroup, that its output and exit come back, and that the view's end ends it.
+// TestSpawnRunsInTheView checks that a spawned process runs as the process's user, unprivileged and in the view's cgroup, that its output and exit come back, that its handle reaches nothing once it has exited, that a command of any size either starts or fails alone, and that the view's end ends it.
 func TestSpawnRunsInTheView(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
@@ -204,7 +226,7 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	token := fmt.Sprintf("oac-spawned-%d", time.Now().UnixNano())
 	spawn := func(mode string, stdout *os.File) *Spawned {
 		t.Helper()
-		s, err := v.Spawn("/.oac/harness/harness", []string{"harness", token}, []string{helperEnv + "=" + mode}, "/data", [3]*os.File{null, stdout, stdout})
+		s, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness", token}, []string{helperEnv + "=" + mode}, "/data", [3]*os.File{null, stdout, stdout})
 		if err != nil {
 			t.Fatalf("Spawn %s: %v", mode, err)
 		}
@@ -233,6 +255,25 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	if n := processesWith(t, token); n != 1 {
 		t.Fatalf("%d spawned processes running, want 1", n)
 	}
+	if err := report.Signal(syscall.SIGKILL); !errors.Is(err, ErrExited) {
+		t.Errorf("Signal after the spawned process exited = %v, want ErrExited", err)
+	}
+	if err := sleeper.Signal(0); err != nil {
+		t.Errorf("Signal to the running spawned process = %v", err)
+	}
+	// One argument above the control socket's packet size starts; one above exec's limit fails alone.
+	for size, want := range map[int]error{100 << 10: nil, 200 << 10: ErrExec} {
+		s, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness", strings.Repeat("x", size)}, []string{helperEnv + "=noop"}, "/data", [3]*os.File{null, null, null})
+		if err == nil {
+			_, err = s.Wait()
+		}
+		if !errors.Is(err, want) {
+			t.Errorf("Spawn with a %d byte argument = %v, want %v", size, err, want)
+		}
+	}
+	if err := v.Signal(0); err != nil || processesWith(t, token) != 1 {
+		t.Fatalf("after the spawns, the view's Signal = %v and the sleeper runs %d times; want both running", err, processesWith(t, token))
+	}
 	if err := v.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -241,6 +282,55 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	}
 	if n := processesWith(t, token); n != 0 {
 		t.Errorf("%d spawned processes survived the view", n)
+	}
+}
+
+// TestBlockedSpawnBlocksNothingElse checks that a spawn blocked on the world leaves the view's signals, its own context, the process's exit and the teardown free.
+func TestBlockedSpawnBlocksNothingElse(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	mkdir(t, filepath.Join(f.world, "data", "stall"))
+	w := &stallWorld{loopbackWorld: loopbackWorld{dir: f.world}, name: "stall", stalled: make(chan struct{}), release: make(chan struct{})}
+	spec := f.spec(&w.loopbackWorld, "wait", "OAC_VIEW_TOKEN=oac-unused")
+	spec.World = w.serve
+	v, err := Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer v.Close()
+	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("harness said %q, %v", line, err)
+	}
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	spawned := make(chan error, 1)
+	go func() {
+		_, err := v.Spawn(ctx, "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=noop"}, "/data/stall", [3]*os.File{null, null, null})
+		spawned <- err
+	}()
+	select {
+	case <-w.stalled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the spawn never looked up its directory in the world")
+	}
+	if err := v.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("Signal while a spawn blocks: %v", err)
+	}
+	cancel()
+	select {
+	case err := <-spawned:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("Spawn = %v, want context.Canceled", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Spawn did not return after its context ended")
+	}
+	if exit, err := v.Wait(); err != nil || exit != (Exit{Code: 7}) {
+		t.Fatalf("Wait = %+v, %v; want exit code 7", exit, err)
 	}
 }
 
@@ -388,7 +478,7 @@ func TestRemoveCgroupKeepsItPastTheDeadline(t *testing.T) {
 func TestCancelledStartStopsTheWorld(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
-	w := &stallWorld{loopbackWorld: loopbackWorld{dir: f.world}, stalled: make(chan struct{}), release: make(chan struct{})}
+	w := &stallWorld{loopbackWorld: loopbackWorld{dir: f.world}, name: "proc", stalled: make(chan struct{}), release: make(chan struct{})}
 	spec := f.spec(&w.loopbackWorld, "noop")
 	spec.World = w.serve
 	ctx, cancel := context.WithCancel(context.Background())
@@ -670,10 +760,11 @@ func (n *hangNode) Write(context.Context, gofs.FileHandle, []byte, int64) (uint3
 	return 0, syscall.EIO
 }
 
-// stallWorld is a loopbackWorld that answers no lookup of proc until Stop.
+// stallWorld is a loopbackWorld that answers no lookup of name until Stop.
 type stallWorld struct {
 	loopbackWorld
-	stalled, release chan struct{} // stalled closes at the first lookup of proc
+	name             string
+	stalled, release chan struct{} // stalled closes at the first lookup of name
 	stallOnce        sync.Once
 }
 
@@ -683,7 +774,7 @@ func (w *stallWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (W
 		return nil, Presentation{}, err
 	}
 	root.(*gofs.LoopbackNode).RootData.NewNode = func(r *gofs.LoopbackRoot, _ *gofs.Inode, name string, _ *syscall.Stat_t) gofs.InodeEmbedder {
-		if name == "proc" {
+		if name == w.name {
 			w.stallOnce.Do(func() { close(w.stalled) })
 			<-w.release
 		}
@@ -786,7 +877,7 @@ func runHelper(mode string) int {
 		sigs := make(chan os.Signal, 1)
 		signal.Notify(sigs, syscall.SIGTERM)
 		child := exec.Command("/.oac/harness/harness")
-		child.Env = []string{helperEnv + "=slow-term"}
+		child.Env = []string{helperEnv + "=slow-term", "OAC_VIEW_TOKEN=" + os.Getenv("OAC_VIEW_TOKEN")}
 		child.Stdout = os.Stdout
 		if err := child.Start(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -802,7 +893,7 @@ func runHelper(mode string) int {
 		<-sigs
 		signal.Reset(syscall.SIGTERM)
 		time.Sleep(300 * time.Millisecond)
-		if err := os.WriteFile("/data/cleaned", []byte("done"), 0o644); err != nil {
+		if err := os.WriteFile("/data/cleaned"+os.Getenv("OAC_VIEW_TOKEN"), []byte("done"), 0o644); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 1
 		}

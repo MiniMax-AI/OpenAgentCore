@@ -90,6 +90,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 	copyExecutable(t, filepath.Join(closure, "harness"))
+	executors := make(chan *testExecutor, 1)
 	register(reg, "test", &agent.View{
 		Closure:   []agent.ViewMount{{Name: "harness", HostDir: closure}},
 		Masks:     []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
@@ -101,8 +102,13 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			return &testExecutor{session: s, dir: req.LocalEnvironment.WorkspaceRoot,
-				env: []string{harnessEnv + "=1", modelEnv + "=" + provider.BaseURL, caEnv + "=" + cfg.CADir}}, nil
+			e := &testExecutor{session: s, dir: req.LocalEnvironment.WorkspaceRoot,
+				env: []string{harnessEnv + "=1", modelEnv + "=" + provider.BaseURL, caEnv + "=" + cfg.CADir}}
+			select {
+			case executors <- e:
+			default:
+			}
+			return e, nil
 		},
 	})
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
@@ -131,6 +137,11 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		}
 		if r.Exit != "" {
 			t.Errorf("Harness: %s; stderr %s", r.Exit, r.Stderr)
+		}
+		// The Turn waited for its Harness, so no view runs.
+		e := <-executors
+		if _, err := e.session.Spawn(clirunner.StartOptions{Binary: harnessPath, Dir: e.dir, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNoLiveView) {
+			t.Errorf("Spawn after the Harness exited = %v, want ErrNoLiveView", err)
 		}
 		select {
 		case ok := <-keyed:

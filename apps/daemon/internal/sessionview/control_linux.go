@@ -55,22 +55,23 @@ const (
 	msgProceed                     // daemon: the world serves and the network is set up; carries the mount targets
 	msgStarted                     // launcher: the process runs
 	msgFailed                      // launcher: construction failed
-	msgExited                      // launcher: the process, or the spawned process Pid, ended
-	msgSignal                      // daemon: signal the process, or the spawned process Pid
+	msgExited                      // launcher: the process, or the spawned process ID, ended
+	msgSignal                      // daemon: signal the process, or the spawned process Spawn
 	msgSignaled                    // launcher: whether msgSignal reached it
-	msgSpawn                       // daemon: start Command as another process; carries its stdin, stdout and stderr
+	msgSpawn                       // daemon: start another process; carries a pipe with its command, then its stdin, stdout and stderr
 	msgSpawned                     // launcher: the spawned process's Pid, or why none started
 )
 
 type message struct {
 	Kind      msgKind
+	ID        uint64 // pairs a reply with its request; a spawn's ID also names the process it started, and 0 names the process
+	Spawn     uint64 // the ID of the spawned process msgSignal signals, or 0
 	Pid       int
 	Signal    syscall.Signal
 	Delivered bool
 	Exit      Exit
 	Fail      failure
 	Targets   map[string]string // each mountpoint's view path to the path the world presents it at
-	Command   command
 }
 
 // failure carries a launcher *Error across the control socket.
@@ -154,7 +155,7 @@ func (c *control) send(m message, fds ...int) error {
 // recv returns the next message and the files it carries. It returns io.EOF once the peer has closed its end.
 func (c *control) recv() (message, []*os.File, error) {
 	buf := make([]byte, 64<<10)
-	oob := make([]byte, unix.CmsgSpace(3*4))
+	oob := make([]byte, unix.CmsgSpace(4*4))
 	n, oobn, flags, _, err := c.conn.ReadMsgUnix(buf, oob)
 	if err != nil {
 		return message{}, nil, err
@@ -177,7 +178,7 @@ func (c *control) recv() (message, []*os.File, error) {
 	return m, files, nil
 }
 
-// interrupt shuts the daemon's end down in both directions, so that a pending recv returns io.EOF and every later send fails.
+// interrupt shuts the socket down in both directions, whoever else holds it, so that a pending recv at either end returns io.EOF and every later send fails.
 func (c *control) interrupt() {
 	c.conn.CloseRead()
 	c.conn.CloseWrite()

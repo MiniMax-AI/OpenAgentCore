@@ -55,7 +55,8 @@ type View struct {
 	waitErr    error
 	cleanupErr error // set before done closes
 	requestMu  sync.Mutex
-	replies    chan reply
+	lastID     uint64
+	requests   map[uint64]chan reply // by ID; nil once the launcher stopped answering
 	exited     atomic.Bool
 	closing    atomic.Bool
 	closeOnce  sync.Once
@@ -72,7 +73,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	if err := Probe(); err != nil {
 		return nil, err
 	}
-	v := &View{done: make(chan struct{}), replies: make(chan reply, 1)}
+	v := &View{done: make(chan struct{}), requests: map[uint64]chan reply{}}
 	if err := v.launch(&spec); err != nil {
 		return nil, v.abort(err)
 	}
@@ -401,7 +402,7 @@ func (v *View) watch() {
 	defer close(v.done)
 	var exit *Exit
 	var failed error
-	spawned := map[int]*Spawned{}
+	spawned := map[uint64]*Spawned{}
 	for {
 		m, files, err := v.ctl.recv()
 		closeFiles(files)
@@ -413,28 +414,37 @@ func (v *View) watch() {
 		}
 		switch m.Kind {
 		case msgExited:
-			if s := spawned[m.Pid]; s != nil {
-				delete(spawned, m.Pid)
+			if m.ID == 0 {
+				exit = &m.Exit
+				v.exited.Store(true)
+			} else if s := spawned[m.ID]; s != nil {
+				delete(spawned, m.ID)
 				s.exit = m.Exit
 				close(s.done)
-				break
 			}
-			exit = &m.Exit
-			v.exited.Store(true)
-		case msgSignaled:
-			v.replies <- reply{message: m}
-		case msgSpawned:
+		case msgSignaled, msgSpawned:
 			r := reply{message: m}
-			if m.Pid != 0 {
+			if m.Kind == msgSpawned && m.Pid != 0 {
 				// Registered before the next message, which may report its exit.
-				r.spawned = &Spawned{v: v, pid: m.Pid, done: make(chan struct{})}
-				spawned[m.Pid] = r.spawned
+				r.spawned = &Spawned{v: v, id: m.ID, done: make(chan struct{})}
+				spawned[m.ID] = r.spawned
 			}
-			v.replies <- r
+			v.requestMu.Lock()
+			if replies := v.requests[m.ID]; replies != nil {
+				delete(v.requests, m.ID)
+				replies <- r
+			}
+			v.requestMu.Unlock()
 		case msgFailed:
 			failed = m.Fail.err()
 		}
 	}
+	v.requestMu.Lock()
+	for _, replies := range v.requests {
+		close(replies)
+	}
+	v.requests = nil
+	v.requestMu.Unlock()
 	werr, terr := v.teardown()
 	for _, s := range spawned {
 		s.err = ErrClosed
@@ -472,40 +482,64 @@ func (v *View) Signal(sig syscall.Signal) error {
 	if v.exited.Load() {
 		return errSignalExited
 	}
-	r, err := v.request(message{Kind: msgSignal, Signal: sig})
+	r, err := v.request(context.Background(), message{Kind: msgSignal, Signal: sig})
 	if (err == ErrClosed && v.exited.Load()) || (err == nil && !r.Delivered) {
 		return errSignalExited
 	}
 	return err
 }
 
-// request sends m with the descriptors of files and returns the launcher's reply, or ErrClosed once the view has ended. The launcher answers requests in order, one at a time.
-func (v *View) request(m message, files ...*os.File) (reply, error) {
+// request sends m with the descriptors of files under a new ID and returns the launcher's reply to it, or ErrClosed once the launcher stopped answering. When ctx ends first, it returns ctx's error and closes the process a late spawn reply brings.
+func (v *View) request(ctx context.Context, m message, files ...*os.File) (reply, error) {
+	replies := make(chan reply, 1)
 	v.requestMu.Lock()
-	defer v.requestMu.Unlock()
-	select {
-	case <-v.done:
+	if v.requests == nil {
+		v.requestMu.Unlock()
 		return reply{}, ErrClosed
-	default:
 	}
+	v.lastID++
+	m.ID = v.lastID
+	v.requests[m.ID] = replies
+	v.requestMu.Unlock()
 	fds := make([]int, len(files))
 	for i, f := range files {
 		fds[i] = int(f.Fd())
 	}
 	if err := v.ctl.send(m, fds...); err != nil {
+		v.requestMu.Lock()
+		delete(v.requests, m.ID)
+		v.requestMu.Unlock()
 		return reply{}, &Error{Kind: ErrLauncher, Op: "request", Err: err}
 	}
 	select {
-	case r := <-v.replies:
+	case r, ok := <-replies:
+		if !ok {
+			return reply{}, ErrClosed
+		}
 		return r, nil
-	case <-v.done:
-		return reply{}, ErrClosed
+	case <-ctx.Done():
+		go func() {
+			if r := <-replies; r.spawned != nil {
+				r.spawned.Close()
+			}
+		}()
+		return reply{}, ctx.Err()
 	}
 }
 
-// Spawn starts path with args, env and dir as another process in the view while the view's process runs, with stdio as its stdin, stdout and stderr; the caller keeps its files. The package documentation says how a spawned process runs and ends. Spawn returns ErrExited once the view's process has exited, ErrClosed once the view has ended, ErrLauncher when the launcher is lost and ErrExec when path did not start.
-func (v *View) Spawn(path string, args, env []string, dir string, stdio [3]*os.File) (*Spawned, error) {
-	r, err := v.request(message{Kind: msgSpawn, Command: command{Path: path, Args: args, Env: env, Dir: dir}}, stdio[:]...)
+// Spawn starts path with args, env and dir as another process in the view while the view's process runs, with stdio as its stdin, stdout and stderr; the caller keeps its files. The package documentation says how a spawned process runs and ends. ctx bounds the wait for the start: once it ends, Spawn returns its error, and a process that starts after all is killed. Spawn returns ErrExited once the view's process has exited, ErrClosed once the view has ended, ErrLauncher when the launcher is lost and ErrExec when path did not start.
+func (v *View) Spawn(ctx context.Context, path string, args, env []string, dir string, stdio [3]*os.File) (*Spawned, error) {
+	cmdR, cmdW, err := os.Pipe()
+	if err != nil {
+		return nil, &Error{Kind: ErrLauncher, Op: "pipe", Err: err}
+	}
+	// The command travels over a pipe, as the spec does, so its size is exec's to bound. A write the launcher never reads fails once the launcher's end closes.
+	go func() {
+		_ = gob.NewEncoder(cmdW).Encode(command{Path: path, Args: args, Env: env, Dir: dir})
+		cmdW.Close()
+	}()
+	r, err := v.request(ctx, message{Kind: msgSpawn}, cmdR, stdio[0], stdio[1], stdio[2])
+	cmdR.Close()
 	switch {
 	case err != nil:
 		return nil, err
@@ -518,7 +552,7 @@ func (v *View) Spawn(path string, args, env []string, dir string, stdio [3]*os.F
 // Spawned is a process that Spawn started. It is a clirunner.Handle.
 type Spawned struct {
 	v    *View
-	pid  int
+	id   uint64
 	done chan struct{} // closed once it has been reaped or the view has ended
 	exit Exit
 	err  error
@@ -526,7 +560,7 @@ type Spawned struct {
 
 // Signal delivers sig to the process's group until the process has exited, and then returns ErrExited.
 func (s *Spawned) Signal(sig syscall.Signal) error {
-	r, err := s.v.request(message{Kind: msgSignal, Pid: s.pid, Signal: sig})
+	r, err := s.v.request(context.Background(), message{Kind: msgSignal, Spawn: s.id, Signal: sig})
 	// The view's end has ended the process.
 	if err == ErrClosed || (err == nil && !r.Delivered) {
 		return errSignalExited
@@ -534,7 +568,7 @@ func (s *Spawned) Signal(sig syscall.Signal) error {
 	return err
 }
 
-// Wait returns the process's exit code, or -1 when a signal ended it, once it has been reaped, which also kills what remains of its process group. It returns ErrClosed when the view ended first.
+// Wait returns the process's exit code, or -1 when a signal ended it, once it has been reaped. What remains of its process group runs on as other processes in the view do. Wait returns ErrClosed when the view ended first.
 func (s *Spawned) Wait() (int, error) {
 	<-s.done
 	if s.exit.Signal != 0 {
@@ -543,7 +577,7 @@ func (s *Spawned) Wait() (int, error) {
 	return s.exit.Code, s.err
 }
 
-// Close kills the process's group. The view's end kills it in any case.
+// Close kills the process's group while the process runs. The view's end kills it in any case.
 func (s *Spawned) Close() error {
 	_ = s.Signal(syscall.SIGKILL)
 	return nil
@@ -554,6 +588,8 @@ func (v *View) Close() error {
 	v.closeOnce.Do(func() {
 		v.closing.Store(true)
 		_ = v.cmd.Process.Kill()
+		// A spawn blocked before its exec outlives the launcher with a copy of the control socket, until the teardown stops the world.
+		v.ctl.interrupt()
 		<-v.done
 		v.closePipes()
 	})

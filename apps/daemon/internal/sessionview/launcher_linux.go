@@ -39,15 +39,15 @@ type launcher struct {
 	proc  int // the view's /proc
 	relay int // the relay's pid, or 0
 
-	// spawns carries each spawn to the restricted thread, which runs them until reaped closes once the process has been reaped.
-	spawns chan func()
-	reaped chan struct{}
+	spawns chan func() // to the restricted thread, which runs them one at a time
 
-	// mu orders signals and spawns against the exits. running holds from the process's start until it is reaped; termAt is when TERM first went to the view; spawned holds each spawned process until it is reaped.
-	mu      sync.Mutex
-	running bool
-	termAt  time.Time
-	spawned map[int]bool
+	// mu orders signals and spawns against the reaping. running holds from the process's start until it is reaped; termAt is when TERM first went to the view; spawned maps the pid of the process and of each spawned process to its ID until the pid is reaped; while forking, forkExits keeps how each pid reaped without an ID ended.
+	mu        sync.Mutex
+	running   bool
+	termAt    time.Time
+	spawned   map[int]uint64
+	forking   bool
+	forkExits map[int]unix.WaitStatus
 }
 
 func runLauncher() int {
@@ -56,10 +56,14 @@ func runLauncher() int {
 		fmt.Fprintf(os.Stderr, "sessionview launcher: %v\n", err)
 		return 1
 	}
-	l := &launcher{ctl: ctl, proceed: make(chan struct{}), spawns: make(chan func()), reaped: make(chan struct{}), spawned: map[int]bool{}}
-	code, err := l.run()
+	l := &launcher{ctl: ctl, proceed: make(chan struct{}), spawns: make(chan func()), spawned: map[int]uint64{}, forkExits: map[int]unix.WaitStatus{}}
+	return l.exit(l.run())
+}
+
+// exit reports err, if any, and returns the code the launcher exits with.
+func (l *launcher) exit(code int, err error) int {
 	if err != nil {
-		_ = ctl.send(message{Kind: msgFailed, Fail: failureOf(err)})
+		_ = l.ctl.send(message{Kind: msgFailed, Fail: failureOf(err)})
 		return 1
 	}
 	return code
@@ -108,7 +112,7 @@ func (l *launcher) run() (int, error) {
 		return 0, err
 	}
 	l.mu.Lock()
-	l.running = true
+	l.running, l.spawned[pid] = true, 0
 	l.mu.Unlock()
 	for _, fd := range []int{stdinFD, stdoutFD, stderrFD} {
 		unix.Close(fd)
@@ -117,22 +121,19 @@ func (l *launcher) run() (int, error) {
 		return 0, &Error{Kind: ErrLauncher, Op: "report start", Err: err}
 	}
 	l.forwardSignals()
-	var code int
 	go func() {
-		code, err = l.reap(pid)
-		close(l.reaped)
-	}()
-	// Only this thread carries the restrictions a process inherits, so spawns start here.
-	for {
-		select {
-		case spawn := <-l.spawns:
-			spawn()
-		case <-l.reaped:
-			if err == nil {
-				l.drain(spec.Grace)
-			}
-			return code, err
+		code, err := l.reap(pid)
+		if err == nil {
+			l.drain(spec.Grace)
 		}
+		code = l.exit(code, err)
+		// A spawn blocked before its exec holds a copy of the control socket, so the daemon learns of the exit from the shutdown.
+		l.ctl.interrupt()
+		os.Exit(code)
+	}()
+	// Only this thread carries the restrictions a process inherits, so every spawn starts here. A spawn that blocks delays only the spawns after it.
+	for {
+		(<-l.spawns)()
 	}
 }
 
@@ -160,45 +161,64 @@ func (l *launcher) serveControl(spec *launchSpec) {
 				close(l.proceed)
 			})
 		case msgSignal:
-			_ = l.ctl.send(message{Kind: msgSignaled, Delivered: l.signal(m.Pid, m.Signal)})
+			_ = l.ctl.send(message{Kind: msgSignaled, ID: m.ID, Delivered: l.signal(m.Spawn, m.Signal)})
 		case msgSpawn:
-			spawn := func() { l.spawn(spec, m.Command, files) }
-			select {
-			case l.spawns <- spawn:
-			case <-l.reaped:
-				// The process has been reaped, so spawn starts nothing and needs no restricted thread.
-				spawn()
-			}
+			go func() { l.spawns <- func() { l.spawn(spec, m.ID, files) } }()
 			continue
 		}
 		closeFiles(files)
 	}
 }
 
-// spawn starts c with files as its stdin, stdout and stderr, as the process's user and in a session of its own, and answers with its pid. Holding mu until the answer is sent keeps the report of its exit behind the answer.
-func (l *launcher) spawn(spec *launchSpec, c command, files []*os.File) {
+// spawn starts the command read from the first of files as the spawned process id, with the other three as its stdin, stdout and stderr, as the process's user and in a session of its own, and answers with its pid. It forks without holding mu, so a child may be reaped before it has an ID; forkExits keeps how it ended.
+func (l *launcher) spawn(spec *launchSpec, id uint64, files []*os.File) {
 	defer closeFiles(files)
+	var c command
+	err := gob.NewDecoder(files[0]).Decode(&c)
+	if err != nil {
+		err = &Error{Kind: ErrLauncher, Op: "read spawn", Err: err}
+	}
+	l.mu.Lock()
+	if err == nil && !l.running {
+		err = &Error{Kind: ErrExited, Op: "spawn"}
+	}
+	l.forking = err == nil
+	l.mu.Unlock()
+	m := message{Kind: msgSpawned, ID: id}
+	if err == nil {
+		m.Pid, err = startProcess(spec, c, []uintptr{files[1].Fd(), files[2].Fd(), files[3].Fd()})
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	m := message{Kind: msgSpawned}
-	err := error(&Error{Kind: ErrExited, Op: "spawn"})
-	if l.running {
-		m.Pid, err = startProcess(spec, c, []uintptr{files[0].Fd(), files[1].Fd(), files[2].Fd()})
-	}
+	ws, reaped := l.forkExits[m.Pid]
+	l.forking = false
+	clear(l.forkExits)
 	if err != nil {
 		m.Fail = failureOf(err)
-	} else {
-		l.spawned[m.Pid] = true
 	}
 	_ = l.ctl.send(m)
+	switch {
+	case err != nil:
+	// An earlier process with the same pid may have been reaped while forking; only a pid that is gone is the child's.
+	case reaped && unix.Kill(m.Pid, 0) == unix.ESRCH:
+		exit, _ := exitOf(ws)
+		_ = l.ctl.send(message{Kind: msgExited, ID: id, Exit: exit})
+	default:
+		l.spawned[m.Pid] = id
+	}
 }
 
-// signal delivers sig and reports whether it did. With pid 0 it signals every process in the view while the process runs: as PID 1 of the view, the launcher reaches them all with kill(-1) and is itself spared. Once the process has been reaped, only the drain signals what remains. Otherwise it signals the process group of the spawned process pid until that is reaped.
-func (l *launcher) signal(pid int, sig syscall.Signal) bool {
+// signal delivers sig and reports whether it did. With id 0 it signals every process in the view while the process runs: as PID 1 of the view, the launcher reaches them all with kill(-1) and is itself spared. Once the process has been reaped, only the drain signals what remains. Otherwise it signals the process group of the spawned process id until that is reaped; until then its pid, and so its group, cannot be reused.
+func (l *launcher) signal(id uint64, sig syscall.Signal) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if pid != 0 {
-		return l.spawned[pid] && unix.Kill(-pid, sig) == nil
+	if id != 0 {
+		for pid, sid := range l.spawned {
+			if sid == id {
+				return unix.Kill(-pid, sig) == nil
+			}
+		}
+		return false
 	}
 	if !l.running {
 		return false
@@ -234,15 +254,10 @@ func (l *launcher) drain(grace time.Duration) {
 	reaped := make(chan struct{})
 	go func() {
 		defer close(reaped)
-		// The last process other than the relay to exit is a child of the launcher by then, so its exit ends the Wait4.
+		// The last process other than the relay to exit is a child of the launcher by then, so its exit ends the wait.
 		for l.othersRemain() {
-			var ws unix.WaitStatus
-			pid, err := unix.Wait4(-1, &ws, 0, nil)
-			if err != nil && err != unix.EINTR {
+			if _, _, err := l.reapOne(); err != nil {
 				return
-			}
-			if err == nil {
-				l.spawnExited(pid, ws)
 			}
 		}
 	}()
@@ -277,38 +292,39 @@ func (l *launcher) othersRemain() bool {
 // reap collects every child, since orphans in the view reparent to PID 1, until the process exits.
 func (l *launcher) reap(pid int) (int, error) {
 	for {
-		var ws unix.WaitStatus
-		wpid, err := unix.Wait4(-1, &ws, 0, nil)
-		if err == unix.EINTR {
-			continue
-		}
+		wpid, ws, err := l.reapOne()
 		if err != nil {
 			return 0, &Error{Kind: ErrLauncher, Op: "wait", Err: err}
 		}
-		if wpid != pid {
-			l.spawnExited(wpid, ws)
-			continue
+		if wpid == pid {
+			_, code := exitOf(ws)
+			return code, nil
 		}
-		l.mu.Lock()
-		l.running = false
-		l.mu.Unlock()
-		exit, code := exitOf(ws)
-		_ = l.ctl.send(message{Kind: msgExited, Exit: exit})
-		return code, nil
 	}
 }
 
-// spawnExited reports the exit of the spawned process pid, which a wait collected, and kills what remains of its process group. Any other pid is one of the view's orphans.
-func (l *launcher) spawnExited(pid int, ws unix.WaitStatus) {
+// reapOne waits for a child to end and reaps one child, if any is left to reap, and reports the exit of a pid with an ID. It waits without mu and reaps under it, so a pid keeps its ID until it is reaped and signals never wait for an exit.
+func (l *launcher) reapOne() (int, unix.WaitStatus, error) {
+	if err := unix.Waitid(unix.P_ALL, 0, nil, unix.WEXITED|unix.WNOWAIT, nil); err != nil && err != unix.EINTR {
+		return 0, 0, err
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if !l.spawned[pid] {
-		return
+	var ws unix.WaitStatus
+	// A failed exec reaps its own child, so there may be none left to reap.
+	pid, err := unix.Wait4(-1, &ws, unix.WNOHANG, nil)
+	if err != nil || pid <= 0 {
+		return 0, 0, nil
 	}
-	delete(l.spawned, pid)
-	_ = unix.Kill(-pid, unix.SIGKILL)
-	exit, _ := exitOf(ws)
-	_ = l.ctl.send(message{Kind: msgExited, Pid: pid, Exit: exit})
+	if id, ok := l.spawned[pid]; ok {
+		delete(l.spawned, pid)
+		l.running = l.running && id != 0
+		exit, _ := exitOf(ws)
+		_ = l.ctl.send(message{Kind: msgExited, ID: id, Exit: exit})
+	} else if l.forking {
+		l.forkExits[pid] = ws
+	}
+	return pid, ws, nil
 }
 
 // exitOf describes how a process ended, with the code the launcher exits with for it.

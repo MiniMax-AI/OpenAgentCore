@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 1ee6da6ae23ad905c30595b899a8910a2e287670cea640ea5e4a68ae9e35989b
+source_hash: db98d69501c492ec945f9e4088cccb202ee9a5f0b99c041c33e1fd303cb0623c
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -329,9 +329,10 @@ agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在
 
 `ViewSession.Spawn` 在 Harness 运行期间，把一个 `LocalExec` 二进制作为另一个进程运行在活动视图中，例如读取 Harness 原生历史的程序。读取 Harness 所写数据的 Harness 侧代码在这里运行，从不在视图之外的 agent host 上运行，也从不获得自己的视图。`Spawn` 像 `Launch` 一样接收 `StartOptions`，并返回同样的 `clirunner.Process`。该进程的运行方式与 Harness 相同：同一用户，同一组命名空间、视图 cgroup、world 和网络，没有 capability，设置 `no_new_privs` 并使用同一 seccomp 过滤器，且位于自己的进程组中。
 
-- Cancel 向它的进程组发送 TERM，并在 `KillTimeout` 后杀死该进程组。进程退出后，其进程组中剩余的进程会被杀死。
-- 视图结束时它也随之结束。Harness 的 Cancel 会到达它；Harness 退出时，它属于仍然存在的进程。
-- `Binary` 不是 `LocalExec` 路径时，`Spawn` 返回 `ErrNotLocalExec`；Session 没有运行中的视图时返回 `ErrNoLiveView`；Harness 已退出或视图已关闭后返回 `ErrViewEnded`。
+- `Parent` 限定等待启动的时间。它结束后，`Spawn` 返回它的错误，并杀死此后仍然启动的进程。
+- Cancel 向它的进程组发送 TERM，并在 `KillTimeout` 后杀死该进程组。进程退出后，Cancel 不再投递任何信号，它遗留的进程像视图中的其他进程一样继续运行。
+- 视图结束时它们全部随之结束。Harness 的 Cancel 会到达它们；Harness 退出时，它们属于仍然存在的进程。`Spawn` 返回之后视图才结束的情况，体现在该进程的 `Wait` 中。
+- `Binary` 不是 `LocalExec` 路径时，`Spawn` 返回 `ErrNotLocalExec`；没有视图在运行其 Harness 时返回 `ErrNoLiveView`：尚未启动视图，或其 Harness 已退出，或其视图已结束。
 
 ### 认定视图资格 {#qualify-the-view}
 
