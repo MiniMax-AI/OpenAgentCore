@@ -12,7 +12,7 @@ func (h *Handler) auditSessionOperation(w http.ResponseWriter, r *http.Request, 
 		return true
 	}
 	if err := h.Sessions.AuditSessionOperation(r.Context(), sessions.AuditSessionOperationCommand{TenantID: tenantID(r), SessionID: sessionID, Action: action}); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return false
 	}
 	return true

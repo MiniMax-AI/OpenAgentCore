@@ -37,16 +37,16 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 	}
 	var input AdminSessionArchiveRequest
 	if decodeInputObject(raw, &input, "expected_generation") != nil || input.ExpectedGeneration == 0 {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeOperationError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if h.Execution == nil {
-		writeStoreError(w, r, sessions.ErrEnvironmentUnavailable)
+		writeOperationError(w, r, sessions.ErrEnvironmentUnavailable)
 		return
 	}
 	result, err := h.Execution.SessionArchive.ArchiveSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeOperationError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -65,7 +65,7 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) adminGetSessionArchive(w http.ResponseWriter, r *http.Request) {
 	result, err := h.SessionAdmin.GetManagedSessionArchive(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)

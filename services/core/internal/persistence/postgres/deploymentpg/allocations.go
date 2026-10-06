@@ -79,7 +79,6 @@ func (e *Execution) WithReservation(ctx context.Context, key deployment.Allocati
 		q := sqlc.New(tx)
 		owned, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenant, ID: environment})
 		if errors.Is(err, pgx.ErrNoRows) {
-			// sessions.ErrNotFound keeps the public 404 that writeStoreError maps.
 			return sessions.ErrNotFound
 		}
 		if err != nil {
@@ -153,7 +152,6 @@ func (s *Store) WithActivity(ctx context.Context, key deployment.AllocationKey, 
 		q := sqlc.New(tx)
 		owned, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenant, ID: environment})
 		if errors.Is(err, pgx.ErrNoRows) {
-			// sessions.ErrNotFound keeps the public 404 that writeStoreError maps.
 			return sessions.ErrNotFound
 		}
 		if err != nil {
@@ -526,7 +524,6 @@ func (s *Store) LifecyclePlacement(ctx context.Context, key deployment.Allocatio
 	defer cancel()
 	row, err := s.pool.Queries().GetRuntimeLifecyclePlacement(ctx, sqlc.GetRuntimeLifecyclePlacementParams{TenantID: tenant, ID: environment})
 	if errors.Is(err, pgx.ErrNoRows) {
-		// sessions.ErrNotFound keeps the public 404 that writeStoreError maps.
 		return deployment.LifecyclePlacement{}, sessions.ErrNotFound
 	}
 	if err != nil {

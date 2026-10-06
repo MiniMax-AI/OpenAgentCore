@@ -40,7 +40,7 @@ type EnvironmentWorkspaces interface {
 func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	options, ok := readEnvironmentFileQuery(w, r, environment)
@@ -48,21 +48,21 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	// Allow the Worker's 45-second observation budget plus response delivery.
 	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(50 * time.Second)); err != nil {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	result, err := h.Execution.Workspaces.ReadEnvironmentDirectory(r.Context(), environment, options.relativeDirectory)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if result.Truncated || !proto.ValidWorkspaceDirectory(&result, proto.WorkspaceDirectoryMaxEntries) {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	files := make([]v1.EnvironmentFile, 0, len(result.Entries))
@@ -85,7 +85,7 @@ func (h *Handler) listEnvironmentFiles(w http.ResponseWriter, r *http.Request) {
 	response, err := environmentFilePage(files, options)
 	if err != nil {
 		if !writeFieldError(w, err) {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 		}
 		return
 	}

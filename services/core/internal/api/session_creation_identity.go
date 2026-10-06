@@ -50,7 +50,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 		return false
 	}
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return true
 	}
 	if stream {
@@ -62,7 +62,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 	} else {
 		session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), result.Session.ID)
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 		} else if h.auditSessionOperation(w, r, session.ID, "create") {
 			h.respondSessionStatus(w, r, session, http.StatusCreated)
 		}

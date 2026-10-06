@@ -24,12 +24,12 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 	}
 	response, err := sessionResponse(result.Session, h.executorURL())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	created := v1.SessionEvent{Type: "agent.session.created", EventID: uuid.NewString(), Session: &response}
 	if err := h.addSessionInstallation(w, r, &response); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if session := result.Session; sessionSettled(session, response) && session.LastTurn == nil && session.EnvironmentInputActivity == nil {

@@ -120,12 +120,12 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 	}
 	session, err := h.SessionsReader.GetSession(r.Context(), claim.Principal.TenantID, environment.SessionID)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response, err := sessionResponse(session, h.executorURL())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v1.NativeInstallationContext{Version: h.Execution.NativeInstaller.Version, ProtocolVersion: proto.Version, EnvironmentID: claim.Environment, RemoteURL: h.Execution.ExecutorURL, Workspace: response.Environment.WorkspaceDirectory, Harness: session.Engine})

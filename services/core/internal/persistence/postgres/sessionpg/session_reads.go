@@ -48,7 +48,7 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 		}
 		rows, err := q.ListSessions(ctx, params)
 		if err != nil {
-			return fmt.Errorf("list sessions: %w", err)
+			return storable(fmt.Errorf("list sessions: %w", err))
 		}
 		page.Sessions = make([]sessions.Session, 0, min(limit, len(rows)))
 		if len(rows) > limit {

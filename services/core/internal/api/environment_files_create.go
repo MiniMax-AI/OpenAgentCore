@@ -42,7 +42,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	}
 	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	var request v1.EnvironmentFileCreateRequest
@@ -56,28 +56,28 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := decodeInputObject(raw, &request, fields...); err != nil || request.Path == nil {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	switch request.Type {
 	case "inline":
 		fields = []string{"type", "path", "data"}
 		if request.Data == nil {
-			writeStoreError(w, r, sessions.ErrInvalidInput)
+			writeSessionsError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 	case "file_id":
 		fields = []string{"type", "path", "file_id"}
 		if request.FileID == nil || *request.FileID == "" {
-			writeStoreError(w, r, sessions.ErrInvalidInput)
+			writeSessionsError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 	default:
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if decodeInputObject(raw, &request, fields...) != nil {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	if err := environmentFileCreatePathError(*request.Path); err != nil {
@@ -88,7 +88,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 	if request.Type == "inline" {
 		data, err = base64.StdEncoding.Strict().DecodeString(*request.Data)
 		if err != nil {
-			writeStoreError(w, r, sessions.ErrInvalidInput)
+			writeSessionsError(w, r, sessions.ErrInvalidInput)
 			return
 		}
 		if len(data) > maxInlineEnvironmentFileBytes {
@@ -118,22 +118,22 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	if h.Execution == nil || !execution.LocalWorkspaceConfiguration(environment.Configuration) {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(215 * time.Second)); err != nil {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	size, err := h.Execution.Workspaces.WriteEnvironmentFile(r.Context(), environment, strings.TrimPrefix(*request.Path, "/workspace/"), data)
 	if err != nil {
 		if !writeFieldError(w, environmentFileWriteError(err)) {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 		}
 		return
 	}
 	if size != int64(len(data)) {
-		writeStoreError(w, r, execution.ErrExecutionUnavailable)
+		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
 	writeJSON(w, http.StatusCreated, v1.EnvironmentFile{EnvironmentID: environment.ID, Object: "agent.environment.file", Path: *request.Path, SizeBytes: size})

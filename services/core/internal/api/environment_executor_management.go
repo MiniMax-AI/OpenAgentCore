@@ -78,7 +78,7 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 		if observed.EnvironmentStatus == "connected" && observed.CredentialHash != "" {
 			connected, err := h.ExecutorConnections.ExecutorConnected(r.Context(), state.EnvironmentID, observed.CredentialHash)
 			if err != nil && !errors.Is(err, sessions.ErrNotFound) && !errors.Is(err, sessions.ErrDeviceBindingConflict) {
-				writeStoreError(w, r, err)
+				writeSessionsError(w, r, err)
 				return
 			}
 			if err == nil && connected {
