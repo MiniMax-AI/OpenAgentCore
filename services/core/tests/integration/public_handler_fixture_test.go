@@ -34,49 +34,48 @@ import (
 // sets another with executorURL.
 const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
-// publicHandler serves s through api.NewHandler. s backs every area the Store
-// implements, and db is the database and credential key that built s; the
-// audit reads, Agents, Files, Vaults, Environment reads, Items, Subagents and
-// Artifacts come from db. keys authenticate as Project keys and "admin" as the
-// Core key. Metrics, Runtime observation and history, and executor connections
-// are strict stand-ins. Execution and Sandboxes stay disabled unless configure
-// sets them.
-func publicHandler(t testing.TB, s *Store, db fixtureDB, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
+// publicHandler serves s through api.NewHandler, with every area built on s's
+// database, credential key and placement rules as cmd/server builds it. keys
+// authenticate as Project keys and "admin" as the Core key. Metrics, Runtime
+// observation and history, and executor connections are strict stand-ins.
+// Execution and Sandboxes stay disabled unless configure sets them.
+func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
 	t.Helper()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
 	if err != nil {
 		return nil, err
 	}
 	strict := strictStandIn{t}
-	audit := auditpg.New(pgunit.NewPool(db.pool))
-	agentStore, agentService := fixtureAgents(t, db)
-	fileStore, fileService := fixtureFiles(t, db)
-	vaultStore, vaultService, err := fixtureVaults(db)
+	audit := auditpg.New(pgunit.NewPool(s.pool))
+	agentStore, agentService := fixtureAgents(t, s)
+	fileStore, fileService := fixtureFiles(t, s)
+	vaultStore, vaultService, err := fixtureVaults(s)
 	if err != nil {
 		return nil, err
 	}
-	templates := templatepg.New(pgunit.NewPool(db.pool), db.cipher)
+	templates := templatepg.New(pgunit.NewPool(s.pool), s.credentialCipher)
 	environmentTemplates, err := environmenttemplates.NewService(templates)
 	if err != nil {
 		return nil, err
 	}
-	modelConfigurationStore := modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher)
+	modelConfigurationStore := modelconfigurationpg.New(pgunit.NewPool(s.pool), s.credentialCipher)
 	modelConfigurationService, err := modelconfiguration.NewService(modelConfigurationStore)
 	if err != nil {
 		return nil, err
 	}
-	skillStore := skillpg.New(pgunit.NewPool(db.pool), db.cipher)
+	skillStore := skillpg.New(pgunit.NewPool(s.pool), s.credentialCipher)
 	skillService, err := skills.NewService(skillStore, skillStore)
 	if err != nil {
 		return nil, err
 	}
-	projectStore, projectService := fixtureProjects(t, db)
-	sessionStore, service, err := fixtureSessions(db)
+	projectStore, projectService := fixtureProjects(t, s)
+	sessionStore := sessionAdapter(s)
+	service, err := newSessionService(s)
 	if err != nil {
 		return nil, err
 	}
 	deps := api.Dependencies{
-		Engine: engine, CoreKeys: admin, InstallationBindings: fixtureDeployment(t, db),
+		Engine: engine, CoreKeys: admin, InstallationBindings: deploymentService(t, s),
 		Projects: projectService, ProjectsReader: fixtureProjectsReader{Reader: projectStore, keys: keys},
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
@@ -86,7 +85,7 @@ func publicHandler(t testing.TB, s *Store, db fixtureDB, keys fixtureKeyResolver
 		Agents: agentService, AgentsReader: agentStore,
 		Sessions:        service,
 		SessionsReader:  sessionStore,
-		SessionCreation: sessionService(t, s),
+		SessionCreation: service,
 		SessionEvents:   sessionStore,
 		Turns:           sessionStore,
 		Items:           sessionStore,
@@ -102,10 +101,10 @@ func publicHandler(t testing.TB, s *Store, db fixtureDB, keys fixtureKeyResolver
 	return api.NewHandler(deps)
 }
 
-// fixtureAgents builds the Agent adapter and service on db.
-func fixtureAgents(t testing.TB, db fixtureDB) (*agentpg.Store, *agents.Service) {
+// fixtureAgents builds the Agent adapter and service on s.
+func fixtureAgents(t testing.TB, s *Store) (*agentpg.Store, *agents.Service) {
 	t.Helper()
-	agentStore := agentpg.New(pgunit.NewPool(db.pool), db.cipher)
+	agentStore := agentpg.New(pgunit.NewPool(s.pool), s.credentialCipher)
 	agentService, err := agents.NewService(agentStore)
 	if err != nil {
 		t.Fatal(err)
@@ -113,10 +112,10 @@ func fixtureAgents(t testing.TB, db fixtureDB) (*agentpg.Store, *agents.Service)
 	return agentStore, agentService
 }
 
-// fixtureFiles builds the File adapter and service on db.
-func fixtureFiles(t testing.TB, db fixtureDB) (*filepg.Store, *files.Service) {
+// fixtureFiles builds the File adapter and service on s.
+func fixtureFiles(t testing.TB, s *Store) (*filepg.Store, *files.Service) {
 	t.Helper()
-	fileStore := filepg.New(pgunit.NewPool(db.pool))
+	fileStore := filepg.New(pgunit.NewPool(s.pool))
 	fileService, err := files.NewService(fileStore)
 	if err != nil {
 		t.Fatal(err)
@@ -179,15 +178,15 @@ func executorURL(url string) func(*api.Dependencies) {
 	return func(d *api.Dependencies) { d.Execution.ExecutorURL = url }
 }
 
-// managedSandboxes enables the managed sandbox deployment on db: its
+// managedSandboxes enables the managed sandbox deployment on s: its
 // administration and node routes and openai_hosted Environments. Deployment
 // changes, reset and discovery need the Worker and are strict stand-ins. It
 // follows the option that enables Execution.
-func managedSandboxes(t testing.TB, db fixtureDB) func(*api.Dependencies) {
+func managedSandboxes(t testing.TB, s *Store) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
 		d.Sandboxes = &api.Sandboxes{
-			Deployment:             fixtureDeployment(t, db),
-			NodeAllocations:        fixtureReader(db),
+			Deployment:             deploymentService(t, s),
+			NodeAllocations:        deploymentStore(s),
 			DeploymentChanges:      strictStandIn{t},
 			DeploymentReset:        strictStandIn{t},
 			ConfigurationDiscovery: strictStandIn{t},

@@ -27,20 +27,10 @@ func placementRules(t testing.TB, publicURL string) *placement.Rules {
 	return rules
 }
 
-// withPlacement gives s the placement rules cmd/server builds on the built-in
-// providers and an unset public URL, and returns s.
-func withPlacement(t testing.TB, s *Store) *Store {
-	t.Helper()
-	s.SetPlacement(placementRules(t, ""))
-	return s
-}
-
-// deploymentService builds the deployment service as cmd/server does, on s's
-// database, credential key and placement rules.
+// deploymentService is fixtureDeploymentService(s) for a test.
 func deploymentService(t testing.TB, s *Store) *deployment.Service {
 	t.Helper()
-	adapter := deploymentStore(s)
-	service, err := deployment.NewService(adapter, adapter, providers.Builtin(), s.placement)
+	service, err := fixtureDeploymentService(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +44,7 @@ func deploymentExecution(t testing.TB, w *Store) *deployment.ExecutionOperations
 	if w.lease == nil {
 		t.Fatal("deployment execution operations need an execution writer")
 	}
-	operations, err := deployment.NewExecutionOperations(deploymentService(t, w), deploymentpg.NewExecution(w.lease, w.credentialCipher))
+	_, operations, err := fixtureDeploymentExecution(w, w.lease)
 	if err != nil {
 		t.Fatal(err)
 	}

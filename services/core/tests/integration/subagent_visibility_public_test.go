@@ -70,20 +70,20 @@ func subagentFixture(kind string, value any) sessions.ExecutionEvent {
 // routes with the Session's Agent ID, Subagent lists use the common envelope and
 // child Item lists clamp their limit. Tenant B sees none of it.
 func TestSubagentVisibilityPublic(t *testing.T) {
-	s, db := newTestStoreDB(t)
+	s, _ := testStore(t)
 	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
+	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	leased := executionOwner(t, db)
+	leased := executionOwner(t, s)
 	writer := NewExecution(s, leased.Lease.(*pgunit.Lease))
 	ctx := t.Context()
 
@@ -121,7 +121,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 		t.Fatal(page, err)
 	}
 	root := page.Turns[0].ID
-	host, err := fixtureSessionService(t, db).CreateDevice(ctx, tenant, "subagent visibility", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := sessionService(t, s).CreateDevice(ctx, tenant, "subagent visibility", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}

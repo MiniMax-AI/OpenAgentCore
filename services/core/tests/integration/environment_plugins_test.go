@@ -21,7 +21,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for path, body := range map[string]string{

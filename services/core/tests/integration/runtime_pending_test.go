@@ -14,20 +14,20 @@ import (
 )
 
 func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
-	tenant, idle, idleEnvironment := managedSession(t, s, db)
+	s, _ := newManagedTestStore(t)
+	tenant, idle, idleEnvironment := managedSession(t, s)
 	initial, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"hello"}`)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, deleted, deletedEnvironment := managedSession(t, s, db)
+	_, deleted, deletedEnvironment := managedSession(t, s)
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: deleted.TenantID, SessionID: deleted.ID}); err != nil {
 		t.Fatal(err)
 	}
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	start := func() *execution.Worker {
-		w := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
+		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
 		return w
 	}
 	stop := func(w *execution.Worker) {
@@ -48,15 +48,15 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	idleOwner, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: idleEnvironment.ID})
+	idleOwner, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: idleEnvironment.ID})
 	if err != nil || idleOwner.State != "running" {
 		t.Fatal("idle creation was stranded", idleOwner, err)
 	}
-	initialOwner, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: initial.Environment.ID})
+	initialOwner, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: initial.Environment.ID})
 	if err != nil || initialOwner.State != "running" {
 		t.Fatal("initial creation was stranded", initialOwner, err)
 	}
-	if _, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: deleted.TenantID, EnvironmentID: deletedEnvironment.ID}); err == nil {
+	if _, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: deleted.TenantID, EnvironmentID: deletedEnvironment.ID}); err == nil {
 		t.Fatal("deleted Session provisioned")
 	}
 	waiting, err := sessionAdapter(s).GetSession(t.Context(), tenant, initial.ID)
@@ -81,7 +81,7 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 		t.Fatal("restart repeated bootstrap", creates, p.creates)
 	}
 	for _, owner := range []deployment.Allocation{idleOwner, initialOwner} {
-		got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: owner.EnvironmentID})
+		got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: owner.EnvironmentID})
 		if err != nil || got.ID != owner.ID || got.DeviceID != owner.DeviceID {
 			t.Fatal("restart replaced allocation identity", got, err)
 		}

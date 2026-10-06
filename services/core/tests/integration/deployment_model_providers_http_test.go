@@ -34,19 +34,18 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{53}, 32))
-	st, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	st.SetPlacement(fixtureRules(t, db))
+	st := NewWithCredentialCipher(pool, cipher)
 	tenant, projectKey, coreKey := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-http", TokenSHA256: runtimedevice.HashCredential(projectKey), TenantID: tenant}})
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, db), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defaults := deploymentDefaults(t, db)
+	defaults := deploymentDefaults(t, st)
 	call := func(method, path, key, body string, status int) map[string]json.RawMessage {
 		t.Helper()
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -247,7 +246,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
 	defer stop()
 	_, pool := testStore(t)
 	reservations := func() int {
@@ -290,18 +289,18 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 // recorded first: a same-key retry returns the committed Session after the
 // default was replaced or removed.
 func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
-	st, db := newModelTestStoreDB(t)
-	if _, err := db.pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
+	st, _ := NewModelTestStore(t)
+	if _, err := st.pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
 		t.Fatal(err)
 	}
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "none-retry", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st))
 	if err != nil {
 		t.Fatal(err)
 	}
 	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "abcd1234", RequestID: "none-retry", TraceID: "none-retry"})
-	defaults := deploymentDefaults(t, db)
+	defaults := deploymentDefaults(t, st)
 	setDefault := func(key string) {
 		t.Helper()
 		if _, err := defaults.Replace(admin, modelconfiguration.Replacement{Harness: "codex", Configuration: v1.ModelConfigurationInput{ModelProvider: v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: key}, Model: "fixture"}}); err != nil {
@@ -351,18 +350,18 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 		t.Fatal("retry changed the frozen provider", err)
 	}
 	var revision uuid.UUID
-	if err := db.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", original).Scan(&revision); err != nil || revision != snapshot.Revision {
+	if err := st.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", original).Scan(&revision); err != nil || revision != snapshot.Revision {
 		t.Fatal("API retry changed frozen revision", err)
 	}
 }
 
 func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T) {
-	st, db := newManagedTestStoreDB(t)
+	st, _ := newManagedTestStore(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tuple-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
 	provider := v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://original.example/v1", APIKey: "original-fixture-key"}
-	defaults := deploymentDefaults(t, db)
+	defaults := deploymentDefaults(t, st)
 	if _, err := defaults.Replace(admin, modelconfiguration.Replacement{Harness: "codex", Configuration: v1.ModelConfigurationInput{ModelProvider: provider, Model: "fixture"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +381,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 		_, err = defaults.Replace(admin, modelconfiguration.Replacement{Harness: harness, Configuration: v1.ModelConfigurationInput{ModelProvider: replacement, Model: "fixture"}})
 		return snapshot, err
 	}
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), modelProviderDefaults(resolver))
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), modelProviderDefaults(resolver))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +396,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 		t.Fatalf("creation failed: %d %s", w.Code, w.Body)
 	}
 	var revision uuid.UUID
-	if err = db.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision != original.Revision {
+	if err = st.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision != original.Revision {
 		t.Fatal("tuple revision changed", err)
 	}
 	frozen, err := sessionAdapter(st).SessionModelExecution(t.Context(), tenant, session.ID)
@@ -430,11 +429,11 @@ func TestDeploymentProviderResolutionFixtureIsolation(t *testing.T) {
 	}
 }
 
-// deploymentDefaults serves deployment default model configurations from db,
+// deploymentDefaults serves deployment default model configurations from s,
 // as the Core routes do.
-func deploymentDefaults(t *testing.T, db fixtureDB) *modelconfiguration.Service {
+func deploymentDefaults(t *testing.T, s *Store) *modelconfiguration.Service {
 	t.Helper()
-	service, err := modelconfiguration.NewService(modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher))
+	service, err := modelconfiguration.NewService(modelconfigurationpg.New(pgunit.NewPool(s.pool), s.credentialCipher))
 	if err != nil {
 		t.Fatal(err)
 	}

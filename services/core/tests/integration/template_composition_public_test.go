@@ -31,9 +31,6 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, reopenedStore := NewWithCredentialCipher(pool, cipher), NewWithCredentialCipher(pool, cipher)
-	db := fixtureDB{pool: pool, cipher: cipher} // built both Stores
-	s.SetPlacement(fixtureRules(t, db))
-	reopenedStore.SetPlacement(fixtureRules(t, db))
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
@@ -42,7 +39,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	serve := func(current *Store) *httptest.Server {
 		t.Helper()
 		// Hosted admission and freezing use the real Store; no Runtime or model runs.
-		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, db), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, auth, "codex", storeExecution(t, current), managedSandboxes(t, current), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +102,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 			t.Fatalf("unknown case %q", label)
 		}
 		// A reader built after the requests reads the frozen setup and files.
-		current := fixtureSessionStore(db)
+		current := sessionAdapter(s)
 		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
 		if err != nil || !reflect.DeepEqual(setup.Env, env) || !reflect.DeepEqual(setup.PackageMetadata(), packages) || len(setup.Commands) != len(commands) {
 			t.Fatalf("%s durable setup differs: %v", label, err)

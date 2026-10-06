@@ -39,9 +39,9 @@ func makeEnvironmentExpiryDue(t *testing.T, pool *pgxpool.Pool, pending *session
 	}
 }
 
-func startEnvironmentExpiryWorker(t *testing.T, db fixtureDB, d *execution.Dispatcher) (*execution.Worker, func()) {
+func startEnvironmentExpiryWorker(t *testing.T, s *Store, d *execution.Dispatcher) (*execution.Worker, func()) {
 	t.Helper()
-	worker := startWorker(t, t.Context(), db, d)
+	worker := startWorker(t, t.Context(), s, d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -99,22 +99,22 @@ func assertEnvironmentExpiryHasNoHistory(t *testing.T, pool *pgxpool.Pool, sessi
 }
 
 func TestWorkerEnvironmentExpiryWithoutDevicesAndAfterRestart(t *testing.T) {
-	s, db := newTestStoreDB(t)
+	s, _ := testStore(t)
 	dueTenant, due := newEnvironmentExpiryReservation(t, s)
 	futureTenant, future := newEnvironmentExpiryReservation(t, s)
-	makeEnvironmentExpiryDue(t, db.pool, &due)
+	makeEnvironmentExpiryDue(t, s.pool, &due)
 	d := &execution.Dispatcher{Registry: runtimegateway.NewRegistry()}
-	_, stop := startEnvironmentExpiryWorker(t, db, d)
+	_, stop := startEnvironmentExpiryWorker(t, s, d)
 	waitEnvironmentExpiry(t, s, dueTenant, due)
 	got, err := sessionAdapter(s).GetEnvironmentInputReservation(t.Context(), futureTenant, future.SessionID, future.ID)
 	if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(future.Deadline) {
 		t.Fatal("future input changed", got, err)
 	}
 	stop()
-	makeEnvironmentExpiryDue(t, db.pool, &future)
-	_, stop = startEnvironmentExpiryWorker(t, db, d)
+	makeEnvironmentExpiryDue(t, s.pool, &future)
+	_, stop = startEnvironmentExpiryWorker(t, s, d)
 	waitEnvironmentExpiry(t, s, futureTenant, future)
 	stop()
-	assertEnvironmentExpiryHasNoHistory(t, db.pool, due.SessionID)
-	assertEnvironmentExpiryHasNoHistory(t, db.pool, future.SessionID)
+	assertEnvironmentExpiryHasNoHistory(t, s.pool, due.SessionID)
+	assertEnvironmentExpiryHasNoHistory(t, s.pool, future.SessionID)
 }

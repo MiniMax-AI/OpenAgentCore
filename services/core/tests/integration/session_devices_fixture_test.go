@@ -14,13 +14,13 @@ import (
 // bindSessionDevice binds the tenant's device to the Session through the
 // Session execution operations on an execution lease of its own, and returns
 // once the server released that lease, so a Worker can take it next.
-func bindSessionDevice(t *testing.T, db fixtureDB, tenant, session, device string) error {
+func bindSessionDevice(t *testing.T, s *Store, tenant, session, device string) error {
 	t.Helper()
-	lease, err := pgunit.AcquireLease(t.Context(), db.pool)
+	lease, err := pgunit.AcquireLease(t.Context(), s.pool)
 	if err != nil {
 		return err
 	}
-	released := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
+	released := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 	operations, err := sessions.NewExecutionOperations(sessionpg.NewExecution(lease))
 	if err == nil {
 		err = operations.BindSessionDevice(t.Context(), tenant, session, device)

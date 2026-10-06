@@ -23,22 +23,22 @@ const deletionAgent = `"agent":{"id":"agent_deletion","model":"fixture","tools":
 // missing and malformed identifiers keep one not-found response.
 func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, db := newManagedTestStoreDB(t)
-	audit := auditpg.New(pgunit.NewPool(db.pool))
+	s, _ := newManagedTestStore(t)
+	audit := auditpg.New(pgunit.NewPool(s.pool))
 	ctx := t.Context()
 	tenant, owner, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "deletion-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "deletion-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	leased := executionOwner(t, db)
+	leased := executionOwner(t, s)
 
 	create := func(environment string, initial bool) sessions.Session {
 		t.Helper()
@@ -134,7 +134,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 		"later_input_cancelled":     "",
 	}
 	expired := create(selfHosted, true)
-	if _, err := db.pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1", expired.ID); err != nil {
+	if _, err := s.pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1", expired.ID); err != nil {
 		t.Fatal(err)
 	}
 	if count, err := leased.Sessions.ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
@@ -181,13 +181,13 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			if readStatus != http.StatusOK || decode(before)["status"] != projected[name] {
 				t.Fatal(readStatus, before)
 			}
-			digest := databaseDigest(t, db.pool)
+			digest := databaseDigest(t, s.pool)
 			notFound(foreign, http.MethodDelete, sessionPath(id))
 			status, raw := client.do(owner, http.MethodDelete, sessionPath(id), "", nil)
 			if status != http.StatusConflict || !reflect.DeepEqual(decode(raw), conflict) {
 				t.Fatalf("busy Session deletion: %d %s", status, raw)
 			}
-			if after := databaseDigest(t, db.pool); !reflect.DeepEqual(after, digest) {
+			if after := databaseDigest(t, s.pool); !reflect.DeepEqual(after, digest) {
 				t.Fatal("rejected deletion changed the database")
 			}
 			if readStatus, after := client.do(owner, http.MethodGet, sessionPath(id), "", nil); readStatus != http.StatusOK || after != before {
@@ -202,7 +202,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			if status != http.StatusOK || !reflect.DeepEqual(decode(first), map[string]any{"id": id, "object": "agent.session.deleted", "deleted": true}) {
 				t.Fatalf("settled Session deletion: %d %s", status, first)
 			}
-			digest := databaseDigest(t, db.pool)
+			digest := databaseDigest(t, s.pool)
 			filter := writeaudit.Filter{ResourceType: "session", ResourceID: id, Limit: 100}
 			beforeAudit, err := audit.ListWriteOperations(ctx, tenant, filter)
 			if err != nil {
@@ -224,7 +224,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			}
 			// Only the new operation records may differ. Ownership, Session state,
 			// execution data and every public response remain unchanged.
-			after := databaseDigest(t, db.pool)
+			after := databaseDigest(t, s.pool)
 			delete(after, "write_audit_operations")
 			delete(digest, "write_audit_operations")
 			if !reflect.DeepEqual(after, digest) {

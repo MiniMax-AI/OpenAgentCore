@@ -16,7 +16,7 @@ func TestSandboxDeploymentMutationViewsIncludeActualResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	changes := deploymentExecution(t, w)
 	installation := uuid.NewString()

@@ -16,7 +16,7 @@ import (
 func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 	ctx := context.Background()
 	s, pool := testStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
+	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "usage"})
 	if err != nil {
@@ -106,8 +106,8 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 
 func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 	ctx := context.Background()
-	s, pool := testStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
+	s, _ := testStore(t)
+	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "cancel-recovery"})
 	if err != nil {
@@ -141,8 +141,8 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 // and after a Turn ends with unknown usage (EVT-13).
 func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	ctx := context.Background()
-	s, pool := testStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
+	s, _ := testStore(t)
+	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "unknown-usage"})
 	if err != nil {

@@ -102,7 +102,7 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	first := h.message("first", "Return an answer.")
@@ -123,7 +123,7 @@ func TestNativeNoExecutionEnvironment(t *testing.T) {
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("forbidden command may have executed: %v", err)
 	}
-	page, err := sessionReads(h.db.pool).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
+	page, err := sessionAdapter(h.s).ListItems(ctx, h.tenant, h.session.ID, "", 100, true)
 	if err != nil {
 		t.Fatal(err)
 	}

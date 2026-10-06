@@ -14,7 +14,7 @@ import (
 func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	ctx := context.Background()
 	s, pool := testStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
+	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "events"})
 	if err != nil {

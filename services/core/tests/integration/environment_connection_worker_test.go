@@ -14,17 +14,17 @@ import (
 )
 
 func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
-	s, db := newTestStoreDB(t)
+	s, _ := testStore(t)
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "connection-worker", Configuration: []byte(`{"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner := executionOwner(t, db)
+	owner := executionOwner(t, s)
 	generation := uuid.NewString()
 	if err := owner.Sessions.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 		t.Fatal(err)
@@ -32,12 +32,12 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	if err := owner.Sessions.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
-	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 	if err := owner.Lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
+	worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	exited := make(chan struct{})
@@ -50,7 +50,7 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 			t.Error("worker cleanup did not exit")
 		}
 	})
-	awaitEnvironmentConnectionState(t, ctx, db.pool, tenant, environment.ID, "disconnected")
+	awaitEnvironmentConnectionState(t, ctx, s, tenant, environment.ID, "disconnected")
 
 	cancel()
 	select {
@@ -61,7 +61,7 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("worker did not close")
 	}
-	awaitEnvironmentConnectionState(t, t.Context(), db.pool, tenant, environment.ID, "disconnected")
+	awaitEnvironmentConnectionState(t, t.Context(), s, tenant, environment.ID, "disconnected")
 	if err := worker.CheckOwnership(t.Context()); err == nil {
 		t.Fatal("worker retained lease")
 	}

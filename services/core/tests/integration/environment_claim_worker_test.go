@@ -15,9 +15,9 @@ import (
 func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 	for _, deleted := range []bool{false, true} {
 		t.Run(map[bool]string{false: "unbound", true: "deleted"}[deleted], func(t *testing.T) {
-			s, db := newTestStoreDB(t)
+			s, _ := testStore(t)
 			tenant, pending := newEnvironmentExpiryReservation(t, s)
-			owner := executionOwner(t, db)
+			owner := executionOwner(t, s)
 			got, err := owner.Sessions.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if err != nil || len(got.Receipts) != 1 || got.Receipts[0].Replayed {
 				t.Fatal(got, err)
@@ -36,15 +36,15 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal("promotion did not retain the active claim", turn, err)
 			}
 			// Simulate owner loss after commit, without sending any daemon Start.
-			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
+			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 			if err := owner.Lease.Close(t.Context()); err != nil {
 				t.Fatal(err)
 			}
 			awaitRelease()
-			restarted := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
+			restarted := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
 			stopped, cancel := context.WithCancel(t.Context())
 			cancel()
-			awaitRelease = pgtest.ObserveExecutionLeaseRelease(t, db.pool)
+			awaitRelease = pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 			if err := restarted.Run(stopped); !errors.Is(err, context.Canceled) {
 				t.Fatal(err)
 			}
@@ -57,14 +57,14 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal("restart failed to settle the original claim", turn, err)
 			}
 			var turns, inputs, queued int
-			err = db.pool.QueryRow(t.Context(), `SELECT
+			err = s.pool.QueryRow(t.Context(), `SELECT
 				(SELECT count(*) FROM turns WHERE session_id=$1),
 				(SELECT count(*) FROM turn_inputs WHERE session_id=$1),
 				(SELECT count(*) FROM turns WHERE session_id=$1 AND status='queued')`, pending.SessionID).Scan(&turns, &inputs, &queued)
 			if err != nil || turns != 1 || inputs != 1 || queued != 0 {
 				t.Fatal("restart duplicated or requeued prepared work", turns, inputs, queued, err)
 			}
-			successor := executionOwner(t, db).Sessions
+			successor := executionOwner(t, s).Sessions
 			retry, err := successor.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if deleted {
 				if !errors.Is(err, sessions.ErrNotFound) {

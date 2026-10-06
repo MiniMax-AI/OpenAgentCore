@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -29,9 +30,14 @@ type Store struct {
 	placement        *placement.Rules
 }
 
+// defaultPlacement is the placement rules cmd/server builds on the built-in
+// providers and an unset public URL.
+var defaultPlacement, _ = placement.NewRules(providers.Builtin(), "")
+
+// New is the fixture on pool without a credential key, under defaultPlacement.
 func New(pool *pgxpool.Pool) *Store {
 	pooled := pgunit.NewPool(pool)
-	return &Store{queries: sqlc.New(pool), pool: pool, pooled: pooled, writer: pooled}
+	return &Store{queries: sqlc.New(pool), pool: pool, pooled: pooled, writer: pooled, placement: defaultPlacement}
 }
 
 // NewWithCredentialCipher is New with a credential key, so Sessions can freeze

@@ -72,23 +72,23 @@ func (p *lifecycleProvider) RunCommand(context.Context, sandbox.Reference, sandb
 	return sandbox.CommandResult{}, errors.New("not used")
 }
 
-func managedWorker(t *testing.T, s *Store, db fixtureDB, key string, p sandbox.SandboxProvider) (*execution.Worker, func()) {
+func managedWorker(t *testing.T, s *Store, key string, p sandbox.SandboxProvider) (*execution.Worker, func()) {
 	t.Helper()
-	return managedWorkerMode(t, s, db, key, p, false)
+	return managedWorkerMode(t, s, key, p, false)
 }
 
-func managedWorkerMode(t *testing.T, s *Store, db fixtureDB, key string, p sandbox.SandboxProvider, maintenance bool, run ...bool) (*execution.Worker, func()) {
+func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProvider, maintenance bool, run ...bool) (*execution.Worker, func()) {
 	t.Helper()
 	registry := runtimegateway.NewRegistry()
 	if peer, ok := p.(interface {
 		setRuntimeGateway(*testing.T, string, *runtimegateway.Registry)
 	}); ok {
-		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
+		handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
 		server := httptest.NewServer(http.HandlerFunc(handler.WS))
 		t.Cleanup(server.Close)
 		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
 	}
-	w := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
+	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
 	if len(run) > 0 && run[0] {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
@@ -113,27 +113,27 @@ func managedWorkerMode(t *testing.T, s *Store, db fixtureDB, key string, p sandb
 	return w, stop
 }
 
-func managedSession(t *testing.T, s *Store, db fixtureDB) (string, sessions.Session, sessions.Environment) {
+func managedSession(t *testing.T, s *Store) (string, sessions.Session, sessions.Environment) {
 	t.Helper()
 	tenant := uuid.NewString()
 	v, e := s.CreateSession(t.Context(), tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","network":{"access":"enabled"}}}`)}))
 	if e != nil {
 		t.Fatal(e)
 	}
-	env, e := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, v.ID)
+	env, e := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, v.ID)
 	if e != nil {
 		t.Fatal(e)
 	}
 	return tenant, v, env
 }
 
-func reconcileManagedState(t *testing.T, w *execution.Worker, db fixtureDB, tenant, environment, state string) {
+func reconcileManagedState(t *testing.T, w *execution.Worker, s *Store, tenant, environment, state string) {
 	t.Helper()
 	for range 100 {
 		if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 			t.Fatal(err)
 		}
-		got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
+		got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,23 +145,23 @@ func reconcileManagedState(t *testing.T, w *execution.Worker, db fixtureDB, tena
 }
 
 func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
-	tenant, session, env := managedSession(t, s, db)
+	s, _ := newManagedTestStore(t)
+	tenant, session, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true}
-	w, stop := managedWorker(t, s, db, key, p)
+	w, stop := managedWorker(t, s, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err == nil || owner.ID == "" {
 		t.Fatal("fault did not retain allocation")
 	}
-	credential, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID)
+	credential, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID)
 	if err != nil || !ok || credential.CredentialHash != p.credentialHash {
 		t.Fatal("provider received unbound credential")
 	}
 	stop()
-	next, _ := managedWorker(t, s, db, key, p)
-	reconcileManagedState(t, next, db, tenant, env.ID, "running")
-	recovered, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	next, _ := managedWorker(t, s, key, p)
+	reconcileManagedState(t, next, s, tenant, env.ID, "running")
+	recovered, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || recovered.ID != owner.ID || !recovered.CreateSettled || recovered.State != "running" {
 		t.Fatalf("lost response recovery: %+v %v", recovered, err)
 	}
@@ -173,22 +173,22 @@ func TestManagedRuntimeLostCreateRestartAndDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A scan may first exhaust its previous cursor before starting a new cycle.
-	reconcileManagedState(t, next, db, tenant, env.ID, "released")
-	clean, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	reconcileManagedState(t, next, s, tenant, env.ID, "released")
+	clean, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || clean.State != "released" || p.kills != 1 {
 		t.Fatalf("deleted cleanup: %+v %v", clean, err)
 	}
-	if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("cleanup did not revoke authority")
 	}
 }
 
 func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
-	tenant, session, env := managedSession(t, s, db)
+	s, _ := newManagedTestStore(t)
+	tenant, session, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: true, absent: true}
-	w, _ := managedWorker(t, s, db, key, p)
+	w, _ := managedWorker(t, s, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err == nil {
 		t.Fatal("expected uncertain creation")
@@ -196,43 +196,43 @@ func TestManagedRuntimeUnknownCreationRetainsCleanup(t *testing.T) {
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, db, tenant, env.ID, "cleanup_pending")
-	got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	reconcileManagedState(t, w, s, tenant, env.ID, "cleanup_pending")
+	got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "cleanup_pending" || got.CreateSettled || p.creates != 1 {
 		t.Fatalf("unknown creation forgotten: %+v %v", got, err)
 	}
-	if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("unknown allocation retains execution authority")
 	}
 	// A late completion is still owned and reclaimed on the next scan.
 	p.resources[owner.ID] = sandbox.Info{Reference: sandbox.Reference{TenantID: tenant, EnvironmentID: env.ID, AllocationID: owner.ID}, ProviderID: owner.ID, State: "running", BootstrapComplete: true}
-	reconcileManagedState(t, w, db, tenant, env.ID, "released")
-	got, err = fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	reconcileManagedState(t, w, s, tenant, env.ID, "released")
+	got, err = deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "released" || len(p.resources) != 0 {
 		t.Fatalf("late creation escaped cleanup: %+v %v", got, err)
 	}
 }
 
 func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
-	tenant, _, env := managedSession(t, s, db)
+	s, _ := newManagedTestStore(t)
+	tenant, _, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, _ := managedWorker(t, s, db, key, p)
+	w, _ := managedWorker(t, s, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET kept_at=clock_timestamp()-interval '61 minutes' WHERE id=$1", owner.ID); err != nil {
 		t.Fatal(err)
 	}
 	p.unavailable = true
-	reconcileManagedState(t, w, db, tenant, env.ID, "cleanup_pending")
-	got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	reconcileManagedState(t, w, s, tenant, env.ID, "cleanup_pending")
+	got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || got.State != "cleanup_pending" {
 		t.Fatalf("expiry lost on provider failure: %+v %v", got, err)
 	}
-	if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 		t.Fatal("expired credential still authenticates")
 	}
 	if p.kills != 0 {
@@ -241,11 +241,11 @@ func TestManagedRuntimeExpiryRevokesWhenProviderUnavailable(t *testing.T) {
 }
 
 func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
-	tenant, _, env := managedSession(t, s, db)
+	s, _ := newManagedTestStore(t)
+	tenant, _, env := managedSession(t, s)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	w, _ := managedWorker(t, s, db, key, p)
+	w, _ := managedWorker(t, s, key, p)
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
 	if err != nil {
 		t.Fatal(err)
@@ -266,7 +266,7 @@ func TestManagedRuntimeStoppedComputeDoesNotRequestCleanup(t *testing.T) {
 		if p.gets == before {
 			t.Fatal("fixture allocation not inspected")
 		}
-		got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+		got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 		if err != nil || got.State != "running" || p.kills != 0 || p.creates != 1 {
 			t.Fatalf("compute interruption authorized replacement/cleanup: %+v %v", got, err)
 		}

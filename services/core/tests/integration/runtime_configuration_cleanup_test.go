@@ -83,7 +83,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 		{name: "kill unavailable stays retained", inspectionError: sandbox.ErrInvalid, killError: sandbox.ErrComputeUnconfirmed, wantSettled: true, wantKill: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s, db := newManagedTestStoreDB(t)
+			s, _ := newManagedTestStore(t)
 			key := uuid.NewString()
 			p := &configurationCleanupProvider{
 				lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}, loseCreate: test.loseCreate},
@@ -91,8 +91,8 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				settleInspection: test.settleInspection, foreign: test.foreign,
 				inspectionError: test.inspectionError, killError: test.killError,
 			}
-			w, _ := managedWorker(t, s, db, key, p)
-			tenant, session, environment := managedSession(t, s, db)
+			w, _ := managedWorker(t, s, key, p)
+			tenant, session, environment := managedSession(t, s)
 			owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 			if (err != nil) != (test.rejectCreate || test.loseCreate) || owner.ID == "" {
 				t.Fatal("unexpected creation outcome", owner, err)
@@ -108,7 +108,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 					t.Fatal(err)
 				}
-				before, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
+				before, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 				if err != nil || before.State == "cleanup_pending" || before.State == "released" {
 					t.Fatal("drift authorized cleanup", before, err)
 				}
@@ -129,17 +129,17 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 			if test.wantReleased {
 				wantState = "released"
 			}
-			reconcileManagedState(t, w, db, tenant, environment.ID, wantState)
+			reconcileManagedState(t, w, s, tenant, environment.ID, wantState)
 			// A second observation must not turn absence after Kill into proof
 			// that an unknown original Create can no longer mutate resources.
 			if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
+			got, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 			if err != nil || got.ID != owner.ID || got.State != wantState || got.CreateSettled != test.wantSettled {
 				t.Fatal("cleanup lost ownership or settlement", got, err)
 			}
-			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("cleanup retained execution authority", err)
 			}
 			p.mu.Lock()

@@ -19,13 +19,13 @@ import (
 // and keeps tenant isolation (W8).
 func TestSavedWebSearchPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
-	s, db := newManagedTestStoreDB(t)
+	s, _ := newManagedTestStore(t)
 	owner, foreign, ownerTenant := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "search-owner", TokenSHA256: runtimedevice.HashCredential(owner), TenantID: ownerTenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "search-foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, db, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 
 	// A disabled record saved before this batch reads unchanged and is admitted with
 	// the same frozen Session tool (W7).
-	_, agentService := fixtureAgents(t, db)
+	_, agentService := fixtureAgents(t, s)
 	legacy, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(
 		`{"model":"search-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":[{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}]}`)})
 	if err != nil {
@@ -172,7 +172,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	enabledTools := map[string]string{"mode-live": agentIDs["mode-live"], "mode-cached": agentIDs["mode-cached"], "type-only": agentIDs["type-only"], "updated-to-live": agentIDs["mode-disabled"]}
 
 	// W4: every creation mode rejects enabled saved search without writes.
-	before := databaseDigest(t, db.pool)
+	before := databaseDigest(t, s.pool)
 	const rejection = `{"error":{"message":"Only disabled web_search is qualified for execution.","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
 	for name, id := range enabledTools {
 		for _, suffix := range []string{
@@ -224,7 +224,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	if status, raw := client.do(foreign, http.MethodGet, "/v1/agents?limit=100", "", nil); status != http.StatusOK || strings.Contains(raw, "search-model") {
 		t.Errorf("foreign list: %d %s", status, raw)
 	}
-	if after := databaseDigest(t, db.pool); !mapsEqual(before, after) {
+	if after := databaseDigest(t, s.pool); !mapsEqual(before, after) {
 		t.Fatal("rejected Session creation changed persisted state")
 	}
 

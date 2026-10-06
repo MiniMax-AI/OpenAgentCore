@@ -23,7 +23,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, db := newModelTestStoreDB(t)
+	s, _ := NewModelTestStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
@@ -33,9 +33,9 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	var owner execution.Owner
 	serve := func() (*httptest.Server, func(bool)) {
 		t.Helper()
-		owner = executionOwner(t, db)
-		worker, stop := publicOwnedWorker(t, s, db, owner)
-		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, worker), executorURL("https://offline-executor.example"))
+		owner = executionOwner(t, s)
+		worker, stop := publicOwnedWorker(t, s, owner)
+		handler, err := publicHandler(t, s, auth, "codex", workerExecution(t, worker), executorURL("https://offline-executor.example"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,7 +79,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	settings["accepted"] = accepted
 	receipts := func(key, target string) []sessions.InputReceipt {
 		t.Helper()
-		rows, err := db.pool.Query(t.Context(), `SELECT sequence, COALESCE(turn_id::text,'') FROM turn_inputs
+		rows, err := s.pool.Query(t.Context(), `SELECT sequence, COALESCE(turn_id::text,'') FROM turn_inputs
 			WHERE session_id=$1 AND idempotency_key=$2 ORDER BY batch_position`, created.ID, key)
 		if err != nil {
 			t.Fatal(err)
@@ -104,7 +104,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	snapshot := func(sessionID string) string {
 		t.Helper()
 		var value string
-		err := db.pool.QueryRow(t.Context(), `SELECT jsonb_build_object(
+		err := s.pool.QueryRow(t.Context(), `SELECT jsonb_build_object(
 			'session', (SELECT to_jsonb(s) FROM sessions s WHERE id=$1),
 			'reservations', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM environment_input_reservations r WHERE session_id=$1),
 			'turns', (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM turns t WHERE session_id=$1),
@@ -148,7 +148,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if snapshot(created.ID) != before {
 		t.Fatal("idle cancellation replay or rejected input changed active work")
 	}
-	itemsBefore, err := sessionReads(db.pool).ListItems(t.Context(), tenant, created.ID, "", 100, true)
+	itemsBefore, err := sessionAdapter(s).ListItems(t.Context(), tenant, created.ID, "", 100, true)
 	if err != nil || len(itemsBefore.Items) != 2 {
 		t.Fatal("controlled partial output was not recorded", err)
 	}
@@ -162,7 +162,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
 		t.Fatal("202 must admit cancellation without fabricating native completion", err)
 	}
-	itemsAfter, err := sessionReads(db.pool).ListItems(t.Context(), tenant, created.ID, "", 100, true)
+	itemsAfter, err := sessionAdapter(s).ListItems(t.Context(), tenant, created.ID, "", 100, true)
 	if err != nil || !reflect.DeepEqual(itemsBefore, itemsAfter) {
 		t.Fatal("cancellation admission changed partial history", err)
 	}
@@ -173,12 +173,12 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	transition(first, sessions.TurnInProgress, sessions.TurnCancelled)
 	for _, reopen := range []bool{false, true} {
 		if reopen {
-			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
+			awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
 			stop(false)
 			awaitRelease()
 			server.Close()
-			db.pool.Close()
-			s, db = newModelTestStoreDB(t)
+			s.pool.Close()
+			s, _ = NewModelTestStore(t)
 			server, stop = serve()
 			settings["base"] = server.URL
 		}

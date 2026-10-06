@@ -46,7 +46,7 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 			defer instrumented.Close()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker := startWorker(t, ctx, fixtureDB{pool: instrumented, cipher: fixtureCipher}, h.d)
+			worker := startWorker(t, ctx, NewWithCredentialCipher(instrumented, fixtureCipher), h.d)
 			done := make(chan error, 1)
 			started := false
 			defer func() {
@@ -102,7 +102,7 @@ func TestWorkerSchedulerHintBypassesEnvironmentScanThrottle(t *testing.T) {
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 	enableWorkerEnvironment(t, h)
 	frames := workerFrames(t, h)
-	worker, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
+	worker, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
 	defer stop()
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "initial empty scheduler scan", func() bool {
 		return worker.MetricsSnapshot().Scheduler.LastRunAt != nil

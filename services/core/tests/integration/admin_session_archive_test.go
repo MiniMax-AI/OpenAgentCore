@@ -44,7 +44,7 @@ func managedArchiveFixture(t *testing.T) (*Store, *Store, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	installation := uuid.NewString()
 	changes := deploymentExecution(t, w)

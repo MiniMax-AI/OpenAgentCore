@@ -77,7 +77,6 @@ func (p *nodeIsolationProvider) RunCommand(ctx context.Context, r sandbox.Refere
 type nodeIsolationFixture struct {
 	t                    *testing.T
 	store                *Store
-	db                   fixtureDB
 	nodes                *deployment.Service
 	pool                 *pgxpool.Pool
 	worker               *execution.Worker
@@ -97,8 +96,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	s.SetPlacement(fixtureRules(t, db))
+	s := NewWithCredentialCipher(pool, cipher)
 	registry := runtimegateway.NewRegistry()
 	cp := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
 	p := &nodeIsolationProvider{fakeCheckpointProvider: cp, blocked: map[string]bool{}, mode: mode, entered: make(chan struct{})}
@@ -115,7 +113,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		p.writes.Add(1)
 		return completedInitialization(request, data)
 	}}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	cp.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {
@@ -126,11 +124,11 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		cp.mu.Unlock()
 		server.Close()
 	})
-	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, db: db, nodes: fixtureDeployment(t, db), pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
+	f := &nodeIsolationFixture{initializationCancel: cancelPreparation, t: t, store: s, nodes: deploymentService(t, s), pool: pool, provider: p, key: uuid.NewString(), nodeA: uuid.NewString(), nodeB: uuid.NewString()}
 	// Keep restored compute awake throughout the isolation assertions.
 	// The suspension setup explicitly dates its activity two minutes in the past.
 	policy := &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Minute, Retention: time.Hour, MaxActive: 100, MaxRetained: 100}
-	f.worker = startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
+	f.worker = startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: strings.Repeat("a", 64), Provider: p, ProviderKind: "microsandbox", LocalNodeID: f.nodeA, LocalCredentialSHA256: runtimedevice.HashCredential("local-credential"), LocalMaxActive: 100, LocalMaxRetained: 100, Suspension: policy}})
 	spec := SandboxDeploymentTestSpec("microsandbox")
 	raw, _ := json.Marshal(spec)
 	if _, err := pool.Exec(t.Context(), "UPDATE runtime_deployment SET specification=$1", raw); err != nil {
@@ -140,7 +138,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(f.stop)
-	f.epoch = fixtureOwnerEpoch(t, db)
+	f.epoch = fixtureOwnerEpoch(t, s)
 	f.enroll(f.nodeB)
 	f.online(f.nodeA)
 	f.online(f.nodeB)
@@ -211,7 +209,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	env, err := sessionReads(f.pool).GetSessionEnvironment(f.t.Context(), tenant, session.ID)
+	env, err := sessionAdapter(f.store).GetSessionEnvironment(f.t.Context(), tenant, session.ID)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -237,7 +235,7 @@ func (f *nodeIsolationFixture) phase(tenant, environment, phase string) deployme
 		if err := f.worker.ReconcileManagedRuntimes(f.t.Context()); err != nil {
 			f.t.Fatal(err)
 		}
-		owner, err := fixtureReader(f.db).EnvironmentAllocation(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
+		owner, err := deploymentStore(f.store).EnvironmentAllocation(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if err != nil {
 			f.t.Fatal(err)
 		}

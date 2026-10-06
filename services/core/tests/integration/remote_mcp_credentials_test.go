@@ -13,12 +13,12 @@ import (
 func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *testing.T) {
 	for _, mode := range []string{"missing key", "deleted", "tampered"} {
 		t.Run(mode, func(t *testing.T) {
-			s, db, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
+			s, tenant, vault, credential := selfHostedMCPAdmissionFixture(t)
 			switch mode {
 			case "missing key":
-				s, db = New(db.pool), fixtureDB{pool: db.pool}
+				s = New(s.pool)
 			case "deleted":
-				_, service, err := fixtureVaults(db)
+				_, service, err := fixtureVaults(s)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -26,11 +26,11 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 					t.Fatal(err)
 				}
 			case "tampered":
-				if _, err := db.pool.Exec(t.Context(), "UPDATE vault_credentials SET token_ciphertext=set_byte(token_ciphertext,15,get_byte(token_ciphertext,15) # 1) WHERE id=$1", credential.ID); err != nil {
+				if _, err := s.pool.Exec(t.Context(), "UPDATE vault_credentials SET token_ciphertext=set_byte(token_ciphertext,15,get_byte(token_ciphertext,15) # 1) WHERE id=$1", credential.ID); err != nil {
 					t.Fatal(err)
 				}
 			}
-			handler := selfHostedMCPAdmissionHandler(t, s, db, tenant)
+			handler := selfHostedMCPAdmissionHandler(t, s, tenant)
 			for _, initial := range []bool{false, true} {
 				body := map[string]any{
 					"agent": map[string]any{"model": "model", "tools": []any{map[string]any{
@@ -64,7 +64,7 @@ func TestSelfHostedServiceMCPRejectionDoesNotRequireCredentialDecryption(t *test
 				if !strings.Contains(response.Body.String(), message) {
 					t.Fatal("unsupported placement attempted credential decryption", response.Body)
 				}
-				assertSelfHostedMCPRejectionHasNoWrites(t, db.pool, tenant)
+				assertSelfHostedMCPRejectionHasNoWrites(t, s.pool, tenant)
 			}
 		})
 	}

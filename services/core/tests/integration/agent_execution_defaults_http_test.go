@@ -18,13 +18,12 @@ import (
 func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	_, pool := testStore(t)
 	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{19}, 32))
-	st, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	st.SetPlacement(fixtureRules(t, db))
+	st := NewWithCredentialCipher(pool, cipher)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "defaults-test", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
 	deployment := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://deployment.example/v1", APIKey: "deployment-canary"}
 	defaultsCalls := 0
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, db), withHarnesses([]string{"codex", "claude_sdk", "mcode"}), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withHarnesses([]string{"codex", "claude_sdk", "mcode"}), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 		defaultsCalls++
 		copy := *deployment
 		return &modelconfiguration.Snapshot{Model: "fixture", Provider: &copy, Revision: uuid.New()}, nil

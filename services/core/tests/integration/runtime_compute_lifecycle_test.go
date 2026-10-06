@@ -260,7 +260,6 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 type computeLifecycleFixture struct {
 	t        *testing.T
 	store    *Store
-	db       fixtureDB
 	provider *fakeCheckpointProvider
 	worker   *execution.Worker
 	stop     func()
@@ -270,10 +269,10 @@ type computeLifecycleFixture struct {
 
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
 	t.Helper()
-	s, db := newManagedTestStoreDB(t)
+	s, _ := newManagedTestStore(t)
 	registry := runtimegateway.NewRegistry()
 	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(sessionAdapter(s)), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {
@@ -284,7 +283,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 		}
 		server.Close()
 	})
-	f := &computeLifecycleFixture{t: t, store: s, db: db, provider: p, key: uuid.NewString(), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour, MaxActive: maxActive, MaxRetained: maxRetained}}
+	f := &computeLifecycleFixture{t: t, store: s, provider: p, key: uuid.NewString(), policy: execution.RuntimeSuspensionPolicy{IdleTimeout: time.Second, Retention: time.Hour, MaxActive: maxActive, MaxRetained: maxRetained}}
 	f.start()
 	return f
 }
@@ -297,7 +296,7 @@ func (f *computeLifecycleFixture) start() {
 	var w *execution.Worker
 	var err error
 	for {
-		w, err = startWorkerErr(t.Context(), f.db, dispatcher)
+		w, err = startWorkerErr(t.Context(), f.store, dispatcher)
 		if err == nil || !errors.Is(err, pgunit.ErrLeaseHeld) || !time.Now().Before(deadline) {
 			break
 		}
@@ -315,14 +314,14 @@ func (f *computeLifecycleFixture) start() {
 }
 func (f *computeLifecycleFixture) sql(query string, args ...any) {
 	f.t.Helper()
-	if _, err := f.db.pool.Exec(f.t.Context(), query, args...); err != nil {
+	if _, err := f.store.pool.Exec(f.t.Context(), query, args...); err != nil {
 		f.t.Fatal(err)
 	}
 }
 func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.Environment, deployment.Allocation) {
 	t := f.t
 	t.Helper()
-	tenant, session, environment := managedSession(t, f.store, f.db)
+	tenant, session, environment := managedSession(t, f.store)
 	owner, err := f.worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, f.key)
 	if err != nil {
 		t.Fatal(err)
@@ -346,7 +345,7 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deplo
 		if err != nil {
 			f.t.Fatal(err)
 		}
-		owner, err = fixtureReader(f.db).EnvironmentAllocation(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
+		owner, err = deploymentStore(f.store).EnvironmentAllocation(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if err != nil {
 			f.t.Fatal(err)
 		}
@@ -389,7 +388,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 		t.Fatal("wake replaced Session or replayed allocation")
 	}
 	var completedCount, queuedCount int
-	if err := f.db.pool.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE id=$2 AND status='completed'),count(*) FILTER(WHERE id=$3 AND status='queued') FROM turns WHERE session_id=$1`, session.ID, completed, queued).Scan(&completedCount, &queuedCount); err != nil || completedCount != 1 || queuedCount != 1 {
+	if err := f.store.pool.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE id=$2 AND status='completed'),count(*) FILTER(WHERE id=$3 AND status='queued') FROM turns WHERE session_id=$1`, session.ID, completed, queued).Scan(&completedCount, &queuedCount); err != nil || completedCount != 1 || queuedCount != 1 {
 		t.Fatal("wake replayed/consumed prior or next Turn", err)
 	}
 	if got, err := sessionAdapter(f.store).GetSession(t.Context(), tenant, session.ID); err != nil || string(got.Configuration) != string(session.Configuration) {
@@ -454,7 +453,7 @@ func TestRuntimeComputeLifecycleQuiesceRejectionAndUnknownIntentRollback(t *test
 	}
 	// A restart with persisted quiescing but no acknowledgement must resume the
 	// source. Inject only the durable phase, never a fake snapshot or new source.
-	current, err := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	current, err := deploymentStore(f.store).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,7 +475,7 @@ func TestRuntimeComputeLifecycleWakeDuringQuiesceResumesSource(t *testing.T) {
 	tenant, _, env, owner := f.create()
 	f.complete(owner)
 	wakeResult := make(chan error, 1)
-	activity := fixtureDeployment(t, f.db)
+	activity := deploymentService(t, f.store)
 	f.provider.mu.Lock()
 	f.provider.beforeQuiesce = func() {
 		wakeResult <- activity.TouchActivity(t.Context(), tenant, env.ID)
@@ -515,11 +514,11 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 			} else {
 				f.sql(`UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID)
 			}
-			reconcileManagedState(t, f.worker, f.db, tenant, env.ID, "released")
+			reconcileManagedState(t, f.worker, f.store, tenant, env.ID, "released")
 			if len(f.provider.computes) != 0 || len(f.provider.snapshots) != 0 || f.provider.snapshotDeletes != 1 {
 				t.Fatal("retained snapshot survived cleanup")
 			}
-			if _, ok, err := fixtureSessionStore(f.db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := sessionAdapter(f.store).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("cleanup retained daemon authority", err)
 			}
 		})
@@ -529,7 +528,7 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	f := newComputeLifecycleFixture(t, 1, 2)
 	tenant, _, env, owner := f.create()
-	tenant2, _, env2 := managedSession(t, f.store, f.db)
+	tenant2, _, env2 := managedSession(t, f.store)
 	if _, err := f.worker.ProvisionEnvironment(t.Context(), tenant2, env2.ID, f.key); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatalf("active capacity ignored: %v", err)
 	}
@@ -546,7 +545,7 @@ func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	for range 4 {
 		f.worker.ReconcileManagedRuntimes(t.Context())
 	}
-	first, err := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	first, err := deploymentStore(f.store).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || first.ComputePhase != "suspended" || f.provider.restores != 0 {
 		t.Fatal("wake exceeded active capacity", err)
 	}
@@ -561,7 +560,7 @@ func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	f.complete(second)
 	f.phase(tenant2, env2.ID, "suspended")
 	// Both retained allocations count even when their source VMs are gone.
-	tenant3, _, env3 := managedSession(t, f.store, f.db)
+	tenant3, _, env3 := managedSession(t, f.store)
 	if _, err := f.worker.ProvisionEnvironment(t.Context(), tenant3, env3.ID, f.key); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatalf("retained capacity ignored: %v", err)
 	}

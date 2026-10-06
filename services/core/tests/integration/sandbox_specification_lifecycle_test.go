@@ -24,7 +24,7 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, dep
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
+	s := NewWithCredentialCipher(pool, cipher)
 	w := executionWriter(t, s)
 	id := uuid.NewString()
 	changes := deploymentExecution(t, w)

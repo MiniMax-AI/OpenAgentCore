@@ -21,7 +21,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		_, pool := testStore(t)
 		insertWorkerRuntimeAllocation(t, pool, h, "disabled")
 	}
-	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		info, _, _ := peer.AgentKindStatus("codex")
 		return info.Capabilities.LocalEnvironment
 	})
-	w := startWorker(t, t.Context(), h.db, h.d)
+	w := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- w.Run(ctx) }()
@@ -95,14 +95,14 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	unassigned, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, other.ID)
+	unassigned, err := sessionAdapter(h.s).GetSessionEnvironment(t.Context(), h.tenant, other.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), unassigned, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("unassigned environment selected general device", err)
 	}
-	if _, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(h.s).GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("read persisted an unauthorized placement", err)
 	}
 }
@@ -151,7 +151,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	if err != nil || bound.Device.EnvironmentID != environment.ID || bound.NativeSessionID != "local-native-history" {
 		t.Fatal("local native identity was not retained", err)
 	}
-	artifacts, err := sessionReads(h.db.pool).ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, environment.ID, "", 20, false)
+	artifacts, err := sessionAdapter(h.s).ListSessionArtifacts(t.Context(), h.tenant, h.session.ID, environment.ID, "", 20, false)
 	if err != nil || len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].Path != "/workspace/outputs/result.bin" || artifacts.Artifacts[0].TurnID != start.RunID || artifacts.Artifacts[0].SizeBytes != 3 {
 		t.Fatalf("completed turn did not publish output: %+v %v", artifacts, err)
 	}

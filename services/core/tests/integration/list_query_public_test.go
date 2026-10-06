@@ -25,7 +25,7 @@ func TestListQueryOfficialClientPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, db := NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s := NewWithCredentialCipher(pool, cipher)
 	token, foreign := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "query-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
@@ -33,7 +33,7 @@ func TestListQueryOfficialClientPostgres(t *testing.T) {
 	})
 	// Use real admission while leaving dispatch paused. Public cancellation retains
 	// the queued history; this fixture does not perform native or model execution.
-	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{})
+	worker := startWorker(t, t.Context(), s, &execution.Dispatcher{})
 	t.Cleanup(func() {
 		stopped, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -41,7 +41,7 @@ func TestListQueryOfficialClientPostgres(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, worker))
+	handler, err := publicHandler(t, s, auth, "codex", workerExecution(t, worker))
 	if err != nil {
 		t.Fatal(err)
 	}

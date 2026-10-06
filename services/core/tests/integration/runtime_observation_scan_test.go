@@ -8,14 +8,14 @@ import (
 )
 
 func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *testing.T) {
-	s, db := newManagedTestStoreDB(t)
+	s, _ := newManagedTestStore(t)
 	var expected []string
 	for range 5 {
-		_, session, _ := managedSession(t, s, db)
+		_, session, _ := managedSession(t, s)
 		expected = append(expected, session.ID)
 	}
 	slices.Sort(expected)
-	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: sessionTenant(t, db, expected[2]), SessionID: expected[2]}); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: sessionTenant(t, s, expected[2]), SessionID: expected[2]}); err != nil {
 		t.Fatal(err)
 	}
 	expected = append(expected[:2], expected[3:]...)
@@ -23,7 +23,7 @@ func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *test
 	var got []string
 	cursor := ""
 	for {
-		page, err := fixtureReader(db).ObservationSessions(t.Context(), cursor, 2)
+		page, err := deploymentStore(s).ObservationSessions(t.Context(), cursor, 2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -47,16 +47,16 @@ func TestRuntimeObservationScanIsDeploymentWideBoundedAndExcludesDeleted(t *test
 	if !slices.Equal(got, expected) {
 		t.Fatalf("observation scan = %v, want %v", got, expected)
 	}
-	if _, err := fixtureReader(db).ObservationSessions(t.Context(), "", 0); err == nil {
+	if _, err := deploymentStore(s).ObservationSessions(t.Context(), "", 0); err == nil {
 		t.Fatal("zero observation page size was accepted")
 	}
 }
 
-func sessionTenant(t *testing.T, db fixtureDB, sessionID string) string {
+func sessionTenant(t *testing.T, s *Store, sessionID string) string {
 	t.Helper()
 	// The deployment-wide scan intentionally discovers tenant identity without
 	// enumerating configured API keys. Use that same read to locate this fixture.
-	page, err := fixtureReader(db).ObservationSessions(t.Context(), "", 100)
+	page, err := deploymentStore(s).ObservationSessions(t.Context(), "", 100)
 	if err != nil {
 		t.Fatal(err)
 	}
