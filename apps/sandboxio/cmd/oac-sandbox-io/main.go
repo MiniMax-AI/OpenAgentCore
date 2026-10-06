@@ -34,7 +34,7 @@ func main() {
 	// Reap is the process's only wait. As a child subreaper it also reaps
 	// the orphaned descendants of operations.
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
-		fail(&sandboxio.StartupError{Step: sandboxio.StepSubreaper, Err: err})
+		fail(fmt.Errorf("become a child subreaper: %w", err))
 	}
 	go processservice.Reap(context.Background())
 

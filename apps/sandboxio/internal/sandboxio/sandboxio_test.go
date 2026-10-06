@@ -263,3 +263,22 @@ func TestRefusedCredentialEndsTheService(t *testing.T) {
 		t.Fatalf("run: %v, want AuthenticationFailed without the credential", err)
 	}
 }
+
+// A failure before serving names its step, and the message never carries the
+// credential.
+func TestStartupFailureNamesTheStep(t *testing.T) {
+	valid, _ := writeBootstrap(t, "wss://relay.invalid/link", "serve-credential")
+	invalid := filepath.Join(t.TempDir(), "bootstrap.json")
+	if err := os.WriteFile(invalid, []byte(`{"version":1,"credential":"serve-credential"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ bootstrap, root, want string }{
+		{invalid, t.TempDir(), "read the bootstrap file: "},
+		{valid, filepath.Join(t.TempDir(), "missing"), "start the file service: "},
+	} {
+		err := run(context.Background(), c.bootstrap, options{root: c.root})
+		if err == nil || !strings.HasPrefix(err.Error(), c.want) || strings.Contains(err.Error(), "serve-credential") {
+			t.Errorf("run: %v, want %q without the credential", err, c.want)
+		}
+	}
+}

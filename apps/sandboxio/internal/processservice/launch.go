@@ -21,8 +21,8 @@ import (
 // launch spawns the process and emits Started or StartFailed, then starts
 // the output readers. The leader's exit follows the output it left buffered;
 // see markLocked.
-func (op *operation) launch(spec sp.ProcessSpec) {
-	l, f := op.spawn(spec)
+func (op *operation) launch(req sp.StartRequest) {
+	l, f := op.spawn(req)
 	op.mu.Lock()
 	if f != nil {
 		op.state, op.startFailure = sp.StateStartFailed, f
@@ -59,9 +59,9 @@ type launched struct {
 	streams []*stream
 }
 
-// spawn starts the trampoline in a new session and waits until it has
-// exec'd the target or reported why it could not.
-func (op *operation) spawn(spec sp.ProcessSpec) (l launched, f *sp.Failure) {
+// spawn starts the trampoline in a new session, hands it the request and
+// waits until it has exec'd the target or reported why it could not.
+func (op *operation) spawn(req sp.StartRequest) (l launched, f *sp.Failure) {
 	ioFail := func(what string, err error) *sp.Failure {
 		return sp.Fail(sp.CodeIO, sandboxwire.EffectNone, "%s: %v", what, err)
 	}
@@ -94,8 +94,8 @@ func (op *operation) spawn(spec sp.ProcessSpec) (l launched, f *sp.Failure) {
 	if files[statusFD], statusR, f = pipe("status pipe", false); f != nil {
 		return l, f
 	}
-	if spec.PTY != nil {
-		master, tty, err := openPTY(*spec.PTY)
+	if req.Spec.PTY != nil {
+		master, tty, err := openPTY(*req.Spec.PTY)
 		if err != nil {
 			return l, ioFail("open terminal", err)
 		}
@@ -125,7 +125,7 @@ func (op *operation) spawn(spec sp.ProcessSpec) (l launched, f *sp.Failure) {
 		Env:   []string{trampolineEnv},
 		Files: files,
 		// Setctty makes the child's descriptor 0, the terminal, its controlling terminal.
-		Sys: &syscall.SysProcAttr{Setsid: true, Setctty: spec.PTY != nil},
+		Sys: &syscall.SysProcAttr{Setsid: true, Setctty: req.Spec.PTY != nil},
 	}
 	reaping.RLock()
 	p, err := os.StartProcess("/proc/self/exe", []string{trampolineArg0}, attr)
@@ -157,7 +157,7 @@ func (op *operation) spawn(spec sp.ProcessSpec) (l launched, f *sp.Failure) {
 	closeAll(child)
 	child = nil
 
-	_, werr := launchW.Write(encodeLaunch(spec))
+	_, werr := launchW.Write(sp.Encode(req))
 	launchW.Close()
 	status, rerr := io.ReadAll(statusR)
 	statusR.Close()
