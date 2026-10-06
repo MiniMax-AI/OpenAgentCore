@@ -20,8 +20,8 @@ const (
 	// MessageType uint16, Flags uint16 and RequestID uint64, in network byte
 	// order.
 	HeaderSize = 16
-	// MaxPayload is the hard maximum frame payload. Advertised limits may be
-	// smaller.
+	// MaxPayload is the hard maximum frame payload. A protocol may bound its
+	// messages lower.
 	MaxPayload = 1 << 20
 	// MaxChunk is the maximum file or process data chunk.
 	MaxChunk = 64 << 10

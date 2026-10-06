@@ -27,7 +27,6 @@ type AttachConfig struct {
 type AttachLink struct {
 	sess     *yamux.Session
 	ctl      *yamux.Stream
-	accepted HelloAccepted
 	onClosed func(AttachmentClosed)
 	done     chan struct{}
 
@@ -52,17 +51,14 @@ func DialAttach(ctx context.Context, cfg AttachConfig) (*AttachLink, error) {
 	}
 	l := &AttachLink{onClosed: cfg.OnAttachmentClosed, done: make(chan struct{}), write: make(chan struct{}, 1),
 		pending: map[uint64]chan Message{}}
-	sess, ctl, accepted, err := connect(ctx, dialerFor(cfg.Dial, cfg.URL, cfg.TLS), hello, &l.seq)
+	sess, ctl, _, err := connect(ctx, dialerFor(cfg.Dial, cfg.URL, cfg.TLS), hello, &l.seq)
 	if err != nil {
 		return nil, err
 	}
-	l.sess, l.ctl, l.accepted = sess, ctl, accepted
+	l.sess, l.ctl = sess, ctl
 	go l.read()
 	return l, nil
 }
-
-// Accepted returns the relay's HelloAccepted.
-func (l *AttachLink) Accepted() HelloAccepted { return l.accepted }
 
 // Done is closed when the link ends.
 func (l *AttachLink) Done() <-chan struct{} { return l.done }
@@ -89,20 +85,16 @@ func (l *AttachLink) OpenService(ctx context.Context, o Open) (Stream, Opened, e
 	stop := context.AfterFunc(ctx, func() { st.Reset() })
 	opened, err := func() (Opened, error) {
 		var seq sandboxwire.RequestSequence
-		if err := WriteMessage(st, seq.Next(), o); err != nil {
+		id := seq.Next()
+		if err := WriteMessage(st, id, o); err != nil {
 			return Opened{}, Uncertain(err)
 		}
-		_, m, err := ReadMessage(st, MaxMessageBytes)
+		m, err := ReadReply(st, OpOpen, id)
 		if err != nil {
-			return Opened{}, Uncertain(err)
+			return Opened{}, err
 		}
-		switch r := m.(type) {
-		case Opened:
-			if r.AttachmentID == o.AttachmentID {
-				return r, nil
-			}
-		case Failure:
-			return Opened{}, r.Err()
+		if r := m.(Opened); r.AttachmentID == o.AttachmentID {
+			return r, nil
 		}
 		return Opened{}, errPossibleViolation
 	}()
@@ -122,28 +114,18 @@ func (l *AttachLink) Renew(ctx context.Context, r RenewAttachment) (AttachmentRe
 	if err != nil {
 		return AttachmentRenewed{}, err
 	}
-	renewed, ok := m.(AttachmentRenewed)
-	if !ok || renewed.AttachmentID != r.AttachmentID {
-		return AttachmentRenewed{}, errPossibleViolation
+	if renewed := m.(AttachmentRenewed); renewed.AttachmentID == r.AttachmentID {
+		return renewed, nil
 	}
-	return renewed, nil
+	return AttachmentRenewed{}, errPossibleViolation
 }
 
 // CloseAttachment ends an attachment and all its streams. Closing an unknown
 // attachment succeeds.
 func (l *AttachLink) CloseAttachment(ctx context.Context, id sandboxwire.ID) error {
-	m, err := l.call(ctx, CloseAttachment{AttachmentID: id})
-	if err != nil {
-		return err
-	}
-	if _, ok := m.(CloseAccepted); !ok {
-		return errPossibleViolation
-	}
-	return nil
+	_, err := l.call(ctx, CloseAttachment{AttachmentID: id})
+	return err
 }
-
-// errPossibleViolation answers a request whose response did not fit it.
-var errPossibleViolation = &Error{Code: ProtocolViolation, Effect: sandboxwire.EffectPossible}
 
 // Write states of a control request. Whichever of the writer and a
 // cancellation leaves writing first decides the request's fate.
@@ -222,13 +204,7 @@ func (l *AttachLink) call(ctx context.Context, req Message) (Message, error) {
 		if !ok {
 			return nil, Uncertain(ErrLinkClosed)
 		}
-		if f, failed := m.(Failure); failed {
-			return nil, f.Err()
-		}
-		if m.frameType() != sandboxwire.ResponseType(req.frameType()) {
-			return nil, errPossibleViolation
-		}
-		return m, nil
+		return reply(Op(req.frameType()), m)
 	case <-ctx.Done():
 		return nil, Uncertain(ctx.Err())
 	}

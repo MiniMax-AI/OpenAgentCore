@@ -182,24 +182,17 @@ func connect(ctx context.Context, dial Dialer, hello Message, seq *sandboxwire.R
 	stop := context.AfterFunc(ctx, func() { sess.Close() })
 	defer stop()
 	ctl, err := sess.OpenStream(ctx)
-	if err == nil {
-		ctl.SetDeadline(time.Now().Add(HandshakeTimeout))
-		err = WriteMessage(ctl, seq.Next(), hello)
-	}
 	var m Message
 	if err == nil {
-		_, m, err = ReadMessage(ctl, MaxMessageBytes)
+		ctl.SetDeadline(time.Now().Add(HandshakeTimeout))
+		id := seq.Next()
+		if err = WriteMessage(ctl, id, hello); err == nil {
+			m, err = ReadReply(ctl, OpHello, id)
+		}
 	}
 	if err == nil {
-		switch r := m.(type) {
-		case HelloAccepted:
-			ctl.SetDeadline(time.Time{})
-			return sess, ctl, r, nil
-		case Failure:
-			err = r.Err()
-		default:
-			err = Fail(ProtocolViolation)
-		}
+		ctl.SetDeadline(time.Time{})
+		return sess, ctl, m.(HelloAccepted), nil
 	}
 	sess.Close()
 	if ctx.Err() != nil {

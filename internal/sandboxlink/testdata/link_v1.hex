@@ -24,11 +24,9 @@
 00000007 72756e74696d65                # Credential "runtime"
 
 # HelloAccepted
-0000001a 8001 0000 0000000000000001    # header: length 26, response to OpHello, flags, request 1
+00000012 8001 0000 0000000000000001    # header: length 18, response to OpHello, flags, request 1
 0001                                   # result success
 0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a       # LinkID
-00000100                               # MaxStreams 256
-00100000                               # MaxFrameBytes 1 MiB
 
 # Open
 00000090 0002 0000 0000000000000001    # header: length 144, OpOpen, flags, request 1
@@ -48,12 +46,11 @@
 00000005 6772616e74                    # AttachGrant "grant"
 
 # Opened
-0000002e 8002 0000 0000000000000001    # header: length 46, response to OpOpen, flags, request 1
+0000002a 8002 0000 0000000000000001    # header: length 42, response to OpOpen, flags, request 1
 0001                                   # result success
 07070707070707070707070707070707       # AttachmentID
 05050505050505050505050505050505       # ServerInstanceID
 000001a0c4506c00                       # LeaseExpiresAt 1790000000000 ms
-00100000                               # MaxFrameBytes 1 MiB
 
 # Failure answering Open
 00000006 8002 0000 0000000000000001    # header: length 6, response to OpOpen, flags, request 1
@@ -62,7 +59,7 @@
 0001                                   # Effect EffectNone
 
 # Bind for a File stream
-00000071 0003 0000 0000000000000001    # header: length 113, OpBind, flags, request 1
+0000006d 0003 0000 0000000000000001    # header: length 109, OpBind, flags, request 1
 07070707070707070707070707070707       # AttachmentID
 0001                                   # Service ServiceFile
 0001                                   # Version 1
@@ -71,7 +68,6 @@
 0000000000000003                       # AssignmentEpoch 3
 000001a0c4506c00                       # LeaseExpiresAt 1790000000000 ms
 05050505050505050505050505050505       # ExpectedServerInstanceID
-00100000                               # MaxFrameBytes 1 MiB
 01                                     # Exports present
 00000002                               # export count 2
 00000005 776f726c64 00                 # export "world", read-write
@@ -79,7 +75,7 @@
 00                                     # Egress absent
 
 # Bind for a Network stream
-00000080 0003 0000 0000000000000001    # header: length 128, OpBind, flags, request 1
+0000007c 0003 0000 0000000000000001    # header: length 124, OpBind, flags, request 1
 07070707070707070707070707070707       # AttachmentID
 0003                                   # Service ServiceNetwork
 0001                                   # Version 1
@@ -88,7 +84,6 @@
 0000000000000003                       # AssignmentEpoch 3
 000001a0c4506c00                       # LeaseExpiresAt 1790000000000 ms
 05050505050505050505050505050505       # ExpectedServerInstanceID
-00100000                               # MaxFrameBytes 1 MiB
 00                                     # Exports absent
 01                                     # Egress present
 00000002                               # rule count 2

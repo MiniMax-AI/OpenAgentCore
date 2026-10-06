@@ -166,7 +166,7 @@ func TestRejectsMalformed(t *testing.T) {
 	}{
 		// Each reader holds only a header, so these fail before any payload read.
 		{"length above MaxPayload", errOf(ReadFrame(bytes.NewReader(header(MaxPayload+1, 0)), ^uint32(0)))},
-		{"length above advertised limit", errOf(ReadFrame(bytes.NewReader(header(65, 0)), 64))},
+		{"length above the caller's limit", errOf(ReadFrame(bytes.NewReader(header(65, 0)), 64))},
 		{"nonzero flags", errOf(ReadFrame(bytes.NewReader(header(0, 1)), MaxPayload))},
 		{"oversize write", WriteFrame(io.Discard, Frame{Type: 1, RequestID: 1, Payload: make([]byte, MaxPayload+1)})},
 		{"trailing bytes", NewDecoder([]byte{0}).Finish()},

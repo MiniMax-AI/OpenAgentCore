@@ -43,15 +43,15 @@ var goldenFrames = []golden{
 	{1, ServeHello{Version: 1, Credential: []byte("serve"), Resource: testResource, ServerInstanceID: testID(0x05),
 		Services: []ServiceVersion{{ServiceFile, 1}, {ServiceNetwork, 1}}}},
 	{1, AttachHello{Version: 1, RuntimeID: testID(0x06), Credential: []byte("runtime")}},
-	{1, HelloAccepted{LinkID: testID(0x0a), MaxStreams: 256, MaxFrameBytes: 1 << 20}},
+	{1, HelloAccepted{LinkID: testID(0x0a)}},
 	{1, Open{Service: ServiceFile, Version: 1, Resource: testResource, ExpectedServerInstanceID: testID(0x05), AttachmentID: testID(0x07),
 		SessionID: testID(0x08), AssignmentID: testID(0x09), AssignmentEpoch: 3, AttachGrant: []byte("grant")}},
-	{1, Opened{AttachmentID: testID(0x07), ServerInstanceID: testID(0x05), LeaseExpiresAt: testLease, MaxFrameBytes: 1 << 20}},
+	{1, Opened{AttachmentID: testID(0x07), ServerInstanceID: testID(0x05), LeaseExpiresAt: testLease}},
 	{1, Failure{Op: OpOpen, Code: StaleGeneration, Effect: sandboxwire.EffectNone}},
 	{1, Bind{AttachmentID: testID(0x07), Service: ServiceFile, Version: 1, SessionID: testID(0x08), AssignmentID: testID(0x09),
-		AssignmentEpoch: 3, LeaseExpiresAt: testLease, ExpectedServerInstanceID: testID(0x05), MaxFrameBytes: 1 << 20, Exports: testExports}},
+		AssignmentEpoch: 3, LeaseExpiresAt: testLease, ExpectedServerInstanceID: testID(0x05), Exports: testExports}},
 	{1, Bind{AttachmentID: testID(0x07), Service: ServiceNetwork, Version: 1, SessionID: testID(0x08), AssignmentID: testID(0x09),
-		AssignmentEpoch: 3, LeaseExpiresAt: testLease, ExpectedServerInstanceID: testID(0x05), MaxFrameBytes: 1 << 20, Egress: testEgress}},
+		AssignmentEpoch: 3, LeaseExpiresAt: testLease, ExpectedServerInstanceID: testID(0x05), Egress: testEgress}},
 	{1, Bound{}},
 	{0, AttachmentClosed{AttachmentID: testID(0x07), Reason: CloseLeaseExpired}},
 }
@@ -109,11 +109,11 @@ func frameOf(t *testing.T, i int, edit func(p []byte) []byte) sandboxwire.Frame 
 
 func TestDecodeRejects(t *testing.T) {
 	// Offsets into the Bind payloads: Service at 16 and exports presence at
-	// 88. In the file Bind (golden frame 6) the export count ends at 92, the
-	// first export runs from 93 to 102 with its ID at 97, and egress presence
-	// is at 112. In the network Bind (golden frame 7) egress presence is at 89,
-	// the rule count ends at 93, and the first rule's family is at 94, address
-	// at 96, prefix length at 100 and ports at 101 and 103.
+	// 84. In the file Bind (golden frame 6) the export count ends at 88, the
+	// first export runs from 89 to 98 with its ID at 93, and egress presence
+	// is at 108. In the network Bind (golden frame 7) egress presence is at 85,
+	// the rule count ends at 89, and the first rule's family is at 90, address
+	// at 92, prefix length at 96 and ports at 97 and 99.
 	set := func(off int, v ...byte) func([]byte) []byte {
 		return func(p []byte) []byte { copy(p[off:], v); return p }
 	}
@@ -128,23 +128,23 @@ func TestDecodeRejects(t *testing.T) {
 		{"file without exports", 7, set(16, 0, 1)},
 		{"exports on network", 6, set(16, 0, 3)},
 		{"empty exports", 6, func(p []byte) []byte {
-			p[92] = 0
-			return append(p[:93], 0)
+			p[88] = 0
+			return append(p[:89], 0)
 		}},
-		{"invalid export ID", 6, set(97, 'W')},
+		{"invalid export ID", 6, set(93, 'W')},
 		{"duplicate export", 6, func(p []byte) []byte {
-			q := append(bytes.Clone(p[:112]), p[93:103]...)
-			q[92] = 3
+			q := append(bytes.Clone(p[:108]), p[89:99]...)
+			q[88] = 3
 			return append(q, 0)
 		}},
-		{"host bits set", 7, set(99, 1)},
-		{"prefix too long", 7, set(100, 33)},
-		{"unknown family", 7, set(94, 0, 3)},
-		{"zero first port", 7, set(101, 0, 0)},
-		{"first port above last", 7, set(101, 0x01, 0xbc)},
+		{"host bits set", 7, set(95, 1)},
+		{"prefix too long", 7, set(96, 33)},
+		{"unknown family", 7, set(90, 0, 3)},
+		{"zero first port", 7, set(97, 0, 0)},
+		{"first port above last", 7, set(97, 0x01, 0xbc)},
 		{"duplicate rule", 7, func(p []byte) []byte {
-			p[93] = 3
-			return append(p, p[94:105]...)
+			p[89] = 3
+			return append(p, p[90:101]...)
 		}},
 	}
 	for _, c := range cases {
@@ -178,6 +178,29 @@ func TestGrantsMatchService(t *testing.T) {
 	auth.Egress = testEgress
 	if err := auth.Validate(&open); !errors.Is(err, sandboxwire.ErrMalformed) {
 		t.Fatalf("file authorization with egress: %v", err)
+	}
+}
+
+// A response answers a request only under the request's ID and for its
+// operation.
+func TestReplyMatchesRequest(t *testing.T) {
+	for _, c := range []struct {
+		op, other Op
+		success   Message
+	}{
+		{OpHello, OpOpen, goldenFrames[2].m},
+		{OpOpen, OpBind, goldenFrames[4].m},
+		{OpBind, OpHello, goldenFrames[8].m},
+	} {
+		for _, r := range []golden{{2, c.success}, {1, FailureFor(c.other, Fail(StaleGeneration))}} {
+			var buf bytes.Buffer
+			if err := WriteMessage(&buf, r.requestID, r.m); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ReadReply(&buf, c.op, 1); !errors.Is(err, ProtocolViolation) {
+				t.Errorf("%#v with request ID %d answering op %d: %v, want ProtocolViolation", r.m, r.requestID, c.op, err)
+			}
+		}
 	}
 }
 
