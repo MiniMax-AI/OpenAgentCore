@@ -258,7 +258,7 @@ func (v *View) handshake(ctx context.Context, spec *Spec) error {
 	case err != nil:
 		return v.lost("start", err)
 	case m.Kind == msgFailed:
-		return m.Fail.err()
+		return m.Fail.startErr(command{Path: spec.Process.Path, Dir: spec.Process.Dir})
 	case m.Kind != msgStarted:
 		return &Error{Kind: ErrLauncher, Op: "start", Err: fmt.Errorf("unexpected message %d", m.Kind)}
 	}
@@ -569,31 +569,39 @@ func (v *View) Spawn(ctx context.Context, path string, args, env []string, dir s
 		return nil, &Error{Kind: ErrLauncher, Op: "pipe", Err: err}
 	}
 	// The command travels over a pipe, as the spec does, so its size is exec's to bound. The write ends once the launcher has read it, or once no read end remains or the spawn is cancelled.
+	c := command{Path: path, Args: args, Env: env, Dir: dir}
 	go func() {
-		_ = gob.NewEncoder(cmdW).Encode(command{Path: path, Args: args, Env: env, Dir: dir})
+		_ = gob.NewEncoder(cmdW).Encode(c)
 		cmdW.Close()
 	}()
 	replies, err := v.request(ctx, message{Kind: msgSpawn}, files...)
 	closeFiles(files)
 	if err == nil {
+		var r reply
+		ok := false
 		select {
-		case r, ok := <-replies:
-			defer func() { <-v.spawning }()
-			return started(r, ok, ends)
+		case r, ok = <-replies:
+			replies = nil
 		case <-ctx.Done():
-			err = ctx.Err()
-			cmdW.Close()
-			go func() {
-				defer func() { <-v.spawning }()
-				r, ok := <-replies
-				if s, err := started(r, ok, ends); err == nil {
-					s.Close()
-					<-s.done
-					closeFiles([]*os.File{s.Stdin, s.Stdout, s.Stderr})
-				}
-			}()
-			return nil, err
 		}
+		// A context that has ended wins over a reply that came as well, and the process goes as a late one does.
+		if err = ctx.Err(); err == nil {
+			defer func() { <-v.spawning }()
+			return started(c, r, ok, ends)
+		}
+		cmdW.Close()
+		go func() {
+			defer func() { <-v.spawning }()
+			if replies != nil { // the reply is still to come
+				r, ok = <-replies
+			}
+			if s, err := started(c, r, ok, ends); err == nil {
+				s.Close()
+				<-s.done
+				closeFiles([]*os.File{s.Stdin, s.Stdout, s.Stderr})
+			}
+		}()
+		return nil, err
 	}
 	cmdW.Close()
 	closeFiles(ends[:])
@@ -601,15 +609,15 @@ func (v *View) Spawn(ctx context.Context, path string, args, env []string, dir s
 	return nil, err
 }
 
-// started returns the process a spawn's reply reports, with ends as its stdio, or why none started, closing ends.
-func started(r reply, ok bool, ends [3]*os.File) (*Spawned, error) {
+// started returns the process a spawn of c's reply reports, with ends as its stdio, or why none started, closing ends.
+func started(c command, r reply, ok bool, ends [3]*os.File) (*Spawned, error) {
 	err := ErrClosed
 	switch {
 	case ok && r.spawned != nil:
 		r.spawned.Stdin, r.spawned.Stdout, r.spawned.Stderr = ends[0], ends[1], ends[2]
 		return r.spawned, nil
 	case ok:
-		err = r.Fail.err()
+		err = r.Fail.startErr(c)
 	}
 	closeFiles(ends[:])
 	return nil, err

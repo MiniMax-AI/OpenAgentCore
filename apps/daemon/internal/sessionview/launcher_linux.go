@@ -226,7 +226,11 @@ func (l *launcher) write() {
 				l.ctl.interrupt()
 				os.Exit(l.code)
 			}
-			_ = l.ctl.send(context.Background(), m)
+			// A send that fails ends the control channel, as a receive that fails does, so that no request waits for a reply that will not come.
+			if err := l.ctl.send(context.Background(), m); err != nil {
+				l.ctl.interrupt()
+				os.Exit(1)
+			}
 		}
 	}
 }
@@ -459,7 +463,7 @@ func chdir(dir string) error {
 	err := unix.Chdir(dir)
 	_ = unix.PthreadSigmask(unix.SIG_SETMASK, &mask, nil)
 	if err != nil {
-		return &Error{Kind: ErrExec, Op: "chdir", Path: dir, Err: err}
+		return &Error{Kind: ErrExec, Op: "chdir", Err: err}
 	}
 	return nil
 }
@@ -475,7 +479,7 @@ func startProcess(spec *launchSpec, c command, stdio []uintptr) (int, error) {
 		},
 	})
 	if err != nil {
-		return 0, &Error{Kind: ErrExec, Op: "exec", Path: c.Path, Err: err}
+		return 0, &Error{Kind: ErrExec, Op: "exec", Err: err}
 	}
 	return pid, nil
 }

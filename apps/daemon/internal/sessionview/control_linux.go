@@ -74,7 +74,7 @@ type message struct {
 	Targets   map[string]string // each mountpoint's view path to the path the world presents it at
 }
 
-// failure carries a launcher *Error across the control socket.
+// failure carries a launcher *Error across the control socket. A failure to start a command leaves the command out, so that no message grows with what a caller passed: the daemon has the command, and startErr puts it back.
 type failure struct {
 	Kind  int
 	Op    string
@@ -115,6 +115,19 @@ func (f failure) err() error {
 		e.Err = errors.New(f.Text)
 	}
 	return e
+}
+
+// startErr returns the error f reports while the launcher starts c, with the directory or path of c that a failed chdir or exec concerns.
+func (f failure) startErr(c command) error {
+	if f.Path == "" {
+		switch f.Op {
+		case "chdir":
+			f.Path = c.Dir
+		case "exec":
+			f.Path = c.Path
+		}
+	}
+	return f.err()
 }
 
 // control is one end of the launcher's SOCK_SEQPACKET control socket. Each packet holds one gob-encoded message.

@@ -200,7 +200,7 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	}
 }
 
-// TestSpawnRunsInTheView checks that a spawned process runs as the process does, with its stdio and exit coming back, that its handle reaches nothing once it has exited, that a spawn whose pipes or command fail fails alone, and that the view's end ends it.
+// TestSpawnRunsInTheView checks that a spawned process runs as the process does, with its stdio and exit coming back, that its handle reaches nothing once it has exited, that a spawn whose pipes, command or directory fail fails alone, that one whose context ended before it began returns that error and leaves no process, and that the view's end ends it.
 func TestSpawnRunsInTheView(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
@@ -249,6 +249,23 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	}
 	if _, err := spawnHelper(context.Background(), v, "noop", "/.oac/harness/root-only"); !errors.Is(err, ErrExec) || !errors.Is(err, syscall.EACCES) {
 		t.Errorf("Spawn in a directory only root may enter = %v, want ErrExec with EACCES", err)
+	}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	late := fmt.Sprintf("oac-cancelled-%d", time.Now().UnixNano())
+	for range 20 {
+		if _, err := spawnHelper(cancelled, v, "sleep", "/data", late); !errors.Is(err, context.Canceled) {
+			t.Fatalf("Spawn with a cancelled context = %v, want context.Canceled", err)
+		}
+	}
+	// A directory longer than a control packet fails alone. This spawn begins once what the cancelled ones started is reaped.
+	bounded, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := spawnHelper(bounded, v, "noop", "/"+strings.Repeat("x", 1<<20)); !errors.Is(err, ErrExec) || !errors.Is(err, syscall.ENAMETOOLONG) {
+		t.Errorf("Spawn in a 1 MiB directory = %.200v, want ErrExec with ENAMETOOLONG", err)
+	}
+	if n := len(pidsWith(t, late)); n != 0 {
+		t.Errorf("the cancelled spawns left %d processes", n)
 	}
 	if err := sleeper.Signal(0); err != nil {
 		t.Errorf("Signal to the running spawned process = %v", err)
