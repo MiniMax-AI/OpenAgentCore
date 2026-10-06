@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -100,7 +102,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			if err := f.nodes.TouchActivity(t.Context(), wakeTenant, wakeEnv.ID); err != nil {
 				t.Fatal(err)
 			}
-			if err := f.store.DeleteSession(t.Context(), deleteTenant, deleteSession.ID); err != nil {
+			if err := store.SessionService(t, f.store).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: deleteTenant, SessionID: deleteSession.ID}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -135,7 +137,7 @@ func TestManagedNodesIsolateBlockedProviderAndInitialization(t *testing.T) {
 			f.online(nodeC)
 			ct, cs, ce := f.session(nodeC, false)
 			f.provision(ct, ce)
-			if err := f.store.DeleteSession(t.Context(), ct, cs.ID); err != nil {
+			if err := store.SessionService(t, f.store).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: ct, SessionID: cs.ID}); err != nil {
 				t.Fatal(err)
 			}
 			waitNodeIsolation(t, 7*time.Second, func() (bool, string) {

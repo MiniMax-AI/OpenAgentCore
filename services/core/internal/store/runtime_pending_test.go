@@ -22,7 +22,7 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 		t.Fatal(err)
 	}
 	_, deleted, deletedEnvironment := managedSession(t, s, db)
-	if err := s.DeleteSession(t.Context(), deleted.TenantID, deleted.ID); err != nil {
+	if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: deleted.TenantID, SessionID: deleted.ID}); err != nil {
 		t.Fatal(err)
 	}
 	key := uuid.NewString()
@@ -60,11 +60,11 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 	if _, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: deleted.TenantID, EnvironmentID: deletedEnvironment.ID}); err == nil {
 		t.Fatal("deleted Session provisioned")
 	}
-	waiting, err := s.GetSession(t.Context(), tenant, initial.ID)
+	waiting, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, initial.ID)
 	if err != nil || waiting.LastTurn != nil || waiting.EnvironmentInputActivity != nil {
 		t.Fatal("compute existence claimed input readiness", waiting, err)
 	}
-	quiet, err := s.GetSession(t.Context(), tenant, idle.ID)
+	quiet, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, idle.ID)
 	if err != nil || quiet.LastTurn != nil || quiet.EnvironmentInputActivity != nil {
 		t.Fatal("idle creation fabricated work", err)
 	}

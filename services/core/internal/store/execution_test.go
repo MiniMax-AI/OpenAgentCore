@@ -50,7 +50,7 @@ func sessionExecution(t *testing.T, lease *pgunit.Lease) *sessions.ExecutionOper
 // pool.
 func transitionTurn(ctx context.Context, s *Store, tenant, session, turn string, transition sessions.TurnTransition) (sessions.Turn, error) {
 	var moved sessions.Turn
-	err := s.withLockedSession(ctx, tenant, session, false, func(ctx context.Context, q *sqlc.Queries, id pgtype.UUID, _ sessions.LockedSession) error {
+	err := s.withSession(ctx, tenant, session, func(ctx context.Context, q *sqlc.Queries, id pgtype.UUID) error {
 		owner, err := parseID(tenant)
 		if err != nil {
 			return err
@@ -139,11 +139,11 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	if err = SubmitFixtureFunctionResult(t.Context(), s, tenant, waiting.ID, waitInput.TurnID, call.CallID, json.RawMessage(`{"success":true,"output":"saved"}`)); err != nil {
 		t.Fatal(err)
 	}
-	before, err := s.GetSession(t.Context(), tenant, active.ID)
+	before, err := sessionAdapter(s).GetSession(t.Context(), tenant, active.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, active.ID)
+	cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, active.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,11 +172,11 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	_, err = writer.ExpireEnvironmentInputs(t.Context())
 	mustReject("input expiry", err)
 	mustReject("ownership check", writer.lease.CheckOwnership(t.Context()))
-	after, err := s.GetSession(t.Context(), tenant, active.ID)
+	after, err := sessionAdapter(s).GetSession(t.Context(), tenant, active.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("stale state persisted", after, err)
 	}
-	afterCursor, err := s.SessionEventCursor(t.Context(), tenant, active.ID)
+	afterCursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, active.ID)
 	if err != nil || afterCursor != cursor {
 		t.Fatal("stale events published", afterCursor, err)
 	}
@@ -290,29 +290,22 @@ func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
 	submitMessage(t, s, tenant, session.ID, "start")
-	before, err := s.GetSession(t.Context(), tenant, session.ID)
+	before, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+	cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, archiveErr := s.ArchiveManagedSession(t.Context(), tenant, session.ID, 0)
-	_, expiryErr := s.ExpireEnvironmentInputs(t.Context())
-	for name, err := range map[string]error{
-		"archive":      archiveErr,
-		"input expiry": expiryErr,
-	} {
-		if !errors.Is(err, ErrExecutionAuthority) {
-			t.Fatalf("pooled Store ran %s: %v", name, err)
-		}
+	if _, err := s.ExpireEnvironmentInputs(t.Context()); !errors.Is(err, ErrExecutionAuthority) {
+		t.Fatalf("pooled Store ran input expiry: %v", err)
 	}
-	after, err := s.GetSession(t.Context(), tenant, session.ID)
+	after, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("rejected execution operation changed the Session", after, err)
 	}
-	if next, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
+	if next, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
 		t.Fatal("rejected execution operation published events", next, err)
 	}
 }

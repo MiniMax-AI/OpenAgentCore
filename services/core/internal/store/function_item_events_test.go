@@ -21,7 +21,7 @@ func TestFunctionResultEventsAreInputs(t *testing.T) {
 	if err := sessionExecution(t, executionWriter(t, s).lease).AppendTurnEvents(t.Context(), tenant, session.ID, turn, 1, events); err != nil {
 		t.Fatal(err)
 	}
-	changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestFunctionResultItemsRetainSubmittedFields(t *testing.T) {
 					results++
 				}
 			}
-			changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

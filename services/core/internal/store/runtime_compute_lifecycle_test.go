@@ -393,7 +393,7 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	if err := f.db.pool.QueryRow(t.Context(), `SELECT count(*) FILTER(WHERE id=$2 AND status='completed'),count(*) FILTER(WHERE id=$3 AND status='queued') FROM turns WHERE session_id=$1`, session.ID, completed, queued).Scan(&completedCount, &queuedCount); err != nil || completedCount != 1 || queuedCount != 1 {
 		t.Fatal("wake replayed/consumed prior or next Turn", err)
 	}
-	if got, err := f.store.GetSession(t.Context(), tenant, session.ID); err != nil || string(got.Configuration) != string(session.Configuration) {
+	if got, err := store.SessionAdapter(f.store).GetSession(t.Context(), tenant, session.ID); err != nil || string(got.Configuration) != string(session.Configuration) {
 		t.Fatal("configuration changed during restore", err)
 	}
 	if f.provider.promptFrames.Load() != 0 {
@@ -510,7 +510,7 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 			f.complete(owner)
 			f.phase(tenant, env.ID, "suspended")
 			if kind == "deleted" {
-				if err := f.store.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+				if err := store.SessionService(t, f.store).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 					t.Fatal(err)
 				}
 			} else {

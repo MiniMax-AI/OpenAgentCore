@@ -17,7 +17,7 @@ import (
 var _ sessions.TurnReader = (*Store)(nil)
 
 func (s *Store) GetTurn(ctx context.Context, tenant, session, turn string) (sessions.Turn, error) {
-	lookup, err := PublicTurnLookup(tenant, session, turn)
+	lookup, err := publicTurnLookup(tenant, session, turn)
 	if err != nil {
 		return sessions.Turn{}, err
 	}
@@ -110,10 +110,10 @@ func ExecutionWorkCursor(after string, connectedDevices []string) (pgtype.UUID, 
 	return id, devices, nil
 }
 
-// PublicTurnLookup resolves the caller's path identifiers of a Turn or a
+// publicTurnLookup resolves the caller's path identifiers of a Turn or a
 // Turn-scoped resource. A malformed tenant is sessions.ErrInvalidInput; a
 // malformed Session or Turn ID resolves as a missing one.
-func PublicTurnLookup(tenant, session, turn string) (sqlc.GetTurnParams, error) {
+func publicTurnLookup(tenant, session, turn string) (sqlc.GetTurnParams, error) {
 	id, err := parseID(tenant)
 	return sqlc.GetTurnParams{TenantID: id, SessionID: pgunit.PathID(session), ID: pgunit.PathID(turn)}, err
 }

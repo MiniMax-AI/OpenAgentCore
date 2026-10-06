@@ -85,7 +85,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	if err != nil {
 		return
 	}
-	session, err := w.dispatcher.Store.GetSession(check, environment.TenantID, environment.SessionID)
+	session, err := w.dispatcher.SessionsReader.GetSession(check, environment.TenantID, environment.SessionID)
 	if err != nil {
 		result.err = err
 		return

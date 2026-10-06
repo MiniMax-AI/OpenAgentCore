@@ -51,7 +51,7 @@ func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter Ad
 				if err != nil {
 					return err
 				}
-				session, err = readSessionActivity(ctx, q, session)
+				session, err = sessionpg.LoadSessionActivity(ctx, q, session)
 				if err != nil {
 					return err
 				}

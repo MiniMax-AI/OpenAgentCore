@@ -34,7 +34,7 @@ func workerEnvironmentCapabilities() proto.AgentKindCapabilities {
 func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessions.EnvironmentInputReservation {
 	t.Helper()
 	pending := unboundWorkerEnvironmentReservation(t, h)
-	session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, pending.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}

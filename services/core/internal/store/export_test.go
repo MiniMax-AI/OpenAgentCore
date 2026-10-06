@@ -25,6 +25,9 @@ func NewTestStore(t *testing.T) (*Store, *pgxpool.Pool) { return testStore(t) }
 // SessionAdapter is the Session adapter on s's pool and credential key.
 func SessionAdapter(s *Store) *sessionpg.Store { return sessionAdapter(s) }
 
+// SessionService is the Session service on SessionAdapter(s).
+func SessionService(t testing.TB, s *Store) *sessions.Service { return sessionService(t, s) }
+
 // TransitionTurn moves the Turn as the execution owner does, in a Session
 // transaction on s's writer.
 func TransitionTurn(ctx context.Context, s *Store, tenant, session, turn string, transition sessions.TurnTransition) (sessions.Turn, error) {

@@ -135,7 +135,7 @@ func TestProjectEnvironmentExecutorManagement(t *testing.T) {
 		t.Fatal("audit actions", actions, rows.Err())
 	}
 
-	if err := s.DeleteSession(ctx, p.TenantID, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: p.TenantID, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := projectCredentials(ctx, s, p, one.ID); !errors.Is(err, sessions.ErrNotFound) {

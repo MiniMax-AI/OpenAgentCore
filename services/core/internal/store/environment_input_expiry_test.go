@@ -112,7 +112,7 @@ func TestEnvironmentExpirySerializesWithTargetedSettlement(t *testing.T) {
 				case "cancel":
 					_, err = s.CancelEnvironmentInput(t.Context(), tenant, session.ID, pending.ID)
 				case "delete":
-					err = s.DeleteSession(t.Context(), tenant, session.ID)
+					err = sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID})
 				}
 				results <- err
 			}()

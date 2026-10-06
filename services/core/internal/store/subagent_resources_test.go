@@ -151,7 +151,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	if err != nil || value.Status != "active" || value.ClosedAt != nil || value.OpenedAt != 100 {
 		t.Fatal(value, err)
 	}
-	changes, err := s.ListSessionEvents(ctx, tenant, session.ID, 0)
+	changes, err := sessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

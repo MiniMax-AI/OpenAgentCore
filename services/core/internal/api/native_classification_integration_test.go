@@ -9,13 +9,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
-	h, _, tenant := adminTestHandler(t, databaseSessionReads(s, pool))
+	h, _, tenant := adminTestHandler(t, databaseSessionReads(pool))
+	reader := sessionpg.New(pgunit.NewPool(pool), nil)
 	for _, code := range []string{"authentication_error", "connection_failed", "secret-canary"} {
 		t.Run(code, func(t *testing.T) {
 			session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "native-classification"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
@@ -34,7 +37,7 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 				t.Fatal(err)
 			}
 			transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: outcome})
-			snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
+			snap, err := reader.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -65,7 +68,7 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 				}
 				before[i] = append([]byte(nil), w.Body.Bytes()...)
 			}
-			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			events, err := reader.ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			if err != nil {
 				t.Fatal(err)
 			}

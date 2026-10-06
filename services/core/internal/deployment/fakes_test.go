@@ -63,6 +63,7 @@ type fakeExecutionStorage struct {
 	withReservation       func(context.Context, AllocationKey, func(sessions.LockedSession, ReservationTx) error) error
 	withAllocation        func(context.Context, AllocationKey, func(AllocationTx) error) error
 	withAllocationCleanup func(context.Context, AllocationKey, func(AllocationCleanupTx) error) error
+	withSessionArchive    func(context.Context, string, string, func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error
 	clearWake             func(context.Context, string, time.Time) error
 }
 
@@ -535,6 +536,13 @@ func (f *fakeExecutionStorage) WithAllocationCleanup(ctx context.Context, key Al
 		unexpected(f.t, "WithAllocationCleanup")
 	}
 	return f.withAllocationCleanup(ctx, key, apply)
+}
+
+func (f *fakeExecutionStorage) WithSessionArchive(ctx context.Context, tenantID, sessionID string, apply func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error {
+	if f.withSessionArchive == nil {
+		unexpected(f.t, "WithSessionArchive")
+	}
+	return f.withSessionArchive(ctx, tenantID, sessionID, apply)
 }
 
 func (f *fakeExecutionStorage) ClearWake(ctx context.Context, allocationID string, observed time.Time) error {

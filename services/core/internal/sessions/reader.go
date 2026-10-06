@@ -1,6 +1,6 @@
 package sessions
 
-// Reader reads a Session's resources, Environment and devices, and the
+// Reader reads Sessions and their resources, Environment and devices, and the
 // administrator's cross-Project Session views, one family per line. Callers
 // use it directly; no use case forwards a read.
 type Reader interface {
@@ -11,6 +11,7 @@ type Reader interface {
 	ExecutorCredentialReader
 	ItemReader
 	ModelExecutionReader
+	SessionReader
 	SubagentReader
 	TurnReader
 }

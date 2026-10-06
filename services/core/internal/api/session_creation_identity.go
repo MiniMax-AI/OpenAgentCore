@@ -60,7 +60,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 		// Recorded-intent lookup finds an existing creation, which sends no events.
 		h.respondSessionCreationStream(w, r, result)
 	} else {
-		session, err := h.Sessions.GetSession(r.Context(), tenantID(r), result.Session.ID)
+		session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), result.Session.ID)
 		if err != nil {
 			writeStoreError(w, r, err)
 		} else if h.auditSessionOperation(w, r, session.ID, "create") {

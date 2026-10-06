@@ -77,17 +77,17 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 	if err != nil || json.Unmarshal(raw, &proof) != nil || len(proof.Sessions) != 4 {
 		t.Fatal("invalid public evidence", err)
 	}
-	page, err := h.s.ListSessions(ctx, h.tenant, "", 100, true, nil)
+	page, err := store.SessionAdapter(h.s).ListSessions(ctx, h.tenant, "", 100, true, nil)
 	if err != nil || len(page.Sessions) != 1+len(proof.Sessions) {
 		t.Fatal("rejected configuration persisted a Session", err)
 	}
-	foreignPage, err := h.s.ListSessions(ctx, foreignTenant, "", 100, true, nil)
+	foreignPage, err := store.SessionAdapter(h.s).ListSessions(ctx, foreignTenant, "", 100, true, nil)
 	if err != nil || len(foreignPage.Sessions) != 0 {
 		t.Fatal("foreign Agent reference persisted a Session", err)
 	}
 	nativeIDs := make(map[string]string, len(proof.Sessions))
 	for _, item := range proof.Sessions {
-		session, err := h.s.GetSession(ctx, h.tenant, item.ID)
+		session, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, item.ID)
 		if err != nil || session.Engine != kind {
 			t.Fatal("selected engine was not persisted", err)
 		}

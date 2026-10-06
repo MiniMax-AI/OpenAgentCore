@@ -169,7 +169,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 	if got := states(); !reflect.DeepEqual(got, map[string]int{"rejected": 3, "committed": 1}) {
 		t.Fatal("successor receipt", got)
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("file writes created model execution", err)
 	}

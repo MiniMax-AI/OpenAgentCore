@@ -160,7 +160,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	if len(all) != 2 || all[0].Sequence != first.Sequence || all[1].Sequence != steer.Sequence {
 		t.Fatalf("recovered inputs = %+v", all)
 	}
-	snapshot, err := recovered.GetSession(ctx, tenant, session.ID)
+	snapshot, err := sessionAdapter(recovered).GetSession(ctx, tenant, session.ID)
 	if err != nil || snapshot.LastTurn == nil || snapshot.LastTurn.ID != next.TurnID || snapshot.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal("latest Session activity did not survive restart", err)
 	}

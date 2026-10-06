@@ -77,23 +77,23 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+			if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: uuid.NewString(), SessionID: session.ID}); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			if status == sessions.TurnQueued || status == sessions.TurnInProgress {
 				// Deletion leaves active work untouched: no cancellation, marker or event.
-				cursor, err := s.SessionEventCursor(ctx, tenant, session.ID)
+				cursor, err := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("active Session deleted", err)
 				}
 				turn, err := sessionAdapter(s).GetTurn(ctx, tenant, session.ID, receipt.TurnID)
 				if err != nil || turn.Status != status || !turn.CancelRequestedAt.IsZero() {
 					t.Fatal("rejected deletion changed the Turn", turn, err)
 				}
-				if after, err := s.SessionEventCursor(ctx, tenant, session.ID); err != nil || after != cursor {
+				if after, err := sessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID); err != nil || after != cursor {
 					t.Fatal("rejected deletion recorded an event", after, cursor, err)
 				}
 				if sessionDeletedAt(t, pool, session.ID).Valid {
@@ -105,7 +105,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 				if status == sessions.TurnInProgress {
-					if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+					if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 						t.Fatal("cancelling Session deleted", err)
 					}
 					if _, err := completeExecution(ctx, t, s, tenant, session.ID, receipt.TurnID, sessions.TurnCancelled, nil, "", receipt.Sequence); err != nil {
@@ -113,24 +113,24 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 					}
 				}
 			}
-			if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+			if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 				t.Fatal(err)
 			}
 			marker := sessionDeletedAt(t, pool, session.ID)
 			fresh := New(pool)
 			// The owner's repeated deletion confirms again without another write.
 			for _, repeat := range []*Store{s, fresh} {
-				if err := repeat.DeleteSession(ctx, tenant, session.ID); err != nil {
+				if err := sessionService(t, repeat).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 					t.Fatal("repeated deletion", err)
 				}
-				if err := repeat.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+				if err := sessionService(t, repeat).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: uuid.NewString(), SessionID: session.ID}); !errors.Is(err, sessions.ErrNotFound) {
 					t.Fatal("foreign deleted Session", err)
 				}
 			}
 			if again := sessionDeletedAt(t, pool, session.ID); again != marker {
 				t.Fatal("repeated deletion rewrote the marker", marker, again)
 			}
-			if _, err := fresh.GetSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sessionAdapter(fresh).GetSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			if _, err := fresh.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
@@ -166,10 +166,10 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if err != nil || len(inputs) == 0 || inputs[0].Sequence != receipt.Sequence {
 				t.Fatal(inputs, err)
 			}
-			if _, err := fresh.SessionEventCursor(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sessionAdapter(fresh).SessionEventCursor(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sessionAdapter(fresh).ListSessionEvents(ctx, tenant, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 		})
@@ -290,7 +290,9 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			tenant, session := kind.setup(t, plain)
 			deleted := make(chan error, 1)
 			s := traced(t, func() {
-				go func() { deleted <- plain.DeleteSession(context.Background(), tenant, session) }()
+				go func() {
+					deleted <- sessionService(t, plain).DeleteSession(context.Background(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session})
+				}()
 				awaitSessionLockWaiter(t, pool)
 			})
 			if err := kind.admit(t.Context(), s, tenant, session); err != nil {
@@ -302,7 +304,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			if sessionDeletedAt(t, pool, session).Valid {
 				t.Fatal("rejected deletion committed a marker")
 			}
-			current, err := plain.GetSession(t.Context(), tenant, session)
+			current, err := sessionAdapter(plain).GetSession(t.Context(), tenant, session)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -320,7 +322,7 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 				go func() { admitted <- kind.admit(context.Background(), plain, tenant, session) }()
 				awaitSessionLockWaiter(t, pool)
 			})
-			if err := s.DeleteSession(t.Context(), tenant, session); err != nil {
+			if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session}); err != nil {
 				t.Fatal(err)
 			}
 			if err := <-admitted; !errors.Is(err, sessions.ErrNotFound) {
@@ -341,7 +343,10 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 				other := New(pool)
 				start := make(chan struct{})
 				results := make(chan error, 2)
-				go func() { <-start; results <- plain.DeleteSession(context.Background(), tenant, session) }()
+				go func() {
+					<-start
+					results <- sessionService(t, plain).DeleteSession(context.Background(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session})
+				}()
 				go func() { <-start; results <- kind.admit(context.Background(), other, tenant, session) }()
 				close(start)
 				first, second := <-results, <-results
@@ -406,10 +411,10 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	if before.deleted.Valid || before.released.Valid || before.retained != 1 || before.reserved != 1 {
 		t.Fatal("unexpected reserved placement", before)
 	}
-	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: uuid.NewString(), SessionID: session.ID}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign deletion", err)
 	}
-	if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("provisioning input deleted", err)
 	}
 	if after := read(); after != before {
@@ -421,20 +426,20 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	if count, err := w.ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
 		t.Fatal("initial input did not expire", count, err)
 	}
-	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	deleted := read()
 	if !deleted.deleted.Valid || !deleted.released.Valid || deleted.retained != 0 || deleted.reserved != 0 {
 		t.Fatal("allowed deletion kept the placement", deleted)
 	}
-	if err := s.DeleteSession(ctx, tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal("repeated deletion", err)
 	}
 	if again := read(); again != deleted {
 		t.Fatal("repeated deletion changed timestamps", deleted, again)
 	}
-	if err := s.DeleteSession(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: uuid.NewString(), SessionID: session.ID}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign deletion of a deleted Session", err)
 	}
 }

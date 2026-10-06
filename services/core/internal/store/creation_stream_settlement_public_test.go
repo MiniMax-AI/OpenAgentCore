@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -173,7 +174,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, first.Session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); err != nil {
 		t.Fatal(err)
 	}
-	if current, err := s.GetSession(t.Context(), tenant, first.Session.ID); err != nil || !current.PendingInput {
+	if current, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, first.Session.ID); err != nil || !current.PendingInput {
 		t.Fatal("later input is not pending", err)
 	}
 	retry := openStream(t, server, token, http.MethodPost, "/v1/agents/sessions", idle, "no-input")
@@ -206,14 +207,14 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 	if err := db.pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", session).Scan(&reservation); err != nil {
 		t.Fatal(err)
 	}
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, session)
+	cursor, err := store.SessionAdapter(s).SessionEventCursor(t.Context(), tenant, session)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if settled, err := s.CancelEnvironmentInput(t.Context(), tenant, session, reservation); err != nil || settled.State != sessions.EnvironmentInputCancelled {
 		t.Fatal(settled.State, err)
 	}
-	if after, err := s.SessionEventCursor(t.Context(), tenant, session); err != nil || after != cursor {
+	if after, err := store.SessionAdapter(s).SessionEventCursor(t.Context(), tenant, session); err != nil || after != cursor {
 		t.Fatal("cancellation recorded a Session event; this case needs a silent settlement", after, cursor, err)
 	}
 	fresh.ended(t, 5*time.Second)

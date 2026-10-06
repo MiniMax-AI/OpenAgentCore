@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -59,7 +60,7 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), values)
+	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), sessions.UpdateSessionMetadataCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id"), Metadata: values})
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

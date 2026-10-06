@@ -38,7 +38,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
-			ended, err := s.GetSession(t.Context(), tenant, session.ID)
+			ended, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 			status := "failed"
 			if expired {
 				status = "expired"
@@ -63,7 +63,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if _, err := s.CreateSession(t.Context(), tenant, input); err != nil {
 				t.Fatal("matching creation retry changed outcome", err)
 			}
-			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,11 +93,11 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			} else if last.EnvironmentFailure != nil {
 				t.Fatal("expiry recorded a provisioning failure", last)
 			}
-			cursor, _ := s.SessionEventCursor(t.Context(), tenant, session.ID)
+			cursor, _ := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 			if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
-			if next, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
+			if next, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
 				t.Fatal("cleanup repeated terminal events", next, err)
 			}
 			if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, uuid.NewString()); !errors.Is(err, sessions.ErrInvalidInput) {
@@ -135,7 +135,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err == nil {
 		t.Fatal("cleanup committed without failure event")
 	}
-	current, err := s.GetSession(t.Context(), tenant, session.ID)
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || current.Environment.Status != "pending" || current.EnvironmentInputActivity != nil {
 		t.Fatal("partial public termination", err)
 	}

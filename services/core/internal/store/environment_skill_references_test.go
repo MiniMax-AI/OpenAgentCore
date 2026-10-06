@@ -69,7 +69,7 @@ func TestSkillReferencesFreezeWithinSessionCreation(t *testing.T) {
 		if err != nil || len(setup.Skills) != 1 || setup.Skills[0].Metadata.Type != "skill_reference" || setup.Skills[0].Metadata.SkillID != skill.ID || setup.Skills[0].Metadata.Version != version || !bytes.Equal(setup.Skills[0].Archive, archive) {
 			t.Fatal("incorrect frozen installation", err)
 		}
-		session, err := s.GetSession(t.Context(), tenant, id)
+		session, err := sessionAdapter(s).GetSession(t.Context(), tenant, id)
 		if err != nil {
 			t.Fatal(err)
 		}

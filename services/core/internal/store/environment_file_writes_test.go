@@ -70,7 +70,7 @@ func TestEnvironmentFileWriteRetainsUnknownAcrossLeaseLoss(t *testing.T) {
 	if _, err := sessionAdapter(reopened).GetEnvironment(ctx, f.tenant, f.env.ID); err != nil {
 		t.Fatal("write gate prevented metadata read", err)
 	}
-	if _, err := reopened.GetSession(ctx, f.tenant, f.session.ID); err != nil {
+	if _, err := sessionAdapter(reopened).GetSession(ctx, f.tenant, f.session.ID); err != nil {
 		t.Fatal("write gate prevented recovery read", err)
 	}
 	if receipt, err := reopened.RequestCancel(ctx, f.tenant, f.session.ID, "idle-cancel"); err != nil || receipt.TurnID != "" {
@@ -113,7 +113,7 @@ func TestEnvironmentFileWriteMatchesReceiptAndRetainsDeletedOwner(t *testing.T) 
 			t.Fatal("non-receipt settled write", state, err)
 		}
 	}
-	if err := f.s.DeleteSession(ctx, f.tenant, f.session.ID); err != nil {
+	if err := sessionService(t, f.s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: f.tenant, SessionID: f.session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := FixtureFileWrite(ctx, f.s.pool, f.tenant, f.env.ID, f.key.ID); err != nil || got.State != "pending" {

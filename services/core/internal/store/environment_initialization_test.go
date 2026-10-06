@@ -160,7 +160,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 				if peer.writes.Load() != expected {
 					t.Fatal("failed, unavailable or revoked effect replayed", peer.writes.Load())
 				}
-				value, err := s.GetSession(t.Context(), principal.TenantID, session.ID)
+				value, err := store.SessionAdapter(s).GetSession(t.Context(), principal.TenantID, session.ID)
 				if err != nil || value.EnvironmentFailure == nil {
 					t.Fatal("failure lost shared Session state", err)
 				}

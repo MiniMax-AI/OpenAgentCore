@@ -19,7 +19,7 @@ type archiveManagementFixture struct {
 	err                   error
 }
 
-func (s *archiveManagementFixture) ArchiveManagedSession(ctx context.Context, tenant, session string, generation uint64) (sessions.ManagedArchive, error) {
+func (s *archiveManagementFixture) ArchiveSession(ctx context.Context, tenant, session string, generation uint64) (sessions.ManagedArchive, error) {
 	s.calls++
 	s.tenant, s.session, s.generation = tenant, session, generation
 	source, ok := adminaudit.FromContext(ctx)
@@ -39,7 +39,7 @@ func TestAdminSessionArchiveAuthorityAndValidation(t *testing.T) {
 	deps, fakes := managementFakes(t, key)
 	fixture := &archiveManagementFixture{}
 	deps.Execution = fakes.execution()
-	fakes.sessionArchive.archiveManagedSession = fixture.ArchiveManagedSession
+	fakes.sessionArchive.archiveSession = fixture.ArchiveSession
 	fakes.sessionAdmin.getManagedSessionArchive = fixture.GetManagedSessionArchive
 	h := newTestHandler(t, deps)
 	path := "/core/v1/projects/" + managementProjectID + "/sessions/11111111-1111-4111-8111-111111111111/archive"

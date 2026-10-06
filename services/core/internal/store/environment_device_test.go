@@ -37,7 +37,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			if _, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("unregistered Runtime was assigned general compute", err)
 			}
-			session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
+			session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, pending.SessionID)
 			if err != nil {
 				t.Fatal(err)
 			}

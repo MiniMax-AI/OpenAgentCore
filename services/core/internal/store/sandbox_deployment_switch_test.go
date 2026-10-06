@@ -156,7 +156,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err := deploymentExecution(t, w).CancelReset(SandboxResetTestContext(t.Context()), id, 1); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("stale resume accepted", err)
 	}
-	if _, err := s.GetSession(t.Context(), tenant, session.ID); err != nil {
+	if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal("historical Session lost", err)
 	}
 }
@@ -355,7 +355,7 @@ func TestSandboxSwitchPreservesReleasedAllocationAndItemHistory(t *testing.T) {
 		t.Fatal("switch rewrote released allocation ownership")
 	}
 	for _, id := range []string{session.ID, history.ID} {
-		if _, err := s.GetSession(t.Context(), tenant, id); err != nil {
+		if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, id); err != nil {
 			t.Fatal("switch lost undeleted Session", err)
 		}
 	}

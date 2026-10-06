@@ -196,3 +196,9 @@ func (t *SessionTx) LoadComputeSuspension(ctx context.Context) (bool, error) {
 func (t *SessionTx) LoadPendingFileWrite(ctx context.Context) (bool, error) {
 	return t.q.EnvironmentFileWriteBlocksSession(ctx, t.session)
 }
+
+// LoadArchive reads the resource disposal of the Session's hosted
+// Environment, as GetManagedSessionArchive does.
+func (t *SessionTx) LoadArchive(ctx context.Context) (sessions.ManagedArchive, error) {
+	return loadManagedArchive(ctx, t.q, t.tenant, t.session)
+}

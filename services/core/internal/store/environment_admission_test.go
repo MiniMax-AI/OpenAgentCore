@@ -92,7 +92,7 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 		default:
 		}
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Status != "requires_action" {
 		t.Fatal("waiting activity", session, err)
 	}
@@ -186,7 +186,7 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 				}
 			case "deleted":
 				expected = sessions.ErrNotFound
-				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := store.SessionService(t, h.s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("pending input deleted", err)
 				}
 				if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, h.session.ID); err != nil {

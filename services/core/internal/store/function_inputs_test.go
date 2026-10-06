@@ -229,7 +229,7 @@ func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "late", []sessions.Input{input}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal(err)
 	}
-	current, err := s.GetSession(t.Context(), tenant, session.ID)
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || current.LastTurn.ID != turn || current.LastTurn.Status != sessions.TurnFailed {
 		t.Fatal(current, err)
 	}

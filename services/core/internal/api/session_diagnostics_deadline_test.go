@@ -17,9 +17,9 @@ type diagnosticDeadlineStore struct {
 	observed context.Context
 }
 
-func (s *diagnosticDeadlineStore) GetSessionDiagnosticsSnapshot(ctx context.Context, tenant, session string) (sessions.Session, error) {
+func (s *diagnosticDeadlineStore) GetSession(ctx context.Context, tenant, session string) (sessions.Session, error) {
 	s.observed = ctx
-	return s.diagnosticSnapshotStore.GetSessionDiagnosticsSnapshot(ctx, tenant, session)
+	return s.diagnosticSnapshotStore.GetSession(ctx, tenant, session)
 }
 func (s *diagnosticDeadlineStore) GetTurnDiagnosticsSnapshot(ctx context.Context, tenant, session, turn string) (sessions.TurnDiagnosticsSnapshot, error) {
 	s.observed = ctx

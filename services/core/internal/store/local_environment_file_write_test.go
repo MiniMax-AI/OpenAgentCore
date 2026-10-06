@@ -79,7 +79,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 		got, e := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, begin.ID)
 		return e == nil && got.State == "committed"
 	})
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("upload created model execution", err)
 	}

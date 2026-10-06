@@ -81,7 +81,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	if frame.DecodePayload(&prepare) != nil || len(prepare.Configuration.Input) != 0 || prepare.Configuration.RunID != "" || prepare.Configuration.ConversationID != "" || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != h.device.EnvironmentID || prepare.Configuration.DisableExecutionEnvironment {
 		t.Fatal("invalid preparation configuration", prepare)
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("preparation created work before readiness", session, err)
 	}

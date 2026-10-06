@@ -43,6 +43,7 @@ type Dependencies struct {
 	Agents               Agents
 	AgentsReader         AgentsReader
 	Sessions             Sessions
+	SessionsReader       SessionsReader
 	SessionCreation      SessionCreation
 	SessionEvents        SessionEvents
 	Turns                Turns
@@ -133,7 +134,7 @@ func (d Dependencies) validate() error {
 		field{"EnvironmentTemplates", d.EnvironmentTemplates}, field{"EnvironmentTemplatesReader", d.EnvironmentTemplatesReader},
 		field{"Skills", d.Skills}, field{"SkillsReader", d.SkillsReader},
 		field{"Agents", d.Agents}, field{"AgentsReader", d.AgentsReader},
-		field{"Sessions", d.Sessions},
+		field{"Sessions", d.Sessions}, field{"SessionsReader", d.SessionsReader},
 		field{"SessionCreation", d.SessionCreation},
 		field{"SessionEvents", d.SessionEvents},
 		field{"Turns", d.Turns},

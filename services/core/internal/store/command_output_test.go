@@ -42,7 +42,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	before, _ := s.SessionEventCursor(ctx, tenant, session.ID)
+	before, _ := store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	// A bad command reference rolls back preceding valid fragments and their events.
 	if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, []sessions.ExecutionEvent{
 		event("command_output", `{"id":"cmd","delta":"rollback"}`),
@@ -50,7 +50,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	}); err == nil {
 		t.Fatal("unknown command accepted")
 	}
-	after, _ := s.SessionEventCursor(ctx, tenant, session.ID)
+	after, _ := store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if before != after {
 		t.Fatal("rollback published output")
 	}
@@ -75,7 +75,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	}
 	// Reopening the Store recovers committed Items without creating events.
 	reopened := store.New(pool)
-	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
+	before, _ = store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	page, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(page.Items) != 3 {
 		t.Fatalf("recovery: %+v %v", page, err)
@@ -83,11 +83,11 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if page.Items[1].Status != "completed" || page.Items[1].Output != "authoritative" || page.Items[2].Status != "incomplete" || page.Items[2].Output != "已观察\n" {
 		t.Fatal("completion/cancellation lost command output", page.Items)
 	}
-	after, _ = s.SessionEventCursor(ctx, tenant, session.ID)
+	after, _ = store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
 	if before != after {
 		t.Fatal("query replayed events")
 	}
-	if _, err := reopened.ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := store.SessionAdapter(reopened).ListSessionEvents(ctx, uuid.NewString(), session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign event access", err)
 	}
 	var fragments []string
@@ -95,7 +95,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	indexes := map[string]int32{}
 	cursor := int64(0)
 	for {
-		changes, err := reopened.ListSessionEvents(ctx, tenant, session.ID, cursor)
+		changes, err := store.SessionAdapter(reopened).ListSessionEvents(ctx, tenant, session.ID, cursor)
 		if err != nil {
 			t.Fatal(err)
 		}

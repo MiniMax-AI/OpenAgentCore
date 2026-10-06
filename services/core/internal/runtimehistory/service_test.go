@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 const (
@@ -14,13 +16,22 @@ const (
 	allocationID  = "44444444-4444-4444-8444-444444444444"
 )
 
-type fixedScopeResolver struct {
-	scope Scope
-	err   error
+// fixedEnvironments returns one Session's Environment.
+type fixedEnvironments struct {
+	sessions.EnvironmentReader
+	environment sessions.Environment
+	err         error
 }
 
-func (r fixedScopeResolver) ResolveRuntimeHistoryScope(context.Context, string, string) (Scope, error) {
-	return r.scope, r.err
+func (e fixedEnvironments) GetSessionEnvironment(context.Context, string, string) (sessions.Environment, error) {
+	return e.environment, e.err
+}
+
+// hosted is the hosted Environment of the Session the tests query.
+func hosted() fixedEnvironments {
+	return fixedEnvironments{environment: sessions.Environment{
+		ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`),
+	}}
 }
 
 type fakeReader struct {
@@ -69,7 +80,7 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 			CPUUtilizationRatio: &ratio, CPUCapacityCores: &capacity, MemoryUsageBytes: &memory, MemoryLimitBytes: &limit,
 		}},
 	}}}
-	service, err := NewService(fixedScopeResolver{scope: scope}, reader)
+	service, err := NewService(hosted(), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +105,7 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 func TestServiceNeverQueriesBeforeOwnershipResolution(t *testing.T) {
 	reader := &fakeReader{capabilities: capabilities()}
 	denied := errors.New("not found")
-	service, err := NewService(fixedScopeResolver{err: denied}, reader)
+	service, err := NewService(fixedEnvironments{err: denied}, reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,9 +119,8 @@ func TestServiceNeverQueriesBeforeOwnershipResolution(t *testing.T) {
 func TestServiceValidatesResultAgainstTimeAfterReaderReturns(t *testing.T) {
 	requestNow := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
 	resultNow := requestNow.Add(2 * time.Second)
-	scope := Scope{TenantID: tenantID, SessionID: sessionID, EnvironmentID: environmentID}
 	reader := &fakeReader{capabilities: capabilities(), result: Result{GeneratedAt: resultNow}}
-	service, err := NewService(fixedScopeResolver{scope: scope}, reader)
+	service, err := NewService(hosted(), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,8 +146,7 @@ func TestServiceValidatesResultAgainstTimeAfterReaderReturns(t *testing.T) {
 
 func TestServiceRejectsInvalidRangeAndResolverIdentity(t *testing.T) {
 	reader := &fakeReader{capabilities: capabilities()}
-	scope := Scope{TenantID: tenantID, SessionID: sessionID, EnvironmentID: environmentID}
-	service, err := NewService(fixedScopeResolver{scope: scope}, reader)
+	service, err := NewService(hosted(), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,9 +164,21 @@ func TestServiceRejectsInvalidRangeAndResolverIdentity(t *testing.T) {
 	if len(reader.queries) != 0 {
 		t.Fatalf("invalid range reached reader: %+v", reader.queries)
 	}
-	service.resolver = fixedScopeResolver{scope: Scope{TenantID: "55555555-5555-4555-8555-555555555555", SessionID: sessionID, EnvironmentID: environmentID}}
-	if _, err := service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60}); err == nil || len(reader.queries) != 0 {
-		t.Fatal("mismatched resolver identity reached reader")
+	for _, environment := range []sessions.Environment{
+		{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)},
+		{ID: environmentID, TenantID: "55555555-5555-4555-8555-555555555555", SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)},
+		{ID: environmentID, TenantID: tenantID, SessionID: "66666666-6666-4666-8666-666666666666", Configuration: []byte(`{"type":"openai_hosted"}`)},
+		{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":`)},
+		{ID: "environment", TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)},
+	} {
+		service.environments = fixedEnvironments{environment: environment}
+		if _, err := service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60}); err == nil || len(reader.queries) != 0 {
+			t.Fatalf("unsafe Runtime history Environment reached reader: %+v", environment)
+		}
+	}
+	service.environments = fixedEnvironments{environment: sessions.Environment{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)}}
+	if _, err := service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60}); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("self-hosted history was not unsupported: %v", err)
 	}
 }
 
@@ -266,7 +287,7 @@ func TestServiceRejectsMalformedBackendResults(t *testing.T) {
 			result.Series[0].Points = []Point{{Start: start, End: start.Add(time.Minute)}}
 			mutate(&result)
 			reader := &fakeReader{capabilities: capabilities(), result: result}
-			service, err := NewService(fixedScopeResolver{scope: scope}, reader)
+			service, err := NewService(hosted(), reader)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -288,7 +309,7 @@ func TestServiceRejectsUnsafeCapabilities(t *testing.T) {
 		value := base
 		value.Metrics = append([]Metric(nil), base.Metrics...)
 		mutate(&value)
-		if _, err := NewService(fixedScopeResolver{}, &fakeReader{capabilities: value}); err == nil {
+		if _, err := NewService(hosted(), &fakeReader{capabilities: value}); err == nil {
 			t.Fatalf("unsafe capabilities accepted: %+v", value)
 		}
 	}

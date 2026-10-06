@@ -1,4 +1,4 @@
-package storeresolver
+package deployment
 
 import (
 	"context"
@@ -6,44 +6,48 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-type resolverStore struct {
-	session       sessions.Session
-	measured      json.RawMessage
-	allocation    deployment.Allocation
-	allocationErr error
-	page          deployment.ObservationSessionPage
+// observedSession is one Session and its measured usage.
+type observedSession struct {
+	sessions.SessionReader
+	session  sessions.Session
+	measured json.RawMessage
 }
 
-func (s resolverStore) GetSession(context.Context, string, string) (sessions.Session, error) {
+func (s observedSession) GetSession(context.Context, string, string) (sessions.Session, error) {
 	return s.session, nil
 }
 
-func (s resolverStore) MeasuredSessionUsage(_ context.Context, tenant, session string) (json.RawMessage, error) {
+func (s observedSession) MeasuredSessionUsage(_ context.Context, tenant, session string) (json.RawMessage, error) {
 	if tenant != s.session.TenantID || session != s.session.ID {
 		return nil, errors.New("measured usage read for another Session")
 	}
 	return s.measured, nil
 }
 
-func (s resolverStore) EnvironmentAllocation(context.Context, deployment.AllocationKey) (deployment.Allocation, error) {
-	return s.allocation, s.allocationErr
+// resolverStore is the Session and the deployment reads one resolution sees.
+type resolverStore struct {
+	session       sessions.Session
+	measured      json.RawMessage
+	allocation    Allocation
+	allocationErr error
+	page          ObservationSessionPage
 }
 
-func (s resolverStore) ObservationSessions(context.Context, string, int) (deployment.ObservationSessionPage, error) {
-	return s.page, nil
+func newTestResolver(t *testing.T, s resolverStore) (*ObservationResolver, error) {
+	reader := &fakeReader{t: t,
+		environmentAllocation: func(context.Context, AllocationKey) (Allocation, error) { return s.allocation, s.allocationErr },
+		observationSessions:   func(context.Context, string, int) (ObservationSessionPage, error) { return s.page, nil },
+	}
+	return NewObservationResolver(observedSession{session: s.session, measured: s.measured}, reader)
 }
 
-// newTestResolver serves the Session and the deployment reads from one fake.
-func newTestResolver(s resolverStore) (*Resolver, error) { return NewResolver(s, s) }
-
-func TestResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {
-	r, err := newTestResolver(resolverStore{page: deployment.ObservationSessionPage{
-		Sessions:   []deployment.ObservationSession{{TenantID: "tenant", SessionID: "session"}},
+func TestObservationResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {
+	r, err := newTestResolver(t, resolverStore{page: ObservationSessionPage{
+		Sessions:   []ObservationSession{{TenantID: "tenant", SessionID: "session"}},
 		NextCursor: "session",
 	}})
 	if err != nil {
@@ -55,11 +59,11 @@ func TestResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {
 	}
 }
 
-func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
-	r, err := newTestResolver(resolverStore{
+func TestObservationResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
+	r, err := newTestResolver(t, resolverStore{
 		session:  sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 		measured: []byte(`{"input_tokens":120,"input_tokens_details":{"cached_tokens":20},"output_tokens":30,"output_tokens_details":{"reasoning_tokens":10},"total_tokens":150}`),
-		allocation: deployment.Allocation{
+		allocation: Allocation{
 			ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
 			ProviderKey: "provider", DeviceID: "device", ComputePhase: "running", ComputeState: []byte(`{"current":{"name":"sandbox"}}`),
 		},
@@ -85,7 +89,7 @@ func TestResolverBindsManagedSessionEnvironmentAndAllocation(t *testing.T) {
 	}
 }
 
-func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
+func TestObservationResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
 	for _, usage := range []string{
 		`{"input_tokens":2,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":4}`,
 		`{}`,
@@ -93,7 +97,7 @@ func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
 		`{"input_tokens":0,"input_tokens_details":{"cached_tokens":-1},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0}`,
 		`{"input_tokens":0,"input_tokens_details":{"cached_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":0,"unknown":0}`,
 	} {
-		resolver, err := newTestResolver(resolverStore{session: sessions.Session{
+		resolver, err := newTestResolver(t, resolverStore{session: sessions.Session{
 			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`),
 		}, measured: []byte(usage)})
 		if err != nil {
@@ -105,8 +109,8 @@ func TestResolverRejectsInvalidCanonicalSessionUsage(t *testing.T) {
 	}
 }
 
-func TestResolverKeepsNullCanonicalSessionUsageAbsent(t *testing.T) {
-	resolver, err := newTestResolver(resolverStore{session: sessions.Session{
+func TestObservationResolverKeepsNullCanonicalSessionUsageAbsent(t *testing.T) {
+	resolver, err := newTestResolver(t, resolverStore{session: sessions.Session{
 		ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`),
 	}, measured: []byte(" \n null \t")})
 	if err != nil {
@@ -120,7 +124,7 @@ func TestResolverKeepsNullCanonicalSessionUsageAbsent(t *testing.T) {
 
 // Telemetry reads measured usage, not the public Session value, which stays
 // null while a root Turn runs.
-func TestResolverUsesMeasuredRatherThanPublicSessionUsage(t *testing.T) {
+func TestObservationResolverUsesMeasuredRatherThanPublicSessionUsage(t *testing.T) {
 	measured := `{"input_tokens":7,"input_tokens_details":{"cached_tokens":0},"output_tokens":3,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":10}`
 	for _, test := range []struct {
 		public, measured string
@@ -129,7 +133,7 @@ func TestResolverUsesMeasuredRatherThanPublicSessionUsage(t *testing.T) {
 		{"null", measured, &runtimeobs.TokenUsage{InputTokens: 7, OutputTokens: 3}},
 		{measured, "null", nil},
 	} {
-		resolver, err := newTestResolver(resolverStore{session: sessions.Session{
+		resolver, err := newTestResolver(t, resolverStore{session: sessions.Session{
 			ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"none"}}`), Usage: []byte(test.public),
 		}, measured: []byte(test.measured)})
 		if err != nil {
@@ -142,7 +146,7 @@ func TestResolverUsesMeasuredRatherThanPublicSessionUsage(t *testing.T) {
 	}
 }
 
-func TestResolverKeepsUnsupportedModesDistinct(t *testing.T) {
+func TestObservationResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 	for _, tc := range []struct {
 		mode        string
 		environment *sessions.Environment
@@ -150,7 +154,7 @@ func TestResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 		{mode: "none"},
 		{mode: "self_hosted", environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
 	} {
-		r, err := newTestResolver(resolverStore{session: sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"` + tc.mode + `"}}`), Environment: tc.environment}})
+		r, err := newTestResolver(t, resolverStore{session: sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"` + tc.mode + `"}}`), Environment: tc.environment}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -161,10 +165,10 @@ func TestResolverKeepsUnsupportedModesDistinct(t *testing.T) {
 	}
 }
 
-func TestResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
-	r, err := newTestResolver(resolverStore{
+func TestObservationResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
+	r, err := newTestResolver(t, resolverStore{
 		session:       sessions.Session{ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`), Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"}},
-		allocationErr: deployment.ErrNotFound,
+		allocationErr: ErrNotFound,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -175,13 +179,13 @@ func TestResolverReportsManagedAllocationAsUnavailable(t *testing.T) {
 	}
 }
 
-func TestResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) {
+func TestObservationResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) {
 	for _, mode := range []string{"self_hosted", "openai_hosted"} {
 		for _, environment := range []sessions.Environment{
 			{ID: "environment", TenantID: "other", SessionID: "session"},
 			{ID: "environment", TenantID: "tenant", SessionID: "other"},
 		} {
-			resolver, err := newTestResolver(resolverStore{session: sessions.Session{
+			resolver, err := newTestResolver(t, resolverStore{session: sessions.Session{
 				ID: "session", TenantID: "tenant",
 				Configuration: []byte(`{"environment":{"type":"` + mode + `"}}`), Environment: &environment,
 			}})
@@ -195,19 +199,19 @@ func TestResolverRejectsMismatchedEnvironmentOwnership(t *testing.T) {
 	}
 }
 
-func TestResolverRejectsMismatchedAllocationOwnership(t *testing.T) {
-	base := deployment.Allocation{
+func TestObservationResolverRejectsMismatchedAllocationOwnership(t *testing.T) {
+	base := Allocation{
 		ID: "allocation", TenantID: "tenant", SessionID: "session", EnvironmentID: "environment",
 		ProviderKey: "provider", DeviceID: "device",
 	}
-	for _, mutate := range []func(*deployment.Allocation){
-		func(value *deployment.Allocation) { value.TenantID = "other" },
-		func(value *deployment.Allocation) { value.SessionID = "other" },
-		func(value *deployment.Allocation) { value.EnvironmentID = "other" },
+	for _, mutate := range []func(*Allocation){
+		func(value *Allocation) { value.TenantID = "other" },
+		func(value *Allocation) { value.SessionID = "other" },
+		func(value *Allocation) { value.EnvironmentID = "other" },
 	} {
 		allocation := base
 		mutate(&allocation)
-		resolver, err := newTestResolver(resolverStore{
+		resolver, err := newTestResolver(t, resolverStore{
 			session: sessions.Session{
 				ID: "session", TenantID: "tenant", Configuration: []byte(`{"environment":{"type":"openai_hosted"}}`),
 				Environment: &sessions.Environment{ID: "environment", TenantID: "tenant", SessionID: "session"},

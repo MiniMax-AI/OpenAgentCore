@@ -39,7 +39,6 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			heartbeat := scenario != "receipt_without_heartbeat"
 			s, db := newManagedTestStoreDB(t)
 			leased := executionOwner(t, db, s)
-			writer := leased.Store
 			t.Cleanup(func() {
 				if err := leased.Lease.Close(context.Background()); err != nil {
 					t.Error(err)
@@ -158,7 +157,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				go func() { revokeDone <- fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
 			}
 
-			archived, err := writer.ArchiveManagedSession(auditCtx, h.tenant, session.ID, 1)
+			archived, err := leased.Deployment.ArchiveSession(auditCtx, h.tenant, session.ID, 1)
 			if err != nil || archived.State != "cleanup_pending" {
 				t.Fatal(archived, err)
 			}
@@ -175,7 +174,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			// A repeat archive and cleanup must not recreate an explicitly
 			// cleared marker, nor erase the marker from a fresh archive.
 			repeatAudit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", ProjectID: projectID, RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-			if _, err := writer.ArchiveManagedSession(repeatAudit, h.tenant, session.ID, 1); err != nil {
+			if _, err := leased.Deployment.ArchiveSession(repeatAudit, h.tenant, session.ID, 1); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := leased.Deployment.RequestCleanup(t.Context(), owner); err != nil {

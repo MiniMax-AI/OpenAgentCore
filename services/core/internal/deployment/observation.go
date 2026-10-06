@@ -1,4 +1,4 @@
-package storeresolver
+package deployment
 
 import (
 	"bytes"
@@ -8,36 +8,26 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-type sessionStore interface {
-	GetSession(context.Context, string, string) (sessions.Session, error)
-	MeasuredSessionUsage(context.Context, string, string) (json.RawMessage, error)
+// ObservationResolver resolves a Session to the Runtime observation target of
+// its Environment and allocation, and lists the hosted Sessions to observe.
+type ObservationResolver struct {
+	sessions sessions.SessionReader
+	reader   Reader
 }
 
-// allocationReader is the part of deployment.Reader the resolver reads.
-type allocationReader interface {
-	EnvironmentAllocation(context.Context, deployment.AllocationKey) (deployment.Allocation, error)
-	ObservationSessions(context.Context, string, int) (deployment.ObservationSessionPage, error)
-}
-
-type Resolver struct {
-	store       sessionStore
-	allocations allocationReader
-}
-
-func NewResolver(s sessionStore, allocations allocationReader) (*Resolver, error) {
-	if s == nil || allocations == nil {
+func NewObservationResolver(sessionReader sessions.SessionReader, reader Reader) (*ObservationResolver, error) {
+	if sessionReader == nil || reader == nil {
 		return nil, errors.New("Runtime observation store is required")
 	}
-	return &Resolver{store: s, allocations: allocations}, nil
+	return &ObservationResolver{sessions: sessionReader, reader: reader}, nil
 }
 
-func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (runtimeobs.Target, error) {
-	session, err := r.store.GetSession(ctx, tenantID, sessionID)
+func (r *ObservationResolver) Resolve(ctx context.Context, tenantID, sessionID string) (runtimeobs.Target, error) {
+	session, err := r.sessions.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
 		return runtimeobs.Target{}, fmt.Errorf("resolve Runtime Session: %w", err)
 	}
@@ -52,7 +42,7 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 	target := runtimeobs.Target{TenantID: session.TenantID, SessionID: session.ID, Mode: runtimeobs.Mode(configuration.Environment.Type)}
 	// Telemetry counts measured usage continuously, including active Turns.
 	// Public Session usage stays null until every root Turn ends measured.
-	measured, err := r.store.MeasuredSessionUsage(ctx, session.TenantID, session.ID)
+	measured, err := r.sessions.MeasuredSessionUsage(ctx, session.TenantID, session.ID)
 	if err != nil {
 		return runtimeobs.Target{}, fmt.Errorf("resolve Runtime Session usage: %w", err)
 	}
@@ -84,8 +74,8 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 			return runtimeobs.Target{}, errors.New("managed Environment does not match resolved ownership")
 		}
 		target.EnvironmentID = session.Environment.ID
-		allocation, err := r.allocations.EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: tenantID, EnvironmentID: target.EnvironmentID})
-		if errors.Is(err, deployment.ErrNotFound) {
+		allocation, err := r.reader.EnvironmentAllocation(ctx, AllocationKey{TenantID: tenantID, EnvironmentID: target.EnvironmentID})
+		if errors.Is(err, ErrNotFound) {
 			return target, runtimeobs.ErrUnavailable
 		}
 		if err != nil {
@@ -153,8 +143,8 @@ func decodeTokenUsage(raw json.RawMessage) (*runtimeobs.TokenUsage, error) {
 	return &runtimeobs.TokenUsage{InputTokens: uint64(*usage.InputTokens), OutputTokens: uint64(*usage.OutputTokens)}, nil
 }
 
-func (r *Resolver) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (runtimeobs.SessionPage, error) {
-	page, err := r.allocations.ObservationSessions(ctx, after, limit)
+func (r *ObservationResolver) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (runtimeobs.SessionPage, error) {
+	page, err := r.reader.ObservationSessions(ctx, after, limit)
 	if err != nil {
 		return runtimeobs.SessionPage{}, err
 	}

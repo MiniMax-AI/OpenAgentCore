@@ -40,9 +40,9 @@ func (s *validationStore) CreateVault(_ context.Context, input vaults.CreateVaul
 	return vaults.Vault{ID: uuid.NewString(), TenantID: input.TenantID, Name: input.Name, Metadata: input.Metadata}, nil
 }
 
-func (s *validationStore) UpdateSessionMetadata(_ context.Context, tenant, id string, metadata map[string]string) (sessions.Session, error) {
+func (s *validationStore) UpdateSessionMetadata(_ context.Context, command sessions.UpdateSessionMetadataCommand) (sessions.Session, error) {
 	s.writes++
-	return sessions.Session{ID: id, TenantID: tenant, Metadata: metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
+	return sessions.Session{ID: command.SessionID, TenantID: command.TenantID, Metadata: command.Metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
 }
 
 func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
@@ -67,7 +67,7 @@ func (s *validationStore) serve(d *Dependencies, f *testFakes) {
 	f.sessionAdmission.createSession = s.CreateSession
 	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
 	f.vaults.createVault = s.CreateVault
-	f.sessions.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
+	f.sessionsReader.getSession, f.sessions.updateSessionMetadata = nil, s.UpdateSessionMetadata
 	f.environmentTemplates.create, f.environmentTemplates.update = s.CreateEnvironmentTemplate, s.UpdateEnvironmentTemplate
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
@@ -87,7 +88,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	}
 	defer conn.Close()
 	assertStatus("connected")
-	got, err := s.GetSession(t.Context(), tenant, session.ID)
+	got, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || got.LastTurn != nil || got.EnvironmentInputActivity != nil {
 		t.Fatal("connection fabricated native execution", err)
 	}
@@ -111,7 +112,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	if err != nil || retained.ID != owner.ID || retained.DeviceID != owner.DeviceID || p.creates != 1 {
 		t.Fatal("restart replaced Runtime identity", err)
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	reconcileManagedState(t, w, db, tenant, environment.ID, "released")

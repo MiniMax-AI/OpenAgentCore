@@ -739,17 +739,9 @@ func (f *fakeRuntimeObservations) ObserveSessions(a0 context.Context, a1 []runti
 
 type fakeSessionAdmin struct {
 	t                                testing.TB
-	getSessionDiagnosticsSnapshot    func(context.Context, string, string) (sessions.Session, error)
 	getTurnDiagnosticsSnapshot       func(context.Context, string, string, string) (sessions.TurnDiagnosticsSnapshot, error)
 	getSessionExecutionConfiguration func(context.Context, string, string) (v1.SessionExecutionConfiguration, error)
 	getManagedSessionArchive         func(context.Context, string, string) (sessions.ManagedArchive, error)
-}
-
-func (f *fakeSessionAdmin) GetSessionDiagnosticsSnapshot(a0 context.Context, a1 string, a2 string) (sessions.Session, error) {
-	if f.getSessionDiagnosticsSnapshot == nil {
-		unexpectedCall(f.t, "GetSessionDiagnosticsSnapshot")
-	}
-	return f.getSessionDiagnosticsSnapshot(a0, a1, a2)
 }
 
 func (f *fakeSessionAdmin) GetTurnDiagnosticsSnapshot(a0 context.Context, a1 string, a2 string, a3 string) (sessions.TurnDiagnosticsSnapshot, error) {
@@ -794,15 +786,15 @@ func (f *fakeSessionAdmission) CreateSessionStream(a0 context.Context, a1 string
 }
 
 type fakeSessionArchive struct {
-	t                     testing.TB
-	archiveManagedSession func(context.Context, string, string, uint64) (sessions.ManagedArchive, error)
+	t              testing.TB
+	archiveSession func(context.Context, string, string, uint64) (sessions.ManagedArchive, error)
 }
 
-func (f *fakeSessionArchive) ArchiveManagedSession(a0 context.Context, a1 string, a2 string, a3 uint64) (sessions.ManagedArchive, error) {
-	if f.archiveManagedSession == nil {
-		unexpectedCall(f.t, "ArchiveManagedSession")
+func (f *fakeSessionArchive) ArchiveSession(a0 context.Context, a1 string, a2 string, a3 uint64) (sessions.ManagedArchive, error) {
+	if f.archiveSession == nil {
+		unexpectedCall(f.t, "ArchiveSession")
 	}
-	return f.archiveManagedSession(a0, a1, a2, a3)
+	return f.archiveSession(a0, a1, a2, a3)
 }
 
 type fakeSessionCreation struct {
@@ -863,46 +855,50 @@ func (f *fakeSessionEvents) SessionStreamSnapshot(a0 context.Context, a1 string,
 
 type fakeSessions struct {
 	t                     testing.TB
-	getSession            func(context.Context, string, string) (sessions.Session, error)
-	listSessions          func(context.Context, string, string, int, bool, *string) (sessions.Page, error)
-	updateSessionMetadata func(context.Context, string, string, map[string]string) (sessions.Session, error)
-	deleteSession         func(context.Context, string, string) error
-	auditSessionOperation func(context.Context, string, string, string) error
+	updateSessionMetadata func(context.Context, sessions.UpdateSessionMetadataCommand) (sessions.Session, error)
+	deleteSession         func(context.Context, sessions.DeleteSessionCommand) error
+	auditSessionOperation func(context.Context, sessions.AuditSessionOperationCommand) error
 }
 
-func (f *fakeSessions) GetSession(a0 context.Context, a1 string, a2 string) (sessions.Session, error) {
+func (f *fakeSessions) UpdateSessionMetadata(a0 context.Context, a1 sessions.UpdateSessionMetadataCommand) (sessions.Session, error) {
+	if f.updateSessionMetadata == nil {
+		unexpectedCall(f.t, "UpdateSessionMetadata")
+	}
+	return f.updateSessionMetadata(a0, a1)
+}
+
+func (f *fakeSessions) DeleteSession(a0 context.Context, a1 sessions.DeleteSessionCommand) error {
+	if f.deleteSession == nil {
+		unexpectedCall(f.t, "DeleteSession")
+	}
+	return f.deleteSession(a0, a1)
+}
+
+func (f *fakeSessions) AuditSessionOperation(a0 context.Context, a1 sessions.AuditSessionOperationCommand) error {
+	if f.auditSessionOperation == nil {
+		unexpectedCall(f.t, "AuditSessionOperation")
+	}
+	return f.auditSessionOperation(a0, a1)
+}
+
+type fakeSessionsReader struct {
+	t            testing.TB
+	getSession   func(context.Context, string, string) (sessions.Session, error)
+	listSessions func(context.Context, string, string, int, bool, *string) (sessions.Page, error)
+}
+
+func (f *fakeSessionsReader) GetSession(a0 context.Context, a1 string, a2 string) (sessions.Session, error) {
 	if f.getSession == nil {
 		unexpectedCall(f.t, "GetSession")
 	}
 	return f.getSession(a0, a1, a2)
 }
 
-func (f *fakeSessions) ListSessions(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 *string) (sessions.Page, error) {
+func (f *fakeSessionsReader) ListSessions(a0 context.Context, a1 string, a2 string, a3 int, a4 bool, a5 *string) (sessions.Page, error) {
 	if f.listSessions == nil {
 		unexpectedCall(f.t, "ListSessions")
 	}
 	return f.listSessions(a0, a1, a2, a3, a4, a5)
-}
-
-func (f *fakeSessions) UpdateSessionMetadata(a0 context.Context, a1 string, a2 string, a3 map[string]string) (sessions.Session, error) {
-	if f.updateSessionMetadata == nil {
-		unexpectedCall(f.t, "UpdateSessionMetadata")
-	}
-	return f.updateSessionMetadata(a0, a1, a2, a3)
-}
-
-func (f *fakeSessions) DeleteSession(a0 context.Context, a1 string, a2 string) error {
-	if f.deleteSession == nil {
-		unexpectedCall(f.t, "DeleteSession")
-	}
-	return f.deleteSession(a0, a1, a2)
-}
-
-func (f *fakeSessions) AuditSessionOperation(a0 context.Context, a1 string, a2 string, a3 string) error {
-	if f.auditSessionOperation == nil {
-		unexpectedCall(f.t, "AuditSessionOperation")
-	}
-	return f.auditSessionOperation(a0, a1, a2, a3)
 }
 
 type fakeSkills struct {

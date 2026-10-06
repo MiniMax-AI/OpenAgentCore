@@ -46,7 +46,7 @@ func (w *Worker) bind(ctx context.Context, item sessions.ExecutionWork) (bool, e
 }
 
 func (w *Worker) bindDevice(ctx context.Context, tenantID, sessionID string, input proto.MessageInput) (bool, error) {
-	session, err := w.dispatcher.Store.GetSession(ctx, tenantID, sessionID)
+	session, err := w.dispatcher.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if errors.Is(err, sessions.ErrNotFound) {
 		return false, nil
 	}

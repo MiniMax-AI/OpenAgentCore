@@ -3,15 +3,12 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -23,7 +20,7 @@ func saveSessionExecutionConfiguration(ctx context.Context, q *sqlc.Queries, ses
 	}
 	var frozenRevision pgtype.UUID
 	frozen := *projection
-	model, err := sessionExecutionModel(session.Configuration)
+	model, err := sessions.ExecutionModel(session.Configuration)
 	if err != nil {
 		return err
 	}
@@ -54,75 +51,12 @@ func saveSessionExecutionConfiguration(ctx context.Context, q *sqlc.Queries, ses
 	default:
 		return fmt.Errorf("%w: invalid execution projection source", sessions.ErrInvalidInput)
 	}
-	normalizeExecutionProjection(&frozen, uuid.UUID(session.ID.Bytes).String())
+	sessions.NormalizeExecutionProjection(&frozen, uuid.UUID(session.ID.Bytes).String())
 	raw, err := json.Marshal(frozen)
 	if err != nil {
 		return err
 	}
 	return q.SaveSessionExecutionConfiguration(ctx, sqlc.SaveSessionExecutionConfigurationParams{SessionID: session.ID, Configuration: raw, DeploymentProviderRevision: frozenRevision})
-}
-
-// GetSessionExecutionConfiguration reads only safe committed configuration. It
-// never loads provider ciphertext, current defaults or runtime health.
-func (s *Store) GetSessionExecutionConfiguration(ctx context.Context, tenantID, sessionID string) (v1.SessionExecutionConfiguration, error) {
-	tenant, err := parseID(tenantID)
-	if err != nil {
-		return v1.SessionExecutionConfiguration{}, err
-	}
-	row, err := s.queries.GetSessionExecutionConfiguration(ctx, sqlc.GetSessionExecutionConfigurationParams{TenantID: tenant, SessionID: pgunit.PathID(sessionID)})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return v1.SessionExecutionConfiguration{}, sessions.ErrNotFound
-	}
-	if err != nil {
-		return v1.SessionExecutionConfiguration{}, fmt.Errorf("get session execution configuration: %w", err)
-	}
-	var projection v1.SessionExecutionConfiguration
-	if len(row.ExecutionConfiguration) == 0 {
-		model, err := sessionExecutionModel(row.SessionConfiguration)
-		if err != nil {
-			return projection, err
-		}
-		var harness *string
-		if row.Engine != "" {
-			harness = &row.Engine
-		}
-		projection.Model = v1.ExecutionSelection{Value: model, Source: "unknown"}
-		projection.Harness = v1.ExecutionSelection{Value: harness, Source: "unknown"}
-		projection.ModelProvider = v1.ExecutionProviderSelection{Source: "unknown", Status: "unavailable"}
-	} else if err := json.Unmarshal(row.ExecutionConfiguration, &projection); err != nil {
-		return v1.SessionExecutionConfiguration{}, errors.New("invalid stored session execution configuration")
-	}
-	normalizeExecutionProjection(&projection, uuid.UUID(row.ID.Bytes).String())
-	return projection, nil
-}
-
-func normalizeExecutionProjection(projection *v1.SessionExecutionConfiguration, sessionID string) {
-	projection.Object = "agent.session.execution_configuration"
-	projection.SchemaVersion = 1
-	if projection.HarnessConfig.Source == "" {
-		projection.HarnessConfig.Source = "unknown"
-	}
-	projection.HarnessConfig.Value = v1.ResolvedHarnessConfig(projection.HarnessConfig.Value)
-	projection.SessionID = sessionID
-	if projection.ModelProvider.Source == "deployment" && (projection.ModelProvider.Status != "available" || projection.ModelProvider.Configuration == nil) {
-		// Sessions created before deployment defaults moved into Core stay redacted.
-		projection.ModelProvider.Status = "redacted"
-		projection.ModelProvider.Configuration = nil
-	} else if projection.ModelProvider.Status != "available" {
-		projection.ModelProvider.Configuration = nil
-	}
-}
-
-func sessionExecutionModel(configuration []byte) (*string, error) {
-	var config struct {
-		Agent struct {
-			Model *string `json:"model"`
-		} `json:"agent"`
-	}
-	if err := json.Unmarshal(configuration, &config); err != nil {
-		return nil, errors.New("invalid stored Session model configuration")
-	}
-	return config.Agent.Model, nil
 }
 
 func sameExecutionValue(a, b *string) bool {

@@ -68,7 +68,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	if err != nil || bound.ID != h.device.ID {
 		t.Fatal(bound, err)
 	}
-	active, err := h.s.GetSession(ctx, h.tenant, h.session.ID)
+	active, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, h.session.ID)
 	if err != nil || active.LastTurn == nil || active.LastTurn.Status != sessions.TurnInProgress {
 		t.Fatal(active, err)
 	}
@@ -138,7 +138,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 		if !ended {
 			want = nil
 		}
-		session, err := h.s.GetSession(ctx, h.tenant, h.session.ID)
+		session, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, h.session.ID)
 		if err != nil || string(session.Usage) != string(want) {
 			t.Fatalf("Session and Turn measurement differ: %+v %v", session, err)
 		}
@@ -154,18 +154,18 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if err := worker.Run(stopped); err != context.Canceled {
 		t.Fatal(err)
 	}
-	interrupted, err := h.s.GetSession(ctx, h.tenant, h.session.ID)
+	interrupted, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, h.session.ID)
 	if err != nil || interrupted.LastTurn.Status != sessions.TurnFailed {
 		t.Fatal(interrupted, err)
 	}
-	pending, err := h.s.GetSession(ctx, h.tenant, queued.ID)
+	pending, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, queued.ID)
 	if err != nil || pending.LastTurn.Status != sessions.TurnQueued {
 		t.Fatal(pending, err)
 	}
 	if _, err := h.s.RequestCancel(ctx, h.tenant, queued.ID, "stop-before-dispatch"); err != nil {
 		t.Fatal(err)
 	}
-	pending, err = h.s.GetSession(ctx, h.tenant, queued.ID)
+	pending, err = store.SessionAdapter(h.s).GetSession(ctx, h.tenant, queued.ID)
 	if err != nil || pending.LastTurn.Status != sessions.TurnCancelled {
 		t.Fatal(pending, err)
 	}
