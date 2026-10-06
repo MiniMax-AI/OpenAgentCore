@@ -91,7 +91,7 @@ func runConnect(ctx *runContext, args []string) error {
 		if *serverURL != "" || *token != "" || *deviceName != "" || *remote != "" || *environment != "" || *credentialFile != "" || fs.NArg() != 0 {
 			return errors.New("connect: bootstrap input cannot be combined with enrollment or pairing options")
 		}
-		bootstrapped, err = bootstrapProfile(*bootstrapFile)
+		bootstrapped, err = bootstrapProfile(*bootstrapFile, ctx)
 		if err != nil {
 			return err
 		}

@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: 5ac3e57f943b8bb3fadbf9cda0a72399317ad101416ec28ca4037eea07703a82
+source_hash: 2f458a8b7689fb5b6b343ceeb4efe0f3aef8627ee820239c9134644db83106e1
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -199,3 +199,7 @@ cd && rm -rf ~/.oac/core
 Web 使用 Core 密钥让管理员登录，检查每个请求来源，并用保留在服务器上的 Core 密钥将已登录的 `/core/v1` 请求转发到 Core。它把 `/v1` 和 `/api/v1` 原样转发给 Core，使用调用方自己的凭据；Web 仅在 `/node-install/` 提供不含密钥的节点文件，没有 Docker 或 KVM 访问权限。`/api/v1` 机器路由使用独立注册和连接凭据。没有服务持有 Docker 套接字。
 
 沙箱是隔离边界（[Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)）。Docker 沙箱共享节点内核，Docker 节点在主机上[等同于 root 权限](nodes.md#what-the-installer-sets-up)；microsandbox 为每个沙箱提供具有显式[网络策略](nodes.md#what-the-installer-sets-up)的 microVM。Core 自身无 Docker 套接字或 KVM 访问权限。
+
+## Runtime 可用性探测 {#runtime-availability-probes}
+
+Codex CLI 可用性探测为 `process_spawn` 和 `process_wait` 输出 `runtime version probe` 记录，只包含耗时和结果。等待区间包含可执行文件加载和版本命令，两者都不是模型执行。

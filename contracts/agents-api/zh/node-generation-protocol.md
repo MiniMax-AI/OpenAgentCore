@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 1ee43dfcdd0eec0806ea3bc8a4c1227e10bd8ac5e69486505cb113a98e3f548a
+source_hash: 39ffd8649b19d3bd0a12a224b650ccd14ffaa73eadbe9646075b698cb7bffa74
 ---
 
 沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
@@ -124,3 +124,5 @@ Runtime 字节缺失时，绝不将固定的放置实例迁移到当前 Runtime�
 诊断代码编写于 `services/core/internal/sandbox/node_diagnostic.go`。共享的 `services/core/internal/sandbox/testdata/node-diagnostics.json` 测试夹具检查 Go 映射、OpenAPI 源注释和生成的枚举，以及 TypeScript 客户端声明。Web 使用客户端规范化器，并检查每个已声明代码的本地化消息。代码变更时要同步更新这些投影；未知代码会规范化为 `provider_unavailable`。
 
 准备诊断使用固定的类型化原因。只有制品传输、校验和或版本来源验证失败才会报告 `runtime_download_failed`；私有准备器通过退出类别指示这一类失败，Core 和节点都不解析 stderr。Provider 故障、所有权故障、取消和未分类故障保留其类型化代码，或使用 `provider_unavailable`。协议中不会传输任何 Provider 原始文本。
+
+创建操作通过 `Bootstrap.Harness` 将会话选择传递到 Runtime 启动协议版本 2。Core 和节点使用协议版本 5；发布此 Core 版本前需升级配套节点。

@@ -128,7 +128,10 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 	createCtx, stopCreate := context.WithTimeout(ctx, 150*time.Millisecond)
 	defer stopCreate()
 	createDone := make(chan error, 1)
-	go func() { _, err := proxy.Create(createCtx, sandbox.Bootstrap{Reference: r}); createDone <- err }()
+	go func() {
+		_, err := proxy.Create(createCtx, sandbox.Bootstrap{Reference: r, Harness: "codex"})
+		createDone <- err
+	}()
 	<-p.started
 	if err := <-createDone; !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
 		t.Fatalf("lost reply = %v", err)

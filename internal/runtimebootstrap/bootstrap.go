@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const Version = 1
+const Version = 2
 const MaxBytes = 16 * 1024
 
 var ErrInvalid = errors.New("invalid Runtime bootstrap input")
@@ -27,12 +27,13 @@ type Connection struct {
 	CoreURL    string `json:"core_url"`
 	DeviceID   string `json:"device_id"`
 	Credential string `json:"credential"`
+	Harness    string `json:"harness"`
 }
 
 func (c Connection) Validate() error {
 	u, err := url.Parse(c.CoreURL)
 	id, idErr := uuid.Parse(c.DeviceID)
-	if c.Version != Version || err != nil || (u.Scheme != "https" && u.Scheme != "http") ||
+	if c.Version != Version || !ValidHarness(c.Harness) || err != nil || (u.Scheme != "https" && u.Scheme != "http") ||
 		u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
 		u.RawPath != "" || u.Path != "/api/v1" ||
 		strings.ContainsAny(c.CoreURL, "?#") || strings.ContainsFunc(c.CoreURL, unicode.IsSpace) ||
@@ -83,6 +84,8 @@ func Decode(raw []byte) (Connection, error) {
 			err = d.Decode(&c.DeviceID)
 		case "credential":
 			err = d.Decode(&c.Credential)
+		case "harness":
+			err = d.Decode(&c.Harness)
 		default:
 			return Connection{}, ErrInvalid
 		}
@@ -93,8 +96,21 @@ func Decode(raw []byte) (Connection, error) {
 	if token, err = d.Token(); err != nil || token != json.Delim('}') {
 		return Connection{}, ErrInvalid
 	}
-	if len(seen) != 4 || d.Decode(new(any)) != io.EOF || c.Validate() != nil {
+	if len(seen) != 5 || d.Decode(new(any)) != io.EOF || c.Validate() != nil {
 		return Connection{}, ErrInvalid
 	}
 	return c, nil
+}
+
+// ValidHarness checks the identifier syntax shared by startup projections.
+func ValidHarness(kind string) bool {
+	if len(kind) == 0 || len(kind) > 64 || kind[0] < 'a' || kind[0] > 'z' {
+		return false
+	}
+	for _, c := range kind {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	return true
 }

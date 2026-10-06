@@ -179,7 +179,7 @@ func TestCopiedIdentityCannotReplaceNodeWithInflightCreate(t *testing.T) {
 	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
 	r := reference()
 	created := make(chan error, 1)
-	go func() { _, err := proxy.Create(ctx, sandbox.Bootstrap{Reference: r}); created <- err }()
+	go func() { _, err := proxy.Create(ctx, sandbox.Bootstrap{Reference: r, Harness: "codex"}); created <- err }()
 	<-original.started
 	stopDuplicate, duplicateDone := start(duplicateDir, duplicate)
 	defer func() {

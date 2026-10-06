@@ -122,3 +122,5 @@ An interrupted download repairs only missing bytes at the original paths. When c
 The diagnostic codes are authored in `services/core/internal/sandbox/node_diagnostic.go`. The shared `services/core/internal/sandbox/testdata/node-diagnostics.json` fixture checks the Go mapping, OpenAPI source annotations and generated enums, and the TypeScript client declaration. Web uses the client normalizer and checks localized messages for every declared code. Update these projections with a code change; unknown codes normalize to `provider_unavailable`.
 
 Preparation diagnostics keep fixed typed causes. Only artifact transfer, checksum or release-provenance failures report `runtime_download_failed`; the private preparer signals that class through its exit category, without Core or the node parsing stderr. Provider, ownership, cancellation and unclassified failures keep their typed code or `provider_unavailable`. No raw provider text crosses the protocol.
+
+Creation carries the Session-selected `Bootstrap.Harness` into Runtime bootstrap version 2. Core and nodes use protocol version 5; upgrade matching nodes before publishing this Core release.

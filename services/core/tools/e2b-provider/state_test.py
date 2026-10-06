@@ -18,7 +18,7 @@ class StateTest(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.TemporaryDirectory()
         self.addCleanup(self.root.cleanup)
-        self.request = {'Version': 1, 'Operation': 'kill',
+        self.request = {'Version': 2, 'Operation': 'kill',
                         'Config': {'StateDir': self.root.name, 'InstallationID': str(uuid4()), 'APIKey': 'test'},
                         'Reference': {key: str(uuid4()) for key in ['TenantID', 'EnvironmentID', 'AllocationID']},
                         'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat()}

@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 )
@@ -42,7 +44,22 @@ func CheckCLIAvailable(ctx context.Context, binary string) (string, error) {
 	cmd := exec.CommandContext(ctx, binary, "--version")
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	spawnAt := time.Now()
+	err := cmd.Start()
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+	obslog.Info(ctx, "runtime version probe", "harness_kind", "codex", "stage", "process_spawn", "duration_ms", float64(time.Since(spawnAt))/float64(time.Millisecond), "status", status)
+	if err == nil {
+		waitAt := time.Now()
+		err = cmd.Wait()
+		if err != nil {
+			status = "error"
+		}
+		obslog.Info(ctx, "runtime version probe", "harness_kind", "codex", "stage", "process_wait", "duration_ms", float64(time.Since(waitAt))/float64(time.Millisecond), "status", status)
+	}
+	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()

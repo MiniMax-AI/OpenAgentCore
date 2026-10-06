@@ -24,13 +24,13 @@ class ProviderTest(unittest.TestCase):
         self.reference = {key: str(uuid4()) for key in ['TenantID', 'EnvironmentID', 'AllocationID']}
         self.config = {'StateDir': self.temporary.name, 'InstallationID': str(uuid4()),
                        'APIKey': 'private-account-secret', 'Template': 'test:' + str(uuid4()), 'TimeoutSeconds': 120}
-        self.request = {'Version': 1, 'Operation': 'create', 'Config': self.config,
+        self.request = {'Version': 2, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret',
-                                          NetworkAccess='enabled', AllowedDomains=[])}
+                                          Harness='codex', NetworkAccess='enabled', AllowedDomains=[])}
         self.request['RuntimeBootstrap'] = {
-            'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
+            'version': 2, 'harness': 'codex', 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
             'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',

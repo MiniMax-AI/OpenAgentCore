@@ -18,7 +18,7 @@ func TestBootstrapConnectionDoesNotReadOrOverwritePrivateProfile(t *testing.T) {
 	if err := auth.Save("default", prior); err != nil {
 		t.Fatal(err)
 	}
-	input := runtimebootstrap.Connection{Version: runtimebootstrap.Version, CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "bootstrap-secret"}
+	input := runtimebootstrap.Connection{Version: runtimebootstrap.Version, CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "bootstrap-secret", Harness: "codex"}
 	raw, err := input.Marshal()
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,11 @@ func TestBootstrapConnectionDoesNotReadOrOverwritePrivateProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		p, err := bootstrapProfile(path)
+		rc := &runContext{}
+		p, err := bootstrapProfile(path, rc)
+		if !rc.installedKinds["codex"] || len(rc.installedKinds) != 1 {
+			t.Fatal("bootstrap did not scope discovery")
+		}
 		if err != nil || p.ServerURL != input.CoreURL || p.RuntimeID != input.DeviceID || p.RunnerCredential != input.Credential {
 			t.Fatal("failed bootstrap/restart", err)
 		}
@@ -40,13 +44,13 @@ func TestBootstrapConnectionDoesNotReadOrOverwritePrivateProfile(t *testing.T) {
 	if err = os.WriteFile(path, []byte("bootstrap-secret"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = bootstrapProfile(path); err == nil || strings.Contains(err.Error(), input.Credential) {
+	if _, err = bootstrapProfile(path, &runContext{}); err == nil || strings.Contains(err.Error(), input.Credential) {
 		t.Fatal("invalid input fell back or leaked")
 	}
 	if err = os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = bootstrapProfile(path); err == nil {
+	if _, err = bootstrapProfile(path, &runContext{}); err == nil {
 		t.Fatal("missing input fell back to private auth")
 	}
 }

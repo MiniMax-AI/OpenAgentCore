@@ -16,7 +16,7 @@ class ObservationTest(ProviderTest):
         try:
             return Provider(request).execute()
         except Failure as error:
-            return {'Version': 1, 'ErrorCode': error.code}
+            return {'Version': 2, 'ErrorCode': error.code}
 
     def listing(self, *pages):
         pages = [list(page) for page in pages] or [[]]

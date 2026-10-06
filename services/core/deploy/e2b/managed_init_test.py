@@ -16,7 +16,7 @@ import managed_init
 def payload():
     value = {key: str(uuid4()) for key in ['InstallationID', 'TenantID', 'EnvironmentID',
                                           'AllocationID', 'SessionID', 'DeviceID']}
-    return dict(value, RuntimeBootstrap={'version': 1, 'core_url': 'https://core.example/api/v1',
+    return dict(value, RuntimeBootstrap={'version': 2, 'harness': 'codex', 'core_url': 'https://core.example/api/v1',
                 'device_id': value['DeviceID'], 'credential': 'private-managed-token'},
                 NetworkAccess='restricted', AllowedDomains=['example.com'])
 

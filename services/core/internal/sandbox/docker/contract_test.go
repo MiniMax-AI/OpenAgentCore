@@ -26,7 +26,7 @@ type contractStep struct {
 
 func dockerContractFixture(t *testing.T, cancel context.CancelFunc, script func(*Provider, sandbox.Reference) []contractStep) contracttest.Fixture {
 	t.Helper()
-	b := sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", Harness: "codex", NetworkAccess: "enabled"}
 	var mu sync.Mutex
 	var calls []string
 	var steps []contractStep

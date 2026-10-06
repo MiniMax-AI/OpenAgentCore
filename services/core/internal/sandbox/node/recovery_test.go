@@ -236,7 +236,7 @@ func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 	}
 	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
 	r := reference()
-	if _, err = proxy.Create(ctx, sandbox.Bootstrap{Reference: r}); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
+	if _, err = proxy.Create(ctx, sandbox.Bootstrap{Reference: r, Harness: "codex"}); !errors.Is(err, sandbox.ErrComputeUnconfirmed) {
 		t.Fatalf("create = %v", err)
 	}
 	if _, err = proxy.GetInfo(ctx, r); err != nil {

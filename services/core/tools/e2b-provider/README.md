@@ -30,7 +30,7 @@ Compatible endpoints must return the SDK 2.51.0 template-list and template-build
 
 Run `go generate ./services/core/internal/sandbox/e2b` from the repository root after changing these declarations. `make check-e2b-provider` and the Go adapter tests reject stale projections; both languages consume generated valid and invalid exchanges covering wire types, extra fields, operation/reference bounds and managed-bootstrap fields. The helper build copies those fixtures with its source before running the pinned-SDK suite.
 
-The boundary has version 1. The request and credentials arrive on standard input; standard output carries one bounded response with a sanitized error code. The helper removes ambient `E2B_*` and `PYTHON*` variables and calls the SDK only with the request's explicit API origin and sandbox domain. Each receipt is bound to those selectors, and a receipt without them belongs to the official endpoints (`https://api.e2b.app`, `e2b.app`). An endpoint change keeps earlier generations on their original API and sandbox domain; the candidate key must verify all retained ownership before an online switch.
+The boundary has version 2. The request and credentials arrive on standard input; standard output carries one bounded response with a sanitized error code. The helper removes ambient `E2B_*` and `PYTHON*` variables and calls the SDK only with the request's explicit API origin and sandbox domain. Each receipt is bound to those selectors, and a receipt without them belongs to the official endpoints (`https://api.e2b.app`, `e2b.app`). An endpoint change keeps earlier generations on their original API and sandbox domain; the candidate key must verify all retained ownership before an online switch.
 
 ## Receipts and state directory
 

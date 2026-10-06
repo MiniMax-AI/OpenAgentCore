@@ -242,7 +242,7 @@ class Provider:
             raise Failure('template_invalid' if check['ExitCode'] == 78 else 'unconfirmed')
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
-        del payload['CoreURL'], payload['Credential']
+        del payload['CoreURL'], payload['Credential'], payload['Harness']
         if set(payload) != set(MANAGED_BOOTSTRAP_FIELDS):
             raise Failure('invalid')
         cloud.files.write('/root/.oac/e2b/managed-bootstrap.json', json.dumps(payload),

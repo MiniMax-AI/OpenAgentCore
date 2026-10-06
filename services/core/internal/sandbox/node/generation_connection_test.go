@@ -69,7 +69,7 @@ func TestGenerationWireRoutesOldOwnershipAndCurrentTargetSeparately(t *testing.T
 			t.Fatal("retained generation info failed", generation, err)
 		}
 		if generation != 9 {
-			if _, err := proxy.Create(ctx, sandbox.Bootstrap{Reference: ref}); err != nil {
+			if _, err := proxy.Create(ctx, sandbox.Bootstrap{Reference: ref, Harness: "codex"}); err != nil {
 				t.Fatal("exact ready provider Create failed", generation, err)
 			}
 		}

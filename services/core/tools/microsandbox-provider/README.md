@@ -62,3 +62,5 @@ The helper returns only the native observation time, exact uptime, cumulative vC
 ## Tests
 
 `make check-microsandbox-provider`, part of `make check`, runs the pure-Go adapter tests everywhere and this module's tests on Linux; other hosts print an explicit skip for the Linux-only module.
+
+The native helper wire uses version 3 and carries the Session-selected Harness into Runtime bootstrap version 2. Upgrade the helper with its node and Core.

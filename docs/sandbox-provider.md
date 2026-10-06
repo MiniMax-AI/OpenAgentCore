@@ -160,6 +160,8 @@ Node readiness binds to the exact generation, the current connection and the own
 
 ### Allocation lifecycle
 
+Core includes the owning Session’s immutable Harness in `Bootstrap.Harness`; every provider projects it into the [Runtime bootstrap](./runtime-bootstrap.md) without choosing an implementation.
+
 The allocation, its dedicated daemon credential digest and the exact Session binding commit atomically before `Create`, under the execution lease and the Session lock. Only a fresh allocation receipt permits `Create`; retries and a Core restart observe the same reference without replaying it or rotating the credential. An allocation is private compute ownership, separate from public Environment connection and native readiness; adapters qualify bootstrap completion, and Core never infers it from an engine or provider name.
 
 With a configured provider, the Worker scans committed pending hosted Environments that have no allocation, which covers idle Session creation and recovery after an interruption between commit and bootstrap; an existing allocation never re-enters that path. The scan is bounded and serialized by the lifecycle owner and needs no caller action. An initial reservation without a Turn leaves its Session idle, and a daemon connection is never treated as native readiness. The same scan publishes authenticated connection observations with durable generations, after verifying the exact Session and device binding and a settled bootstrap.
