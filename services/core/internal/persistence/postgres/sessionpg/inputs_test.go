@@ -124,12 +124,20 @@ func TestConcurrentInputsUseOneTurnAndOneRetryReceipt(t *testing.T) {
 }
 
 // An active Turn takes steering input, retries replay their receipts across a
-// restart, and an idle Session starts a new Turn.
+// restart, an idle Session starts a new Turn, and admission changes no stored
+// Session field besides its event sequence.
 func TestTurnInputRetriesAndRestart(t *testing.T) {
 	pool := pgtest.Open(t)
 	_, service := stagingService(t, pool)
 	tenant, session := newSession(t, pool)
 	ctx := t.Context()
+	stored := func(pool *pgxpool.Pool) (row string) {
+		if err := pool.QueryRow(ctx, `SELECT (to_jsonb(s) - 'event_sequence')::text FROM sessions s WHERE id = $1`, session).Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		return row
+	}
+	created := stored(pool)
 	first := submitMessage(t, service, tenant, session, "first")
 	move(t, pool, tenant, session, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	steer := submitMessage(t, service, tenant, session, "steer")
@@ -153,7 +161,8 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 		t.Fatal("idle message did not start a new Turn")
 	}
 	pool.Close()
-	recovered, restarted := stagingService(t, pgtest.Open(t))
+	reopened := pgtest.Open(t)
+	recovered, restarted := stagingService(t, reopened)
 	retry = submitMessage(t, restarted, tenant, session, "first")
 	if !retry.Replayed || retry.TurnID != first.TurnID || retry.Sequence != first.Sequence {
 		t.Fatalf("restart retry changed target: %+v", retry)
@@ -181,9 +190,12 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	if len(all) != 2 || all[0].Sequence != first.Sequence || all[1].Sequence != steer.Sequence {
 		t.Fatalf("recovered inputs = %+v", all)
 	}
-	latest, err := recovered.ListTurns(ctx, text(tenant), text(session), "", 1, false)
-	if err != nil || len(latest.Turns) != 1 || latest.Turns[0].ID != next.TurnID || latest.Turns[0].Status != sessions.TurnQueued {
-		t.Fatalf("latest Turn did not survive restart: %+v, %v", latest, err)
+	snapshot, err := recovered.GetSession(ctx, text(tenant), text(session))
+	if err != nil || snapshot.LastTurn == nil || snapshot.LastTurn.ID != next.TurnID || snapshot.LastTurn.Status != sessions.TurnQueued {
+		t.Fatal("latest Session activity did not survive restart", err)
+	}
+	if stored(reopened) != created {
+		t.Fatal("input admission mutated the stored Session")
 	}
 }
 

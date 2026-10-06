@@ -7,7 +7,7 @@
 // The Session writes that several operations share are procedures here, over
 // the transaction interfaces declared beside them: cancelling work, failing
 // and terminating an Environment, tracking input activity, the admission
-// gates, admitting an input, moving a Turn's status, admitting a function
+// gates, admitting an input batch, moving a Turn's status, admitting a function
 // result, reading a Turn's required actions, appending to a Turn's execution
 // journal and projecting its observations and admitted inputs into Items, Turn
 // usage and Subagents. Service runs the pooled Session use cases, such as

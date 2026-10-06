@@ -161,11 +161,8 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				return err
 			}
 		} else {
-			bound := sessionpg.BindSession(q, row.TenantID, row.ID)
-			for position, input := range inputs {
-				if _, err := sessions.AdmitInput(ctx, bound, key, int32(position), input); err != nil {
-					return err
-				}
+			if _, err := sessions.AdmitInputs(ctx, sessionpg.BindSession(q, row.TenantID, row.ID), key, inputs); err != nil {
+				return err
 			}
 		}
 		if err := sessionpg.PruneChanges(ctx, q, row.ID); err != nil {

@@ -66,13 +66,7 @@ func (t *SessionTx) CreateTurnInput(ctx context.Context, turn, key string, posit
 }
 
 func (t *SessionTx) LoadInputBatch(ctx context.Context, key string, batch json.RawMessage) ([]sessions.InputReceipt, bool, error) {
-	return inputBatchReceipts(ctx, t.q, t.session, key, batch)
-}
-
-// inputBatchReceipts reads the receipts of the inputs the Session admitted
-// under key, marked replayed, and reports whether they are batch.
-func inputBatchReceipts(ctx context.Context, q *sqlc.Queries, session pgtype.UUID, key string, batch json.RawMessage) ([]sessions.InputReceipt, bool, error) {
-	rows, err := q.FindInputBatch(ctx, sqlc.FindInputBatchParams{SessionID: session, IdempotencyKey: key, Batch: batch})
+	rows, err := t.q.FindInputBatch(ctx, sqlc.FindInputBatchParams{SessionID: t.session, IdempotencyKey: key, Batch: batch})
 	if err != nil {
 		return nil, false, storable(err)
 	}
@@ -98,11 +92,14 @@ func (t *SessionTx) FindInputReservation(ctx context.Context, key string, batch 
 	if err != nil {
 		return nil, false, storable(err)
 	}
-	reservation, err := reservationFromRow(ctx, t.q, row.EnvironmentInputReservation)
+	if !row.Matches {
+		return nil, true, nil
+	}
+	reservation, err := t.reservationFromRow(ctx, row.EnvironmentInputReservation)
 	if err != nil {
 		return nil, false, err
 	}
-	return &reservation, row.Matches, nil
+	return &reservation, true, nil
 }
 
 func (t *SessionTx) LoadInputReservation(ctx context.Context, reservation string) (sessions.EnvironmentInputReservation, error) {
@@ -110,25 +107,19 @@ func (t *SessionTx) LoadInputReservation(ctx context.Context, reservation string
 	if err != nil {
 		return sessions.EnvironmentInputReservation{}, err
 	}
-	return loadReservation(ctx, t.q, t.session, id)
-}
-
-// loadReservation reads one of the Session's Environment input reservations;
-// a missing one is sessions.ErrNotFound.
-func loadReservation(ctx context.Context, q *sqlc.Queries, session, id pgtype.UUID) (sessions.EnvironmentInputReservation, error) {
-	row, err := q.GetEnvironmentInputReservation(ctx, sqlc.GetEnvironmentInputReservationParams{SessionID: session, ID: id})
+	row, err := t.q.GetEnvironmentInputReservation(ctx, sqlc.GetEnvironmentInputReservationParams{SessionID: t.session, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sessions.EnvironmentInputReservation{}, sessions.ErrNotFound
 	}
 	if err != nil {
 		return sessions.EnvironmentInputReservation{}, err
 	}
-	return reservationFromRow(ctx, q, row)
+	return t.reservationFromRow(ctx, row)
 }
 
 // reservationFromRow maps a stored Environment input reservation; an
 // admitted one carries the receipts of its batch, which it must have.
-func reservationFromRow(ctx context.Context, q *sqlc.Queries, row sqlc.EnvironmentInputReservation) (sessions.EnvironmentInputReservation, error) {
+func (t *SessionTx) reservationFromRow(ctx context.Context, row sqlc.EnvironmentInputReservation) (sessions.EnvironmentInputReservation, error) {
 	result := sessions.EnvironmentInputReservation{
 		ID: uuid.UUID(row.ID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), Key: row.IdempotencyKey,
 		State: row.State, IsInitial: row.IsInitial, CreatedAt: row.CreatedAt.Time, Deadline: row.Deadline.Time,
@@ -142,7 +133,7 @@ func reservationFromRow(ctx context.Context, q *sqlc.Queries, row sqlc.Environme
 	if row.State != sessions.EnvironmentInputAdmitted {
 		return result, nil
 	}
-	receipts, matches, err := inputBatchReceipts(ctx, q, row.SessionID, row.IdempotencyKey, row.Batch)
+	receipts, matches, err := t.LoadInputBatch(ctx, row.IdempotencyKey, row.Batch)
 	if err != nil {
 		return sessions.EnvironmentInputReservation{}, err
 	}
@@ -160,7 +151,7 @@ func (t *SessionTx) CreateInputReservation(ctx context.Context, key string, batc
 	if err != nil {
 		return sessions.EnvironmentInputReservation{}, storable(err)
 	}
-	return reservationFromRow(ctx, t.q, row)
+	return t.reservationFromRow(ctx, row)
 }
 
 func (t *SessionTx) ExpireInputReservation(ctx context.Context, reservation string) error {
@@ -221,20 +212,22 @@ func (s *Store) ListTurnInputs(ctx context.Context, tenant, session, turn string
 }
 
 func (s *Store) GetEnvironmentInputReservation(ctx context.Context, tenantID, sessionID, reservationID string) (sessions.EnvironmentInputReservation, error) {
-	id, err := parseID(reservationID)
-	if err != nil {
-		return sessions.EnvironmentInputReservation{}, err
-	}
 	tenant, err := parseID(tenantID)
 	if err != nil {
 		return sessions.EnvironmentInputReservation{}, err
 	}
 	session := pgunit.PathID(sessionID)
-	q := s.units.Queries()
-	if err := visibleSession(ctx, q, tenant, session); err != nil {
-		return sessions.EnvironmentInputReservation{}, err
-	}
-	return loadReservation(ctx, q, session, id)
+	var reservation sessions.EnvironmentInputReservation
+	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		q := sqlc.New(tx)
+		if err := visibleSession(ctx, q, tenant, session); err != nil {
+			return err
+		}
+		var err error
+		reservation, err = BindSession(q, tenant, session).LoadInputReservation(ctx, reservationID)
+		return err
+	})
+	return reservation, err
 }
 
 func (s *Store) ListEnvironmentInputWork(ctx context.Context, after string, connectedDevices []string) ([]sessions.EnvironmentInputWork, error) {

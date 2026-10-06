@@ -47,11 +47,11 @@ func (s *Service) ReserveEnvironmentInput(ctx context.Context, tenant, session, 
 	var result EnvironmentInputReservation
 	err = s.storage.WithInputs(ctx, tenant, session, func(ctx context.Context, tx InputTx) error {
 		return TrackInputActivity(ctx, tx, func(ctx context.Context) error {
-			previous, matches, err := tx.FindInputReservation(ctx, key, encoded)
+			previous, used, err := tx.FindInputReservation(ctx, key, encoded)
 			if err != nil {
 				return err
 			}
-			replay, err := decideReplay(previous != nil, matches)
+			replay, err := decideReplay(used, previous != nil)
 			if err != nil {
 				return err
 			}
@@ -101,14 +101,11 @@ func (s *Service) ReserveEnvironmentInput(ctx context.Context, tenant, session, 
 				return err
 			}
 			if joinsActiveTurn(turn, active) {
-				result = EnvironmentInputReservation{SessionID: session, State: EnvironmentInputAdmitted}
-				for position, input := range batch {
-					receipt, err := AdmitInput(ctx, tx, key, int32(position), input)
-					if err != nil {
-						return err
-					}
-					result.Receipts = append(result.Receipts, receipt)
+				receipts, err := AdmitInputs(ctx, tx, key, batch)
+				if err != nil {
+					return err
 				}
+				result = EnvironmentInputReservation{SessionID: session, State: EnvironmentInputAdmitted, Receipts: receipts}
 				return tx.RecordInputAudit(ctx)
 			}
 			if result, err = tx.CreateInputReservation(ctx, key, encoded); err != nil {

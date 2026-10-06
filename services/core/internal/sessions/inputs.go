@@ -154,7 +154,7 @@ func placeInput(kind string, active bool) inputPlacement {
 	return keepsIdentity
 }
 
-// InputAdmissionTx is the Session transaction AdmitInput runs in.
+// InputAdmissionTx is the Session transaction AdmitInputs runs in.
 type InputAdmissionTx interface {
 	FunctionResultTx
 	TurnCancellationTx
@@ -169,14 +169,27 @@ type InputAdmissionTx interface {
 	CreateTurnInput(ctx context.Context, turn, key string, position int32, input Input) (int64, error)
 }
 
-// AdmitInput admits one validated input at position of the batch under key
-// and returns its receipt. A function result joins the Turn whose call it
-// answers. A message steers the Session's active Turn or, on an idle Session,
-// starts a new Turn, which publishes turn.created, then the message's Items,
-// then the Session activity. A cancellation requests the cancellation of the
-// active Turn; on an idle Session it joins no Turn and keeps only its retry
-// identity.
-func AdmitInput(ctx context.Context, tx InputAdmissionTx, key string, position int32, input Input) (InputReceipt, error) {
+// AdmitInputs admits the validated batch under key, input by input in batch
+// order, and returns their receipts. A function result joins the Turn whose
+// call it answers. A message steers the Session's active Turn or, on an idle
+// Session, starts a new Turn, which publishes turn.created, then the message's
+// Items, then the Session activity. A cancellation requests the cancellation
+// of the active Turn; on an idle Session it joins no Turn and keeps only its
+// retry identity.
+func AdmitInputs(ctx context.Context, tx InputAdmissionTx, key string, batch []Input) ([]InputReceipt, error) {
+	receipts := make([]InputReceipt, 0, len(batch))
+	for position, input := range batch {
+		receipt, err := admitInput(ctx, tx, key, int32(position), input)
+		if err != nil {
+			return nil, err
+		}
+		receipts = append(receipts, receipt)
+	}
+	return receipts, nil
+}
+
+// admitInput admits the input at position of the batch under key.
+func admitInput(ctx context.Context, tx InputAdmissionTx, key string, position int32, input Input) (InputReceipt, error) {
 	if input.Kind == "tool_result" {
 		result, err := ParseFunctionResultInput(input.Payload)
 		if err != nil {
@@ -246,7 +259,8 @@ type InputTx interface {
 	// is ErrNotFound.
 	LoadEnvironment(ctx context.Context) (Environment, error)
 	// FindInputReservation reads the Session's Environment input reservation
-	// under key, nil when it has none, and reports whether its batch is batch.
+	// under key when its batch is batch, nil otherwise, and reports whether
+	// the Session reserved key at all.
 	FindInputReservation(ctx context.Context, key string, batch json.RawMessage) (*EnvironmentInputReservation, bool, error)
 	// LoadInputReservation reads one of the Session's Environment input
 	// reservations; a missing one is ErrNotFound. An admitted reservation
@@ -316,7 +330,7 @@ func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string,
 	if err != nil {
 		return nil, err
 	}
-	receipts := make([]InputReceipt, 0, len(batch))
+	var receipts []InputReceipt
 	err = s.storage.WithInputs(ctx, tenant, session, func(ctx context.Context, tx InputTx) error {
 		previous, matches, err := tx.LoadInputBatch(ctx, key, encoded)
 		if err != nil {
@@ -342,12 +356,8 @@ func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string,
 		if err := checkInputGate(gate); err != nil {
 			return err
 		}
-		for position, input := range batch {
-			receipt, err := AdmitInput(ctx, tx, key, int32(position), input)
-			if err != nil {
-				return err
-			}
-			receipts = append(receipts, receipt)
+		if receipts, err = AdmitInputs(ctx, tx, key, batch); err != nil {
+			return err
 		}
 		return tx.RecordInputAudit(ctx)
 	})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -23,7 +24,9 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err = lease.CheckOwnership(ctx); err != nil {
 		return run, err
 	}
-	run.Reservation, err = d.Sessions.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)
+	expire, cancel := context.WithTimeout(ctx, 5*time.Second)
+	run.Reservation, err = d.Sessions.ExpireEnvironmentInput(expire, tenantID, sessionID, reservationID)
+	cancel()
 	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}

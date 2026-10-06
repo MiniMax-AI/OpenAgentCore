@@ -42,12 +42,8 @@ func (o *ExecutionOperations) PromoteEnvironmentInput(ctx context.Context, tenan
 			if err := CheckInputStart(ctx, tx); err != nil {
 				return err
 			}
-			for position, input := range result.Inputs {
-				receipt, err := AdmitInput(ctx, tx, result.Key, int32(position), input)
-				if err != nil {
-					return err
-				}
-				result.Receipts = append(result.Receipts, receipt)
+			if result.Receipts, err = AdmitInputs(ctx, tx, result.Key, result.Inputs); err != nil {
+				return err
 			}
 			settled, err := tx.AdmitInputReservation(ctx, reservation)
 			if err != nil {
@@ -74,10 +70,7 @@ func (o *ExecutionOperations) PromoteEnvironmentInput(ctx context.Context, tenan
 // has passed expires instead. Any other code and a malformed reservation ID
 // are ErrInvalidInput.
 func (o *ExecutionOperations) FailEnvironmentInput(ctx context.Context, tenant, session, reservation, code string) error {
-	if code != "model_provider_required" && code != "runtime_preparation_failed" {
-		return ErrInvalidInput
-	}
-	if !validID(reservation) {
+	if (code != "model_provider_required" && code != "runtime_preparation_failed") || !validID(reservation) {
 		return ErrInvalidInput
 	}
 	return o.storage.WithInputs(ctx, tenant, session, func(ctx context.Context, tx InputTx) error {

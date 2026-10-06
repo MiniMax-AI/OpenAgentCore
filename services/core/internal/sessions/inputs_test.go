@@ -203,7 +203,7 @@ func TestAdmitInput(t *testing.T) {
 		tx.createTurnInput, tx.loadUsage = sequences(7), returns(json.RawMessage(`{}`))
 		tx.loadInputSource = returns(Source{Turn: testTurn, Kind: "message", Sequence: 7, Payload: json.RawMessage(`{"text":"hi"}`)})
 		tx.loadItem, tx.putItem = returns(items.Stored{}), func(items.Change) (*int32, error) { return nil, nil }
-		receipt, err := AdmitInput(t.Context(), tx, inputKey, 0, messageInput("hi"))
+		receipt, err := admitInput(t.Context(), tx, inputKey, 0, messageInput("hi"))
 		if err != nil || receipt != (InputReceipt{Sequence: 7, TurnID: testTurn}) {
 			t.Fatalf("receipt %+v, %v", receipt, err)
 		}
@@ -229,7 +229,7 @@ func TestAdmitInput(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			tx := newInputTx(t)
 			tx.loadActiveTurn, tx.createTurnInput, tx.loadInputSource, tx.requestTurnCancel = activeTurn(test.active), sequences(8), unprojected, done
-			receipt, err := AdmitInput(t.Context(), tx, inputKey, 1, test.input)
+			receipt, err := admitInput(t.Context(), tx, inputKey, 1, test.input)
 			if err != nil || receipt != test.want {
 				t.Fatalf("receipt %+v, %v", receipt, err)
 			}
@@ -241,7 +241,7 @@ func TestAdmitInput(t *testing.T) {
 		tx.findResultTurn = func() (Turn, bool, error) { return turnWith(TurnWaiting), true, nil }
 		tx.matchFunctionResult, tx.submitFunctionResult, tx.createTurnInput = returns(FunctionResultMatch{Recorded: true}), done, sequences(9)
 		payload := json.RawMessage(`{"turn_id":"` + testTurn + `","call_id":"call","result":{"ok":true}}`)
-		receipt, err := AdmitInput(t.Context(), tx, inputKey, 0, Input{Kind: "tool_result", Payload: payload})
+		receipt, err := admitInput(t.Context(), tx, inputKey, 0, Input{Kind: "tool_result", Payload: payload})
 		if err != nil || receipt != (InputReceipt{Sequence: 9, TurnID: testTurn}) {
 			t.Fatalf("receipt %+v, %v", receipt, err)
 		}
