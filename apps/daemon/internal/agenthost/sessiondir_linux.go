@@ -22,10 +22,10 @@ var uids = struct {
 }{used: map[uint32]bool{}}
 
 // allocUID returns a uid in r that no Session uses and no process holds.
-func allocUID(r UIDRange, procs processTable) (uint32, error) {
-	held, err := heldUIDs(procs, r)
+func allocUID(r UIDRange, tasks listTasks) (uint32, error) {
+	held, err := heldUIDs(tasks, r)
 	if err != nil {
-		return 0, &Error{Kind: ErrInvalidConfig, Op: "processes", Err: err}
+		return 0, fmt.Errorf("%w: processes: %w", ErrInvalidConfig, err)
 	}
 	uids.Lock()
 	defer uids.Unlock()
@@ -35,7 +35,7 @@ func allocUID(r UIDRange, procs processTable) (uint32, error) {
 			return id, nil
 		}
 	}
-	return 0, &Error{Kind: ErrCapacity}
+	return 0, ErrCapacity
 }
 
 func freeUID(id uint32) {
@@ -66,17 +66,17 @@ func (d sessionDir) entry(name ...string) string {
 func createSessionDir(stateDir string, id sandboxwire.ID, uid uint32) (sessionDir, error) {
 	parent := sessionsDir(stateDir)
 	if err := os.MkdirAll(parent, 0o700); err != nil {
-		return "", &Error{Kind: ErrInvalidConfig, Op: "state directory", Err: err}
+		return "", fmt.Errorf("%w: state directory: %w", ErrInvalidConfig, err)
 	}
 	d := sessionDir(filepath.Join(parent, id.String()))
 	if err := os.Mkdir(string(d), 0o700); errors.Is(err, fs.ErrExist) {
-		return "", &Error{Kind: ErrSessionExists, Err: err}
+		return "", fmt.Errorf("%w: %w", ErrSessionExists, err)
 	} else if err != nil {
-		return "", &Error{Kind: ErrInvalidConfig, Op: "session directory", Err: err}
+		return "", fmt.Errorf("%w: session directory: %w", ErrInvalidConfig, err)
 	}
 	if err := d.populate(uid); err != nil {
 		os.RemoveAll(string(d))
-		return "", &Error{Kind: ErrInvalidConfig, Op: "session directory", Err: err}
+		return "", fmt.Errorf("%w: session directory: %w", ErrInvalidConfig, err)
 	}
 	return d, nil
 }

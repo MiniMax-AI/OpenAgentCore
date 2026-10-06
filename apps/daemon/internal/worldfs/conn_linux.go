@@ -5,6 +5,7 @@ package worldfs
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
@@ -36,7 +37,7 @@ func (f *frontend) client(ctx context.Context, interrupt <-chan struct{}) (*sand
 	select {
 	case f.connTurn <- struct{}{}:
 	case <-ctx.Done():
-		return nil, &Error{Kind: ErrConnect, Op: "reconnect", Err: ctx.Err()}
+		return nil, fmt.Errorf("%w: reconnect: %w", ErrConnect, ctx.Err())
 	case <-interrupt:
 		return nil, errInterrupted
 	}
@@ -45,7 +46,7 @@ func (f *frontend) client(ctx context.Context, interrupt <-chan struct{}) (*sand
 		return nil, errDead
 	}
 	if f.ctx.Err() != nil {
-		return nil, &Error{Kind: ErrConnect, Op: "reconnect", Err: errStopped}
+		return nil, fmt.Errorf("%w: reconnect: %w", ErrConnect, errStopped)
 	}
 	if c := f.conn; c != nil {
 		select {
@@ -71,10 +72,10 @@ func (f *frontend) client(ctx context.Context, interrupt <-chan struct{}) (*sand
 		return nil, errInterrupted
 	case err != nil:
 		f.observe(err)
-		return nil, &Error{Kind: ErrConnect, Op: "reconnect", Err: err}
+		return nil, fmt.Errorf("%w: reconnect: %w", ErrConnect, err)
 	case d.ServerInstanceID != f.instance:
 		c.Close()
-		f.lose(&Error{Kind: ErrInstanceChanged, Op: "reconnect"}, true)
+		f.lose(fmt.Errorf("%w: reconnect", ErrInstanceChanged), true)
 		return nil, errDead
 	}
 	f.conn = c

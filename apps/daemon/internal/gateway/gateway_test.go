@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,6 +12,8 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -27,12 +30,15 @@ import (
 
 const wait = 5 * time.Second
 
+// model is a model upstream for tests that do not reach it.
+var model = modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://model.test", APIKey: upstreamKey}
+
 // loopback is a gateway served on host loopback listeners at free ports, as
 // Start serves it in the Session's namespace.
 type loopback struct {
 	Endpoints
-	// end ends the Session.
-	end context.CancelFunc
+	// stop stops the gateway.
+	stop func()
 	// handlers counts the requests being handled.
 	handlers sync.WaitGroup
 }
@@ -41,12 +47,12 @@ type loopback struct {
 func serveOnLoopback(t *testing.T, cfg Config) *loopback {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 	g, err := build(ctx, cfg)
 	if err != nil {
+		cancel()
 		t.Fatal(err)
 	}
-	l := &loopback{end: cancel}
+	l := &loopback{}
 	lns := make([]*net.TCPListener, len(g.listeners))
 	ports := make([]int, len(lns))
 	for i := range lns {
@@ -61,7 +67,8 @@ func serveOnLoopback(t *testing.T, cfg Config) *loopback {
 			h.ServeHTTP(w, r)
 		})
 	}
-	g.serve(ctx, lns)
+	l.stop = g.serve(ctx, cancel, lns)
+	t.Cleanup(l.stop)
 	l.Endpoints = g.endpoints(ports)
 	return l
 }
@@ -160,7 +167,7 @@ func startSandbox(t *testing.T) *sandbox {
 
 func TestPlanKeepsPortsWithoutTheProxy(t *testing.T) {
 	cfg := Config{
-		Models: []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://upstream.test", APIKey: upstreamKey}}},
+		Model:  model,
 		MCP:    []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: "https://tools.test/mcp"}},
 		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 	}
@@ -170,7 +177,7 @@ func TestPlanKeepsPortsWithoutTheProxy(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := Endpoints{Placeholder: modelprovider.Placeholder, Models: map[string]string{"main": "http://127.0.0.1:17101"}, MCP: map[string]string{"tools": "http://127.0.0.1:17102/mcp"}}
+		want := Endpoints{Model: "http://127.0.0.1:17101", MCP: map[string]string{"tools": "http://127.0.0.1:17102/mcp"}}
 		if proxy {
 			want.Proxy = "http://127.0.0.1:17100"
 		}
@@ -206,6 +213,7 @@ func TestSessionEndEndsBlockedRelays(t *testing.T) {
 	}))
 	defer srv.Close()
 	gw := serveOnLoopback(t, Config{
+		Model:  model,
 		MCP:    []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp"}},
 		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 	})
@@ -227,7 +235,7 @@ func TestSessionEndEndsBlockedRelays(t *testing.T) {
 		t.Fatal("the upstream never filled the Harness's side")
 	}
 
-	gw.end()
+	gw.stop()
 	returned := make(chan struct{})
 	go func() {
 		gw.handlers.Wait()
@@ -258,6 +266,7 @@ func TestRejectedUpgradeClosesTheUpstream(t *testing.T) {
 	}))
 	defer srv.Close()
 	gw := serveOnLoopback(t, Config{
+		Model:  model,
 		MCP:    []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp"}},
 		Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 	})
@@ -277,5 +286,67 @@ func TestRejectedUpgradeClosesTheUpstream(t *testing.T) {
 	case <-closed:
 	case <-time.After(wait):
 		t.Fatal("the upstream connection is still open")
+	}
+}
+
+func TestStopClosesEveryConnection(t *testing.T) {
+	// The upstream holds the request open over HTTP/2, whose connection the
+	// transport keeps when a request ends.
+	held, closed := make(chan struct{}), make(chan struct{})
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(held)
+		<-r.Context().Done()
+	}))
+	srv.EnableHTTP2 = true
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateClosed {
+			close(closed)
+		}
+	}
+	srv.StartTLS()
+	defer srv.Close()
+	gw := serveOnLoopback(t, Config{Model: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: srv.URL, APIKey: upstreamKey}, RootCAs: trust(srv)})
+
+	harness, err := net.Dial("tcp", strings.TrimPrefix(gw.Model, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer harness.Close()
+	io.WriteString(harness, "POST /v1/messages HTTP/1.1\r\nHost: model\r\nContent-Length: 0\r\n\r\n")
+	select {
+	case <-held:
+	case <-time.After(wait):
+		t.Fatal("the request never reached the upstream")
+	}
+
+	gw.stop()
+	harness.SetReadDeadline(time.Now().Add(wait))
+	if _, err := io.Copy(io.Discard, harness); errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Error("the Harness's connection is still open")
+	}
+	select {
+	case <-closed:
+	case <-time.After(wait):
+		t.Error("the upstream connection is still open")
+	}
+}
+
+func TestClosedSetClosesNewConnections(t *testing.T) {
+	ln, err := net.ListenTCP("tcp4", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	c, err := net.DialTCP("tcp4", nil, ln.Addr().(*net.TCPAddr))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s connSet
+	s.closeAll()
+	if _, err := s.add(tcpConn{c}); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("add: %v", err)
+	}
+	if _, err := c.Write([]byte("x")); !errors.Is(err, net.ErrClosed) {
+		t.Errorf("the connection is open: %v", err)
 	}
 }

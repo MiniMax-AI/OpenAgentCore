@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,8 +18,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/gateway"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -25,18 +29,20 @@ import (
 func TestAllocationSkipsUIDsThatProcessesHold(t *testing.T) {
 	r := UIDRange{First: 71000, Count: 2}
 	// A thread holds the uid; its process's leader does not.
-	procs := &fakeProcesses{list: []task{{tgid: 10, tid: 10, uids: [4]uint32{1000, 1000, 1000, 1000}}, {tgid: 10, tid: 11, uids: [4]uint32{1000, 71000, 1000, 1000}}}}
-	id, err := allocUID(r, procs)
+	tasks := func() ([][4]uint32, error) {
+		return [][4]uint32{{1000, 1000, 1000, 1000}, {1000, 71000, 1000, 1000}}, nil
+	}
+	id, err := allocUID(r, tasks)
 	if err != nil || id != 71001 {
 		t.Fatalf("allocUID = %d, %v; want 71001", id, err)
 	}
 	defer freeUID(id)
-	if _, err := allocUID(r, procs); !errors.Is(err, ErrCapacity) {
+	if _, err := allocUID(r, tasks); !errors.Is(err, ErrCapacity) {
 		t.Fatalf("allocUID with every uid taken = %v", err)
 	}
 	// The host's table shows this process with its own uids.
 	self := uint32(os.Getuid())
-	if held, err := heldUIDs(procfs{}, UIDRange{First: self, Count: 1}); err != nil || !held[self] {
+	if held, err := heldUIDs(taskUIDs, UIDRange{First: self, Count: 1}); err != nil || !held[self] {
 		t.Fatalf("/proc shows uid %d held: %v, %v", self, held[self], err)
 	}
 }
@@ -74,6 +80,55 @@ func TestViewEndReleasesTheSlotBeforeTheProcessEnds(t *testing.T) {
 		case stop != nil && (!errors.Is(err, ErrWorld) || !errors.Is(err, errDetach) || !failed):
 			t.Errorf("%s: Run = %v, Session failed %v; want ErrWorld with the detach error", name, err, failed)
 		}
+	}
+}
+
+// TestViewEndStopsTheGateway checks that the gateway's listeners are closed
+// once Process.Wait returns. It serves the gateway in the test's own network
+// namespace, so it runs with the view suite.
+func TestViewEndStopsTheGateway(t *testing.T) {
+	if os.Getenv(gateEnv) != "1" {
+		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see view_linux_test.go", gateEnv)
+	}
+	ns, err := os.Open("/proc/self/ns/net")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ns.Close()
+	cfg := gateway.Config{Model: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://model.test", APIKey: upstreamKey}}
+	eps, err := gateway.Plan(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop, err := gateway.Start(ns, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := newOwnerSession(t)
+	lv := &liveView{}
+	s.live = lv
+	s.views.Add(1)
+	ends, err := newStdio(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ends.closeChild()
+	v := &fakeView{exit: make(chan struct{})}
+	p, err := s.own(lv, v, fakeWorld{}, stop, clirunner.StartOptions{Parent: context.Background(), KillTimeout: time.Second}, ends, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := strings.TrimPrefix(eps.Model, "http://")
+	c, err := net.Dial("tcp", model)
+	if err != nil {
+		t.Fatalf("the gateway does not serve: %v", err)
+	}
+	c.Close()
+	v.Close()
+	_ = p.Wait()
+	if c, err := net.Dial("tcp", model); err == nil {
+		c.Close()
+		t.Fatal("the model listener accepts after Process.Wait")
 	}
 }
 
@@ -201,7 +256,7 @@ func TestFailedCloseKeepsTheSessionDirectoryAndUID(t *testing.T) {
 		output := make(chan proto.Envelope, 4)
 		s.in.Output = output
 		// Each case takes its own uid.
-		uid, err := allocUID(UIDRange{First: 72000, Count: 2}, &fakeProcesses{})
+		uid, err := allocUID(UIDRange{First: 72000, Count: 2}, noTasks)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -156,31 +155,4 @@ func (h *Host) Close() error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-// Error is a typed agent host failure. It matches Kind and, when present,
-// Err. Its message never includes a credential.
-type Error struct {
-	Kind error
-	Op   string
-	Err  error
-}
-
-func (e *Error) Error() string {
-	var b strings.Builder
-	b.WriteString(e.Kind.Error())
-	if e.Op != "" {
-		b.WriteString(": " + e.Op)
-	}
-	if e.Err != nil {
-		b.WriteString(": " + e.Err.Error())
-	}
-	return b.String()
-}
-
-func (e *Error) Unwrap() []error {
-	if e.Err == nil {
-		return []error{e.Kind}
-	}
-	return []error{e.Kind, e.Err}
 }

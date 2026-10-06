@@ -42,10 +42,12 @@ type launchOptions struct {
 }
 
 func prepareOptions(ctx context.Context, req proto.PromptRequestPayload) (launchOptions, error) {
-	return prepareOptionsWithSkills(ctx, req, true)
+	return prepareOptionsWithTools(ctx, req, nil)
 }
 
-func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayload, managedSkills bool) (launchOptions, error) {
+// prepareOptionsWithTools installs the managed Skills unless the workspace
+// bridge's tools present the Environment's.
+func prepareOptionsWithTools(ctx context.Context, req proto.PromptRequestPayload, tools *workspaceTools) (launchOptions, error) {
 	var result launchOptions
 	if err := validateOptions(req); err != nil {
 		return result, err
@@ -67,7 +69,7 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 	if err := os.MkdirAll(result.Dir, 0o700); err != nil {
 		return result, err
 	}
-	if managedSkills {
+	if tools == nil {
 		installed, err := managedskills.InstallManagedSkills(ctx, log.With("component", "mcode"), root, req.AgentOptions["skills"])
 		if err != nil {
 			return result, err
@@ -81,7 +83,7 @@ func prepareOptionsWithSkills(ctx context.Context, req proto.PromptRequestPayloa
 		return result, err
 	}
 	defer data.Close()
-	if result.Model, err = writeNativeConfig(req, data); err != nil {
+	if result.Model, err = writeNativeConfig(req, data, result.DataDir, tools); err != nil {
 		return result, err
 	}
 	opts := req.AgentOptions
@@ -123,8 +125,10 @@ func validateOptions(req proto.PromptRequestPayload) error {
 }
 
 // writeNativeConfig writes the instructions and native configuration into the
-// data directory and returns the model.
-func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root) (string, error) {
+// data directory, which the native process sees at dataDir, and returns the
+// model. With tools, the workspace bridge replaces native permissions and
+// sandbox, and Subagents use it too.
+func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root, dataDir string, tools *workspaceTools) (string, error) {
 	opts := req.AgentOptions
 	prompt := optionString(opts, "system_prompt")
 	if override := optionString(opts, "override_system_prompt"); override != "" {
@@ -164,6 +168,31 @@ func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root) (string, e
 		return "", fmt.Errorf("mcode: unsupported permission mode")
 	}
 	config["permissionMode"] = mode
+	servers := map[string]any{}
+	if tools != nil {
+		config["permissionMode"] = "bypassPermissions"
+		config["sandbox"] = map[string]bool{"enabled": false}
+		if len(tools.skills) > 0 {
+			selected := config["agents"].(map[string]any)["default"].(map[string]any)
+			selected["skills"] = tools.skills
+			for _, key := range []string{"tools", "builtinTools"} {
+				selected[key] = append(selected[key].([]string), "skill")
+			}
+		}
+		raw, err := json.Marshal(tools.profile)
+		if err != nil {
+			return "", err
+		}
+		if err := data.WriteFile("workspace-profile.json", raw, 0o600); err != nil {
+			return "", err
+		}
+		if !req.DisableSubagents {
+			// This native data directory belongs to one public Session and its
+			// descendants. ACP's ephemeral server map otherwise covers only root.
+			server := tools.server(dataDir)
+			servers["oac_workspace"] = map[string]any{"type": "stdio", "command": server["command"], "args": server["args"], "env": map[string]string{}, "enabled": true}
+		}
+	}
 	raw, err := json.Marshal(config)
 	if err != nil {
 		return "", err
@@ -172,7 +201,10 @@ func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root) (string, e
 		return "", err
 	}
 	if req.StrictResume {
-		if err := data.WriteFile("mcp.json", []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		if raw, err = json.Marshal(map[string]any{"mcpServers": servers}); err != nil {
+			return "", err
+		}
+		if err := data.WriteFile("mcp.json", raw, 0o600); err != nil {
 			return "", err
 		}
 	}

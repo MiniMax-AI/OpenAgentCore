@@ -3,7 +3,6 @@ package agenthost
 import (
 	"context"
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
@@ -22,9 +21,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
-
-// modelName is the gateway's name for the request's model provider.
-const modelName = "model_provider"
 
 // etcFiles are the files the agent host writes for each Session and presents
 // at /etc/<name>.
@@ -72,7 +68,7 @@ func checkConfig(cfg Config) (*x509.CertPool, error) {
 func loadRoots(dir string) (*x509.CertPool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, &Error{Kind: ErrInvalidConfig, Op: "CA directory", Err: err}
+		return nil, fmt.Errorf("%w: CA directory: %w", ErrInvalidConfig, err)
 	}
 	if len(entries) == 0 {
 		return nil, invalidConfig("CA directory %s is empty", dir)
@@ -84,7 +80,7 @@ func loadRoots(dir string) (*x509.CertPool, error) {
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
 		if err != nil {
-			return nil, &Error{Kind: ErrInvalidConfig, Op: "CA directory", Err: err}
+			return nil, fmt.Errorf("%w: CA directory: %w", ErrInvalidConfig, err)
 		}
 		if !roots.AppendCertsFromPEM(data) {
 			return nil, invalidConfig("CA entry %s holds no PEM certificate", e.Name())
@@ -102,7 +98,7 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 	req := s.Request
 	view, err := cfg.Harnesses.ResolveView(req.AgentKind)
 	if err != nil {
-		return nil, &Error{Kind: ErrUnsupported, Op: "admit", Err: err}
+		return nil, fmt.Errorf("%w: admit: %w", ErrUnsupported, err)
 	}
 	local := req.LocalEnvironment
 	switch {
@@ -145,7 +141,7 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 		return nil, err
 	}
 	gw := gateway.Config{
-		Models:      []gateway.Model{{Name: modelName, Provider: provider}},
+		Model:       provider,
 		MCP:         bindings,
 		Prompt:      req,
 		OpenNetwork: openNetwork,
@@ -154,13 +150,10 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 	}
 	endpoints, err := gateway.Plan(gw)
 	if err != nil {
-		return nil, &Error{Kind: ErrInvalidSession, Op: "gateway", Err: err}
+		return nil, fmt.Errorf("%w: gateway: %w", ErrInvalidSession, err)
 	}
-	p := &plan{view: view, gateway: gw, proxy: endpoints.Proxy,
+	p := &plan{view: view, gateway: gw, request: handoff(req, provider, endpoints), proxy: endpoints.Proxy,
 		executables: processbroker.Executables{Names: identity(view.Shims), Paths: identity(view.ShimPaths)}}
-	if p.request, err = handoff(req, provider, endpoints); err != nil {
-		return nil, err
-	}
 	for _, b := range bindings {
 		b.ServerURL, b.BearerToken, b.HTTPHeaders = endpoints.MCP[b.ServerLabel], nil, nil
 		if b.AllowedTools != nil {
@@ -175,23 +168,15 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 // handoff rewrites the request as a view Executor receives it: the model
 // provider is the gateway's listener with the placeholder key, and MCP is
 // only in ViewSession.MCP.
-func handoff(req proto.PromptRequestPayload, provider modelprovider.Provider, endpoints gateway.Endpoints) (proto.PromptRequestPayload, error) {
-	provider.BaseURL, provider.APIKey = endpoints.Models[modelName], modelprovider.Placeholder
-	encoded, err := json.Marshal(provider)
-	if err != nil {
-		return req, invalidSession("model provider: %v", err)
-	}
-	var option map[string]any
-	if err := json.Unmarshal(encoded, &option); err != nil {
-		return req, invalidSession("model provider: %v", err)
-	}
+func handoff(req proto.PromptRequestPayload, provider modelprovider.Provider, endpoints gateway.Endpoints) proto.PromptRequestPayload {
+	provider.BaseURL, provider.APIKey = endpoints.Model, modelprovider.Placeholder
 	req.AgentOptions = maps.Clone(req.AgentOptions)
-	req.AgentOptions["model_provider"] = option
+	req.AgentOptions["model_provider"] = provider
 	req.MCPHTTPServers = nil
 	local := *req.LocalEnvironment
 	local.MCP = nil
 	req.LocalEnvironment = &local
-	return req, nil
+	return req
 }
 
 // checkLayout rejects a view whose overlays, masks or shim paths meet the
@@ -211,7 +196,7 @@ func checkLayout(cfg Config, view agent.View) error {
 	for _, p := range claimed {
 		for _, q := range own {
 			if p == q || strings.HasPrefix(p, q+"/") || strings.HasPrefix(q, p+"/") {
-				return &Error{Kind: ErrUnsupported, Op: "admit", Err: fmt.Errorf("%w: view path %s meets the agent host's %s", agent.ErrInvalidView, p, q)}
+				return fmt.Errorf("%w: admit: %w: view path %s meets the agent host's %s", ErrUnsupported, agent.ErrInvalidView, p, q)
 			}
 		}
 	}
@@ -267,13 +252,13 @@ func isViewPath(p string) bool {
 }
 
 func unsupported(format string, args ...any) error {
-	return &Error{Kind: ErrUnsupported, Op: "admit", Err: fmt.Errorf("%w: %s", agent.ErrUnsupportedOperation, fmt.Sprintf(format, args...))}
+	return fmt.Errorf("%w: admit: %w: %s", ErrUnsupported, agent.ErrUnsupportedOperation, fmt.Sprintf(format, args...))
 }
 
 func invalidSession(format string, args ...any) error {
-	return &Error{Kind: ErrInvalidSession, Op: "admit", Err: fmt.Errorf(format, args...)}
+	return fmt.Errorf("%w: admit: %s", ErrInvalidSession, fmt.Sprintf(format, args...))
 }
 
 func invalidConfig(format string, args ...any) error {
-	return &Error{Kind: ErrInvalidConfig, Err: fmt.Errorf(format, args...)}
+	return fmt.Errorf("%w: %s", ErrInvalidConfig, fmt.Sprintf(format, args...))
 }

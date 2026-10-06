@@ -252,7 +252,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			cmd.Wait()
 		}()
 		until(t, "a zombie leader with a running thread", func() bool { return zombieLeaderHolds(id) })
-		if got, err := allocUID(UIDRange{First: id, Count: 1}, procfs{}); !errors.Is(err, ErrCapacity) {
+		if got, err := allocUID(UIDRange{First: id, Count: 1}, taskUIDs); !errors.Is(err, ErrCapacity) {
 			freeUID(got)
 			t.Errorf("allocUID beside a running thread = %d, %v", got, err)
 		}
@@ -541,7 +541,7 @@ func checkReleased(t *testing.T, cfg Config) {
 	if strings.Contains(string(mounts), cfg.StateDir) {
 		t.Error("a mount under the state directory remains")
 	}
-	if held, err := heldUIDs(procfs{}, cfg.UIDs); err != nil || len(held) != 0 {
+	if held, err := heldUIDs(taskUIDs, cfg.UIDs); err != nil || len(held) != 0 {
 		t.Errorf("Session uids held: %v, %v", held, err)
 	}
 }

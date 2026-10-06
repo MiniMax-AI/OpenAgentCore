@@ -36,7 +36,7 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 		dials  int32
 	}{{"service", service, 0}, {"environment", environment, 1}} {
 		before := sb.dials.Load()
-		eps := serveOnLoopback(t, Config{MCP: []agent.MCPBinding{binding(c.origin)}, Prompt: c.prompt, OpenNetwork: sb.open, RootCAs: trust(srv)})
+		eps := serveOnLoopback(t, Config{Model: model, MCP: []agent.MCPBinding{binding(c.origin)}, Prompt: c.prompt, OpenNetwork: sb.open, RootCAs: trust(srv)})
 		if !strings.HasPrefix(eps.MCP["tools"], "http://127.0.0.1:") || !strings.HasSuffix(eps.MCP["tools"], "/mcp") {
 			t.Fatalf("%s: Harness URL %q", c.origin, eps.MCP["tools"])
 		}
@@ -65,7 +65,7 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 
 	// Origin admission runs first: an environment binding needs an enabled
 	// workspace network.
-	if _, err := Plan(Config{MCP: []agent.MCPBinding{binding("environment")}, Prompt: service, OpenNetwork: sb.open}); !errors.Is(err, ErrInvalidConfig) {
+	if _, err := Plan(Config{Model: model, MCP: []agent.MCPBinding{binding("environment")}, Prompt: service, OpenNetwork: sb.open}); !errors.Is(err, ErrInvalidConfig) {
 		t.Errorf("Plan with a relocated binding: %v", err)
 	}
 	// The gateway relays HTTP only, and the bearer token owns Authorization.
@@ -84,7 +84,7 @@ func TestMCPBrokersBothOrigins(t *testing.T) {
 		b      agent.MCPBinding
 		prompt proto.PromptRequestPayload
 	}{"stdio": {stdio, service}, "Authorization twice": {twice, service}, "headers over http": {plain, environment}, "a query over http": {query, environment}, "userinfo": {userinfo, service}} {
-		_, err := Plan(Config{MCP: []agent.MCPBinding{c.b}, Prompt: c.prompt, OpenNetwork: sb.open})
+		_, err := Plan(Config{Model: model, MCP: []agent.MCPBinding{c.b}, Prompt: c.prompt, OpenNetwork: sb.open})
 		if !errors.Is(err, ErrInvalidConfig) || strings.Contains(err.Error(), "secret") {
 			t.Errorf("Plan with %s: %v", name, err)
 		}
@@ -108,7 +108,7 @@ func TestMCPServesOnlyItsServerURL(t *testing.T) {
 	defer srv.Close()
 	const query = "tenant=acme&key=query%2Bsecret"
 	b := agent.MCPBinding{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: srv.URL + "/mcp?" + query}
-	eps := serveOnLoopback(t, Config{MCP: []agent.MCPBinding{b}, Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true}, RootCAs: trust(srv)})
+	eps := serveOnLoopback(t, Config{Model: model, MCP: []agent.MCPBinding{b}, Prompt: proto.PromptRequestPayload{DisableExecutionEnvironment: true}, RootCAs: trust(srv)})
 	harness := eps.MCP["tools"]
 	if !strings.HasPrefix(harness, "http://127.0.0.1:") || !strings.HasSuffix(harness, "/mcp") || strings.Contains(harness, "?") {
 		t.Fatalf("Harness URL %q", harness)

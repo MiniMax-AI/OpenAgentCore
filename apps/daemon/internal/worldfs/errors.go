@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 )
 
 // Dial opens a new File stream to the attachment's service. It returns once ctx ends; ctx bounds the open, not the stream.
@@ -22,33 +21,3 @@ var (
 	// ErrAttachmentDirty is a failed Serve whose cleanup Detach could not be sent or answered, so it cannot show the attachment holds nothing: the owner of the Link attachment must end it.
 	ErrAttachmentDirty = errors.New("worldfs: the attachment may still hold state")
 )
-
-// Error is a typed worldfs failure. It matches Kind and, when present, Err.
-type Error struct {
-	Kind error
-	Op   string
-	Path string
-	Err  error
-}
-
-func (e *Error) Error() string {
-	var b strings.Builder
-	b.WriteString(e.Kind.Error())
-	if e.Op != "" {
-		b.WriteString(": " + e.Op)
-	}
-	if e.Path != "" {
-		b.WriteString(" " + e.Path)
-	}
-	if e.Err != nil {
-		b.WriteString(": " + e.Err.Error())
-	}
-	return b.String()
-}
-
-func (e *Error) Unwrap() []error {
-	if e.Err == nil {
-		return []error{e.Kind}
-	}
-	return []error{e.Kind, e.Err}
-}

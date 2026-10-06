@@ -11,20 +11,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-// attachLink is the part of *sandboxlink.AttachLink the Session uses.
-type attachLink interface {
-	OpenService(context.Context, sandboxlink.Open) (sandboxlink.Stream, sandboxlink.Opened, error)
-	Renew(context.Context, sandboxlink.RenewAttachment) (sandboxlink.AttachmentRenewed, error)
-	CloseAttachment(context.Context, sandboxwire.ID) error
-	Done() <-chan struct{}
-	Close() error
-}
-
 // dialFunc connects an attach link; onClosed is its OnAttachmentClosed.
-type dialFunc func(ctx context.Context, onClosed func(sandboxlink.AttachmentClosed)) (attachLink, error)
+type dialFunc func(ctx context.Context, onClosed func(sandboxlink.AttachmentClosed)) (*sandboxlink.AttachLink, error)
 
 func relayDial(cfg Config) dialFunc {
-	return func(ctx context.Context, onClosed func(sandboxlink.AttachmentClosed)) (attachLink, error) {
+	return func(ctx context.Context, onClosed func(sandboxlink.AttachmentClosed)) (*sandboxlink.AttachLink, error) {
 		return sandboxlink.DialAttach(ctx, sandboxlink.AttachConfig{URL: cfg.RelayURL, TLS: cfg.TLS, RuntimeID: cfg.RuntimeID,
 			Credential: cfg.Credential, OnAttachmentClosed: onClosed})
 	}
@@ -50,7 +41,7 @@ type linkOwner struct {
 
 	dialMu sync.Mutex // serializes dials
 	mu     sync.Mutex
-	link   attachLink
+	link   *sandboxlink.AttachLink
 	// instance is the service instance of the first Opened; zero before.
 	instance sandboxwire.ID
 	lease    time.Time
@@ -73,7 +64,7 @@ func (b Binding) open(service sandboxlink.Service, version uint16, expected sand
 }
 
 // current returns the live link, dialing a new one when there is none.
-func (l *linkOwner) current(ctx context.Context) (attachLink, error) {
+func (l *linkOwner) current(ctx context.Context) (*sandboxlink.AttachLink, error) {
 	l.dialMu.Lock()
 	defer l.dialMu.Unlock()
 	l.mu.Lock()
@@ -103,7 +94,7 @@ func (l *linkOwner) open(ctx context.Context, service sandboxlink.Service, versi
 	closing := l.closing
 	l.mu.Unlock()
 	if closing {
-		return nil, &Error{Kind: ErrLink, Op: "open " + service.String(), Err: errors.New("the Session is ending")}
+		return nil, fmt.Errorf("%w: open %s: the Session is ending", ErrLink, service)
 	}
 	link, err := l.current(ctx)
 	if err != nil {
@@ -112,7 +103,7 @@ func (l *linkOwner) open(ctx context.Context, service sandboxlink.Service, versi
 	l.mu.Lock()
 	if l.closing {
 		l.mu.Unlock()
-		return nil, &Error{Kind: ErrLink, Op: "open " + service.String(), Err: errors.New("the Session is ending")}
+		return nil, fmt.Errorf("%w: open %s: the Session is ending", ErrLink, service)
 	}
 	l.opened = true
 	expected := l.instance
@@ -140,7 +131,7 @@ func (l *linkOwner) open(ctx context.Context, service sandboxlink.Service, versi
 // observe fails the Session on a Link failure that is not retryable and
 // returns err as a typed error.
 func (l *linkOwner) observe(op string, err error) error {
-	err = &Error{Kind: ErrLink, Op: op, Err: err}
+	err = fmt.Errorf("%w: %s: %w", ErrLink, op, err)
 	if !retryable(err) {
 		l.report(err)
 	}
@@ -167,7 +158,7 @@ func retryable(err error) bool {
 // closed is the link's OnAttachmentClosed. It never blocks.
 func (l *linkOwner) closed(c sandboxlink.AttachmentClosed) {
 	if c.AttachmentID == l.binding.AttachmentID {
-		l.report(&Error{Kind: ErrLink, Op: "attachment", Err: fmt.Errorf("the relay closed the attachment (reason %d)", c.Reason)})
+		l.report(fmt.Errorf("%w: attachment: the relay closed the attachment (reason %d)", ErrLink, c.Reason))
 	}
 }
 
@@ -188,7 +179,7 @@ func (l *linkOwner) renew(ctx context.Context) {
 		}
 		for {
 			if !time.Now().Before(lease) {
-				l.report(&Error{Kind: ErrLink, Op: "renew", Err: sandboxlink.LeaseExpired})
+				l.report(fmt.Errorf("%w: renew: %w", ErrLink, sandboxlink.LeaseExpired))
 				return
 			}
 			attempt, cancel := context.WithDeadline(ctx, lease)
@@ -238,7 +229,7 @@ func (l *linkOwner) close() error {
 	if opened {
 		ctx, cancel := context.WithTimeout(context.Background(), closeBound)
 		for {
-			var link attachLink
+			var link *sandboxlink.AttachLink
 			if link, err = l.current(ctx); err == nil {
 				err = link.CloseAttachment(ctx, l.binding.AttachmentID)
 			}
@@ -256,7 +247,7 @@ func (l *linkOwner) close() error {
 		link.Close()
 	}
 	if err != nil {
-		return &Error{Kind: ErrTeardown, Op: "close attachment", Err: err}
+		return fmt.Errorf("%w: close attachment: %w", ErrTeardown, err)
 	}
 	return nil
 }

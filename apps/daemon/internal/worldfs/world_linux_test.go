@@ -129,6 +129,16 @@ func serve(t *testing.T, backing string, id uint32, mps ...sessionview.Mountpoin
 	})
 	ws, p, err := m.world.Serve(context.Background(), dev, sessionview.WorldMount{UID: id, GID: id, Mountpoints: mps})
 	m.present = p
+	if err == nil {
+		// The kernel asks the server about a file's first poll, and the Go runtime polls each file this process opens without releasing its P, which the world needs to answer.
+		// Poll go-fuse's own file once with a call that releases the P, as fuse.Server.WaitMount does for other mountpoints, and the kernel stops asking.
+		fd, err := unix.Open(filepath.Join(mnt, ".go-fuse-epoll-hack"), unix.O_RDONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0)
+		unix.Close(fd)
+	}
 	t.Cleanup(func() {
 		if !m.stopped {
 			if err := unix.Unmount(mnt, unix.MNT_DETACH); err != nil {
@@ -166,6 +176,37 @@ func TestPOSIX(t *testing.T) {
 			}
 			fn(t, m.dir)
 		})
+	}
+}
+
+// The operations TestPOSIX skips fail as the package documentation maps them.
+func TestUnsupportedErrnos(t *testing.T) {
+	requireFUSE(t)
+	m, err := serve(t, t.TempDir(), 0)
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	p := filepath.Join(m.dir, "f")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fd := int(f.Fd())
+	_, getErr := unix.Getxattr(p, "user.x", make([]byte, 64))
+	_, listErr := unix.Listxattr(p, make([]byte, 64))
+	for name, c := range map[string]struct{ err, want error }{
+		"fallocate":           {unix.Fallocate(fd, 0, 0, 4096), unix.EOPNOTSUPP},
+		"fallocate keep size": {unix.Fallocate(fd, unix.FALLOC_FL_KEEP_SIZE, 0, 4096), unix.EOPNOTSUPP},
+		"getxattr":            {getErr, unix.EOPNOTSUPP},
+		"listxattr":           {listErr, unix.EOPNOTSUPP},
+		"setxattr":            {unix.Setxattr(p, "user.x", []byte("v"), 0), unix.EOPNOTSUPP},
+		"removexattr":         {unix.Removexattr(p, "user.x"), unix.EOPNOTSUPP},
+		"fcntl lock":          {unix.FcntlFlock(uintptr(fd), unix.F_SETLK, &unix.Flock_t{Type: unix.F_WRLCK}), unix.ENOLCK},
+	} {
+		if !errors.Is(c.err, c.want) {
+			t.Errorf("%s = %v, want %v", name, c.err, c.want)
+		}
 	}
 }
 
@@ -213,15 +254,21 @@ func TestInstanceChanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A private mapping reads the file through READ when it faults; a shared one is refused.
+	// madvise faults the mapping in within a system call, which releases the P the world needs to answer; a fault on a load would hold it.
 	mf, err := os.Open(f)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if b, err := unix.Mmap(int(mf.Fd()), 0, len("before"), unix.PROT_READ, unix.MAP_PRIVATE); err != nil || string(b) != "before" {
-		t.Errorf("private mapping = %q, %v", b, err)
-	} else {
-		unix.Munmap(b)
+	b, err := unix.Mmap(int(mf.Fd()), 0, len("before"), unix.PROT_READ, unix.MAP_PRIVATE)
+	if err != nil {
+		t.Fatalf("private mapping: %v", err)
 	}
+	if err := unix.Madvise(b, unix.MADV_POPULATE_READ); err != nil {
+		t.Errorf("fault the private mapping in: %v", err)
+	} else if string(b) != "before" {
+		t.Errorf("private mapping = %q", b)
+	}
+	unix.Munmap(b)
 	if _, err := unix.Mmap(int(mf.Fd()), 0, len("before"), unix.PROT_READ, unix.MAP_SHARED); !errors.Is(err, syscall.ENODEV) {
 		t.Errorf("shared mapping: %v, want ENODEV", err)
 	}

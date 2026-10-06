@@ -2,7 +2,6 @@ package mcode
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,18 +60,29 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	if err != nil {
 		return launchOptions{}, err
 	}
+	tools := workspaceTools{node: c.Node, bridge: c.Bridge, profile: map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": c.Directory, "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(req.LocalEnvironment.Skills) > 0}}
+	file, err := localworkspace.ToolEnvironmentFile()
+	if err != nil {
+		return launchOptions{}, err
+	}
+	if file != "" {
+		tools.profile["toolEnvFile"] = file
+	}
+	for _, skill := range req.LocalEnvironment.Skills {
+		tools.skills = append(tools.skills, skill.Metadata.Name)
+	}
 	// Reuse public option validation and private Session state provisioning.
 	// The native process, ACP Session and workspace tools share the declared cwd.
 	private := req
 	private.LocalEnvironment, private.DisableExecutionEnvironment = nil, true
 	// Public declarations have already been resolved into the transient ACP map.
 	private.MCPHTTPServers = nil
-	opts, err := prepareOptionsWithSkills(ctx, private, false)
+	opts, err := prepareOptionsWithTools(ctx, private, &tools)
 	if err != nil {
 		return opts, err
 	}
 	opts.Dir, opts.bindings = c.Directory, bindings
-	var skills []string
+	opts.MCP = append([]map[string]any{tools.server(opts.DataDir)}, servers...)
 	if len(req.LocalEnvironment.Skills) > 0 {
 		root := filepath.Join(opts.DataDir, "skills")
 		if err := os.MkdirAll(root, 0700); err != nil {
@@ -90,79 +100,21 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 			} else if err := os.Symlink(target, link); err != nil {
 				return opts, err
 			}
-			skills = append(skills, skill.Metadata.Name)
 		}
 	}
-	profile := map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": c.Directory, "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(skills) > 0}
-	file, err := localworkspace.ToolEnvironmentFile()
-	if err != nil {
-		return opts, err
-	}
-	if file != "" {
-		profile["toolEnvFile"] = file
-	}
-	data, err := os.OpenRoot(opts.DataDir)
-	if err != nil {
-		return opts, err
-	}
-	defer data.Close()
-	return opts, writeWorkspaceTools(&opts, data, req, workspaceTools{node: c.Node, bridge: c.Bridge, profile: filepath.Join(opts.DataDir, "workspace-profile.json")}, profile, skills, servers)
+	return opts, nil
 }
 
-// workspaceTools are the workspace bridge as the native process runs it, and
-// the bridge's profile path.
-type workspaceTools struct{ node, bridge, profile string }
+// workspaceTools is the workspace bridge as the native process runs it, the
+// bridge's profile and the Skills it presents.
+type workspaceTools struct {
+	node, bridge string
+	profile      map[string]any
+	skills       []string
+}
 
-// writeWorkspaceTools turns the native configuration in data over to the
-// workspace bridge: native permissions and sandbox are off, the bridge's
-// profile is written, and oac_workspace precedes the Session's servers.
-func writeWorkspaceTools(opts *launchOptions, data *os.Root, req proto.PromptRequestPayload, tools workspaceTools, profile map[string]any, skills []string, servers []map[string]any) error {
-	raw, err := data.ReadFile("config.yaml")
-	if err != nil {
-		return err
-	}
-	var config map[string]any
-	if err = json.Unmarshal(raw, &config); err != nil {
-		return err
-	}
-	config["permissionMode"] = "bypassPermissions"
-	config["sandbox"] = map[string]bool{"enabled": false}
-	if len(skills) > 0 {
-		selected := config["agents"].(map[string]any)["default"].(map[string]any)
-		selected["skills"] = skills
-		for _, key := range []string{"tools", "builtinTools"} {
-			selected[key] = append(selected[key].([]any), "skill")
-		}
-	}
-	if raw, err = json.Marshal(config); err != nil {
-		return err
-	}
-	if err = data.WriteFile("config.yaml", raw, 0600); err != nil {
-		return err
-	}
-	if raw, err = json.Marshal(profile); err != nil {
-		return err
-	}
-	if err = data.WriteFile("workspace-profile.json", raw, 0600); err != nil {
-		return err
-	}
-	opts.MCP = []map[string]any{{"name": "oac_workspace", "command": tools.node, "args": []string{tools.bridge, tools.profile}, "env": []map[string]string{}}}
-	opts.MCP = append(opts.MCP, servers...)
-	if !req.DisableSubagents {
-		// This native data directory belongs to one public Session and its
-		// descendants. ACP's ephemeral server map otherwise covers only root.
-		configured := map[string]any{}
-		for _, server := range opts.MCP[:1] {
-			name, _ := server["name"].(string)
-			configured[name] = map[string]any{"type": "stdio", "command": server["command"], "args": server["args"], "env": map[string]string{}, "enabled": true}
-		}
-		raw, err := json.Marshal(map[string]any{"mcpServers": configured})
-		if err != nil {
-			return err
-		}
-		if err := data.WriteFile("mcp.json", raw, 0o600); err != nil {
-			return err
-		}
-	}
-	return nil
+// server is the bridge's ACP MCP server, with its profile in dataDir as the
+// native process sees it.
+func (t workspaceTools) server(dataDir string) map[string]any {
+	return map[string]any{"name": "oac_workspace", "command": t.node, "args": []string{t.bridge, filepath.Join(dataDir, "workspace-profile.json")}, "env": []map[string]string{}}
 }

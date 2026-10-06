@@ -88,8 +88,3 @@ func (f *frontend) FsyncDir(_ <-chan struct{}, in *fuse.FsyncIn) fuse.Status {
 	_, err := call(f, f.ctx, (*sandboxfs.Client).Fsync, &sandboxfs.FsyncRequest{Handle: h.server, DataOnly: in.FsyncFlags&1 != 0})
 	return status(err)
 }
-
-// ReadDirPlus is never negotiated.
-func (f *frontend) ReadDirPlus(<-chan struct{}, *fuse.ReadIn, *fuse.DirEntryList) fuse.Status {
-	return fuse.ENOSYS
-}
