@@ -11,7 +11,7 @@ const historySnapshot = (page: Page) => page.evaluate(() => ({
 }));
 
 async function tabBackToSkipLink(page: Page) {
-  const skip = page.getByRole("link", { name: "Skip to content", exact: true });
+  const skip = page.getByRole("link", { name: "Skip to main content", exact: true });
   // Reach the link through the actual tab order, including after a route change
   // or the tour restores focus to its opener.
   for (let step = 0; step < 30; step++) {
@@ -27,7 +27,7 @@ test("skips to the current page with Enter without changing its route or history
   await openConsole(page, request, "files");
   const heading = page.getByRole("heading", { name: "Files", level: 1 });
   await expect(heading).toBeVisible();
-  const skip = page.getByRole("link", { name: "Skip to content", exact: true });
+  const skip = page.getByRole("link", { name: "Skip to main content", exact: true });
   const main = page.getByRole("main");
   const existingMain = await main.elementHandle();
   const history = await historySnapshot(page);
@@ -90,7 +90,7 @@ test("skips to the current main after the tour removes and remounts the console"
   await opener.click();
   await expect(page.getByRole("heading", { name: "Is it healthy, and where does it fail?", exact: true })).toBeVisible();
   await expect.poll(() => originalMain!.evaluate((element) => element.isConnected)).toBe(false);
-  await expect(page.getByRole("link", { name: "Skip to content", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Skip to main content", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Skip", exact: true }).click();
   await expect(opener).toBeFocused();
 
