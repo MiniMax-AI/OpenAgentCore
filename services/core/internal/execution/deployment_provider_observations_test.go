@@ -82,10 +82,12 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 }
 func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	t.Helper()
-	receipt, err := f.s.SubmitMessage(t.Context(), f.tenant, f.session.ID, uuid.NewString(), json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`))
+	_, service := testSessions(t, f.pool, nil)
+	receipts, err := service.SubmitInputs(t.Context(), f.tenant, f.session.ID, uuid.NewString(), []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"fixture"}]}]}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
+	receipt := receipts[0]
 	if _, err = f.execution.TransitionTurn(t.Context(), f.tenant, f.session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}

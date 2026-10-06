@@ -21,15 +21,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
-func validateInitialInputs(inputs []sessions.Input) ([]sessions.Input, json.RawMessage, error) {
-	for _, input := range inputs {
-		if input.Kind != "message" {
-			return nil, nil, sessions.ErrInvalidInput
-		}
-	}
-	return validateInputs(inputs)
-}
-
 // The Session upsert locks retries. Only the new row reserves or admits work, so a
 // retry after completion or later Turns cannot submit the original input again.
 func (s *Store) createSessionResources(ctx context.Context, tenant string, params sqlc.CreateSessionParams, inputs []sessions.Input, encodedInput json.RawMessage, files []environmentconfig.InitialFile, setup environmentconfig.Setup, provider *v1.ModelProviderInput, executionConfiguration *v1.SessionExecutionConfiguration, providerSource string, deploymentRevision uuid.UUID) (sqlc.Session, *sessions.Environment, error) {
@@ -170,8 +161,9 @@ func (s *Store) createSessionResources(ctx context.Context, tenant string, param
 				return err
 			}
 		} else {
+			bound := sessionpg.BindSession(q, row.TenantID, row.ID)
 			for position, input := range inputs {
-				if _, err := admitInput(ctx, q, tenant, row.ID, key, int32(position), input); err != nil {
+				if _, err := sessions.AdmitInput(ctx, bound, key, int32(position), input); err != nil {
 					return err
 				}
 			}

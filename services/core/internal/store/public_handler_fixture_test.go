@@ -145,14 +145,14 @@ func withPolicy(policy execution.Policy) func(*api.Dependencies) {
 	return func(d *api.Dependencies) { d.Policy = policy }
 }
 
-// storeExecution admits Sessions and inputs through the Store without a
-// Worker, so nothing runs them.
+// storeExecution admits Sessions through the Store and inputs through the
+// Session service without a Worker, so nothing runs them.
 func storeExecution(t testing.TB, s *store.Store) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
 		d.Execution = &api.Execution{
 			ExecutorURL:      testExecutorURL,
 			SessionAdmission: s,
-			InputAdmission:   s,
+			InputAdmission:   store.SessionService(t, s),
 			SessionArchive:   strictStandIn{t},
 			Workspaces:       strictStandIn{t},
 		}

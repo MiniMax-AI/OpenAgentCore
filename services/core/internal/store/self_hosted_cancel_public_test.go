@@ -118,7 +118,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 		return value
 	}
 	idleReceipts := receipts(created.IdleKey, "")
-	later, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
+	later, err := store.SessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, created.LaterID, "controlled-later-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Retain pending input."}`)}})
 	if err != nil || later.State != sessions.EnvironmentInputPending || later.IsInitial {
 		t.Fatal("could not establish controlled later reservation", err)
 	}
@@ -132,7 +132,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	start := func() string {
 		t.Helper()
 		// Controlled callbacks isolate HTTP admission; no daemon or model runs in this fixture.
-		input, err := s.SubmitMessage(t.Context(), tenant, created.ID, uuid.NewString(), json.RawMessage(`{"text":"Controlled active work."}`))
+		input, err := store.SendMessage(t.Context(), s, tenant, created.ID, uuid.NewString(), json.RawMessage(`{"text":"Controlled active work."}`))
 		if err != nil {
 			t.Fatal(err)
 		}

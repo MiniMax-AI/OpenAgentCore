@@ -19,10 +19,7 @@ func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	receipt, err := s.SubmitMessage(t.Context(), tenant, session.ID, "input", json.RawMessage(`{"text":"input-secret-canary"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
+	receipt := submitMessage(t, pool, tenant, session.ID, "input", json.RawMessage(`{"text":"input-secret-canary"}`))
 	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"device_disconnected","error":"Bearer raw-secret-canary https://private.example/key","done":{"native_id":"secret-native-canary"}}`)})
 	base := adminSessionsPath + session.ID

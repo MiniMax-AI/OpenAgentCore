@@ -16,7 +16,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 			enableWorkerEnvironment(t, h)
 			frames := workerFrames(t, h)
-			pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+			pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -31,7 +31,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 				h.write(prepare.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{State: "rejected", Operation: proto.TypeExecutionPrepare, ErrorCode: code})
 			}
 			awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "failed reservation settlement", func() bool {
-				current, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
+				current, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
 				return err == nil && current.State == sessions.EnvironmentInputFailed
 			})
 			session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
@@ -59,7 +59,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 				t.Fatal("failed input retried", frame.Type)
 			case <-time.After(1200 * time.Millisecond):
 			}
-			next, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"next"}`)}})
+			next, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"next"}`)}})
 			if err != nil {
 				t.Fatal("new input remained blocked", err)
 			}
@@ -71,7 +71,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 			if startFrame.DecodePayload(&start) != nil || start.RunID == "" || inputTextForTest(t, start.Input) != "next" {
 				t.Fatal("new input was not admitted")
 			}
-			current, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, next.ID)
+			current, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, next.ID)
 			if err != nil || current.State != sessions.EnvironmentInputAdmitted {
 				t.Fatal("new input state", err)
 			}
@@ -99,7 +99,7 @@ func TestWorkerRetriesUncertainPreparationFailure(t *testing.T) {
 			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 			enableWorkerEnvironment(t, h)
 			frames := workerFrames(t, h)
-			pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "retry", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"retry"}`)}})
+			pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "retry", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"retry"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -116,11 +116,11 @@ func TestWorkerRetriesUncertainPreparationFailure(t *testing.T) {
 				nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 			}
 			nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-			current, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
+			current, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
 			if err != nil || current.State != sessions.EnvironmentInputPending || !current.Deadline.Equal(pending.Deadline) {
 				t.Fatal("transient failure settled or extended input", err)
 			}
-			if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID); err != nil {
+			if _, err := store.CancelEnvironmentInput(t.Context(), h.s, h.tenant, h.session.ID, pending.ID); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -131,17 +131,17 @@ func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), false)
 	enableWorkerEnvironment(t, h)
 	frames := workerFrames(t, h)
-	first, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	first, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "first", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, stop := startEnvironmentExpiryWorker(t, h.db, h.d)
 	defer stop()
 	old := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
-	if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, h.session.ID, first.ID); err != nil {
+	if _, err := store.CancelEnvironmentInput(t.Context(), h.s, h.tenant, h.session.ID, first.ID); err != nil {
 		t.Fatal(err)
 	}
-	next, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"next"}`)}})
+	next, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "next", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"next"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing
 	h.write(old.ID, proto.TypePreparationStatus, rejection)
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	for id, state := range map[string]string{first.ID: sessions.EnvironmentInputCancelled, next.ID: sessions.EnvironmentInputPending} {
-		current, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, id)
+		current, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, id)
 		if err != nil || current.State != state {
 			t.Fatal("late rejection changed cancellation or newer input", err)
 		}

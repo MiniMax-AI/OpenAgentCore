@@ -36,7 +36,7 @@ func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.T) {
 	h, _ := runtimeWorkerHarness(t)
 	h.d, h.lease = h.bound(), h.owner().Lease
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.
 
 func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	h, pool := runtimeWorkerHarness(t)
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 	if release.ID != prepare.ID {
 		t.Fatal("conflicted preparation was not released")
 	}
-	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
+	stored, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
 	if err != nil || stored.State != sessions.EnvironmentInputPending || len(stored.Receipts) != 0 {
 		t.Fatal("conflict consumed queued input", stored, err)
 	}

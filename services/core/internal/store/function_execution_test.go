@@ -137,7 +137,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			}
 			status := sessions.TurnFailed
 			if cancel {
-				if _, err := h.s.RequestCancel(t.Context(), h.tenant, h.session.ID, "cancel"); err != nil {
+				if _, err := store.RequestCancel(t.Context(), h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 					t.Fatal(err)
 				}
 				var request proto.PromptCancelPayload

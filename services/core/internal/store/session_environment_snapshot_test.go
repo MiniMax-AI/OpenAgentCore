@@ -25,7 +25,7 @@ func TestSelfHostedCreationSnapshotRetainsEnvironmentAndCursor(t *testing.T) {
 	if environment.ID == "" || environment.SessionID != created.Session.ID || environment.TenantID != tenant || environment.Status != "pending" {
 		t.Fatal("incorrect creation association", environment)
 	}
-	pending, err := s.ReserveEnvironmentInput(t.Context(), tenant, created.Session.ID, "later", []sessions.Input{messageInput("later")})
+	pending, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, created.Session.ID, "later", []sessions.Input{messageInput("later")})
 	if err != nil || pending.State != sessions.EnvironmentInputPending {
 		t.Fatal(pending, err)
 	}

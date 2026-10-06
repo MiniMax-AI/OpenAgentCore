@@ -77,7 +77,7 @@ func TestNativeFunctionImagePublicExecution(t *testing.T) {
 		if err != nil || !call.Applied {
 			t.Fatal("function delivery acknowledgement missing", err)
 		}
-		inputs, err := h.s.ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
+		inputs, err := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
 		if err != nil || len(inputs) != 2 || inputs[0].Kind != "message" || inputs[1].Kind != "tool_result" {
 			t.Fatal("function result admission duplicated or mutated", err)
 		}

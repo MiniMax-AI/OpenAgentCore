@@ -98,7 +98,7 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 			if status == sessions.TurnCancelled {
 				before, _ := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 				for _, key := range []string{"cancel", "cancel", "another-cancel"} {
-					if _, err := s.RequestCancel(t.Context(), tenant, session.ID, key); err != nil {
+					if _, err := requestCancel(t.Context(), s, tenant, session.ID, key); err != nil {
 						t.Fatal(err)
 					}
 				}

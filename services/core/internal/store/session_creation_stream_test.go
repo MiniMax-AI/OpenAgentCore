@@ -121,7 +121,7 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 	if err != nil || late.Created || late.Cursor != all[len(all)-1].Sequence {
 		t.Fatal(late, err)
 	}
-	next, err := s.SubmitInputs(ctx, tenant, id, "next", []sessions.Input{messageInput("later")})
+	next, err := submitInputs(ctx, s, tenant, id, "next", []sessions.Input{messageInput("later")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestCreationStreamIdleAndNonstreamRetry(t *testing.T) {
 	if err != nil || !first.Created || first.Cursor != 0 || first.Session.LastTurn != nil {
 		t.Fatal(first, err)
 	}
-	if _, err := s.SubmitInputs(ctx, tenant, first.Session.ID, "message", []sessions.Input{messageInput("later")}); err != nil {
+	if _, err := submitInputs(ctx, s, tenant, first.Session.ID, "message", []sessions.Input{messageInput("later")}); err != nil {
 		t.Fatal(err)
 	}
 	retry, err := s.CreateSessionStream(ctx, tenant, input)

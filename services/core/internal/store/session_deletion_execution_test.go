@@ -120,7 +120,7 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	if again := functionState(t, h, 1); again.LastTurn == nil || again.LastTurn.Status != sessions.TurnWaiting || !again.LastTurn.CancelRequestedAt.IsZero() {
 		t.Fatal("rejected deletion changed required actions", again)
 	}
-	if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "cancel-before-delete"); err != nil {
+	if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel-before-delete"); err != nil {
 		t.Fatal(err)
 	}
 	// The explicit cancellation, not the rejected deletion, reaches the daemon.

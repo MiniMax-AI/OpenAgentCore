@@ -50,7 +50,7 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	if first.LastTurn == nil {
 		t.Fatal("missing initial Turn")
 	}
-	inputs, err := s.ListTurnInputs(ctx, tenant, first.ID, first.LastTurn.ID, 0, 100)
+	inputs, err := sessionAdapter(s).ListTurnInputs(ctx, tenant, first.ID, first.LastTurn.ID, 0, 100)
 	if err != nil || len(inputs) != 2 {
 		t.Fatal(inputs, err)
 	}
@@ -67,11 +67,11 @@ func TestInitialInputCreationRetriesAcrossConnectionsAndLaterTurns(t *testing.T)
 	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnQueued, sessions.TurnInProgress)
 	transition(t, s, tenant, first.ID, first.LastTurn.ID, sessions.TurnInProgress, sessions.TurnCompleted)
 	// The same caller key at the events endpoint is an independent request.
-	next, err := s.SubmitInputs(ctx, tenant, first.ID, input.IdempotencyKey, []sessions.Input{messageInput("later")})
+	next, err := submitInputs(ctx, s, tenant, first.ID, input.IdempotencyKey, []sessions.Input{messageInput("later")})
 	if err != nil || len(next) != 1 || next[0].TurnID == first.LastTurn.ID {
 		t.Fatal(next, err)
 	}
-	if _, err := s.RequestCancel(ctx, tenant, first.ID, "cancel"); err != nil {
+	if _, err := requestCancel(ctx, s, tenant, first.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sessionService(t, s).UpdateSessionMetadata(ctx, sessions.UpdateSessionMetadataCommand{TenantID: tenant, SessionID: first.ID, Metadata: map[string]string{"updated": "yes"}}); err != nil {

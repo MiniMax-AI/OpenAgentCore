@@ -24,7 +24,7 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 			handle := acknowledgePreparation(h, frame.ID)
 			switch action {
 			case "cancel":
-				if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID); err != nil {
+				if _, err := store.CancelEnvironmentInput(t.Context(), h.s, h.tenant, h.session.ID, pending.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "expire":
@@ -66,7 +66,7 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 			}
 			assertEnvironmentExpiryHasNoHistory(t, pool, h.session.ID)
 			if action == "prepare-failure" || action == "disconnect" {
-				stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
+				stored, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
 				if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) {
 					t.Fatal("preparation failure changed the pending identity", stored, err)
 				}
@@ -87,7 +87,7 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 				h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{State: "rejected", Operation: proto.TypeExecutionStart, ErrorCode: "preparation_not_ready"})
 			} else {
 				h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "starting", RunID: start.RunID})
-				if _, err := h.s.RequestCancel(t.Context(), h.tenant, h.session.ID, "cancel-start"); err != nil {
+				if _, err := store.RequestCancel(t.Context(), h.s, h.tenant, h.session.ID, "cancel-start"); err != nil {
 					t.Fatal(err)
 				}
 				frame := h.read(proto.TypePromptCancel)
@@ -147,7 +147,7 @@ func TestPreparedDispatchCancellationReceiptSurvivesStartFailure(t *testing.T) {
 			handle := acknowledgePreparation(h, prepare.ID)
 			start := readyPreparedDispatch(t, h, prepare.ID, handle)
 			h.write(prepare.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "starting", RunID: start.RunID})
-			if _, err := h.s.RequestCancel(t.Context(), h.tenant, h.session.ID, "cancel-start"); err != nil {
+			if _, err := store.RequestCancel(t.Context(), h.s, h.tenant, h.session.ID, "cancel-start"); err != nil {
 				t.Fatal(err)
 			}
 			frame := h.read(proto.TypePromptCancel)

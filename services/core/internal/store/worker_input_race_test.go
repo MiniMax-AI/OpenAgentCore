@@ -50,7 +50,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 					mutated <- h.s.CommitLegacyDeletion(t.Context(), h.tenant, candidateSession)
 					return
 				}
-				_, err := h.s.SubmitInputs(t.Context(), h.tenant, candidateSession, "cancel", []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
+				_, err := store.SubmitInputs(t.Context(), h.s, h.tenant, candidateSession, "cancel", []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
 				mutated <- err
 			}}
 			instrumented, err := pgxpool.NewWithConfig(t.Context(), cfg)

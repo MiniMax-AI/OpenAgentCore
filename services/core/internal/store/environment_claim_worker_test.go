@@ -19,8 +19,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			s, db := newTestStoreDB(t)
 			tenant, pending := newEnvironmentExpiryReservation(t, s)
 			owner := executionOwner(t, db, s)
-			writer := owner.Store
-			got, err := writer.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
+			got, err := owner.Sessions.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if err != nil || len(got.Receipts) != 1 || got.Receipts[0].Replayed {
 				t.Fatal(got, err)
 			}
@@ -66,7 +65,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			if err != nil || turns != 1 || inputs != 1 || queued != 0 {
 				t.Fatal("restart duplicated or requeued prepared work", turns, inputs, queued, err)
 			}
-			successor := executionOwner(t, db, s).Store
+			successor := executionOwner(t, db, s).Sessions
 			retry, err := successor.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if deleted {
 				if !errors.Is(err, sessions.ErrNotFound) {

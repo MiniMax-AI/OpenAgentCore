@@ -57,7 +57,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(ctx, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`))
+	input, err := store.SendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.SubmitMessage(ctx, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`)); err != nil {
+	if _, err = store.SendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"question"}`)); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := store.SessionAdapter(s).SessionEventCursor(ctx, tenant, session.ID)
@@ -170,7 +170,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 		inputs[i] = sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"input"}`)}
 	}
 	for range 5 {
-		if _, err = s.SubmitInputs(ctx, tenant, session.ID, uuid.NewString(), inputs); err != nil {
+		if _, err = store.SubmitInputs(ctx, s, tenant, session.ID, uuid.NewString(), inputs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -185,7 +185,7 @@ func TestSessionEventsRetentionAndQueuedCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.RequestCancel(ctx, tenant, session.ID, "cancel"); err != nil {
+	if _, err = store.RequestCancel(ctx, s, tenant, session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
 	changes, err := store.SessionAdapter(s).ListSessionEvents(ctx, tenant, session.ID, cursor)

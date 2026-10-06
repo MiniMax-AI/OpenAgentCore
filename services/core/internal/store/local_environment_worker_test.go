@@ -110,7 +110,7 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 
 func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *testing.T) {
 	h, worker, environment := localWorker(t, true, true)
-	reservation, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	reservation, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 		turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
 		return err == nil && turn.Status == sessions.TurnCompleted
 	})
-	settled, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, reservation.ID)
+	settled, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, reservation.ID)
 	if err != nil || settled.State != sessions.EnvironmentInputAdmitted || len(settled.Receipts) != 1 {
 		t.Fatal("local reservation did not settle", err)
 	}

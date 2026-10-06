@@ -303,7 +303,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				continue
 			}
 			if pending == nil {
-				inputs, err := d.Store.ListTurnInputs(ctx, tenantID, sessionID, request.RunID, result.AppliedThrough, 1)
+				inputs, err := d.SessionsReader.ListTurnInputs(ctx, tenantID, sessionID, request.RunID, result.AppliedThrough, 1)
 				if err != nil {
 					result.ErrorCode = "execution_state_unavailable"
 					if ctx.Err() != nil {

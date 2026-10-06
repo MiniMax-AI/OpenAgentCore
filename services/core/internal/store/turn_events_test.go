@@ -21,7 +21,7 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(ctx, tenant, session.ID, "start", json.RawMessage(`{"text":"test"}`))
+	input, err := store.SendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"test"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

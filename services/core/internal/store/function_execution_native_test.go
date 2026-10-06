@@ -32,7 +32,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 			t.Fatal(action, state.LastTurn)
 		}
 		if index == 2 {
-			if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "native-cancel"); err != nil {
+			if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "native-cancel"); err != nil {
 				t.Fatal(err)
 			}
 			h.finished(running, sessions.TurnCancelled)

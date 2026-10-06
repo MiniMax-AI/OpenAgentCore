@@ -105,7 +105,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 		t.Fatal(err)
 	}
 	var result execution.Result
-	inputs, inputErr := h.s.ListTurnInputs(ctx, h.tenant, created.ID, first.RunID, 0, 100)
+	inputs, inputErr := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, created.ID, first.RunID, 0, 100)
 	if inputErr != nil || len(inputs) != 2 {
 		t.Fatal(inputs, inputErr)
 	}

@@ -54,7 +54,7 @@ func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
 	h.write(input.TurnID, proto.TypeOutputMessage, proto.OutputMessagePayload{ID: "a", Status: "completed", Phase: "commentary", Text: &text})
 	h.write(input.TurnID, proto.TypeOutputMessage, proto.OutputMessagePayload{ID: "b", Status: "in_progress", Phase: "final_answer"})
 	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{ItemID: "b", Delta: "partial", Sequence: 2})
-	if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "cancel"); err != nil {
+	if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
 	env = h.read(proto.TypePromptCancel)

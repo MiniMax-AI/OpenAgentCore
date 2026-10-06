@@ -40,7 +40,7 @@ func TestExecutionNegotiatesAndPersistsToolObservations(t *testing.T) {
 		}
 		h.write(input.TurnID, proto.TypeToolCall, proto.ToolCallPayload{ID: id, Stage: stage, Observation: &observation})
 	}
-	if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "cancel"); err != nil {
+	if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
 	env = h.read(proto.TypePromptCancel)

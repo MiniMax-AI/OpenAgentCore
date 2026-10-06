@@ -70,7 +70,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// waiting starts a Turn that waits for one function result.
 	waiting := func(session, key, call string) sessions.InputReceipt {
 		t.Helper()
-		receipt, err := s.SubmitMessage(ctx, tenant, session, key, json.RawMessage(`{"text":"work"}`))
+		receipt, err := store.SendMessage(ctx, s, tenant, session, key, json.RawMessage(`{"text":"work"}`))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -62,7 +62,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			receipt, err := s.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`))
+			receipt, err := sendMessage(ctx, s, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +101,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				}
 				// Callers cancel first. A queued Turn cancels at once; a running
 				// Turn stays active until execution settles its cancellation.
-				if _, err := s.RequestCancel(ctx, tenant, session.ID, "cancel"); err != nil {
+				if _, err := requestCancel(ctx, s, tenant, session.ID, "cancel"); err != nil {
 					t.Fatal(err)
 				}
 				if status == sessions.TurnInProgress {
@@ -139,10 +139,10 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if _, err := fresh.CreateSessionStream(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`)); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sendMessage(ctx, fresh, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`)); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.RequestCancel(ctx, tenant, session.ID, "late-cancel"); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := requestCancel(ctx, fresh, tenant, session.ID, "late-cancel"); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			if _, err := sessionAdapter(fresh).ListItems(ctx, tenant, session.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
@@ -162,7 +162,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if _, err := transitionTurn(ctx, fresh, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
-			inputs, err := fresh.ListTurnInputs(ctx, tenant, session.ID, receipt.TurnID, 0, 20)
+			inputs, err := sessionAdapter(fresh).ListTurnInputs(ctx, tenant, session.ID, receipt.TurnID, 0, 20)
 			if err != nil || len(inputs) == 0 || inputs[0].Sequence != receipt.Sequence {
 				t.Fatal(inputs, err)
 			}
@@ -184,7 +184,7 @@ func TestSessionDeletionSerializesAdmissionBeforeRetryLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.RequestCancel(ctx, tenant, session.ID, "existing"); err != nil {
+	if _, err := requestCancel(ctx, s, tenant, session.ID, "existing"); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := pool.Begin(ctx)
@@ -196,7 +196,7 @@ func TestSessionDeletionSerializesAdmissionBeforeRetryLookup(t *testing.T) {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
-	go func() { _, err := s.RequestCancel(ctx, tenant, session.ID, "existing"); done <- err }()
+	go func() { _, err := requestCancel(ctx, s, tenant, session.ID, "existing"); done <- err }()
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -262,14 +262,14 @@ func TestSessionDeletionRacesAdmissionUnderSessionLock(t *testing.T) {
 			tenant, session := newTurnSession(t, s)
 			return tenant, session.ID
 		}, func(ctx context.Context, s *Store, tenant, session string) error {
-			_, err := s.SubmitMessage(ctx, tenant, session, "racing", messagePayload)
+			_, err := sendMessage(ctx, s, tenant, session, "racing", messagePayload)
 			return err
 		}},
 		{"environment_input", func(t *testing.T, s *Store) (string, string) {
 			tenant, session := environmentInputSession(t, s)
 			return tenant, session.ID
 		}, func(ctx context.Context, s *Store, tenant, session string) error {
-			_, err := s.ReserveEnvironmentInput(ctx, tenant, session, "racing", []sessions.Input{messageInput("racing")})
+			_, err := sessionService(t, s).ReserveEnvironmentInput(ctx, tenant, session, "racing", []sessions.Input{messageInput("racing")})
 			return err
 		}},
 	}
@@ -423,7 +423,7 @@ func TestSessionDeletionKeepsProvisioningInputPlacementUntilSettled(t *testing.T
 	if _, err := s.pool.Exec(ctx, "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1", session.ID); err != nil {
 		t.Fatal(err)
 	}
-	if count, err := w.ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
+	if count, err := sessionExecution(t, w.lease).ExpireEnvironmentInputs(ctx); err != nil || count != 1 {
 		t.Fatal("initial input did not expire", count, err)
 	}
 	if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {

@@ -169,7 +169,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	mustReject("completion", err)
 	_, err = operations.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
 	mustReject("reconciliation", err)
-	_, err = writer.ExpireEnvironmentInputs(t.Context())
+	_, err = operations.ExpireEnvironmentInputs(t.Context())
 	mustReject("input expiry", err)
 	mustReject("ownership check", writer.lease.CheckOwnership(t.Context()))
 	after, err := sessionAdapter(s).GetSession(t.Context(), tenant, active.ID)
@@ -276,36 +276,12 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	task := tasks[0]
-	_, err := s.SubmitMessage(ctx, task.tenant, task.session, "public", json.RawMessage(`{"text":"additional"}`))
+	_, err := sendMessage(ctx, s, task.tenant, task.session, "public", json.RawMessage(`{"text":"additional"}`))
 	close(release)
 	if err != nil {
 		t.Fatal("public admission used owner gate", err)
 	}
 	if err := <-held; err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestPooledStoreHasNoExecutionAuthority(t *testing.T) {
-	s, _ := testStore(t)
-	tenant, session := newTurnSession(t, s)
-	submitMessage(t, s, tenant, session.ID, "start")
-	before, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ExpireEnvironmentInputs(t.Context()); !errors.Is(err, ErrExecutionAuthority) {
-		t.Fatalf("pooled Store ran input expiry: %v", err)
-	}
-	after, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
-	if err != nil || !reflect.DeepEqual(before, after) {
-		t.Fatal("rejected execution operation changed the Session", after, err)
-	}
-	if next, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
-		t.Fatal("rejected execution operation published events", next, err)
 	}
 }

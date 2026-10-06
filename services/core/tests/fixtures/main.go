@@ -8,8 +8,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -52,12 +53,16 @@ func seed() error {
 		return err
 	}
 	defer pool.Close()
-	s := store.New(pool)
+	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	if err != nil {
+		return err
+	}
 	for _, status := range []string{sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled, sessions.TurnInProgress} {
-		receipt, err := s.SubmitMessage(ctx, f.Tenant, f.Session, uuid.NewString(), json.RawMessage(`{"text":"recovery fixture"}`))
+		receipts, err := service.SubmitInputs(ctx, f.Tenant, f.Session, uuid.NewString(), []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"recovery fixture"}`)}})
 		if err != nil {
 			return err
 		}
+		receipt := receipts[0]
 		if err = transitionTurn(ctx, pool, f.Tenant, f.Session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			return err
 		}

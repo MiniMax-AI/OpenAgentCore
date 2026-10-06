@@ -61,7 +61,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			}
 			stop()
 			for _, value := range []sessions.EnvironmentInputReservation{pending, bound} {
-				stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, value.SessionID, value.ID)
+				stored, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, value.SessionID, value.ID)
 				if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(value.Deadline) {
 					t.Fatal("device readiness changed pending input", err)
 				}

@@ -244,7 +244,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	}
 	executor := connectFixtureRuntime(t, h, legacy)
 	// Reserved directly, as a pre-upgrade Core did.
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
+	pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, legacy.ID, "before-upgrade", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"old"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 		t.Fatal("rejected work was queued", before, after)
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "legacy reservation settled", func() bool {
-		got, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
+		got, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, legacy.ID, pending.ID)
 		return err == nil && got.State == sessions.EnvironmentInputFailed
 	})
 	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, legacy.ID)

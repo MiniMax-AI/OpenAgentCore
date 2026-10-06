@@ -152,7 +152,7 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 	if err != nil || turn.Status != sessions.TurnWaiting || !turn.CancelRequestedAt.IsZero() {
 		t.Fatal(turn, err)
 	}
-	history, err := h.s.ListTurnInputs(t.Context(), h.tenant, h.session.ID, input.TurnID, 0, 100)
+	history, err := store.SessionAdapter(h.s).ListTurnInputs(t.Context(), h.tenant, h.session.ID, input.TurnID, 0, 100)
 	if err != nil || len(history) != 1 {
 		t.Fatal(history, err)
 	}

@@ -17,12 +17,13 @@ type EnvironmentRun struct {
 }
 
 // RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor. It
-// checks lease, the lease d.Store was built on, before any Runtime preparation.
+// checks lease, the lease the Dispatcher's execution operations hold, before
+// any Runtime preparation.
 func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, tenantID, sessionID, reservationID string) (run EnvironmentRun, err error) {
 	if err = lease.CheckOwnership(ctx); err != nil {
 		return run, err
 	}
-	run.Reservation, err = d.Store.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)
+	run.Reservation, err = d.Sessions.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)
 	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
@@ -92,7 +93,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
 		return run, err
 	}
-	promoted, err := d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
+	promoted, err := d.sessionExecution.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
 	if errors.Is(err, sessions.ErrTurnConflict) {
 		// A rejected claim leaves the reservation pending for a later attempt.
 		return run, err

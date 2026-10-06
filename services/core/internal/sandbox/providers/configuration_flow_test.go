@@ -149,7 +149,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		Execution: &api.Execution{
 			ExecutorURL:      "wss://core.example/api/v1/agent-daemon/ws",
 			SessionAdmission: s,
-			InputAdmission:   s,
+			InputAdmission:   struct{ api.InputAdmission }{},
 			SessionArchive:   struct{ api.SessionArchive }{},
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 		},

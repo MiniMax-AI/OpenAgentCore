@@ -53,11 +53,11 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("terminal credential remained usable", err)
 			}
-			failed, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
+			failed, err := sessionExecution(t, writer.lease).PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
 			if err != nil || failed.State != sessions.EnvironmentInputFailed || len(failed.Receipts) != 0 || failed.SettledAt == nil || !failed.Deadline.Equal(reservation.Deadline) {
 				t.Fatal("late preparation resurrected failed input", failed, err)
 			}
-			if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) || expired == errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
+			if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) || expired == errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
 				t.Fatal("terminal environment admitted new input", err)
 			}
 			if _, err := s.CreateSession(t.Context(), tenant, input); err != nil {

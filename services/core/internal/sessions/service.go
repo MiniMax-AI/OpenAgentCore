@@ -20,4 +20,5 @@ type Storage interface {
 	DeviceStorage
 	ExecutorCredentialStorage
 	SessionStorage
+	InputStorage
 }

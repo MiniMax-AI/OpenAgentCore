@@ -16,7 +16,7 @@ func (w *Worker) wakeScheduler() {
 }
 
 func (w *Worker) admitInputs(ctx context.Context, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
-	receipts, err := w.admission.SubmitInputs(ctx, tenant, session, key, inputs)
+	receipts, err := w.dispatcher.Sessions.SubmitInputs(ctx, tenant, session, key, inputs)
 	if err == nil {
 		w.wakeScheduler()
 		w.dispatcher.notifications.notify(tenant, session)

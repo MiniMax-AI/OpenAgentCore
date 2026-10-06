@@ -25,10 +25,7 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			receipt, err := s.SubmitMessage(t.Context(), tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
-			if err != nil {
-				t.Fatal(err)
-			}
+			receipt := submitMessage(t, pool, tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
 			transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			status := 503
 			result := execution.Result{ErrorCode: "engine_failed", Error: "Bearer secret-canary https://private.example/key", EngineErrorCode: code, EngineHTTPStatus: &status, Done: proto.DonePayload{Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-secret-canary"}}}

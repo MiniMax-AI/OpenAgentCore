@@ -39,7 +39,7 @@ func TestExecutionPersistsLiveAndCancelledPartialOutput(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "stop"); err != nil {
+	if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "stop"); err != nil {
 		t.Fatal(err)
 	}
 	cancelEnv := h.read(proto.TypePromptCancel)

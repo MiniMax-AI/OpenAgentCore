@@ -22,7 +22,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(ctx, tenant, session.ID, "start", json.RawMessage(`{"text":"run commands"}`))
+	input, err := store.SendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"run commands"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +135,7 @@ func TestExecutionJournalsCommandOutputBeforeCancellation(t *testing.T) {
 	h.read(testExecutionRequest)
 	h.write(input.TurnID, proto.TypeToolCall, proto.ToolCallPayload{ID: "cmd", Stage: "before", Observation: &proto.ToolObservation{Kind: "command", Command: "wait", Status: "in_progress"}})
 	h.write(input.TurnID, proto.TypeCommandOutput, proto.CommandOutputPayload{ID: "cmd", Delta: "partial"})
-	if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "cancel"); err != nil {
+	if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
 	env := h.read(proto.TypePromptCancel)
