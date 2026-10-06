@@ -88,7 +88,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
+	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), fixtureSessionStore(db), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}

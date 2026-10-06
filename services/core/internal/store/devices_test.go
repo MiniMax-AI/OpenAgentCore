@@ -124,7 +124,7 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	_, foreignSecret := registerTestDevice(t, s, uuid.NewString())
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), s, wsURL)
+	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,19 +11,19 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
 type adminRuntimeTargets struct {
-	page      store.AdminRuntimeTargetPage
+	page      sessions.AdminRuntimeTargetPage
 	tenants   []string
 	after     string
 	limit     int
 	ascending bool
 }
 
-func (s *adminRuntimeTargets) ListAdminRuntimeTargets(_ context.Context, tenants []string, after string, limit int, ascending bool) (store.AdminRuntimeTargetPage, error) {
+func (s *adminRuntimeTargets) ListAdminRuntimeTargets(_ context.Context, tenants []string, after string, limit int, ascending bool) (sessions.AdminRuntimeTargetPage, error) {
 	s.tenants, s.after, s.limit, s.ascending = tenants, after, limit, ascending
 	return s.page, nil
 }
@@ -32,14 +32,14 @@ const adminRuntimeObservationsPath = "/core/v1/sandbox/runtime-observations"
 
 // adminRuntimeFixture serves the administrator observation list over one
 // Project per tenant and the given Session targets.
-func adminRuntimeFixture(t *testing.T, catalog []projects.Project, targets []store.AdminRuntimeTarget, service RuntimeObservations) (http.Handler, *adminRuntimeTargets) {
+func adminRuntimeFixture(t *testing.T, catalog []projects.Project, targets []sessions.AdminRuntimeTarget, service RuntimeObservations) (http.Handler, *adminRuntimeTargets) {
 	t.Helper()
 	deps, fakes := managementFakes(t, callerBinding())
 	fakes.projectsReader.listProjects = func(context.Context, projects.ListQuery) (projects.Page, error) {
 		return projects.Page{Data: catalog}, nil
 	}
-	management := &adminRuntimeTargets{page: store.AdminRuntimeTargetPage{Data: targets, HasMore: true}}
-	fakes.admin.listAdminRuntimeTargets = management.ListAdminRuntimeTargets
+	management := &adminRuntimeTargets{page: sessions.AdminRuntimeTargetPage{Data: targets, HasMore: true}}
+	fakes.adminRuntimeTargets.listAdminRuntimeTargets = management.ListAdminRuntimeTargets
 	observeWith(service)(&deps, fakes)
 	return newTestHandler(t, deps), management
 }
@@ -73,12 +73,12 @@ func unsupportedObservation(session string, at time.Time) runtimeobs.Observation
 func TestAdminRuntimeObservationListKeepsTargetOrderAndProjects(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
 	catalog := []projects.Project{{ID: uuid.NewString(), TenantID: uuid.NewString()}, {ID: uuid.NewString(), TenantID: uuid.NewString()}}
-	var targets []store.AdminRuntimeTarget
+	var targets []sessions.AdminRuntimeTarget
 	for index := range 3 {
-		targets = append(targets, store.AdminRuntimeTarget{SessionID: uuid.NewString(), TenantID: catalog[index%2].TenantID})
+		targets = append(targets, sessions.AdminRuntimeTarget{SessionID: uuid.NewString(), TenantID: catalog[index%2].TenantID})
 	}
 	service := runtimeObservationServiceFunc(func(_ context.Context, tenant, session string) (runtimeobs.Observation, error) {
-		if !slices.Contains(targets, store.AdminRuntimeTarget{SessionID: session, TenantID: tenant}) {
+		if !slices.Contains(targets, sessions.AdminRuntimeTarget{SessionID: session, TenantID: tenant}) {
 			return runtimeobs.Observation{}, errors.New("unexpected tenant")
 		}
 		return unsupportedObservation(session, now), nil
@@ -107,9 +107,9 @@ func TestAdminRuntimeObservationListKeepsTargetOrderAndProjects(t *testing.T) {
 func TestAdminRuntimeObservationListBoundsCollection(t *testing.T) {
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
 	project := projects.Project{ID: uuid.NewString(), TenantID: uuid.NewString()}
-	var targets []store.AdminRuntimeTarget
+	var targets []sessions.AdminRuntimeTarget
 	for range 20 {
-		targets = append(targets, store.AdminRuntimeTarget{SessionID: uuid.NewString(), TenantID: project.TenantID})
+		targets = append(targets, sessions.AdminRuntimeTarget{SessionID: uuid.NewString(), TenantID: project.TenantID})
 	}
 	var options runtimeobs.PageOptions
 	service := runtimeObservationPageRecorder{options: &options, runtimeObservationServiceFunc: func(_ context.Context, _, session string) (runtimeobs.Observation, error) {
@@ -134,7 +134,7 @@ func TestAdminRuntimeObservationListRejectsWholePageOnIntegrityFailure(t *testin
 		}
 		return unsupportedObservation(session, now), nil
 	})
-	handler, _ := adminRuntimeFixture(t, []projects.Project{project}, []store.AdminRuntimeTarget{{SessionID: valid, TenantID: project.TenantID}, {SessionID: invalid, TenantID: project.TenantID}}, service)
+	handler, _ := adminRuntimeFixture(t, []projects.Project{project}, []sessions.AdminRuntimeTarget{{SessionID: valid, TenantID: project.TenantID}, {SessionID: invalid, TenantID: project.TenantID}}, service)
 
 	response := runtimeObservationRequest(handler, adminRuntimeObservationsPath+"?limit=2")
 	var envelope struct {

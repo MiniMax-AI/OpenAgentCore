@@ -65,7 +65,7 @@ func testReader(t *testing.T, s *fakeStore, now time.Time) *Reader {
 	t.Helper()
 	caps := testCapabilities()
 	caps.Metrics = append(caps.Metrics, runtimehistory.MetricTokens)
-	r, err := New(s, Config{Capabilities: caps, QueryTimeout: time.Second})
+	r, err := newReader(s, Config{Capabilities: caps, QueryTimeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}

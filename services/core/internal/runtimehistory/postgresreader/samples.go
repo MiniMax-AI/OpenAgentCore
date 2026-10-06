@@ -1,28 +1,34 @@
-package store
+package postgresreader
 
 import (
 	"context"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// samples stores Runtime history samples in Core's database.
+type samples struct {
+	units *pgunit.Pool
+}
+
 // InsertRuntimeHistorySample copies a sanitized periodic observation. Public
 // Session/Turn Usage remains the accounting authority; these measured counters
 // are only sampled chart values. Deleted or mismatched owners cannot create orphan rows.
-func (s *Store) InsertRuntimeHistorySample(ctx context.Context, record runtimeobs.ExportRecord) error {
-	tenant, err := parseID(record.TenantID)
+func (s samples) InsertRuntimeHistorySample(ctx context.Context, record runtimeobs.ExportRecord) error {
+	tenant, err := pgunit.ParseID(record.TenantID)
 	if err != nil {
 		return err
 	}
-	session, err := parseID(record.SessionID)
+	session, err := pgunit.ParseID(record.SessionID)
 	if err != nil {
 		return err
 	}
-	environment, err := parseID(record.EnvironmentID)
+	environment, err := pgunit.ParseID(record.EnvironmentID)
 	if err != nil {
 		return err
 	}
@@ -31,7 +37,7 @@ func (s *Store) InsertRuntimeHistorySample(ctx context.Context, record runtimeob
 		ResolvedAtNs: record.ResolvedAt.UnixNano(), ProviderType: record.ProviderType, Status: string(record.Status),
 	}
 	if record.AllocationID != "" {
-		params.AllocationID, err = parseID(record.AllocationID)
+		params.AllocationID, err = pgunit.ParseID(record.AllocationID)
 		if err != nil {
 			return err
 		}
@@ -51,23 +57,23 @@ func (s *Store) InsertRuntimeHistorySample(ctx context.Context, record runtimeob
 		params.InputTokens = historyInteger(&usage.InputTokens)
 		params.OutputTokens = historyInteger(&usage.OutputTokens)
 	}
-	return s.queries.InsertRuntimeHistorySample(ctx, params)
+	return s.units.Queries().InsertRuntimeHistorySample(ctx, params)
 }
 
-func (s *Store) ListRuntimeHistorySamples(ctx context.Context, tenantID, sessionID, environmentID string, startNS, endNS int64, limit int32) ([]runtimeobs.ExportRecord, error) {
-	tenant, err := parseID(tenantID)
+func (s samples) ListRuntimeHistorySamples(ctx context.Context, tenantID, sessionID, environmentID string, startNS, endNS int64, limit int32) ([]runtimeobs.ExportRecord, error) {
+	tenant, err := pgunit.ParseID(tenantID)
 	if err != nil {
 		return nil, err
 	}
-	session, err := parseID(sessionID)
+	session, err := pgunit.ParseID(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	environment, err := parseID(environmentID)
+	environment, err := pgunit.ParseID(environmentID)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.queries.ListRuntimeHistorySamples(ctx, sqlc.ListRuntimeHistorySamplesParams{
+	rows, err := s.units.Queries().ListRuntimeHistorySamples(ctx, sqlc.ListRuntimeHistorySamplesParams{
 		TenantID: tenant, SessionID: session, EnvironmentID: environment, StartNs: startNS, EndNs: endNS, RowLimit: limit,
 	})
 	if err != nil {
@@ -103,12 +109,15 @@ func (s *Store) ListRuntimeHistorySamples(ctx context.Context, tenantID, session
 	return records, nil
 }
 
-func (s *Store) PruneRuntimeHistorySamples(ctx context.Context, beforeNS int64) (int64, error) {
-	count, err := s.queries.PruneRuntimeHistorySamples(ctx, beforeNS)
+// PruneRuntimeHistorySamples deletes one batch of expired Runtime samples and
+// one batch of expired node-host samples, which share the retention.
+func (s samples) PruneRuntimeHistorySamples(ctx context.Context, beforeNS int64) (int64, error) {
+	queries := s.units.Queries()
+	count, err := queries.PruneRuntimeHistorySamples(ctx, beforeNS)
 	if err != nil {
 		return count, err
 	}
-	nodes, err := s.queries.PruneNodeHostHistory(ctx, pgtype.Timestamptz{Time: time.Unix(0, beforeNS), Valid: true})
+	nodes, err := queries.PruneNodeHostHistory(ctx, pgtype.Timestamptz{Time: time.Unix(0, beforeNS), Valid: true})
 	return count + nodes, err
 }
 

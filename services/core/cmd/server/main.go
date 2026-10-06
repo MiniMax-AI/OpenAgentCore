@@ -45,6 +45,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/nativeinstaller"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/agentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/auditpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/coremetricspg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
@@ -198,7 +199,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	metricsSource := &coreMetricsSource{store: executionStore, pool: pool}
+	metricsSource := &coreMetricsSource{store: coremetricspg.New(units), pool: pool}
 	metrics := coremetrics.New(processStartedAt, buildRevision, metricsSource)
 	auditRetention, err := writeAuditRetention()
 	if err != nil {
@@ -233,7 +234,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	history, err := runtimeHistory(ctx, executionStore, public != "")
+	history, err := runtimeHistory(ctx, units, public != "")
 	if err != nil {
 		return err
 	}
@@ -290,7 +291,7 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, executionStore, executorURL)
+		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, sessionStore, executorURL)
 		if err != nil {
 			return err
 		}
@@ -412,7 +413,7 @@ func run() error {
 		ArtifactsReader: sessionStore,
 		SessionAdmin:    executionStore,
 		Environments:    sessionService, EnvironmentsReader: sessionStore, ExecutorConnections: executorConnections{sessions: sessionStore, registry: registry},
-		Admin: executionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
+		Admin: executionStore, AdminRuntimeTargets: sessionStore, AdminAudit: auditStore, WriteAudit: auditStore, Metrics: metrics,
 		RuntimeObservations: observationService, RuntimeHistory: historyService,
 	}
 	if worker != nil {

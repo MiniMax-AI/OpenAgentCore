@@ -25,7 +25,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	tenant, session, environment := managedSession(t, s, db)
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
+	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), fixtureSessionStore(db), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
