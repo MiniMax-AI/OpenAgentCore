@@ -251,7 +251,10 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Checkpo
 	if state.Target == nil || state.Snapshot == nil || state.Rollback {
 		return sandbox.ErrOwnership
 	}
+	resumeAt := time.Now()
 	result, err := p.Resume(ctx, sandbox.ResumeRequest{Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
+	observeExecutionStage(ctx, "provider_resume", resumeAt, err, "allocation_id", owner.ID,
+		"session_id", owner.SessionID, "environment_id", owner.EnvironmentID, "node_id", r.nodeID, "observe_only", observeOnly)
 	if err != nil {
 		return err
 	}

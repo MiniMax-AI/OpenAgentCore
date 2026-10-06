@@ -119,7 +119,9 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 	return copied, nil
 }
 
-func (r *runtimeLifecycle) lock(ctx context.Context) error {
+func (r *runtimeLifecycle) lock(ctx context.Context) (err error) {
+	started := time.Now()
+	defer func() { observeExecutionStage(ctx, "runtime_gate_wait", started, err, "node_id", r.nodeID) }()
 	select {
 	case r.gate <- struct{}{}:
 		if err := r.ctx.Err(); err != nil {
@@ -226,10 +228,13 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
+	createAt := time.Now()
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
 		CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
 	})
+	observeExecutionStage(ctx, "provider_create", createAt, err, "allocation_id", owner.ID,
+		"session_id", owner.SessionID, "environment_id", environment, "device_id", owner.DeviceID, "node_id", r.nodeID)
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {
 		record, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		released, releaseErr := r.deployment.ReleaseAbsentCreation(record, owner)
@@ -301,7 +306,9 @@ func (r *runtimeLifecycle) reconcile(ctx context.Context) error {
 	for _, owner := range rows {
 		r.cursor = owner.ID
 		operation, stop := context.WithTimeout(ctx, 30*time.Second)
+		observeAt := time.Now()
 		err := r.observe(operation, owner)
+		observeExecutionStage(ctx, "runtime_observe", observeAt, err, "allocation_id", owner.ID, "session_id", owner.SessionID, "node_id", r.nodeID)
 		r.recordObservation(ctx, owner, err)
 		stop()
 		if err != nil {
