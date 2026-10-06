@@ -1,4 +1,4 @@
-package store
+package coremetricspg
 
 import (
 	"context"
@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func coreMetricsSession(t *testing.T, pool *pgxpool.Pool, deleted bool) string {
@@ -42,9 +43,10 @@ func coreMetricsTurn(t *testing.T, pool *pgxpool.Pool, session, status, code str
 }
 
 func TestCoreMetricsSnapshot(t *testing.T) {
-	s, pool := testStore(t)
+	pool := pgtest.Open(t)
+	s := New(pgunit.NewPool(pool))
 	now := time.Now().UTC()
-	baseline, err := s.ReadCoreExecutionSnapshot(t.Context(), now, []string{})
+	baseline, err := s.ReadExecutionSnapshot(t.Context(), now, []string{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ func TestCoreMetricsSnapshot(t *testing.T) {
 			}
 		}
 	}
-	got, err := s.ReadCoreExecutionSnapshot(t.Context(), now, []string{connected})
+	got, err := s.ReadExecutionSnapshot(t.Context(), now, []string{connected})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,17 +78,18 @@ func TestCoreMetricsSnapshot(t *testing.T) {
 	if got.OldestQueuedSeconds == nil || math.Abs(*got.OldestQueuedSeconds-now.Sub(oldest).Seconds()) > 0.001 {
 		t.Fatalf("oldest age: %v", got.OldestQueuedSeconds)
 	}
-	disconnected, err := s.ReadCoreExecutionSnapshot(t.Context(), now, []string{})
+	disconnected, err := s.ReadExecutionSnapshot(t.Context(), now, []string{})
 	if err != nil || disconnected.WaitingForDaemon != got.WaitingForDaemon+1 {
 		t.Fatalf("registry disconnect: %+v, %v", disconnected, err)
 	}
-	if _, err := s.ReadCoreExecutionSnapshot(t.Context(), now, []string{"invalid-device-id"}); err == nil {
+	if _, err := s.ReadExecutionSnapshot(t.Context(), now, []string{"invalid-device-id"}); err == nil {
 		t.Fatal("invalid registry ID accepted")
 	}
 }
 
 func TestCoreMetricsHistory(t *testing.T) {
-	s, pool := testStore(t)
+	pool := pgtest.Open(t)
+	s := New(pgunit.NewPool(pool))
 	start := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := start.Add(3 * time.Minute)
 	// Boundary samples exercise inclusive start, exclusive end and exact buckets.
@@ -109,7 +112,7 @@ func TestCoreMetricsHistory(t *testing.T) {
 		}
 		coreMetricsTurn(t, pool, coreMetricsSession(t, pool, false), status, code, start, nil, &completed)
 	}
-	got, err := s.ReadCoreExecutionHistory(t.Context(), start, end, time.Minute)
+	got, err := s.ReadExecutionHistory(t.Context(), start, end, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,33 +127,33 @@ func TestCoreMetricsHistory(t *testing.T) {
 	}
 	check("range p50", got.QueueWaitMS.P50, 1000)
 	check("range p95", got.QueueWaitMS.P95, 2800)
-	check("first bucket p95", got.Buckets[0].P95MS, 950)
-	check("second bucket p95", got.Buckets[1].P95MS, 3000)
-	if got.Buckets[2].P95MS != nil || !got.Buckets[2].Start.Equal(start.Add(2*time.Minute)) {
+	check("first bucket p95", got.Buckets[start], 950)
+	check("second bucket p95", got.Buckets[start.Add(time.Minute)], 3000)
+	if p95, ok := got.Buckets[start.Add(2*time.Minute)]; !ok || p95 != nil {
 		t.Fatal("missing bucket must have aligned start and unknown percentile")
 	}
-	empty, err := s.ReadCoreExecutionHistory(t.Context(), end.Add(time.Hour), end.Add(2*time.Hour), time.Minute)
+	empty, err := s.ReadExecutionHistory(t.Context(), end.Add(time.Hour), end.Add(2*time.Hour), time.Minute)
 	if err != nil || empty.Interrupted != 0 || empty.QueueWaitMS.P50 != nil || empty.QueueWaitMS.P95 != nil || len(empty.Buckets) != 60 {
 		t.Fatalf("empty history: %+v, %v", empty, err)
 	}
-	for _, bucket := range empty.Buckets {
-		if bucket.P95MS != nil {
+	for _, p95 := range empty.Buckets {
+		if p95 != nil {
 			t.Fatal("empty bucket invented zero percentile")
 		}
 	}
-	size, err := s.ReadCoreDatabaseSize(t.Context())
+	size, err := s.ReadDatabaseSize(t.Context())
 	if err != nil || size <= 0 {
 		t.Fatalf("database size: %d, %v", size, err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := s.ReadCoreExecutionSnapshot(ctx, start, nil); err == nil {
+	if _, err := s.ReadExecutionSnapshot(ctx, start, nil); err == nil {
 		t.Fatal("snapshot read error hidden")
 	}
-	if result, err := s.ReadCoreExecutionHistory(ctx, start, end, time.Minute); err == nil || result.Buckets != nil {
+	if result, err := s.ReadExecutionHistory(ctx, start, end, time.Minute); err == nil || result.Buckets != nil {
 		t.Fatal("history read error hidden or partial data returned")
 	}
-	if _, err := s.ReadCoreDatabaseSize(ctx); err == nil {
+	if _, err := s.ReadDatabaseSize(ctx); err == nil {
 		t.Fatal("database size read error hidden")
 	}
 }
@@ -171,7 +174,7 @@ func TestCoreMetricsHistoryBounds(t *testing.T) {
 		{start, start.Add(time.Hour + time.Second), time.Minute},
 		{start.Add(time.Nanosecond), start.Add(time.Hour + time.Nanosecond), time.Minute},
 	} {
-		if _, err := s.ReadCoreExecutionHistory(t.Context(), tc.start, tc.end, tc.step); !errors.Is(err, sessions.ErrInvalidInput) {
+		if _, err := s.ReadExecutionHistory(t.Context(), tc.start, tc.end, tc.step); !errors.Is(err, coremetrics.ErrInvalidRange) {
 			t.Fatalf("unbounded or unaligned range accepted: %+v, %v", tc, err)
 		}
 	}

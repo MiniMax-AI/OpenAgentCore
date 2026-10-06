@@ -1,16 +1,14 @@
-package store_test
+package postgresreader
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory/postgresreader"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -20,26 +18,26 @@ func historyCapabilities() runtimehistory.Capabilities {
 		Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second, MaximumRange: 24 * time.Hour, MaximumPoints: 1000, MaximumSeries: 64, MaximumTotalPoints: 10000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens}}
 }
-func historyBackend(t *testing.T, s *store.Store) *postgresreader.Reader {
+func historyBackend(t *testing.T, pool *pgxpool.Pool) *Reader {
 	t.Helper()
-	r, err := postgresreader.New(s, postgresreader.Config{Capabilities: historyCapabilities(), QueryTimeout: 5 * time.Second})
+	r, err := New(pgunit.NewPool(pool), Config{Capabilities: historyCapabilities(), QueryTimeout: 5 * time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return r
 }
-func historyOwner(t *testing.T, s *store.Store, pool *pgxpool.Pool) runtimehistory.Scope {
+
+// historyOwner seeds a Session of a fresh tenant with its Environment.
+func historyOwner(t *testing.T, pool *pgxpool.Pool) runtimehistory.Scope {
 	t.Helper()
-	tenant := uuid.NewString()
-	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"openai_hosted","workspace_directory":"/workspace","capability_directories":[]}}`)})
-	if err != nil {
+	scope := runtimehistory.Scope{TenantID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString()}
+	if _, err := pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash) VALUES ($1, $2, 'codex', 'key', 'hash')`, scope.SessionID, scope.TenantID); err != nil {
 		t.Fatal(err)
 	}
-	environment, err := sessionReads(pool).GetSessionEnvironment(t.Context(), tenant, session.ID)
-	if err != nil {
+	if _, err := pool.Exec(t.Context(), `INSERT INTO environments(id, session_id) VALUES ($1, $2)`, scope.EnvironmentID, scope.SessionID); err != nil {
 		t.Fatal(err)
 	}
-	return runtimehistory.Scope{TenantID: tenant, SessionID: session.ID, EnvironmentID: environment.ID}
+	return scope
 }
 func historyRecord(scope runtimehistory.Scope, allocation string, started, at time.Time, cpu float64, input uint64) runtimeobs.ExportRecord {
 	capacity := 2.0
@@ -56,10 +54,10 @@ func historyQuery(scope runtimehistory.Scope, start, end time.Time, points int) 
 }
 
 func TestPostgresRuntimeHistoryAcceptance(t *testing.T) {
-	s, pool := store.NewTestStore(t)
-	scope := historyOwner(t, s, pool)
-	foreign := historyOwner(t, s, pool)
-	reader := historyBackend(t, s)
+	pool := pgtest.Open(t)
+	scope := historyOwner(t, pool)
+	foreign := historyOwner(t, pool)
+	reader := historyBackend(t, pool)
 	end := time.Now().UTC().Truncate(time.Second)
 	start := end.Add(-3 * time.Minute)
 	started := start.Add(-time.Minute + 123*time.Nanosecond)
@@ -101,7 +99,7 @@ func TestPostgresRuntimeHistoryAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer freshPool.Close()
-	reader = historyBackend(t, store.New(freshPool))
+	reader = historyBackend(t, freshPool)
 	q := historyQuery(scope, start, end, 6)
 	result, err := reader.Query(t.Context(), q)
 	if err != nil {
@@ -129,17 +127,17 @@ func TestPostgresRuntimeHistoryAcceptance(t *testing.T) {
 			t.Fatal("scope isolation failed", got, err)
 		}
 	}
-	// Chart snapshots do not alter canonical Session Usage.
-	session, err := s.GetSession(t.Context(), scope.TenantID, scope.SessionID)
-	if err != nil || len(session.Usage) != 0 && string(session.Usage) != "null" {
-		t.Fatal("telemetry became accounting authority", string(session.Usage), err)
+	// Chart snapshots do not alter canonical Session Usage, which Turns carry.
+	var usage int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM turns WHERE session_id = $1 AND token_usage IS NOT NULL`, scope.SessionID).Scan(&usage); err != nil || usage != 0 {
+		t.Fatal("telemetry became accounting authority", usage, err)
 	}
 }
 
 func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
-	s, pool := store.NewTestStore(t)
-	scope := historyOwner(t, s, pool)
-	reader := historyBackend(t, s)
+	pool := pgtest.Open(t)
+	scope := historyOwner(t, pool)
+	reader := historyBackend(t, pool)
 	end := time.Now().UTC().Truncate(time.Second)
 	start := end.Add(-24 * time.Hour)
 	started := start.Add(-time.Hour + 987*time.Nanosecond)
@@ -171,7 +169,7 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 	}
 	// Expired rows remain invisible before physical pruning runs.
 	old := historyRecord(scope, base.AllocationID, started.Add(-8*24*time.Hour), start.Add(-8*24*time.Hour), 0, 1)
-	if err := s.InsertRuntimeHistorySample(t.Context(), old); err != nil {
+	if err := (samples{units: pgunit.NewPool(pool)}).InsertRuntimeHistorySample(t.Context(), old); err != nil {
 		t.Fatal(err)
 	}
 	_, err = pool.Exec(t.Context(), `INSERT INTO runtime_history_samples
@@ -206,9 +204,9 @@ func TestPostgresRuntimeHistoryDenseReadAndBoundedRetention(t *testing.T) {
 }
 
 func TestPostgresRuntimeHistoryKeepsProviderReportedUtilization(t *testing.T) {
-	s, pool := store.NewTestStore(t)
-	scope := historyOwner(t, s, pool)
-	reader := historyBackend(t, s)
+	pool := pgtest.Open(t)
+	scope := historyOwner(t, pool)
+	reader := historyBackend(t, pool)
 	allocation := uuid.NewString()
 	start := time.Now().UTC().Truncate(time.Minute).Add(-10 * time.Minute)
 	started := start.Add(-time.Minute)
@@ -226,5 +224,27 @@ func TestPostgresRuntimeHistoryKeepsProviderReportedUtilization(t *testing.T) {
 	}
 	if ratio := *result.Series[0].Points[0].CPUUtilizationRatio; ratio < .2999 || ratio > .3001 {
 		t.Fatalf("bucket utilization = %v, want the mean of reported ratios", ratio)
+	}
+}
+
+// Retention also expires node-host samples and never deletes nodes.
+func TestNodeHostHistoryRetentionKeepsNode(t *testing.T) {
+	pool := pgtest.Open(t)
+	node := uuid.NewString()
+	if _, err := pool.Exec(t.Context(), `INSERT INTO runtime_nodes(id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained) VALUES ($1, $2, 'history', repeat('a', 64), repeat('b', 64), 1, 1)`, node, uuid.NewString()); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	for _, at := range []time.Time{now.Add(-8 * 24 * time.Hour), now.Add(-2 * time.Minute)} {
+		if _, err := pool.Exec(t.Context(), `INSERT INTO node_host_history_samples(node_id, observed_at) VALUES ($1, $2)`, node, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := historyBackend(t, pool).Prune(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var expired, kept, nodes int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FILTER (WHERE observed_at < $2), count(*) FILTER (WHERE observed_at >= $2), (SELECT count(*) FROM runtime_nodes WHERE id = $1) FROM node_host_history_samples WHERE node_id = $1`, node, now.Add(-7*24*time.Hour)).Scan(&expired, &kept, &nodes); err != nil || expired != 0 || kept != 1 || nodes != 1 {
+		t.Fatal("retention kept expired samples or removed recent ones or the node", expired, kept, nodes, err)
 	}
 }

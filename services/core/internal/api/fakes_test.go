@@ -42,9 +42,8 @@ func unexpectedCall(t testing.TB, method string) {
 }
 
 type fakeAdmin struct {
-	t                       testing.TB
-	readAdminSummary        func(context.Context, string, store.AdminSummaryFilter, func(sessions.Session, *string) error) (store.AdminAssetCounts, error)
-	listAdminRuntimeTargets func(context.Context, []string, string, int, bool) (store.AdminRuntimeTargetPage, error)
+	t                testing.TB
+	readAdminSummary func(context.Context, string, store.AdminSummaryFilter, func(sessions.Session, *string) error) (store.AdminAssetCounts, error)
 }
 
 func (f *fakeAdmin) ReadAdminSummary(a0 context.Context, a1 string, a2 store.AdminSummaryFilter, a3 func(sessions.Session, *string) error) (store.AdminAssetCounts, error) {
@@ -54,7 +53,12 @@ func (f *fakeAdmin) ReadAdminSummary(a0 context.Context, a1 string, a2 store.Adm
 	return f.readAdminSummary(a0, a1, a2, a3)
 }
 
-func (f *fakeAdmin) ListAdminRuntimeTargets(a0 context.Context, a1 []string, a2 string, a3 int, a4 bool) (store.AdminRuntimeTargetPage, error) {
+type fakeAdminRuntimeTargets struct {
+	t                       testing.TB
+	listAdminRuntimeTargets func(context.Context, []string, string, int, bool) (sessions.AdminRuntimeTargetPage, error)
+}
+
+func (f *fakeAdminRuntimeTargets) ListAdminRuntimeTargets(a0 context.Context, a1 []string, a2 string, a3 int, a4 bool) (sessions.AdminRuntimeTargetPage, error) {
 	if f.listAdminRuntimeTargets == nil {
 		unexpectedCall(f.t, "ListAdminRuntimeTargets")
 	}

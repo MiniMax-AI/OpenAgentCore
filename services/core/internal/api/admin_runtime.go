@@ -7,7 +7,14 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
+
+// AdminRuntimeTargets lists the Sessions whose Runtime the administrator
+// observes across managed Projects.
+type AdminRuntimeTargets interface {
+	ListAdminRuntimeTargets(context.Context, []string, string, int, bool) (sessions.AdminRuntimeTargetPage, error)
+}
 
 type AdminRuntimeObservation struct {
 	ProjectID   string                        `json:"project_id"`
@@ -72,9 +79,9 @@ func (h *Handler) adminRuntimeObservations(w http.ResponseWriter, r *http.Reques
 			break
 		}
 	}
-	page, err := h.Admin.ListAdminRuntimeTargets(ctx, tenants, options.after, options.limit, options.ascending)
+	page, err := h.AdminRuntimeTargets.ListAdminRuntimeTargets(ctx, tenants, options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	sessions := make([]runtimeobs.SessionIdentity, len(page.Data))

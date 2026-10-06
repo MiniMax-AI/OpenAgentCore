@@ -65,6 +65,10 @@ type DeviceReader interface {
 	// authenticates a device with, and reports whether the device still has
 	// authority.
 	GetDeviceCredential(ctx context.Context, device string) (runtimedevice.Credential, bool, error)
+	// ArchivedCancellationReceipt reads the receipt window that archiving a
+	// Session leaves the device's exact authenticated delivery of one of
+	// runIDs; without one it is the zero receipt.
+	ArchivedCancellationReceipt(ctx context.Context, device, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error)
 	// ListEnrolledRuntimeBindings lists the enrolled user-managed Runtimes of
 	// live Environments.
 	ListEnrolledRuntimeBindings(ctx context.Context) ([]EnrolledRuntimeBinding, error)

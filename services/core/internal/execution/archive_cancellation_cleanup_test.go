@@ -116,7 +116,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				server := httptest.NewUnstartedServer(nil)
 				wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
 				credentials, heartbeat := testSessions(t, pool, testCredentialCipher(t))
-				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, s, wsURL)
+				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, credentials, wsURL)
 				if err != nil {
 					t.Fatal(err)
 				}

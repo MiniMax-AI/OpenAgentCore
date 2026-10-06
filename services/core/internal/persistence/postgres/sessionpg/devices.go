@@ -76,6 +76,29 @@ func (s *Store) GetDeviceCredential(ctx context.Context, device string) (runtime
 	}, true, nil
 }
 
+// ArchivedCancellationReceipt is a read-only exception for the exact already
+// authenticated delivery. The ordinary credential view remains revoked; this
+// cannot authorize bootstrap, reconnect, dispatch, workspace access or renewal.
+// A marker records that archive caused the first revocation; timestamps alone
+// cannot distinguish an earlier ordinary cancel/revoke followed by archive.
+func (s *Store) ArchivedCancellationReceipt(ctx context.Context, device, credentialHash string, runIDs []string) (runtimedevice.ArchivedCancellationReceipt, error) {
+	if len(runIDs) == 0 || credentialHash == "" {
+		return runtimedevice.ArchivedCancellationReceipt{}, nil
+	}
+	id, err := parseID(device)
+	if err != nil {
+		return runtimedevice.ArchivedCancellationReceipt{}, err
+	}
+	row, err := s.units.Queries().GetArchivedCancellationReceipt(ctx, sqlc.GetArchivedCancellationReceiptParams{DeviceID: id, CredentialHash: pgtype.Text{String: credentialHash, Valid: true}, RunIds: runIDs, LimitSeconds: int32(runtimedevice.ArchivedCancellationReceiptLimit.Seconds())})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return runtimedevice.ArchivedCancellationReceipt{}, nil
+	}
+	if err != nil {
+		return runtimedevice.ArchivedCancellationReceipt{}, err
+	}
+	return runtimedevice.ArchivedCancellationReceipt{RunID: uuid.UUID(row.ID.Bytes).String(), Deadline: row.CancelRequestedAt.Time.Add(runtimedevice.ArchivedCancellationReceiptLimit)}, nil
+}
+
 func (s *Store) ListEnrolledRuntimeBindings(ctx context.Context) ([]sessions.EnrolledRuntimeBinding, error) {
 	rows, err := s.units.Queries().ListEnrolledRuntimeBindings(ctx)
 	if err != nil {

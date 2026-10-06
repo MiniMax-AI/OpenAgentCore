@@ -3,8 +3,14 @@ package coremetrics
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+// ErrInvalidRange reports a Core metrics range that is not one of the supported
+// windows, or a history interval that is unbounded or not aligned to its
+// resolution.
+var ErrInvalidRange = errors.New("invalid Core metrics range")
 
 type Latency struct {
 	P50 *float64 `json:"p50" extensions:"x-nullable"`
@@ -103,6 +109,15 @@ type Live struct {
 	Pool                                     Pool
 	Scheduler                                Job
 }
+
+// ExecutionSnapshot counts the deployment's persisted root Turns.
+type ExecutionSnapshot struct {
+	QueuedTurns, WaitingForDaemon, InProgressTurns int64
+	OldestQueuedSeconds                            *float64
+}
+
+// History is the root Turn history of a range. Buckets maps each bucket's UTC
+// start to its queue wait p95 in milliseconds, nil without observations.
 type History struct {
 	Interrupted int64
 	QueueWaitMS Latency
