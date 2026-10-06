@@ -143,6 +143,9 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		if _, err := e.session.Spawn(clirunner.StartOptions{Binary: harnessPath, Dir: e.dir, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNoLiveView) {
 			t.Errorf("Spawn after the Harness exited = %v, want ErrNoLiveView", err)
 		}
+		if _, err := e.session.Spawn(clirunner.StartOptions{Binary: "/bin/sh", Dir: e.dir, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNotLocalExec) {
+			t.Errorf("Spawn of a binary outside LocalExec = %v, want ErrNotLocalExec", err)
+		}
 		select {
 		case ok := <-keyed:
 			if !ok {

@@ -38,7 +38,7 @@ type runningView interface {
 	Wait() (sessionview.Exit, error)
 	Close() error
 	Relay() *os.File
-	Spawn(ctx context.Context, path string, args, env []string, dir string, stdio [3]*os.File) (*sessionview.Spawned, error)
+	Spawn(ctx context.Context, path string, args, env []string, dir string, stdin bool) (*sessionview.Spawned, error)
 }
 
 // viewWorld is the part of *worldfs.World the Session watches.
@@ -119,26 +119,20 @@ func (s *session) spawn(opts clirunner.StartOptions) (*clirunner.Process, error)
 	if opts.Parent == nil {
 		opts.Parent = context.Background()
 	}
-	ends, err := newStdio(opts.NeedStdin)
+	p, err := v.Spawn(opts.Parent, opts.Binary, append([]string{opts.Binary}, opts.Args...), opts.Env, opts.Dir, opts.NeedStdin)
 	if err != nil {
-		return nil, &Error{Kind: ErrLaunch, Op: "stdio", Err: err}
-	}
-	p, err := v.Spawn(opts.Parent, opts.Binary, append([]string{opts.Binary}, opts.Args...), opts.Env, opts.Dir, ends.child)
-	ends.closeChild()
-	var process *clirunner.Process
-	if err == nil {
-		if process, err = clirunner.FromHandle(p, clirunner.HandleOptions{Parent: opts.Parent, Stdin: ends.stdin(),
-			Stdout: ends.parent[1], Stderr: ends.parent[2], KillTimeout: opts.KillTimeout}); err != nil {
-			p.Close()
-		}
-	}
-	if err != nil {
-		ends.closeParent()
-		if errors.Is(err, sessionview.ErrExited) || errors.Is(err, sessionview.ErrClosed) || errors.Is(err, sessionview.ErrLauncher) {
+		// Only a view that has ended has no live view; any other failure keeps its own error.
+		if errors.Is(err, sessionview.ErrExited) || errors.Is(err, sessionview.ErrClosed) {
 			err = fmt.Errorf("%w: %w", agent.ErrNoLiveView, err)
 		}
 		return nil, &Error{Kind: ErrLaunch, Op: "spawn", Err: err}
 	}
+	var stdin io.WriteCloser
+	if p.Stdin != nil {
+		stdin = p.Stdin
+	}
+	// FromHandle fails only without stdout and stderr, which a spawned process always has.
+	process, _ := clirunner.FromHandle(p, clirunner.HandleOptions{Parent: opts.Parent, Stdin: stdin, Stdout: p.Stdout, Stderr: p.Stderr, KillTimeout: opts.KillTimeout})
 	return process, nil
 }
 

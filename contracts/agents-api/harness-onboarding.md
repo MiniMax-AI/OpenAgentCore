@@ -327,10 +327,10 @@ With `ViewProxyNone`, `ViewSession.Proxy` is empty and the view has no generic p
 
 `ViewSession.Spawn` runs a `LocalExec` binary as another process in the live view while the Harness runs, such as a reader of the Harness's native history. Harness-side code that reads Harness-written data runs here, never on the agent host outside the view and never in a view of its own. `Spawn` takes `StartOptions` as `Launch` does and returns the same `clirunner.Process`. The process runs as the Harness does: as the same user, in the same namespaces, view cgroup, world and network, with no capabilities, `no_new_privs` and the same seccomp filter, in a process group of its own.
 
-- `Parent` bounds the wait for the start. Once it ends, `Spawn` returns its error and kills a process that starts after all.
+- The view starts one `Spawn` at a time. `Parent` bounds the wait for its turn and for the start. Once it ends, `Spawn` returns its error and kills a process that starts after all.
 - Cancel sends TERM to its process group and kills the group after `KillTimeout`. Once the process has exited, Cancel delivers nothing, and what it left runs on as the view's other processes do.
 - The view's end ends them all. A Cancel of the Harness reaches them, and when the Harness exits they are among the processes that remain. A view that ends after `Spawn` returned shows in the process's `Wait`.
-- `Spawn` returns `ErrNotLocalExec` when `Binary` is not a `LocalExec` path, and `ErrNoLiveView` when no view runs its Harness: none was launched yet, or its Harness has exited or its view has ended.
+- `Spawn` returns `ErrNotLocalExec` when `Binary` is not a `LocalExec` path, and `ErrNoLiveView` when no view runs its Harness: none was launched yet, or its Harness has exited or its view has ended. Any other failure, such as a binary that does not start or no descriptors left, keeps its own error.
 
 ### Qualify the view
 

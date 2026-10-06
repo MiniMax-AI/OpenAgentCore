@@ -3,11 +3,13 @@
 package sessionview
 
 import (
+	"context"
 	"encoding/gob"
 	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +28,8 @@ func Init() {
 	}
 	// Capability sets, no_new_privs and seccomp filters are per thread: the thread that sets them must be the one that forks the process.
 	runtime.LockOSThread()
+	// A fork that blocks in the world holds this thread and its P, so another P runs everything else. A fixed count also keeps the runtime from stopping the world to change it.
+	runtime.GOMAXPROCS(max(2, runtime.GOMAXPROCS(0)))
 	os.Exit(runLauncher())
 }
 
@@ -39,15 +43,18 @@ type launcher struct {
 	proc  int // the view's /proc
 	relay int // the relay's pid, or 0
 
-	spawns chan func() // to the restricted thread, which runs them one at a time
+	spawns chan func()    // to the restricted thread; the view sends one spawn at a time
+	chld   chan os.Signal // SIGCHLD, and a wake once a spawn has registered its child
+	ready  chan struct{}  // wakes the writer
 
-	// mu orders signals and spawns against the reaping. running holds from the process's start until it is reaped; termAt is when TERM first went to the view; spawned maps the pid of the process and of each spawned process to its ID until the pid is reaped; while forking, forkExits keeps how each pid reaped without an ID ended.
-	mu        sync.Mutex
-	running   bool
-	termAt    time.Time
-	spawned   map[int]uint64
-	forking   bool
-	forkExits map[int]unix.WaitStatus
+	// mu orders signals, spawns and messages against the reaping. running holds from the process's start until it is reaped, and code is how it exited; termAt is when TERM first went to the view. spawned maps the pid of the process and of each spawned process to its ID until the pid is reaped; forking holds while a spawn starts a child it has not registered yet. out holds the messages the writer sends next.
+	mu      sync.Mutex
+	running bool
+	code    int
+	termAt  time.Time
+	spawned map[int]uint64
+	forking bool
+	out     []message
 }
 
 func runLauncher() int {
@@ -56,46 +63,39 @@ func runLauncher() int {
 		fmt.Fprintf(os.Stderr, "sessionview launcher: %v\n", err)
 		return 1
 	}
-	l := &launcher{ctl: ctl, proceed: make(chan struct{}), spawns: make(chan func()), spawned: map[int]uint64{}, forkExits: map[int]unix.WaitStatus{}}
-	return l.exit(l.run())
+	l := &launcher{ctl: ctl, proceed: make(chan struct{}), spawns: make(chan func(), 1), chld: make(chan os.Signal, 1), ready: make(chan struct{}, 1), spawned: map[int]uint64{}}
+	// run returns only when the build fails; once the process runs, the writer exits.
+	_ = l.ctl.send(context.Background(), message{Kind: msgFailed, Fail: failureOf(l.run())})
+	return 1
 }
 
-// exit reports err, if any, and returns the code the launcher exits with.
-func (l *launcher) exit(code int, err error) int {
-	if err != nil {
-		_ = l.ctl.send(message{Kind: msgFailed, Fail: failureOf(err)})
-		return 1
-	}
-	return code
-}
-
-func (l *launcher) run() (int, error) {
+func (l *launcher) run() error {
 	spec, err := readSpec()
 	if err != nil {
-		return 0, err
+		return err
 	}
 	go l.serveControl(spec)
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return 0, mountError("make-rprivate", "/", err)
+		return mountError("make-rprivate", "/", err)
 	}
 	if err := loopbackUp(); err != nil {
-		return 0, &Error{Kind: ErrNetwork, Op: "loopback", Err: err}
+		return &Error{Kind: ErrNetwork, Op: "loopback", Err: err}
 	}
 	if err := l.mountWorld(spec.Staging); err != nil {
-		return 0, err
+		return err
 	}
 	<-l.proceed
 	b := &builder{root: -1, proc: -1, listener: -1, targets: l.targets}
 	defer b.close()
 	if err := b.build(spec); err != nil {
-		return 0, err
+		return err
 	}
 	l.proc = b.proc
 	if err := switchRoot(b.root); err != nil {
-		return 0, err
+		return err
 	}
 	if err := restrict(); err != nil {
-		return 0, err
+		return err
 	}
 	b.closeBuild()
 	if b.listener >= 0 {
@@ -104,12 +104,12 @@ func (l *launcher) run() (int, error) {
 		b.closeListener()
 		unix.Close(relayFD)
 		if err != nil {
-			return 0, err
+			return err
 		}
 	}
 	pid, err := startProcess(spec, spec.Command, []uintptr{stdinFD, stdoutFD, stderrFD})
 	if err != nil {
-		return 0, err
+		return err
 	}
 	l.mu.Lock()
 	l.running, l.spawned[pid] = true, 0
@@ -117,21 +117,13 @@ func (l *launcher) run() (int, error) {
 	for _, fd := range []int{stdinFD, stdoutFD, stderrFD} {
 		unix.Close(fd)
 	}
-	if err := l.ctl.send(message{Kind: msgStarted, Pid: pid}); err != nil {
-		return 0, &Error{Kind: ErrLauncher, Op: "report start", Err: err}
+	if err := l.ctl.send(context.Background(), message{Kind: msgStarted, Pid: pid}); err != nil {
+		return &Error{Kind: ErrLauncher, Op: "report start", Err: err}
 	}
 	l.forwardSignals()
-	go func() {
-		code, err := l.reap(pid)
-		if err == nil {
-			l.drain(spec.Grace)
-		}
-		code = l.exit(code, err)
-		// A spawn blocked before its exec holds a copy of the control socket, so the daemon learns of the exit from the shutdown.
-		l.ctl.interrupt()
-		os.Exit(code)
-	}()
-	// Only this thread carries the restrictions a process inherits, so every spawn starts here. A spawn that blocks delays only the spawns after it.
+	go l.write()
+	go l.reap(spec.Grace)
+	// Only this thread carries the restrictions a process inherits, so every spawn starts here.
 	for {
 		(<-l.spawns)()
 	}
@@ -161,16 +153,19 @@ func (l *launcher) serveControl(spec *launchSpec) {
 				close(l.proceed)
 			})
 		case msgSignal:
-			_ = l.ctl.send(message{Kind: msgSignaled, ID: m.ID, Delivered: l.signal(m.Spawn, m.Signal)})
+			l.mu.Lock()
+			l.post(message{Kind: msgSignaled, ID: m.ID, Delivered: l.signal(m.Spawn, m.Signal)})
+			l.mu.Unlock()
 		case msgSpawn:
-			go func() { l.spawns <- func() { l.spawn(spec, m.ID, files) } }()
+			// The restricted thread takes each spawn before it forks, and the view sends the next only once the last has been answered, so this never waits.
+			l.spawns <- func() { l.spawn(spec, m.ID, files) }
 			continue
 		}
 		closeFiles(files)
 	}
 }
 
-// spawn starts the command read from the first of files as the spawned process id, with the other three as its stdin, stdout and stderr, as the process's user and in a session of its own, and answers with its pid. It forks without holding mu, so a child may be reaped before it has an ID; forkExits keeps how it ended.
+// spawn starts the command read from the first of files as the spawned process id, with the other three as its stdin, stdout and stderr, as the process's user and in a session of its own, and answers with its pid. It forks without holding mu; while it does, the reaper leaves unregistered children, so the child's pid stays its own until it is registered.
 func (l *launcher) spawn(spec *launchSpec, id uint64, files []*os.File) {
 	defer closeFiles(files)
 	var c command
@@ -186,32 +181,57 @@ func (l *launcher) spawn(spec *launchSpec, id uint64, files []*os.File) {
 	l.mu.Unlock()
 	m := message{Kind: msgSpawned, ID: id}
 	if err == nil {
+		// A fork that blocks in the world holds this thread and its P where no stop of the world reaches them, so no collection may run or be about to start until the fork returns. Turning collection off stops new ones; runtime.GC waits out one that started before.
+		gc := debug.SetGCPercent(-1)
+		runtime.GC()
 		m.Pid, err = startProcess(spec, c, []uintptr{files[1].Fd(), files[2].Fd(), files[3].Fd()})
+		debug.SetGCPercent(gc)
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
-	ws, reaped := l.forkExits[m.Pid]
-	l.forking = false
-	clear(l.forkExits)
 	if err != nil {
 		m.Fail = failureOf(err)
-	}
-	_ = l.ctl.send(m)
-	switch {
-	case err != nil:
-	// An earlier process with the same pid may have been reaped while forking; only a pid that is gone is the child's.
-	case reaped && unix.Kill(m.Pid, 0) == unix.ESRCH:
-		exit, _ := exitOf(ws)
-		_ = l.ctl.send(message{Kind: msgExited, ID: id, Exit: exit})
-	default:
+	} else {
 		l.spawned[m.Pid] = id
+	}
+	l.forking = false
+	l.post(m)
+	l.mu.Unlock()
+	// SIGCHLD does not queue: the child may have exited while the reaper left it.
+	select {
+	case l.chld <- unix.SIGCHLD:
+	default:
 	}
 }
 
-// signal delivers sig and reports whether it did. With id 0 it signals every process in the view while the process runs: as PID 1 of the view, the launcher reaches them all with kill(-1) and is itself spared. Once the process has been reaped, only the drain signals what remains. Otherwise it signals the process group of the spawned process id until that is reaped; until then its pid, and so its group, cannot be reused.
+// post queues m for the writer, which sends the queued messages in order; a message without a kind exits the launcher once those before it are sent. mu is held.
+func (l *launcher) post(m message) {
+	l.out = append(l.out, m)
+	select {
+	case l.ready <- struct{}{}:
+	default:
+	}
+}
+
+// write sends what post queues, so that neither the reaper nor a signal waits on the socket.
+func (l *launcher) write() {
+	for range l.ready {
+		l.mu.Lock()
+		out := l.out
+		l.out = nil
+		l.mu.Unlock()
+		for _, m := range out {
+			if m.Kind == 0 {
+				// A spawn blocked before its exec holds a copy of this end, and the exit waits for it, so the daemon learns of the exit from the shutdown.
+				l.ctl.interrupt()
+				os.Exit(l.code)
+			}
+			_ = l.ctl.send(context.Background(), m)
+		}
+	}
+}
+
+// signal delivers sig and reports whether it did. mu is held. With id 0 it signals every process in the view while the process runs: as PID 1 of the view, the launcher reaches them all with kill(-1) and is itself spared. Once the process has been reaped, only the drain signals what remains. Otherwise it signals the process group of the spawned process id until that is reaped; until then its pid, and so its group, cannot be reused.
 func (l *launcher) signal(id uint64, sig syscall.Signal) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	if id != 0 {
 		for pid, sid := range l.spawned {
 			if sid == id {
@@ -235,7 +255,9 @@ func (l *launcher) forwardSignals() {
 	signal.Notify(sigs, unix.SIGHUP, unix.SIGINT, unix.SIGQUIT, unix.SIGTERM, unix.SIGUSR1, unix.SIGUSR2, unix.SIGWINCH)
 	go func() {
 		for s := range sigs {
+			l.mu.Lock()
 			l.signal(0, s.(syscall.Signal))
+			l.mu.Unlock()
 		}
 	}()
 }
@@ -251,21 +273,16 @@ func (l *launcher) drain(grace time.Duration) {
 	if grace <= 0 || (termAt.IsZero() && unix.Kill(-1, unix.SIGTERM) != nil) {
 		return
 	}
-	reaped := make(chan struct{})
-	go func() {
-		defer close(reaped)
-		// The last process other than the relay to exit is a child of the launcher by then, so its exit ends the wait.
-		for l.othersRemain() {
-			if _, _, err := l.reapOne(); err != nil {
-				return
-			}
-		}
-	}()
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
-	select {
-	case <-reaped:
-	case <-timer.C:
+	// The last process other than the relay to exit is a child of the launcher by then, so its SIGCHLD ends the wait.
+	for l.othersRemain() {
+		select {
+		case <-l.chld:
+			l.reapChildren()
+		case <-timer.C:
+			return
+		}
 	}
 }
 
@@ -289,42 +306,52 @@ func (l *launcher) othersRemain() bool {
 	return false
 }
 
-// reap collects every child, since orphans in the view reparent to PID 1, until the process exits.
-func (l *launcher) reap(pid int) (int, error) {
-	for {
-		wpid, ws, err := l.reapOne()
-		if err != nil {
-			return 0, &Error{Kind: ErrLauncher, Op: "wait", Err: err}
-		}
-		if wpid == pid {
-			_, code := exitOf(ws)
-			return code, nil
-		}
+// reap reaps children as SIGCHLD reports them, starting with those that exited before it began, until the process has exited and the drain has ended, and then has the writer exit the launcher.
+func (l *launcher) reap(grace time.Duration) {
+	signal.Notify(l.chld, unix.SIGCHLD)
+	for l.reapChildren() {
+		<-l.chld
 	}
+	l.drain(grace)
+	l.mu.Lock()
+	l.post(message{})
+	l.mu.Unlock()
 }
 
-// reapOne waits for a child to end and reaps one child, if any is left to reap, and reports the exit of a pid with an ID. It waits without mu and reaps under it, so a pid keeps its ID until it is reaped and signals never wait for an exit.
-func (l *launcher) reapOne() (int, unix.WaitStatus, error) {
-	if err := unix.Waitid(unix.P_ALL, 0, nil, unix.WEXITED|unix.WNOWAIT, nil); err != nil && err != unix.EINTR {
-		return 0, 0, err
-	}
+// reapChildren reaps the children that have exited and reports whether the process still runs. It reaps registered children at any time and other children, the view's orphans and the relay, only while no spawn forks: until its registration, a spawned child that has exited stays a zombie and keeps its pid.
+func (l *launcher) reapChildren() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	var ws unix.WaitStatus
-	// A failed exec reaps its own child, so there may be none left to reap.
-	pid, err := unix.Wait4(-1, &ws, unix.WNOHANG, nil)
-	if err != nil || pid <= 0 {
-		return 0, 0, nil
+	if l.forking {
+		for pid := range l.spawned {
+			if wpid, _ := unix.Wait4(pid, &ws, unix.WNOHANG, nil); wpid == pid {
+				l.reaped(pid, ws)
+			}
+		}
+		return l.running
 	}
-	if id, ok := l.spawned[pid]; ok {
-		delete(l.spawned, pid)
-		l.running = l.running && id != 0
-		exit, _ := exitOf(ws)
-		_ = l.ctl.send(message{Kind: msgExited, ID: id, Exit: exit})
-	} else if l.forking {
-		l.forkExits[pid] = ws
+	for {
+		pid, _ := unix.Wait4(-1, &ws, unix.WNOHANG, nil)
+		if pid <= 0 {
+			return l.running
+		}
+		l.reaped(pid, ws)
 	}
-	return pid, ws, nil
+}
+
+// reaped retires the ID of pid, if it has one, and reports its exit. mu is held.
+func (l *launcher) reaped(pid int, ws unix.WaitStatus) {
+	id, ok := l.spawned[pid]
+	if !ok {
+		return
+	}
+	delete(l.spawned, pid)
+	exit, code := exitOf(ws)
+	if id == 0 {
+		l.running, l.code = false, code
+	}
+	l.post(message{Kind: msgExited, ID: id, Exit: exit})
 }
 
 // exitOf describes how a process ended, with the code the launcher exits with for it.
@@ -350,7 +377,7 @@ func (l *launcher) mountWorld(staging string) error {
 		return &Error{Kind: ErrNetwork, Op: "open", Path: "/proc/self/ns/net", Err: err}
 	}
 	defer unix.Close(netns)
-	if err := l.ctl.send(message{Kind: msgMounted}, dev, netns); err != nil {
+	if err := l.ctl.send(context.Background(), message{Kind: msgMounted}, dev, netns); err != nil {
 		return &Error{Kind: ErrLauncher, Op: "report mount", Err: err}
 	}
 	return nil

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -110,7 +111,7 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
 		t.Fatalf("harness said %q, %v", line, err)
 	}
-	if n := processesWith(t, token); n != 1 {
+	if n := len(pidsWith(t, token)); n != 1 {
 		t.Fatalf("%d grandchildren before exit, want 1", n)
 	}
 	if staged, _ := os.ReadDir(f.staging); len(staged) != 1 {
@@ -127,7 +128,7 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if exit, err := v.Wait(); err != nil || exit != (Exit{Code: 7}) {
 		t.Fatalf("Wait = %+v, %v; want exit code 7", exit, err)
 	}
-	if n := processesWith(t, token); n != 0 {
+	if n := len(pidsWith(t, token)); n != 0 {
 		t.Errorf("%d grandchildren survived the Harness", n)
 	}
 	select {
@@ -155,22 +156,12 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 		t.Fatalf("Start: %v", err)
 	}
 	defer v.Close()
-	null, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer null.Close()
-	r, wr, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Close()
-	spawned, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=cleanup", "OAC_VIEW_TOKEN=-spawned"}, "/data", [3]*os.File{null, wr, os.Stderr})
-	wr.Close()
+	spawned, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=cleanup", "OAC_VIEW_TOKEN=-spawned"}, "/data", false)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}
-	for _, stdout := range []io.Reader{v.Stdout(), r} {
+	defer closeStdio(spawned)
+	for _, stdout := range []io.Reader{v.Stdout(), spawned.Stdout} {
 		if line, err := bufio.NewReader(stdout).ReadString('\n'); err != nil || line != "ready\n" {
 			t.Fatalf("helper said %q, %v", line, err)
 		}
@@ -203,57 +194,51 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	if code, err := spawned.Wait(); err != nil || code != 7 {
 		t.Errorf("spawned Wait = %d, %v; want exit code 7", code, err)
 	}
+	// Once the spawned process has exited, its handle no longer reaches the group it led.
+	if err := spawned.Signal(syscall.SIGTERM); !errors.Is(err, ErrExited) {
+		t.Errorf("Signal after the spawned process exited = %v, want ErrExited", err)
+	}
 }
 
-// TestSpawnRunsInTheView checks that a spawned process runs as the process's user, unprivileged and in the view's cgroup, that its output and exit come back, that its handle reaches nothing once it has exited, that a command of any size either starts or fails alone, and that the view's end ends it.
+// TestSpawnRunsInTheView checks that a spawned process runs as the process does, with its stdio and exit coming back, that its handle reaches nothing once it has exited, that a spawn whose pipes or command fail fails alone, and that the view's end ends it.
 func TestSpawnRunsInTheView(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
 	w := &loopbackWorld{dir: f.world}
-	v, err := Start(context.Background(), f.spec(w, "wait", "OAC_VIEW_TOKEN=oac-unused"))
+	v, err := Start(context.Background(), f.spec(w, "identity"))
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer v.Close()
-	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
-		t.Fatalf("harness said %q, %v", line, err)
-	}
-	null, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer null.Close()
 	token := fmt.Sprintf("oac-spawned-%d", time.Now().UnixNano())
-	spawn := func(mode string, stdout *os.File) *Spawned {
-		t.Helper()
-		s, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness", token}, []string{helperEnv + "=" + mode}, "/data", [3]*os.File{null, stdout, stdout})
-		if err != nil {
-			t.Fatalf("Spawn %s: %v", mode, err)
+	sleeper, err := spawnHelper(context.Background(), v, "identity", "/data", token)
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	defer closeStdio(sleeper)
+	var ids [2]map[string]string
+	for i, stdout := range []io.Reader{v.Stdout(), sleeper.Stdout} {
+		if err := json.NewDecoder(stdout).Decode(&ids[i]); err != nil {
+			t.Fatal(err)
 		}
-		return s
 	}
-	r, wr, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
+	if len(ids[0]) != 20 || !maps.Equal(ids[0], ids[1]) {
+		t.Errorf("spawned process runs as and in %v, the process as and in %v", ids[1], ids[0])
 	}
-	report := spawn("report", wr)
-	wr.Close()
-	out, err := io.ReadAll(r)
-	r.Close()
+	report, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=report"}, "/data", true)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Spawn: %v", err)
+	}
+	report.Stdin.Write([]byte("ping"))
+	report.Stdin.Close()
+	out, _ := io.ReadAll(report.Stdout)
+	errOut, _ := io.ReadAll(report.Stderr)
+	closeStdio(report)
+	if string(out) != "ping /data hello from the world <nil>" || string(errOut) != "to stderr" {
+		t.Errorf("spawned process wrote %q and %q", out, errOut)
 	}
 	if code, err := report.Wait(); err != nil || code != 3 {
 		t.Fatalf("spawned Wait = %d, %v; want exit code 3", code, err)
-	}
-	cgroups := sessionviewtest.Cgroups(t, f.cgroups)
-	want := fmt.Sprintf("%d %d <nil> 0::", viewID, viewID)
-	if len(cgroups) != 1 || !strings.HasPrefix(string(out), want) || !strings.HasSuffix(string(out), "/"+filepath.Base(cgroups[0])+"\n") {
-		t.Fatalf("spawned process reported %q in cgroups %v, want %q and the view's cgroup", out, cgroups, want)
-	}
-	sleeper := spawn("sleep", null)
-	if n := processesWith(t, token); n != 1 {
-		t.Fatalf("%d spawned processes running, want 1", n)
 	}
 	if err := report.Signal(syscall.SIGKILL); !errors.Is(err, ErrExited) {
 		t.Errorf("Signal after the spawned process exited = %v, want ErrExited", err)
@@ -261,18 +246,34 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	if err := sleeper.Signal(0); err != nil {
 		t.Errorf("Signal to the running spawned process = %v", err)
 	}
+	// A spawn that cannot make its pipes fails with the reason.
+	var limit unix.Rlimit
+	if err := unix.Prlimit(0, unix.RLIMIT_NOFILE, nil, &limit); err != nil {
+		t.Fatal(err)
+	}
+	if err := unix.Prlimit(0, unix.RLIMIT_NOFILE, &unix.Rlimit{Max: limit.Max}, nil); err != nil {
+		t.Fatal(err)
+	}
+	_, err = spawnHelper(context.Background(), v, "noop", "/data")
+	if err := unix.Prlimit(0, unix.RLIMIT_NOFILE, &limit, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !errors.Is(err, ErrLauncher) || !errors.Is(err, syscall.EMFILE) {
+		t.Errorf("Spawn without descriptors = %v, want ErrLauncher with EMFILE", err)
+	}
 	// One argument above the control socket's packet size starts; one above exec's limit fails alone.
 	for size, want := range map[int]error{100 << 10: nil, 200 << 10: ErrExec} {
-		s, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness", strings.Repeat("x", size)}, []string{helperEnv + "=noop"}, "/data", [3]*os.File{null, null, null})
+		s, err := spawnHelper(context.Background(), v, "noop", "/data", strings.Repeat("x", size))
 		if err == nil {
+			closeStdio(s)
 			_, err = s.Wait()
 		}
 		if !errors.Is(err, want) {
 			t.Errorf("Spawn with a %d byte argument = %v, want %v", size, err, want)
 		}
 	}
-	if err := v.Signal(0); err != nil || processesWith(t, token) != 1 {
-		t.Fatalf("after the spawns, the view's Signal = %v and the sleeper runs %d times; want both running", err, processesWith(t, token))
+	if err := v.Signal(0); err != nil || len(pidsWith(t, token)) != 1 {
+		t.Fatalf("after the spawns, the view's Signal = %v and the sleeper runs %d times; want both running", err, len(pidsWith(t, token)))
 	}
 	if err := v.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -280,57 +281,174 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	if _, err := sleeper.Wait(); !errors.Is(err, ErrClosed) {
 		t.Errorf("spawned Wait after the view ended = %v, want ErrClosed", err)
 	}
-	if n := processesWith(t, token); n != 0 {
+	if n := len(pidsWith(t, token)); n != 0 {
 		t.Errorf("%d spawned processes survived the view", n)
 	}
 }
 
-// TestBlockedSpawnBlocksNothingElse checks that a spawn blocked on the world leaves the view's signals, its own context, the process's exit and the teardown free.
-func TestBlockedSpawnBlocksNothingElse(t *testing.T) {
-	requireView(t)
-	f := newFixture(t)
-	mkdir(t, filepath.Join(f.world, "data", "stall"))
-	w := &stallWorld{loopbackWorld: loopbackWorld{dir: f.world}, name: "stall", stalled: make(chan struct{}), release: make(chan struct{})}
-	spec := f.spec(&w.loopbackWorld, "wait", "OAC_VIEW_TOKEN=oac-unused")
-	spec.World = w.serve
-	v, err := Start(context.Background(), spec)
+// TestStalledSpawnBlocksNothingElse checks that while a spawn's child is stuck on the world before its exec, the spawns behind it wait holding no descriptors and return once their contexts end, and that the view's signals, the exits of its other processes, the stuck caller's context, the process's exit and the teardown all go on.
+func TestStalledSpawnBlocksNothingElse(t *testing.T) {
+	v, w := startStalled(t)
+	sleeper, err := spawnHelper(context.Background(), v, "sleep", "/data")
 	if err != nil {
-		t.Fatalf("Start: %v", err)
+		t.Fatalf("Spawn: %v", err)
 	}
-	defer v.Close()
-	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
-		t.Fatalf("harness said %q, %v", line, err)
-	}
-	null, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer null.Close()
+	defer closeStdio(sleeper)
+	launcherFDs := fdCount(t, v.cmd.Process.Pid)
 	ctx, cancel := context.WithCancel(context.Background())
-	spawned := make(chan error, 1)
-	go func() {
-		_, err := v.Spawn(ctx, "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=noop"}, "/data/stall", [3]*os.File{null, null, null})
-		spawned <- err
-	}()
-	select {
-	case <-w.stalled:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the spawn never looked up its directory in the world")
+	stuck := spawnAsync(ctx, v, "sleep", "/data/stall")
+	await(t, w.stalled, "the spawn's lookup in the world")
+	fds := fdCount(t, os.Getpid())
+	waitCtx, stopWaiting := context.WithCancel(context.Background())
+	var waiting []<-chan spawnResult
+	for range 50 {
+		waiting = append(waiting, spawnAsync(waitCtx, v, "noop", "/data"))
 	}
-	if err := v.Signal(syscall.SIGTERM); err != nil {
-		t.Fatalf("Signal while a spawn blocks: %v", err)
+	eventually(t, "50 spawns waiting", func() bool { return inSpawn() == 51 })
+	if n := fdCount(t, os.Getpid()); n > fds {
+		t.Errorf("%d descriptors with 50 spawns waiting, %d before", n, fds)
+	}
+	// The launcher holds the stuck spawn's descriptors and its fork's pipe, nothing for the spawns waiting.
+	if n := fdCount(t, v.cmd.Process.Pid); n > launcherFDs+6 {
+		t.Errorf("launcher holds %d descriptors with a spawn stuck and 50 waiting, %d before", n, launcherFDs)
+	}
+	stopWaiting()
+	for _, r := range waiting {
+		if r := await(t, r, "a waiting spawn's return"); !errors.Is(r.err, context.Canceled) {
+			t.Errorf("waiting Spawn = %v, want context.Canceled", r.err)
+		}
+	}
+	// Enough requests that the launcher's heap would call for a collection.
+	signaled := make(chan error, 1)
+	go func() {
+		for range 1000 {
+			if err := v.Signal(0); err != nil {
+				signaled <- err
+				return
+			}
+		}
+		signaled <- nil
+	}()
+	if err := await(t, signaled, "1000 signals"); err != nil {
+		t.Errorf("Signal while a spawn is stuck = %v", err)
+	}
+	if err := sleeper.Signal(syscall.SIGKILL); err != nil {
+		t.Fatalf("Signal to the sleeper = %v", err)
+	}
+	if code := await(t, waitFor(sleeper), "the sleeper's exit"); code != -1 {
+		t.Errorf("sleeper Wait = %d, want -1", code)
 	}
 	cancel()
-	select {
-	case err := <-spawned:
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("Spawn = %v, want context.Canceled", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("Spawn did not return after its context ended")
+	if r := await(t, stuck, "the stuck spawn's return"); !errors.Is(r.err, context.Canceled) {
+		t.Errorf("stuck Spawn = %v, want context.Canceled", r.err)
 	}
-	if exit, err := v.Wait(); err != nil || exit != (Exit{Code: 7}) {
-		t.Fatalf("Wait = %+v, %v; want exit code 7", exit, err)
+	if err := v.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("Signal: %v", err)
+	}
+	exited := make(chan error, 1)
+	go func() {
+		exit, err := v.Wait()
+		if exit != (Exit{Code: 7}) {
+			err = errors.Join(err, fmt.Errorf("exit %+v", exit))
+		}
+		exited <- err
+	}()
+	if err := await(t, exited, "the view's end"); err != nil {
+		t.Errorf("Wait with a spawn still starting: %v, want exit code 7", err)
+	}
+}
+
+// TestLateSpawnIsEnded checks that a process whose spawn was cancelled before it started is killed once it starts, before the next spawn begins.
+func TestLateSpawnIsEnded(t *testing.T) {
+	v, w := startStalled(t)
+	token := fmt.Sprintf("oac-late-%d", time.Now().UnixNano())
+	ctx, cancel := context.WithCancel(context.Background())
+	late := spawnAsync(ctx, v, "sleep", "/data/stall", token)
+	await(t, w.stalled, "the spawn's lookup in the world")
+	cancel()
+	if r := await(t, late, "the cancelled spawn's return"); !errors.Is(r.err, context.Canceled) {
+		t.Fatalf("Spawn = %v, want context.Canceled", r.err)
+	}
+	next := spawnAsync(context.Background(), v, "noop", "/data")
+	eventually(t, "the next spawn waiting", func() bool { return inSpawn() == 1 })
+	w.unstall()
+	r := await(t, next, "the next spawn")
+	if r.err != nil {
+		t.Fatalf("next Spawn: %v", r.err)
+	}
+	closeStdio(r.s)
+	if n := len(pidsWith(t, token)); n != 0 {
+		t.Errorf("the late process runs %d times once the next spawn started", n)
+	}
+	if code, err := r.s.Wait(); err != nil || code != 0 {
+		t.Errorf("next Wait = %d, %v", code, err)
+	}
+}
+
+// TestSpawnExitsBeforeItsRegistration checks that a spawned child that dies before its exec, while orphans exit around it, reports its own exit to its own handle and to no other, that a handle whose process has exited reaches nothing, and that Close ends what remains.
+func TestSpawnExitsBeforeItsRegistration(t *testing.T) {
+	v, w := startStalled(t)
+	launcher := v.cmd.Process.Pid
+	token := fmt.Sprintf("oac-bystander-%d", time.Now().UnixNano())
+	bystander, err := spawnHelper(context.Background(), v, "sleep", "/data", token)
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	defer closeStdio(bystander)
+	parent, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=wait", "OAC_VIEW_TOKEN=oac-orphan"}, "/data", false)
+	if err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+	defer closeStdio(parent)
+	if line, err := bufio.NewReader(parent.Stdout).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("parent said %q, %v", line, err)
+	}
+	pending := spawnAsync(context.Background(), v, "noop", "/data/stall")
+	await(t, w.stalled, "the spawn's lookup in the world")
+	// The parent's group ends while the child forks; its orphan stays unreaped until the child is registered.
+	if err := parent.Signal(syscall.SIGKILL); err != nil {
+		t.Fatalf("Signal to the parent = %v", err)
+	}
+	if code := await(t, waitFor(parent), "the parent's exit"); code != -1 {
+		t.Errorf("parent Wait = %d, want -1", code)
+	}
+	if err := parent.Signal(syscall.SIGKILL); !errors.Is(err, ErrExited) {
+		t.Errorf("Signal after the parent exited = %v, want ErrExited", err)
+	}
+	eventually(t, "the orphan's exit", func() bool { return zombies(t, launcher) > 0 })
+	// The child dies before its exec, once the world answers.
+	child := pidsWith(t, launcherArg0)
+	child = slices.DeleteFunc(child, func(pid int) bool { return pid == launcher })
+	if len(child) != 1 {
+		t.Fatalf("children before their exec: %v, want 1", child)
+	}
+	if err := unix.Kill(child[0], unix.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	w.unstall()
+	r := await(t, pending, "the spawn")
+	if r.err != nil {
+		t.Fatalf("Spawn = %v, want the child that died before its exec", r.err)
+	}
+	defer closeStdio(r.s)
+	if code := await(t, waitFor(r.s), "the child's exit"); code != -1 {
+		t.Errorf("child Wait = %d, want -1", code)
+	}
+	if err := r.s.Signal(0); !errors.Is(err, ErrExited) {
+		t.Errorf("Signal after the child exited = %v, want ErrExited", err)
+	}
+	if err := bystander.Signal(0); err != nil {
+		t.Errorf("Signal to the bystander = %v", err)
+	}
+	eventually(t, "the orphans reaped", func() bool { return zombies(t, launcher) == 0 })
+	if err := v.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := bystander.Wait(); !errors.Is(err, ErrClosed) {
+		t.Errorf("bystander Wait after Close = %v, want ErrClosed", err)
+	}
+	if n := len(pidsWith(t, token)); n != 0 {
+		t.Errorf("%d bystanders survived the view", n)
 	}
 }
 
@@ -760,13 +878,15 @@ func (n *hangNode) Write(context.Context, gofs.FileHandle, []byte, int64) (uint3
 	return 0, syscall.EIO
 }
 
-// stallWorld is a loopbackWorld that answers no lookup of name until Stop.
+// stallWorld is a loopbackWorld that answers no lookup of name until unstall or Stop.
 type stallWorld struct {
 	loopbackWorld
-	name             string
-	stalled, release chan struct{} // stalled closes at the first lookup of name
-	stallOnce        sync.Once
+	name                   string
+	stalled, release       chan struct{} // stalled closes at the first lookup of name
+	stallOnce, releaseOnce sync.Once
 }
+
+func (w *stallWorld) unstall() { w.releaseOnce.Do(func() { close(w.release) }) }
 
 func (w *stallWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (WorldServer, Presentation, error) {
 	root, err := gofs.NewLoopbackRoot(w.dir)
@@ -788,7 +908,7 @@ func (w *stallWorld) serve(_ context.Context, dev *os.File, mount WorldMount) (W
 }
 
 func (w *stallWorld) Stop() error {
-	close(w.release)
+	w.unstall()
 	return w.loopbackWorld.Stop()
 }
 
@@ -829,20 +949,163 @@ func serveBroker(t *testing.T) func(*os.File) error {
 	}
 }
 
-// processesWith counts processes whose command line contains token.
-func processesWith(t *testing.T, token string) int {
+// pidsWith lists the processes whose command line contains token.
+func pidsWith(t *testing.T, token string) []int {
 	t.Helper()
 	cmdlines, err := filepath.Glob("/proc/[0-9]*/cmdline")
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := 0
+	var pids []int
 	for _, p := range cmdlines {
 		if b, err := os.ReadFile(p); err == nil && bytes.Contains(b, []byte(token)) {
+			pid, _ := strconv.Atoi(filepath.Base(filepath.Dir(p)))
+			pids = append(pids, pid)
+		}
+	}
+	return pids
+}
+
+// zombies counts the children of pid that have exited and are not reaped yet.
+func zombies(t *testing.T, pid int) int {
+	t.Helper()
+	stats, err := filepath.Glob("/proc/[0-9]*/stat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, p := range stats {
+		b, err := os.ReadFile(p)
+		// The state and the parent's pid follow the command name, which may hold anything.
+		if f := strings.Fields(string(b[bytes.LastIndexByte(b, ')')+1:])); err == nil && len(f) > 1 && f[0] == "Z" && f[1] == strconv.Itoa(pid) {
 			n++
 		}
 	}
 	return n
+}
+
+func fdCount(t *testing.T, pid int) int {
+	t.Helper()
+	fds, err := os.ReadDir(fmt.Sprintf("/proc/%d/fd", pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(fds)
+}
+
+// inSpawn counts the goroutines in View.Spawn.
+func inSpawn() int {
+	buf := make([]byte, 1<<20)
+	return strings.Count(string(buf[:runtime.Stack(buf, true)]), "sessionview.(*View).Spawn(")
+}
+
+// startStalled starts a view whose process waits for TERM and whose world answers no lookup of /data/stall until w.unstall.
+func startStalled(t *testing.T) (*View, *stallWorld) {
+	t.Helper()
+	requireView(t)
+	f := newFixture(t)
+	mkdir(t, filepath.Join(f.world, "data", "stall"))
+	w := &stallWorld{loopbackWorld: loopbackWorld{dir: f.world}, name: "stall", stalled: make(chan struct{}), release: make(chan struct{})}
+	spec := f.spec(&w.loopbackWorld, "wait", "OAC_VIEW_TOKEN=oac-unused")
+	spec.World = w.serve
+	v, err := Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { v.Close() })
+	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("harness said %q, %v", line, err)
+	}
+	return v, w
+}
+
+// spawnHelper spawns this binary as helper mode in dir, with args after its name and no stdin.
+func spawnHelper(ctx context.Context, v *View, mode, dir string, args ...string) (*Spawned, error) {
+	return v.Spawn(ctx, "/.oac/harness/harness", append([]string{"harness"}, args...), []string{helperEnv + "=" + mode}, dir, false)
+}
+
+type spawnResult struct {
+	s   *Spawned
+	err error
+}
+
+func spawnAsync(ctx context.Context, v *View, mode, dir string, args ...string) <-chan spawnResult {
+	ch := make(chan spawnResult, 1)
+	go func() {
+		s, err := spawnHelper(ctx, v, mode, dir, args...)
+		ch <- spawnResult{s, err}
+	}()
+	return ch
+}
+
+// waitFor delivers s's exit code, or -2 when Wait fails.
+func waitFor(s *Spawned) <-chan int {
+	ch := make(chan int, 1)
+	go func() {
+		code, err := s.Wait()
+		if err != nil {
+			code = -2
+		}
+		ch <- code
+	}()
+	return ch
+}
+
+func closeStdio(s *Spawned) { closeFiles([]*os.File{s.Stdin, s.Stdout, s.Stderr}) }
+
+// await returns what ch delivers, failing the test when nothing comes within 10 seconds.
+func await[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(10 * time.Second):
+		t.Fatalf("%s: nothing within 10s", what)
+	}
+	var zero T
+	return zero
+}
+
+// eventually polls cond, failing the test when it does not hold within 10 seconds.
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); !cond(); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s not within 10s", what)
+		}
+	}
+}
+
+// identity describes what this process runs as and in: its credentials and restrictions, its namespaces, its cgroup and its root.
+func identity() (map[string]string, error) {
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return nil, err
+	}
+	id := map[string]string{}
+	for _, line := range strings.Split(string(status), "\n") {
+		k, v, _ := strings.Cut(line, ":")
+		switch k {
+		case "Uid", "Gid", "Groups", "CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb", "NoNewPrivs", "Seccomp", "Seccomp_filters":
+			id[k] = strings.TrimSpace(v)
+		}
+	}
+	for _, ns := range []string{"mnt", "net", "pid", "ipc", "uts", "user", "cgroup"} {
+		if id["ns "+ns], err = os.Readlink("/proc/self/ns/" + ns); err != nil {
+			return nil, err
+		}
+	}
+	cgroup, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return nil, err
+	}
+	id["cgroup"] = string(cgroup)
+	var st unix.Stat_t
+	if err := unix.Stat("/", &st); err != nil {
+		return nil, err
+	}
+	id["root"] = fmt.Sprintf("%d:%d", st.Dev, st.Ino)
+	return id, nil
 }
 
 func runHelper(mode string) int {
@@ -900,9 +1163,23 @@ func runHelper(mode string) int {
 		return 0
 	case "noop":
 		return 0
+	case "identity":
+		sigs := make(chan os.Signal, 1)
+		signal.Notify(sigs, syscall.SIGTERM)
+		id, err := identity()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		json.NewEncoder(os.Stdout).Encode(id)
+		<-sigs
+		return 7
 	case "report":
-		cgroup, err := os.ReadFile("/proc/self/cgroup")
-		fmt.Printf("%d %d %v %s", os.Getuid(), os.Getgid(), errors.Join(err, noPrivileges()), cgroup)
+		in, err := io.ReadAll(os.Stdin)
+		wd, werr := os.Getwd()
+		data, rerr := os.ReadFile("in.txt")
+		fmt.Printf("%s %s %s %v", in, wd, data, errors.Join(err, werr, rerr))
+		fmt.Fprint(os.Stderr, "to stderr")
 		return 3
 	case "hang":
 		f, err := os.OpenFile("/data/hang", os.O_WRONLY, 0)
