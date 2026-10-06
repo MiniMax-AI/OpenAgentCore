@@ -720,7 +720,7 @@ func Decode(t uint16, payload []byte) (Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &reader{d: sandboxwire.NewDecoder(payload)}
+	r := sandboxwire.NewDecoder(payload)
 	var m Message
 	switch kind {
 	case sandboxwire.KindRequest:
@@ -735,14 +735,11 @@ func Decode(t uint16, payload []byte) (Message, error) {
 	case sandboxwire.KindEvent:
 		m = readEvent(r, t)
 	}
-	if r.err == nil {
-		r.err = r.d.Finish()
+	if err := r.Finish(); err != nil {
+		return nil, err
 	}
-	if r.err == nil {
-		r.err = validate(m)
-	}
-	if r.err != nil {
-		return nil, r.err
+	if err := validate(m); err != nil {
+		return nil, err
 	}
 	return m, nil
 }
@@ -950,51 +947,24 @@ func (m ObservationLostEvent) encode(e *sandboxwire.Encoder) {
 
 // Decoding.
 
-// reader keeps the first error, after which every read returns a zero value.
-type reader struct {
-	d   *sandboxwire.Decoder
-	err error
-}
-
-func read[T any](r *reader, f func() (T, error)) T {
-	var v T
-	if r.err == nil {
-		v, r.err = f()
-	}
-	return v
-}
-
-func (r *reader) u8() uint8                  { return read(r, r.d.U8) }
-func (r *reader) u16() uint16                { return read(r, r.d.U16) }
-func (r *reader) u32() uint32                { return read(r, r.d.U32) }
-func (r *reader) u64() uint64                { return read(r, r.d.U64) }
-func (r *reader) boolean() bool              { return read(r, r.d.Bool) }
-func (r *reader) present() bool              { return read(r, r.d.Present) }
-func (r *reader) bytes() []byte              { return read(r, r.d.Bytes) }
-func (r *reader) id() sandboxwire.ID         { return read(r, r.d.ID) }
-func (r *reader) effect() sandboxwire.Effect { return read(r, r.d.Effect) }
-func (r *reader) count(max uint32) int {
-	return read(r, func() (int, error) { return r.d.Count(max) })
-}
-
 func enum[T interface {
 	~uint16
 	Valid() bool
-}](r *reader) T {
-	return T(read(r, func() (uint16, error) { return r.d.Enum(func(v uint16) bool { return T(v).Valid() }) }))
+}](r *sandboxwire.Decoder) T {
+	return T(r.Enum(func(v uint16) bool { return T(v).Valid() }))
 }
 
 // enums reads a list of distinct enum values.
 func enums[T interface {
 	~uint16
 	Valid() bool
-}](r *reader) []T {
-	n := r.count(maxListEntries)
+}](r *sandboxwire.Decoder) []T {
+	n := r.Count(maxListEntries)
 	list := make([]T, 0, n)
 	for range n {
 		v := enum[T](r)
-		if r.err == nil && slices.Contains(list, v) {
-			r.err = malformed("duplicate list entry %d", v)
+		if slices.Contains(list, v) {
+			r.Fail(malformed("duplicate list entry %d", v))
 		}
 		list = append(list, v)
 	}
@@ -1005,37 +975,37 @@ func malformed(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{sandboxwire.ErrMalformed}, args...)...)
 }
 
-func readRef(r *reader) OperationRef {
-	return OperationRef{ServerInstanceID: r.id(), OperationID: r.id()}
+func readRef(r *sandboxwire.Decoder) OperationRef {
+	return OperationRef{ServerInstanceID: r.ID(), OperationID: r.ID()}
 }
 
-func readFailure(r *reader) Failure {
-	return Failure{Code: enum[ErrorCode](r), Effect: r.effect(), Message: string(r.bytes())}
+func readFailure(r *sandboxwire.Decoder) Failure {
+	return Failure{Code: enum[ErrorCode](r), Effect: r.Effect(), Message: string(r.Bytes())}
 }
 
-func readWindowSize(r *reader) WindowSize {
-	return WindowSize{Rows: r.u16(), Cols: r.u16(), XPixels: r.u16(), YPixels: r.u16()}
+func readWindowSize(r *sandboxwire.Decoder) WindowSize {
+	return WindowSize{Rows: r.U16(), Cols: r.U16(), XPixels: r.U16(), YPixels: r.U16()}
 }
 
-func readSpec(r *reader) ProcessSpec {
+func readSpec(r *sandboxwire.Decoder) ProcessSpec {
 	var s ProcessSpec
-	s.Executable = r.bytes()
-	s.Argv = make([][]byte, r.count(maxSpecEntries))
+	s.Executable = r.Bytes()
+	s.Argv = make([][]byte, r.Count(maxSpecEntries))
 	for i := range s.Argv {
-		s.Argv[i] = r.bytes()
+		s.Argv[i] = r.Bytes()
 	}
-	s.Env = make([]EnvVar, r.count(maxSpecEntries))
+	s.Env = make([]EnvVar, r.Count(maxSpecEntries))
 	for i := range s.Env {
-		s.Env[i] = EnvVar{Name: r.bytes(), Value: r.bytes()}
+		s.Env[i] = EnvVar{Name: r.Bytes(), Value: r.Bytes()}
 	}
-	s.Cwd = r.bytes()
-	s.Umask = r.u32()
+	s.Cwd = r.Bytes()
+	s.Umask = r.U32()
 	s.IOMode = enum[IOMode](r)
-	if r.present() {
-		p := &PTYSpec{Size: readWindowSize(r), Term: r.bytes()}
-		p.Modes = make([]PTYModeValue, r.count(maxListEntries))
+	if r.Present() {
+		p := &PTYSpec{Size: readWindowSize(r), Term: r.Bytes()}
+		p.Modes = make([]PTYModeValue, r.Count(maxListEntries))
 		for i := range p.Modes {
-			p.Modes[i] = PTYModeValue{Mode: enum[PTYMode](r), Value: r.u32()}
+			p.Modes[i] = PTYModeValue{Mode: enum[PTYMode](r), Value: r.U32()}
 		}
 		s.PTY = p
 	}
@@ -1043,7 +1013,7 @@ func readSpec(r *reader) ProcessSpec {
 	return s
 }
 
-func readCapabilities(r *reader) Capabilities {
+func readCapabilities(r *sandboxwire.Decoder) Capabilities {
 	return Capabilities{
 		Platform:                   enum[Platform](r),
 		Scopes:                     enums[Scope](r),
@@ -1051,55 +1021,55 @@ func readCapabilities(r *reader) Capabilities {
 		Signals:                    enums[Signal](r),
 		SignalTargets:              enums[SignalTarget](r),
 		PTYModes:                   enums[PTYMode](r),
-		MaxStartBytes:              r.u32(),
-		MaxDataBytes:               r.u32(),
-		MaxActiveOperations:        r.u32(),
-		MaxOperationRecords:        r.u32(),
-		MaxReplayBytesPerOperation: r.u32(),
-		OwnerLossGraceMillis:       r.u32(),
-		CancelGraceLimitMillis:     r.u32(),
+		MaxStartBytes:              r.U32(),
+		MaxDataBytes:               r.U32(),
+		MaxActiveOperations:        r.U32(),
+		MaxOperationRecords:        r.U32(),
+		MaxReplayBytesPerOperation: r.U32(),
+		OwnerLossGraceMillis:       r.U32(),
+		CancelGraceLimitMillis:     r.U32(),
 	}
 }
 
-func readExitStatus(r *reader) ExitStatus {
+func readExitStatus(r *sandboxwire.Decoder) ExitStatus {
 	s := ExitStatus{Kind: enum[ExitKind](r)}
 	if s.Kind == ExitCode {
-		s.Code = r.u8()
+		s.Code = r.U8()
 	} else {
 		s.Signal = enum[Signal](r)
-		s.CoreDumped = r.boolean()
+		s.CoreDumped = r.Bool()
 	}
 	return s
 }
 
-func readStatus(r *reader) OperationStatus {
+func readStatus(r *sandboxwire.Decoder) OperationStatus {
 	s := OperationStatus{State: enum[OperationState](r)}
-	if r.present() {
+	if r.Present() {
 		exit := readExitStatus(r)
 		s.Exit = &exit
 	}
-	if r.present() {
+	if r.Present() {
 		f := readFailure(r)
 		s.StartFailure = &f
 	}
-	s.StdinOffset = r.u64()
-	s.StdinClosed = r.boolean()
-	if r.present() {
+	s.StdinOffset = r.U64()
+	s.StdinClosed = r.Bool()
+	if r.Present() {
 		d := enum[OutputDisposition](r)
 		s.Output = &d
 	}
 	s.Scope = enum[ScopeState](r)
-	s.Released = r.boolean()
-	s.FirstRetained = r.u64()
-	s.LastSequence = r.u64()
+	s.Released = r.Bool()
+	s.FirstRetained = r.U64()
+	s.LastSequence = r.U64()
 	return s
 }
 
-func readHeader(r *reader) EventHeader {
-	return EventHeader{OperationID: r.id(), Sequence: r.u64()}
+func readHeader(r *sandboxwire.Decoder) EventHeader {
+	return EventHeader{OperationID: r.ID(), Sequence: r.U64()}
 }
 
-func readRequest(r *reader, t uint16) Message {
+func readRequest(r *sandboxwire.Decoder, t uint16) Message {
 	if t == OpDescribe {
 		return DescribeRequest{}
 	}
@@ -1108,13 +1078,13 @@ func readRequest(r *reader, t uint16) Message {
 	case OpStart:
 		return StartRequest{ref, readSpec(r)}
 	case OpAttach:
-		return AttachRequest{ref, r.u64()}
+		return AttachRequest{ref, r.U64()}
 	case OpInspect:
 		return InspectRequest{ref}
 	case OpWriteStdin:
-		return WriteStdinRequest{ref, r.u64(), r.bytes()}
+		return WriteStdinRequest{ref, r.U64(), r.Bytes()}
 	case OpCloseStdin:
-		return CloseStdinRequest{ref, r.u64()}
+		return CloseStdinRequest{ref, r.U64()}
 	case OpCloseOutput:
 		return CloseOutputRequest{ref, enum[Stream](r)}
 	case OpResizePTY:
@@ -1122,18 +1092,18 @@ func readRequest(r *reader, t uint16) Message {
 	case OpSignal:
 		return SignalRequest{ref, enum[Signal](r), enum[SignalTarget](r)}
 	case OpCancel:
-		return CancelRequest{ref, r.u32()}
+		return CancelRequest{ref, r.U32()}
 	case OpAckEvents:
-		return AckEventsRequest{ref, r.u64()}
+		return AckEventsRequest{ref, r.U64()}
 	default:
 		return ReleaseRequest{ref}
 	}
 }
 
-func readResponse(r *reader, op uint16) Message {
+func readResponse(r *sandboxwire.Decoder, op uint16) Message {
 	switch op {
 	case OpDescribe:
-		return DescribeResponse{r.id(), readCapabilities(r)}
+		return DescribeResponse{r.ID(), readCapabilities(r)}
 	case OpStart:
 		return StartResponse{enum[StartDisposition](r)}
 	case OpAttach:
@@ -1141,7 +1111,7 @@ func readResponse(r *reader, op uint16) Message {
 	case OpInspect:
 		return InspectResponse{readStatus(r)}
 	case OpWriteStdin:
-		return WriteStdinResponse{r.u32()}
+		return WriteStdinResponse{r.U32()}
 	case OpCloseStdin:
 		return CloseStdinResponse{}
 	case OpCloseOutput:
@@ -1159,7 +1129,7 @@ func readResponse(r *reader, op uint16) Message {
 	}
 }
 
-func readEvent(r *reader, t uint16) Message {
+func readEvent(r *sandboxwire.Decoder, t uint16) Message {
 	h := readHeader(r)
 	switch t {
 	case EventStarted:
@@ -1167,9 +1137,9 @@ func readEvent(r *reader, t uint16) Message {
 	case EventStartFailed:
 		return StartFailedEvent{h, readFailure(r)}
 	case EventOutput:
-		return OutputEvent{h, enum[Stream](r), r.u64(), r.bytes()}
+		return OutputEvent{h, enum[Stream](r), r.U64(), r.Bytes()}
 	case EventStreamClosed:
-		return StreamClosedEvent{h, enum[Stream](r), r.u64(), enum[OutputDisposition](r)}
+		return StreamClosedEvent{h, enum[Stream](r), r.U64(), enum[OutputDisposition](r)}
 	case EventExited:
 		return ExitedEvent{h, readExitStatus(r)}
 	case EventOutputClosed:

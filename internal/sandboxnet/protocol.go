@@ -219,24 +219,21 @@ func Decode(f sandboxwire.Frame) (Message, error) {
 	if !sandboxwire.ValidRequestID(f.RequestID) {
 		return nil, invalid("request ID %d", f.RequestID)
 	}
-	r := &reader{d: sandboxwire.NewDecoder(f.Payload)}
+	d := sandboxwire.NewDecoder(f.Payload)
 	var m Message
 	if kind == sandboxwire.KindRequest {
-		m = ConnectRequest{Network: Network(r.enum(func(v uint16) bool { return Network(v).Valid() })),
-			Host: string(r.bytes()), Port: r.u16(), TimeoutMillis: r.u32()}
+		m = ConnectRequest{Network: Network(d.Enum(func(v uint16) bool { return Network(v).Valid() })),
+			Host: string(d.Bytes()), Port: d.U16(), TimeoutMillis: d.U32()}
 	} else {
-		resp := ConnectResponse{Result: Result(r.enum(func(v uint16) bool { return Result(v).Valid() }))}
+		resp := ConnectResponse{Result: Result(d.Enum(func(v uint16) bool { return Result(v).Valid() }))}
 		if resp.Result == ResultFailed {
-			resp.Code = Code(r.enum(func(v uint16) bool { return Code(v).Valid() }))
-			resp.Effect = r.effect()
+			resp.Code = Code(d.Enum(func(v uint16) bool { return Code(v).Valid() }))
+			resp.Effect = d.Effect()
 		}
 		m = resp
 	}
-	if r.err == nil {
-		r.err = r.d.Finish()
-	}
-	if r.err != nil {
-		return nil, r.err
+	if err := d.Finish(); err != nil {
+		return nil, err
 	}
 	if err := m.validate(); err != nil {
 		return nil, err
@@ -377,27 +374,4 @@ func permitsPort(egress []sandboxlink.EgressRule, port uint16) bool {
 
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{sandboxwire.ErrMalformed}, args...)...)
-}
-
-// reader decodes fields in order, keeping the first error.
-type reader struct {
-	d   *sandboxwire.Decoder
-	err error
-}
-
-func read[T any](r *reader, f func() (T, error)) T {
-	var v T
-	if r.err == nil {
-		v, r.err = f()
-	}
-	return v
-}
-
-func (r *reader) u16() uint16                { return read(r, r.d.U16) }
-func (r *reader) u32() uint32                { return read(r, r.d.U32) }
-func (r *reader) bytes() []byte              { return read(r, r.d.Bytes) }
-func (r *reader) effect() sandboxwire.Effect { return read(r, r.d.Effect) }
-
-func (r *reader) enum(valid func(uint16) bool) uint16 {
-	return read(r, func() (uint16, error) { return r.d.Enum(valid) })
 }

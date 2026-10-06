@@ -3,15 +3,12 @@ package processshim
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire/sandboxwiretest"
 )
 
 func b(s string) []byte { return []byte(s) }
@@ -75,28 +72,10 @@ func decoderFor(t uint16) func(sandboxwire.Frame) (Message, error) {
 	return decoders[min(t>>4, 2)]
 }
 
-func readHexFixture(t testing.TB, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var digits strings.Builder
-	for _, line := range strings.Split(string(raw), "\n") {
-		line, _, _ = strings.Cut(line, "#")
-		digits.WriteString(strings.Join(strings.Fields(line), ""))
-	}
-	frame, err := hex.DecodeString(digits.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return frame
-}
-
 func TestGoldenFixtures(t *testing.T) {
 	for _, fx := range fixtures {
 		t.Run(fx.name, func(t *testing.T) {
-			want := readHexFixture(t, fx.name)
+			want := sandboxwiretest.ReadHex(t, fx.name)
 			var got bytes.Buffer
 			if err := sandboxwire.WriteFrame(&got, Frame(fx.msg)); err != nil {
 				t.Fatal(err)

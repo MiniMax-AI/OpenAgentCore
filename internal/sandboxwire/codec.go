@@ -48,132 +48,115 @@ func (e *Encoder) ID(id ID) { e.b = append(e.b, id[:]...) }
 
 func (e *Encoder) Effect(v Effect) { e.Enum(uint16(v)) }
 
-// Decoder reads primitives from a payload. Every error wraps ErrMalformed;
-// after an error the Decoder's position is unspecified.
+// Decoder reads primitives from a payload. The first error sticks: every later
+// read returns the zero value, and Err and Finish return that error. Its own
+// errors wrap ErrMalformed.
 type Decoder struct {
-	b []byte
+	b   []byte
+	err error
 }
 
 func NewDecoder(payload []byte) *Decoder { return &Decoder{b: payload} }
 
-// Remaining returns the number of unread bytes.
-func (d *Decoder) Remaining() int { return len(d.b) }
+// Err returns the first error.
+func (d *Decoder) Err() error { return d.err }
 
-// Finish fails when bytes remain unread.
-func (d *Decoder) Finish() error {
-	if len(d.b) != 0 {
-		return fmt.Errorf("%w: %d trailing bytes", ErrMalformed, len(d.b))
+// Fail records err unless an earlier error is recorded. A protocol reports its
+// own decoding rules through it.
+func (d *Decoder) Fail(err error) {
+	if d.err == nil {
+		d.err = err
 	}
-	return nil
 }
 
-func (d *Decoder) take(n uint64, what string) ([]byte, error) {
+// Finish returns the first error, or an error when bytes remain unread.
+func (d *Decoder) Finish() error {
+	if len(d.b) != 0 {
+		d.Fail(fmt.Errorf("%w: %d trailing bytes", ErrMalformed, len(d.b)))
+	}
+	return d.err
+}
+
+// take returns the next n bytes, or nil after an error.
+func (d *Decoder) take(n uint64, what string) []byte {
+	if d.err != nil {
+		return nil
+	}
 	if n > uint64(len(d.b)) {
-		return nil, fmt.Errorf("%w: %s needs %d bytes, %d remain", ErrMalformed, what, n, len(d.b))
+		d.err = fmt.Errorf("%w: %s needs %d bytes, %d remain", ErrMalformed, what, n, len(d.b))
+		return nil
 	}
 	v := d.b[:n:n]
 	d.b = d.b[n:]
-	return v, nil
+	return v
 }
 
-func (d *Decoder) U8() (uint8, error) {
-	b, err := d.take(1, "u8")
-	if err != nil {
-		return 0, err
+// unsigned reads an n-byte big-endian integer.
+func (d *Decoder) unsigned(n uint64, what string) uint64 {
+	var v uint64
+	for _, b := range d.take(n, what) {
+		v = v<<8 | uint64(b)
 	}
-	return b[0], nil
+	return v
 }
 
-func (d *Decoder) U16() (uint16, error) {
-	b, err := d.take(2, "u16")
-	if err != nil {
-		return 0, err
-	}
-	return binary.BigEndian.Uint16(b), nil
-}
-
-func (d *Decoder) U32() (uint32, error) {
-	b, err := d.take(4, "u32")
-	if err != nil {
-		return 0, err
-	}
-	return binary.BigEndian.Uint32(b), nil
-}
-
-func (d *Decoder) U64() (uint64, error) {
-	b, err := d.take(8, "u64")
-	if err != nil {
-		return 0, err
-	}
-	return binary.BigEndian.Uint64(b), nil
-}
-
-func (d *Decoder) I64() (int64, error) {
-	v, err := d.U64()
-	return int64(v), err
-}
+func (d *Decoder) U8() uint8   { return uint8(d.unsigned(1, "u8")) }
+func (d *Decoder) U16() uint16 { return uint16(d.unsigned(2, "u16")) }
+func (d *Decoder) U32() uint32 { return uint32(d.unsigned(4, "u32")) }
+func (d *Decoder) U64() uint64 { return d.unsigned(8, "u64") }
+func (d *Decoder) I64() int64  { return int64(d.U64()) }
 
 // Bool accepts exactly 0 or 1.
-func (d *Decoder) Bool() (bool, error) {
-	v, err := d.U8()
-	if err == nil && v > 1 {
-		err = fmt.Errorf("%w: boolean byte %d", ErrMalformed, v)
+func (d *Decoder) Bool() bool {
+	v := d.U8()
+	if v > 1 {
+		d.Fail(fmt.Errorf("%w: boolean byte %d", ErrMalformed, v))
 	}
-	return v == 1, err
+	return v == 1
 }
 
 // Bytes reads a uint32 length and that many bytes. The result aliases the
 // payload, with its capacity clipped to its length.
-func (d *Decoder) Bytes() ([]byte, error) {
-	n, err := d.U32()
-	if err != nil {
-		return nil, err
-	}
-	return d.take(uint64(n), "byte string")
-}
+func (d *Decoder) Bytes() []byte { return d.take(uint64(d.U32()), "byte string") }
 
 // Count reads an array's uint32 element count. The count is at most max and at
 // most the remaining bytes, because every element encodes to at least one byte,
-// so a caller may allocate count elements.
-func (d *Decoder) Count(max uint32) (int, error) {
-	n, err := d.U32()
-	switch {
-	case err != nil:
-		return 0, err
+// so a caller may allocate count elements. It is zero after an error.
+func (d *Decoder) Count(max uint32) int {
+	switch n := d.U32(); {
 	case n > max:
-		return 0, fmt.Errorf("%w: count %d exceeds maximum %d", ErrMalformed, n, max)
+		d.Fail(fmt.Errorf("%w: count %d exceeds maximum %d", ErrMalformed, n, max))
 	case uint64(n) > uint64(len(d.b)):
-		return 0, fmt.Errorf("%w: count %d exceeds %d remaining bytes", ErrMalformed, n, len(d.b))
+		d.Fail(fmt.Errorf("%w: count %d exceeds %d remaining bytes", ErrMalformed, n, len(d.b)))
+	default:
+		return int(n)
 	}
-	return int(n), nil
+	return 0
 }
 
 // Present reads the presence byte of an optional field.
-func (d *Decoder) Present() (bool, error) { return d.Bool() }
+func (d *Decoder) Present() bool { return d.Bool() }
 
 // Enum reads a uint16 enum value, rejecting zero and values valid does not
 // accept.
-func (d *Decoder) Enum(valid func(uint16) bool) (uint16, error) {
-	v, err := d.U16()
-	if err == nil && (v == 0 || !valid(v)) {
-		err = fmt.Errorf("%w: enum value %d", ErrMalformed, v)
+func (d *Decoder) Enum(valid func(uint16) bool) uint16 {
+	v := d.U16()
+	if v == 0 || !valid(v) {
+		d.Fail(fmt.Errorf("%w: enum value %d", ErrMalformed, v))
 	}
-	return v, err
+	return v
 }
 
 // ID reads a required identifier, rejecting the zero ID.
-func (d *Decoder) ID() (ID, error) {
-	b, err := d.take(uint64(len(ID{})), "identifier")
-	if err != nil {
-		return ID{}, err
+func (d *Decoder) ID() ID {
+	var id ID
+	copy(id[:], d.take(uint64(len(id)), "identifier"))
+	if id.IsZero() {
+		d.Fail(fmt.Errorf("%w: zero identifier", ErrMalformed))
 	}
-	if id := ID(b); !id.IsZero() {
-		return id, nil
-	}
-	return ID{}, fmt.Errorf("%w: zero identifier", ErrMalformed)
+	return id
 }
 
-func (d *Decoder) Effect() (Effect, error) {
-	v, err := d.Enum(func(v uint16) bool { return Effect(v).Valid() })
-	return Effect(v), err
+func (d *Decoder) Effect() Effect {
+	return Effect(d.Enum(func(v uint16) bool { return Effect(v).Valid() }))
 }

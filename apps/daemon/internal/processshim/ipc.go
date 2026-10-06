@@ -91,6 +91,7 @@
 package processshim
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -525,19 +526,17 @@ func Decode(f sandboxwire.Frame) (Message, error) {
 	return decode(f, func(d *sandboxwire.Decoder) (Message, error) {
 		switch f.Type {
 		case TypeRequest:
-			r, err := decodeRequest(d)
-			if err == nil && r.Version != Version {
+			r := decodeRequest(d)
+			if r.Version != Version && d.Err() == nil {
 				return r, nil // the rest is another version's
 			}
-			return r, finish(d, err)
+			return r, d.Finish()
 		case TypeAck:
 			return Ack{}, d.Finish()
 		case TypeSignal:
-			n, err := decodeSignal(d)
-			return Signal{Number: n}, finish(d, err)
+			return Signal{Number: decodeSignal(d)}, d.Finish()
 		case TypeResult:
-			r, err := decodeResult(d)
-			return r, finish(d, err)
+			return decodeResult(d), d.Finish()
 		}
 		return nil, errType
 	})
@@ -546,48 +545,32 @@ func Decode(f sandboxwire.Frame) (Message, error) {
 // DecodeRelay decodes and validates a frame from the relay.
 func DecodeRelay(f sandboxwire.Frame) (RelayMessage, error) {
 	m, err := decode(f, func(d *sandboxwire.Decoder) (Message, error) {
-		id, err := decodeID(d)
-		if err != nil {
-			return nil, err
-		}
+		id := decodeID(d)
 		switch f.Type {
 		case TypeOpen:
-			m := Open{ID: id}
-			m.Request, err = decodeRequest(d)
-			if err == nil && m.Request.Version != Version {
-				err = fmt.Errorf("request version %d", m.Request.Version)
+			m := Open{ID: id, Request: decodeRequest(d)}
+			if m.Request.Version != Version {
+				d.Fail(fmt.Errorf("request version %d", m.Request.Version))
 			}
-			if err == nil {
-				m.Terminal, err = decodeTerminal(d)
-			}
-			return m, finish(d, err)
+			m.Terminal = decodeTerminal(d)
+			return m, d.Finish()
 		case TypeInput:
-			m := Input{ID: id}
-			m.Data, err = decodeData(d)
-			return m, finish(d, err)
+			return Input{ID: id, Data: decodeData(d)}, d.Finish()
 		case TypeInputEnd:
 			return InputEnd{ID: id}, d.Finish()
 		case TypeWritten:
 			m := Written{ID: id}
-			m.FD, m.Seq, err = decodeFDSeq(d)
-			return m, finish(d, err)
+			m.FD, m.Seq = decodeFDSeq(d)
+			return m, d.Finish()
 		case TypeWriteFailed:
 			m := WriteFailed{ID: id}
-			m.FD, m.Seq, err = decodeFDSeq(d)
-			if err == nil {
-				m.Errno, err = d.U32()
+			m.FD, m.Seq = decodeFDSeq(d)
+			if m.Errno = d.U32(); m.Errno == 0 {
+				d.Fail(errors.New("errno 0"))
 			}
-			if err == nil && m.Errno == 0 {
-				err = errors.New("errno 0")
-			}
-			return m, finish(d, err)
+			return m, d.Finish()
 		case TypeSignaled:
-			m := Signaled{ID: id}
-			m.Number, err = decodeSignal(d)
-			if err == nil {
-				m.Size, err = decodeSize(d)
-			}
-			return m, finish(d, err)
+			return Signaled{ID: id, Number: decodeSignal(d), Size: decodeSize(d)}, d.Finish()
 		case TypeGone:
 			return Gone{ID: id}, d.Finish()
 		}
@@ -602,51 +585,41 @@ func DecodeRelay(f sandboxwire.Frame) (RelayMessage, error) {
 // DecodeBroker decodes and validates a frame from the broker.
 func DecodeBroker(f sandboxwire.Frame) (BrokerMessage, error) {
 	m, err := decode(f, func(d *sandboxwire.Decoder) (Message, error) {
-		id, err := decodeID(d)
-		if err != nil {
-			return nil, err
-		}
+		id := decodeID(d)
 		switch f.Type {
 		case TypeAccept:
 			return Accept{ID: id}, d.Finish()
 		case TypeStarted:
 			return Started{ID: id}, d.Finish()
 		case TypeRead:
-			m := Read{ID: id}
-			m.Max, err = d.U32()
-			if err == nil && (m.Max == 0 || m.Max > sandboxwire.MaxChunk) {
-				err = fmt.Errorf("read of %d bytes", m.Max)
+			m := Read{ID: id, Max: d.U32()}
+			if m.Max == 0 || m.Max > sandboxwire.MaxChunk {
+				d.Fail(fmt.Errorf("read of %d bytes", m.Max))
 			}
-			return m, finish(d, err)
+			return m, d.Finish()
 		case TypeStopInput:
 			return StopInput{ID: id}, d.Finish()
 		case TypeOutput:
 			m := Output{ID: id}
-			m.FD, m.Seq, err = decodeFDSeq(d)
-			if err == nil {
-				m.Data, err = decodeData(d)
-			}
-			return m, finish(d, err)
+			m.FD, m.Seq = decodeFDSeq(d)
+			m.Data = decodeData(d)
+			return m, d.Finish()
 		case TypeClose:
 			m := Close{ID: id}
-			m.FD, m.Seq, err = decodeFDSeq(d)
-			return m, finish(d, err)
+			m.FD, m.Seq = decodeFDSeq(d)
+			return m, d.Finish()
 		case TypeExit:
-			m := Exit{ID: id}
-			if m.Result, err = decodeResult(d); err == nil {
-				m.Marks, err = decodeMarks(d)
+			m := Exit{ID: id, Result: decodeResult(d), Marks: decodeMarks(d)}
+			if len(m.Marks) > 0 && len(m.Result.Message) > 0 {
+				d.Fail(errors.New("exit with marks and a message"))
 			}
-			if err == nil && len(m.Marks) > 0 && len(m.Result.Message) > 0 {
-				err = errors.New("exit with marks and a message")
-			}
-			return m, finish(d, err)
+			return m, d.Finish()
 		case TypeNotice:
-			m := Notice{ID: id}
-			m.Message, err = d.Bytes()
-			if err == nil && (len(m.Message) == 0 || len(m.Message) > MaxMessageBytes) {
-				err = fmt.Errorf("notice of %d bytes", len(m.Message))
+			m := Notice{ID: id, Message: d.Bytes()}
+			if len(m.Message) == 0 || len(m.Message) > MaxMessageBytes {
+				d.Fail(fmt.Errorf("notice of %d bytes", len(m.Message)))
 			}
-			return m, finish(d, err)
+			return m, d.Finish()
 		case TypeEnd:
 			return End{ID: id}, d.Finish()
 		}
@@ -660,11 +633,16 @@ func DecodeBroker(f sandboxwire.Frame) (BrokerMessage, error) {
 
 var errType = errors.New("message type")
 
+// decode runs body, which returns errType for a type it does not decode. The
+// decoder's first error wins, so a bad invocation ID is reported before an
+// unknown type.
 func decode(f sandboxwire.Frame, body func(*sandboxwire.Decoder) (Message, error)) (Message, error) {
 	if f.RequestID != 0 {
 		return nil, fmt.Errorf("%w: request ID %d", ErrProtocol, f.RequestID)
 	}
-	m, err := body(sandboxwire.NewDecoder(f.Payload))
+	d := sandboxwire.NewDecoder(f.Payload)
+	m, err := body(d)
+	err = cmp.Or(d.Err(), err)
 	switch {
 	case err == errType:
 		return nil, fmt.Errorf("%w: message type %#x", ErrProtocol, f.Type)
@@ -674,177 +652,111 @@ func decode(f sandboxwire.Frame, body func(*sandboxwire.Decoder) (Message, error
 	return m, nil
 }
 
-// finish returns err, or the decoder's error for trailing bytes.
-func finish(d *sandboxwire.Decoder, err error) error {
-	if err != nil {
-		return err
+func decodeID(d *sandboxwire.Decoder) uint64 {
+	id := d.U64()
+	if id == 0 {
+		d.Fail(errors.New("invocation ID 0"))
 	}
-	return d.Finish()
+	return id
 }
 
-func decodeID(d *sandboxwire.Decoder) (uint64, error) {
-	id, err := d.U64()
-	if err == nil && id == 0 {
-		err = errors.New("invocation ID 0")
+// decodeRequest stops after a Version other than Version.
+func decodeRequest(d *sandboxwire.Decoder) Request {
+	v := d.U16()
+	if v != Version {
+		return Request{Version: v}
 	}
-	return id, err
-}
-
-func decodeRequest(d *sandboxwire.Decoder) (Request, error) {
-	var r Request
-	var err error
-	if r.Version, err = d.U16(); err != nil || r.Version != Version {
-		return Request{Version: r.Version}, err
-	}
-	if r.ExecPath, err = d.Bytes(); err != nil {
-		return r, err
-	}
-	if r.Argv, err = decodeList(d); err != nil {
-		return r, err
-	}
-	if r.Env, err = decodeList(d); err != nil {
-		return r, err
-	}
-	if r.Cwd, err = d.Bytes(); err != nil {
-		return r, err
-	}
-	if r.Umask, err = d.U32(); err != nil {
-		return r, err
-	}
+	r := Request{Version: v, ExecPath: d.Bytes(), Argv: decodeList(d), Env: decodeList(d), Cwd: d.Bytes(), Umask: d.U32()}
 	switch {
 	case slices.Contains(r.ExecPath, 0) || slices.Contains(r.Cwd, 0):
-		return r, errors.New("NUL in path")
+		d.Fail(errors.New("NUL in path"))
 	case len(r.Cwd) == 0 || r.Cwd[0] != '/':
-		return r, errors.New("cwd is not absolute")
+		d.Fail(errors.New("cwd is not absolute"))
 	case r.Umask > 0o777:
-		return r, fmt.Errorf("umask %#o", r.Umask)
+		d.Fail(fmt.Errorf("umask %#o", r.Umask))
 	}
 	for _, b := range slices.Concat(r.Argv, r.Env) {
 		if slices.Contains(b, 0) {
-			return r, errors.New("NUL in argv or environment")
+			d.Fail(errors.New("NUL in argv or environment"))
 		}
 	}
-	return r, nil
+	return r
 }
 
-func decodeList(d *sandboxwire.Decoder) ([][]byte, error) {
-	n, err := d.Count(MaxFrameBytes / 4)
-	if err != nil {
-		return nil, err
-	}
-	list := make([][]byte, n)
+func decodeList(d *sandboxwire.Decoder) [][]byte {
+	list := make([][]byte, d.Count(MaxFrameBytes/4))
 	for i := range list {
-		if list[i], err = d.Bytes(); err != nil {
-			return nil, err
-		}
+		list[i] = d.Bytes()
 	}
-	return list, nil
+	return list
 }
 
-func decodeSignal(d *sandboxwire.Decoder) (uint16, error) {
-	n, err := d.U16()
-	if err == nil && (n == 0 || n > 64) {
-		err = fmt.Errorf("signal %d", n)
+func decodeSignal(d *sandboxwire.Decoder) uint16 {
+	n := d.U16()
+	if n == 0 || n > 64 {
+		d.Fail(fmt.Errorf("signal %d", n))
 	}
-	return n, err
+	return n
 }
 
-func decodeResult(d *sandboxwire.Decoder) (Result, error) {
-	var r Result
-	var err error
-	if r.Signal, err = d.U16(); err != nil {
-		return r, err
-	}
-	if r.Code, err = d.U8(); err != nil {
-		return r, err
-	}
-	if r.Message, err = d.Bytes(); err != nil {
-		return r, err
-	}
+func decodeResult(d *sandboxwire.Decoder) Result {
+	r := Result{Signal: d.U16(), Code: d.U8(), Message: d.Bytes()}
 	switch {
 	case r.Signal > 64 || (r.Signal != 0 && r.Code != 0):
-		return r, fmt.Errorf("signal %d with code %d", r.Signal, r.Code)
+		d.Fail(fmt.Errorf("signal %d with code %d", r.Signal, r.Code))
 	case len(r.Message) > MaxMessageBytes:
-		return r, fmt.Errorf("message of %d bytes", len(r.Message))
+		d.Fail(fmt.Errorf("message of %d bytes", len(r.Message)))
 	}
-	return r, nil
+	return r
 }
 
-func decodeSize(d *sandboxwire.Decoder) (*WindowSize, error) {
-	ok, err := d.Present()
-	if err != nil || !ok {
-		return nil, err
+func decodeSize(d *sandboxwire.Decoder) *WindowSize {
+	if !d.Present() {
+		return nil
 	}
-	var s WindowSize
-	for _, v := range []*uint16{&s.Rows, &s.Cols, &s.XPixels, &s.YPixels} {
-		if *v, err = d.U16(); err != nil {
-			return nil, err
-		}
-	}
-	return &s, nil
+	return &WindowSize{Rows: d.U16(), Cols: d.U16(), XPixels: d.U16(), YPixels: d.U16()}
 }
 
-func decodeTerminal(d *sandboxwire.Decoder) (*Terminal, error) {
-	size, err := decodeSize(d)
-	if err != nil || size == nil {
-		return nil, err
+func decodeTerminal(d *sandboxwire.Decoder) *Terminal {
+	size := decodeSize(d)
+	if size == nil {
+		return nil
 	}
-	t := &Terminal{Size: *size}
-	for _, v := range []*uint32{&t.Iflag, &t.Oflag, &t.Cflag, &t.Lflag} {
-		if *v, err = d.U32(); err != nil {
-			return nil, err
-		}
-	}
-	if t.Cc, err = d.Bytes(); err != nil {
-		return nil, err
-	}
+	t := &Terminal{Size: *size, Iflag: d.U32(), Oflag: d.U32(), Cflag: d.U32(), Lflag: d.U32(), Cc: d.Bytes()}
 	if len(t.Cc) > MaxControlChars {
-		return nil, fmt.Errorf("%d control characters", len(t.Cc))
+		d.Fail(fmt.Errorf("%d control characters", len(t.Cc)))
 	}
-	return t, nil
+	return t
 }
 
-func decodeData(d *sandboxwire.Decoder) ([]byte, error) {
-	b, err := d.Bytes()
-	if err == nil && (len(b) == 0 || len(b) > sandboxwire.MaxChunk) {
-		err = fmt.Errorf("data of %d bytes", len(b))
+func decodeData(d *sandboxwire.Decoder) []byte {
+	b := d.Bytes()
+	if len(b) == 0 || len(b) > sandboxwire.MaxChunk {
+		d.Fail(fmt.Errorf("data of %d bytes", len(b)))
 	}
-	return b, err
+	return b
 }
 
-func decodeFD(d *sandboxwire.Decoder) (uint8, error) {
-	fd, err := d.U8()
-	if err == nil && fd != 1 && fd != 2 {
-		err = fmt.Errorf("fd %d", fd)
+func decodeFDSeq(d *sandboxwire.Decoder) (uint8, uint64) {
+	fd := d.U8()
+	if fd != 1 && fd != 2 {
+		d.Fail(fmt.Errorf("fd %d", fd))
 	}
-	return fd, err
+	seq := d.U64()
+	if seq == 0 {
+		d.Fail(errors.New("sequence 0"))
+	}
+	return fd, seq
 }
 
-func decodeFDSeq(d *sandboxwire.Decoder) (uint8, uint64, error) {
-	fd, err := decodeFD(d)
-	if err != nil {
-		return 0, 0, err
-	}
-	seq, err := d.U64()
-	if err == nil && seq == 0 {
-		err = errors.New("sequence 0")
-	}
-	return fd, seq, err
-}
-
-func decodeMarks(d *sandboxwire.Decoder) ([]Mark, error) {
-	n, err := d.Count(2)
-	if err != nil || n == 0 {
-		return nil, err
-	}
-	marks := make([]Mark, n)
-	for i := range marks {
-		if marks[i].FD, marks[i].Seq, err = decodeFDSeq(d); err != nil {
-			return nil, err
+func decodeMarks(d *sandboxwire.Decoder) []Mark {
+	var marks []Mark
+	for range d.Count(2) {
+		var m Mark
+		if m.FD, m.Seq = decodeFDSeq(d); len(marks) > 0 && m.FD == marks[0].FD {
+			d.Fail(fmt.Errorf("two marks on fd %d", m.FD))
 		}
-		if i > 0 && marks[i].FD == marks[0].FD {
-			return nil, fmt.Errorf("two marks on fd %d", marks[i].FD)
-		}
+		marks = append(marks, m)
 	}
-	return marks, nil
+	return marks
 }
