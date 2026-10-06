@@ -192,6 +192,13 @@ func TestPrepareCreation(t *testing.T) {
 	}, fingerprints).RequestHash != session.RequestHash {
 		t.Fatal("metadata order or engine whitespace changed the identity")
 	}
+	inputs := []Input{messageInput("first"), messageInput("second")}
+	initial := prepare(t, func(input *CreateSession) { input.InitialInputs = inputs }, fingerprints).RequestHash
+	for _, changed := range [][]Input{nil, {messageInput("changed")}, {inputs[1], inputs[0]}} {
+		if prepare(t, func(input *CreateSession) { input.InitialInputs = changed }, fingerprints).RequestHash == initial {
+			t.Fatal("changed initial input kept the identity", changed)
+		}
+	}
 	if prepare(t, withProvider("self_hosted", "one", "session"), fingerprints).RequestHash == prepare(t, withProvider("self_hosted", "two", "session"), fingerprints).RequestHash {
 		t.Fatal("caller keys share an identity")
 	}

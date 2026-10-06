@@ -61,7 +61,7 @@ func (s *Store) CreateSession(ctx context.Context, tenant string, input sessions
 // createSession runs Session creation as cmd/server does, on s's database,
 // credential key and placement rules.
 func createSession(ctx context.Context, s *Store, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
-	service, err := sessions.NewService(sessionAdapter(s), s.placement)
+	service, err := newSessionService(s)
 	if err != nil {
 		return sessions.Creation{}, err
 	}

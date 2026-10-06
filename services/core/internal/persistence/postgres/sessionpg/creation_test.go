@@ -128,17 +128,18 @@ func awaitWaiters(t *testing.T, pool *pgxpool.Pool, holder int32, count int) {
 	}
 }
 
-// Concurrent creations under one key from two pools create one Session whose
-// cursor precedes its initial input. Changed input conflicts, and a retry
-// after the Turn completed and a later Turn ran returns the current Session
-// without submitting the input again.
+// Concurrent creations of one intent under one key from two pools, each
+// resolved to its own configuration, create one Session with the winner's
+// configuration and a cursor before its initial input. A retry after the Turn
+// completed and a later Turn ran returns the current Session without
+// submitting the input again.
 func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 	pool := pgtest.Open(t)
 	store, service := creationService(t, pool, nil)
 	_, other := creationService(t, pgtest.Open(t), nil)
 	ctx := t.Context()
 	tenant := uuid.NewString()
-	input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "initial", InitialInputs: []sessions.Input{messageInput("first"), messageInput("second")}}
+	input := sessions.CreateSession{Creator: creator, Engine: "codex", IdempotencyKey: "initial", CreationRequest: json.RawMessage(`{"agent_id":"source"}`), InitialInputs: []sessions.Input{messageInput("first"), messageInput("second")}}
 	const count = 8
 	var wg sync.WaitGroup
 	results := make(chan sessions.Creation, count)
@@ -148,7 +149,9 @@ func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 			if i%2 == 0 {
 				creating = other
 			}
-			result, err := creating.CreateSession(ctx, tenant, input)
+			resolved := input
+			resolved.Configuration = json.RawMessage(fmt.Sprintf(`{"resolved":%d}`, i))
+			result, err := creating.CreateSession(ctx, tenant, resolved)
 			if err != nil {
 				t.Error(err)
 				return
@@ -159,12 +162,12 @@ func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 	wg.Wait()
 	close(results)
 	var created []sessions.Creation
-	id := ""
+	id, configuration := "", json.RawMessage(nil)
 	for result := range results {
 		if id == "" {
-			id = result.Session.ID
+			id, configuration = result.Session.ID, result.Session.Configuration
 		}
-		if result.Session.ID != id || result.Session.LastTurn == nil {
+		if result.Session.ID != id || !bytes.Equal(result.Session.Configuration, configuration) || result.Session.LastTurn == nil {
 			t.Fatal("creation retry diverged", result)
 		}
 		if result.Created {
@@ -193,13 +196,6 @@ func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 	if _, _, err := store.SessionStreamSnapshot(ctx, uuid.NewString(), id); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign stream snapshot", err)
 	}
-	for _, changed := range [][]sessions.Input{nil, {messageInput("changed")}, {input.InitialInputs[1], input.InitialInputs[0]}} {
-		request := input
-		request.InitialInputs = changed
-		if _, err := service.CreateSession(ctx, tenant, request); !errors.Is(err, sessions.ErrIdempotencyConflict) {
-			t.Fatal("changed initial input accepted", err)
-		}
-	}
 	tenantID, sessionID := pgID(uuid.MustParse(tenant)), pgID(uuid.MustParse(id))
 	first := created[0].Session.LastTurn.ID
 	move(t, pool, tenantID, sessionID, first, sessions.TurnQueued, sessions.TurnInProgress)
@@ -215,7 +211,7 @@ func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	retry, err := service.CreateSession(ctx, tenant, input)
-	if err != nil || retry.Created || retry.Session.ID != id || retry.Session.LastTurn.ID != later.TurnID || retry.Cursor != all[len(all)-1].Sequence {
+	if err != nil || retry.Created || retry.Session.ID != id || !bytes.Equal(retry.Session.Configuration, configuration) || retry.Session.LastTurn.ID != later.TurnID || retry.Cursor != all[len(all)-1].Sequence {
 		t.Fatal("retry after later Turn", retry, err)
 	}
 	if after, err := store.ListSessionEvents(ctx, tenant, id, retry.Cursor); err != nil || len(after) != 0 {
@@ -231,9 +227,11 @@ func TestCreationRetriesNeverReplayInitialInput(t *testing.T) {
 }
 
 // A stored intent hash identifies the creation whatever the request resolved
-// to; a Session without one falls back to its request hash and is never
-// given one. Another creator, a Session without a complete creator and a
-// deleted Session conflict at both lookup and upsert.
+// to, and a changed intent conflicts at both lookup and upsert; a Session
+// without one falls back to its request hash and is never given one. Another
+// creator, a Session without a complete creator and a deleted Session conflict
+// at both lookup and upsert, and of two creators racing for one key exactly
+// one creates.
 func TestCreationIdentity(t *testing.T) {
 	pool := pgtest.Open(t)
 	_, service := creationService(t, pool, nil)
@@ -256,6 +254,11 @@ func TestCreationIdentity(t *testing.T) {
 	}
 	if _, err := service.FindSessionCreation(ctx, tenant, "intent", json.RawMessage(`{"agent_id":"source","agent":{"tools":[{"parameters":{"const":9007199254740992}}]}}`), creator); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed intent found", err)
+	}
+	changed := input
+	changed.CreationRequest = json.RawMessage(`{"agent_id":"changed"}`)
+	if _, err := service.CreateSession(ctx, tenant, changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+		t.Fatal("changed intent upserted", err)
 	}
 	if _, err := service.FindSessionCreation(ctx, uuid.NewString(), "intent", request, creator); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign lookup", err)
@@ -298,6 +301,30 @@ func TestCreationIdentity(t *testing.T) {
 	conflicts("unknown creator", creator)
 	exec(t, pool, "UPDATE sessions SET creator_kind=$2, creator_id=$3, deleted_at=clock_timestamp() WHERE id=$1", first.Session.ID, creator.Kind, creator.ID)
 	conflicts("deleted Session", creator)
+
+	outcomes := make(chan error, 2)
+	for _, subject := range []identity.Subject{creator, another} {
+		go func() {
+			raced := input
+			raced.IdempotencyKey, raced.Creator = "raced", subject
+			_, err := service.CreateSession(ctx, tenant, raced)
+			outcomes <- err
+		}()
+	}
+	won, conflicted := 0, 0
+	for range 2 {
+		switch err := <-outcomes; {
+		case err == nil:
+			won++
+		case errors.Is(err, sessions.ErrIdempotencyConflict):
+			conflicted++
+		default:
+			t.Fatal("racing creator", err)
+		}
+	}
+	if won != 1 || conflicted != 1 {
+		t.Fatal("racing creators", won, conflicted)
+	}
 }
 
 // The provider-key fingerprint in retry identities depends on the credential

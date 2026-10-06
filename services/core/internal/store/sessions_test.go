@@ -26,12 +26,17 @@ func testStore(t *testing.T) (*Store, *pgxpool.Pool) {
 // key. It serves the Session reads and pooled Session storage.
 func sessionAdapter(s *Store) *sessionpg.Store { return sessionpg.New(s.pooled, s.credentialCipher) }
 
-// sessionService is the Session service on s's Session adapter. It runs the
-// device, heartbeat, enrollment, executor credential and installation use
-// cases.
+// newSessionService is the Session service on s's Session adapter with s's
+// placement rules, as cmd/server builds it.
+func newSessionService(s *Store) (*sessions.Service, error) {
+	return sessions.NewService(sessionAdapter(s), s.placement)
+}
+
+// sessionService is newSessionService(s) for a test. It runs the device,
+// heartbeat, enrollment, executor credential and installation use cases.
 func sessionService(t testing.TB, s *Store) *sessions.Service {
 	t.Helper()
-	service, err := sessions.NewService(sessionAdapter(s), s.placement)
+	service, err := newSessionService(s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +46,7 @@ func sessionService(t testing.TB, s *Store) *sessions.Service {
 // stageTurnArtifacts stages export as the Turn's Artifacts through the Session
 // service on s's database, as the execution Worker does.
 func stageTurnArtifacts(ctx context.Context, s *Store, tenant, session, turn, environment string, export io.Reader) error {
-	service, err := sessions.NewService(sessionAdapter(s), s.placement)
+	service, err := newSessionService(s)
 	if err != nil {
 		return err
 	}

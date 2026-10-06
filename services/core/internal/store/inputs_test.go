@@ -46,7 +46,7 @@ func environmentInputSession(t *testing.T, s *Store) (string, sessions.Session) 
 // submitInputs admits inputs through the Session service on s's database, as
 // the public events route does.
 func submitInputs(ctx context.Context, s *Store, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
-	service, err := sessions.NewService(sessionAdapter(s), s.placement)
+	service, err := newSessionService(s)
 	if err != nil {
 		return nil, err
 	}
