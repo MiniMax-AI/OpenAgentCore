@@ -5,9 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 
+	"github.com/jackc/pgx/v5"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -24,12 +28,18 @@ func (s *Store) SessionModelExecution(ctx context.Context, tenant, session strin
 		return nil, err
 	}
 	ciphertext, err := s.units.Queries().GetSessionModelExecution(ctx, sqlc.GetSessionModelExecutionParams{TenantID: tenantID, SessionID: sessionID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, sessions.ErrNotFound
+	}
 	if err != nil {
-		return nil, errors.New("session model execution configuration is unavailable")
+		return nil, err
+	}
+	if s.cipher == nil {
+		return nil, credentialcrypto.ErrUnavailable
 	}
 	raw, err := s.cipher.OpenModelExecution(ciphertext, tenant, session)
 	if err != nil {
-		return nil, errors.New("session model execution decryption is unavailable")
+		return nil, fmt.Errorf("open session model execution: %w", err)
 	}
 	var provider v1.ModelProviderInput
 	decoder := json.NewDecoder(bytes.NewReader(raw))

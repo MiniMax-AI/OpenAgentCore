@@ -44,9 +44,7 @@ type TurnTransitionTx interface {
 type TurnTx interface {
 	TurnTransitionTx
 	TurnEventTx
-	// LoadJournalTurn reads the tenant's Turn in the Session and reports
-	// whether it exists.
-	LoadJournalTurn(ctx context.Context, turn string) (JournalTurn, bool, error)
+	TurnJournalTx
 	// HasUnappliedInputs reports whether the Turn has message inputs after
 	// sequence appliedThrough.
 	HasUnappliedInputs(ctx context.Context, turn string, appliedThrough int64) (bool, error)
@@ -59,12 +57,12 @@ type TurnTx interface {
 	BeginArtifactCapture(ctx context.Context, turn string) error
 }
 
-// TurnExecution is the lease-bound storage of root Turn transitions.
+// TurnExecution is the lease-bound storage of the Turn execution operations.
 type TurnExecution interface {
 	// WithTurns runs apply in one transaction on the execution lease, under
 	// the tenant's Session lock, and commits only when apply succeeds. A
 	// malformed ID is ErrInvalidInput and a missing Session ErrNotFound; a
-	// publicly deleted Session still settles its Turns.
+	// publicly deleted Session still journals and settles its Turns.
 	WithTurns(ctx context.Context, tenant, session string, apply func(context.Context, TurnTx) error) error
 }
 
@@ -286,5 +284,23 @@ func (o *ExecutionOperations) BeginTurnArtifactCapture(ctx context.Context, tena
 			return err
 		}
 		return tx.BeginArtifactCapture(ctx, turn)
+	})
+}
+
+// AppendTurnEvents records an ordered batch of a Turn's execution observations
+// in its journal from position first and projects them, as the
+// AppendTurnEvents procedure decides. A malformed tenant, Session or Turn ID is
+// ErrInvalidInput, before the batch is validated and before the Session is
+// looked up. The journal is Core-internal; it is not the public event stream.
+func (o *ExecutionOperations) AppendTurnEvents(ctx context.Context, tenant, session, turn string, first int32, events []ExecutionEvent) error {
+	if !validID(tenant) || !validID(session) {
+		return ErrInvalidInput
+	}
+	batch, err := NewJournalBatch(turn, first, events)
+	if err != nil {
+		return err
+	}
+	return o.storage.WithTurns(ctx, tenant, session, func(ctx context.Context, tx TurnTx) error {
+		return AppendTurnEvents(ctx, tx, batch)
 	})
 }

@@ -1,28 +1,25 @@
 package execution
 
 import (
-	"context"
 	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// noModelExecution reads no frozen model provider for any Session.
-type noModelExecution struct{ sessions.Reader }
-
-func (noModelExecution) SessionModelExecution(context.Context, string, string) (*v1.ModelProviderInput, error) {
-	return nil, errors.New("session model execution configuration is unavailable")
-}
-
 func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
-	d := Dispatcher{SessionsReader: noModelExecution{}}
-	if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); err == nil {
-		t.Fatal("missing Session credentials fell back")
+	reader, _ := testSessions(t, pgtest.Open(t), nil)
+	d := Dispatcher{SessionsReader: reader}
+	session := sessions.Session{TenantID: uuid.NewString(), ID: uuid.NewString(), Engine: "codex"}
+	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatal("missing Session credentials fell back", err)
 	}
 	// Hosted and self-hosted Runtimes have no model configuration of their own.
 	for _, environment := range []string{"openai_hosted", "self_hosted"} {

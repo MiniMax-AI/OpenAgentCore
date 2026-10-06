@@ -101,8 +101,6 @@ var (
 	_ InputStartTx             = (*fakeTx)(nil)
 	_ ComputeAdmissionTx       = (*fakeTx)(nil)
 	_ EnvironmentDeviceTx      = (*fakeTx)(nil)
-	_ TurnJournalTx            = (*fakeTx)(nil)
-	_ TurnEventTx              = (*fakeTx)(nil)
 	_ InputProjectionTx        = (*fakeTx)(nil)
 	_ InitializationTx         = (*fakeTx)(nil)
 	_ ConnectionTx             = (*fakeTx)(nil)

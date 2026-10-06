@@ -46,14 +46,14 @@ func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
 	if err != nil || provider.APIKey != "private-model-canary" {
 		t.Fatal("restart lost model credential", err)
 	}
-	if _, err := sessionAdapter(restarted).SessionModelExecution(ctx, uuid.NewString(), session.ID); err == nil {
-		t.Fatal("foreign tenant read credential")
+	if _, err := sessionAdapter(restarted).SessionModelExecution(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+		t.Fatal("foreign tenant read credential", err)
 	}
 	if _, err := cipher.OpenModelExecution(ciphertext, tenant, uuid.NewString()); err == nil {
 		t.Fatal("ciphertext not Session-bound")
 	}
-	if _, err := sessionAdapter(New(pool)).SessionModelExecution(ctx, tenant, session.ID); err == nil {
-		t.Fatal("missing cipher succeeded")
+	if _, err := sessionAdapter(New(pool)).SessionModelExecution(ctx, tenant, session.ID); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+		t.Fatal("missing cipher succeeded", err)
 	}
 	input.IdempotencyKey = uuid.NewString()
 	if _, err := withPlacement(t, New(pool)).CreateSession(ctx, tenant, input); !errors.Is(err, credentialcrypto.ErrUnavailable) {

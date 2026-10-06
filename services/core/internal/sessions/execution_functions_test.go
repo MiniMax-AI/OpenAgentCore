@@ -17,7 +17,6 @@ import (
 type fakeExecutionStorage struct {
 	t                *testing.T
 	withFunctionTurn func(ctx context.Context, tenant, session, turn string, apply func(context.Context, FunctionTx, Turn) error) error
-	withTurnJournal  func(ctx context.Context, tenant, session string, apply func(context.Context, TurnJournalTx) error) error
 	withTurns        func(ctx context.Context, tenant, session string, apply func(context.Context, TurnTx) error) error
 
 	tx     *fakeTx
@@ -39,14 +38,6 @@ func (f *fakeExecutionStorage) WithFunctionTurn(ctx context.Context, tenant, ses
 		f.t.Fatal("unexpected call to WithFunctionTurn")
 	}
 	return f.withFunctionTurn(ctx, tenant, session, turn, apply)
-}
-
-func (f *fakeExecutionStorage) WithTurnJournal(ctx context.Context, tenant, session string, apply func(context.Context, TurnJournalTx) error) error {
-	f.t.Helper()
-	if f.withTurnJournal == nil {
-		f.t.Fatal("unexpected call to WithTurnJournal")
-	}
-	return f.withTurnJournal(ctx, tenant, session, apply)
 }
 
 func (f *fakeExecutionStorage) WithTurns(ctx context.Context, tenant, session string, apply func(context.Context, TurnTx) error) error {
@@ -141,9 +132,10 @@ func TestRecordFunctionCall(t *testing.T) {
 	t.Run("first call moves the Turn to waiting", func(t *testing.T) {
 		running, waiting := turnWith(TurnInProgress), turnWith(TurnWaiting)
 		var changes []SessionChange
-		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadUsage: returns(usage), appendChanges: collect(&changes)},
+		moved := func(TurnStatusChange) (Turn, error) { return waiting, nil }
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadUsage: returns(usage), appendChanges: collect(&changes), applyTurnStatus: moved},
 			matchFunctionCall: returns(FunctionCallMatch{}), createFunctionCall: done,
-			loadPendingFunctionCalls: returns([]FunctionCall{testCall}), applyTurnStatus: returns(waiting)}
+			loadPendingFunctionCalls: returns([]FunctionCall{testCall})}
 		if err := functionOperations(t, f, running).RecordFunctionCall(t.Context(), testTenant, testSession, testTurn, testCall); err != nil {
 			t.Fatal(err)
 		}
@@ -207,9 +199,10 @@ func TestConfirmFunctionResult(t *testing.T) {
 	t.Run("last receipt resumes the Turn", func(t *testing.T) {
 		waiting, running := turnWith(TurnWaiting), turnWith(TurnInProgress)
 		var changes []SessionChange
-		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadUsage: returns(usage), appendChanges: collect(&changes)},
+		moved := func(TurnStatusChange) (Turn, error) { return running, nil }
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadUsage: returns(usage), appendChanges: collect(&changes), applyTurnStatus: moved},
 			loadFunctionCall: func() (FunctionCall, bool, error) { return submitted, true, nil }, applyFunctionResult: done,
-			loadPendingFunctionCalls: returns([]FunctionCall{}), applyTurnStatus: returns(running)}
+			loadPendingFunctionCalls: returns([]FunctionCall{})}
 		if err := functionOperations(t, f, waiting).ConfirmFunctionResult(t.Context(), testTenant, testSession, testTurn, "call"); err != nil {
 			t.Fatal(err)
 		}

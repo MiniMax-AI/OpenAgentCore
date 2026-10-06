@@ -246,7 +246,7 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 	results := make(chan error, len(tasks)*2)
 	for _, task := range tasks {
 		group.Go(func() {
-			_, err := transitionTurn(t.Context(), writer, task.tenant, task.session, task.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+			_, err := journal.TransitionTurn(t.Context(), task.tenant, task.session, task.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			if err == nil {
 				err = journal.AppendTurnEvents(t.Context(), task.tenant, task.session, task.turn, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"accepted"}`)}})
 			}
