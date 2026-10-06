@@ -83,7 +83,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	}
 	providerOf := func(sessionID string) string {
 		t.Helper()
-		provider, err := st.SessionModelExecution(t.Context(), tenant, sessionID)
+		provider, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, sessionID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -335,7 +335,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	}
 	key := uuid.NewString()
 	original := create(key)
-	if provider, err := st.SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
+	if provider, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
 		t.Fatal("none Session did not freeze the deployment default", err)
 	}
 	setDefault("rotated-default-key")
@@ -348,7 +348,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	if create(key) != original {
 		t.Fatal("retry after removal created another Session")
 	}
-	if provider, err := st.SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
+	if provider, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, original); err != nil || provider.APIKey != "first-default-key" {
 		t.Fatal("retry changed the frozen provider", err)
 	}
 	var revision uuid.UUID
@@ -401,7 +401,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 	if err = db.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision != original.Revision {
 		t.Fatal("tuple revision changed", err)
 	}
-	frozen, err := st.SessionModelExecution(t.Context(), tenant, session.ID)
+	frozen, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, session.ID)
 	if err != nil || frozen == nil || *frozen != provider {
 		t.Fatal("tuple bundle changed", err)
 	}

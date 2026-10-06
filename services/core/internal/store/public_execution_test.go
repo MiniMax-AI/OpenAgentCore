@@ -95,7 +95,7 @@ func waitTurn(t *testing.T, h *dispatchHarness, id, status string) {
 	t.Helper()
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
-		turn, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, id)
+		turn, err := store.SessionAdapter(h.s).GetTurn(context.Background(), h.tenant, h.session.ID, id)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +112,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	h.session = publicSession(t, h, "interrupted")
 	first := h.message("first", "Already sent")
 	ctx := context.Background()
-	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := store.TransitionTurn(ctx, h.s, h.tenant, h.session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	// A native measurement committed before process loss must survive startup
@@ -123,7 +123,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	}
 	checkMeasurement := func(ended bool) {
 		t.Helper()
-		turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, first.TurnID)
+		turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, first.TurnID)
 		if err != nil {
 			t.Fatal(err)
 		}

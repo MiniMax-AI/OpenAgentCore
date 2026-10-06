@@ -21,4 +21,5 @@ type ExecutionStorage interface {
 	EnvironmentExecution
 	FunctionExecution
 	JournalExecution
+	TurnExecution
 }

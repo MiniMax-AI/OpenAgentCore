@@ -56,7 +56,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				admitted <- admission{value, err}
 			}
 			complete := func() {
-				_, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", original.Sequence)
+				_, err := completeExecution(ctx, t, writer, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", original.Sequence)
 				completed <- err
 			}
 			first, second := input, complete
@@ -87,7 +87,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 				if err != nil || retry.ID != got.value.ID || !retry.Deadline.Equal(got.value.Deadline) || len(retry.Receipts) != 2 || !retry.Receipts[0].Replayed || retry.Receipts[0].TurnID != prepared.Receipts[0].TurnID {
 					t.Fatal("active retry replaced its original reservation", retry, err)
 				}
-				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, prepared.Receipts[0].TurnID, sessions.TurnCompleted, nil, "", prepared.Receipts[1].Sequence); err != nil {
+				if _, err := completeExecution(ctx, t, writer, tenant, session.ID, prepared.Receipts[0].TurnID, sessions.TurnCompleted, nil, "", prepared.Receipts[1].Sequence); err != nil {
 					t.Fatal(err)
 				}
 			} else {
@@ -95,7 +95,7 @@ func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {
 					t.Fatal("admitted input escaped the original Turn or application fence", completionErr, got.value)
 				}
 				environmentInputHistory(t, pool, session.ID, 1, 3)
-				if _, err := writer.CompleteExecution(ctx, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", got.value.Receipts[1].Sequence); err != nil {
+				if _, err := completeExecution(ctx, t, writer, tenant, session.ID, original.TurnID, sessions.TurnCompleted, nil, "", got.value.Receipts[1].Sequence); err != nil {
 					t.Fatal("completion after controlled application failed", err)
 				}
 			}

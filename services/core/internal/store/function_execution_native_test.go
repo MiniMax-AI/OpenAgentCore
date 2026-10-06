@@ -66,7 +66,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 		if !found {
 			t.Fatal("required action identity differs from recovered function item")
 		}
-		bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
+		bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 		if err != nil || bound.NativeSessionID == "" || (nativeID != "" && bound.NativeSessionID != nativeID) {
 			t.Fatal(bound, err)
 		}

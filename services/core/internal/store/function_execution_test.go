@@ -155,7 +155,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			}
 			h.finished(result, status)
 			if cancel {
-				bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
+				bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 				if err != nil || bound.NativeSessionID != "native-cancelled-functions" {
 					t.Fatal(bound, err)
 				}
@@ -203,7 +203,7 @@ func TestExecutionFunctionsRequireAdvertisedCapability(t *testing.T) {
 	if result.err == nil || !strings.Contains(result.err.Error(), "function_tools") {
 		t.Fatal(result)
 	}
-	turn, err := h.s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal(turn, err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // Consume the actual controls so capacity rejection is exercised before any
@@ -102,7 +103,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	}
 	assertQueued := func() {
 		t.Helper()
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, blocked, turns[blocked])
+		turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, blocked, turns[blocked])
 		if err != nil || turn.Status != sessions.TurnQueued {
 			t.Fatal("capacity rejection failed queued work", turn, err)
 		}
@@ -135,7 +136,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	// still owns a slot and reports the same capacity rejection.
 	h.write(turns[first], proto.TypeDone, proto.DonePayload{Content: "done"})
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "first completed Turn", func() bool {
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, first, turns[first])
+		turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, first, turns[first])
 		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	observeCapacity()
@@ -150,7 +151,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "all five Turns completed", func() bool {
 		for session, id := range turns {
-			turn, err := h.s.GetTurn(t.Context(), h.tenant, session, id)
+			turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, session, id)
 			if err != nil || turn.Status != sessions.TurnCompleted {
 				return false
 			}

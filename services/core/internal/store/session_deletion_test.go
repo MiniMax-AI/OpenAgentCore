@@ -67,13 +67,13 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				t.Fatal(err)
 			}
 			if status != sessions.TurnQueued {
-				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+				_, err = transitionTurn(ctx, s, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
 			if status == sessions.TurnCompleted || status == sessions.TurnFailed {
-				if _, err = s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence); err != nil {
+				if _, err = completeExecution(ctx, t, s, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -89,7 +89,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 				if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("active Session deleted", err)
 				}
-				turn, err := s.GetTurn(ctx, tenant, session.ID, receipt.TurnID)
+				turn, err := sessionAdapter(s).GetTurn(ctx, tenant, session.ID, receipt.TurnID)
 				if err != nil || turn.Status != status || !turn.CancelRequestedAt.IsZero() {
 					t.Fatal("rejected deletion changed the Turn", turn, err)
 				}
@@ -108,7 +108,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 					if err := s.DeleteSession(ctx, tenant, session.ID); !errors.Is(err, sessions.ErrNotIdle) {
 						t.Fatal("cancelling Session deleted", err)
 					}
-					if _, err := s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnCancelled, nil, "", receipt.Sequence); err != nil {
+					if _, err := completeExecution(ctx, t, s, tenant, session.ID, receipt.TurnID, sessions.TurnCancelled, nil, "", receipt.Sequence); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -148,7 +148,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if _, err := sessionAdapter(fresh).ListItems(ctx, tenant, session.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
-			turn, err := fresh.GetTurn(ctx, tenant, session.ID, receipt.TurnID)
+			turn, err := sessionAdapter(fresh).GetTurn(ctx, tenant, session.ID, receipt.TurnID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -159,7 +159,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if turn.Status != want {
 				t.Fatal(turn)
 			}
-			if _, err := fresh.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
+			if _, err := transitionTurn(ctx, fresh, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal(err)
 			}
 			inputs, err := fresh.ListTurnInputs(ctx, tenant, session.ID, receipt.TurnID, 0, 20)

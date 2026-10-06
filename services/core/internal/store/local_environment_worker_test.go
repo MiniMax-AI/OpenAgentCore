@@ -141,14 +141,14 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "complete", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "local-native-history"}})
 	completeLocalArtifactExport(t, h, worker, environment)
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "local completion", func() bool {
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
+		turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
 		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	settled, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, reservation.ID)
 	if err != nil || settled.State != sessions.EnvironmentInputAdmitted || len(settled.Receipts) != 1 {
 		t.Fatal("local reservation did not settle", err)
 	}
-	bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 	if err != nil || bound.Device.EnvironmentID != environment.ID || bound.NativeSessionID != "local-native-history" {
 		t.Fatal("local native identity was not retained", err)
 	}

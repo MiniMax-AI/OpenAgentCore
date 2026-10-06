@@ -24,7 +24,7 @@ type fakeFunctionTx struct {
 	createFunctionCall       func() error
 	loadFunctionCall         func() (FunctionCall, bool, error)
 	applyFunctionResult      func() error
-	applyFunctionTurnStatus  func() (Turn, error)
+	applyTurnStatus          func() (Turn, error)
 }
 
 var (
@@ -77,9 +77,9 @@ func (f *fakeFunctionTx) ApplyFunctionResult(_ context.Context, turn, call strin
 	return f.applyFunctionResult()
 }
 
-func (f *fakeFunctionTx) ApplyFunctionTurnStatus(_ context.Context, turn, expected, status string) (Turn, error) {
-	f.record("ApplyFunctionTurnStatus", f.applyFunctionTurnStatus != nil, turn, expected, status)
-	return f.applyFunctionTurnStatus()
+func (f *fakeFunctionTx) ApplyTurnStatus(_ context.Context, turn string, change TurnStatusChange) (Turn, error) {
+	f.record("ApplyTurnStatus", f.applyTurnStatus != nil, turn, change.Expected, change.Status, string(change.Outcome))
+	return f.applyTurnStatus()
 }
 
 func cancelling(status string) Turn {

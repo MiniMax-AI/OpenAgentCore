@@ -12,7 +12,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func functionTools(raw []json.RawMessage) ([]proto.FunctionTool, error) {
@@ -50,7 +49,7 @@ type functionReply struct {
 }
 
 type functionExchange struct {
-	store                 *store.Store
+	turns                 sessions.TurnReader
 	sessions              *sessions.ExecutionOperations
 	tenant, session, turn string
 	kind                  string
@@ -125,7 +124,7 @@ func (f *functionExchange) confirm(ctx context.Context, reply functionReply) err
 
 func (f *functionExchange) unlessCancelling(ctx context.Context, err error) error {
 	if errors.Is(err, sessions.ErrTurnConflict) {
-		turn, lookupErr := f.store.GetTurn(ctx, f.tenant, f.session, f.turn)
+		turn, lookupErr := f.turns.GetTurn(ctx, f.tenant, f.session, f.turn)
 		if lookupErr == nil && !turn.CancelRequestedAt.IsZero() {
 			return nil
 		}
@@ -144,7 +143,7 @@ func (f *functionExchange) complete(ctx context.Context) error {
 	if len(calls) != 0 {
 		return errors.New("function calls remain unapplied")
 	}
-	turn, err := f.store.GetTurn(ctx, f.tenant, f.session, f.turn)
+	turn, err := f.turns.GetTurn(ctx, f.tenant, f.session, f.turn)
 	if err != nil {
 		return err
 	}

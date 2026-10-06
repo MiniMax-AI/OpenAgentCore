@@ -53,7 +53,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if again, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(key.Token)); err != nil || again != bound {
 		t.Fatalf("retry changed binding: %+v %v", again, err)
 	}
-	if devices, err := s.ListExecutionDevices(ctx, p.TenantID); err != nil || len(devices) != 0 {
+	if devices, err := sessionAdapter(s).ListExecutionDevices(ctx, p.TenantID); err != nil || len(devices) != 0 {
 		t.Fatalf("enrolled Runtime entered general selection: %v", err)
 	}
 	auth := runtimegateway.NewAuthenticator(sessionAdapter(s))

@@ -108,7 +108,7 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 	if first[0].TurnID != "" || first[1].TurnID == "" || first[1].TurnID != first[2].TurnID || first[1].TurnID == first[3].TurnID {
 		t.Fatalf("cancellation targets: %+v", first)
 	}
-	cancelled, err := s.GetTurn(ctx, tenant, session.ID, first[1].TurnID)
+	cancelled, err := sessionAdapter(s).GetTurn(ctx, tenant, session.ID, first[1].TurnID)
 	if err != nil || cancelled.Status != sessions.TurnCancelled {
 		t.Fatalf("cancelled turn=%+v err=%v", cancelled, err)
 	}
@@ -130,7 +130,7 @@ func TestBatchRetriesCompareTheWholeRequestAndRetainTargets(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(retry, first) {
 		t.Fatalf("restart changed receipts: %+v, %v", retry, err)
 	}
-	current, err := restarted.GetTurn(ctx, tenant, session.ID, next.TurnID)
+	current, err := sessionAdapter(restarted).GetTurn(ctx, tenant, session.ID, next.TurnID)
 	if err != nil || current.Status != sessions.TurnQueued || !current.CancelRequestedAt.IsZero() {
 		t.Fatalf("retry cancelled later work: %+v, %v", current, err)
 	}
@@ -158,7 +158,7 @@ func TestFailedBatchRollsBackEarlierCancellationAndInputs(t *testing.T) {
 	if got, err := s.SubmitInputs(ctx, tenant, session.ID, key, batch); err == nil || got != nil {
 		t.Fatalf("partial batch succeeded: %+v %v", got, err)
 	}
-	turn, err := s.GetTurn(ctx, tenant, session.ID, initial.TurnID)
+	turn, err := sessionAdapter(s).GetTurn(ctx, tenant, session.ID, initial.TurnID)
 	if err != nil || turn.Status != sessions.TurnInProgress || !turn.CancelRequestedAt.IsZero() {
 		t.Fatalf("cancellation escaped rollback: %+v %v", turn, err)
 	}

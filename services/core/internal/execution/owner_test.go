@@ -53,8 +53,8 @@ func (l *closeCountingLease) Close(ctx context.Context) error {
 	return l.inner.Close(ctx)
 }
 
-// unusedSessions returns the Session service and reader for Workers that run
-// no Turn. Any call through them panics.
+// unusedSessions returns the Session service and reader for Workers that fail
+// to start. Any call through them panics.
 func unusedSessions(t *testing.T) (*sessions.Service, sessions.Reader) {
 	t.Helper()
 	service, err := sessions.NewService(struct{ sessions.Storage }{})
@@ -195,10 +195,11 @@ func TestStartWorkerChecksDeploymentAfterItsDependencies(t *testing.T) {
 }
 
 func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
-	s, owner, deployments, deploymentReader := resetManagerStore(t)
+	s, owner, deployments, deploymentReader, pool := resetManagerStoreDB(t, nil)
 	lease := &closeCountingLease{t: t, inner: owner.Lease}
 	id := uuid.NewString()
-	service, reader := unusedSessions(t)
+	// The Worker's first reconciliation scans the Session work.
+	reader, service := testSessions(t, pool, nil)
 	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
 	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Store: owner.Store, Deployment: owner.Deployment, Sessions: owner.Sessions})
 	if err != nil {

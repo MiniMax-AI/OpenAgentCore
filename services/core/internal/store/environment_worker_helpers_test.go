@@ -122,7 +122,7 @@ func awaitWorkerEnvironmentRun(t *testing.T, ctx context.Context, s *store.Store
 		if len(run.Reservation.Receipts) == 0 {
 			return false
 		}
-		run.Turn, err = s.GetTurn(ctx, tenant, pending.SessionID, run.Reservation.Receipts[0].TurnID)
+		run.Turn, err = store.SessionAdapter(s).GetTurn(ctx, tenant, pending.SessionID, run.Reservation.Receipts[0].TurnID)
 		if err != nil {
 			t.Fatal(err)
 		}

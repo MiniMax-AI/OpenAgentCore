@@ -232,13 +232,12 @@ func settleEnvironmentInput(ctx context.Context, q *sqlc.Queries, tenantID strin
 		return sessions.EnvironmentInputReservation{}, err
 	}
 	if state == sessions.EnvironmentInputAdmitted {
-		params, err := sessionpg.TurnLookup(tenantID, result.SessionID, result.Receipts[0].TurnID)
+		tenant, err := parseID(tenantID)
 		if err != nil {
 			return sessions.EnvironmentInputReservation{}, err
 		}
-		if _, err := transitionTurn(ctx, q, params, sessions.TurnTransition{
-			ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{}`),
-		}); err != nil {
+		start := sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}
+		if _, err := sessions.TransitionTurn(ctx, sessionpg.BindSession(q, tenant, row.SessionID), result.Receipts[0].TurnID, start); err != nil {
 			return sessions.EnvironmentInputReservation{}, err
 		}
 	}

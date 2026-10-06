@@ -26,7 +26,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	event := func(kind, raw string) sessions.ExecutionEvent {
@@ -70,7 +70,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, final); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
+	if _, err := journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	// Reopening the Store recovers committed Items without creating events.

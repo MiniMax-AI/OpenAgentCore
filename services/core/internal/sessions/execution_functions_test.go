@@ -18,6 +18,7 @@ type fakeExecutionStorage struct {
 	t                *testing.T
 	withFunctionTurn func(ctx context.Context, tenant, session, turn string, apply func(context.Context, FunctionTx, Turn) error) error
 	withTurnJournal  func(ctx context.Context, tenant, session string, apply func(context.Context, TurnJournalTx) error) error
+	withTurns        func(ctx context.Context, tenant, session string, apply func(context.Context, TurnTx) error) error
 
 	tx     *fakeTx
 	locked LockedSession
@@ -46,6 +47,14 @@ func (f *fakeExecutionStorage) WithTurnJournal(ctx context.Context, tenant, sess
 		f.t.Fatal("unexpected call to WithTurnJournal")
 	}
 	return f.withTurnJournal(ctx, tenant, session, apply)
+}
+
+func (f *fakeExecutionStorage) WithTurns(ctx context.Context, tenant, session string, apply func(context.Context, TurnTx) error) error {
+	f.t.Helper()
+	if f.withTurns == nil {
+		f.t.Fatal("unexpected call to WithTurns")
+	}
+	return f.withTurns(ctx, tenant, session, apply)
 }
 
 const testTenant = "4f0d0c35-8b8e-4d7c-9d1c-1f0a5b8a2e61"
@@ -134,12 +143,12 @@ func TestRecordFunctionCall(t *testing.T) {
 		var changes []SessionChange
 		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadUsage: returns(usage), appendChanges: collect(&changes)},
 			matchFunctionCall: returns(FunctionCallMatch{}), createFunctionCall: done,
-			loadPendingFunctionCalls: returns([]FunctionCall{testCall}), applyFunctionTurnStatus: returns(waiting)}
+			loadPendingFunctionCalls: returns([]FunctionCall{testCall}), applyTurnStatus: returns(waiting)}
 		if err := functionOperations(t, f, running).RecordFunctionCall(t.Context(), testTenant, testSession, testTurn, testCall); err != nil {
 			t.Fatal(err)
 		}
 		assertCalls(t, f.fakeTx, "MatchFunctionCall "+testTurn+" call", "CreateFunctionCall "+testTurn+" call", "LoadPendingFunctionCalls "+testTurn,
-			"ApplyFunctionTurnStatus "+testTurn+" in_progress waiting", "AppendChanges ", "LoadUsage", "AppendChanges agent.session.requires_action")
+			"ApplyTurnStatus "+testTurn+" in_progress waiting {}", "AppendChanges ", "LoadUsage", "AppendChanges agent.session.requires_action")
 		actions, _ := LoadRequiredActions(t.Context(), &fakeFunctionTx{fakeTx: &fakeTx{t: t}, loadPendingFunctionCalls: returns([]FunctionCall{testCall})}, waiting)
 		if !reflect.DeepEqual(changes, []SessionChange{ActivityChange(waiting, usage, actions)}) {
 			t.Fatalf("changes %+v", changes)
@@ -200,12 +209,12 @@ func TestConfirmFunctionResult(t *testing.T) {
 		var changes []SessionChange
 		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadUsage: returns(usage), appendChanges: collect(&changes)},
 			loadFunctionCall: func() (FunctionCall, bool, error) { return submitted, true, nil }, applyFunctionResult: done,
-			loadPendingFunctionCalls: returns([]FunctionCall{}), applyFunctionTurnStatus: returns(running)}
+			loadPendingFunctionCalls: returns([]FunctionCall{}), applyTurnStatus: returns(running)}
 		if err := functionOperations(t, f, waiting).ConfirmFunctionResult(t.Context(), testTenant, testSession, testTurn, "call"); err != nil {
 			t.Fatal(err)
 		}
 		assertCalls(t, f.fakeTx, "LoadFunctionCall "+testTurn+" call", "ApplyFunctionResult "+testTurn+" call", "LoadPendingFunctionCalls "+testTurn,
-			"ApplyFunctionTurnStatus "+testTurn+" waiting in_progress", "AppendChanges agent.session.turn.in_progress", "LoadUsage", "AppendChanges agent.session.in_progress")
+			"ApplyTurnStatus "+testTurn+" waiting in_progress {}", "AppendChanges agent.session.turn.in_progress", "LoadUsage", "AppendChanges agent.session.in_progress")
 		want := append(TurnChanges(running, false), ActivityChange(running, usage, []v1.FunctionCallAction{}))
 		if !reflect.DeepEqual(changes, want) {
 			t.Fatalf("changes %+v", changes)

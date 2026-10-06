@@ -37,6 +37,7 @@ var (
 	_ sessions.TurnJournalTx            = (*SessionTx)(nil)
 	_ sessions.TurnEventTx              = (*SessionTx)(nil)
 	_ sessions.InputProjectionTx        = (*SessionTx)(nil)
+	_ sessions.TurnTx                   = (*SessionTx)(nil)
 )
 
 // BindSession binds the tenant's Session to the caller's transaction-bound
@@ -70,6 +71,9 @@ func (t *SessionTx) LoadTurn(ctx context.Context, turn string) (sessions.Turn, e
 		return sessions.Turn{}, err
 	}
 	row, err := t.q.SessionEventTurn(ctx, sqlc.SessionEventTurnParams{SessionID: t.session, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.Turn{}, sessions.ErrNotFound
+	}
 	if err != nil {
 		return sessions.Turn{}, err
 	}

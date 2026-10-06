@@ -136,13 +136,13 @@ func TestSubagentRootCompletionRetainsNativeSourceTime(t *testing.T) {
 			tenant, session := newTurnSession(t, s)
 			input := submitMessage(t, s, tenant, session.ID, "start")
 			transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-			current, err := s.GetTurn(t.Context(), tenant, session.ID, input.TurnID)
+			current, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, input.TurnID)
 			if err != nil {
 				t.Fatal(err)
 			}
 			source := current.CreatedAt.Unix() * 1000
 			outcome := json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source))
-			completed, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, status, outcome, "", input.Sequence)
+			completed, err := completeExecution(t.Context(), t, s, tenant, session.ID, input.TurnID, status, outcome, "", input.Sequence)
 			if err != nil {
 				t.Fatal(err)
 			}

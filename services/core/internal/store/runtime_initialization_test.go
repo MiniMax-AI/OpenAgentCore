@@ -79,7 +79,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				if _, err := fixtureSessionStore(db).GetSessionDevice(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Error("premature file access", err)
 				}
-				if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+				if _, err := store.SessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 					t.Error("premature execution", err)
 				}
 				if mode == "uncertain" {
@@ -120,7 +120,7 @@ func TestEnvironmentInitializationCompletionUnknownAndRestart(t *testing.T) {
 				if int(p.writes.Load()) != expectedSteps {
 					t.Fatal("missing operations", p.writes.Load())
 				}
-				if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); err != nil {
+				if _, err := store.SessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, session.ID); err != nil {
 					t.Fatal("completed preparation blocked", err)
 				}
 				stop()

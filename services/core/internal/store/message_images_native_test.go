@@ -78,7 +78,7 @@ func TestNativeMessageImagePublicExecution(t *testing.T) {
 	if err != nil || !call.Applied {
 		t.Fatal("function application receipt missing", err)
 	}
-	turn, err := h.s.GetTurn(ctx, h.tenant, proof.Session, proof.Turn)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, proof.Session, proof.Turn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,14 +90,14 @@ func TestNativeMessageImagePublicExecution(t *testing.T) {
 	if err != nil || len(inputs) != 3 || inputs[0].Kind != "message" || inputs[1].Kind != "message" || inputs[2].Kind != "tool_result" || outcome.AppliedThrough != inputs[2].Sequence {
 		t.Fatal("active image batch was not applied exactly once in the same Turn", err)
 	}
-	before, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	before, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID == "" {
 		t.Fatal("native binding missing", err)
 	}
 	stop()
 	stop = startNativeEngineDaemon(t, h, home, binary, kind)
 	run("resume")
-	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
 		t.Fatal("native history changed", err)
 	}

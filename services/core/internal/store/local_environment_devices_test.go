@@ -47,7 +47,7 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 			t.Fatal("dedicated credential bound to another Session")
 		}
 	}
-	devices, err := s.ListExecutionDevices(t.Context(), tenant)
+	devices, err := sessionAdapter(s).ListExecutionDevices(t.Context(), tenant)
 	if err != nil || len(devices) != 0 {
 		t.Fatalf("dedicated device entered general selection: %v %v", devices, err)
 	}

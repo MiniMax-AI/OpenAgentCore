@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -11,8 +12,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
+// noModelExecution reads no frozen model provider for any Session.
+type noModelExecution struct{ sessions.Reader }
+
+func (noModelExecution) SessionModelExecution(context.Context, string, string) (*v1.ModelProviderInput, error) {
+	return nil, errors.New("session model execution configuration is unavailable")
+}
+
 func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
-	var d Dispatcher
+	d := Dispatcher{SessionsReader: noModelExecution{}}
 	if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); err == nil {
 		t.Fatal("missing Session credentials fell back")
 	}

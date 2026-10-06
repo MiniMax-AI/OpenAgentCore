@@ -10,6 +10,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -113,7 +114,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 			t.Fatalf("wrong frozen selections: %#v", snapshot)
 		}
 		equalJSON(snapshot.HarnessConfig.Value, native)
-		secret, err := st.SessionModelExecution(t.Context(), tenant, id)
+		secret, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, id)
 		if err != nil || secret == nil || secret.APIKey != providerKey {
 			t.Fatal("frozen provider changed", err)
 		}

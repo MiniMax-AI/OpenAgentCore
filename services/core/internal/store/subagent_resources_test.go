@@ -90,13 +90,13 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 		t.Fatal(same, err)
 	}
 	// Session Turn reads carry root work only: a child Turn ID is missing there.
-	if _, err = s.GetTurn(ctx, tenant, session.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).GetTurn(ctx, tenant, session.ID, tid); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn in Session Turn retrieval", err)
 	}
-	if _, err = s.ListTurns(ctx, tenant, session.ID, tid, 100, true); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).ListTurns(ctx, tenant, session.ID, tid, 100, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("child Turn as a Session Turn cursor", err)
 	}
-	allTurns, err := s.ListTurns(ctx, tenant, session.ID, "", 100, true)
+	allTurns, err := sessionAdapter(s).ListTurns(ctx, tenant, session.ID, "", 100, true)
 	if err != nil || len(allTurns.Turns) != 1 || allTurns.Turns[0].ID != root.TurnID {
 		t.Fatal(allTurns, err)
 	}
@@ -113,7 +113,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	if _, err = sessionAdapter(s).ListSubagentTurns(ctx, uuid.NewString(), session.ID, child.ID, "", 20, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign tenant child Turns", err)
 	}
-	if allTurns, err = s.ListTurns(ctx, tenant, session.ID, "", 100, true); err != nil || len(allTurns.Turns) != 1 {
+	if allTurns, err = sessionAdapter(s).ListTurns(ctx, tenant, session.ID, "", 100, true); err != nil || len(allTurns.Turns) != 1 {
 		t.Fatal(allTurns, err)
 	}
 	own, err := sessionAdapter(s).ListSubagentTurnItems(ctx, tenant, session.ID, child.ID, tid, "", 20, true)

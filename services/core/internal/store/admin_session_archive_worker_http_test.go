@@ -119,7 +119,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil || allocation.ID != owner.ID || allocation.State != "cleanup_pending" {
 		t.Fatal("archive did not retain cleanup ownership", allocation, err)
 	}
-	turn, err := s.GetTurn(t.Context(), project.TenantID, active.ID, input.TurnID)
+	turn, err := store.SessionAdapter(s).GetTurn(t.Context(), project.TenantID, active.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnCancelled {
 		t.Fatal("archive did not cancel queued work", turn, err)
 	}

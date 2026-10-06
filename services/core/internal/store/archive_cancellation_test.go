@@ -182,7 +182,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			current, err := s.GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
+			current, err := store.SessionAdapter(s).GetTurn(t.Context(), h.tenant, session.ID, input.TurnID)
 			if err != nil || current.Status != sessions.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}

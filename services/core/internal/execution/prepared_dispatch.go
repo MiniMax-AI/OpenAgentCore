@@ -42,7 +42,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		// Reserved before providers were required; the caller settles it as failed.
 		return run, ErrModelProviderRequired
 	}
-	bound, err := d.Store.GetSessionExecutionBinding(ctx, tenantID, sessionID)
+	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {
 		return run, err
 	}

@@ -449,7 +449,7 @@ func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
 	transition(t, s, tenant, session, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	stageArtifactOutputs(t, s, tenant, session, env.ID, first.TurnID, map[string]string{"b.txt": "bravo"})
 	future := time.Now().Add(time.Hour).UnixMilli()
-	if _, err := s.CompleteExecution(t.Context(), tenant, session, first.TurnID, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, future)), "", first.Sequence); err != nil {
+	if _, err := completeExecution(t.Context(), t, s, tenant, session, first.TurnID, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, future)), "", first.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	one := publishedByTurn(t, s, tenant, session, first.TurnID)["b.txt"]
@@ -510,7 +510,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.TransitionTurn(t.Context(), tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted})
+		_, err := transitionTurn(t.Context(), s, tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted})
 		done <- err
 	}()
 	// Completion must be blocked on the Session lock before the deletion commits.
@@ -533,7 +533,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if status, err := s.GetTurn(t.Context(), tenant, session, turn); err != nil || status.Status != sessions.TurnInProgress {
+	if status, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session, turn); err != nil || status.Status != sessions.TurnInProgress {
 		t.Fatalf("Turn settled while the deletion held the lock: %+v %v", status, err)
 	}
 	if err := tx.Commit(t.Context()); err != nil {

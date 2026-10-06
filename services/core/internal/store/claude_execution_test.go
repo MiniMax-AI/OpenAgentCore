@@ -68,7 +68,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			}()
 			queued := func() {
 				time.Sleep(650 * time.Millisecond)
-				turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
+				turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
 				if err != nil || turn.Status != sessions.TurnQueued {
 					t.Fatal(turn, err)
 				}
@@ -91,7 +91,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			}
 			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "claude-native"}})
 			waitTurn(t, h, input.TurnID, sessions.TurnCompleted)
-			bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
+			bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 			if err != nil || bound.NativeSessionID != "claude-native" {
 				t.Fatal(bound, err)
 			}
@@ -112,7 +112,7 @@ func TestClaudeDispatcherRejectsUnsupportedConfigurationBeforeClaim(t *testing.T
 			if result := <-h.run(t.Context(), input.TurnID); result.err == nil {
 				t.Fatal("unsupported configuration claimed")
 			}
-			turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
+			turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
 			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal(turn, err)
 			}
@@ -126,7 +126,7 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 	worker := startOwnedWorker(t, t.Context(), h.db, h.d, h.owner())
 	defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 	input := h.message("start", "Run")
-	if _, err := h.s.TransitionTurn(t.Context(), h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := store.TransitionTurn(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	call := sessions.FunctionCall{CallID: "public-call", ExecutorCallID: "native-call", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)}
@@ -148,7 +148,7 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 	if err != nil || saved.Result != nil || saved.Applied {
 		t.Fatal(saved, err)
 	}
-	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnWaiting || !turn.CancelRequestedAt.IsZero() {
 		t.Fatal(turn, err)
 	}

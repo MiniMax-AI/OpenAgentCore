@@ -38,7 +38,7 @@ func submitMessage(t *testing.T, s *Store, tenant, session, key string) sessions
 
 func transition(t *testing.T, s *Store, tenant, session, turn, from, to string) sessions.Turn {
 	t.Helper()
-	got, err := s.TransitionTurn(context.Background(), tenant, session, turn, sessions.TurnTransition{ExpectedStatus: from, Status: to})
+	got, err := transitionTurn(context.Background(), s, tenant, session, turn, sessions.TurnTransition{ExpectedStatus: from, Status: to})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestTurnInputRetriesAndRestart(t *testing.T) {
 	if !retry.Replayed || retry.TurnID != first.TurnID || retry.Sequence != first.Sequence {
 		t.Fatalf("restart retry changed target: %+v", retry)
 	}
-	got, err := recovered.GetTurn(ctx, tenant, session.ID, first.TurnID)
+	got, err := sessionAdapter(recovered).GetTurn(ctx, tenant, session.ID, first.TurnID)
 	if err != nil || !reflect.DeepEqual(got, completed) {
 		t.Fatalf("restart turn: %+v, %v", got, err)
 	}
@@ -183,13 +183,16 @@ func TestTurnOperationsAreTenantAndSessionScoped(t *testing.T) {
 				return err
 			},
 			"cancel": func() error { _, err := s.RequestCancel(ctx, scope.tenant, scope.session, "cancel"); return err },
-			"read":   func() error { _, err := s.GetTurn(ctx, scope.tenant, scope.session, first.TurnID); return err },
+			"read": func() error {
+				_, err := sessionAdapter(s).GetTurn(ctx, scope.tenant, scope.session, first.TurnID)
+				return err
+			},
 			"inputs": func() error {
 				_, err := s.ListTurnInputs(ctx, scope.tenant, scope.session, first.TurnID, 0, 10)
 				return err
 			},
 			"transition": func() error {
-				_, err := s.TransitionTurn(ctx, scope.tenant, scope.session, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed})
+				_, err := transitionTurn(ctx, s, scope.tenant, scope.session, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed})
 				return err
 			},
 		} {
@@ -203,10 +206,10 @@ func TestTurnOperationsAreTenantAndSessionScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetTurn(ctx, tenant, second.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetTurn(ctx, tenant, second.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-session turn read: %v", err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, second.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed}); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := transitionTurn(ctx, s, tenant, second.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("cross-session turn write: %v", err)
 	}
 	otherInput := submitMessage(t, s, otherTenant, other.ID, "input")

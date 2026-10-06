@@ -42,7 +42,7 @@ func (s *Store) GetSessionDiagnosticsSnapshot(ctx context.Context, tenantID, ses
 // GetTurnDiagnosticsSnapshot reads only root Turns and their root Items. Its
 // bounded query and public projection share the same committed snapshot.
 func (s *Store) GetTurnDiagnosticsSnapshot(ctx context.Context, tenantID, sessionID, turnID string) (sessions.TurnDiagnosticsSnapshot, error) {
-	params, err := publicTurnLookup(tenantID, sessionID, turnID)
+	params, err := sessionpg.PublicTurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return sessions.TurnDiagnosticsSnapshot{}, err
 	}

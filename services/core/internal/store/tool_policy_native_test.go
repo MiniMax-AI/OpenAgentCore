@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -90,7 +91,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 		if err != nil || session.Engine != kind {
 			t.Fatal("selected engine was not persisted", err)
 		}
-		turn, err := h.s.GetTurn(ctx, h.tenant, item.ID, item.FirstTurn)
+		turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, item.ID, item.FirstTurn)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +100,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 		if err != nil || len(inputs) != 1 || json.Unmarshal(turn.Outcome, &outcome) != nil || outcome.AppliedThrough != inputs[0].Sequence {
 			t.Fatal("native text input receipt missing", err)
 		}
-		binding, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, item.ID)
+		binding, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, item.ID)
 		if err != nil || binding.NativeSessionID == "" {
 			t.Fatal("native binding missing", err)
 		}
@@ -109,7 +110,7 @@ func TestNativeToolPolicyPublicExecution(t *testing.T) {
 	stop = startNativeEngineDaemon(t, h, home, binary, kind)
 	run("resume")
 	for id, before := range nativeIDs {
-		after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, id)
+		after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, id)
 		if err != nil || after.NativeSessionID != before {
 			t.Fatal("cold continuation changed native history", err)
 		}

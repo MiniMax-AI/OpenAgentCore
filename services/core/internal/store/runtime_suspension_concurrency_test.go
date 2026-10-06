@@ -61,7 +61,7 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)
 			go func() {
-				_, err := w.TransitionTurn(ctx, owner.TenantID, owner.SessionID, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+				_, err := transitionTurn(ctx, w, owner.TenantID, owner.SessionID, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 				done <- err
 			}()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -77,7 +77,7 @@ func TestRuntimeSuspensionClaimReadsPhaseAfterSessionLock(t *testing.T) {
 			if blocked && !errors.Is(err, sessions.ErrTurnConflict) || !blocked && err != nil {
 				t.Fatal("incorrect claim outcome", phase, err)
 			}
-			got, err := s.GetTurn(ctx, owner.TenantID, owner.SessionID, turn)
+			got, err := sessionAdapter(s).GetTurn(ctx, owner.TenantID, owner.SessionID, turn)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -205,7 +205,7 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := transitionTurn(ctx, w.queries.WithTx(tx), params, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress, Outcome: json.RawMessage(`{}`)}); err != nil {
+	if _, err := sessions.TransitionTurn(ctx, sessionpg.BindSession(w.queries.WithTx(tx), params.TenantID, params.SessionID), turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -18,7 +18,7 @@ func (w *Worker) bind(ctx context.Context, item sessions.ExecutionWork) (bool, e
 	}
 	// Candidate selection is a snapshot. Cancellation can append a control input
 	// before this read, so recheck eligibility after reading the input history.
-	turn, err := w.dispatcher.Store.GetTurn(ctx, item.TenantID, item.SessionID, item.TurnID)
+	turn, err := w.dispatcher.SessionsReader.GetTurn(ctx, item.TenantID, item.SessionID, item.TurnID)
 	if errors.Is(err, sessions.ErrNotFound) {
 		return false, nil
 	}
@@ -38,7 +38,7 @@ func (w *Worker) bind(ctx context.Context, item sessions.ExecutionWork) (bool, e
 	if !errors.Is(err, sessions.ErrDeviceBindingConflict) {
 		return ready, err
 	}
-	_, err = w.dispatcher.Store.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_device_unavailable"}`)})
+	_, err = w.dispatcher.sessionExecution.TransitionTurn(ctx, item.TenantID, item.SessionID, item.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"execution_device_unavailable"}`)})
 	if errors.Is(err, sessions.ErrTurnConflict) {
 		err = nil
 	}
@@ -107,7 +107,7 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 	if !errors.Is(err, sessions.ErrNotFound) {
 		return false, err
 	}
-	devices, err := w.dispatcher.Store.ListExecutionDevices(ctx, session.TenantID)
+	devices, err := w.dispatcher.SessionsReader.ListExecutionDevices(ctx, session.TenantID)
 	if err != nil {
 		return false, err
 	}

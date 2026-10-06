@@ -82,7 +82,7 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 		if json.Unmarshal(session.Configuration, &cfg) != nil || cfg.Agent.Model != model {
 			t.Fatal("model snapshot changed")
 		}
-		provider, err := st.SessionModelExecution(t.Context(), tenant, sessionID)
+		provider, err := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, sessionID)
 		if err != nil || provider.BaseURL != endpoint || provider.APIKey != key {
 			t.Fatal("provider snapshot mismatch", err)
 		}
@@ -106,7 +106,7 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	created := id(call("POST", "/v1/agents/sessions", nativeHarness, uuid.NewString(), 201))
 	assertSnapshot(created, "model-override", "https://override.example/v1", "override-canary")
 	resolved, err := st.GetSession(t.Context(), tenant, created)
-	frozen, providerErr := st.SessionModelExecution(t.Context(), tenant, created)
+	frozen, providerErr := store.SessionAdapter(st).SessionModelExecution(t.Context(), tenant, created)
 	if err != nil || providerErr != nil || resolved.Engine != "claude_sdk" || frozen == nil || frozen.Protocol != "anthropic" {
 		t.Fatal("harness override did not freeze the native provider", err, providerErr)
 	}

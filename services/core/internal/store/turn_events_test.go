@@ -25,7 +25,7 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,14 +66,14 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A failed native binding write must roll back both the terminal event and status.
-	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "missing-binding", input.Sequence); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "missing-binding", input.Sequence); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	events, _ := s.ListTurnEvents(ctx, tenant, session.ID, input.TurnID, 0, 100)
 	if len(events) != 2 {
 		t.Fatal("terminal event survived rollback")
 	}
-	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{"content":""}}`), "", input.Sequence); err != nil {
+	if _, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{"content":""}}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
@@ -98,7 +98,7 @@ func TestEventLimitStillAllowsTerminalFailure(t *testing.T) {
 	h := newDispatchHarness(t)
 	ctx := context.Background()
 	input := h.message("start", "Test output budget")
-	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err := store.TransitionTurn(ctx, h.s, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestEventLimitStillAllowsTerminalFailure(t *testing.T) {
 	if err = h.owner().Sessions.AppendTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 1, events); !errors.Is(err, sessions.ErrEventLimit) {
 		t.Fatal(err)
 	}
-	if _, err = h.s.CompleteExecution(ctx, h.tenant, h.session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"error_code":"event_limit"}`), "", input.Sequence); err != nil {
+	if _, err = h.owner().Sessions.CompleteExecution(ctx, h.tenant, h.session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"error_code":"event_limit"}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	got, err := h.s.ListTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 0, 100)

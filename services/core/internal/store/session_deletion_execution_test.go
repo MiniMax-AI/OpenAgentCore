@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
@@ -47,7 +48,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "deleted-native"}}})
 	waitTurn(t, h, input.TurnID, sessions.TurnCancelled)
-	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "deleted-native" {
 		t.Fatal(bound, err)
 	}
@@ -68,7 +69,7 @@ func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 	h := newDispatchHarness(t)
 	input := h.message("interrupted", "Run")
 	ctx := t.Context()
-	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := store.TransitionTurn(ctx, h.s, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
@@ -83,7 +84,7 @@ func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 	if err := worker.Run(stopped); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnFailed {
 		t.Fatal(turn, err)
 	}

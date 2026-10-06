@@ -211,8 +211,10 @@ func (s *Store) ListTurnInputs(ctx context.Context, tenantID, sessionID, turnID 
 	if after < 0 || limit < 1 || limit > 100 {
 		return nil, fmt.Errorf("%w: nonnegative cursor and page size 1..100 required", sessions.ErrInvalidInput)
 	}
-	if _, err := s.GetTurn(ctx, tenantID, sessionID, turnID); err != nil {
-		return nil, err
+	if _, err := s.queries.GetTurn(ctx, params); errors.Is(err, pgx.ErrNoRows) {
+		return nil, sessions.ErrNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("get turn: %w", err)
 	}
 	rows, err := s.queries.ListTurnInputs(ctx, sqlc.ListTurnInputsParams{
 		TenantID: params.TenantID, SessionID: params.SessionID, TurnID: params.ID, Sequence: after, Limit: int32(limit),

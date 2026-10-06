@@ -44,7 +44,7 @@ func TestNativePublicFunctionStreamHelper(t *testing.T) {
 			t.Fatal(call, err)
 		}
 	}
-	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || bound.NativeSessionID == "" || bound.Device.ID != h.device.ID {
 		t.Fatal(bound, err)
 	}

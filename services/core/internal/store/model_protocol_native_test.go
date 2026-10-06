@@ -136,14 +136,14 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	if expectedCalls > 0 && failed != 1 {
 		t.Fatal("missing failed function-result scenario")
 	}
-	before, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	before, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID == "" {
 		t.Fatal("native Session binding missing before restart")
 	}
 	stop()
 	stop = startNativeEngineDaemon(t, h, home, binary, options.Engine)
 	run("resume")
-	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
 		t.Fatal("cold Session continuation changed native history")
 	}

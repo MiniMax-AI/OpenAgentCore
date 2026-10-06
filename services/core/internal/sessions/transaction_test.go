@@ -89,6 +89,11 @@ type fakeTx struct {
 	recordTerminalActivity func() error
 	loadChildItem          func() (StoredChildItem, bool, error)
 	putChildItem           func(ChildItem) error
+
+	applyTurnStatus       func(TurnStatusChange) (Turn, error)
+	hasUnappliedInputs    func() (bool, error)
+	rememberNativeSession func() error
+	beginArtifactCapture  func() error
 }
 
 var (
@@ -105,6 +110,7 @@ var (
 	_ EnrollmentTx             = (*fakeTx)(nil)
 	_ FileWriteReservationTx   = (*fakeTx)(nil)
 	_ FileWriteSettlementTx    = (*fakeTx)(nil)
+	_ TurnTx                   = (*fakeTx)(nil)
 
 	_ EnvironmentExecutorCredentialTx = (*fakeTx)(nil)
 )
@@ -310,6 +316,30 @@ func (f *fakeTx) LoadChildItem(_ context.Context, subagent, id string, _ json.Ra
 func (f *fakeTx) PutChildItem(_ context.Context, item ChildItem) error {
 	f.record("PutChildItem", f.putChildItem != nil, item.ID, fmt.Sprint(item.Position))
 	return f.putChildItem(item)
+}
+
+func (f *fakeTx) ApplyTurnStatus(_ context.Context, turn string, change TurnStatusChange) (Turn, error) {
+	detail := []string{turn, change.Expected, change.Status, string(change.Outcome)}
+	if !change.SourceCompletedAt.IsZero() {
+		detail = append(detail, fmt.Sprint(change.SourceCompletedAt.UnixMilli()))
+	}
+	f.record("ApplyTurnStatus", f.applyTurnStatus != nil, detail...)
+	return f.applyTurnStatus(change)
+}
+
+func (f *fakeTx) HasUnappliedInputs(_ context.Context, turn string, appliedThrough int64) (bool, error) {
+	f.record("HasUnappliedInputs", f.hasUnappliedInputs != nil, turn, fmt.Sprint(appliedThrough))
+	return f.hasUnappliedInputs()
+}
+
+func (f *fakeTx) RememberNativeSession(_ context.Context, native string) error {
+	f.record("RememberNativeSession", f.rememberNativeSession != nil, native)
+	return f.rememberNativeSession()
+}
+
+func (f *fakeTx) BeginArtifactCapture(_ context.Context, turn string) error {
+	f.record("BeginArtifactCapture", f.beginArtifactCapture != nil, turn)
+	return f.beginArtifactCapture()
 }
 
 // returns is a fake method that reads value.

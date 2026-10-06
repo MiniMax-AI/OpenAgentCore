@@ -222,7 +222,7 @@ func TestManagedSessionArchiveAuditFailureRollsBack(t *testing.T) {
 	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	turn, err := s.GetTurn(t.Context(), tenant, session.ID, input.TurnID)
+	turn, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() {
 		t.Fatal("archive did not request cancellation or fabricated settlement", turn, err)
 	}

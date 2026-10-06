@@ -35,7 +35,7 @@ func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 	makeEnvironmentExpiryDue(t, pool, &due)
 	waitEnvironmentExpiry(t, h.s, tenant, due)
 	for i, request := range requests {
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, active[i].ID, request.ID)
+		turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, active[i].ID, request.ID)
 		if err != nil || turn.Status != sessions.TurnInProgress {
 			t.Fatal("expiry was not observed at full capacity", turn, err)
 		}

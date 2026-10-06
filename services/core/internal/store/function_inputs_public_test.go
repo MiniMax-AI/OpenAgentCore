@@ -38,7 +38,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	functions := executionOwner(t, db, s).Sessions
@@ -108,7 +108,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil || len(history) != 6 {
 		t.Fatal(history, err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
+	if _, err := store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
 		t.Fatal(err)
 	}
 	next, err := s.SubmitMessage(ctx, tenant, session.ID, "next", json.RawMessage(`{"text":"next"}`))
@@ -125,7 +125,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil || len(history) != 1 {
 		t.Fatal(history, err)
 	}
-	current, err := s.GetTurn(ctx, tenant, session.ID, next.TurnID)
+	current, err := store.SessionAdapter(s).GetTurn(ctx, tenant, session.ID, next.TurnID)
 	if err != nil || current.Status != sessions.TurnQueued || !current.CancelRequestedAt.IsZero() {
 		t.Fatal(current, err)
 	}
