@@ -96,13 +96,12 @@ type Shim struct {
 
 // Process is the one process the view runs.
 type Process struct {
-	Path   string
-	Args   []string
-	Env    []string
-	Dir    string
-	UID    uint32
-	GID    uint32
-	Groups []uint32
+	Path string
+	Args []string
+	Env  []string
+	Dir  string
+	UID  uint32
+	GID  uint32
 	// A nil Stdin, Stdout or Stderr is a pipe whose other end the View exposes.
 	Stdin, Stdout, Stderr *os.File
 	// Grace is how long processes left in the view when the process exits have to exit, counted from the first TERM the view sent them, before the view ends. Zero ends the view at once.
@@ -117,9 +116,8 @@ type Network struct {
 
 // Exit is how the process ended.
 type Exit struct {
-	Code       int
-	Signal     syscall.Signal
-	CoreDumped bool
+	Code   int
+	Signal syscall.Signal
 }
 
 func (s *Spec) validate() error {

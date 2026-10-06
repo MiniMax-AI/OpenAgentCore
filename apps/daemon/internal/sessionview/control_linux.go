@@ -36,7 +36,6 @@ type launchSpec struct {
 	Command  command
 	UID      uint32
 	GID      uint32
-	Groups   []uint32
 	Grace    time.Duration
 }
 

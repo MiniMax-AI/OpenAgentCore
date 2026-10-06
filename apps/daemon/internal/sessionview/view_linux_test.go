@@ -222,8 +222,8 @@ func TestSpawnRunsInTheView(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(ids[0]) != 20 || !maps.Equal(ids[0], ids[1]) {
-		t.Errorf("spawned process runs as and in %v, the process as and in %v", ids[1], ids[0])
+	if len(ids[0]) != 20 || !maps.Equal(ids[0], ids[1]) || ids[0]["Groups"] != "" {
+		t.Errorf("spawned process runs as and in %v, the process as and in %v; want both alike, with no supplementary groups", ids[1], ids[0])
 	}
 	report, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=report"}, "/data", true)
 	if err != nil {

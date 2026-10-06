@@ -177,7 +177,7 @@ func (v *View) launch(spec *Spec) error {
 	ls := &launchSpec{
 		Staging: v.staging, Private: spec.Private, Overlays: spec.Overlays, Shim: spec.Shim,
 		Command: command{Path: spec.Process.Path, Args: spec.Process.Args, Env: spec.Process.Env, Dir: spec.Process.Dir},
-		UID:     spec.Process.UID, GID: spec.Process.GID, Groups: spec.Process.Groups, Grace: spec.Process.Grace,
+		UID:     spec.Process.UID, GID: spec.Process.GID, Grace: spec.Process.Grace,
 	}
 	// A launcher that dies early breaks the pipe; the handshake reports that.
 	go func() {
