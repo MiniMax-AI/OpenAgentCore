@@ -300,7 +300,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(w))
+	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, w))
 	if err != nil {
 		t.Fatal(err)
 	}

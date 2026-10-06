@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -62,17 +63,28 @@ func TestCheckArchiveReset(t *testing.T) {
 }
 
 // fakeArchiveTx is a Session archive over fixed facts. Each method records
-// its call; a test asserts the exact call log. The Session has no active
-// Turn, pending input or input activity change.
+// its call; a test asserts the exact call log. The Session's Turn and input
+// reads fail the test unless it settles the Session with idle.
 type fakeArchiveTx struct {
-	t           testing.TB
-	calls       []string
-	deployment  Record
-	environment *sessions.Environment
-	busy        bool
-	allocation  *Allocation
+	t                    testing.TB
+	calls                []string
+	deployment           Record
+	environment          *sessions.Environment
+	busy                 bool
+	allocation           *Allocation
+	loadActiveTurn       func() (sessions.Turn, bool, error)
+	cancelPendingInput   func() error
+	loadEnvironmentInput func() (*sessions.EnvironmentInputState, error)
 	// audited is the administrator source the audit was recorded with.
 	audited *adminaudit.Source
+}
+
+// idle settles a Session with no active Turn, pending input or input
+// activity change.
+func (f *fakeArchiveTx) idle() {
+	f.loadActiveTurn = func() (sessions.Turn, bool, error) { return sessions.Turn{}, false, nil }
+	f.cancelPendingInput = func() error { return nil }
+	f.loadEnvironmentInput = func() (*sessions.EnvironmentInputState, error) { return nil, nil }
 }
 
 func (f *fakeArchiveTx) record(call string) { f.calls = append(f.calls, call) }
@@ -143,17 +155,26 @@ func (f *fakeArchiveTx) LoadArchive(context.Context) (sessions.ManagedArchive, e
 
 func (f *fakeArchiveTx) LoadActiveTurn(context.Context) (sessions.Turn, bool, error) {
 	f.record("LoadActiveTurn")
-	return sessions.Turn{}, false, nil
+	if f.loadActiveTurn == nil {
+		unexpected(f.t, "LoadActiveTurn")
+	}
+	return f.loadActiveTurn()
 }
 
 func (f *fakeArchiveTx) CancelPendingInput(context.Context) error {
 	f.record("CancelPendingInput")
-	return nil
+	if f.cancelPendingInput == nil {
+		unexpected(f.t, "CancelPendingInput")
+	}
+	return f.cancelPendingInput()
 }
 
 func (f *fakeArchiveTx) LoadEnvironmentInput(context.Context) (*sessions.EnvironmentInputState, error) {
 	f.record("LoadEnvironmentInput")
-	return nil, nil
+	if f.loadEnvironmentInput == nil {
+		unexpected(f.t, "LoadEnvironmentInput")
+	}
+	return f.loadEnvironmentInput()
 }
 
 func (f *fakeArchiveTx) RequestTurnCancel(context.Context, string) error {
@@ -240,6 +261,9 @@ func TestArchiveSession(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			tx := &fakeArchiveTx{t: t, deployment: managed, environment: test.environment, allocation: test.allocation}
+			if slices.Contains(test.calls, "LoadActiveTurn") {
+				tx.idle()
+			}
 			result, err := archiveOperations(t, tx, test.locked).ArchiveSession(t.Context(), "tenant", "session", 1)
 			if test.want == nil && (err != nil || result.State != "cleanup_pending") || test.want != nil && !errors.Is(err, test.want) {
 				t.Fatalf("got %v %v, want %v", result, err, test.want)
@@ -280,6 +304,9 @@ func TestArchiveResetSession(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			tx := &fakeArchiveTx{t: t, deployment: test.deployment, environment: test.environment, busy: test.busy}
+			if slices.Contains(test.calls, "LoadActiveTurn") {
+				tx.idle()
+			}
 			_, err := archiveOperations(t, tx, sessions.LockedSession{}).ArchiveResetSession(t.Context(), "tenant", "session", 1, test.requested)
 			if test.want == nil && err != nil || test.want != nil && !errors.Is(err, test.want) {
 				t.Fatalf("got %v, want %v", err, test.want)

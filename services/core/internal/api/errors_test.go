@@ -189,6 +189,7 @@ func TestSharedPersistenceErrors(t *testing.T) {
 		{writeAuditError, adminaudit.ErrInvalidQuery, 400, invalid},
 		{storeError, fmt.Errorf("write: %w", textvalue.ErrUnstorable), 400, unstorableTextMessage},
 		{writeAuditError, textvalue.ErrUnstorable, 400, unstorableTextMessage},
+		{storeError, deployment.ErrInvalidInput, 400, invalid},
 		{storeError, credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
 		{writeAuditError, errors.New("canary"), 500, "internal_error"},
 	} {

@@ -63,8 +63,8 @@ type ExecutionStorage interface {
 	AllocationCleanupStorage
 	// WithSessionArchive runs apply in one leased transaction that locks the
 	// tenant's Session, deleted or not, and then prunes the Session's journal.
-	// It commits only when both succeed. A malformed or missing Session is
-	// sessions.ErrNotFound.
+	// It commits only when both succeed. A malformed tenant is
+	// ErrInvalidInput; a malformed or missing Session is sessions.ErrNotFound.
 	WithSessionArchive(ctx context.Context, tenantID, sessionID string, apply func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error
 	// ClearWake clears the allocation's wake request unless activity newer
 	// than observed arrived. It runs on the lease.

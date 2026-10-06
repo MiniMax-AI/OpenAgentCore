@@ -160,14 +160,14 @@ func storeExecution(t testing.TB, s *store.Store) func(*api.Dependencies) {
 }
 
 // workerExecution runs Sessions through worker. It wires no archive; an
-// archive request panics.
-func workerExecution(worker *execution.Worker) func(*api.Dependencies) {
+// archive request fails the test.
+func workerExecution(t testing.TB, worker *execution.Worker) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
 		d.Execution = &api.Execution{
 			ExecutorURL:      testExecutorURL,
 			SessionAdmission: worker,
 			InputAdmission:   worker,
-			SessionArchive:   struct{ api.SessionArchive }{},
+			SessionArchive:   strictStandIn{t},
 			Workspaces:       worker,
 		}
 	}

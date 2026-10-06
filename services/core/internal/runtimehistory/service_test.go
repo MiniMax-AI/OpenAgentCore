@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -16,22 +17,48 @@ const (
 	allocationID  = "44444444-4444-4444-8444-444444444444"
 )
 
-// fixedEnvironments returns one Session's Environment.
-type fixedEnvironments struct {
-	sessions.EnvironmentReader
-	environment sessions.Environment
-	err         error
+// fakeEnvironmentReader serves the Session Environment read that scopes a
+// query; every other read fails the test.
+type fakeEnvironmentReader struct {
+	t                     testing.TB
+	getSessionEnvironment func(context.Context, string, string) (sessions.Environment, error)
 }
 
-func (e fixedEnvironments) GetSessionEnvironment(context.Context, string, string) (sessions.Environment, error) {
-	return e.environment, e.err
+func (f *fakeEnvironmentReader) GetSessionEnvironment(ctx context.Context, tenant, session string) (sessions.Environment, error) {
+	if f.getSessionEnvironment == nil {
+		f.t.Fatalf("unexpected call to GetSessionEnvironment")
+	}
+	return f.getSessionEnvironment(ctx, tenant, session)
 }
 
-// hosted is the hosted Environment of the Session the tests query.
-func hosted() fixedEnvironments {
-	return fixedEnvironments{environment: sessions.Environment{
-		ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`),
-	}}
+func (f *fakeEnvironmentReader) GetEnvironment(context.Context, string, string) (sessions.Environment, error) {
+	f.t.Fatalf("unexpected call to GetEnvironment")
+	return sessions.Environment{}, nil
+}
+
+func (f *fakeEnvironmentReader) ListEnvironmentInitializations(context.Context, string) ([]sessions.EnvironmentInitialization, error) {
+	f.t.Fatalf("unexpected call to ListEnvironmentInitializations")
+	return nil, nil
+}
+
+func (f *fakeEnvironmentReader) ReadEnvironmentSetup(context.Context, string, string) (environmentconfig.Setup, error) {
+	f.t.Fatalf("unexpected call to ReadEnvironmentSetup")
+	return environmentconfig.Setup{}, nil
+}
+
+func (f *fakeEnvironmentReader) ReadInitialEnvironmentFile(context.Context, string, string, int) (environmentconfig.InitialFileMetadata, []byte, error) {
+	f.t.Fatalf("unexpected call to ReadInitialEnvironmentFile")
+	return environmentconfig.InitialFileMetadata{}, nil, nil
+}
+
+// sessionEnvironment reads environment and err as the Session's Environment.
+func sessionEnvironment(t testing.TB, environment sessions.Environment, err error) *fakeEnvironmentReader {
+	return &fakeEnvironmentReader{t: t, getSessionEnvironment: func(context.Context, string, string) (sessions.Environment, error) { return environment, err }}
+}
+
+// hosted reads the hosted Environment of the Session the tests query.
+func hosted(t testing.TB) *fakeEnvironmentReader {
+	return sessionEnvironment(t, sessions.Environment{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)}, nil)
 }
 
 type fakeReader struct {
@@ -80,7 +107,7 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 			CPUUtilizationRatio: &ratio, CPUCapacityCores: &capacity, MemoryUsageBytes: &memory, MemoryLimitBytes: &limit,
 		}},
 	}}}
-	service, err := NewService(hosted(), reader)
+	service, err := NewService(hosted(t), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +132,7 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 func TestServiceNeverQueriesBeforeOwnershipResolution(t *testing.T) {
 	reader := &fakeReader{capabilities: capabilities()}
 	denied := errors.New("not found")
-	service, err := NewService(fixedEnvironments{err: denied}, reader)
+	service, err := NewService(sessionEnvironment(t, sessions.Environment{}, denied), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +147,7 @@ func TestServiceValidatesResultAgainstTimeAfterReaderReturns(t *testing.T) {
 	requestNow := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
 	resultNow := requestNow.Add(2 * time.Second)
 	reader := &fakeReader{capabilities: capabilities(), result: Result{GeneratedAt: resultNow}}
-	service, err := NewService(hosted(), reader)
+	service, err := NewService(hosted(t), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +173,7 @@ func TestServiceValidatesResultAgainstTimeAfterReaderReturns(t *testing.T) {
 
 func TestServiceRejectsInvalidRangeAndResolverIdentity(t *testing.T) {
 	reader := &fakeReader{capabilities: capabilities()}
-	service, err := NewService(hosted(), reader)
+	service, err := NewService(hosted(t), reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,12 +198,12 @@ func TestServiceRejectsInvalidRangeAndResolverIdentity(t *testing.T) {
 		{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":`)},
 		{ID: "environment", TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"openai_hosted"}`)},
 	} {
-		service.environments = fixedEnvironments{environment: environment}
+		service.environments = sessionEnvironment(t, environment, nil)
 		if _, err := service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60}); err == nil || len(reader.queries) != 0 {
 			t.Fatalf("unsafe Runtime history Environment reached reader: %+v", environment)
 		}
 	}
-	service.environments = fixedEnvironments{environment: sessions.Environment{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)}}
+	service.environments = sessionEnvironment(t, sessions.Environment{ID: environmentID, TenantID: tenantID, SessionID: sessionID, Configuration: []byte(`{"type":"self_hosted"}`)}, nil)
 	if _, err := service.QuerySession(t.Context(), tenantID, sessionID, Range{Start: now.Add(-time.Hour), End: now, MaxPoints: 60}); !errors.Is(err, ErrUnsupported) {
 		t.Fatalf("self-hosted history was not unsupported: %v", err)
 	}
@@ -287,7 +314,7 @@ func TestServiceRejectsMalformedBackendResults(t *testing.T) {
 			result.Series[0].Points = []Point{{Start: start, End: start.Add(time.Minute)}}
 			mutate(&result)
 			reader := &fakeReader{capabilities: capabilities(), result: result}
-			service, err := NewService(hosted(), reader)
+			service, err := NewService(hosted(t), reader)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -309,7 +336,7 @@ func TestServiceRejectsUnsafeCapabilities(t *testing.T) {
 		value := base
 		value.Metrics = append([]Metric(nil), base.Metrics...)
 		mutate(&value)
-		if _, err := NewService(hosted(), &fakeReader{capabilities: value}); err == nil {
+		if _, err := NewService(hosted(t), &fakeReader{capabilities: value}); err == nil {
 			t.Fatalf("unsafe capabilities accepted: %+v", value)
 		}
 	}

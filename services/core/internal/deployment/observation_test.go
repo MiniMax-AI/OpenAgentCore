@@ -10,24 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-// observedSession is one Session and its measured usage.
-type observedSession struct {
-	sessions.SessionReader
-	session  sessions.Session
-	measured json.RawMessage
-}
-
-func (s observedSession) GetSession(context.Context, string, string) (sessions.Session, error) {
-	return s.session, nil
-}
-
-func (s observedSession) MeasuredSessionUsage(_ context.Context, tenant, session string) (json.RawMessage, error) {
-	if tenant != s.session.TenantID || session != s.session.ID {
-		return nil, errors.New("measured usage read for another Session")
-	}
-	return s.measured, nil
-}
-
 // resolverStore is the Session and the deployment reads one resolution sees.
 type resolverStore struct {
 	session       sessions.Session
@@ -42,7 +24,16 @@ func newTestResolver(t *testing.T, s resolverStore) (*ObservationResolver, error
 		environmentAllocation: func(context.Context, AllocationKey) (Allocation, error) { return s.allocation, s.allocationErr },
 		observationSessions:   func(context.Context, string, int) (ObservationSessionPage, error) { return s.page, nil },
 	}
-	return NewObservationResolver(observedSession{session: s.session, measured: s.measured}, reader)
+	sessionReader := &fakeSessionReader{t: t,
+		getSession: func(context.Context, string, string) (sessions.Session, error) { return s.session, nil },
+		measuredSessionUsage: func(_ context.Context, tenant, session string) (json.RawMessage, error) {
+			if tenant != s.session.TenantID || session != s.session.ID {
+				t.Fatalf("measured usage read for another Session: %s/%s", tenant, session)
+			}
+			return s.measured, nil
+		},
+	}
+	return NewObservationResolver(sessionReader, reader)
 }
 
 func TestObservationResolverListsOnlyProviderNeutralSessionIdentity(t *testing.T) {

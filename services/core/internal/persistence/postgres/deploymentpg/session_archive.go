@@ -2,7 +2,6 @@ package deploymentpg
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -58,14 +57,7 @@ func (t *archiveTx) FindAllocation(environment string) (deployment.Allocation, b
 	if err != nil {
 		return deployment.Allocation{}, false, err
 	}
-	row, err := t.q.GetRuntimeAllocation(t.ctx, sqlc.GetRuntimeAllocationParams{TenantID: t.tenant, EnvironmentID: id})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return deployment.Allocation{}, false, nil
-	}
-	if err != nil {
-		return deployment.Allocation{}, false, err
-	}
-	return allocation(row.RuntimeAllocation, row.SessionID, row.TenantID, row.DeletedAt, row.Expired), true, nil
+	return findAllocation(t.ctx, t.q, t.tenant, id)
 }
 
 func (t *archiveTx) RequestArchiveCleanup(current deployment.Allocation) error {

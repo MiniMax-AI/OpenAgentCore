@@ -104,7 +104,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), workerExecution(worker), func(d *api.Dependencies) { d.Execution.SessionArchive = owner.Deployment }, withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), workerExecution(t, worker), func(d *api.Dependencies) { d.Execution.SessionArchive = owner.Deployment }, withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
