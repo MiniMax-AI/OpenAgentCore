@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -305,7 +306,7 @@ func (v *View) abort(err error) error {
 	return err
 }
 
-// teardown releases the view once its launcher is exiting or never started. It disconnects the relay, so that the broker stops using it, ends every process in the view's cgroup and stops the world server, which ends the requests still pending on the view's FUSE connection so that a process blocked on the world can exit. It waits for the launcher and the world server, then for the cgroup to empty, together up to closeWait, and only then removes the cgroup. When the bound passes or the cgroup cannot be ended and removed, it sets cleanupErr and keeps the cgroup; the launcher and the world server finish in the background if they can, and nothing touches the cgroup once teardown returns. It returns the launcher's wait error and the teardown's errors.
+// teardown releases the view once its launcher is exiting or never started, as the package documentation describes, and disconnects the relay so that the broker stops using it. When it does not finish within closeWait, it sets cleanupErr and keeps the view's cgroup; what still runs finishes in the background. It returns the launcher's wait error and the teardown's errors.
 func (v *View) teardown() (werr, err error) {
 	if v.relay != nil {
 		shutdown(v.relay)
@@ -313,7 +314,7 @@ func (v *View) teardown() (werr, err error) {
 	deadline := time.Now().Add(closeWait)
 	var errs, cleanup []error
 	if v.cgroup != "" {
-		if kerr := writeCgroup(v.cgroup, "cgroup.kill", "1"); kerr != nil {
+		if kerr := os.WriteFile(filepath.Join(v.cgroup, "cgroup.kill"), []byte("1"), 0); kerr != nil {
 			cleanup = append(cleanup, &Error{Kind: ErrCleanup, Op: "kill", Path: v.cgroup, Err: kerr})
 		}
 	}
@@ -342,7 +343,7 @@ func (v *View) teardown() (werr, err error) {
 	}
 	if v.cgroup != "" && len(cleanup) == 0 {
 		if rerr := removeCgroup(v.cgroup, deadline); rerr != nil {
-			cleanup = append(cleanup, &Error{Kind: ErrCleanup, Op: "remove cgroup", Path: v.cgroup, Err: rerr})
+			cleanup = append(cleanup, rerr)
 		}
 	}
 	if len(cleanup) > 0 {

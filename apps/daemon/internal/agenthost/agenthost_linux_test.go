@@ -116,22 +116,6 @@ func leftSessions(t *testing.T, cfg Config) []os.DirEntry {
 	return entries
 }
 
-// leftCgroups lists the cgroups that remain in the view cgroups directory.
-func leftCgroups(t *testing.T, cfg Config) []string {
-	t.Helper()
-	entries, err := os.ReadDir(cfg.ViewCgroups)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var dirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			dirs = append(dirs, e.Name())
-		}
-	}
-	return dirs
-}
-
 // fakeProcesses is a process table that lists fixed tasks.
 type fakeProcesses struct {
 	list []task

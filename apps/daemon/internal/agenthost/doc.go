@@ -5,47 +5,47 @@
 //
 // The process that runs the agent host calls Open once at startup, runs each
 // Session with Host.Run and calls Close after the last Run has returned. Open
-// takes two installation locks, exclusive flocks that the Host holds until
-// Close: StateDir/lock allows one agent host per StateDir and its Session
-// directories, and a flock on the Config.ViewCgroups directory allows one
-// agent host per set of view cgroups. Under the locks, Open checks the
-// requirements that create nothing, recovers what an earlier agent host left,
-// checks that ViewCgroups can hold a new cgroup, and only then removes the
-// Session directories, as Config describes, so nothing an earlier agent host
-// left can block the checks. A step that fails fails Open, which then has
-// reclaimed nothing. The cgroup hierarchy is the only record of what the views
-// own: recovery ends each cgroup in ViewCgroups with every process in it, and
-// identifies no process by name or credentials.
+// takes two installation locks, which the Host holds until Close: a flock on
+// StateDir/lock for the Session directories and one on the Config.ViewCgroups
+// directory for the view cgroups. Under the locks, Open checks the
+// requirements that need nothing created, ends every cgroup in ViewCgroups
+// with all its processes (sessionview.Recover), checks the requirements that
+// create something, and only then removes the Session directories. So no
+// process of an earlier Session still uses a directory or uid that a new
+// Session gets, and nothing an earlier agent host left can fail a check. If a
+// step fails, Open fails and has reclaimed nothing. The cgroup hierarchy is
+// the only record of what the views own; no process is identified by name or
+// credentials.
 //
 // The agent host requires root with the capabilities, /dev/fuse and the mount
-// and seccomp support that sessionview.Probe checks, and a cgroup v2
-// directory, Config.ViewCgroups, that is delegated to it, lies outside the
-// agent host's own cgroup and can hold cgroups with cgroup.kill (Linux 5.14,
-// which brings CLONE_INTO_CGROUP from Linux 5.7). Open checks each of these,
-// without starting a process, and a missing one fails Open with ErrUnsupported
-// and the sessionview error that names it; nothing falls back. A delegation
-// that refuses only cloning a process into a view's cgroup shows when a view
-// starts: its launch fails with ErrLaunch and sessionview.ErrLauncher.
+// and seccomp support that sessionview.Probe checks; clone3, which some
+// seccomp filters block; and a writable cgroup v2 directory,
+// Config.ViewCgroups, delegated to it and outside its own cgroup, that can
+// hold cgroups with cgroup.kill (Linux 5.14). Open checks each without
+// starting a process, and a missing one fails Open with ErrUnsupported;
+// nothing falls back. The kernel's common-ancestor and cgroup-namespace
+// checks on a delegation run only when a process is cloned into a cgroup, so
+// a delegation that fails them fails each view's launch with ErrLaunch and
+// sessionview.ErrLauncher.
 //
-// Host.Run runs one Session. It admits the Session before any effect: the kind
-// must declare an agent.View, the request must use only what a view runs and
-// no function tools, whose results Input cannot carry, and when the view
-// declares shim names, which run on the sandbox PATH, the Session's
-// Environment must set PATH. It then allocates the Session uid, skipping each
-// uid that a running thread holds as its real, effective, saved or file-system
-// uid; this check only detects a conflict and never ends a process. It creates
-// the Session directory under Config.StateDir, rewrites the request so the
-// model provider and HTTP MCP reach the network only through the Session's
-// gateway, and calls the view's Executor factory. Each ViewSession.Launch
-// builds one sessionview view in a cgroup of its own in Config.ViewCgroups, of
-// which one at a time is live, over the world that worldfs serves from the
-// attachment's File service, with the gateway listening in the view's network
-// namespace. A view with a shim gets its own process broker, started once the
-// view runs and closed once it has ended. The broker runs the shims' commands
-// over the attachment's Process service in the strongest scope the service
-// declares, with the view's ForwardEnv and the Session's Environment, and
-// cancels a forwarded process whose shim is lost with the launch's kill
-// timeout as its grace.
+// Run runs one Session. It admits the Session before any effect: the kind must
+// declare an agent.View, the request must use only what a view runs and no
+// function tools, whose results Input cannot carry, and when the view declares
+// shim names, which run on the sandbox PATH, the Session's Environment must
+// set PATH. It then allocates the Session uid, skipping each uid that a
+// running thread holds as its real, effective, saved or file-system uid; this
+// check only detects a conflict and never ends a process. It creates the
+// Session directory under Config.StateDir, rewrites the request so the model
+// provider and HTTP MCP reach the network only through the Session's gateway,
+// and calls the view's Executor factory. Each ViewSession.Launch builds one
+// sessionview view, of which one at a time is live, over the world that
+// worldfs serves from the attachment's File service, with the gateway
+// listening in the view's network namespace. A view with a shim gets its own
+// process broker, started once the view runs and closed once it has ended. The
+// broker runs the shims' commands over the attachment's Process service in the
+// strongest scope the service declares, with the view's ForwardEnv and the
+// Session's Environment, and cancels a forwarded process whose shim is lost
+// with the launch's kill timeout as its grace.
 //
 // Each view presents the closure directories read-only and executable, the
 // Session home read-write and noexec, the agent host's /etc/passwd, group,
@@ -71,8 +71,7 @@
 // fails again, the Executor may still use the Session directory: Run returns
 // ErrTeardown and keeps the directory, and the uid stays in use until the
 // agent host exits. A view whose teardown did not finish keeps both the same
-// way, because its processes may still run, and keeps its cgroup for the next
-// Open to recover.
+// way, because its processes may still run.
 //
 // Run drives each Turn as the daemon's dispatch drives a prepared execution.
 // One output consumer starts before StartTurn and forwards the Turn's

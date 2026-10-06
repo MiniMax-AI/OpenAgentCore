@@ -20,31 +20,58 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-func TestOpenRequiresViewCgroups(t *testing.T) {
-	cfg := newConfig(t, agent.NewRegistry(), testCA())
-	left := plantSession(t, cfg)
-	if _, err := Open(cfg); !errors.Is(err, ErrUnsupported) || !errors.Is(err, sessionview.ErrCgroup) {
-		t.Fatalf("Open = %v, want ErrUnsupported with sessionview.ErrCgroup", err)
+// TestOpenReclaimsNothingWithoutViewCgroups checks that Open rejects a
+// ViewCgroups that is not a cgroup v2 directory, or that is a symlink, here to
+// a cgroup tree this process runs in, and keeps every Session directory.
+func TestOpenReclaimsNothingWithoutViewCgroups(t *testing.T) {
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink("/sys/fs/cgroup", link); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(left); err != nil {
-		t.Errorf("Open without its requirements reclaimed a Session directory: %v", err)
+	for _, c := range []struct {
+		dir  string
+		want []error
+	}{
+		{t.TempDir(), []error{ErrUnsupported, sessionview.ErrCgroup}},
+		{link, []error{ErrInvalidConfig}},
+	} {
+		cfg := newConfig(t, agent.NewRegistry(), testCA())
+		cfg.ViewCgroups = c.dir
+		left := plantSession(t, cfg)
+		_, err := Open(cfg)
+		for _, want := range c.want {
+			if !errors.Is(err, want) {
+				t.Errorf("Open with ViewCgroups %s = %v, want %v", c.dir, err, want)
+			}
+		}
+		if _, err := os.Stat(left); err != nil {
+			t.Errorf("Open with ViewCgroups %s reclaimed a Session directory: %v", c.dir, err)
+		}
 	}
 }
 
-// TestSweepReclaimsNothingUnrecovered checks that a view cgroup that cannot
-// be ended, here a directory outside any cgroup hierarchy, keeps every
-// Session directory.
-func TestSweepReclaimsNothingUnrecovered(t *testing.T) {
+// TestOpenReclaimsNothingUnrecovered checks that a view cgroup that Open
+// cannot remove, here one that holds a cgroup of its own, keeps every Session
+// directory.
+func TestOpenReclaimsNothingUnrecovered(t *testing.T) {
+	if os.Getenv(gateEnv) != "1" {
+		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see view_linux_test.go", gateEnv)
+	}
 	cfg := newConfig(t, agent.NewRegistry(), testCA())
-	if err := os.Mkdir(filepath.Join(cfg.ViewCgroups, "view-left"), 0o755); err != nil {
+	cfg.ViewCgroups = sessionviewtest.CgroupParent(t)
+	stuck := filepath.Join(cfg.ViewCgroups, "view-stuck")
+	if err := os.MkdirAll(filepath.Join(stuck, "nested"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	left := plantSession(t, cfg)
-	if err := sweep(cfg); !errors.Is(err, ErrTeardown) || !errors.Is(err, sessionview.ErrCleanup) {
-		t.Fatalf("sweep = %v, want ErrTeardown with sessionview.ErrCleanup", err)
+	_, err := Open(cfg)
+	os.Remove(filepath.Join(stuck, "nested"))
+	os.Remove(stuck)
+	if !errors.Is(err, ErrTeardown) || !errors.Is(err, sessionview.ErrCleanup) {
+		t.Errorf("Open = %v, want ErrTeardown with sessionview.ErrCleanup", err)
 	}
 	if _, err := os.Stat(left); err != nil {
-		t.Errorf("sweep reclaimed a Session directory before recovery: %v", err)
+		t.Errorf("Open reclaimed a Session directory before recovery: %v", err)
 	}
 }
 
@@ -104,7 +131,7 @@ func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 	if held, err := heldUIDs(procfs{}, UIDRange{First: cfg.UIDs.First, Count: 2}); err != nil || len(held) != 0 {
 		t.Errorf("Session uids held after Open: %v, %v", held, err)
 	}
-	if left := leftCgroups(t, cfg); len(left) != 0 {
+	if left := sessionviewtest.Cgroups(t, cfg.ViewCgroups); len(left) != 0 {
 		t.Errorf("view cgroups left after Open: %v", left)
 	}
 	if left := leftSessions(t, cfg); len(left) != 0 {

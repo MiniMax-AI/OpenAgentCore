@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Error kinds. Every error that Start, Probe, CheckCgroups, ProbeCgroups, Recover, Wait, Signal and Close return matches one of them with errors.Is.
+// Error kinds. Every error the package returns matches one of them with errors.Is.
 var (
 	ErrUnsupported = errors.New("sessionview: unsupported platform")
 	ErrInvalidSpec = errors.New("sessionview: invalid spec")
@@ -16,14 +16,14 @@ var (
 	ErrMountDenied = errors.New("sessionview: mount denied")
 	ErrMountTarget = errors.New("sessionview: invalid mount target")
 	ErrWorld       = errors.New("sessionview: world server failed")
-	// ErrCgroup is a cgroup parent that cannot hold view cgroups, or a view cgroup that could not be created.
-	ErrCgroup   = errors.New("sessionview: view cgroup unavailable")
-	ErrNetwork  = errors.New("sessionview: network setup failed")
-	ErrRestrict = errors.New("sessionview: privilege drop failed")
-	ErrExec     = errors.New("sessionview: process start failed")
-	ErrLauncher = errors.New("sessionview: launcher failed")
-	ErrClosed   = errors.New("sessionview: view closed")
-	// ErrCleanup reports a teardown or recovery that did not finish: the view's processes or the world server were still running at the bound, or the view's cgroup could not be ended and removed. The cgroup stays for Recover, and the processes and the world server finish in the background if they can.
+	ErrNetwork     = errors.New("sessionview: network setup failed")
+	ErrRestrict    = errors.New("sessionview: privilege drop failed")
+	ErrExec        = errors.New("sessionview: process start failed")
+	ErrLauncher    = errors.New("sessionview: launcher failed")
+	ErrClosed      = errors.New("sessionview: view closed")
+	// ErrCgroup is a cgroup parent that fails Recover's checks, or a view cgroup that could not be created.
+	ErrCgroup = errors.New("sessionview: view cgroup unavailable")
+	// ErrCleanup reports a teardown or recovery that did not finish within its bound, or a cgroup that could not be ended and removed. The cgroup stays for Recover, and what remains finishes in the background if it can.
 	ErrCleanup = errors.New("sessionview: cleanup incomplete")
 	// ErrExited is Signal's result once the process has exited. It also matches os.ErrProcessDone.
 	ErrExited = errors.New("sessionview: process exited")

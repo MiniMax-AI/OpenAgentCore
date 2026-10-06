@@ -15,26 +15,17 @@ import (
 
 // Config is the agent host's own configuration, shared by its Sessions. It
 // holds a credential: keep it in memory and never log it.
-//
-// Open recovers what an earlier agent host with the same StateDir and
-// ViewCgroups left. It ends every cgroup in ViewCgroups, with every process
-// in it, and only then removes the Session directories, so no process of an
-// earlier Session still uses a directory or uid that a new Session gets.
-// When recovery fails, Open fails and reclaims nothing.
 type Config struct {
 	// StateDir is an absolute host directory private to the agent host. Each
-	// Session's directory is StateDir/sessions/<Session ID>, and
-	// StateDir/lock is the installation lock.
+	// Session's directory is StateDir/sessions/<Session ID>.
 	StateDir string
 	// UIDs is the range Session uids are allocated from; each Session's gid
 	// equals its uid. Only one agent host runs per kernel, and nothing else
 	// uses the range or starts session views.
 	UIDs UIDRange
-	// ViewCgroups is the absolute path of a cgroup v2 directory delegated to
-	// the agent host, which runs outside it. Each view runs in a cgroup of its
-	// own there, and every cgroup there counts as one of this agent host's
-	// views. It is unrelated to the Process protocol's cgroup scope, which
-	// belongs to the sandbox's process service.
+	// ViewCgroups is the canonical path of the cgroup v2 directory delegated
+	// to the agent host for its views. Every cgroup in it counts as a view's.
+	// It is unrelated to the Process protocol's cgroup scope.
 	ViewCgroups string
 	// RelayURL and TLS reach the Link relay, as sandboxlink.DialAttach takes
 	// them. A nil TLS uses the system roots.
@@ -118,9 +109,9 @@ var (
 	ErrUnsupported = errors.New("agenthost: unsupported")
 	// ErrInvalidConfig is a Config that Open or Run rejects.
 	ErrInvalidConfig = errors.New("agenthost: invalid configuration")
-	// ErrStateLocked means another agent host holds the installation lock
-	// on the StateDir or on the ViewCgroups.
-	ErrStateLocked = errors.New("agenthost: state directory in use")
+	// ErrStateLocked means another agent host holds the StateDir or the
+	// ViewCgroups.
+	ErrStateLocked = errors.New("agenthost: state in use")
 	// ErrInvalidSession is a malformed Session.
 	ErrInvalidSession = errors.New("agenthost: invalid session")
 	// ErrCapacity means every Session uid is in use.
@@ -148,8 +139,7 @@ var (
 	ErrTeardown = errors.New("agenthost: teardown incomplete")
 )
 
-// Host is a running agent host. It holds the installation locks on its
-// StateDir and its ViewCgroups from Open until Close.
+// Host is an agent host that Open has started.
 type Host struct {
 	cfg Config
 	// state and views hold the locks; nil until taken.

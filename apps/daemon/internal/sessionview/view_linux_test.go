@@ -116,7 +116,7 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if staged, _ := os.ReadDir(f.staging); len(staged) != 1 {
 		t.Fatalf("staging parent holds %v, want the view's staging directory", staged)
 	}
-	if cgroups := cgroupsIn(t, f.cgroups); len(cgroups) != 1 {
+	if cgroups := sessionviewtest.Cgroups(t, f.cgroups); len(cgroups) != 1 {
 		t.Fatalf("cgroup parent holds %v, want the view's cgroup", cgroups)
 	} else if populated, err := isPopulated(cgroups[0]); err != nil || !populated {
 		t.Fatalf("view cgroup populated = %v, %v; want the view's processes in it", populated, err)
@@ -138,7 +138,7 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if left, _ := os.ReadDir(f.staging); len(left) != 0 {
 		t.Errorf("staging directories left: %v", left)
 	}
-	if left := cgroupsIn(t, f.cgroups); len(left) != 0 {
+	if left := sessionviewtest.Cgroups(t, f.cgroups); len(left) != 0 {
 		t.Errorf("view cgroups left: %v", left)
 	}
 }
@@ -213,7 +213,7 @@ func TestTeardownIsBounded(t *testing.T) {
 	if _, err := v.Wait(); !errors.Is(err, ErrClosed) || !errors.Is(err, ErrCleanup) {
 		t.Errorf("Wait = %v, want ErrClosed and ErrCleanup", err)
 	}
-	cgroups := cgroupsIn(t, f.cgroups)
+	cgroups := sessionviewtest.Cgroups(t, f.cgroups)
 	if len(cgroups) != 1 {
 		t.Fatalf("cgroup parent holds %v after the bound, want the view's cgroup", cgroups)
 	}
@@ -250,7 +250,7 @@ func TestStalledWorldStopKeepsTheCgroup(t *testing.T) {
 	if exit, err := v.Wait(); exit != (Exit{}) || !errors.Is(err, ErrCleanup) {
 		t.Errorf("Wait = %+v, %v; want exit code 0 and ErrCleanup", exit, err)
 	}
-	cgroups := cgroupsIn(t, f.cgroups)
+	cgroups := sessionviewtest.Cgroups(t, f.cgroups)
 	if len(cgroups) != 1 {
 		t.Fatalf("cgroup parent holds %v after the bound, want the view's cgroup", cgroups)
 	}
@@ -269,33 +269,57 @@ func recoverKept(t *testing.T, w *hangWorld, parent string) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("the world server outlived its release")
 	}
-	if kept := cgroupsIn(t, parent); len(kept) != 1 {
+	if kept := sessionviewtest.Cgroups(t, parent); len(kept) != 1 {
 		t.Fatalf("cgroup parent holds %v after the teardown, want the view's cgroup", kept)
 	}
 	if err := Recover(parent); err != nil {
 		t.Errorf("Recover: %v", err)
 	}
-	if left := cgroupsIn(t, parent); len(left) != 0 {
+	if left := sessionviewtest.Cgroups(t, parent); len(left) != 0 {
 		t.Errorf("view cgroups left after Recover: %v", left)
 	}
 }
 
-// TestCheckCgroups checks that CheckCgroups accepts a cgroup v2 directory the tests own and refuses a plain directory and the cgroup this process runs in, and that ProbeCgroups accepts the directory and leaves nothing in it.
-func TestCheckCgroups(t *testing.T) {
-	if err := CheckCgroups(t.TempDir()); !errors.Is(err, ErrCgroup) {
-		t.Errorf("CheckCgroups of a plain directory = %v, want ErrCgroup", err)
+// TestRecoverChecksTheParent checks that Recover refuses a plain directory and a cgroup that holds this process, and accepts a cgroup v2 directory the test owns, in which it leaves nothing.
+func TestRecoverChecksTheParent(t *testing.T) {
+	if err := Recover(t.TempDir()); !errors.Is(err, ErrCgroup) {
+		t.Errorf("Recover of a plain directory = %v, want ErrCgroup", err)
 	}
 	requireView(t)
 	parent := sessionviewtest.CgroupParent(t)
-	if err := CheckCgroups(parent); err != nil {
-		t.Errorf("CheckCgroups: %v", err)
-	}
 	// The test runs in the root of the cgroup v2 hierarchy that sessionviewtest mounts.
-	if err := CheckCgroups(filepath.Dir(parent)); !errors.Is(err, ErrCgroup) {
-		t.Errorf("CheckCgroups of this process's own cgroup = %v, want ErrCgroup", err)
+	if err := Recover(filepath.Dir(parent)); !errors.Is(err, ErrCgroup) {
+		t.Errorf("Recover of this process's own cgroup = %v, want ErrCgroup", err)
 	}
-	if err := ProbeCgroups(parent); err != nil {
-		t.Errorf("ProbeCgroups: %v", err)
+	if err := Recover(parent); err != nil {
+		t.Errorf("Recover: %v", err)
+	}
+}
+
+func TestClone3Error(t *testing.T) {
+	if err := clone3Error(unix.EINVAL); err != nil {
+		t.Errorf("clone3Error(EINVAL) = %v, want nil", err)
+	}
+	for _, errno := range []unix.Errno{unix.ENOSYS, unix.EPERM} {
+		if err := clone3Error(errno); !errors.Is(err, ErrCgroup) || !errors.Is(err, errno) {
+			t.Errorf("clone3Error(%v) = %v, want ErrCgroup", errno, err)
+		}
+	}
+}
+
+// TestRemoveCgroupKeepsItPastTheDeadline checks that an empty cgroup stays once the deadline has passed.
+func TestRemoveCgroupKeepsItPastTheDeadline(t *testing.T) {
+	requireView(t)
+	dir := filepath.Join(sessionviewtest.CgroupParent(t), "view-late")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Rmdir(dir)
+	if err := removeCgroup(dir, time.Now()); !errors.Is(err, ErrCleanup) {
+		t.Errorf("removeCgroup = %v, want ErrCleanup", err)
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("removeCgroup removed the cgroup past the deadline: %v", err)
 	}
 }
 
@@ -654,22 +678,6 @@ func serveBroker(t *testing.T) func(*os.File) error {
 }
 
 // processesWith counts processes whose command line contains token.
-// cgroupsIn lists the cgroups in parent.
-func cgroupsIn(t *testing.T, parent string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(parent)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var dirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			dirs = append(dirs, filepath.Join(parent, e.Name()))
-		}
-	}
-	return dirs
-}
-
 func processesWith(t *testing.T, token string) int {
 	t.Helper()
 	cmdlines, err := filepath.Glob("/proc/[0-9]*/cmdline")

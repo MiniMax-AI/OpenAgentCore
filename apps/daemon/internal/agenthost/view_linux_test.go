@@ -520,7 +520,7 @@ func checkReleased(t *testing.T, cfg Config) {
 	if left := leftSessions(t, cfg); len(left) != 0 {
 		t.Errorf("%d Session directories remain", len(left))
 	}
-	if left := leftCgroups(t, cfg); len(left) != 0 {
+	if left := sessionviewtest.Cgroups(t, cfg.ViewCgroups); len(left) != 0 {
 		t.Errorf("view cgroups remain: %v", left)
 	}
 	mounts, err := os.ReadFile("/proc/self/mountinfo")
