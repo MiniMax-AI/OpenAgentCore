@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Error kinds. Every error that Start, Probe, CheckCgroups, Recover, Wait, Signal and Close return matches one of them with errors.Is.
+// Error kinds. Every error that Start, Probe, CheckCgroups, ProbeCgroups, Recover, Wait, Signal and Close return matches one of them with errors.Is.
 var (
 	ErrUnsupported = errors.New("sessionview: unsupported platform")
 	ErrInvalidSpec = errors.New("sessionview: invalid spec")
@@ -23,7 +23,7 @@ var (
 	ErrExec     = errors.New("sessionview: process start failed")
 	ErrLauncher = errors.New("sessionview: launcher failed")
 	ErrClosed   = errors.New("sessionview: view closed")
-	// ErrCleanup reports a teardown or recovery that did not finish: the view's processes or the world server were still running at the bound, or the view's cgroup could not be ended and removed. What remains finishes in the background if it can, and the cgroup stays for Recover.
+	// ErrCleanup reports a teardown or recovery that did not finish: the view's processes or the world server were still running at the bound, or the view's cgroup could not be ended and removed. The cgroup stays for Recover, and the processes and the world server finish in the background if they can.
 	ErrCleanup = errors.New("sessionview: cleanup incomplete")
 	// ErrExited is Signal's result once the process has exited. It also matches os.ErrProcessDone.
 	ErrExited = errors.New("sessionview: process exited")

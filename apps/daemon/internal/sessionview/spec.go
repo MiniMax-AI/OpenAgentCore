@@ -23,7 +23,7 @@ type Spec struct {
 	Network  Network
 	// StagingParent is an existing absolute host directory, such as the Session directory, in which the view creates its staging directory and removes it at teardown.
 	StagingParent string
-	// CgroupParent is the absolute path of a cgroup v2 directory that the caller owns and that CheckCgroups accepts. The view creates its own cgroup in it, runs every process there and removes it at teardown.
+	// CgroupParent is the absolute path of a cgroup v2 directory that the caller owns and that CheckCgroups and ProbeCgroups accept. The view creates its own cgroup in it, runs every process there and removes it at teardown.
 	CgroupParent string
 }
 

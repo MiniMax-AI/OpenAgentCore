@@ -183,7 +183,7 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	}
 }
 
-// TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it, and that the teardown keeps the view's cgroup for Recover.
+// TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it, and that the view's cgroup stays for Recover after its processes end past the bound.
 func TestTeardownIsBounded(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
@@ -213,32 +213,89 @@ func TestTeardownIsBounded(t *testing.T) {
 	if _, err := v.Wait(); !errors.Is(err, ErrClosed) || !errors.Is(err, ErrCleanup) {
 		t.Errorf("Wait = %v, want ErrClosed and ErrCleanup", err)
 	}
-	if kept := cgroupsIn(t, f.cgroups); len(kept) != 1 {
-		t.Errorf("cgroup parent holds %v after the bound, want the view's cgroup", kept)
+	cgroups := cgroupsIn(t, f.cgroups)
+	if len(cgroups) != 1 {
+		t.Fatalf("cgroup parent holds %v after the bound, want the view's cgroup", cgroups)
 	}
-	// Once the world answers, what was left finishes, and Recover removes the cgroup.
+	// Once the world answers, the process ends, and its cgroup stays for Recover.
 	close(w.release)
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if populated, err := isPopulated(cgroups[0]); err != nil {
+			t.Fatal(err)
+		} else if !populated {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the view's process outlived the world's answer")
+		}
+	}
+	recoverKept(t, w, f.cgroups)
+}
+
+// TestStalledWorldStopKeepsTheCgroup checks that a world server that does not stop within the bound fails the teardown with ErrCleanup and keeps the view's cgroup, although the view's processes have ended.
+func TestStalledWorldStopKeepsTheCgroup(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	w := &hangWorld{loopbackWorld: loopbackWorld{dir: f.world}, hung: make(chan struct{}), release: make(chan struct{})}
+	saved := closeWait
+	closeWait = time.Second
+	defer func() { closeWait = saved }()
+	spec := f.spec(&w.loopbackWorld, "noop")
+	spec.World = w.serve
+	v, err := Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer v.Close()
+	if exit, err := v.Wait(); exit != (Exit{}) || !errors.Is(err, ErrCleanup) {
+		t.Errorf("Wait = %+v, %v; want exit code 0 and ErrCleanup", exit, err)
+	}
+	cgroups := cgroupsIn(t, f.cgroups)
+	if len(cgroups) != 1 {
+		t.Fatalf("cgroup parent holds %v after the bound, want the view's cgroup", cgroups)
+	}
+	if populated, err := isPopulated(cgroups[0]); err != nil || populated {
+		t.Errorf("view cgroup populated = %v, %v; want its processes ended", populated, err)
+	}
+	close(w.release)
+	recoverKept(t, w, f.cgroups)
+}
+
+// recoverKept waits until w has stopped serving after its release, checks that the view's cgroup is still there, and removes it with Recover.
+func recoverKept(t *testing.T, w *hangWorld, parent string) {
+	t.Helper()
 	select {
 	case <-w.served:
 	case <-time.After(10 * time.Second):
-		t.Error("the view outlived the world's answer")
+		t.Fatal("the world server outlived its release")
 	}
-	if err := Recover(f.cgroups); err != nil {
+	if kept := cgroupsIn(t, parent); len(kept) != 1 {
+		t.Fatalf("cgroup parent holds %v after the teardown, want the view's cgroup", kept)
+	}
+	if err := Recover(parent); err != nil {
 		t.Errorf("Recover: %v", err)
 	}
-	if left := cgroupsIn(t, f.cgroups); len(left) != 0 {
+	if left := cgroupsIn(t, parent); len(left) != 0 {
 		t.Errorf("view cgroups left after Recover: %v", left)
 	}
 }
 
-// TestCheckCgroups checks that a cgroup v2 directory the tests own passes and that a plain directory fails with ErrCgroup.
+// TestCheckCgroups checks that CheckCgroups accepts a cgroup v2 directory the tests own and refuses a plain directory and the cgroup this process runs in, and that ProbeCgroups accepts the directory and leaves nothing in it.
 func TestCheckCgroups(t *testing.T) {
 	if err := CheckCgroups(t.TempDir()); !errors.Is(err, ErrCgroup) {
 		t.Errorf("CheckCgroups of a plain directory = %v, want ErrCgroup", err)
 	}
 	requireView(t)
-	if err := CheckCgroups(sessionviewtest.CgroupParent(t)); err != nil {
+	parent := sessionviewtest.CgroupParent(t)
+	if err := CheckCgroups(parent); err != nil {
 		t.Errorf("CheckCgroups: %v", err)
+	}
+	// The test runs in the root of the cgroup v2 hierarchy that sessionviewtest mounts.
+	if err := CheckCgroups(filepath.Dir(parent)); !errors.Is(err, ErrCgroup) {
+		t.Errorf("CheckCgroups of this process's own cgroup = %v, want ErrCgroup", err)
+	}
+	if err := ProbeCgroups(parent); err != nil {
+		t.Errorf("ProbeCgroups: %v", err)
 	}
 }
 
