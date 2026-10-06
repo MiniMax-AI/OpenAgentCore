@@ -89,24 +89,36 @@ func TestCancelDuringHeldWrite(t *testing.T) {
 }
 
 // finisher completes Describe after its request is cancelled, as a lock
-// acquired just before CancelRequest arrives does.
-type finisher struct{ Service }
+// acquired just before CancelRequest arrives does. running closes once
+// Describe runs.
+type finisher struct {
+	Service
+	running chan struct{}
+}
 
-func (finisher) Describe(ctx context.Context, _ Attachment, _ *DescribeRequest) (*DescribeResponse, error) {
+func (f finisher) Describe(ctx context.Context, _ Attachment, _ *DescribeRequest) (*DescribeResponse, error) {
+	close(f.running)
 	<-ctx.Done()
 	return &DescribeResponse{ServerInstanceID: testInstance, Capabilities: testCaps}, nil
 }
 
-// An interrupt cancels the request and still returns its own outcome.
+// An interrupt of a running request cancels it and still returns its own
+// outcome.
 func TestInterruptReturnsOutcome(t *testing.T) {
 	cc, sc := net.Pipe()
 	a := testAttachment()
-	go NewServer(finisher{}).Serve(context.Background(), sc, a, 1)
+	svc := finisher{running: make(chan struct{})}
+	go NewServer(svc).Serve(context.Background(), sc, a, 1)
 	c := NewClient(cc)
 	defer c.Close()
 
+	// A CancelRequest that arrives before the handler runs ends the request
+	// with Cancelled, so the interrupt waits for the handler.
 	interrupt := make(chan struct{})
-	close(interrupt)
+	go func() {
+		<-svc.running
+		close(interrupt)
+	}()
 	if _, err := c.Describe(WithInterrupt(context.Background(), interrupt), &DescribeRequest{}); err != nil {
 		t.Fatalf("interrupted describe that completed: %v", err)
 	}
