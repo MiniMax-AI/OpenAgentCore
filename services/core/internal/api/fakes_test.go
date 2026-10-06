@@ -761,23 +761,15 @@ func (f *fakeSessionAdmin) GetManagedSessionArchive(a0 context.Context, a1 strin
 }
 
 type fakeSessionAdmission struct {
-	t                   testing.TB
-	createSession       func(context.Context, string, sessions.CreateSession) (sessions.Session, error)
-	createSessionStream func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	t             testing.TB
+	createSession func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
 }
 
-func (f *fakeSessionAdmission) CreateSession(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Session, error) {
+func (f *fakeSessionAdmission) CreateSession(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Creation, error) {
 	if f.createSession == nil {
 		unexpectedCall(f.t, "CreateSession")
 	}
 	return f.createSession(a0, a1, a2)
-}
-
-func (f *fakeSessionAdmission) CreateSessionStream(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Creation, error) {
-	if f.createSessionStream == nil {
-		unexpectedCall(f.t, "CreateSessionStream")
-	}
-	return f.createSessionStream(a0, a1, a2)
 }
 
 type fakeSessionArchive struct {
@@ -794,23 +786,15 @@ func (f *fakeSessionArchive) ArchiveSession(a0 context.Context, a1 string, a2 st
 
 type fakeSessionCreation struct {
 	t                   testing.TB
-	createSession       func(context.Context, string, sessions.CreateSession) (sessions.Session, error)
-	createSessionStream func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	createSession       func(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
 	findSessionCreation func(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error)
 }
 
-func (f *fakeSessionCreation) CreateSession(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Session, error) {
+func (f *fakeSessionCreation) CreateSession(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Creation, error) {
 	if f.createSession == nil {
 		unexpectedCall(f.t, "CreateSession")
 	}
 	return f.createSession(a0, a1, a2)
-}
-
-func (f *fakeSessionCreation) CreateSessionStream(a0 context.Context, a1 string, a2 sessions.CreateSession) (sessions.Creation, error) {
-	if f.createSessionStream == nil {
-		unexpectedCall(f.t, "CreateSessionStream")
-	}
-	return f.createSessionStream(a0, a1, a2)
 }
 
 func (f *fakeSessionCreation) FindSessionCreation(a0 context.Context, a1 string, a2 string, a3 json.RawMessage, a4 identity.Subject) (sessions.Creation, error) {

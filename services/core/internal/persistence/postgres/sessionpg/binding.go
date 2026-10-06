@@ -116,7 +116,7 @@ func (t *SessionTx) LoadEnvironmentInput(ctx context.Context) (*sessions.Environ
 
 func (t *SessionTx) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
 	row, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.tenant, ID: t.session})
-	return EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
+	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }
 
 // RecordEnvironmentFailure fails the Environment only while it is the

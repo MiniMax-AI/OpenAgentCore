@@ -127,7 +127,6 @@ func mcpBearerWorkerConfiguration(t *testing.T, h *dispatchHarness) (string, str
 		t.Fatal(err)
 	}
 	h.s, h.db = store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
-	h.d.Store = h.s
 	_, service, err := fixtureVaults(h.db)
 	if err != nil {
 		t.Fatal(err)

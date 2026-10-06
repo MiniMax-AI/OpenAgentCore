@@ -148,7 +148,7 @@ func runCredentialCases(t *testing.T, cases []credentialCase, digest *string) {
 			tx.t = t
 			storage := test.storage
 			storage.t, storage.credentials = t, &tx
-			service, err := NewService(&storage)
+			service, err := NewService(&storage, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

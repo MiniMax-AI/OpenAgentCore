@@ -89,7 +89,7 @@ func managedWorkerMode(t *testing.T, s *store.Store, db fixtureDB, key string, p
 		t.Cleanup(server.Close)
 		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
 	}
-	w := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
+	w := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
 	if len(run) > 0 && run[0] {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)

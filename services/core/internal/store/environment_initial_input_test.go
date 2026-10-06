@@ -88,7 +88,7 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			tenant := uuid.NewString()
 			input := environmentInput("initial", kind, "/workspace")
 			input.InitialInputs = []sessions.Input{messageInput("first"), messageInput("second")}
-			creation, err := s.CreateSessionStream(t.Context(), tenant, input)
+			creation, err := createSession(t.Context(), s, tenant, input)
 			if err != nil || !creation.Created || creation.Cursor != 0 || creation.Session.LastTurn != nil {
 				t.Fatal("creation started initial work before native readiness", creation, err)
 			}
@@ -125,8 +125,9 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 				t.Fatal("creation cursor lost initial activity", events, err)
 			}
 			other, _ := testStore(t)
-			retry, err := other.CreateSessionStream(t.Context(), tenant, input)
-			if err != nil || retry.Created || retry.Cursor != int64(expectedEvents) || retry.Session.ID != session.ID || retry.Session.EnvironmentInputActivity != nil || retry.Session.LastTurn != nil {
+			retry, err := createSession(t.Context(), other, tenant, input)
+			// A retry returns the current projection; the reservation is unchanged.
+			if err != nil || retry.Created || retry.Cursor != int64(expectedEvents) || retry.Session.ID != session.ID || activityStatus(retry.Session) != activityStatus(session) || retry.Session.LastTurn != nil {
 				t.Fatal("retry changed creation cursor/snapshot", retry, err)
 			}
 			if got := initialEnvironmentReservation(t, other, pool, tenant, session.ID); !reflect.DeepEqual(got, reservation) {

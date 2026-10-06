@@ -41,7 +41,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if _, err := store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	functions := executionOwner(t, db, s).Sessions
+	functions := executionOwner(t, db).Sessions
 	for _, id := range []string{"a", "b", "c", "rollback", "late"} {
 		if err := functions.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)

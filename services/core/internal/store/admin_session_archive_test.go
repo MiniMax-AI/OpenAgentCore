@@ -11,10 +11,31 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/filepg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// testFiles returns the files domain over pool for tests that need a File.
+func testFiles(t *testing.T, pool *pgxpool.Pool) (*files.Service, *filepg.Store) {
+	t.Helper()
+	storage := filepg.New(pgunit.NewPool(pool))
+	service, err := files.NewService(storage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service, storage
+}
+
+func uploadSource(data []byte) func(io.Writer) (files.Upload, error) {
+	return func(w io.Writer) (files.Upload, error) {
+		_, err := w.Write(data)
+		return files.Upload{Filename: "source.bin", Purpose: files.PurposeUserData}, err
+	}
+}
 
 func managedArchiveFixture(t *testing.T) (*Store, *Store, string) {
 	t.Helper()

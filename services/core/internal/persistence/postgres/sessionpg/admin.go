@@ -75,11 +75,11 @@ func (s *Store) ReadAdminSummary(ctx context.Context, tenantID string, filter se
 				return err
 			}
 			for _, row := range rows {
-				session, err := SessionFromRow(row.Session)
+				session, err := sessionFromRow(row.Session)
 				if err != nil {
 					return err
 				}
-				if session, err = LoadSessionActivity(ctx, q, session); err != nil {
+				if session, err = loadSessionActivity(ctx, q, session); err != nil {
 					return err
 				}
 				var creator *string

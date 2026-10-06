@@ -47,6 +47,10 @@ type fakeStorage struct {
 	auditOperation func() error
 	// inputTx is the transaction WithInputs applies in.
 	inputTx *fakeInputTx
+	// creation is the transaction WithCreation applies in.
+	creation     *fakeCreationTx
+	fingerprint  func(secret string) (string, error)
+	findCreation func() (CreationRecord, error)
 }
 
 func (s *fakeStorage) record(name string, set bool, detail ...string) {
@@ -109,7 +113,7 @@ func (s *fakeStorage) DeleteSessionArtifact(context.Context, string, string, str
 
 func deviceService(t *testing.T, storage *fakeStorage) *Service {
 	t.Helper()
-	service, err := NewService(storage)
+	service, err := NewService(storage, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

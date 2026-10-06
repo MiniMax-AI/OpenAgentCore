@@ -46,8 +46,13 @@ func TestClaudeSessionConfigurationAdmission(t *testing.T) {
 					handler, saved, _ := testHandler(t, func(d *Dependencies, f *testFakes) {
 						d.Engine = "claude_sdk"
 						admitSessions(d, f)
-						// The Worker's stream admission reports that it cannot execute.
-						f.sessionAdmission.createSessionStream = func(_ context.Context, _ string, input sessions.CreateSession) (sessions.Creation, error) {
+						// The Worker records a JSON creation and reports that it cannot
+						// execute a streamed one.
+						record := f.sessionAdmission.createSession
+						f.sessionAdmission.createSession = func(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
+							if !stream {
+								return record(ctx, tenant, input)
+							}
 							streamed = input.Engine
 							return sessions.Creation{}, execution.ErrExecutionUnavailable
 						}

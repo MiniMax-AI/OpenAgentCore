@@ -83,7 +83,7 @@ func TestUserManagedPreparationUsesAuthenticatedRuntimeWithoutAllocation(t *test
 			handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 			server := httptest.NewServer(http.HandlerFunc(handler.WS))
 			defer server.Close()
-			worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry})
+			worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: registry})
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
@@ -199,7 +199,7 @@ func TestEnvironmentInitializationRevocationBeforeClaim(t *testing.T) {
 		return sessions.EnvironmentInitialization{EnvironmentID: environment.ID, SessionID: session.ID, TenantID: principal.TenantID, DeviceID: enrolled.DeviceID, State: "pending", Engine: "codex"}
 	}
 	revoked, other := create(), create()
-	owned := executionOwner(t, db, s).Sessions
+	owned := executionOwner(t, db).Sessions
 	if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), principal.TenantID, revoked.DeviceID); err != nil {
 		t.Fatal(err)
 	}

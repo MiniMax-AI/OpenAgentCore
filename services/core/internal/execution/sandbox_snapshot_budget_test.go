@@ -60,7 +60,7 @@ func (d *snapshotBudget) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data pg
 
 func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 	budget := &snapshotBudget{t: t}
-	_, owner, deployments, reader := resetManagerStoreConfig(t, func(cfg *pgxpool.Config) {
+	owner, deployments, reader := resetManagerConfig(t, func(cfg *pgxpool.Config) {
 		cfg.ConnConfig.RuntimeParams["jit"] = "on"
 		cfg.ConnConfig.Tracer = budget
 	})

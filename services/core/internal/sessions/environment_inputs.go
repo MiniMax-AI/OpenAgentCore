@@ -40,7 +40,7 @@ func (s *Service) ReserveEnvironmentInput(ctx context.Context, tenant, session, 
 	if err := ValidateInputKey(key); err != nil {
 		return EnvironmentInputReservation{}, err
 	}
-	batch, encoded, err := ValidateMessageInputs(inputs)
+	batch, encoded, err := validateMessageInputs(inputs)
 	if err != nil {
 		return EnvironmentInputReservation{}, err
 	}
@@ -108,7 +108,7 @@ func (s *Service) ReserveEnvironmentInput(ctx context.Context, tenant, session, 
 				result = EnvironmentInputReservation{SessionID: session, State: EnvironmentInputAdmitted, Receipts: receipts}
 				return tx.RecordInputAudit(ctx)
 			}
-			if result, err = tx.CreateInputReservation(ctx, key, encoded); err != nil {
+			if result, err = tx.CreateInputReservation(ctx, key, encoded, false); err != nil {
 				return err
 			}
 			return tx.RecordInputAudit(ctx)

@@ -157,6 +157,39 @@ func (s *Store) Read(ctx context.Context, tenantID, fileID string, consume func(
 	})
 }
 
+// ReadSourceForCopy reads, in the caller's transaction, the content of the
+// tenant's File for a copy of at most limit bytes. It holds a share lock on
+// the File until that transaction ends, so a Delete waits for the copy. A
+// malformed or missing File is files.ErrNotFound and a larger one
+// files.ErrTooLarge; content that does not match its recorded size is an
+// internal error.
+func ReadSourceForCopy(ctx context.Context, tx pgx.Tx, tenant pgtype.UUID, id string, limit int64) ([]byte, error) {
+	key, ok := files.ParseID(id)
+	if !ok {
+		return nil, files.ErrNotFound
+	}
+	row, err := sqlc.New(tx).LockSourceFile(ctx, sqlc.LockSourceFileParams{TenantID: tenant, ID: pgtype.UUID{Bytes: key, Valid: true}})
+	if err != nil {
+		return nil, rowError(err)
+	}
+	if row.SizeBytes > limit {
+		return nil, files.ErrTooLarge
+	}
+	objects := tx.LargeObjects()
+	body, err := objects.Open(ctx, row.BodyOid.Uint32, pgx.LargeObjectModeRead)
+	if err != nil {
+		return nil, err
+	}
+	content, err := io.ReadAll(io.LimitReader(body, row.SizeBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(content)) != row.SizeBytes {
+		return nil, errors.New("stored File does not match its recorded size")
+	}
+	return content, body.Close()
+}
+
 // Delete removes the row and its large object and records the write audit in
 // one transaction.
 func (s *Store) Delete(ctx context.Context, tenantID, fileID string) error {

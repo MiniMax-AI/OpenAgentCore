@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/skillpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -466,6 +468,45 @@ func TestSoleVersionDeletionSerializesWithUpload(t *testing.T) {
 		} else if del.err != nil || del.version.Version != 1 || !errors.Is(up.err, skills.ErrNotFound) || skillRows != 0 || versionRows != 0 {
 			t.Fatal("deletion before upload", up, del, skillRows, versionRows)
 		}
+	}
+}
+
+// LockSkills locks each named Skill of the tenant once, and
+// ReadVersionForFreeze opens a version only with the key that sealed it.
+func TestFreezeReads(t *testing.T) {
+	cipher := testCipher(t, 48)
+	f := newFixture(t, pgtest.Open(t), cipher)
+	ctx := t.Context()
+	tenant := uuid.NewString()
+	content := proofArchive(t, "freeze-first")
+	first := f.create(t, tenant, content)
+	second := f.create(t, tenant, archive(t, "other", "Another Skill.", "freeze-second"))
+	tenantID := pgtype.UUID{Bytes: uuid.MustParse(tenant), Valid: true}
+	q := sqlc.New(f.pool)
+	locked, err := skillpg.LockSkills(ctx, q, tenantID, []string{second.ID, first.ID, second.ID})
+	if err != nil || len(locked) != 2 || locked[first.ID].ID != first.ID || locked[second.ID].DefaultVersion != 1 {
+		t.Fatal("locked Skills", locked, err)
+	}
+	for _, ids := range [][]string{{first.ID, "skill_" + uuid.NewString()}, {"malformed"}} {
+		if _, err := skillpg.LockSkills(ctx, q, tenantID, ids); !errors.Is(err, skills.ErrNotFound) {
+			t.Fatal("missing Skill", ids, err)
+		}
+	}
+	if _, err := skillpg.LockSkills(ctx, q, pgtype.UUID{Bytes: uuid.New(), Valid: true}, []string{first.ID}); !errors.Is(err, skills.ErrNotFound) {
+		t.Fatal("foreign Skill", err)
+	}
+	read, err := skillpg.ReadVersionForFreeze(ctx, q, cipher, tenantID, first.ID, 1)
+	if err != nil || read.Version.Version != 1 || !bytes.Equal(read.Archive, content) {
+		t.Fatal("frozen version", err)
+	}
+	if _, err := skillpg.ReadVersionForFreeze(ctx, q, cipher, tenantID, first.ID, 2); !errors.Is(err, skills.ErrNotFound) {
+		t.Fatal("missing version", err)
+	}
+	if _, err := skillpg.ReadVersionForFreeze(ctx, q, nil, tenantID, first.ID, 1); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+		t.Fatal("read without a key", err)
+	}
+	if _, err := skillpg.ReadVersionForFreeze(ctx, q, testCipher(t, 49), tenantID, first.ID, 1); err == nil || errors.Is(err, skills.ErrNotFound) || errors.Is(err, credentialcrypto.ErrUnavailable) {
+		t.Fatal("another key opened the version", err)
 	}
 }
 

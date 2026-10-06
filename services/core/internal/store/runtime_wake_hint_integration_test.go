@@ -75,7 +75,7 @@ func newWakeHintIntegration(t *testing.T) *wakeHintIntegration {
 		release: make(chan struct{}), scans: make(chan int, 16),
 	}
 	worker := startWorker(t, t.Context(), f.db, &execution.Dispatcher{
-		Store: f.store, Registry: f.provider.registry,
+		Registry: f.provider.registry,
 		ManagedRuntimes: &execution.RuntimeProvider{
 			CoreURL: "http://core.invalid/api/v1", InstallationID: f.key,
 			BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

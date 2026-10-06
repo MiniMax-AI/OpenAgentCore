@@ -21,10 +21,11 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 	reader := sessionpg.New(pgunit.NewPool(pool), nil)
 	for _, code := range []string{"authentication_error", "connection_failed", "secret-canary"} {
 		t.Run(code, func(t *testing.T) {
-			session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "native-classification"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
+			created, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "native-classification"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 			if err != nil {
 				t.Fatal(err)
 			}
+			session := created.Session
 			receipt := submitMessage(t, pool, tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
 			transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			status := 503

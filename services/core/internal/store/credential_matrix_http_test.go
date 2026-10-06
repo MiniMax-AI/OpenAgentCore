@@ -101,7 +101,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}}, nil
 	})
-	worker := startWorker(t, ctx, db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
+	worker := startWorker(t, ctx, db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: runtimes})
 	var stop sync.Once
 	t.Cleanup(func() {
 		stop.Do(func() {

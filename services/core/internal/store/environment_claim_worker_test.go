@@ -18,7 +18,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 		t.Run(map[bool]string{false: "unbound", true: "deleted"}[deleted], func(t *testing.T) {
 			s, db := newTestStoreDB(t)
 			tenant, pending := newEnvironmentExpiryReservation(t, s)
-			owner := executionOwner(t, db, s)
+			owner := executionOwner(t, db)
 			got, err := owner.Sessions.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if err != nil || len(got.Receipts) != 1 || got.Receipts[0].Replayed {
 				t.Fatal(got, err)
@@ -42,7 +42,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitRelease()
-			restarted := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
+			restarted := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
 			stopped, cancel := context.WithCancel(t.Context())
 			cancel()
 			awaitRelease = pgtest.ObserveExecutionLeaseRelease(t, db.pool)
@@ -65,7 +65,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			if err != nil || turns != 1 || inputs != 1 || queued != 0 {
 				t.Fatal("restart duplicated or requeued prepared work", turns, inputs, queued, err)
 			}
-			successor := executionOwner(t, db, s).Sessions
+			successor := executionOwner(t, db).Sessions
 			retry, err := successor.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if deleted {
 				if !errors.Is(err, sessions.ErrNotFound) {

@@ -103,7 +103,7 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 			input := environmentInput("winner", "openai_hosted", fmt.Sprintf("/workspace/%d", i))
 			input.CreationRequest = intent
 			input.InitialInputs = []sessions.Input{messageInput("initial")}
-			creation, err := st.CreateSessionStream(ctx, tenant, input)
+			creation, err := createSession(ctx, st, tenant, input)
 			if err != nil {
 				t.Error(err)
 				return
@@ -162,11 +162,11 @@ func TestEnvironmentCreationWinnerOwnsSnapshotAndIdentity(t *testing.T) {
 	retryInput := environmentInput("winner", "openai_hosted", "/changed-resolution")
 	retryInput.CreationRequest = intent
 	retryInput.InitialInputs = []sessions.Input{messageInput("initial")}
-	retry, err := restarted.CreateSessionStream(ctx, tenant, retryInput)
+	retry, err := createSession(ctx, restarted, tenant, retryInput)
 	if err != nil || retry.Created || retry.Session.ID != first.creation.Session.ID {
 		t.Fatal(retry, err)
 	}
-	found, err := restarted.FindSessionCreation(ctx, tenant, "winner", intent, FixtureCreator())
+	found, err := sessionService(t, restarted).FindSessionCreation(ctx, tenant, "winner", intent, FixtureCreator())
 	if err != nil || found.Created || found.Session.ID != first.creation.Session.ID {
 		t.Fatal(found, err)
 	}

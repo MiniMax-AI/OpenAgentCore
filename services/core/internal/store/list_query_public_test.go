@@ -34,7 +34,7 @@ func TestListQueryOfficialClientPostgres(t *testing.T) {
 	})
 	// Use real admission while leaving dispatch paused. Public cancellation retains
 	// the queued history; this fixture does not perform native or model execution.
-	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s})
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{})
 	t.Cleanup(func() {
 		stopped, cancel := context.WithCancel(context.Background())
 		cancel()

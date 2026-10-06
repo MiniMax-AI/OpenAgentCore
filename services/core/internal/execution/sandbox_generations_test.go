@@ -16,7 +16,7 @@ import (
 )
 
 func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) {
-	_, owner, deployments, reader := resetManagerStore(t)
+	owner, deployments, reader := resetManager(t)
 	id := uuid.NewString()
 	if err := owner.Deployment.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)

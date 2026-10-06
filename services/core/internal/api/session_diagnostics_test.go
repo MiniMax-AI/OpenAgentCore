@@ -15,10 +15,11 @@ import (
 func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	s, pool := diagnosticDatabase(t)
 	h, _, tenant := adminTestHandler(t, databaseSessionReads(pool))
-	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "diagnostic-test"}, Engine: "codex", IdempotencyKey: "diagnostics", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
+	created, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "diagnostic-test"}, Engine: "codex", IdempotencyKey: "diagnostics", Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
+	session := created.Session
 	receipt := submitMessage(t, pool, tenant, session.ID, "input", json.RawMessage(`{"text":"input-secret-canary"}`))
 	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"device_disconnected","error":"Bearer raw-secret-canary https://private.example/key","done":{"native_id":"secret-native-canary"}}`)})

@@ -63,12 +63,12 @@ type Page struct {
 	NextCursor string
 }
 
-// Creation starts observation at the Session upsert. For a new creation,
-// CreateSessionStream returns the committed Session projection that
-// CreateSession returns, read after the creation commits; Cursor still precedes
-// the initial inputs, so their events remain observable exactly once. Retries
-// and FindSessionCreation return only the resource row and its cursor. Only a new creation emits a created snapshot and
-// streams from Cursor; a stream retry of an existing creation sends no events.
+// Creation starts observation at the Session upsert. Session is the Session
+// projection the creation transaction read last, after any initial input;
+// Cursor is the event sequence the upsert returned, before that input, so its
+// events remain observable exactly once. Only a new creation emits a created
+// snapshot and streams from Cursor; a stream retry of an existing creation
+// sends no events. FindSessionCreation returns only the Session ID.
 type Creation struct {
 	Session Session
 	Created bool

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -83,8 +84,8 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	leased := executionOwner(t, db, s)
-	writer := leased.Store
+	leased := executionOwner(t, db)
+	writer := store.NewExecution(s, leased.Lease.(*pgunit.Lease))
 	ctx := t.Context()
 
 	created := openStream(t, server, token, http.MethodPost, "/v1/agents/sessions",

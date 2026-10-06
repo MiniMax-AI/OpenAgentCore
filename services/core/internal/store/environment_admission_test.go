@@ -30,14 +30,14 @@ func newEnvironmentAdmission(t *testing.T) (*dispatchHarness, *execution.Worker)
 		cancel()
 		_ = worker.Run(ctx)
 	})
-	session, err := worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(sessions.CreateSession{
+	created, err := worker.CreateSession(t.Context(), h.tenant, store.WithFixtureModelProvider(sessions.CreateSession{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
 		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.session = session
+	h.session = created.Session
 	h = connectFixtureRuntime(t, h, h.session)
 	return h, worker
 }

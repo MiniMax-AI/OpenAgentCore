@@ -6,6 +6,9 @@ RETURNING *;
 -- name: GetSourceFile :one
 SELECT * FROM source_files WHERE tenant_id = $1 AND id = $2;
 
+-- name: LockSourceFile :one
+SELECT * FROM source_files WHERE tenant_id = $1 AND id = $2 FOR SHARE;
+
 -- name: ListSourceFiles :many
 SELECT * FROM source_files
 WHERE tenant_id = sqlc.arg(tenant_id)

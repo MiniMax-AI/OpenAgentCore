@@ -52,7 +52,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	functions := executionOwner(t, db, s).Sessions
+	functions := executionOwner(t, db).Sessions
 
 	create := func(environment string, initial bool) string {
 		t.Helper()

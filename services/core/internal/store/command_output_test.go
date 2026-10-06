@@ -16,7 +16,7 @@ import (
 func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
+	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "command-output"})
 	if err != nil {

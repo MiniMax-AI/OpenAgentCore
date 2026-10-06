@@ -17,7 +17,7 @@ import (
 func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
+	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "items"})
 	if err != nil {
@@ -120,7 +120,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
+	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
 	tenant := uuid.NewString()
 	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
 	input, err := store.SendMessage(ctx, s, tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
@@ -156,7 +156,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
+	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
 	tenant := uuid.NewString()
 	for _, receiptOnly := range []bool{true, false} {
 		session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
@@ -188,7 +188,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
-	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
+	journal := executionOwner(t, fixtureDB{pool: pool}).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "failed-items"})
 	if err != nil {

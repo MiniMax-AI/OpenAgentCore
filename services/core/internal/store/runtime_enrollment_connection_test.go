@@ -85,7 +85,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	server.Start()
 	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
 	start := func() func() {
-		worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: registry})
+		worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: registry})
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() { done <- worker.Run(ctx) }()
