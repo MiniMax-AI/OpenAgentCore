@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 	sp "github.com/MiniMax-AI/OpenAgentCore/internal/sandboxprocess"
 )
 
@@ -107,6 +108,7 @@ func startView(t *testing.T, w *hangWorld, p sessionview.Process) (*sessionview.
 		Shim:          sessionview.Shim{Binary: shimBinary(t), Paths: []string{"/bin/sh"}},
 		Process:       p,
 		StagingParent: t.TempDir(),
+		CgroupParent:  sessionviewtest.CgroupParent(t),
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)

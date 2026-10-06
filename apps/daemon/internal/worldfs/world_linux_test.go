@@ -18,6 +18,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/worldfs"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/fileservicetest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
@@ -28,7 +29,7 @@ import (
 // The world tests mount FUSE and need root with CAP_SYS_ADMIN (and CAP_NET_ADMIN for the view test), /dev/fuse and no AppArmor confinement. Run them in a throwaway container:
 //
 //	CGO_ENABLED=0 go test -c -o /tmp/worldfs.test ./apps/daemon/internal/worldfs
-//	docker run --rm --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
+//	docker run --rm --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
 //	  -e OAC_TEST_WORLDFS=1 -v /tmp/worldfs.test:/t.test:ro debian:bookworm-slim /t.test -test.v
 const (
 	gateEnv    = "OAC_TEST_WORLDFS"
@@ -342,6 +343,7 @@ func TestStartEndsDuringAttach(t *testing.T) {
 	_, err = sessionview.Start(ctx, sessionview.Spec{
 		World:         worldfs.New(fileservicetest.Export, srv.Dial).Serve,
 		StagingParent: t.TempDir(),
+		CgroupParent:  sessionviewtest.CgroupParent(t),
 		Process:       sessionview.Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: 1000, GID: 1000, Stderr: os.Stderr},
 	})
 	if errors.Is(err, worldfs.ErrAttachmentDirty) || !errors.Is(err, context.Canceled) {

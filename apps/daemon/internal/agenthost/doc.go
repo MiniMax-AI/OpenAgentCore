@@ -1,7 +1,32 @@
 // Package agenthost runs Sessions whose Harness runs on the agent host, next to
 // Core, while its tools, files and network act in the sandbox through the
-// Session's Link attachment. It needs Linux; elsewhere Run returns
+// Session's Link attachment. It needs Linux; elsewhere Open returns
 // ErrUnsupported.
+//
+// The process that runs the agent host calls Open once at startup, runs each
+// Session with Host.Run and calls Close after the last Run has returned. Open
+// takes two installation locks, which the Host holds until Close: a flock on
+// StateDir/lock for the Session directories and one on the Config.ViewCgroups
+// directory for the view cgroups. Under the locks, Open checks the
+// requirements that need nothing created, ends every cgroup in ViewCgroups
+// with all its processes (sessionview.Recover), checks the requirements that
+// create something, and only then removes the Session directories. So no
+// process of an earlier Session still uses a directory or uid that a new
+// Session gets, and nothing an earlier agent host left can fail a check. If a
+// step fails, Open fails and has reclaimed nothing. The cgroup hierarchy is
+// the only record of what the views own; no process is identified by name or
+// credentials.
+//
+// The agent host requires root with the capabilities, /dev/fuse and the mount
+// and seccomp support that sessionview.Probe checks; clone3, which some
+// seccomp filters block; and a writable cgroup v2 directory,
+// Config.ViewCgroups, delegated to it and outside its own cgroup, that can
+// hold cgroups with cgroup.kill (Linux 5.14). Open checks each without
+// starting a process, and a missing one fails Open with ErrUnsupported;
+// nothing falls back. The kernel's common-ancestor and cgroup-namespace
+// checks on a delegation run only when a process is cloned into a cgroup, so
+// a delegation that fails them fails each view's launch with ErrLaunch and
+// sessionview.ErrLauncher.
 //
 // Run runs one Session. It admits the Session before any effect: the kind must
 // declare an agent.View, the request must use only what a view runs and no

@@ -364,6 +364,7 @@ func (s *session) spec(viewCtx context.Context, world *worldfs.World, opts cliru
 			return err
 		}},
 		StagingParent: s.dir.entry(stagingEntry),
+		CgroupParent:  s.cfg.ViewCgroups,
 	}
 }
 

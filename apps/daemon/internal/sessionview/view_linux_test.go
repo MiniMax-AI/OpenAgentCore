@@ -32,12 +32,13 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 )
 
-// The view tests need root with CAP_SYS_ADMIN and CAP_NET_ADMIN, /dev/fuse and no AppArmor confinement. Run them in a throwaway container:
+// The view tests need root with CAP_SYS_ADMIN and CAP_NET_ADMIN, /dev/fuse, no AppArmor confinement and a private cgroup namespace, in which sessionviewtest mounts a writable cgroup v2 hierarchy for the views. Run them in a throwaway container:
 //
 //	CGO_ENABLED=0 go test -c -o /tmp/sessionview.test ./apps/daemon/internal/sessionview
-//	docker run --rm --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
+//	docker run --rm --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
 //	  -e OAC_TEST_SESSIONVIEW=1 -v /tmp/sessionview.test:/t.test:ro debian:bookworm-slim /t.test -test.v
 const (
 	gateEnv    = "OAC_TEST_SESSIONVIEW"
@@ -115,6 +116,11 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if staged, _ := os.ReadDir(f.staging); len(staged) != 1 {
 		t.Fatalf("staging parent holds %v, want the view's staging directory", staged)
 	}
+	if cgroups := sessionviewtest.Cgroups(t, f.cgroups); len(cgroups) != 1 {
+		t.Fatalf("cgroup parent holds %v, want the view's cgroup", cgroups)
+	} else if populated, err := isPopulated(cgroups[0]); err != nil || !populated {
+		t.Fatalf("view cgroup populated = %v, %v; want the view's processes in it", populated, err)
+	}
 	if err := v.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("Signal: %v", err)
 	}
@@ -131,6 +137,9 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	}
 	if left, _ := os.ReadDir(f.staging); len(left) != 0 {
 		t.Errorf("staging directories left: %v", left)
+	}
+	if left := sessionviewtest.Cgroups(t, f.cgroups); len(left) != 0 {
+		t.Errorf("view cgroups left: %v", left)
 	}
 }
 
@@ -174,7 +183,7 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	}
 }
 
-// TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it.
+// TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it, and that the view's cgroup stays for Recover after its processes end past the bound.
 func TestTeardownIsBounded(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
@@ -204,12 +213,113 @@ func TestTeardownIsBounded(t *testing.T) {
 	if _, err := v.Wait(); !errors.Is(err, ErrClosed) || !errors.Is(err, ErrCleanup) {
 		t.Errorf("Wait = %v, want ErrClosed and ErrCleanup", err)
 	}
-	// Once the world answers, what was left finishes.
+	cgroups := sessionviewtest.Cgroups(t, f.cgroups)
+	if len(cgroups) != 1 {
+		t.Fatalf("cgroup parent holds %v after the bound, want the view's cgroup", cgroups)
+	}
+	// Once the world answers, the process ends, and its cgroup stays for Recover.
 	close(w.release)
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if populated, err := isPopulated(cgroups[0]); err != nil {
+			t.Fatal(err)
+		} else if !populated {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the view's process outlived the world's answer")
+		}
+	}
+	recoverKept(t, w, f.cgroups)
+}
+
+// TestStalledWorldStopKeepsTheCgroup checks that a world server that does not stop within the bound fails the teardown with ErrCleanup and keeps the view's cgroup, although the view's processes have ended.
+func TestStalledWorldStopKeepsTheCgroup(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	w := &hangWorld{loopbackWorld: loopbackWorld{dir: f.world}, hung: make(chan struct{}), release: make(chan struct{})}
+	saved := closeWait
+	closeWait = time.Second
+	defer func() { closeWait = saved }()
+	spec := f.spec(&w.loopbackWorld, "noop")
+	spec.World = w.serve
+	v, err := Start(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer v.Close()
+	if exit, err := v.Wait(); exit != (Exit{}) || !errors.Is(err, ErrCleanup) {
+		t.Errorf("Wait = %+v, %v; want exit code 0 and ErrCleanup", exit, err)
+	}
+	cgroups := sessionviewtest.Cgroups(t, f.cgroups)
+	if len(cgroups) != 1 {
+		t.Fatalf("cgroup parent holds %v after the bound, want the view's cgroup", cgroups)
+	}
+	if populated, err := isPopulated(cgroups[0]); err != nil || populated {
+		t.Errorf("view cgroup populated = %v, %v; want its processes ended", populated, err)
+	}
+	close(w.release)
+	recoverKept(t, w, f.cgroups)
+}
+
+// recoverKept waits until w has stopped serving after its release, checks that the view's cgroup is still there, and removes it with Recover.
+func recoverKept(t *testing.T, w *hangWorld, parent string) {
+	t.Helper()
 	select {
 	case <-w.served:
 	case <-time.After(10 * time.Second):
-		t.Error("the view outlived the world's answer")
+		t.Fatal("the world server outlived its release")
+	}
+	if kept := sessionviewtest.Cgroups(t, parent); len(kept) != 1 {
+		t.Fatalf("cgroup parent holds %v after the teardown, want the view's cgroup", kept)
+	}
+	if err := Recover(parent); err != nil {
+		t.Errorf("Recover: %v", err)
+	}
+	if left := sessionviewtest.Cgroups(t, parent); len(left) != 0 {
+		t.Errorf("view cgroups left after Recover: %v", left)
+	}
+}
+
+// TestRecoverChecksTheParent checks that Recover refuses a plain directory and a cgroup that holds this process, and accepts a cgroup v2 directory the test owns, in which it leaves nothing.
+func TestRecoverChecksTheParent(t *testing.T) {
+	if err := Recover(t.TempDir()); !errors.Is(err, ErrCgroup) {
+		t.Errorf("Recover of a plain directory = %v, want ErrCgroup", err)
+	}
+	requireView(t)
+	parent := sessionviewtest.CgroupParent(t)
+	// The test runs in the root of the cgroup v2 hierarchy that sessionviewtest mounts.
+	if err := Recover(filepath.Dir(parent)); !errors.Is(err, ErrCgroup) {
+		t.Errorf("Recover of this process's own cgroup = %v, want ErrCgroup", err)
+	}
+	if err := Recover(parent); err != nil {
+		t.Errorf("Recover: %v", err)
+	}
+}
+
+func TestClone3Error(t *testing.T) {
+	if err := clone3Error(unix.EINVAL); err != nil {
+		t.Errorf("clone3Error(EINVAL) = %v, want nil", err)
+	}
+	for _, errno := range []unix.Errno{unix.ENOSYS, unix.EPERM} {
+		if err := clone3Error(errno); !errors.Is(err, ErrCgroup) || !errors.Is(err, errno) {
+			t.Errorf("clone3Error(%v) = %v, want ErrCgroup", errno, err)
+		}
+	}
+}
+
+// TestRemoveCgroupKeepsItPastTheDeadline checks that an empty cgroup stays once the deadline has passed.
+func TestRemoveCgroupKeepsItPastTheDeadline(t *testing.T) {
+	requireView(t)
+	dir := filepath.Join(sessionviewtest.CgroupParent(t), "view-late")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Rmdir(dir)
+	if err := removeCgroup(dir, time.Now()); !errors.Is(err, ErrCleanup) {
+		t.Errorf("removeCgroup = %v, want ErrCleanup", err)
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("removeCgroup removed the cgroup past the deadline: %v", err)
 	}
 }
 
@@ -320,9 +430,13 @@ func TestStartRejectsInvalidSpec(t *testing.T) {
 		"missing staging parent":      {StagingParent: filepath.Join(t.TempDir(), "missing")},
 		"private run directory":       {Private: []PrivateDir{{Name: "run", HostDir: t.TempDir()}}},
 		"shim named as the relay":     {Shim: Shim{Binary: "/bin/true", Names: []string{processshim.RelayName}}},
+		"relative cgroup parent":      {CgroupParent: "sys/fs/cgroup/oac"},
 	} {
 		if spec.StagingParent == "" {
 			spec.StagingParent = t.TempDir()
+		}
+		if spec.CgroupParent == "" {
+			spec.CgroupParent = "/sys/fs/cgroup/oac"
 		}
 		spec.World = (&loopbackWorld{}).serve
 		spec.Process = Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: viewID, GID: viewID}
@@ -343,7 +457,7 @@ func requireView(t *testing.T) {
 }
 
 type fixture struct {
-	self, world, harness, home, overlay, staging string
+	self, world, harness, home, overlay, staging, cgroups string
 }
 
 // newFixture lays out a world with the mountpoints the real world frontend presents synthetically, plus the local sources.
@@ -360,6 +474,7 @@ func newFixture(t *testing.T) *fixture {
 		home:    filepath.Join(base, "home"),
 		overlay: filepath.Join(base, "overlay"),
 		staging: filepath.Join(base, "staging"),
+		cgroups: sessionviewtest.CgroupParent(t),
 	}
 	for _, d := range []string{".oac/harness", ".oac/home", ".oac/run", ".oac/bin", "proc", "dev", "bin", "usr/bin", "data", "etc/oac-overlay"} {
 		mkdir(t, filepath.Join(f.world, d))
@@ -403,6 +518,7 @@ func (f *fixture) spec(w *loopbackWorld, mode string, env ...string) Spec {
 			Stderr: os.Stderr,
 		},
 		StagingParent: f.staging,
+		CgroupParent:  f.cgroups,
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -30,7 +31,7 @@ import (
 // The view test needs root with CAP_SYS_ADMIN and CAP_NET_ADMIN, /dev/fuse and no AppArmor confinement. Run it in a throwaway container:
 //
 //	CGO_ENABLED=0 go test -c -o /tmp/gateway.test ./apps/daemon/internal/gateway
-//	docker run --rm --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
+//	docker run --rm --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
 //	  -e OAC_TEST_SESSIONVIEW=1 -v /tmp/gateway.test:/t.test:ro debian:bookworm-slim /t.test -test.v
 const (
 	gateEnv      = "OAC_TEST_SESSIONVIEW"
@@ -97,6 +98,7 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
 		World:         (&loopbackWorld{dir: world}).serve,
 		StagingParent: t.TempDir(),
+		CgroupParent:  sessionviewtest.CgroupParent(t),
 		Private:       []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
 		Process: sessionview.Process{
 			Path: "/.oac/harness/harness", Args: []string{"harness"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr,

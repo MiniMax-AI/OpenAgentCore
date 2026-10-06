@@ -41,7 +41,7 @@ import (
 //	CGO_ENABLED=0 go test -c -o /tmp/processbroker.test ./apps/daemon/internal/processbroker
 //	CGO_ENABLED=0 go build -o /tmp/processserve ./apps/sandboxio/testdata/processserve
 //	CGO_ENABLED=0 go build -o /tmp/oac-process-shim ./apps/daemon/cmd/oac-process-shim
-//	docker run --rm --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
+//	docker run --rm --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
 //	  -e OAC_TEST_SESSIONVIEW=1 -e OAC_TEST_PROCESS_SERVICE=/svc -e OAC_TEST_PROCESS_SHIM=/shim \
 //	  -v /tmp/processbroker.test:/t.test:ro -v /tmp/processserve:/svc:ro -v /tmp/oac-process-shim:/shim:ro \
 //	  debian:bookworm-slim /t.test -test.v

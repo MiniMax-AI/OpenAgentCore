@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -46,6 +47,7 @@ type View struct {
 	present Presentation
 	dev     *os.File
 	staging string
+	cgroup  string // the view's cgroup, once created
 	pipes   [3]*os.File
 	relay   *os.File // the broker's end of the relay connection
 
@@ -108,6 +110,15 @@ func (v *View) launch(spec *Spec) error {
 	if err != nil {
 		return &Error{Kind: ErrLauncher, Op: "staging", Err: err}
 	}
+	// A fresh name in the parent makes the cgroup the view's alone.
+	if v.cgroup, err = os.MkdirTemp(spec.CgroupParent, "view-*"); err != nil {
+		return &Error{Kind: ErrCgroup, Op: "create", Path: spec.CgroupParent, Err: err}
+	}
+	cgroup, err := os.Open(v.cgroup)
+	if err != nil {
+		return &Error{Kind: ErrCgroup, Op: "open", Path: v.cgroup, Err: err}
+	}
+	defer cgroup.Close()
 	specR, specW, err := os.Pipe()
 	if err != nil {
 		return &Error{Kind: ErrLauncher, Op: "pipe", Err: err}
@@ -143,10 +154,12 @@ func (v *View) launch(spec *Spec) error {
 		Env:        []string{},
 		Stderr:     os.Stderr,
 		ExtraFiles: files,
-		// Cloning into the namespaces, rather than unsharing later, puts every runtime thread of the launcher in them and makes it PID 1 of the view.
+		// Cloning into the namespaces, rather than unsharing later, puts every runtime thread of the launcher in them and makes it PID 1 of the view. Cloning into the cgroup, rather than moving the launcher there, means that no process of the view ever runs outside it.
 		SysProcAttr: &syscall.SysProcAttr{
-			Cloneflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWPID,
-			Setsid:     true,
+			Cloneflags:  syscall.CLONE_NEWNS | syscall.CLONE_NEWNET | syscall.CLONE_NEWPID,
+			Setsid:      true,
+			UseCgroupFD: true,
+			CgroupFD:    int(cgroup.Fd()),
 		},
 	}
 	if err := v.cmd.Start(); err != nil {
@@ -293,17 +306,23 @@ func (v *View) abort(err error) error {
 	return err
 }
 
-// teardown releases the view once its launcher is exiting or never started. It disconnects the relay, so that the broker stops using it, and stops the world server, which ends the requests still pending on the view's FUSE connection so that a process blocked on the world can exit. It waits for the launcher and the world server together up to closeWait; past that it sets cleanupErr, and what still runs finishes in the background. It returns the launcher's wait error and the teardown's errors.
+// teardown releases the view once its launcher is exiting or never started, as the package documentation describes, and disconnects the relay so that the broker stops using it. When it does not finish within closeWait, it sets cleanupErr and keeps the view's cgroup; what still runs finishes in the background. It returns the launcher's wait error and the teardown's errors.
 func (v *View) teardown() (werr, err error) {
 	if v.relay != nil {
 		shutdown(v.relay)
 	}
+	deadline := time.Now().Add(closeWait)
+	var errs, cleanup []error
+	if v.cgroup != "" {
+		if kerr := os.WriteFile(filepath.Join(v.cgroup, "cgroup.kill"), []byte("1"), 0); kerr != nil {
+			cleanup = append(cleanup, &Error{Kind: ErrCleanup, Op: "kill", Path: v.cgroup, Err: kerr})
+		}
+	}
 	waited := v.waited
 	stopped := make(chan error, 1)
 	go func() { stopped <- v.stopWorld() }()
-	timer := time.NewTimer(closeWait)
+	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
-	var errs []error
 	for waited != nil || stopped != nil {
 		select {
 		case <-waited:
@@ -318,10 +337,18 @@ func (v *View) teardown() (werr, err error) {
 			if stopped != nil {
 				running = append(running, "the world server")
 			}
-			v.cleanupErr = &Error{Kind: ErrCleanup, Op: "teardown", Err: fmt.Errorf("%s still running after %v", strings.Join(running, " and "), closeWait)}
-			errs = append(errs, v.cleanupErr)
+			cleanup = append(cleanup, &Error{Kind: ErrCleanup, Op: "teardown", Err: fmt.Errorf("%s still running after %v", strings.Join(running, " and "), closeWait)})
 			waited, stopped = nil, nil
 		}
+	}
+	if v.cgroup != "" && len(cleanup) == 0 {
+		if rerr := removeCgroup(v.cgroup, deadline); rerr != nil {
+			cleanup = append(cleanup, rerr)
+		}
+	}
+	if len(cleanup) > 0 {
+		v.cleanupErr = errors.Join(cleanup...)
+		errs = append(errs, v.cleanupErr)
 	}
 	if v.relay != nil {
 		v.relay.Close()
