@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,8 +27,6 @@ func Init() {
 	}
 	// Capability sets, no_new_privs and seccomp filters are per thread: the thread that sets them must be the one that forks the process.
 	runtime.LockOSThread()
-	// A fork that blocks in the world holds this thread and its P, so another P runs everything else. A fixed count also keeps the runtime from stopping the world to change it.
-	runtime.GOMAXPROCS(max(2, runtime.GOMAXPROCS(0)))
 	os.Exit(runLauncher())
 }
 
@@ -97,6 +94,9 @@ func (l *launcher) run() error {
 	if err := restrict(); err != nil {
 		return err
 	}
+	if err := takeIdentity(spec); err != nil {
+		return err
+	}
 	b.closeBuild()
 	if b.listener >= 0 {
 		// The launcher keeps neither the listener nor the broker connection, so the relay's end is theirs alone.
@@ -106,6 +106,9 @@ func (l *launcher) run() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := chdir(spec.Command.Dir); err != nil {
+		return err
 	}
 	pid, err := startProcess(spec, spec.Command, []uintptr{stdinFD, stdoutFD, stderrFD})
 	if err != nil {
@@ -165,13 +168,15 @@ func (l *launcher) serveControl(spec *launchSpec) {
 	}
 }
 
-// spawn starts the command read from the first of files as the spawned process id, with the other three as its stdin, stdout and stderr, as the process's user and in a session of its own, and answers with its pid. It forks without holding mu; while it does, the reaper leaves unregistered children, so the child's pid stays its own until it is registered.
+// spawn starts the command read from the first of files as the spawned process id, with the other three as its stdin, stdout and stderr, as the process's user and in a session of its own, and answers with its pid. It enters the command's directory before it forks, so a directory the world is slow to answer blocks this thread in an ordinary syscall. It forks without holding mu; while it does, the reaper leaves unregistered children, so the child's pid stays its own until it is registered.
 func (l *launcher) spawn(spec *launchSpec, id uint64, files []*os.File) {
 	defer closeFiles(files)
 	var c command
 	err := gob.NewDecoder(files[0]).Decode(&c)
 	if err != nil {
 		err = &Error{Kind: ErrLauncher, Op: "read spawn", Err: err}
+	} else {
+		err = chdir(c.Dir)
 	}
 	l.mu.Lock()
 	if err == nil && !l.running {
@@ -181,11 +186,7 @@ func (l *launcher) spawn(spec *launchSpec, id uint64, files []*os.File) {
 	l.mu.Unlock()
 	m := message{Kind: msgSpawned, ID: id}
 	if err == nil {
-		// A fork that blocks in the world holds this thread and its P where no stop of the world reaches them, so no collection may run or be about to start until the fork returns. Turning collection off stops new ones; runtime.GC waits out one that started before.
-		gc := debug.SetGCPercent(-1)
-		runtime.GC()
 		m.Pid, err = startProcess(spec, c, []uintptr{files[1].Fd(), files[2].Fd(), files[3].Fd()})
-		debug.SetGCPercent(gc)
 	}
 	l.mu.Lock()
 	if err != nil {
@@ -221,7 +222,7 @@ func (l *launcher) write() {
 		l.mu.Unlock()
 		for _, m := range out {
 			if m.Kind == 0 {
-				// A spawn blocked before its exec holds a copy of this end, and the exit waits for it, so the daemon learns of the exit from the shutdown.
+				// A spawn blocked on the world keeps the launcher, and this end, from closing until the teardown stops the world, so the daemon learns of the exit from the shutdown.
 				l.ctl.interrupt()
 				os.Exit(l.code)
 			}
@@ -408,7 +409,6 @@ func startRelay(spec *launchSpec, listener int) (int, error) {
 	}
 	files[processshim.RelayBrokerFD], files[processshim.RelayListenerFD] = relayFD, uintptr(listener)
 	pid, err := syscall.ForkExec(processshim.RelayPath, processshim.RelayArgs, &syscall.ProcAttr{
-		Dir:   "/",
 		Env:   []string{},
 		Files: files,
 		Sys: &syscall.SysProcAttr{
@@ -422,10 +422,51 @@ func startRelay(spec *launchSpec, listener int) (int, error) {
 	return pid, nil
 }
 
-// startProcess starts c as the process's user, in a session of its own, with stdio as its standard descriptors.
+// takeIdentity gives this thread a working directory of its own and the process's file system identity, with no capability but the two a fork needs to set the child's user, so that it enters a directory as the process would. The other threads keep theirs.
+func takeIdentity(spec *launchSpec) error {
+	groups := make([]int, len(spec.Groups))
+	for i, g := range spec.Groups {
+		groups[i] = int(g)
+	}
+	const setID = 1<<unix.CAP_SETUID | 1<<unix.CAP_SETGID
+	caps := [2]unix.CapUserData{{Effective: setID, Permitted: setID}}
+	err := unix.Unshare(unix.CLONE_FS)
+	if err == nil {
+		err = unix.Capset(&unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}, &caps[0])
+	}
+	if err == nil {
+		err = unix.Setgroups(groups)
+	}
+	if err != nil {
+		return &Error{Kind: ErrRestrict, Op: "take the process's identity", Err: err}
+	}
+	// With CAP_SETUID and CAP_SETGID in effect, neither fails; neither reports a failure.
+	_ = unix.Setfsgid(int(spec.GID))
+	_ = unix.Setfsuid(int(spec.UID))
+	return nil
+}
+
+// chdir makes dir, taken from the view's root when empty or relative, this thread's working directory, which the processes it starts inherit. Signals stay blocked meanwhile: a signal to the launcher could pick this thread, and a wait on the world that a signal interrupts goes on, holding the signal back from the threads that handle it.
+func chdir(dir string) error {
+	if !strings.HasPrefix(dir, "/") {
+		dir = "/" + dir
+	}
+	var all, mask unix.Sigset_t
+	for i := range all.Val {
+		all.Val[i] = ^all.Val[i]
+	}
+	_ = unix.PthreadSigmask(unix.SIG_BLOCK, &all, &mask)
+	err := unix.Chdir(dir)
+	_ = unix.PthreadSigmask(unix.SIG_SETMASK, &mask, nil)
+	if err != nil {
+		return &Error{Kind: ErrExec, Op: "chdir", Path: dir, Err: err}
+	}
+	return nil
+}
+
+// startProcess starts c as the process's user, in a session of its own and this thread's working directory, with stdio as its standard descriptors.
 func startProcess(spec *launchSpec, c command, stdio []uintptr) (int, error) {
 	pid, err := syscall.ForkExec(c.Path, c.Args, &syscall.ProcAttr{
-		Dir:   c.Dir,
 		Env:   c.Env,
 		Files: stdio,
 		Sys: &syscall.SysProcAttr{

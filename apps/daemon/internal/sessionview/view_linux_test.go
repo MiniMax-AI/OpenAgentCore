@@ -243,6 +243,13 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	if err := report.Signal(syscall.SIGKILL); !errors.Is(err, ErrExited) {
 		t.Errorf("Signal after the spawned process exited = %v, want ErrExited", err)
 	}
+	// The directory is entered as the process's user.
+	if err := os.Mkdir(filepath.Join(f.harness, "root-only"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := spawnHelper(context.Background(), v, "noop", "/.oac/harness/root-only"); !errors.Is(err, ErrExec) || !errors.Is(err, syscall.EACCES) {
+		t.Errorf("Spawn in a directory only root may enter = %v, want ErrExec with EACCES", err)
+	}
 	if err := sleeper.Signal(0); err != nil {
 		t.Errorf("Signal to the running spawned process = %v", err)
 	}
@@ -286,7 +293,7 @@ func TestSpawnRunsInTheView(t *testing.T) {
 	}
 }
 
-// TestStalledSpawnBlocksNothingElse checks that while a spawn's child is stuck on the world before its exec, the spawns behind it wait holding no descriptors and return once their contexts end, and that the view's signals, the exits of its other processes, the stuck caller's context, the process's exit and the teardown all go on.
+// TestStalledSpawnBlocksNothingElse checks that while a spawn's directory is stuck on the world, the spawns behind it wait holding no descriptors and return once their contexts end, and that the view's signals, the exits of its other processes, the stuck caller's context, the process's exit and the teardown all go on.
 func TestStalledSpawnBlocksNothingElse(t *testing.T) {
 	v, w := startStalled(t)
 	sleeper, err := spawnHelper(context.Background(), v, "sleep", "/data")
@@ -308,8 +315,8 @@ func TestStalledSpawnBlocksNothingElse(t *testing.T) {
 	if n := fdCount(t, os.Getpid()); n > fds {
 		t.Errorf("%d descriptors with 50 spawns waiting, %d before", n, fds)
 	}
-	// The launcher holds the stuck spawn's descriptors and its fork's pipe, nothing for the spawns waiting.
-	if n := fdCount(t, v.cmd.Process.Pid); n > launcherFDs+6 {
+	// The launcher holds the stuck spawn's descriptors, nothing for the spawns waiting.
+	if n := fdCount(t, v.cmd.Process.Pid); n > launcherFDs+4 {
 		t.Errorf("launcher holds %d descriptors with a spawn stuck and 50 waiting, %d before", n, launcherFDs)
 	}
 	stopWaiting()
@@ -385,7 +392,7 @@ func TestLateSpawnIsEnded(t *testing.T) {
 	}
 }
 
-// TestSpawnExitsBeforeItsRegistration checks that a spawned child that dies before its exec, while orphans exit around it, reports its own exit to its own handle and to no other, that a handle whose process has exited reaches nothing, and that Close ends what remains.
+// TestSpawnExitsBeforeItsRegistration checks that a spawned child that dies before its exec, while orphans exit around it, reports its own exit to its own handle and to no other, that a handle whose process has exited reaches nothing, and that Close ends what remains. While the child is stuck, its fork may hold up the launcher, so the test acts on the processes directly.
 func TestSpawnExitsBeforeItsRegistration(t *testing.T) {
 	v, w := startStalled(t)
 	launcher := v.cmd.Process.Pid
@@ -395,7 +402,8 @@ func TestSpawnExitsBeforeItsRegistration(t *testing.T) {
 		t.Fatalf("Spawn: %v", err)
 	}
 	defer closeStdio(bystander)
-	parent, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=wait", "OAC_VIEW_TOKEN=oac-orphan"}, "/data", false)
+	orphanToken := fmt.Sprintf("oac-orphan-%d", time.Now().UnixNano())
+	parent, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=wait", "OAC_VIEW_TOKEN=" + orphanToken}, "/data", false)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}
@@ -403,25 +411,29 @@ func TestSpawnExitsBeforeItsRegistration(t *testing.T) {
 	if line, err := bufio.NewReader(parent.Stdout).ReadString('\n'); err != nil || line != "ready\n" {
 		t.Fatalf("parent said %q, %v", line, err)
 	}
-	pending := spawnAsync(context.Background(), v, "noop", "/data/stall")
-	await(t, w.stalled, "the spawn's lookup in the world")
+	orphan := pidsWith(t, orphanToken)
+	if len(orphan) != 1 {
+		t.Fatalf("orphans: %v, want 1", orphan)
+	}
+	group, _ := strconv.Atoi(stat(orphan[0])[2])
+	// The child's exec stays on the world.
+	pending := make(chan spawnResult, 1)
+	go func() {
+		s, err := v.Spawn(context.Background(), "/data/stall", []string{"stall"}, nil, "/data", false)
+		pending <- spawnResult{s, err}
+	}()
+	await(t, w.stalled, "the exec's lookup in the world")
 	// The parent's group ends while the child forks; its orphan stays unreaped until the child is registered.
-	if err := parent.Signal(syscall.SIGKILL); err != nil {
-		t.Fatalf("Signal to the parent = %v", err)
+	if err := unix.Kill(-group, unix.SIGKILL); err != nil {
+		t.Fatal(err)
 	}
-	if code := await(t, waitFor(parent), "the parent's exit"); code != -1 {
-		t.Errorf("parent Wait = %d, want -1", code)
-	}
-	if err := parent.Signal(syscall.SIGKILL); !errors.Is(err, ErrExited) {
-		t.Errorf("Signal after the parent exited = %v, want ErrExited", err)
-	}
-	eventually(t, "the orphan's exit", func() bool { return zombies(t, launcher) > 0 })
-	// The child dies before its exec, once the world answers.
+	eventually(t, "the orphan's exit", func() bool { return slices.Contains(zombies(t, launcher), orphan[0]) })
 	child := pidsWith(t, launcherArg0)
 	child = slices.DeleteFunc(child, func(pid int) bool { return pid == launcher })
 	if len(child) != 1 {
 		t.Fatalf("children before their exec: %v, want 1", child)
 	}
+	// The child dies before its exec, once the world answers.
 	if err := unix.Kill(child[0], unix.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
@@ -434,13 +446,18 @@ func TestSpawnExitsBeforeItsRegistration(t *testing.T) {
 	if code := await(t, waitFor(r.s), "the child's exit"); code != -1 {
 		t.Errorf("child Wait = %d, want -1", code)
 	}
-	if err := r.s.Signal(0); !errors.Is(err, ErrExited) {
-		t.Errorf("Signal after the child exited = %v, want ErrExited", err)
+	if code := await(t, waitFor(parent), "the parent's exit"); code != -1 {
+		t.Errorf("parent Wait = %d, want -1", code)
+	}
+	for _, s := range []*Spawned{r.s, parent} {
+		if err := s.Signal(0); !errors.Is(err, ErrExited) {
+			t.Errorf("Signal after the process exited = %v, want ErrExited", err)
+		}
 	}
 	if err := bystander.Signal(0); err != nil {
 		t.Errorf("Signal to the bystander = %v", err)
 	}
-	eventually(t, "the orphans reaped", func() bool { return zombies(t, launcher) == 0 })
+	eventually(t, "the orphans reaped", func() bool { return len(zombies(t, launcher)) == 0 })
 	if err := v.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -966,22 +983,30 @@ func pidsWith(t *testing.T, token string) []int {
 	return pids
 }
 
-// zombies counts the children of pid that have exited and are not reaped yet.
-func zombies(t *testing.T, pid int) int {
+// stat returns the fields of pid's stat after its command name, which may hold anything: the state, the parent's pid and the process group come first. It returns nil once pid is gone.
+func stat(pid int) []string {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return nil
+	}
+	return strings.Fields(string(b[bytes.LastIndexByte(b, ')')+1:]))
+}
+
+// zombies returns the children of pid that have exited and are not reaped yet.
+func zombies(t *testing.T, pid int) []int {
 	t.Helper()
 	stats, err := filepath.Glob("/proc/[0-9]*/stat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	n := 0
+	var z []int
 	for _, p := range stats {
-		b, err := os.ReadFile(p)
-		// The state and the parent's pid follow the command name, which may hold anything.
-		if f := strings.Fields(string(b[bytes.LastIndexByte(b, ')')+1:])); err == nil && len(f) > 1 && f[0] == "Z" && f[1] == strconv.Itoa(pid) {
-			n++
+		child, _ := strconv.Atoi(filepath.Base(filepath.Dir(p)))
+		if f := stat(child); len(f) > 1 && f[0] == "Z" && f[1] == strconv.Itoa(pid) {
+			z = append(z, child)
 		}
 	}
-	return n
+	return z
 }
 
 func fdCount(t *testing.T, pid int) int {

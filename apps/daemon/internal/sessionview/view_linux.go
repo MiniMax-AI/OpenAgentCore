@@ -657,7 +657,7 @@ func (v *View) Close() error {
 	v.closeOnce.Do(func() {
 		v.closing.Store(true)
 		_ = v.cmd.Process.Kill()
-		// A spawn blocked before its exec outlives the launcher with a copy of its end, until the teardown stops the world.
+		// A spawn blocked on the world keeps the killed launcher, and its end, open until the teardown stops the world.
 		v.ctl.interrupt()
 		<-v.done
 		v.closePipes()
