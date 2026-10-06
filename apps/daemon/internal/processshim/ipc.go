@@ -72,7 +72,9 @@
 //  7. Exit ends the shim. The relay stops reading stdin, waits until every
 //     Mark's FD has reported Written through the Mark's Seq or has failed,
 //     restores the terminal and sends the shim the Result. A Result Message
-//     goes to the shim in the Result before the Ack, and to fd 2 after it.
+//     goes to the shim in the Result before the Ack, and to fd 2 after it,
+//     ahead of what the broker sends for FD 2 after the Exit. An Exit with a
+//     Message has no Marks.
 //  8. Notice writes "oac-process-shim: <Message>" to fd 2 after the output
 //     queued before it.
 //  9. End closes the invocation: the relay stops its pumps, closes every
@@ -633,6 +635,9 @@ func DecodeBroker(f sandboxwire.Frame) (BrokerMessage, error) {
 			m := Exit{ID: id}
 			if m.Result, err = decodeResult(d); err == nil {
 				m.Marks, err = decodeMarks(d)
+			}
+			if err == nil && len(m.Marks) > 0 && len(m.Result.Message) > 0 {
+				err = errors.New("exit with marks and a message")
 			}
 			return m, finish(d, err)
 		case TypeNotice:

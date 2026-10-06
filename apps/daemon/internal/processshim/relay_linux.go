@@ -298,6 +298,13 @@ type invocation struct {
 // lost is the control item for the broker's loss.
 type lost struct{}
 
+// exiting is the control item for an Exit. written, for an Exit with a
+// Message, closes once the Message is written or goes to the shim.
+type exiting struct {
+	Exit
+	written chan struct{}
+}
+
 // start runs the published invocation. The output pumps are counted before
 // run starts, as its finish waits for them.
 func (inv *invocation) start() {
@@ -325,7 +332,14 @@ func (inv *invocation) receive(m BrokerMessage) {
 		inv.in.stop.set()
 	case Exit:
 		inv.in.stop.set()
-		inv.control(m)
+		e := exiting{Exit: m}
+		if len(m.Result.Message) > 0 {
+			// The Message may go to fd 2, so fd 2 takes nothing the broker
+			// sent after the Exit, such as its Close, until it is written.
+			e.written = make(chan struct{})
+			inv.out[2].push(item{hold: e.written})
+		}
+		inv.control(e)
 	case End:
 		inv.end.set()
 		inv.control(m)
@@ -377,7 +391,7 @@ func (inv *invocation) run() {
 				inv.term.makeRaw() // a terminal that stays cooked still works
 			}
 			inv.rawOnce.Do(func() { close(inv.raw) })
-		case Exit:
+		case exiting:
 			inv.exit(m)
 		case Notice:
 			inv.out[2].message(m.Message)
@@ -393,7 +407,7 @@ func (inv *invocation) run() {
 
 // exit answers the shim once the output before the exit is written. When
 // End cuts that wait short, the shim gets ExitLost.
-func (inv *invocation) exit(m Exit) {
+func (inv *invocation) exit(m exiting) {
 	complete := inv.waitMarks(m.Marks)
 	inv.term.restore()
 	res := m.Result
@@ -406,6 +420,9 @@ func (inv *invocation) exit(m Exit) {
 	if acked && len(res.Message) > 0 {
 		inv.out[2].message(res.Message)
 		res.Message = nil
+	}
+	if m.written != nil {
+		close(m.written)
 	}
 	inv.answer(res)
 }
@@ -536,13 +553,15 @@ func (in *input) run() {
 	}
 }
 
-// item is an Output or Close for an output pump. A local Close closes the
-// descriptor without a report.
+// item is an Output or Close for an output pump, or a hold. A local Close
+// closes the descriptor without a report. A hold keeps the items behind it
+// until it closes.
 type item struct {
 	seq   uint64
 	data  []byte
 	close bool
 	local bool
+	hold  <-chan struct{}
 }
 
 // output writes one descriptor's Output in order and reports each write.
@@ -602,6 +621,14 @@ func (o *output) run() {
 		it, ok := o.next()
 		if !ok {
 			return
+		}
+		if it.hold != nil {
+			select {
+			case <-it.hold:
+			case <-o.inv.end.c:
+				return
+			}
+			continue
 		}
 		if it.close {
 			o.closeEP()

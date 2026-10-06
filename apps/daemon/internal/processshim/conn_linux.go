@@ -43,7 +43,9 @@ func (c *Conn) SendRequest(r Request, fds [3]int) error {
 		return err
 	}
 	n, _, err := c.c.WriteMsgUnix(b, unix.UnixRights(fds[:]...), nil)
-	if err != nil {
+	// An empty write fails with EPIPE once the relay has run the invocation
+	// and closed the connection, so write only what remains.
+	if err != nil || n == len(b) {
 		return err
 	}
 	_, err = c.c.Write(b[n:])
