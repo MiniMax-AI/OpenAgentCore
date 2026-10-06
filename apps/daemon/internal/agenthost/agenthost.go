@@ -16,9 +16,11 @@ import (
 // Config is the agent host's own configuration, shared by its Sessions. It
 // holds a credential: keep it in memory and never log it.
 //
-// The agent host does not yet recover Sessions that an earlier agent-host
-// process left. Until it does, an agent-host process must not reuse the
-// StateDir or the UIDs of an earlier one.
+// Open recovers what an earlier agent host with the same StateDir and
+// ViewCgroups left. It ends every cgroup in ViewCgroups, with every process
+// in it, and only then removes the Session directories, so no process of an
+// earlier Session still uses a directory or uid that a new Session gets.
+// When recovery fails, Open fails and reclaims nothing.
 type Config struct {
 	// StateDir is an absolute host directory private to the agent host. Each
 	// Session's directory is StateDir/sessions/<Session ID>, and

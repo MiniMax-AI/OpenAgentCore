@@ -1,26 +1,45 @@
 // Package agenthost runs Sessions whose Harness runs on the agent host, next to
 // Core, while its tools, files and network act in the sandbox through the
-// Session's Link attachment. It needs Linux; elsewhere Run returns
+// Session's Link attachment. It needs Linux; elsewhere Open returns
 // ErrUnsupported.
 //
-// Run runs one Session. It admits the Session before any effect: the kind must
-// declare an agent.View, the request must use only what a view runs and no
-// function tools, whose results Input cannot carry, and when the view declares
-// shim names, which run on the sandbox PATH, the Session's Environment must
-// set PATH. It then allocates the Session uid, skipping each uid that a
-// running thread holds as its real, effective, saved or file-system uid; this
-// check only detects a conflict and never ends a process. It creates the
-// Session directory under Config.StateDir, rewrites the request so the model
-// provider and HTTP MCP reach the network only through the Session's gateway,
-// and calls the view's Executor factory. Each ViewSession.Launch builds one
-// sessionview view, of which one at a time is live, over the world that
-// worldfs serves from the attachment's File service, with the gateway
-// listening in the view's network namespace. A view with a shim gets its own
-// process broker, started once the view runs and closed once it has ended. The
-// broker runs the shims' commands over the attachment's Process service in the
-// strongest scope the service declares, with the view's ForwardEnv and the
-// Session's Environment, and cancels a forwarded process whose shim is lost
-// with the launch's kill timeout as its grace.
+// The process that runs the agent host calls Open once at startup, runs each
+// Session with Host.Run and calls Close after the last Run has returned. Open
+// takes the installation lock, an exclusive flock on StateDir/lock that
+// allows one agent host per StateDir, and the Host holds it until Close.
+// Under the lock, Open checks the requirements below, then recovers what an
+// earlier agent host left, as Config describes. The cgroup hierarchy is the
+// only record of what the views own: recovery ends each cgroup in
+// Config.ViewCgroups with every process in it, and identifies no process by
+// name or credentials.
+//
+// The agent host requires root with the capabilities, /dev/fuse and the
+// mount and seccomp support that sessionview.Probe checks, and a cgroup v2
+// directory, Config.ViewCgroups, delegated to it and writable, in which it
+// can create cgroups, clone a process into one with CLONE_INTO_CGROUP (Linux
+// 5.7) and end its processes with cgroup.kill (Linux 5.14). A missing
+// requirement fails Open with ErrUnsupported and the sessionview error that
+// names it; nothing falls back.
+//
+// Host.Run runs one Session. It admits the Session before any effect: the kind
+// must declare an agent.View, the request must use only what a view runs and
+// no function tools, whose results Input cannot carry, and when the view
+// declares shim names, which run on the sandbox PATH, the Session's
+// Environment must set PATH. It then allocates the Session uid, skipping each
+// uid that a running thread holds as its real, effective, saved or file-system
+// uid; this check only detects a conflict and never ends a process. It creates
+// the Session directory under Config.StateDir, rewrites the request so the
+// model provider and HTTP MCP reach the network only through the Session's
+// gateway, and calls the view's Executor factory. Each ViewSession.Launch
+// builds one sessionview view in a cgroup of its own in Config.ViewCgroups, of
+// which one at a time is live, over the world that worldfs serves from the
+// attachment's File service, with the gateway listening in the view's network
+// namespace. A view with a shim gets its own process broker, started once the
+// view runs and closed once it has ended. The broker runs the shims' commands
+// over the attachment's Process service in the strongest scope the service
+// declares, with the view's ForwardEnv and the Session's Environment, and
+// cancels a forwarded process whose shim is lost with the launch's kill
+// timeout as its grace.
 //
 // Each view presents the closure directories read-only and executable, the
 // Session home read-write and noexec, the agent host's /etc/passwd, group,
@@ -46,7 +65,8 @@
 // fails again, the Executor may still use the Session directory: Run returns
 // ErrTeardown and keeps the directory, and the uid stays in use until the
 // agent host exits. A view whose teardown did not finish keeps both the same
-// way, because its processes may still run.
+// way, because its processes may still run, and keeps its cgroup for the next
+// Open to recover.
 //
 // Run drives each Turn as the daemon's dispatch drives a prepared execution.
 // One output consumer starts before StartTurn and forwards the Turn's
