@@ -97,7 +97,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-harness", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
 	// Real Worker admission with dispatch paused keeps admitted Turns queued.
-	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
 	t.Cleanup(func() {
 		stopped, cancel := context.WithCancel(context.Background())
 		cancel()

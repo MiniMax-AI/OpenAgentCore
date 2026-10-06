@@ -136,7 +136,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if _, err := fresh.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal(err)
 			}
-			if _, err := fresh.CreateSessionStream(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+			if _, err := createSession(ctx, fresh, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal(err)
 			}
 			if _, err := sendMessage(ctx, fresh, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`)); !errors.Is(err, sessions.ErrNotFound) {

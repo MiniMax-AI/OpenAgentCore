@@ -104,7 +104,7 @@ func TestWorkerEnvironmentExpiryWithoutDevicesAndAfterRestart(t *testing.T) {
 	dueTenant, due := newEnvironmentExpiryReservation(t, s)
 	futureTenant, future := newEnvironmentExpiryReservation(t, s)
 	makeEnvironmentExpiryDue(t, db.pool, &due)
-	d := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
+	d := &execution.Dispatcher{Registry: runtimegateway.NewRegistry()}
 	_, stop := startEnvironmentExpiryWorker(t, db, d)
 	waitEnvironmentExpiry(t, s, dueTenant, due)
 	got, err := store.SessionAdapter(s).GetEnvironmentInputReservation(t.Context(), futureTenant, future.SessionID, future.ID)

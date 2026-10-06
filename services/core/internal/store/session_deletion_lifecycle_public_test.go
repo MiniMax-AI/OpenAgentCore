@@ -39,7 +39,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	leased := executionOwner(t, db, s)
+	leased := executionOwner(t, db)
 
 	create := func(environment string, initial bool) sessions.Session {
 		t.Helper()

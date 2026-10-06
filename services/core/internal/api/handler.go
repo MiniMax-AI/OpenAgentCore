@@ -22,16 +22,14 @@ import (
 // earlier creation by its retry identity. Creation that admits work goes
 // through Execution.SessionAdmission.
 type SessionCreation interface {
-	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error)
-	CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
 	FindSessionCreation(context.Context, string, string, json.RawMessage, identity.Subject) (sessions.Creation, error)
 }
 
 // SessionAdmission creates Sessions that admit work through the execution
 // Worker, which validates execution support first.
 type SessionAdmission interface {
-	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error)
-	CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
+	CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
 }
 
 // Sessions updates and deletes Sessions, and records their public write audit.
@@ -274,10 +272,6 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		Creator:                    sessionCreator(r), InitialFiles: input.initialFiles, Initialization: input.initialization,
 		Engine: selectedEngine, IdempotencyKey: key, Metadata: input.Metadata, Configuration: configuration, InitialInputs: initialInputs, CreationRequest: creationRequest,
 	}
-	if input.Stream {
-		h.createSessionStream(w, r, createInput)
-		return
-	}
 	create := h.SessionCreation.CreateSession
 	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {
 		if h.Execution == nil {
@@ -286,12 +280,16 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		}
 		create = h.Execution.SessionAdmission.CreateSession
 	}
-	session, err := create(r.Context(), tenantID(r), createInput)
+	result, err := create(r.Context(), tenantID(r), createInput)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
 	}
-	h.respondSessionStatus(w, r, session, http.StatusCreated)
+	if input.Stream {
+		h.respondSessionCreationStream(w, r, result)
+		return
+	}
+	h.respondSessionStatus(w, r, result.Session, http.StatusCreated)
 }
 
 // @Summary Retrieve an execution Session

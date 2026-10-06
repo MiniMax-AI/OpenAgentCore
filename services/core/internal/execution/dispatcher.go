@@ -14,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
@@ -33,7 +32,6 @@ type Dispatcher struct {
 	// Bind sets it from Owner.Sessions.
 	sessionExecution *sessions.ExecutionOperations
 	Policy
-	Store    *store.Store
 	Registry *runtimegateway.Registry
 	// Credentials opens the bearer tokens of authenticated MCP servers.
 	Credentials Credentials

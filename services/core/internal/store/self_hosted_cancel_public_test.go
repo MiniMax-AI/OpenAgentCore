@@ -34,7 +34,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	var owner execution.Owner
 	serve := func() (*httptest.Server, func(bool)) {
 		t.Helper()
-		owner = executionOwner(t, db, s)
+		owner = executionOwner(t, db)
 		worker, stop := publicOwnedWorker(t, s, db, owner)
 		handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, worker), executorURL("https://offline-executor.example"))
 		if err != nil {

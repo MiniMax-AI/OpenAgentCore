@@ -214,14 +214,14 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 
 func publicInitialWorker(t *testing.T, s *store.Store, db fixtureDB) (*execution.Worker, func(bool)) {
 	t.Helper()
-	return publicOwnedWorker(t, s, db, executionOwner(t, db, s))
+	return publicOwnedWorker(t, s, db, executionOwner(t, db))
 }
 
 // publicOwnedWorker is publicInitialWorker on owner, for tests that also write
 // as the Worker's execution owner.
 func publicOwnedWorker(t *testing.T, s *store.Store, db fixtureDB, owner execution.Owner) (*execution.Worker, func(bool)) {
 	t.Helper()
-	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}, owner)
+	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()}, owner)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
@@ -250,11 +250,7 @@ func publicOwnedWorker(t *testing.T, s *store.Store, db fixtureDB, owner executi
 // a running Worker.
 type unavailableAdmission struct{}
 
-func (unavailableAdmission) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
-	return sessions.Session{}, execution.ErrExecutionUnavailable
-}
-
-func (unavailableAdmission) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
+func (unavailableAdmission) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	return sessions.Creation{}, execution.ErrExecutionUnavailable
 }
 

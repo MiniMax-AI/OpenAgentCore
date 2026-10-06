@@ -58,7 +58,6 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer instrumented.Close()
-			h.d.Store = store.New(instrumented)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			worker := startWorker(t, ctx, fixtureDB{pool: instrumented}, h.d)

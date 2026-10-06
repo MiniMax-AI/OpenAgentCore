@@ -64,10 +64,10 @@ func (s *Store) UpdateSessionMetadata(ctx context.Context, tenantID, sessionID s
 		if err := auditpg.RecordWriteAudit(ctx, q, tenantID, "update", "session", uuid.UUID(row.ID.Bytes).String(), ""); err != nil {
 			return err
 		}
-		if session, err = SessionFromRow(row); err != nil {
+		if session, err = sessionFromRow(row); err != nil {
 			return err
 		}
-		session, err = LoadSessionActivity(ctx, q, session)
+		session, err = loadSessionActivity(ctx, q, session)
 		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {

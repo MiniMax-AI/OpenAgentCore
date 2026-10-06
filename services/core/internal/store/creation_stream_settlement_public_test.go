@@ -128,7 +128,7 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 		handler.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	sessionExecution := executionOwner(t, db, s).Sessions
+	sessionExecution := executionOwner(t, db).Sessions
 	connect := func(environment string) {
 		t.Helper()
 		generation := uuid.NewString()

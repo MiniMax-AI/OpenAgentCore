@@ -48,7 +48,7 @@ func TestDeleteSession(t *testing.T) {
 			tx := test.tx
 			tx.t = t
 			storage := &fakeStorage{t: t, deletion: &tx, locked: test.locked}
-			service, err := NewService(storage)
+			service, err := NewService(storage, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,7 +68,7 @@ func TestDeleteSession(t *testing.T) {
 
 func TestUpdateSessionMetadata(t *testing.T) {
 	storage := &fakeStorage{t: t, updateMetadata: func(string) (Session, error) { return Session{ID: "session"}, nil }}
-	service, err := NewService(storage)
+	service, err := NewService(storage, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestUpdateSessionMetadata(t *testing.T) {
 
 func TestAuditSessionOperation(t *testing.T) {
 	storage := &fakeStorage{t: t, auditOperation: done}
-	service, err := NewService(storage)
+	service, err := NewService(storage, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

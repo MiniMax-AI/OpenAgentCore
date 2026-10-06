@@ -38,7 +38,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			heartbeat := scenario != "receipt_without_heartbeat"
 			s, db := newManagedTestStoreDB(t)
-			leased := executionOwner(t, db, s)
+			leased := executionOwner(t, db)
 			t.Cleanup(func() {
 				if err := leased.Lease.Close(context.Background()); err != nil {
 					t.Error(err)

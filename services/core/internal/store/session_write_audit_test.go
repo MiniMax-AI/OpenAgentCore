@@ -205,7 +205,7 @@ func TestSessionWriteAuditInitialInputAndHistoricalReplay(t *testing.T) {
 			tenant := uuid.NewString()
 			input := environmentInput("audit-initial", kind, "/workspace")
 			input.InitialInputs = []sessions.Input{messageInput("private initial message")}
-			created, err := s.CreateSessionStream(sessionAuditContext(t, tenant, "a"), tenant, input)
+			created, err := createSession(sessionAuditContext(t, tenant, "a"), s, tenant, input)
 			if err != nil || !created.Created {
 				t.Fatal(created, err)
 			}

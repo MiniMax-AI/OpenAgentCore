@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -283,7 +284,7 @@ func (s *Store) VersionContent(ctx context.Context, tenantID string, skillID uui
 	if err != nil {
 		return skills.Content{}, translate(err)
 	}
-	return s.open(row)
+	return open(s.cipher, row)
 }
 
 func (s *Store) DefaultVersionContent(ctx context.Context, tenantID string, skillID uuid.UUID) (skills.Content, error) {
@@ -295,7 +296,7 @@ func (s *Store) DefaultVersionContent(ctx context.Context, tenantID string, skil
 	if err != nil {
 		return skills.Content{}, translate(err)
 	}
-	return s.open(row)
+	return open(s.cipher, row)
 }
 
 // insertVersion seals the archive under a new version ID and stores it.
@@ -315,11 +316,55 @@ func (s *Store) insertVersion(ctx context.Context, q *sqlc.Queries, tenant, skil
 	return versionFromRow(sqlc.GetSkillVersionRow(row)), nil
 }
 
-func (s *Store) open(row sqlc.SkillVersion) (skills.Content, error) {
-	if s.cipher == nil {
+// LockSkills locks, on q, the tenant's Skills in ID order, whatever the order
+// of ids, so callers never lock them in opposite orders. It returns them by
+// ID; a malformed or missing one is skills.ErrNotFound.
+func LockSkills(ctx context.Context, q *sqlc.Queries, tenant pgtype.UUID, ids []string) (map[string]skills.Skill, error) {
+	ids = slices.Compact(slices.Sorted(slices.Values(ids)))
+	locked := make(map[string]skills.Skill, len(ids))
+	for _, id := range ids {
+		key, err := skills.ParseID(id)
+		if err != nil {
+			return nil, err
+		}
+		row, err := q.LockSkill(ctx, sqlc.LockSkillParams{TenantID: tenant, ID: pgID(key)})
+		if err != nil {
+			return nil, translate(err)
+		}
+		locked[id] = skillFromRow(row)
+	}
+	return locked, nil
+}
+
+// ReadVersionForFreeze reads, on q, a version of the tenant's Skill, opens
+// it with cipher and verifies it is still the archive the version records. A
+// missing version is skills.ErrNotFound and a missing cipher
+// credentialcrypto.ErrUnavailable; one that does not open or verify is
+// corrupt stored data, an internal error.
+func ReadVersionForFreeze(ctx context.Context, q *sqlc.Queries, cipher *credentialcrypto.Cipher, tenant pgtype.UUID, skillID string, version int64) (skills.Content, error) {
+	key, err := skills.ParseID(skillID)
+	if err != nil {
+		return skills.Content{}, err
+	}
+	row, err := q.ReadSkillVersion(ctx, sqlc.ReadSkillVersionParams{TenantID: tenant, SkillID: pgID(key), Version: version})
+	if err != nil {
+		return skills.Content{}, translate(err)
+	}
+	content, err := open(cipher, row)
+	if err != nil {
+		return skills.Content{}, err
+	}
+	if skills.VerifyContent(content) != nil {
+		return skills.Content{}, errors.New("stored Skill version does not verify")
+	}
+	return content, nil
+}
+
+func open(cipher *credentialcrypto.Cipher, row sqlc.SkillVersion) (skills.Content, error) {
+	if cipher == nil {
 		return skills.Content{}, credentialcrypto.ErrUnavailable
 	}
-	archive, err := s.cipher.OpenSkill(row.Contents, credentialcrypto.NewSkillBinding(row.TenantID.Bytes, row.SkillID.Bytes, row.ID.Bytes, row.Version))
+	archive, err := cipher.OpenSkill(row.Contents, credentialcrypto.NewSkillBinding(row.TenantID.Bytes, row.SkillID.Bytes, row.ID.Bytes, row.Version))
 	if err != nil {
 		return skills.Content{}, err
 	}

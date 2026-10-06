@@ -120,7 +120,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.d = &execution.Dispatcher{Store: s, Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}
+	h.d = &execution.Dispatcher{Registry: h.registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}
 	return h
 }
 
@@ -183,7 +183,7 @@ type runResult struct {
 func (h *dispatchHarness) owner() execution.Owner {
 	h.t.Helper()
 	if h.owned == nil {
-		owner := executionOwner(h.t, h.db, h.s)
+		owner := executionOwner(h.t, h.db)
 		h.owned = &owner
 	}
 	return *h.owned
@@ -267,7 +267,6 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	awaitRelease()
 	newStore, db := newTestStoreDB(t)
 	h.s, h.db, h.owned = newStore, db, nil
-	h.d.Store = newStore
 	bound, err := store.SessionAdapter(newStore).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {
 		t.Fatalf("native binding lost: %+v %v", bound, err)

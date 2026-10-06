@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
@@ -102,7 +103,7 @@ func seedCursorFixture(t *testing.T, s *store.Store, leased execution.Owner, ski
 		if err = leased.Sessions.BindSessionDevice(ctx, tenant, created.ID, host.ID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = store.TransitionTurn(ctx, leased.Store, tenant, created.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err = store.TransitionTurn(ctx, store.NewExecution(s, leased.Lease.(*pgunit.Lease)), tenant, created.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		opened := int64(1700000001000)
@@ -241,7 +242,7 @@ func TestListCursorErrorsPostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	leased := executionOwner(t, db, s)
+	leased := executionOwner(t, db)
 	skillService := store.SkillService(t, db.pool, db.cipher)
 	_, sessionService, err := fixtureSessions(db)
 	if err != nil {

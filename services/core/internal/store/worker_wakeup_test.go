@@ -31,7 +31,7 @@ func (trace *schedulerQueryOrder) TraceQueryStart(ctx context.Context, _ *pgx.Co
 func (*schedulerQueryOrder) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
-	for _, operation := range []string{"submit", "create", "stream", "rejected"} {
+	for _, operation := range []string{"submit", "create", "rejected"} {
 		t.Run(operation, func(t *testing.T) {
 			h := newDispatchHarness(t)
 			enableWorkerEnvironment(t, h)
@@ -45,7 +45,6 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer instrumented.Close()
-			h.d.Store = store.NewWithCredentialCipher(instrumented, store.FixtureCipher())
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			worker := startWorker(t, ctx, fixtureDB{pool: instrumented, cipher: store.FixtureCipher()}, h.d)
@@ -66,13 +65,8 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 			switch operation {
 			case "submit":
 				_, err = worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", input)
-			case "create", "stream":
-				creation := sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "wake", Configuration: h.session.Configuration, InitialInputs: input}
-				if operation == "create" {
-					_, err = worker.CreateSession(ctx, h.tenant, creation)
-				} else {
-					_, err = worker.CreateSessionStream(ctx, h.tenant, creation)
-				}
+			case "create":
+				_, err = worker.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "wake", Configuration: h.session.Configuration, InitialInputs: input})
 			case "rejected":
 				h.message("wake", "different")
 				_, err = worker.SubmitInputs(ctx, h.tenant, h.session.ID, "wake", input)

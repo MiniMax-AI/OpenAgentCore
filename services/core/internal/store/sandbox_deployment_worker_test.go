@@ -35,7 +35,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	})
 	start := func() (*execution.Worker, func()) {
 		t.Helper()
-		w := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
+		w := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
 		var once sync.Once
 		stop := func() {
 			once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })

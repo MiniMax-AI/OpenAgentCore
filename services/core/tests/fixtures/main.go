@@ -53,7 +53,7 @@ func seed() error {
 		return err
 	}
 	defer pool.Close()
-	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil), nil)
 	if err != nil {
 		return err
 	}

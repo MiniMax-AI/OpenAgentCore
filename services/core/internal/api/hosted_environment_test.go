@@ -90,7 +90,7 @@ func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 		recorder := &hostedCreationRecorder{}
 		handler, fixture := environmentCreationHandler(t, "codex", func(d *Dependencies, f *testFakes) {
 			d.Execution, d.Sandboxes = f.execution(), f.sandboxes()
-			f.sessionAdmission.createSession, f.sessionAdmission.createSessionStream = recorder.CreateSession, recorder.CreateSessionStream
+			f.sessionAdmission.createSession = recorder.CreateSession
 		})
 		input := ""
 		if stream {
@@ -103,8 +103,8 @@ func TestHostedCreationUsesExecutionAdmission(t *testing.T) {
 		request.Header.Set("Content-Type", "application/json")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
-		// The recorder deliberately rejects both creation methods. Its rejection
-		// proves admission was used; the resource fixture must remain untouched.
+		// The recorder deliberately rejects creation. Its rejection proves
+		// admission was used; the resource fixture must remain untouched.
 		if recorder.calls != 1 || fixture.input.Engine != "" || fixture.session.ID != "" || response.Code != http.StatusBadRequest {
 			t.Fatal("hosted creation bypassed execution admission", stream, response.Code, response.Body.String())
 		}
@@ -117,11 +117,7 @@ type hostedCreationRecorder struct {
 	calls int
 }
 
-func (r *hostedCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
-	r.calls++
-	return sessions.Session{}, sessions.ErrInvalidInput
-}
-func (r *hostedCreationRecorder) CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
+func (r *hostedCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	r.calls++
 	return sessions.Creation{}, sessions.ErrInvalidInput
 }

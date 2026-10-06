@@ -65,7 +65,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -140,7 +139,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	executionStore := store.NewWithCredentialCipher(pool, credentialKey)
 	units := pgunit.NewPool(pool)
 	auditStore := auditpg.New(units)
 	agentStore := agentpg.New(units, credentialKey)
@@ -180,16 +178,13 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	// Session creation in store still decides admission and placement until
-	// it moves to sessions.
-	executionStore.SetPlacement(placementRules)
 	deploymentStore := deploymentpg.New(units, credentialKey)
 	deploymentService, err := deployment.NewService(deploymentStore, deploymentStore, sandboxProviders, placementRules)
 	if err != nil {
 		return err
 	}
 	sessionStore := sessionpg.New(units, credentialKey)
-	sessionService, err := sessions.NewService(sessionStore)
+	sessionService, err := sessions.NewService(sessionStore, placementRules)
 	if err != nil {
 		return err
 	}
@@ -303,7 +298,7 @@ func run() error {
 	}
 	var deploymentExecution *deployment.ExecutionOperations
 	if registry != nil {
-		dispatcher := &execution.Dispatcher{Store: executionStore, Registry: registry,
+		dispatcher := &execution.Dispatcher{Registry: registry,
 			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
 			Sessions:        sessionService,
 			SessionsReader:  sessionStore,
@@ -323,7 +318,6 @@ func run() error {
 		// From this call on the Worker closes the lease, even when it fails to start.
 		worker, err = execution.StartWorker(ctx, dispatcher, execution.Owner{
 			Lease:      lease,
-			Store:      store.NewExecution(executionStore, lease),
 			Deployment: deploymentExecution,
 			Sessions:   sessionExecution,
 		})
@@ -400,7 +394,7 @@ func run() error {
 		Agents: agentService, AgentsReader: agentStore,
 		Sessions:        sessionService,
 		SessionsReader:  sessionStore,
-		SessionCreation: executionStore,
+		SessionCreation: sessionService,
 		SessionEvents:   sessionStore,
 		Turns:           sessionStore,
 		Items:           sessionStore,

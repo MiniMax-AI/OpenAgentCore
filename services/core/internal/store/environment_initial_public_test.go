@@ -37,7 +37,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner := executionOwner(t, db, s)
+	owner := executionOwner(t, db)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

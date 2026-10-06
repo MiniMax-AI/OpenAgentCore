@@ -51,7 +51,7 @@ func TestSessionExecutionConfigurationFrozenAcrossCreationPathsAndRetry(t *testi
 				var session sessions.Session
 				var err error
 				if stream {
-					created, e := s.CreateSessionStream(t.Context(), tenant, input)
+					created, e := createSession(t.Context(), s, tenant, input)
 					session, err = created.Session, e
 				} else {
 					session, err = s.CreateSession(t.Context(), tenant, input)
@@ -217,7 +217,7 @@ func TestSessionExecutionConfigurationConcurrentRetryKeepsWinner(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			created, err := s.CreateSessionStream(t.Context(), tenant, request)
+			created, err := createSession(t.Context(), s, tenant, request)
 			if err != nil {
 				t.Error(err)
 				return

@@ -277,6 +277,21 @@ func (s *fakeArtifactStorage) AuditSessionOperation(context.Context, string, str
 	return nil
 }
 
+func (s *fakeArtifactStorage) FingerprintProviderKey(string) (string, error) {
+	s.t.Fatal("unexpected call to FingerprintProviderKey")
+	return "", nil
+}
+
+func (s *fakeArtifactStorage) WithCreation(context.Context, string, func(context.Context, CreationTx) error) error {
+	s.t.Fatal("unexpected call to WithCreation")
+	return nil
+}
+
+func (s *fakeArtifactStorage) FindCreation(context.Context, string, string) (CreationRecord, error) {
+	s.t.Fatal("unexpected call to FindCreation")
+	return CreationRecord{}, nil
+}
+
 func discard(content io.Reader, size int64) error {
 	_, err := io.CopyN(io.Discard, content, size)
 	return err
@@ -309,7 +324,7 @@ func TestStageTurnArtifacts(t *testing.T) {
 			tx := test.tx
 			tx.t = t
 			storage := &fakeArtifactStorage{t: t, tx: &tx}
-			service, err := NewService(storage)
+			service, err := NewService(storage, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -327,7 +342,7 @@ func TestStageTurnArtifacts(t *testing.T) {
 	}
 
 	// Without an export nothing reaches storage.
-	service, err := NewService(&fakeArtifactStorage{t: t})
+	service, err := NewService(&fakeArtifactStorage{t: t}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +352,7 @@ func TestStageTurnArtifacts(t *testing.T) {
 }
 
 func TestNewServiceRequiresStorage(t *testing.T) {
-	if _, err := NewService(nil); err == nil {
+	if _, err := NewService(nil, nil); err == nil {
 		t.Fatal("service built without storage")
 	}
 }

@@ -65,9 +65,9 @@ func TurnFromRow(row sqlc.Turn) sessions.Turn {
 	}
 }
 
-// SessionFromRow maps a stored Session with its creator, normalized
+// sessionFromRow maps a stored Session with its creator, normalized
 // configuration and metadata.
-func SessionFromRow(row sqlc.Session) (sessions.Session, error) {
+func sessionFromRow(row sqlc.Session) (sessions.Session, error) {
 	session := sessions.Session{ID: uuid.UUID(row.ID.Bytes).String(), TenantID: uuid.UUID(row.TenantID.Bytes).String(), Engine: row.Engine, CreatedAt: row.CreatedAt.Time, RequiredActions: []v1.FunctionCallAction{}}
 	creator, err := sessionCreator(row.CreatorKind, row.CreatorID)
 	if err != nil {
@@ -98,10 +98,10 @@ func sessionCreator(kind, id pgtype.Text) (*identity.Subject, error) {
 	return &creator, nil
 }
 
-// EnvironmentFromRow maps a stored Environment of the tenant with its
+// environmentFromRow maps a stored Environment of the tenant with its
 // normalized configuration snapshot, from the result of the query that read
 // it: no rows is sessions.ErrNotFound.
-func EnvironmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration []byte, err error) (sessions.Environment, error) {
+func environmentFromRow(row sqlc.Environment, tenant pgtype.UUID, configuration []byte, err error) (sessions.Environment, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sessions.Environment{}, sessions.ErrNotFound
 	}

@@ -31,7 +31,7 @@ func sessionAdapter(s *Store) *sessionpg.Store { return sessionpg.New(s.pooled, 
 // cases.
 func sessionService(t testing.TB, s *Store) *sessions.Service {
 	t.Helper()
-	service, err := sessions.NewService(sessionAdapter(s))
+	service, err := sessions.NewService(sessionAdapter(s), s.placement)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func sessionService(t testing.TB, s *Store) *sessions.Service {
 // stageTurnArtifacts stages export as the Turn's Artifacts through the Session
 // service on s's database, as the execution Worker does.
 func stageTurnArtifacts(ctx context.Context, s *Store, tenant, session, turn, environment string, export io.Reader) error {
-	service, err := sessions.NewService(sessionAdapter(s))
+	service, err := sessions.NewService(sessionAdapter(s), s.placement)
 	if err != nil {
 		return err
 	}

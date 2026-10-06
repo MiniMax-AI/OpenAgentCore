@@ -73,10 +73,10 @@ func ValidateInputs(inputs []Input) ([]Input, json.RawMessage, error) {
 	return batch, encoded, err
 }
 
-// ValidateMessageInputs validates a batch as ValidateInputs does and also
+// validateMessageInputs validates a batch as ValidateInputs does and also
 // requires that it holds only messages, as Environment input reservations and
 // Session initial input do.
-func ValidateMessageInputs(inputs []Input) ([]Input, json.RawMessage, error) {
+func validateMessageInputs(inputs []Input) ([]Input, json.RawMessage, error) {
 	for _, input := range inputs {
 		if input.Kind != "message" {
 			return nil, nil, ErrInvalidInput
@@ -267,8 +267,9 @@ type InputTx interface {
 	// carries the receipts of its batch.
 	LoadInputReservation(ctx context.Context, reservation string) (EnvironmentInputReservation, error)
 	// CreateInputReservation reserves batch under key until the deadline the
-	// database clock sets, and returns the pending reservation as stored.
-	CreateInputReservation(ctx context.Context, key string, batch json.RawMessage) (EnvironmentInputReservation, error)
+	// database clock sets, marked initial when it is the Session's initial
+	// input, and returns the pending reservation as stored.
+	CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool) (EnvironmentInputReservation, error)
 	// ExpireInputReservation expires the reservation while it is pending and
 	// its deadline has passed by the database clock; otherwise it changes
 	// nothing.

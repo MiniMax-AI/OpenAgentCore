@@ -58,11 +58,11 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := fixtureOwner(db, s, lease)
+	owner, err := fixtureOwner(db, lease)
 	if err != nil {
 		t.Fatal(errors.Join(err, lease.Close(t.Context())))
 	}
-	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration}, owner)
+	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration}, owner)
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {

@@ -58,7 +58,7 @@ func run() error {
 	defer pool.Close()
 	// Device provisioning opens no frozen Session data, so it needs no
 	// credential key.
-	s, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	s, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil), nil)
 	if err != nil {
 		return err
 	}

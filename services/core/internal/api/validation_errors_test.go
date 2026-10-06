@@ -45,9 +45,9 @@ func (s *validationStore) UpdateSessionMetadata(_ context.Context, command sessi
 	return sessions.Session{ID: command.SessionID, TenantID: command.TenantID, Metadata: command.Metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
+func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	s.writes++
-	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
+	return sessions.Creation{Session: sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, Created: true}, nil
 }
 
 func (s *validationStore) CreateEnvironmentTemplate(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {

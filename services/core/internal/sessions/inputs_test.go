@@ -67,8 +67,12 @@ func (f *fakeInputTx) LoadInputReservation(_ context.Context, reservation string
 	return f.loadInputReservation()
 }
 
-func (f *fakeInputTx) CreateInputReservation(_ context.Context, key string, batch json.RawMessage) (EnvironmentInputReservation, error) {
-	f.record("CreateInputReservation", f.createInputReservation != nil, key, string(batch))
+func (f *fakeInputTx) CreateInputReservation(_ context.Context, key string, batch json.RawMessage, initial bool) (EnvironmentInputReservation, error) {
+	detail := []string{key, string(batch)}
+	if initial {
+		detail = append(detail, "initial")
+	}
+	f.record("CreateInputReservation", f.createInputReservation != nil, detail...)
 	return f.createInputReservation()
 }
 
@@ -140,11 +144,11 @@ func TestValidateInputs(t *testing.T) {
 }
 
 func TestValidateMessageInputs(t *testing.T) {
-	if _, encoded, err := ValidateMessageInputs([]Input{messageInput("hi")}); err != nil || string(encoded) != `[{"kind":"message","payload":{"text":"hi"}}]` {
+	if _, encoded, err := validateMessageInputs([]Input{messageInput("hi")}); err != nil || string(encoded) != `[{"kind":"message","payload":{"text":"hi"}}]` {
 		t.Fatalf("batch %s, %v", encoded, err)
 	}
 	for name, inputs := range map[string][]Input{"cancel": {messageInput("hi"), cancelInput}, "no inputs": nil} {
-		if _, _, err := ValidateMessageInputs(inputs); !errors.Is(err, ErrInvalidInput) {
+		if _, _, err := validateMessageInputs(inputs); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}

@@ -38,7 +38,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if _, err := store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	functions := executionOwner(t, db, s).Sessions
+	functions := executionOwner(t, db).Sessions
 	record := func(id string) {
 		t.Helper()
 		if err := functions.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {

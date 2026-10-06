@@ -65,7 +65,7 @@
     "reason": "These exact authenticated encryption domain/AAD strings must remain stable to decrypt existing stored credentials and assets."
   },
   {
-    "path": "services/core/internal/store/session_creation_identity.go",
+    "path": "services/core/internal/persistence/postgres/sessionpg/creation.go",
     "regex": "parsar\\.agents-api\\.model-provider-api-key\\.v1",
     "reason": "This persisted model-provider key fingerprint purpose remains stable across upgrade and request replay."
   },

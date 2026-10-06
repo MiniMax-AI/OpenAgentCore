@@ -65,7 +65,7 @@ func startWorkerErr(ctx context.Context, db fixtureDB, dispatcher *execution.Dis
 	if err != nil {
 		return nil, err
 	}
-	owner, err := fixtureOwner(db, dispatcher.Store, lease)
+	owner, err := fixtureOwner(db, lease)
 	if err != nil {
 		return nil, errors.Join(err, lease.Close(ctx))
 	}
@@ -107,26 +107,26 @@ func startOwnedWorkerErr(ctx context.Context, db fixtureDB, dispatcher *executio
 	return execution.StartWorker(ctx, &owned, owner)
 }
 
-// executionOwner acquires the execution lease on db and builds s's execution
-// writer on it, for tests that run execution operations without a Worker. The
-// lease closes when the test ends.
-func executionOwner(t testing.TB, db fixtureDB, s *store.Store) execution.Owner {
+// executionOwner acquires the execution lease on db and builds the execution
+// operations on it, for tests that run them without a Worker. The lease
+// closes when the test ends.
+func executionOwner(t testing.TB, db fixtureDB) execution.Owner {
 	t.Helper()
 	lease, err := pgunit.AcquireLease(t.Context(), db.pool)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	owner, err := fixtureOwner(db, s, lease)
+	owner, err := fixtureOwner(db, lease)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return owner
 }
 
-// fixtureOwner builds s's execution writer and the deployment and Session
-// execution operations on lease, as cmd/server does.
-func fixtureOwner(db fixtureDB, s *store.Store, lease *pgunit.Lease) (execution.Owner, error) {
+// fixtureOwner builds the deployment and Session execution operations on
+// lease, as cmd/server does.
+func fixtureOwner(db fixtureDB, lease *pgunit.Lease) (execution.Owner, error) {
 	_, changes, err := fixtureDeploymentExecution(db, lease)
 	if err != nil {
 		return execution.Owner{}, err
@@ -137,7 +137,6 @@ func fixtureOwner(db fixtureDB, s *store.Store, lease *pgunit.Lease) (execution.
 	}
 	return execution.Owner{
 		Lease:      lease,
-		Store:      store.NewExecution(s, lease),
 		Deployment: changes,
 		Sessions:   sessionExecution,
 	}, nil

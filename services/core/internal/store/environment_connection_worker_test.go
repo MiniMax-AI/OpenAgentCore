@@ -25,7 +25,7 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner := executionOwner(t, db, s)
+	owner := executionOwner(t, db)
 	generation := uuid.NewString()
 	if err := owner.Sessions.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func TestEnvironmentConnectionWorkerReconcilesAndReleasesLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
+	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Registry: runtimegateway.NewRegistry()})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	exited := make(chan struct{})
