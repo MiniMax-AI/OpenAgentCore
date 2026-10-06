@@ -8,7 +8,6 @@ import (
 
 // Error kinds. Every error the package returns matches one of them with errors.Is.
 var (
-	ErrUnsupported = errors.New("sessionview: unsupported platform")
 	ErrInvalidSpec = errors.New("sessionview: invalid spec")
 	ErrCapability  = errors.New("sessionview: missing capability")
 	ErrNoFUSE      = errors.New("sessionview: /dev/fuse unavailable")

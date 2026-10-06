@@ -14,5 +14,5 @@
 //
 // Teardown never waits unconditionally. Once the launcher has exited, the view shuts its end of the relay connection down, ends every process in its cgroup with cgroup.kill and stops the world server, which ends the requests still pending on the view's FUSE connection so that a process blocked on the world can exit. Only when the world server and the launcher have ended and the cgroup is empty, all within 30 seconds, does it remove the cgroup. Otherwise Wait and Close report [ErrCleanup] and the cgroup stays for Recover; nothing touches it after the teardown. When Start's context ends during the build, Start kills the launcher, stops waiting for it and tears the view down the same way, so a launcher blocked on the world cannot hold Start past this bound.
 //
-// The package works only on Linux. Elsewhere [Start] returns [ErrUnsupported].
+// Views work only on Linux; elsewhere the package offers only [Init] and its types.
 package sessionview
