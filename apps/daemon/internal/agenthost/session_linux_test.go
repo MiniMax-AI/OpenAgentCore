@@ -54,11 +54,11 @@ func TestViewEndReleasesTheSlotBeforeTheProcessEnds(t *testing.T) {
 		lv := &liveView{}
 		s.live = lv
 		s.views.Add(1)
-		ends, err := newStdio(false)
+		child, ends, err := sessionview.Stdio([3]*os.File{}, false, uint32(os.Getuid()), uint32(os.Getgid()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		ends.closeChild()
+		closeFiles(child[:])
 		v := &fakeView{exit: make(chan struct{})}
 		p, err := s.own(lv, v, fakeWorld{stop: stop}, func() {}, clirunner.StartOptions{Parent: context.Background(), KillTimeout: time.Second}, ends, 0)
 		if err != nil {
@@ -108,11 +108,11 @@ func TestViewEndStopsTheGateway(t *testing.T) {
 	lv := &liveView{}
 	s.live = lv
 	s.views.Add(1)
-	ends, err := newStdio(false)
+	child, ends, err := sessionview.Stdio([3]*os.File{}, false, uint32(os.Getuid()), uint32(os.Getgid()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	ends.closeChild()
+	closeFiles(child[:])
 	v := &fakeView{exit: make(chan struct{})}
 	p, err := s.own(lv, v, fakeWorld{}, stop, clirunner.StartOptions{Parent: context.Background(), KillTimeout: time.Second}, ends, 0)
 	if err != nil {

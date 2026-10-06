@@ -127,12 +127,8 @@ func (s *session) spawn(opts clirunner.StartOptions) (*clirunner.Process, error)
 		}
 		return nil, fmt.Errorf("%w: spawn: %w", ErrLaunch, err)
 	}
-	var stdin io.WriteCloser
-	if p.Stdin != nil {
-		stdin = p.Stdin
-	}
 	// FromHandle fails only without stdout and stderr, which a spawned process always has.
-	process, _ := clirunner.FromHandle(p, clirunner.HandleOptions{Parent: opts.Parent, Stdin: stdin, Stdout: p.Stdout, Stderr: p.Stderr, KillTimeout: opts.KillTimeout})
+	process, _ := clirunner.FromHandle(p, clirunner.HandleOptions{Parent: opts.Parent, Stdin: writer(p.Stdin), Stdout: p.Stdout, Stderr: p.Stderr, KillTimeout: opts.KillTimeout})
 	return process, nil
 }
 
@@ -169,13 +165,13 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 		s.release(lv)
 		return nil, fmt.Errorf("%w: home: %w", ErrLaunch, err)
 	}
-	ends, err := newStdio(opts.NeedStdin)
+	child, ends, err := sessionview.Stdio([3]*os.File{}, opts.NeedStdin, s.uid, s.uid)
 	if err != nil {
 		s.release(lv)
 		return nil, fmt.Errorf("%w: stdio: %w", ErrLaunch, err)
 	}
 	world := worldfs.New(worldExport, s.openFile)
-	spec := s.spec(world, opts, ends)
+	spec := s.spec(world, opts, child)
 	// The gateway serves from the view's network hook until the view has ended.
 	var stopGateway func()
 	spec.Network.Setup = func(netns *os.File) (err error) {
@@ -183,12 +179,12 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 		return err
 	}
 	v, err := sessionview.Start(startCtx, spec)
-	ends.closeChild()
+	closeFiles(child[:])
 	if err != nil {
 		if stopGateway != nil {
 			stopGateway()
 		}
-		ends.closeParent()
+		closeFiles(ends[:])
 		defer s.release(lv)
 		// sessionview stops a world that served; Stop reports how that went.
 		serr := world.Stop()
@@ -241,7 +237,7 @@ func (s *session) brokerFailed(op string, err error) error {
 // own hands a started view to the clirunner.Process the adapter receives. A
 // view with a relay gets its own process broker, which serves the view's
 // shims in scope until the view ends.
-func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway func(), opts clirunner.StartOptions, ends *stdio, scope sandboxprocess.Scope) (*clirunner.Process, error) {
+func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway func(), opts clirunner.StartOptions, ends [3]*os.File, scope sandboxprocess.Scope) (*clirunner.Process, error) {
 	h := &ownedView{s: s, lv: lv, v: v, world: world, stopGateway: stopGateway, ended: make(chan struct{}), watched: make(chan struct{})}
 	var brokerErr error
 	if relay := v.Relay(); relay != nil {
@@ -269,8 +265,8 @@ func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway 
 	}
 	var process *clirunner.Process
 	if err == nil {
-		process, err = clirunner.FromHandle(h, clirunner.HandleOptions{Parent: opts.Parent, Stdin: ends.stdin(),
-			Stdout: ends.parent[1], Stderr: ends.parent[2], KillTimeout: opts.KillTimeout})
+		process, err = clirunner.FromHandle(h, clirunner.HandleOptions{Parent: opts.Parent, Stdin: writer(ends[0]),
+			Stdout: ends[1], Stderr: ends[2], KillTimeout: opts.KillTimeout})
 		if err != nil {
 			err = fmt.Errorf("%w: %w", ErrLaunch, err)
 		}
@@ -278,7 +274,7 @@ func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway 
 	if err != nil {
 		v.Close()
 		h.Wait()
-		ends.closeParent()
+		closeFiles(ends[:])
 		return nil, err
 	}
 	return process, nil
@@ -379,7 +375,7 @@ func (h *ownedView) end(waitErr error) {
 // spec builds the view: the closure and home directories, the agent
 // host's /etc files and CA directory, the adapter's overlays and masks, and
 // the shim.
-func (s *session) spec(world *worldfs.World, opts clirunner.StartOptions, ends *stdio) sessionview.Spec {
+func (s *session) spec(world *worldfs.World, opts clirunner.StartOptions, stdio [3]*os.File) sessionview.Spec {
 	view := s.plan.view
 	var private []sessionview.PrivateDir
 	for _, m := range view.Closure {
@@ -407,56 +403,21 @@ func (s *session) spec(world *worldfs.World, opts clirunner.StartOptions, ends *
 		Overlays: overlays,
 		Shim:     sessionview.Shim{Binary: s.cfg.Shim, Names: view.Shims, Paths: view.ShimPaths},
 		Process: sessionview.Process{Path: opts.Binary, Args: append([]string{opts.Binary}, opts.Args...), Env: opts.Env,
-			Dir: opts.Dir, UID: s.uid, GID: s.uid, Stdin: ends.child[0], Stdout: ends.child[1], Stderr: ends.child[2],
+			Dir: opts.Dir, UID: s.uid, GID: s.uid, Stdin: stdio[0], Stdout: stdio[1], Stderr: stdio[2],
 			Grace: opts.KillTimeout},
 		StagingParent: s.dir.entry(stagingEntry),
 		CgroupParent:  s.cfg.ViewCgroups,
 	}
 }
 
-// stdio holds the view process's stdio: the child ends sessionview passes to
-// the process and the parent ends the clirunner.Process owns. Without a stdin
-// pipe the child's stdin is /dev/null and there is no parent end.
-type stdio struct {
-	child, parent [3]*os.File
-}
-
-func newStdio(needStdin bool) (*stdio, error) {
-	e := &stdio{}
-	if needStdin {
-		r, w, err := os.Pipe()
-		if err != nil {
-			return nil, err
-		}
-		e.child[0], e.parent[0] = r, w
-	} else {
-		null, err := os.Open(os.DevNull)
-		if err != nil {
-			return nil, err
-		}
-		e.child[0] = null
-	}
-	for i := 1; i < 3; i++ {
-		r, w, err := os.Pipe()
-		if err != nil {
-			e.closeChild()
-			e.closeParent()
-			return nil, err
-		}
-		e.child[i], e.parent[i] = w, r
-	}
-	return e, nil
-}
-
-func (e *stdio) stdin() io.WriteCloser {
-	if e.parent[0] == nil {
+// writer returns f, or nil without f: a nil *os.File would be a writer
+// that fails.
+func writer(f *os.File) io.WriteCloser {
+	if f == nil {
 		return nil
 	}
-	return e.parent[0]
+	return f
 }
-
-func (e *stdio) closeChild()  { closeFiles(e.child[:]) }
-func (e *stdio) closeParent() { closeFiles(e.parent[:]) }
 
 func closeFiles(files []*os.File) {
 	for _, f := range files {
