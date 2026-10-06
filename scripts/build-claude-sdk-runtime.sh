@@ -17,12 +17,11 @@ build_context="$(mktemp -d "$runtime_root/cache/claude-sdk-builds/runtime.XXXXXX
 trap 'rm -rf "$build_context"' EXIT
 cd "$repo_root"
 # Validate source manifests before deploy derives its dedicated frozen lockfile.
-test -f pnpm-lock.yaml
-pnpm install --frozen-lockfile
-pnpm --filter @oac/claude-sdk-adapter build --outDir "$build_context/compiled"
-# This package has registry dependencies only. Keep injection local to export;
-# the ordinary workspace and product installs retain their current settings.
-pnpm --config.inject-workspace-packages=true --config.extend-node-path=false \
+test -f packages/claude-sdk-adapter/pnpm-lock.yaml
+pnpm --dir packages/claude-sdk-adapter install --frozen-lockfile
+pnpm --dir packages/claude-sdk-adapter build --outDir "$build_context/compiled"
+# Export from the adapter workspace and its frozen dependency lock.
+pnpm --dir packages/claude-sdk-adapter --config.extend-node-path=false \
   --filter @oac/claude-sdk-adapter \
   deploy --prod "$build_context/runtime"
 # Discard any incremental checkout output copied by the package exporter.

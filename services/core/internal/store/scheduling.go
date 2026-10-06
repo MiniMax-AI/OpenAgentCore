@@ -159,7 +159,7 @@ func readSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 	}
 	turn := sessionpg.TurnFromRow(row)
 	session.LastTurn = &turn
-	session.RequiredActions, err = functionActions(ctx, q, row)
+	session.RequiredActions, err = sessionpg.LoadRequiredActions(ctx, q, id, turn)
 	if err != nil {
 		return session, err
 	}

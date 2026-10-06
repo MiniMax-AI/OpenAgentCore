@@ -2,10 +2,11 @@ package store
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 type wireEvent struct {
@@ -75,7 +76,7 @@ func TestAssistantMessageEventsFollowOfficialSequence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := s.AppendTurnEvents(t.Context(), tenant, session.ID, turn, 1, test.events); err != nil {
+			if err := sessionExecution(t, executionWriter(t, s).lease).AppendTurnEvents(t.Context(), tenant, session.ID, turn, 1, test.events); err != nil {
 				t.Fatal(err)
 			}
 			var kinds, deltas []string

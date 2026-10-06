@@ -1,9 +1,11 @@
-# Run your first Session
+---
+title: "Run your first Session"
+---
 
 This walkthrough takes you from a Project API key to an agent that has created a file and reported back. You need:
 
-- a Project API key and the API base URL, from your administrator ([Issue a Project API key](install.md#issue-a-project-api-key));
-- a ready node or E2B backend, so Core has somewhere to run the agent ([Nodes](nodes.md));
+- a Project API key and the API base URL, from your administrator ([Issue a Project API key](./install.md#issue-a-project-api-key));
+- a ready node or E2B backend, so Core has somewhere to run the agent ([Nodes](./nodes.md));
 - Python 3.9 or newer;
 - a model: the installation's default model, or your own provider's model ID, base URL and API key. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which one a Session uses and which protocols each harness speaks.
 
@@ -108,5 +110,5 @@ Success is a `completed` Turn whose Items describe the new file. A timeout neith
 | --- | --- |
 | Stream output, send follow-up messages, upload files, add Skills or MCP, cancel | [Agents API guide](../api/public-agent-api.md#common-tasks) |
 | See every resource with request and response examples | [Agents API guide](../api/public-agent-api.md) |
-| Run the agent on your own machine | [Self-hosted execution](self-hosted.md) |
+| Run the agent on your own machine | [Self-hosted execution](./self-hosted.md) |
 | See a complete application | [Examples](../examples.md) |

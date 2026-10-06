@@ -1,12 +1,14 @@
-# Core–Runtime protocol
+---
+title: "Core\u2013Runtime protocol"
+---
 
-This protocol connects Core to a Runtime daemon after the daemon has its machine credential. It defines the meaning and order of the messages on the daemon connection. The wire types, limits and validators live once in [`internal/agentdaemon/proto`](../internal/agentdaemon/proto); Core's [gateway](../services/core/internal/runtimegateway) and the reference Runtime's [dispatcher](../apps/daemon/internal/dispatch) both use them, so there is no second payload schema to keep in sync. The HTTP routes that issue credentials and open the connection are in the [machine connection API](../contracts/agents-api/machine-api.md).
+This protocol connects Core to a Runtime daemon after the daemon has its machine credential. It defines the meaning and order of the messages on the daemon connection. The wire types, limits and validators live once in [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto); Core's [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) and the reference Runtime's [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) both use them, so there is no second payload schema to keep in sync. The HTTP routes that issue credentials and open the connection are in the [machine connection API](../contracts/agents-api/machine-api.md).
 
 Hosted and self-hosted Runtimes use the same protocol. A Harness joins through the [Harness adapter contract](../contracts/agents-api/harness-onboarding.md), which owns the Executor and Turn lifecycle obligations behind the Runtime registry.
 
 ## Ownership and connection
 
-Core owns durable Session, Turn, input and Environment records, scheduling and reconciliation. Runtime owns native Executors, active Turns, transfer state and cleanup until settlement. A Sandbox Provider owns placement and the surrounding compute. Releasing an execution admission or closing an Executor never deletes, suspends or reclaims a sandbox. The daemon is not an isolation boundary; see [Runtime and outer isolation](concepts.md#runtime-and-outer-isolation).
+Core owns durable Session, Turn, input and Environment records, scheduling and reconciliation. Runtime owns native Executors, active Turns, transfer state and cleanup until settlement. A Sandbox Provider owns placement and the surrounding compute. Releasing an execution admission or closing an Executor never deletes, suspends or reclaims a sandbox. The daemon is not an isolation boundary; see [Runtime and outer isolation](./concepts.md#runtime-and-outer-isolation).
 
 A Runtime connects in this order:
 
@@ -16,13 +18,13 @@ A Runtime connects in this order:
 4. Send a heartbeat at once, then at the interval bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
 5. Exchange ordered JSON [envelopes](#envelope-and-identity). Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
-The wire version is [`proto.Version`](../internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
+The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
 
 Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core fences the owner lease and evicts the old Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
 
 ## Capability declarations
 
-`AgentKindCapabilities` in [`inbound.go`](../internal/agentdaemon/proto/inbound.go) describes one composed Runtime and Harness, independently of `available` and of Core's engine profile. Every field is a `CapabilitySupport`: supported or unsupported. The zero value is unspecified and invalid, even for an unavailable Harness. Registration validates the complete declaration before changing the registry; there is no implicit basic descriptor.
+`AgentKindCapabilities` in [`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) describes one composed Runtime and Harness, independently of `available` and of Core's engine profile. Every field is a `CapabilitySupport`: supported or unsupported. The zero value is unspecified and invalid, even for an unavailable Harness. Registration validates the complete declaration before changing the registry; there is no implicit basic descriptor.
 
 On the wire each field is a JSON boolean, and every field is present, including `false`. Encoding an incomplete declaration fails. Decoding rejects omitted, null, invalid and unknown fields, and a missing capability object. An invalid heartbeat clears the connection's admission snapshot and closes its transport; that establishes no native completion or cancellation result.
 
@@ -68,7 +70,7 @@ Requests without an opt-in keep the frames and fields they had without it.
 
 ## Envelope and identity
 
-Every data frame is one JSON [`Envelope`](../internal/agentdaemon/proto/envelope.go): `type`, a type-dependent `id`, a typed `payload` and an optional W3C `trace`. The trace is diagnostic correlation only; missing or invalid trace data creates a local trace and never changes ownership. Never use a trace ID as a request ID.
+Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/envelope.go): `type`, a type-dependent `id`, a typed `payload` and an optional W3C `trace`. The trace is diagnostic correlation only; missing or invalid trace data creates a local trace and never changes ownership. Never use a trace ID as a request ID.
 
 | Identity | Scope and meaning |
 | --- | --- |
@@ -92,16 +94,16 @@ The linked source files define the required fields, validators, limits and finit
 
 | Core → Runtime | Runtime → Core | Definition |
 | --- | --- | --- |
-| `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](../internal/agentdaemon/proto/runtime_prepare.go) |
-| `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](../internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](../internal/agentdaemon/proto/outbound.go), [events and capabilities](../internal/agentdaemon/proto/inbound.go) |
-| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](../internal/agentdaemon/proto/outbound.go), [interactions](../internal/agentdaemon/proto/inbound.go) |
-| `prompt_steer` | `prompt_steer_ack` | [Active input receipts](../internal/agentdaemon/proto/steering.go) |
-| `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](../internal/agentdaemon/proto/functions.go) |
-| `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](../internal/agentdaemon/proto/workspace_read.go), [write](../internal/agentdaemon/proto/workspace_write.go), [export](../internal/agentdaemon/proto/workspace_export.go) |
-| `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](../internal/agentdaemon/proto/suspend.go) |
+| `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
+| `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
+| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
+| `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
+| `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go), [write](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go), [export](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
+| `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
 
-Initial, prepared and active input use the same [ordered MessageInput](../internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
+Initial, prepared and active input use the same [ordered MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
 
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 
@@ -158,7 +160,7 @@ No generic receipt exists for every envelope. A successful send does not prove t
 
 Transport and execution outcomes are separate. Core's only Run subscription entry point is `SubscribeDurable`; inspect `Subscription.Err()` when its event channel closes. Disconnection and subscriber overflow close it with an explicit observation error and fabricate no `error` or `done`. Core keeps the durable truth and reconciles from confirmed facts. The Runtime keeps cleanup ownership until native work, input receipts, interactions and child work have settled.
 
-The public Turn status is a separate projection. [`execution/delivery.go`](../services/core/internal/execution/delivery.go) records an unsuccessful orchestration attempt as `failed`, including `delivery_unknown` after an unconfirmed send and `event_stream_incomplete` after a subscription failure; a closed subscription can replace the send reason with `event_stream_incomplete`. Both mean the native effect is unknown: a public `failed` status does not prove that the Harness failed, that no side effect occurred or that cleanup completed. Keep the observation reason and any native evidence distinct.
+The public Turn status is a separate projection. [`execution/delivery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/delivery.go) records an unsuccessful orchestration attempt as `failed`, including `delivery_unknown` after an unconfirmed send and `event_stream_incomplete` after a subscription failure; a closed subscription can replace the send reason with `event_stream_incomplete`. Both mean the native effect is unknown: a public `failed` status does not prove that the Harness failed, that no side effect occurred or that cleanup completed. Keep the observation reason and any native evidence distinct.
 
 | Condition | Responsibility |
 | --- | --- |
@@ -177,9 +179,9 @@ Retry only an operation whose own contract makes retry safe. A retired preparati
 
 An adapter may add `code` and `http_status` to a Run's `error` frame. They are optional neutral metadata, not a terminal event or a public error contract; the frame's text, Usage, `done`, native Session identity and cancellation receipts keep their order and meaning.
 
-The accepted codes are `authentication_error`, `rate_limit_exceeded`, `usage_limit_exceeded`, `server_overloaded`, `server_error`, `invalid_request`, `resource_not_found`, `request_timeout`, `context_length_exceeded`, `cyber_policy` and `connection_failed` ([`engine_failure.go`](../internal/agentdaemon/proto/engine_failure.go)). Only `connection_failed` keeps `http_status`, and only an integer from 100 to 599; every other status is discarded. A missing, malformed or unknown value leaves the error unclassified without discarding Usage or `done`.
+The accepted codes are `authentication_error`, `rate_limit_exceeded`, `usage_limit_exceeded`, `server_overloaded`, `server_error`, `invalid_request`, `resource_not_found`, `request_timeout`, `context_length_exceeded`, `cyber_policy` and `connection_failed` ([`engine_failure.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/engine_failure.go)). Only `connection_failed` keeps `http_status`, and only an integer from 100 to 599; every other status is discarded. A missing, malformed or unknown value leaves the error unclassified without discarding Usage or `done`.
 
-Core stores accepted values in the Turn outcome as `engine_error_code` and `engine_http_status`. The classification is subordinate to the terminal status and Core's `error_code`: it cannot turn a completed or cancelled Turn into a failure, hide an incomplete event stream, or override a persistence or cancellation-receipt failure. Normal delivery and terminal journal draining use the same extraction. [Session diagnostics](../contracts/agents-api/session-diagnostics.md) expose the category only for a failed Turn whose Core error is `engine_failed`. The [Codex](../services/core/deploy/codex/README.md) and [Claude Code](../services/core/deploy/claude/README.md) adapter guides give each Harness's mapping; an adapter never classifies error prose.
+Core stores accepted values in the Turn outcome as `engine_error_code` and `engine_http_status`. The classification is subordinate to the terminal status and Core's `error_code`: it cannot turn a completed or cancelled Turn into a failure, hide an incomplete event stream, or override a persistence or cancellation-receipt failure. Normal delivery and terminal journal draining use the same extraction. [Session diagnostics](../contracts/agents-api/session-diagnostics.md) expose the category only for a failed Turn whose Core error is `engine_failed`. The [Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) and [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) adapter guides give each Harness's mapping; an adapter never classifies error prose.
 
 ## Workspace operations
 
@@ -199,9 +201,9 @@ Every public `MCPHTTPServer` in a prompt request carries an explicit `connection
 
 ## Contract verification
 
-Run `make check-runtime-contract` from the repository root. It exercises the shared wire validators, gateway, transport and dispatcher, the shared wire scenarios on both sides, the [observation-result regression](../services/core/internal/execution/runtime_protocol_test.go) and the Harness declaration tests. It needs no model credentials or external sandbox, and `make check` runs the same tests through `check-go` and `check-core`.
+Run `make check-runtime-contract` from the repository root. It exercises the shared wire validators, gateway, transport and dispatcher, the shared wire scenarios on both sides, the [observation-result regression](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_protocol_test.go) and the Harness declaration tests. It needs no model credentials or external sandbox, and `make check` runs the same tests through `check-go` and `check-core`.
 
-Each [wire scenario](../internal/agentdaemon/proto/prototest/wire.go) lists once, in order, the frames Core and the Runtime send, together with native settlement, connection loss and reconnection. Each side runs its real implementation against a scripted peer that replays the other side's frames over a WebSocket: [Core's gateway test](../services/core/internal/runtimegateway/wire_test.go) and the [Runtime's transport and dispatcher test](../apps/daemon/internal/wireconformance/wire_test.go), which uses a controlled Harness adapter. Each side asserts the frames it sends and the behavior it owns; neither imports the other. Values the Runtime generates, such as the Executor ID, admission handle and expiry, are placeholders that the Runtime side binds to the values its Runtime sends.
+Each [wire scenario](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/prototest/wire.go) lists once, in order, the frames Core and the Runtime send, together with native settlement, connection loss and reconnection. Each side runs its real implementation against a scripted peer that replays the other side's frames over a WebSocket: [Core's gateway test](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/runtimegateway/wire_test.go) and the [Runtime's transport and dispatcher test](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/wireconformance/wire_test.go), which uses a controlled Harness adapter. Each side asserts the frames it sends and the behavior it owns; neither imports the other. Values the Runtime generates, such as the Executor ID, admission handle and expiry, are placeholders that the Runtime side binds to the values its Runtime sends.
 
 The suite covers incompatible versions, preparation failure, cancellation settlement, connection loss without invented terminal events, reconnection without replay, stale or duplicate handles and receipts, cleanup failures, bounded transfer validation and resource ownership after a timeout. Detailed fault injection stays next to the gateway and dispatcher code it tests.
 

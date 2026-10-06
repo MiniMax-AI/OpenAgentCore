@@ -34,11 +34,11 @@ jobs:
 
   build:
     needs: check
-    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     timeout-minutes: 120
-    outputs:
-      revision: ${{ steps.source.outputs.revision }}
-      release_tag: ${{ steps.source.outputs.release_tag }}
+    permissions:
+      contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -85,10 +85,24 @@ jobs:
             core-go-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-backend-
             core-go-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/go.mod', '**/go.sum') }}-
       - uses: ./.github/actions/node
+        with:
+          lockfiles: |
+            apps/web/pnpm-lock.yaml
+            packages/agents-client/pnpm-lock.yaml
+            packages/claude-sdk-adapter/pnpm-lock.yaml
       - name: Install build prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libssl-dev
+          sudo apt-get install -y build-essential pkg-config libssl-dev pigz
+      - name: Cache pinned release downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.npm/_cacache
+            ~/.oac/cache/microsandbox-v0.7.2-linux-x86_64.tar.gz
+          key: release-downloads-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-release-runtimes.sh', 'packages/mcode-harness/source.json', 'scripts/core-distribution-manifest.py') }}
+          restore-keys: |
+            release-downloads-v1-${{ runner.os }}-${{ runner.arch }}-
       - name: Check release metadata and prepare pinned harnesses
         run: |
           PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
@@ -100,6 +114,7 @@ jobs:
           path: ${{ runner.temp }}/native-artifacts
       - name: Assemble the native installation catalog
         run: node scripts/build-native-catalog.mjs "$RUNNER_TEMP/native-artifacts" "$RUNNER_TEMP/native-installers"
+      - uses: ./.github/actions/e2b-provider
       - name: Build matched artifacts
         env:
           OAC_NATIVE_INSTALLER_BUILD_DIR: ${{ runner.temp }}/native-installers
@@ -118,35 +133,34 @@ jobs:
           for asset in "$HOME/.oac/build/core-distribution/"*; do
             if [[ -f "$asset" ]]; then ln "$asset" "$HOME/.oac/build/release-upload/"; fi
           done
-          cp deploy/install-release.sh "$HOME/.oac/build/release-upload/install.sh"
+          cp deploy/install.sh "$HOME/.oac/build/release-upload/install.sh"
           (cd "$HOME/.oac/build/release-upload" && sha256sum install.sh > install.sh.sha256)
+      - name: Sign in to GHCR
+        if: github.event_name == 'push' || inputs.draft_release
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export DOCKER_CONFIG="$RUNNER_TEMP/oac-release-docker"
+          echo "DOCKER_CONFIG=$DOCKER_CONFIG" >> "$GITHUB_ENV"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish the version tag or create a manual draft
+        id: publish
+        if: github.event_name == 'push' || inputs.draft_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_REVISION: ${{ steps.source.outputs.revision }}
+          RELEASE_TAG: ${{ steps.source.outputs.release_tag }}
+          RELEASE_MODE: ${{ github.event_name == 'push' && 'publish' || 'draft' }}
+        run: python3 scripts/publish-core-release.py --assets "$HOME/.oac/build/release-upload"
+      - name: Remove registry credentials
+        if: always() && (github.event_name == 'push' || inputs.draft_release)
+        run: rm -f "$RUNNER_TEMP/oac-release-docker/config.json"
+      # Recovering a failed publication reuses these exact assets.
       - uses: actions/upload-artifact@v6
+        if: (failure() && steps.publish.outcome == 'failure') || (success() && steps.publish.outcome == 'skipped')
         with:
           name: core-release-${{ steps.source.outputs.revision }}
           path: ~/.oac/build/release-upload/*
           compression-level: 0
           if-no-files-found: error
-
-  release:
-    if: github.event_name == 'push' || inputs.draft_release
-    needs: [check, build]
-    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.build.outputs.revision }}
-          persist-credentials: false
-      - uses: actions/download-artifact@v6
-        with:
-          name: core-release-${{ needs.build.outputs.revision }}
-          path: release-upload
-      - name: Publish the version tag or create a manual draft
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_REVISION: ${{ needs.build.outputs.revision }}
-          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
-          RELEASE_MODE: ${{ github.event_name == 'push' && 'publish' || 'draft' }}
-        run: python3 scripts/publish-core-release.py --assets release-upload

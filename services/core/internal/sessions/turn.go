@@ -37,6 +37,22 @@ func TerminalStatus(status string) bool {
 	return status == TurnCompleted || status == TurnFailed || status == TurnCancelled
 }
 
+// ValidTransition reports whether a Turn may move from one status to another:
+// a queued Turn starts, fails or is cancelled, and an in-progress or waiting
+// Turn moves between the two or ends. An ended Turn never moves.
+func ValidTransition(from, to string) bool {
+	switch from {
+	case TurnQueued:
+		return to == TurnInProgress || to == TurnFailed || to == TurnCancelled
+	case TurnInProgress:
+		return to == TurnWaiting || TerminalStatus(to)
+	case TurnWaiting:
+		return to == TurnInProgress || TerminalStatus(to)
+	default:
+		return false
+	}
+}
+
 type TurnTransition struct {
 	ExpectedStatus string
 	Status         string

@@ -14,6 +14,7 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -120,7 +121,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	}
 	failed := 0
 	for _, item := range proof.Calls {
-		call, err := h.s.GetFunctionCall(ctx, h.tenant, proof.Session, item.Turn, item.Call)
+		call, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, item.Turn, item.Call)
 		if err != nil || !call.Applied {
 			t.Fatal("public function result lacks native delivery acknowledgement")
 		}

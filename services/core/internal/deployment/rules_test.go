@@ -13,16 +13,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-// deploy/install/test_install.py checks valid_core_origin against the same
-// cases.
 func TestValidateCoreURL(t *testing.T) {
-	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]"} {
+	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]", "http://core.example", "http://core:8091", "http://10.0.0.5:8080"} {
 		if err := ValidateCoreURL(value); err != nil {
 			t.Errorf("valid Core URL %q rejected: %v", value, err)
 		}
 	}
 	for _, value := range []string{
-		"", "http://core.example", "http://core:8091", "http://host.localhost", "https://core.example/", "https://user:secret@core.example",
+		"", "ftp://core.example", "ws://core.example", "https://core.example/", "https://user:secret@core.example",
 		"https://core.example/path", "https://core.example?", "https://core.example?q=x", "https://core.example#x", "https://core.example#",
 		"https://CORE.example", "https://core.example:", "https://core.example:0", "https://core.example:65536", "https://core.example:0080",
 		"https://core.example\\evil", "https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example",
@@ -30,17 +28,6 @@ func TestValidateCoreURL(t *testing.T) {
 	} {
 		if err := ValidateCoreURL(value); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("invalid Core URL %q accepted: %v", value, err)
-		}
-	}
-}
-
-func TestLoopbackOrigin(t *testing.T) {
-	for value, want := range map[string]bool{
-		"http://localhost:8091": true, "http://127.0.0.1:8091": true, "http://127.0.0.2": true, "http://[::1]:8091": true,
-		"https://core.example": false, "https://[2001:db8::1]": false, "https://10.0.0.1": false, "": false, "http://host.localhost": false,
-	} {
-		if got := LoopbackOrigin(value); got != want {
-			t.Errorf("LoopbackOrigin(%q) = %v, want %v", value, got, want)
 		}
 	}
 }

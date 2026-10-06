@@ -35,8 +35,7 @@ func runtimeWorkerHarness(t *testing.T) (*dispatchHarness, *pgxpool.Pool) {
 
 func TestPreparedDispatchKeepsPendingReservationAfterComputeConflict(t *testing.T) {
 	h, _ := runtimeWorkerHarness(t)
-	owner := executionOwner(t, h.db, h.s)
-	h.d.Store, h.lease = owner.Store, owner.Lease
+	h.d, h.lease = h.bound(), h.owner().Lease
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +74,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		}
 	})
 	frames := workerFrames(t, h)
-	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

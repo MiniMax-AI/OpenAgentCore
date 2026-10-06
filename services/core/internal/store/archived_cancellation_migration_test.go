@@ -38,10 +38,10 @@ func TestArchivedCancellationMigrationDoesNotAdoptOldRevocations(t *testing.T) {
 	if _, err := provider.Up(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.SettleRuntimeCreation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := provider.DownTo(t.Context(), 79); err != nil {

@@ -38,9 +38,10 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
+	functions := executionOwner(t, db, s).Sessions
 	record := func(id string) {
 		t.Helper()
-		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {
+		if err := functions.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -71,10 +72,10 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	}
 	record("second")
 	for _, id := range []string{"first", "second"} {
-		if err := s.SubmitFunctionResult(ctx, tenant, session.ID, input.TurnID, id, json.RawMessage(`{"success":true,"output":"private"}`)); err != nil {
+		if err := store.SubmitFixtureFunctionResult(ctx, s, tenant, session.ID, input.TurnID, id, json.RawMessage(`{"success":true,"output":"private"}`)); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.ConfirmFunctionResult(ctx, tenant, session.ID, input.TurnID, id); err != nil {
+		if err := functions.ConfirmFunctionResult(ctx, tenant, session.ID, input.TurnID, id); err != nil {
 			t.Fatal(err)
 		}
 	}

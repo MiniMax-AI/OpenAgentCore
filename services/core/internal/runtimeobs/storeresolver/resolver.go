@@ -8,25 +8,32 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type sessionStore interface {
 	GetSession(context.Context, string, string) (sessions.Session, error)
 	MeasuredSessionUsage(context.Context, string, string) (json.RawMessage, error)
-	GetRuntimeAllocation(context.Context, string, string) (store.RuntimeAllocation, error)
-	ListRuntimeObservationSessions(context.Context, string, int) (store.RuntimeObservationSessionPage, error)
 }
 
-type Resolver struct{ store sessionStore }
+// allocationReader is the part of deployment.Reader the resolver reads.
+type allocationReader interface {
+	EnvironmentAllocation(context.Context, deployment.AllocationKey) (deployment.Allocation, error)
+	ObservationSessions(context.Context, string, int) (deployment.ObservationSessionPage, error)
+}
 
-func NewResolver(s sessionStore) (*Resolver, error) {
-	if s == nil {
+type Resolver struct {
+	store       sessionStore
+	allocations allocationReader
+}
+
+func NewResolver(s sessionStore, allocations allocationReader) (*Resolver, error) {
+	if s == nil || allocations == nil {
 		return nil, errors.New("Runtime observation store is required")
 	}
-	return &Resolver{store: s}, nil
+	return &Resolver{store: s, allocations: allocations}, nil
 }
 
 func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (runtimeobs.Target, error) {
@@ -77,8 +84,8 @@ func (r *Resolver) Resolve(ctx context.Context, tenantID, sessionID string) (run
 			return runtimeobs.Target{}, errors.New("managed Environment does not match resolved ownership")
 		}
 		target.EnvironmentID = session.Environment.ID
-		allocation, err := r.store.GetRuntimeAllocation(ctx, tenantID, target.EnvironmentID)
-		if errors.Is(err, sessions.ErrNotFound) {
+		allocation, err := r.allocations.EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: tenantID, EnvironmentID: target.EnvironmentID})
+		if errors.Is(err, deployment.ErrNotFound) {
 			return target, runtimeobs.ErrUnavailable
 		}
 		if err != nil {
@@ -147,7 +154,7 @@ func decodeTokenUsage(raw json.RawMessage) (*runtimeobs.TokenUsage, error) {
 }
 
 func (r *Resolver) ListRuntimeObservationSessions(ctx context.Context, after string, limit int) (runtimeobs.SessionPage, error) {
-	page, err := r.store.ListRuntimeObservationSessions(ctx, after, limit)
+	page, err := r.allocations.ObservationSessions(ctx, after, limit)
 	if err != nil {
 		return runtimeobs.SessionPage{}, err
 	}

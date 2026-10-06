@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-sandbox-io build-core check-core docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-sandbox-io build-core check-core check-core-packages check-core-store docker-build-core check-core-container build-agents-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make build-sandbox-io  Build the Sandbox I/O service for Linux' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -70,11 +70,23 @@ build-sandbox-io:
 build-core:
 	./scripts/build-core.sh
 
-check-core: build-core
-	# Persistence integration tests include bounded lifecycle waits that together exceed Go's 10m default.
-	go test ./services/core/... ./packages/agents-client/... -count=1 -timeout=20m
+CORE_STORE_PACKAGE := github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store
+
+check-core: override OAC_CORE_STORE_SHARD :=
+check-core: build-core check-core-packages check-core-store
+
+# Core, service and client tests except the serial store integration package.
+check-core-packages:
+	@set -euo pipefail; packages=$$(go list ./services/core/... ./packages/agents-client/...); \
+	packages=$$(printf '%s\n' "$$packages" | grep -vxF '$(CORE_STORE_PACKAGE)'); \
+	go test $$packages -count=1 -timeout=20m
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s services/core/tests -p 'official_diagnostics_test.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 services/core/deploy/e2b/managed_init_test.py
+
+# Store integration tests run serially and include bounded lifecycle waits that together exceed Go's 10m default.
+# OAC_CORE_STORE_SHARD=INDEX/TOTAL runs one deterministic partition; unset runs them all.
+check-core-store:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/go-test-shard.py $(CORE_STORE_PACKAGE) $(or $(OAC_CORE_STORE_SHARD),1/1) -count=1 -timeout=20m
 
 # The distribution's Core image, without the native installer catalog.
 docker-build-core:
@@ -89,30 +101,46 @@ check-core-container: docker-build-core
 
 node-deps:
 	pnpm install --frozen-lockfile
+	pnpm --dir website install --frozen-lockfile
+	pnpm --dir packages/claude-sdk-adapter install --frozen-lockfile
 
-check-claude-sdk: node-deps
-	pnpm --filter @oac/claude-sdk-adapter test
+check-claude-sdk:
+	pnpm --dir packages/claude-sdk-adapter install --frozen-lockfile
+	pnpm --dir packages/claude-sdk-adapter test
 	$(MAKE) build-claude-sdk-runtime
 
-.PHONY: check-web-unit check-web-acceptance
+.PHONY: check-web-unit check-web-acceptance check-website
 check-web: override OAC_WEB_TEST_SHARD :=
 check-web: check-web-unit check-web-acceptance
 
-check-web-unit: node-deps
-	pnpm typecheck
+web-deps:
+	pnpm --filter @oac/web... install --frozen-lockfile
+
+example-deps:
+	pnpm --filter @oac/parsar-example... install --frozen-lockfile
+
+.PHONY: web-deps example-deps
+check-web-unit: web-deps
+	pnpm --filter @oac/web... typecheck
 	pnpm test:web
 	pnpm --filter @oac/web build
 
+# The website build also checks every published documentation link.
+check-website:
+	pnpm --dir website install --frozen-lockfile
+	pnpm --dir website build
+	pnpm --dir website test
+
 # CI shards run in separate jobs, each with its own fixture and Web server.
 # An unset shard keeps the complete local make check gate.
-check-web-acceptance: node-deps
+check-web-acceptance: web-deps
 	pnpm test:web:acceptance $(if $(OAC_WEB_TEST_SHARD),--shard=$(OAC_WEB_TEST_SHARD))
 
 build-claude-sdk-runtime:
 	./scripts/build-claude-sdk-runtime.sh
 
 .PHONY: check-example
-check-example: node-deps
+check-example: example-deps
 	pnpm --filter @oac/parsar-example typecheck
 	pnpm --filter @oac/parsar-example test
 	pnpm --filter @oac/parsar-example build
@@ -156,12 +184,13 @@ check-microsandbox-provider:
 check-distribution:
 	node --test scripts/build-native-catalog.test.mjs
 	go test ./services/web -count=1
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/install -p 'test_*.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/node -p 'test_*.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/compose -p 'test_*.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/acceptance -p 'test_*.py'
+	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/publish-core-release.test.py
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/install-release.test.py
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/config-reference.py --check
-	bash -n deploy/install/install.sh deploy/install-release.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh
+	bash -n deploy/install.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh
 	./scripts/build-web.sh
 
 build-core-distribution:
@@ -184,7 +213,7 @@ check-sandbox-provider-contract:
 
 .PHONY: check-docs check-ci
 check-docs:
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py BundledDocsTests
 
 check-ci:
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'ci_*test.py'

@@ -22,7 +22,7 @@ func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s, db), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, db), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,4 +17,6 @@ func NewService(storage Storage) (*Service, error) {
 // Storage persists the pooled Session use cases, one family per line.
 type Storage interface {
 	ArtifactStorage
+	DeviceStorage
+	ExecutorCredentialStorage
 }

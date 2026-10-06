@@ -40,7 +40,7 @@ func environmentResourceHandler(t *testing.T) (http.Handler, *environmentResourc
 		OrganizationID: "resource-org", ProjectID: "resource-project", SubjectKind: "user", SubjectID: "resource-reader",
 		TokenSHA256: runtimedevice.HashCredential("resource-key"), TenantID: f.environment.TenantID,
 	}).ResolveAPIKey
-	fakes.environments.getEnvironment = f.GetEnvironment
+	fakes.environmentsReader.getEnvironment = f.GetEnvironment
 	return newTestHandler(t, deps), f
 }
 

@@ -53,7 +53,7 @@ func run(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("sandbox-node "+args[0], flag.ContinueOnError)
 	configFile := flags.String("config", "", "absolute provider configuration file")
 	stateDir := flags.String("state-dir", "", "absolute private node state directory")
-	coreURL := flags.String("core-url", "", "Core HTTPS origin (register only)")
+	coreURL := flags.String("core-url", "", "Core origin (register only)")
 	name := flags.String("name", "sandbox-node", "display name (register only)")
 	tokenFile := flags.String("enrollment-token-file", "", "private single-use enrollment token file (register only)")
 	if err := flags.Parse(args[1:]); err != nil {

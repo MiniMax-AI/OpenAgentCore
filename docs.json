@@ -1,0 +1,65 @@
+{
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": [
+          "docs/getting-started/index",
+          "docs/getting-started/install",
+          "docs/getting-started/quickstart",
+          "docs/examples"
+        ]
+      },
+      {
+        "group": "Operate",
+        "pages": [
+          "docs/getting-started/install-options",
+          "docs/getting-started/nodes",
+          "docs/getting-started/self-hosted",
+          "docs/getting-started/operations",
+          "docs/configuration"
+        ]
+      },
+      {
+        "group": "API guides",
+        "pages": [
+          "docs/api/index",
+          "docs/api/public-agent-api",
+          "contracts/agents-api/admin-api",
+          "contracts/agents-api/machine-api",
+          "contracts/agents-api/harness-capabilities"
+        ]
+      },
+      {
+        "group": "Architecture and extensions",
+        "pages": [
+          "docs/concepts",
+          "docs/architecture",
+          "docs/runtime-protocol",
+          "docs/runtime-bootstrap",
+          "docs/sandbox-provider",
+          "contracts/agents-api/harness-onboarding",
+          "docs/development"
+        ]
+      }
+    ]
+  },
+  "redirects": [
+    {
+      "source": "/docs/getting-started/README",
+      "destination": "/docs/getting-started/index"
+    },
+    {
+      "source": "/docs/api/README",
+      "destination": "/docs/api/index"
+    },
+    {
+      "source": "/docs/web/README",
+      "destination": "/docs/web/index"
+    },
+    {
+      "source": "/contracts/agents-api/README",
+      "destination": "/contracts/agents-api/index"
+    }
+  ]
+}

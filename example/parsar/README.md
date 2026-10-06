@@ -9,7 +9,7 @@ Use Node 22.13+ (for built-in SQLite) and pnpm 10.30.3. Configure [Core](../../d
 ```sh
 export OAC_EXAMPLE_CORE_URL='http://127.0.0.1:8091'
 export OAC_EXAMPLE_PROJECT_KEY='<project-api-key>'
-pnpm install --frozen-lockfile
+pnpm --filter @oac/parsar-example... install --frozen-lockfile
 pnpm --filter @oac/parsar-example dev
 ```
 
@@ -48,7 +48,7 @@ make check-example
 make check
 ```
 
-The example gate runs TypeScript, proxy and SQLite persistence/binding tests, a production build and browser acceptance. Install Chrome with `pnpm exec playwright install chrome` if necessary. Browser fixtures use ports 18180/18181 and isolated SQLite data under `~/.oac/tests/parsar-example/`. They verify Provider groups and model selection, live text before durable completion, resource management, multiple Sessions, continuation, cancellation, lost-response recovery, Skill versions and mobile/help behavior. Synthetic fixtures are not model execution.
+The example gate runs TypeScript, proxy and SQLite persistence/binding tests, a production build and browser acceptance. Install Chrome with `pnpm --filter @oac/parsar-example exec playwright install chrome` if necessary. Browser fixtures use ports 18180/18181 and isolated SQLite data under `~/.oac/tests/parsar-example/`. They verify Provider groups and model selection, live text before durable completion, resource management, multiple Sessions, continuation, cancellation, lost-response recovery, Skill versions and mobile/help behavior. Synthetic fixtures are not model execution.
 
 The opt-in live browser probe requires an already started example backed by an isolated real Project:
 

@@ -18,7 +18,7 @@ type bootstrapCredentialStore struct {
 }
 
 func (s bootstrapCredentialStore) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
-	return runtimedevice.Credential{ID: "runtime", Type: runtimegateway.RuntimeTypeAgentDaemon,
+	return runtimedevice.Credential{ID: "runtime", Type: runtimedevice.RuntimeTypeAgentDaemon,
 		CredentialHash: runtimedevice.HashCredential("synthetic-token"), RuntimeNodeID: s.nodeID, RuntimeAllocationID: s.allocationID}, true, nil
 }
 

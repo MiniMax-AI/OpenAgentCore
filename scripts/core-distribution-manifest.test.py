@@ -108,13 +108,29 @@ class DistributionTests(unittest.TestCase):
         for name in ("core", "web", "runtime", "database", "ingress"):
             self.identities[name] = image_archive(self.bundle / "images" / (name + ".tar"), name)
             (self.stage / (name + ".id")).write_text(self.identities[name][0] + "\n")
+        (self.bundle / "node-install.pyz").write_bytes(b"node installer")
         self.runtime_bytes = (self.bundle / "images/runtime.tar").read_bytes()
 
     def manifest(self, base=RELEASE_BASE, offline="0"):
-        distribution.manifest(self.bundle, self.stage, REVISION, TREE, base, offline)
+        distribution.node_payload(self.bundle, self.stage, REVISION, TREE, base, offline)
+        distribution.manifest(self.bundle, self.stage)
 
     def write_inspection(self):
         (self.stage / "runtime-inspect.json").write_text(json.dumps(self.inspection))
+
+    def test_init_payload_contains_only_verified_node_metadata(self):
+        self.manifest()
+        payload = self.stage / "ingress/node-payload"
+        files = sorted(p.relative_to(payload).as_posix() for p in payload.rglob("*") if p.is_file())
+        self.assertEqual(files, ["SHA256SUMS", "manifest.json", "node-install.pyz", "runtime/seccomp.json"])
+        sums = dict(line.split("  ", 1)[::-1] for line in (payload / "SHA256SUMS").read_text().splitlines())
+        for name, checksum in sums.items():
+            self.assertEqual(distribution.sha256(payload / name), checksum)
+        bundled = json.loads((payload / "manifest.json").read_text())
+        full = json.loads((self.bundle / "manifest.json").read_text())
+        for name in ("source_commit", "platform", "artifacts", "runtime_ref", "microsandbox"):
+            self.assertEqual(bundled[name], full[name])
+        self.assertEqual(list(bundled["images"]), ["runtime"])
 
     def test_oci_manifest_identity_is_distinct_from_docker_config_identity(self):
         self.manifest()
@@ -199,21 +215,32 @@ class DistributionTests(unittest.TestCase):
             self.manifest()
 
     def test_archive_reproducible_and_installer_executable(self):
-        native = self.bundle / "native/bin/oac-core"
+        native = self.bundle / "native/bin/fixture-tool"
         native.parent.mkdir(parents=True, exist_ok=True)
         native.write_bytes(b"native executable")
         native.chmod(0o555)
         self.manifest()
-        distribution.archive(self.bundle, "1700000000")
+        with mock.patch.object(distribution.os, "cpu_count", return_value=1):
+            distribution.archive(self.bundle, "1700000000")
         archive = self.bundle.with_name(self.bundle.name + ".tar.gz")
         first = archive.read_bytes()
-        distribution.archive(self.bundle, "1700000000")
+        with mock.patch.object(distribution.os, "cpu_count", return_value=4):
+            distribution.archive(self.bundle, "1700000000")
         self.assertEqual(first, archive.read_bytes())
         self.assertEqual(archive.with_name(archive.name + ".sha256").read_text(), distribution.sha256(archive) + "  " + archive.name + "\n")
         with tarfile.open(archive) as contents:
             self.assertEqual(contents.getmember(self.bundle.name + "/install.sh").mode, 0o755)
             self.assertEqual(contents.getmember(self.bundle.name + "/manifest.json").mode, 0o644)
-            self.assertEqual(contents.getmember(self.bundle.name + "/native/bin/oac-core").mode, 0o555)
+            self.assertEqual(contents.getmember(self.bundle.name + "/native/bin/fixture-tool").mode, 0o555)
+
+    def test_compressor_failure_propagates(self):
+        real_popen = subprocess.Popen
+        with mock.patch.object(distribution.subprocess, "Popen", side_effect=lambda *args, **kwargs:
+                               real_popen(["python3", "-c", "raise SystemExit(7)"], **kwargs)):
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                with distribution.compressed_output(self.stage / "failed.gz"):
+                    pass
+        self.assertEqual(raised.exception.returncode, 7)
 
     def test_bad_upstream_checksum_does_not_extract(self):
         archive = self.stage / "untrusted.tar.gz"
@@ -266,16 +293,13 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(json.loads((self.bundle / "manifest.json").read_text())["artifact_base_url"], "")
 
     def test_bootstraps_include_shared_downloader_and_are_reproducible(self):
-        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", *distribution.OAC_CLI_MODULES):
+        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "distribution.py", "node_spec.py"):
             (self.bundle / name).write_text("# " + name + "\n")
         distribution.bootstraps(self.bundle, "1700000000", "a" * 40)
-        first = [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "oac.pyz")]
+        first = (self.bundle / "node-install.pyz").read_bytes()
         distribution.bootstraps(self.bundle, "1700000000", "a" * 40)
-        self.assertEqual(first, [(self.bundle / name).read_bytes() for name in ("node-install.pyz", "oac.pyz")])
-        self.assertTrue(first[1].startswith(b"#!/usr/bin/env python3\n"))
-        with zipfile.ZipFile(self.bundle / "oac.pyz") as contents:
-            self.assertEqual(set(contents.namelist()), {"__main__.py", *distribution.OAC_CLI_MODULES})
-            self.assertIn(("oac_cli.SOURCE_COMMIT = " + repr("a" * 40)).encode(), contents.read("__main__.py"))
+        self.assertEqual(first, (self.bundle / "node-install.pyz").read_bytes())
+        self.assertFalse((self.bundle / "oac.pyz").exists())
         with zipfile.ZipFile(self.bundle / "node-install.pyz") as contents:
             self.assertEqual(set(contents.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"})
             self.assertEqual(contents.read("__main__.py"), (self.bundle / "node_install.py").read_bytes())
@@ -301,7 +325,7 @@ class BundledDocsTests(unittest.TestCase):
                                "- A list item\n\n    [continued](#install)\n",
             "docs/banner.png": "png",
             "docs/chart.png": "png",
-            "docs/web/README.md": "# Web\n",
+            "docs/web/index.md": "# Web\n",
             "contracts/api.md": "# API\n## Routes\n",
             "contracts/schema.json": "{}",
         }.items():
@@ -334,6 +358,14 @@ class BundledDocsTests(unittest.TestCase):
                 (self.source / "README.md").write_text("# Title\n" + text + "\n")
                 with self.assertRaises(ValueError):
                     self.bundle_docs()
+
+    def test_explicit_heading_ids_preserve_translated_links(self):
+        (self.source / "docs/install.md").write_text("## 登录 Web {#sign-in-to-web}\n[Here](#sign-in-to-web)\n")
+        self.bundle_docs()
+        self.assertEqual(distribution.heading_anchors("## 登录 Web {#sign-in-to-web}\n"), {"sign-in-to-web"})
+        (self.source / "docs/install.md").write_text("## 登录 Web {#other-id}\n")
+        with self.assertRaises(ValueError):
+            self.bundle_docs()
 
     def test_the_bundle_check_reads_code_span_links(self):
         self.bundle_docs()

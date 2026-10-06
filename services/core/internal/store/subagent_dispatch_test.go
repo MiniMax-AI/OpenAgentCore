@@ -24,10 +24,9 @@ func TestSubagentIdentityUsesLeasedDispatchJournal(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err = h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+			if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 				t.Fatal(err)
 			}
-			h.d.Store = executionOwner(t, h.db, h.s).Store
 			input := h.message("first", "root message")
 			running := h.run(ctx, input.TurnID)
 			var request proto.PromptRequestPayload

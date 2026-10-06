@@ -30,7 +30,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil {
 		return run, err
 	}
-	environment, err := d.Store.GetSessionEnvironment(ctx, tenantID, sessionID)
+	environment, err := d.SessionsReader.GetSessionEnvironment(ctx, tenantID, sessionID)
 	if err != nil {
 		return run, err
 	}

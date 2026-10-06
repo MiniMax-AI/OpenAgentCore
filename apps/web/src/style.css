@@ -9,9 +9,8 @@
      (src/app/beautifui/foundation.css), which owns the light and dark values of
      --canvas, --surface, --ink*, --line*, --hover*, --accent* and the semantic
      colours. Only what the foundation does not define is set here. */
-  --font-inter: "Inter Variable";
   --font-console:
-    "Inter Variable", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "PingFang SC",
     "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei", "Noto Sans SC",
     "Helvetica Neue", Helvetica, Arial, sans-serif;
   --fg: var(--ink);
@@ -146,28 +145,21 @@ a {
   height: 100vh;
   overflow: hidden;
   color: var(--fg);
-  background: var(--surface);
 }
 
 .app-sidebar {
   display: flex;
-  flex: 0 0 232px;
+  flex: 0 0 224px;
   flex-direction: column;
-  width: 232px;
+  width: 224px;
   min-width: 200px;
   height: 100vh;
-  padding: 10px;
   overflow-y: auto;
-  color: var(--sidebar-fg);
-  background: var(--surface-subtle);
-  border-right: 1px solid var(--line);
 }
 
 .brand-lockup {
   display: flex;
   align-items: center;
-  min-height: 32px;
-  padding: 0 8px;
   gap: 7px;
   color: var(--fg);
   white-space: nowrap;
@@ -203,10 +195,6 @@ html[data-theme="dark"] .brand-mark {
   text-overflow: ellipsis;
 }
 
-.brand-name {
-  font-weight: 500;
-}
-
 .brand-product {
   color: var(--fg-muted);
 }
@@ -227,18 +215,9 @@ html[data-theme="dark"] .brand-mark {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 30px;
-  margin: 1px 0;
-  padding: 0 8px;
-  gap: 8px;
-  color: inherit;
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: 6px;
-  transition:
-    color 150ms var(--ease-settle),
-    background-color 150ms var(--ease-settle);
 }
 
 .main-nav button:hover {
@@ -246,16 +225,9 @@ html[data-theme="dark"] .brand-mark {
   background: var(--hover);
 }
 
-.main-nav button.active {
-  color: var(--fg);
-  font-weight: 500;
-  background: var(--pressed);
-}
-
 .main-nav button span {
   min-width: 0;
   overflow: hidden;
-  font-size: 14px;
   line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -420,7 +392,6 @@ html[data-theme="dark"] .brand-mark {
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  background: var(--surface);
 }
 
 .page-section {
@@ -444,13 +415,8 @@ html[data-theme="dark"] .brand-mark {
   top: 0;
   z-index: 5;
   display: flex;
-  min-height: 64px;
   flex: 0 0 64px;
   align-items: center;
-  padding: 12px 24px;
-  gap: 12px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
 }
 
 .page-header h1 {
@@ -459,11 +425,6 @@ html[data-theme="dark"] .brand-mark {
   align-items: baseline;
   margin: 0;
   gap: 7px;
-  color: var(--fg);
-  font-size: 20px;
-  font-weight: 600;
-  line-height: 24px;
-  letter-spacing: -0.02em;
 }
 
 .page-header h1 span {
@@ -476,7 +437,9 @@ html[data-theme="dark"] .brand-mark {
 
 .page-actions {
   display: flex;
+  flex-wrap: wrap;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
   margin-left: auto;
   gap: 8px;

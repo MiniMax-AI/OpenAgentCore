@@ -1,4 +1,6 @@
-# Machine connection API
+---
+title: "Machine connection API"
+---
 
 Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons and the self-hosted installer. Each route accepts only the credential listed for it, never the Core key or a Project API key, and a console sign-in grants nothing here. The reverse proxy sends `/api/v1` directly to Core; Web never serves these routes.
 
@@ -9,18 +11,18 @@ Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons and the self-
 | `GET sandbox-node/configuration` | Node installer and node | Enrollment token, or node credential with `X-OAC-Node-ID` | [Read the node configuration](#read-the-node-configuration) |
 | `POST sandbox-node/enroll` | Node installer | Enrollment token | [Enroll a node](#enroll-a-node) |
 | `GET sandbox-node/identity?node_id=` | Node | Node credential | [Recover a node's identity](#recover-a-nodes-identity) |
-| WebSocket `GET sandbox-node/connect?node_id=` | Node | Node credential | [Node generation protocol](node-generation-protocol.md) |
-| `GET agent-daemon/install/{version}/…` | Self-hosted installer | None | [Installation grant](environment-executor-credentials.md#installation-grant) |
-| `POST agent-daemon/installation`, `POST agent-daemon/installation/claim` | Self-hosted installer | Installation grant | [Installation grant](environment-executor-credentials.md#installation-grant) |
+| WebSocket `GET sandbox-node/connect?node_id=` | Node | Node credential | [Node generation protocol](./node-generation-protocol.md) |
+| `GET agent-daemon/install/{version}/…` | Self-hosted installer | None | [Installation grant](./environment-executor-credentials.md#installation-grant) |
+| `POST agent-daemon/installation`, `POST agent-daemon/installation/claim` | Self-hosted installer | Installation grant | [Installation grant](./environment-executor-credentials.md#installation-grant) |
 | `POST agent-daemon/enroll` | Self-hosted daemon | Executor credential | [Enroll a self-hosted daemon](#enroll-a-self-hosted-daemon) |
-| `GET agent-daemon/connection?environment_id=` | Self-hosted installer | Executor credential | [Private connection confirmation](environment-executor-credentials.md#private-connection-confirmation) |
+| `GET agent-daemon/connection?environment_id=` | Self-hosted installer | Executor credential | [Private connection confirmation](./environment-executor-credentials.md#private-connection-confirmation) |
 | `POST agent-daemon/bootstrap` | Runtime daemon | Daemon credential | [Daemon bootstrap](#daemon-bootstrap) |
 | `GET agent-daemon/device-status?device_id=` | Runtime daemon | Daemon credential | [Device status](#device-status) |
 | WebSocket `GET agent-daemon/ws?device_id=&version=` | Runtime daemon | Daemon credential | [Core–Runtime protocol](../../docs/runtime-protocol.md) |
 
 Every credential travels in an `Authorization: Bearer` header, never in a URL.
 
-The generated [`runtime.openapi.yaml`](runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes and the two installation routes. The two WebSockets and the daemon bootstrap, device-status, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
+The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes and the two installation routes. The two WebSockets and the daemon bootstrap, device-status, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
 
 ## Credentials
 
@@ -29,7 +31,7 @@ The generated [`runtime.openapi.yaml`](runtime.openapi.yaml) describes only the 
 | Enrollment token | `POST /core/v1/sandbox/enrollment-tokens` (Web **Add node**), with the node's approved capacity. One use; it expires at the response's `expires_at` | `sandbox-node/configuration` without a node ID, `sandbox-node/enroll` |
 | Node credential | The node itself: it generates a secret of 32 to 256 characters without whitespace and registers it at enrollment | `sandbox-node/configuration` with `X-OAC-Node-ID`, `sandbox-node/identity`, `sandbox-node/connect` |
 | Installation grant | The `x_agents_core.installation` command of a `self_hosted` Session; short-lived | `agent-daemon/installation` and its `claim` |
-| Executor credential | The installation claim, or the Core-key [executor credential routes](environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
+| Executor credential | The installation claim, or the Core-key [executor credential routes](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
 | Daemon credential of a hosted sandbox | Core, for each managed allocation, delivered in the [bootstrap file](../../docs/runtime-bootstrap.md) | `agent-daemon/bootstrap`, `device-status` and `ws` |
 | Operator device profile | `oac-core-device`, run by an operator with database access | `agent-daemon/bootstrap`, `device-status` and `ws` |
 
@@ -57,7 +59,7 @@ oac-daemon connect --profile default
 - A new node sends its enrollment token without `X-OAC-Node-ID`. The token must be valid, unexpired, unconsumed and issued by this installation. An active reset refuses this read.
 - A registered node sends its node credential and its UUID in `X-OAC-Node-ID`. Without a query it reads the current target. `?generation=N` reads only a generation this node may still need: the current target, its serving pin, or one held by an unreleased allocation or placement on it; any other generation is refused. This read stays available during a reset, for owned recovery.
 
-The response has `installation_id`, `provider`, `core_url` (the installation public URL), `generation`, `specification`, `specification_digest`, `max_active` and `max_retained`. It never contains an administrator, Project or E2B credential, and exists only for node-backed providers. The [sandbox deployment contract](sandbox-deployment.md#canonical-node-specification) defines the specification and its digest.
+The response has `installation_id`, `provider`, `core_url` (the installation public URL), `generation`, `specification`, `specification_digest`, `max_active` and `max_retained`. It never contains an administrator, Project or E2B credential, and exists only for node-backed providers. The [sandbox deployment contract](./sandbox-deployment.md#canonical-node-specification) defines the specification and its digest.
 
 ### Enroll a node
 
@@ -117,4 +119,4 @@ The bootstrap, device-status and WebSocket routes share one error body, `{"error
 | 409 | The Environment is already bound to a different key or device |
 | 503 | Storage is unavailable |
 
-Enrollment creates no managed allocation and grants no Session API access. The daemon keeps the binding beside its credential and refuses another Environment's native history. The gateway and Worker recheck the credential's authority on every connection and dispatch, so rotation, revocation and Session deletion end further use. The [self-hosted guide](../../docs/getting-started/self-hosted.md) gives the operator steps, and the [executor credential contract](environment-executor-credentials.md#revoked-or-rotated-credential) describes how the daemon handles a permanent rejection.
+Enrollment creates no managed allocation and grants no Session API access. The daemon keeps the binding beside its credential and refuses another Environment's native history. The gateway and Worker recheck the credential's authority on every connection and dispatch, so rotation, revocation and Session deletion end further use. The [self-hosted guide](../../docs/getting-started/self-hosted.md) gives the operator steps, and the [executor credential contract](./environment-executor-credentials.md#revoked-or-rotated-credential) describes how the daemon handles a permanent rejection.

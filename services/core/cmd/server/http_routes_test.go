@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
@@ -103,7 +104,7 @@ func daemonComposition(t testing.TB) http.Handler {
 		Subagents:       struct{ api.Subagents }{},
 		Artifacts:       struct{ api.Artifacts }{},
 		ArtifactsReader: struct{ api.ArtifactsReader }{},
-		SessionAdmin:    struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
+		SessionAdmin:    struct{ api.SessionAdmin }{}, Environments: struct{ api.Environments }{}, EnvironmentsReader: struct{ api.EnvironmentsReader }{}, ExecutorConnections: struct{ api.ExecutorConnections }{},
 		Admin: struct{ api.Admin }{}, AdminAudit: struct{ api.AdminAudit }{}, WriteAudit: struct{ api.WriteAudit }{}, Metrics: struct{ api.Metrics }{},
 		RuntimeObservations: struct{ api.RuntimeObservations }{}, RuntimeHistory: struct{ api.RuntimeHistory }{},
 		Execution: &api.Execution{
@@ -113,7 +114,7 @@ func daemonComposition(t testing.TB) http.Handler {
 			SessionArchive:   struct{ api.SessionArchive }{},
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
 		},
-		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: struct{ api.NodeAllocations }{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
+		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: unusedNodeAllocations{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
 			DeploymentReset: struct{ api.DeploymentReset }{}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},
 	})
 	if err != nil {
@@ -313,4 +314,13 @@ func oracleTarget(segments []string, trailing bool) string {
 		target.WriteByte('/')
 	}
 	return target.String()
+}
+
+// unusedNodeAllocations stands in for the node allocation list, which the
+// route tests never read. The interface's method shares its name, so the
+// embedded-interface stand-in the other dependencies use cannot satisfy it.
+type unusedNodeAllocations struct{}
+
+func (unusedNodeAllocations) NodeAllocations(context.Context, string) ([]deployment.NodeAllocation, error) {
+	panic("unexpected NodeAllocations")
 }

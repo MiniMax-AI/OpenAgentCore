@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
@@ -70,7 +71,7 @@ func TestDeploymentAddressIsNotInput(t *testing.T) {
 		if input.Provider != "e2b" || input.ExpectedGeneration != 0 {
 			t.Fatal("invalid selection reached initialization", input.Provider, input.ExpectedGeneration)
 		}
-		return deployment.View{}, deployment.ErrPublicURLUnreachable
+		return deployment.View{}, placement.ErrPublicURLUnreachable
 	}
 	// The strict fake fails the test if core_url reaches the update.
 	fakes.deploymentChanges.initializeSandboxDeployment = initialize

@@ -1,4 +1,6 @@
-# Agents API guide
+---
+title: "Agents API guide"
+---
 
 Core serves the [OpenAI Agents API](https://platform.openai.com/docs/api-reference) at `/v1`. Use the official OpenAI SDK or plain HTTP. This guide shows both for every common operation, and notes where Core differs from OpenAI.
 
@@ -54,7 +56,7 @@ On a shared host, `-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")`
 | [Vaults](#vaults) | `/vaults` | Write-only credentials for MCP servers |
 | Subagents | `/agents/sessions/{id}/subagents` | Read-only child work; see [subagents](../../contracts/agents-api/subagents.md) |
 
-Core has exactly the routes of the pinned SDK, listed in [upstream-routes.json](../../contracts/agents-api/upstream-routes.json). It adds no route; its additions live in [`x_agents_core`](#core-extensions-x_agents_core).
+Core has exactly the routes of the pinned SDK, listed in [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json). It adds no route; its additions live in [`x_agents_core`](#core-extensions-x_agents_core).
 
 ## Common tasks
 
@@ -536,8 +538,8 @@ The HTTP path is `/vaults`, with the Beta header. A Session selects credentials 
 3. Check the harness, model and tool combination in [Harness capabilities](../../contracts/agents-api/harness-capabilities.md).
 4. Ask the administrator for the Session's [diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [troubleshooting](../getting-started/operations.md#troubleshooting) for service logs, credentials and node readiness.
 
-A 401 usually means a key from another namespace; see [API namespaces and credentials](README.md).
+A 401 usually means a key from another namespace; see [API namespaces and credentials](./index.md).
 
 ## Differences from OpenAI
 
-Core differs from the OpenAI service in some behavior, such as Session creation idempotency and harness-specific tool support. The [coverage ledger](../../contracts/agents-api/README.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.
+Core differs from the OpenAI service in some behavior, such as Session creation idempotency and harness-specific tool support. The [coverage ledger](../../contracts/agents-api/index.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.

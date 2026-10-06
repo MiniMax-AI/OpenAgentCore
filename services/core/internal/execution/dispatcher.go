@@ -29,6 +29,9 @@ type Snapshot struct {
 
 type Dispatcher struct {
 	notifications *executionNotifications
+	// sessionExecution runs the Session execution operations on the lease;
+	// Bind sets it from Owner.Sessions.
+	sessionExecution *sessions.ExecutionOperations
 	Policy
 	Store    *store.Store
 	Registry *runtimegateway.Registry

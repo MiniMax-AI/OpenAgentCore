@@ -17,8 +17,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func main() {
@@ -54,7 +56,12 @@ func run() error {
 		return errors.New("invalid execution database configuration")
 	}
 	defer pool.Close()
-	s := store.New(pool)
+	// Device provisioning opens no frozen Session data, so it needs no
+	// credential key.
+	s, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	if err != nil {
+		return err
+	}
 	if *revoke != "" {
 		return s.RevokeDevice(ctx, *tenant, *revoke)
 	}

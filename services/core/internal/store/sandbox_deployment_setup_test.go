@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 
 func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	s, pool := newManagedTestStore(t)
-	s.SetPublicURL("https://core.example")
+	s.SetPlacement(placementRules(t, "https://core.example"))
 	w := executionWriter(t, s)
 	id := uuid.NewString()
 	if err := deploymentExecution(t, w).Claim(t.Context(), id); err != nil {
@@ -25,7 +26,7 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	if err != nil || before.InstallationID != id || before.Provider != "" || before.CoreURL != "https://core.example" {
 		t.Fatal(before, err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("uninitialized hosted admission", err)
 	}
 	input := sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}

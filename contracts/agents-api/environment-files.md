@@ -1,8 +1,10 @@
-# Environment files and Artifacts
+---
+title: "Environment files and Artifacts"
+---
 
 A Session's workspace holds live files that the agent and its tools change. `/agents/environments/{environment_id}/files` lists one workspace directory and creates files in it. When a Turn completes, Core copies the files under the workspace's `outputs/` directory into immutable Artifacts, read through `/agents/sessions/{session_id}/artifacts`. Artifacts outlive the Environment; workspace files do not.
 
-The routes follow the SDK pinned in [upstream.json](upstream.json): the [Environment files resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py), its [list parameters](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environments/file_list_params.py), [EnvironmentFile](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environments/environment_file.py) and [TokenPage](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/pagination.py). They need the `OpenAI-Beta: agents=v1` header.
+The routes follow the SDK pinned in [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json): the [Environment files resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py), its [list parameters](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environments/file_list_params.py), [EnvironmentFile](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environments/environment_file.py) and [TokenPage](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/pagination.py). They need the `OpenAI-Beta: agents=v1` header.
 
 ## Where files work
 
@@ -37,8 +39,8 @@ Query errors, all with type and code `invalid_request_error` and a null `param` 
 | `path` relative, outside `/workspace`, longer than 4,096 bytes, not UTF-8, or containing a backslash, NUL, CR or LF | `path must be an absolute directory inside /workspace` |
 | `path` not in clean form: a trailing or repeated `/`, `.` or `..` | `path must identify a non-reserved directory inside /workspace` |
 | A malformed token, another request's token, or a token whose listing changed | `Invalid file page token for this request` |
-| `limit` outside 1–100 | `limit must be between 1 and 100`; malformed integers and invalid `order` use the shared [Beta list errors](wire-semantics.md#lists) |
-| A repeated `path`, `limit`, `order` or `page` | The shared duplicate-field error ([list rules](wire-semantics.md)) |
+| `limit` outside 1–100 | `limit must be between 1 and 100`; malformed integers and invalid `order` use the shared [Beta list errors](./wire-semantics.md#lists) |
+| A repeated `path`, `limit`, `order` or `page` | The shared duplicate-field error ([list rules](./wire-semantics.md)) |
 
 Unknown query keys are ignored. An explicit empty value is invalid for every key. Malformed query encoding, such as `%GG` or a `;` separator, returns 400 `invalid_request`.
 
@@ -51,7 +53,7 @@ Unknown query keys are ignored. An explicit empty value is invalid for every key
 {"type": "file_id", "file_id": "file-…", "path": "/workspace/data/input.csv"}
 ```
 
-Empty inline `data` is valid and creates an empty file. It returns 201 with the four EnvironmentFile fields. `file_id` names a [File](source-files.md) of the same Project; Core reads its bytes before contacting the Runtime.
+Empty inline `data` is valid and creates an empty file. It returns 201 with the four EnvironmentFile fields. `file_id` names a [File](./source-files.md) of the same Project; Core reads its bytes before contacting the Runtime.
 
 | Case | Result |
 | --- | --- |
@@ -109,4 +111,4 @@ List parameters:
 | `after` | An Artifact ID of this Session |
 | `environment_id` | Only Artifacts produced in that Environment. A malformed or unknown ID returns an empty page; an empty value means no filter |
 
-`limit` and cursor errors follow the shared [list rules](wire-semantics.md#lists). The response is `{"object": "list", "data": [...], "first_id", "last_id", "has_more"}`; an empty page has null IDs. The Session is looked up first, so a missing or foreign Session returns 404 whatever the query.
+`limit` and cursor errors follow the shared [list rules](./wire-semantics.md#lists). The response is `{"object": "list", "data": [...], "first_id", "last_id", "has_more"}`; an empty page has null IDs. The Session is looked up first, so a missing or foreign Session returns 404 whatever the query.

@@ -11,7 +11,7 @@ import (
 
 func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
 	registry := Builtin()
-	raw, err := os.ReadFile("../../../../../deploy/install/node_spec.py")
+	raw, err := os.ReadFile("../../../../../deploy/node/node_spec.py")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,12 +1,13 @@
 # Build context is a prepared binary bundle, never the product checkout.
 # Native package and resources must both be Codex 0.153.4 (linux/amd64).
-FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
+# The base and package layer match the Claude and MiniMax images, so one build
+# shares that layer and the combined Runtime image keeps the same base.
+FROM node:22.23.1-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27
+USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates bash git python3 python3-pip nodejs npm ripgrep \
+    ca-certificates bash git python3 python3-pip ripgrep \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /environment/workspace /workspace /home/runtime \
-    && groupadd --gid 1000 runtime \
-    && useradd --uid 1000 --gid 1000 --home-dir /home/runtime --no-create-home runtime
+    && mkdir -p /environment/workspace /workspace /home/runtime
 COPY --chmod=0555 oac-daemon codex /usr/local/bin/
 COPY codex-resources /usr/local/codex-resources
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \

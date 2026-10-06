@@ -20,7 +20,6 @@ import (
 type HeartbeatTouch interface {
 	TouchRuntimeHeartbeat(ctx context.Context, runtimeID string) (runtimedevice.HeartbeatStatus, error)
 	TouchAgentDaemonHeartbeat(ctx context.Context, input runtimedevice.Heartbeat) (runtimedevice.HeartbeatStatus, error)
-	MarkRuntimeOffline(ctx context.Context, runtimeID string) error
 }
 
 // HandlerConfig wires the gateway's HTTP/WS handlers. nil values panic
@@ -36,6 +35,10 @@ type HandlerConfig struct {
 	// Heartbeat flips pending_pairing -> online and keeps
 	// last_heartbeat_at fresh. nil tracks liveness in-process only.
 	Heartbeat HeartbeatTouch
+
+	// ArchivedCancellations reads the receipt that an archived Session's
+	// cancellation still owes a connection's delivery. nil drains nothing.
+	ArchivedCancellations ArchivedCancellationStore
 
 	// PublicWSURL is the wss://... URL returned in the bootstrap
 	// response so deployments behind a TLS terminator can advertise
@@ -164,6 +167,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := NewSessionWithOwner(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log, lease)
 	sess.heartbeat = h.cfg.Heartbeat
+	sess.archivedCancellations = h.cfg.ArchivedCancellations
 	sess.credentialHash = runtimedevice.HashCredential(token)
 	h.cfg.Log("agentdaemon gateway: ws upgrade ok, registering device_id=%s owner_pod=%s waiters=%d",
 		auth.DeviceID, h.cfg.OwnerPodID, len(h.cfg.Registry.PendingWaiters(auth.DeviceID)))

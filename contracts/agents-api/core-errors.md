@@ -1,4 +1,6 @@
-# Core administration errors
+---
+title: "Core administration errors"
+---
 
 Errors on `/core/v1` use this envelope. `message` is safe English text; `code` and `param` are nullable. Clients act on the stable `code` and the optional `param`, show `message` for an unknown code, never parse messages and never retry a rejected write automatically.
 
@@ -36,7 +38,7 @@ These have null `param` and no `details`. A Core `401 invalid_admin_key` therefo
 
 ## Sandbox provider verification
 
-A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](sandbox-deployment.md#reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
+A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-deployment.md#reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
 
 | HTTP | Code | Meaning | `param` |
 | --- | --- | --- | --- |
@@ -71,7 +73,7 @@ Bounds are validation constants, never submitted values. Node names are limited 
 
 ## Diagnostic failure categories
 
-The [Session and Turn diagnostics reads](session-diagnostics.md) return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
+The [Session and Turn diagnostics reads](./session-diagnostics.md) return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
 
 | Code | Stored cause or safe meaning |
 | --- | --- |

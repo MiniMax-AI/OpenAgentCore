@@ -19,7 +19,7 @@ export interface NodeCleanup {
 
 /**
  * After Remove: the command that removes the node's service and files from its
- * host (deploy/install/node_install.py `uninstall_system`).
+ * host (deploy/node/node_install.py `uninstall_system`).
  * The installer first confirms with Core, at the node's own address, that the
  * node is removed, which holds from the removal on. The command uses sudo unless the shell is already root. A node enrolled with an earlier address may find it gone; then
  * `--force` skips only that confirmation. Nothing deletes sandboxes, volumes or
@@ -45,7 +45,7 @@ export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCle
     </div> : cleanup && !sourceUrl ? <div className="sandbox-add-node form-stack">
       <p>{join(stays, installation.data?.local_only && installation.data.public_url
         ? t("Other machines can't reach this installation's public URL, {{url}}, so no uninstall command can be given.", { url: installation.data.public_url })
-        : t("An uninstall command needs an HTTPS public URL that other machines can reach, and this installation has none."))}</p>
+        : t("An uninstall command needs a public URL that other machines can reach, and this installation has none."))}</p>
     </div> : cleanup ? <div className="sandbox-add-node form-stack">
       <p>{t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
       <CommandBlock key={command()} value={command()} label={t("Uninstall command")} autoFocus />

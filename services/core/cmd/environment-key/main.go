@@ -13,8 +13,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -108,15 +109,19 @@ func run() error {
 		return errors.New("invalid execution database configuration")
 	}
 	defer pool.Close()
-	s := store.New(pool)
+	// Executor credentials need no credential key.
+	credentials, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	if err != nil {
+		return err
+	}
 	if options.revoke {
-		return credentialOperationError(s.RevokeExecutorCredential(ctx, options.principal, options.keyID))
+		return credentialOperationError(credentials.RevokeExecutorCredential(ctx, options.principal, options.keyID))
 	}
 	var credential sessions.IssuedExecutorCredential
 	if options.rotate {
-		credential, err = s.RotateExecutorCredential(ctx, options.principal, options.keyID)
+		credential, err = credentials.RotateExecutorCredential(ctx, options.principal, options.keyID)
 	} else {
-		credential, err = s.IssueExecutorCredential(ctx, options.principal, options.keyID, options.environment)
+		credential, err = credentials.IssueExecutorCredential(ctx, options.principal, options.keyID, options.environment)
 	}
 	if err != nil {
 		return credentialOperationError(err)

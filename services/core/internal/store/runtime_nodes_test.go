@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -135,7 +136,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	for err := range failures {
 		if err == nil {
 			successes++
-		} else if !errors.Is(err, deployment.ErrNodeUnavailable) {
+		} else if !errors.Is(err, placement.ErrNodeUnavailable) {
 			t.Fatal(err)
 		}
 	}
@@ -186,7 +187,7 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.publicURL}
+	input := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
 	if _, err := nodes.Enroll(t.Context(), token, input); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("mixed provider accepted", err)
 	}
@@ -222,7 +223,7 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if err := nodes.Heartbeat(t.Context(), input.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old epoch heartbeat revived node", err)
 	}
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale")); !errors.Is(err, deployment.ErrNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale")); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("stale node admitted", err)
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)
@@ -241,7 +242,7 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retained, err := w.ReserveRuntimeAllocation(t.Context(), tenant, first.Environment.ID, next.InstallationID, runtimedevice.HashCredential("runtime"))
+	retained, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: first.Environment.ID}, next.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,18 +259,18 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err := s.DeleteSession(t.Context(), tenant, first.ID); err != nil {
 		t.Fatal(err)
 	}
-	retained, err = w.RequestRuntimeCleanup(t.Context(), retained)
+	retained, err = deploymentExecution(t, w).RequestCleanup(t.Context(), retained)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("unknown cleanup released node", err)
 	}
-	retained, err = w.SettleRuntimeCreation(t.Context(), retained)
+	retained, err = deploymentExecution(t, w).SettleCreation(t.Context(), retained)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.ReleaseRuntimeAllocation(t.Context(), retained); err != nil {
+	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), retained); err != nil {
 		t.Fatal(err)
 	}
 	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrLocalNodeConfigured) {
@@ -297,14 +298,14 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocation, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET state='running',create_settled=true,compute_phase='suspended',compute_retained_until=clock_timestamp()+interval '1 hour',compute_state=$2::jsonb WHERE id=$1", allocation.ID, json.RawMessage(`{"snapshot":{"id":"owned"}}`)); err != nil {
 		t.Fatal(err)
 	}
-	allocation, err = s.GetRuntimeAllocation(t.Context(), tenant, session.Environment.ID)
+	allocation, err = deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +314,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 	results := make(chan error, 2)
 	go func() {
 		<-start
-		_, err := w.SetRuntimeCompute(t.Context(), allocation, "restoring", json.RawMessage(`{"target":{"id":"restore"}}`), &until, 0)
+		_, err := deploymentExecution(t, w).SetCompute(t.Context(), allocation, "restoring", json.RawMessage(`{"target":{"id":"restore"}}`), &until, 0)
 		results <- err
 	}()
 	go func() {
@@ -327,7 +328,7 @@ func TestRuntimeNodesRestoreAndCreationShareCapacity(t *testing.T) {
 		err := <-results
 		if err == nil {
 			success++
-		} else if !errors.Is(err, deployment.ErrNodeUnavailable) {
+		} else if !errors.Is(err, placement.ErrNodeUnavailable) {
 			t.Fatal(err)
 		}
 	}
@@ -355,11 +356,11 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	owner, err = w.ObserveRuntimeRunning(t.Context(), owner)
+	owner, err = deploymentExecution(t, w).ObserveRunning(t.Context(), owner)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +370,7 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.LocalNodeID); err != nil {
 		t.Fatal(err)
 	}
-	offline, err := s.GetRuntimeAllocation(t.Context(), tenant, session.Environment.ID)
+	offline, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || offline.Expired || offline.State != "running" {
 		t.Fatal("offline treated as destructive expiry", offline, err)
 	}
@@ -382,11 +383,11 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 		t.Fatal("lost local state created replacement identity")
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)
-	resumed, err := w.ObserveRuntimeRunning(t.Context(), offline)
+	resumed, err := deploymentExecution(t, w).ObserveRunning(t.Context(), offline)
 	if err != nil || resumed.ID != owner.ID || resumed.DeviceID != owner.DeviceID || resumed.NodeID != owner.NodeID {
 		t.Fatal("reconnect changed instance", resumed, err)
 	}
-	if _, err := w.KeepRuntimeAllocation(t.Context(), resumed); err != nil {
+	if _, err := deploymentExecution(t, w).KeepAllocation(t.Context(), resumed); err != nil {
 		t.Fatal("offline observation lease could not renew", err)
 	}
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_phase='suspended',compute_state=$2::jsonb,compute_retained_until=clock_timestamp()+interval '1 day' WHERE id=$1", owner.ID, json.RawMessage(`{"snapshot":{"id":"same-snapshot"}}`)); err != nil {
@@ -395,12 +396,12 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1", d.LocalNodeID); err != nil {
 		t.Fatal(err)
 	}
-	retained, err := s.GetRuntimeAllocation(t.Context(), tenant, session.Environment.ID)
+	retained, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || retained.Expired || string(retained.ComputeState) != `{"snapshot": {"id": "same-snapshot"}}` {
 		t.Fatal(retained, err)
 	}
 	onlineManagerNode(t, s, d.LocalNodeID)
-	same, err := s.GetRuntimeAllocation(t.Context(), tenant, session.Environment.ID)
+	same, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || same.ID != owner.ID || string(same.ComputeState) != string(retained.ComputeState) {
 		t.Fatal("snapshot changed across reconnect", same, err)
 	}
@@ -411,7 +412,7 @@ func TestRuntimeNodesLongOfflineRetainsExactAllocation(t *testing.T) {
 	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1", owner.ID); err != nil {
 		t.Fatal(err)
 	}
-	expired, err := s.GetRuntimeAllocation(t.Context(), tenant, session.Environment.ID)
+	expired, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID})
 	if err != nil || !expired.Expired {
 		t.Fatal("explicit snapshot retention ignored", expired, err)
 	}

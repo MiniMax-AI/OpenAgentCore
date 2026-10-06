@@ -23,6 +23,18 @@ describe("Web internationalization", () => {
     }
   });
 
+  it.each([
+    ["en", 0, "0 more nodes on the Nodes page"],
+    ["en", 1, "1 more node on the Nodes page"],
+    ["en", 3, "3 more nodes on the Nodes page"],
+    ["zh-CN", 0, "另有 0 个节点，在节点页查看"],
+    ["zh-CN", 1, "另有 1 个节点，在节点页查看"],
+    ["zh-CN", 3, "另有 3 个节点，在节点页查看"],
+  ] as const)("renders remaining fleet nodes in %s for count %s", async (language, count, expected) => {
+    await i18n.changeLanguage(language);
+    expect(i18n.t("fleet.more", { ns: "overview", count })).toBe(expected);
+  });
+
   it("renders the language control in the active language", async () => {
     await i18n.changeLanguage("zh-CN");
     const html = renderToStaticMarkup(<ThemeContext.Provider value={{ preference: "light", resolvedTheme: "light", setPreference: () => undefined }}><AppearanceMenu /></ThemeContext.Provider>);

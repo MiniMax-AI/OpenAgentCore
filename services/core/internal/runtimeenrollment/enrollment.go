@@ -11,11 +11,10 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type EnrollmentStore interface {
-	EnrollRuntime(context.Context, string, string) (store.RuntimeEnrollment, error)
+	EnrollRuntime(context.Context, string, string) (sessions.RuntimeEnrollment, error)
 }
 
 // EnrollmentHandler is part of our daemon connection contract, not an upstream

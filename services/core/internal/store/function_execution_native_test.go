@@ -19,7 +19,7 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := h.s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	nativeID := ""
@@ -44,12 +44,12 @@ func TestNativeFunctionExecutionPersistsCallsResultsAndContinuity(t *testing.T) 
 		}
 		raw, _ := json.Marshal(value)
 		for range 2 {
-			if err := h.s.SubmitFunctionResult(ctx, h.tenant, h.session.ID, input.TurnID, action.CallID, raw); err != nil {
+			if err := store.SubmitFixtureFunctionResult(ctx, h.s, h.tenant, h.session.ID, input.TurnID, action.CallID, raw); err != nil {
 				t.Fatal(err)
 			}
 		}
 		h.finished(running, sessions.TurnCompleted)
-		saved, err := h.s.GetFunctionCall(ctx, h.tenant, h.session.ID, input.TurnID, action.CallID)
+		saved, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, h.session.ID, input.TurnID, action.CallID)
 		if err != nil || !saved.Applied {
 			t.Fatal(saved, err)
 		}

@@ -16,13 +16,13 @@ import (
 )
 
 func TestEnvironmentConnectionURL(t *testing.T) {
-	for _, valid := range []string{"wss://runtime.example/api/v1/agent-daemon/ws", "ws://127.0.0.1:123/api/v1/agent-daemon/ws", "ws://[::1]:123/api/v1/agent-daemon/ws"} {
+	for _, valid := range []string{"wss://runtime.example/api/v1/agent-daemon/ws", "ws://127.0.0.1:123/api/v1/agent-daemon/ws", "ws://[::1]:123/api/v1/agent-daemon/ws", "ws://runtime.example/api/v1/agent-daemon/ws"} {
 		base, err := environmentBase(valid)
 		if err != nil || !strings.HasSuffix(base, "/api/v1") {
 			t.Fatalf("valid URL rejected: %v", err)
 		}
 	}
-	for _, invalid := range []string{"ws://runtime.example/api/v1/agent-daemon/ws", "https://runtime.example/api/v1/agent-daemon/ws", "wss://secret@runtime.example/api/v1/agent-daemon/ws", "wss://runtime.example/api/v1/agent-daemon/ws?secret=value", "wss://runtime.example/api/v1/agent-daemon/ws#fragment", "wss://runtime.example/api/v1/agent-daemon/ws/", "wss://runtime.example/api%2fv1/agent-daemon/ws"} {
+	for _, invalid := range []string{"https://runtime.example/api/v1/agent-daemon/ws", "wss://secret@runtime.example/api/v1/agent-daemon/ws", "wss://runtime.example/api/v1/agent-daemon/ws?secret=value", "wss://runtime.example/api/v1/agent-daemon/ws#fragment", "wss://runtime.example/api/v1/agent-daemon/ws/", "wss://runtime.example/api%2fv1/agent-daemon/ws"} {
 		if _, err := environmentBase(invalid); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatal("invalid URL accepted or disclosed")
 		}

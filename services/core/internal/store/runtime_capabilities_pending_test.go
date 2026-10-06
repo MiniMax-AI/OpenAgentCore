@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -21,6 +22,7 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, db := store.NewWithCredentialCipher(pool, cipher), fixtureDB{pool: pool, cipher: cipher}
+	s.SetPlacement(fixtureRules(t, db))
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{
 		Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -30,7 +32,7 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	env, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+	env, err := fixtureSessionStore(db).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +40,7 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 	key := uuid.NewString()
 	worker, _ := managedWorkerMode(t, s, db, key, provider, false, true)
 	owner, err := worker.ProvisionEnvironment(t.Context(), tenant, env.ID, key)
-	if err != nil || initializationState(t, s, owner.TenantID, owner.EnvironmentID) != "pending" {
+	if err != nil || initializationState(t, db.pool, owner.TenantID, owner.EnvironmentID) != "pending" {
 		t.Fatal(owner, err)
 	}
 	for range 4 {
@@ -46,8 +48,8 @@ func TestManagedCapabilitiesWaitBeforeInitializationClaim(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	owner, err = s.GetRuntimeAllocation(t.Context(), tenant, env.ID)
-	if err != nil || initializationState(t, s, owner.TenantID, owner.EnvironmentID) != "pending" || owner.State != "running" || provider.writes.Load() != 0 || provider.kills != 0 {
+	owner, err = fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
+	if err != nil || initializationState(t, db.pool, owner.TenantID, owner.EnvironmentID) != "pending" || owner.State != "running" || provider.writes.Load() != 0 || provider.kills != 0 {
 		t.Fatal("missing socket consumed initialization or requested cleanup", owner, err, provider.writes.Load(), provider.kills)
 	}
 	if _, err := s.GetSessionExecutionBinding(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {

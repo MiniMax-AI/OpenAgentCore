@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -90,7 +91,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				inspectionError: test.inspectionError, killError: test.killError,
 			}
 			w, _ := managedWorker(t, s, db, key, p)
-			tenant, session, environment := managedSession(t, s)
+			tenant, session, environment := managedSession(t, s, db)
 			owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 			if (err != nil) != (test.rejectCreate || test.loseCreate) || owner.ID == "" {
 				t.Fatal("unexpected creation outcome", owner, err)
@@ -106,7 +107,7 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 				if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 					t.Fatal(err)
 				}
-				before, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+				before, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 				if err != nil || before.State == "cleanup_pending" || before.State == "released" {
 					t.Fatal("drift authorized cleanup", before, err)
 				}
@@ -127,17 +128,17 @@ func TestManagedRuntimeConfigurationCleanup(t *testing.T) {
 			if test.wantReleased {
 				wantState = "released"
 			}
-			reconcileManagedState(t, w, s, tenant, environment.ID, wantState)
+			reconcileManagedState(t, w, db, tenant, environment.ID, wantState)
 			// A second observation must not turn absence after Kill into proof
 			// that an unknown original Create can no longer mutate resources.
 			if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			got, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+			got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 			if err != nil || got.ID != owner.ID || got.State != wantState || got.CreateSettled != test.wantSettled {
 				t.Fatal("cleanup lost ownership or settlement", got, err)
 			}
-			if _, ok, err := s.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := fixtureSessionStore(db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("cleanup retained execution authority", err)
 			}
 			p.mu.Lock()

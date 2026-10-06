@@ -1,6 +1,8 @@
-# Runtime observability
+---
+title: "Runtime observability"
+---
 
-This is the contributor contract for how Core observes Runtimes and keeps their history. The routes and response fields are in the [Runtime telemetry API](runtime-observability-api.md). The code lives in `services/core/internal/runtimeobs` (resolution, sources, sampler and export), `internal/runtimehistory` (history queries and the PostgreSQL store) and `internal/runtimeobs/otlpexporter`.
+This is the contributor contract for how Core observes Runtimes and keeps their history. The routes and response fields are in the [Runtime telemetry API](./runtime-observability-api.md). The code lives in `services/core/internal/runtimeobs` (resolution, sources, sampler and export), `internal/runtimehistory` (history queries and the PostgreSQL store) and `internal/runtimeobs/otlpexporter`.
 
 Observations are telemetry. They never create, renew, wake, restore or stop compute, never touch Session activity, and never decide idle time, suspension, admission or execution outcomes.
 
@@ -48,13 +50,13 @@ One non-streaming Inspect and Stats read of the owned container. Cumulative CPU 
 
 ### microsandbox
 
-A suspended allocation is `runtime_not_running` without calling the helper. Otherwise Core sends the helper a `metrics` request for the exact compute recorded on the allocation. Under the allocation lock, the helper checks the sandbox's identity through the pinned SDK, runs the pinned `msb metrics <name> --format json` CLI read, and checks the identity again; the sandbox must be running or draining. The [microsandbox helper](../../services/core/tools/microsandbox-provider/README.md) owns that request.
+A suspended allocation is `runtime_not_running` without calling the helper. Otherwise Core sends the helper a `metrics` request for the exact compute recorded on the allocation. Under the allocation lock, the helper checks the sandbox's identity through the pinned SDK, runs the pinned `msb metrics <name> --format json` CLI read, and checks the identity again; the sandbox must be running or draining. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) owns that request.
 
 Cumulative vCPU time, guest memory usage and the effective memory limit come from that one CLI sample. CPU capacity is the deployment's configured CPU count. `started_at` is the sample's own timestamp minus its millisecond uptime, never rounded uptime subtracted from a later clock reading, so a restored generation restarts compute uptime while the allocation age continues. Instantaneous CPU percent, host memory, disk and network values are not used, and disk is null. A suspension-disabled allocation without a recorded compute identity is `sample_unavailable`, and any other allocation without one fails the read; a deterministic sandbox name is never used instead.
 
 ### E2B
 
-One helper `observe` request reads a page of at most 100 allocations: E2B's batch metrics for the sandboxes named in the private receipts, and a labelled listing of the installation's running sandboxes that confirms each one. The [E2B helper](../../services/core/tools/e2b-provider/README.md) owns that request. It never connects to, renews or changes a sandbox and writes no receipts.
+One helper `observe` request reads a page of at most 100 allocations: E2B's batch metrics for the sandboxes named in the private receipts, and a labelled listing of the installation's running sandboxes that confirms each one. The [E2B helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) owns that request. It never connects to, renews or changes a sandbox and writes no receipts.
 
 | E2B value | Sample field |
 | --- | --- |
@@ -93,7 +95,7 @@ Every observation, current or periodic, is marked with its collection source, `o
 
 The PostgreSQL store keeps only periodic `openai_hosted` records, so API reads cannot inflate coverage. Each goes into one `runtime_history_samples` row keyed by tenant, Session, Environment and resolution time: the allocation, provider type, status, observation and start times, CPU seconds, capacity and utilization ratio, memory usage and limit, and the measured token counters. Disk is not stored. A sample without `started_at` keeps its coverage and drops its resource values, since they cannot be tied to an incarnation.
 
-The history service resolves the Project, Session and Environment before it queries; the query always carries that scope and bounded times, never provider identity. The store keeps seven days. A read covers at most 24 hours, reads at most 20,000 raw samples, starts two sampling intervals before the range to find CPU baselines, and returns at most 1,000 buckets per array, 64 series and 10,000 points in total. Results outside the requested scope, range or limits fail the read. The API's [Series](runtime-observability-api.md#series) section describes the aggregation.
+The history service resolves the Project, Session and Environment before it queries; the query always carries that scope and bounded times, never provider identity. The store keeps seven days. A read covers at most 24 hours, reads at most 20,000 raw samples, starts two sampling intervals before the range to find CPU baselines, and returns at most 1,000 buckets per array, 64 series and 10,000 points in total. Results outside the requested scope, range or limits fail the read. The API's [Series](./runtime-observability-api.md#series) section describes the aggregation.
 
 `runtimehistory.Capabilities` states the collection mode, interval, seven-day retention, minimum bucket width (30 seconds or the interval, whichever is longer), 24-hour range and point limits; the history route answers 503 unless they are valid and periodic.
 

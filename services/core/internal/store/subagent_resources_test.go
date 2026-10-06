@@ -30,13 +30,14 @@ func subagentFact(kind string, value any) sessions.ExecutionEvent {
 func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	s, pool := testStore(t)
 	owner := executionWriter(t, s)
+	journal := sessionExecution(t, owner.lease)
 	ctx := t.Context()
 	tenant, session := newSubagentSession(t, s)
-	host, err := s.CreateDevice(ctx, tenant, "child resources", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := sessionService(t, s).CreateDevice(ctx, tenant, "child resources", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = owner.BindSessionDevice(ctx, tenant, session.ID, host.ID); err != nil {
+	if err = sessionExecution(t, owner.lease).BindSessionDevice(ctx, tenant, session.ID, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	root := submitMessage(t, s, tenant, session.ID, "first")
@@ -44,7 +45,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	ordinal := int32(1)
 	appendFacts := func(facts ...sessions.ExecutionEvent) {
 		t.Helper()
-		if err := owner.AppendTurnEvents(ctx, tenant, session.ID, root.TurnID, ordinal, facts); err != nil {
+		if err := journal.AppendTurnEvents(ctx, tenant, session.ID, root.TurnID, ordinal, facts); err != nil {
 			t.Fatal(err)
 		}
 		ordinal += int32(len(facts))
@@ -178,7 +179,7 @@ func TestSubagentResourcesNativeOwnershipLifecycleAndRecovery(t *testing.T) {
 	// A conflicting replay rolls back the whole batch, including an earlier new child.
 	closed.OccurredAtMS++
 	facts := []sessions.ExecutionEvent{subagentIdentityEvent("rollback", "root", 104), subagentFact(proto.TypeSubagentLifecycle, closed)}
-	if err = owner.AppendTurnEvents(ctx, tenant, session.ID, root.TurnID, ordinal, facts); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, root.TurnID, ordinal, facts); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal(err)
 	}
 	if _, err = s.GetSubagentIdentity(ctx, tenant, session.ID, "rollback"); !errors.Is(err, sessions.ErrNotFound) {

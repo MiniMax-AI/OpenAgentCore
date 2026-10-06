@@ -17,10 +17,14 @@ func LoadUsage(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) (json.
 }
 
 // PutTurnUsage replaces a root Turn's recorded usage with a measurement.
-func PutTurnUsage(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, usage v1.TokenUsage) error {
+func (t *SessionTx) PutTurnUsage(ctx context.Context, turnID string, usage v1.TokenUsage) error {
+	turn, err := parseID(turnID)
+	if err != nil {
+		return err
+	}
 	payload, err := json.Marshal(usage)
 	if err != nil {
 		return err
 	}
-	return q.PutTurnUsage(ctx, sqlc.PutTurnUsageParams{SessionID: session, ID: turn, TokenUsage: payload})
+	return t.q.PutTurnUsage(ctx, sqlc.PutTurnUsageParams{SessionID: t.session, ID: turn, TokenUsage: payload})
 }

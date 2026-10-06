@@ -42,7 +42,14 @@ type RuntimeProvider struct {
 }
 
 type runtimeLifecycle struct {
-	store           *store.Store
+	store            *store.Store
+	sessions         sessions.Reader
+	sessionExecution *sessions.ExecutionOperations
+	// deployment runs the allocation mutations on the lease; deployments and
+	// reader run the pooled activity use case and reads.
+	deployment      *deployment.ExecutionOperations
+	deployments     *deployment.Service
+	reader          deployment.Reader
 	lease           Ownership
 	registry        *runtimegateway.Registry
 	config          RuntimeProvider
@@ -58,7 +65,7 @@ type runtimeLifecycle struct {
 	wakeHints       chan struct{}
 }
 
-func newRuntimeManager(owner Owner, deployments *deployment.Service, reader deployment.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
+func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -76,7 +83,7 @@ func newRuntimeManager(owner Owner, deployments *deployment.Service, reader depl
 		}
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{store: owner.Store, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: reader, lease: owner.Lease, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{store: owner.Store, sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -133,79 +140,80 @@ func (r *runtimeLifecycle) lock(ctx context.Context) error {
 
 // ProvisionEnvironment is an internal bootstrap operation for an already
 // authorized hosted Environment. It does not enable public hosted admission.
-func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, providerKey string) (store.RuntimeAllocation, error) {
+func (w *Worker) ProvisionEnvironment(ctx context.Context, tenant, environment, providerKey string) (deployment.Allocation, error) {
 	if w.runtimes == nil {
-		return store.RuntimeAllocation{}, ErrExecutionUnavailable
+		return deployment.Allocation{}, ErrExecutionUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	ctx, finish, err := w.runtimes.enter(ctx)
 	if err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	defer finish()
 	ready, err := w.runtimes.ensureDeployment(ctx)
 	if err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	if !ready {
-		return store.RuntimeAllocation{}, ErrExecutionUnavailable
+		return deployment.Allocation{}, ErrExecutionUnavailable
 	}
-	nodeID, err := w.runtimes.store.ResolveRuntimeLifecycleNode(ctx, tenant, environment)
+	nodeID, err := w.runtimes.deploymentService.LifecycleNode(ctx, tenant, environment)
 	if err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	node, err := w.runtimes.node(nodeID)
 	if err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	r := node.lifecycle
 	if err := r.lock(ctx); err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	defer func() { <-r.gate }()
 	return r.provision(ctx, tenant, environment, providerKey)
 }
 
 // provision runs under the lifecycle gate and uses the durable one-shot receipt.
-func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, providerKey string) (store.RuntimeAllocation, error) {
+func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, providerKey string) (deployment.Allocation, error) {
 	provider := r.config.Provider
 	if providerKey != r.config.InstallationID {
-		return store.RuntimeAllocation{}, sandbox.ErrInvalid
+		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
-	environmentValue, err := r.store.GetEnvironment(ctx, tenant, environment)
+	environmentValue, err := r.sessions.GetEnvironment(ctx, tenant, environment)
 	if err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	placement, err := parseEnvironmentPlacement(environmentValue.Configuration)
 	if err != nil || placement.Type != "openai_hosted" {
-		return store.RuntimeAllocation{}, sandbox.ErrInvalid
+		return deployment.Allocation{}, sandbox.ErrInvalid
 	}
-	if _, err := r.store.GetRuntimeAllocation(ctx, tenant, environment); errors.Is(err, sessions.ErrNotFound) {
+	key := deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment}
+	if _, err := r.reader.EnvironmentAllocation(ctx, key); errors.Is(err, deployment.ErrNotFound) {
 		if r.config.AdmissionPaused && r.config.Generation == 0 {
-			return store.RuntimeAllocation{}, ErrExecutionUnavailable
+			return deployment.Allocation{}, ErrExecutionUnavailable
 		}
 		if err := r.computeFreshCapacity(ctx, providerKey); err != nil {
-			return store.RuntimeAllocation{}, err
+			return deployment.Allocation{}, err
 		}
 		if policy := r.config.Suspension; policy != nil && r.config.ProviderKind == "" {
-			count, err := r.store.CountRuntimeRetainedAllocations(ctx, providerKey)
+			count, err := r.reader.CountRetainedAllocations(ctx, providerKey)
 			if err != nil {
-				return store.RuntimeAllocation{}, err
+				return deployment.Allocation{}, err
 			}
 			if count >= int64(policy.MaxRetained) {
-				return store.RuntimeAllocation{}, ErrExecutionUnavailable
+				return deployment.Allocation{}, ErrExecutionUnavailable
 			}
 		}
 	} else if err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
-		return store.RuntimeAllocation{}, err
+		return deployment.Allocation{}, err
 	}
 	token := hex.EncodeToString(secret)
-	owner, err := r.store.ReserveRuntimeAllocation(ctx, tenant, environment, providerKey, runtimedevice.HashCredential(token))
+	owner, err := r.deployment.ReserveAllocation(ctx, key, providerKey, runtimedevice.HashCredential(token))
 	if err != nil {
 		return owner, err
 	}
@@ -224,7 +232,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	})
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {
 		record, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		released, releaseErr := r.store.ReleaseAbsentRuntimeCreation(record, owner)
+		released, releaseErr := r.deployment.ReleaseAbsentCreation(record, owner)
 		cancel()
 		if releaseErr != nil {
 			return owner, releaseErr
@@ -235,7 +243,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		return released, err
 	}
 	if info.Reference == runtimeReference(owner) && info.CreateSettled {
-		settled, settleErr := r.store.SettleRuntimeCreation(ctx, owner)
+		settled, settleErr := r.deployment.SettleCreation(ctx, owner)
 		if settleErr != nil {
 			return owner, settleErr
 		}
@@ -245,7 +253,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		// Explicit invalid/foreign bootstrap cannot become an authorized Runtime.
 		// Other failures may hide a successful Create; retain recovery for those.
 		if errors.Is(err, sandbox.ErrInvalid) || errors.Is(err, sandbox.ErrOwnership) {
-			if _, cleanupErr := r.store.RequestRuntimeCleanup(ctx, owner); cleanupErr != nil {
+			if _, cleanupErr := r.deployment.RequestCleanup(ctx, owner); cleanupErr != nil {
 				return owner, cleanupErr
 			}
 		}
@@ -255,7 +263,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if info.Reference != runtimeReference(owner) || info.ProviderID == "" || info.State != "running" || !info.BootstrapComplete {
 		return owner, sandbox.ErrOwnership
 	}
-	return r.store.ObserveRuntimeRunning(ctx, owner)
+	return r.deployment.ObserveRunning(ctx, owner)
 }
 
 // ReconcileManagedRuntimes is also callable before serving admission. One scan
@@ -274,7 +282,7 @@ func (r *runtimeLifecycle) reconcile(ctx context.Context) error {
 		return err
 	}
 	defer finish()
-	rows, err := r.store.ListRuntimeAllocationsForNode(ctx, r.nodeID, r.cursor)
+	rows, err := r.reader.LifecycleAllocations(ctx, r.nodeID, r.cursor)
 	if err != nil {
 		return err
 	}
@@ -284,7 +292,7 @@ func (r *runtimeLifecycle) reconcile(ctx context.Context) error {
 		if wrapped {
 			// Service the next page now instead of spending a ticker interval on EOF.
 			// Refill only once so an empty store still returns without spinning.
-			rows, err = r.store.ListRuntimeAllocationsForNode(ctx, r.nodeID, "")
+			rows, err = r.reader.LifecycleAllocations(ctx, r.nodeID, "")
 			if err != nil {
 				return err
 			}
@@ -308,13 +316,13 @@ func (r *runtimeLifecycle) reconcile(ctx context.Context) error {
 	return r.provisionPending(ctx)
 }
 
-func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAllocation) error {
+func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocation) error {
 	if owner.ProviderKey != r.config.InstallationID || owner.NodeID != r.nodeID {
 		return sandbox.ErrOwnership
 	}
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
 		var err error
-		owner, err = r.store.RequestRuntimeCleanup(ctx, owner)
+		owner, err = r.deployment.RequestCleanup(ctx, owner)
 		if err != nil {
 			return err
 		}
@@ -359,13 +367,13 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if (settled || running && info.BootstrapComplete) && !owner.CreateSettled {
 		// Explicit settlement can accompany a configuration rejection. Missing
 		// compute, a timeout or a successful Kill alone cannot settle Create.
-		owner, err = r.store.SettleRuntimeCreation(ctx, owner)
+		owner, err = r.deployment.SettleCreation(ctx, owner)
 		if err != nil {
 			return err
 		}
 	}
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
-		owner, err = r.store.RequestRuntimeCleanup(ctx, owner)
+		owner, err = r.deployment.RequestCleanup(ctx, owner)
 		if err != nil {
 			return err
 		}
@@ -378,7 +386,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 		if !owner.CreateSettled {
 			return nil // Keep scanning unknown creation; absence is not a final receipt.
 		}
-		_, err = r.store.ReleaseRuntimeAllocation(ctx, owner)
+		_, err = r.deployment.ReleaseAllocation(ctx, owner)
 		return err
 	}
 	// A stopped or missing container does not authorize destroying retained
@@ -392,11 +400,11 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 		}
 		return nil
 	}
-	owner, err = r.store.ObserveRuntimeRunning(ctx, owner)
+	owner, err = r.deployment.ObserveRunning(ctx, owner)
 	if err != nil {
 		return err
 	}
-	environment, err := r.store.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
+	environment, err := r.sessions.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
 	if err != nil {
 		return err
 	}
@@ -413,16 +421,16 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner store.RuntimeAlloc
 	if renewed.Reference != runtimeReference(owner) || renewed.State != "running" || !renewed.BootstrapComplete {
 		return sandbox.ErrOwnership
 	}
-	_, err = r.store.KeepRuntimeAllocation(ctx, owner)
+	_, err = r.deployment.KeepAllocation(ctx, owner)
 	return err
 }
 
 // Environment identity owns connectivity; preparation has an independent owner.
-func (r *runtimeLifecycle) clearRuntimeState(owner store.RuntimeAllocation) {
+func (r *runtimeLifecycle) clearRuntimeState(owner deployment.Allocation) {
 	delete(r.connections, owner.EnvironmentID)
 }
 
-func runtimeReference(owner store.RuntimeAllocation) sandbox.Reference {
+func runtimeReference(owner deployment.Allocation) sandbox.Reference {
 	return sandbox.Reference{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID}
 }
 

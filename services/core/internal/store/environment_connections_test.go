@@ -17,7 +17,7 @@ import (
 func connectionFixture(t *testing.T, s *Store) (string, sessions.Session, sessions.Environment) {
 	t.Helper()
 	tenant, session := environmentInputSession(t, s)
-	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+	environment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,13 +57,13 @@ func TestEnvironmentConnectionOrdersGenerationsAndImmutableEvents(t *testing.T) 
 	first, second := uuid.NewString(), uuid.NewString()
 	replace := func(gen string) {
 		t.Helper()
-		if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, gen); err != nil {
+		if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, gen); err != nil {
 			t.Fatal(err)
 		}
 	}
 	observe := func(gen string, rev int64, connected bool) {
 		t.Helper()
-		if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, gen, rev, connected); err != nil {
+		if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, gen, rev, connected); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -120,7 +120,7 @@ func TestEnvironmentConnectionOrdersGenerationsAndImmutableEvents(t *testing.T) 
 	if !reflect.DeepEqual(got, want) {
 		t.Fatal(got, want)
 	}
-	retained, err := s.GetEnvironment(t.Context(), tenant, environment.ID)
+	retained, err := sessionAdapter(s).GetEnvironment(t.Context(), tenant, environment.ID)
 	if err != nil || retained.Status != "connected" {
 		t.Fatal(retained, err)
 	}
@@ -130,20 +130,14 @@ func TestEnvironmentConnectionRequiresOwnerAndRollsBackWithEvent(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session, environment := connectionFixture(t, s)
 	generation := uuid.NewString()
-	if err := s.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err == nil {
-		t.Fatal("unleased replacement accepted")
-	}
-	if err := s.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err == nil {
-		t.Fatal("unleased observation accepted")
-	}
 	writer := executionWriter(t, s)
-	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
+	if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.ReplaceEnvironmentConnection(t.Context(), uuid.NewString(), environment.ID, generation); !errors.Is(err, sessions.ErrNotFound) {
+	if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), uuid.NewString(), environment.ID, generation); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign generation accepted", err)
 	}
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, session.ID, generation, 1, true); !errors.Is(err, sessions.ErrNotFound) {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, session.ID, generation, 1, true); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("Session ID used as Environment", err)
 	}
 	before := connectionSnapshot(t, pool, environment.ID)
@@ -157,7 +151,7 @@ func TestEnvironmentConnectionRequiresOwnerAndRollsBackWithEvent(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err == nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err == nil {
 		t.Fatal("event failure did not abort transaction")
 	}
 	if after := connectionSnapshot(t, pool, environment.ID); after != before {
@@ -166,14 +160,14 @@ func TestEnvironmentConnectionRequiresOwnerAndRollsBackWithEvent(t *testing.T) {
 	if _, err := pool.Exec(t.Context(), "ALTER TABLE session_events DROP CONSTRAINT "+constraint); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := writer.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	before = connectionSnapshot(t, pool, environment.ID)
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 2, false); err == nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 2, false); err == nil {
 		t.Fatal("closed owner used pooled writer")
 	}
 	if after := connectionSnapshot(t, pool, environment.ID); after != before {
@@ -188,7 +182,7 @@ func TestEnvironmentConnectionDoesNotReviveDeletedOrTerminalResources(t *testing
 			tenant, session, environment := connectionFixture(t, s)
 			writer := executionWriter(t, s)
 			generation := uuid.NewString()
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
+			if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 				t.Fatal(err)
 			}
 			if status == "deleted" {
@@ -203,10 +197,10 @@ func TestEnvironmentConnectionDoesNotReviveDeletedOrTerminalResources(t *testing
 			before := connectionSnapshot(t, pool, environment.ID)
 			for _, operation := range []func() error{
 				func() error {
-					return writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, uuid.NewString())
+					return sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, uuid.NewString())
 				},
 				func() error {
-					return writer.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true)
+					return sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true)
 				},
 			} {
 				if err := operation(); err == nil {

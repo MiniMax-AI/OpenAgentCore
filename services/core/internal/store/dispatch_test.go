@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -33,6 +34,7 @@ type dispatchHarness struct {
 	db           fixtureDB
 	d            *execution.Dispatcher
 	lease        execution.Ownership // held by tests that run execution operations without a Worker
+	owned        *execution.Owner    // the Owner that bound binds, acquired on first use
 	tenant       string
 	session      sessions.Session
 	device       sessions.ExecutionDevice
@@ -67,26 +69,26 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	_ = json.Unmarshal(configuration, &snapshot)
 	if snapshot.Environment.Type == "self_hosted" {
-		h.device, h.credential = enrollFixtureSession(t, s, h.tenant, h.session)
+		h.device, h.credential = enrollFixtureSession(t, s, db, h.tenant, h.session)
 		secret = h.credential
 	} else if local {
-		environment, getErr := s.GetSessionEnvironment(ctx, h.tenant, h.session.ID)
+		environment, getErr := fixtureSessionStore(db).GetSessionEnvironment(ctx, h.tenant, h.session.ID)
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		h.device, err = s.CreateEnvironmentDevice(ctx, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
+		h.device, err = store.FixtureEnvironmentDevice(ctx, db.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
 	} else {
-		h.device, err = s.CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
+		h.device, err = fixtureSessionService(t, db).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.BindSessionDevice(ctx, h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(s, wsURL)
+	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,9 +177,34 @@ type runResult struct {
 	err  error
 }
 
+// owner returns the harness's execution Owner. The first call acquires the
+// execution lease, which closes when the test ends. A test that also starts a
+// Worker hands it this Owner through startOwnedWorker.
+func (h *dispatchHarness) owner() execution.Owner {
+	h.t.Helper()
+	if h.owned == nil {
+		owner := executionOwner(h.t, h.db, h.s)
+		h.owned = &owner
+	}
+	return *h.owned
+}
+
+// bound returns h.d bound to the harness's execution Owner, as StartWorker
+// binds a Worker's Dispatcher.
+func (h *dispatchHarness) bound() *execution.Dispatcher {
+	h.t.Helper()
+	d, err := h.d.Bind(h.owner())
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return d
+}
+
 func (h *dispatchHarness) run(ctx context.Context, turn string) <-chan runResult {
+	h.t.Helper()
+	d := h.bound()
 	out := make(chan runResult, 1)
-	go func() { result, err := h.d.Run(ctx, h.tenant, h.session.ID, turn); out <- runResult{result, err} }()
+	go func() { result, err := d.Run(ctx, h.tenant, h.session.ID, turn); out <- runResult{result, err} }()
 	return out
 }
 
@@ -206,10 +233,10 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	if inputTextForTest(t, prompt.Input) != "Initial input" || prompt.ConversationID != h.session.ID || prompt.AgentOptions["model"] != "test-model" || prompt.AgentOptions["system_prompt"] != "Keep this instruction." {
 		t.Fatalf("wrong resolved request: %+v", prompt)
 	}
-	if _, err := h.d.Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := h.bound().Run(ctx, uuid.NewString(), h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatalf("foreign execution: %v", err)
 	}
-	if _, err := h.d.Run(ctx, h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := h.bound().Run(ctx, h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatalf("duplicate execution: %v", err)
 	}
 	second := h.message("second", "Follow-up input")
@@ -232,9 +259,14 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	if outcome.AppliedThrough != second.Sequence || outcome.Done.Usage.InputTokens != 7 {
 		t.Fatalf("missing result: %+v", outcome)
 	}
+	// Restart Core: a new Store and execution owner continue the native Session.
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, h.db.pool)
+	if err := h.owner().Lease.Close(ctx); err != nil {
+		t.Fatal(err)
+	}
+	awaitRelease()
 	newStore, db := newTestStoreDB(t)
-	defer db.pool.Close()
-	h.s, h.db = newStore, db
+	h.s, h.db, h.owned = newStore, db, nil
 	h.d.Store = newStore
 	bound, err := newStore.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {
@@ -335,7 +367,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 				}
 			}
 			if kind != "disconnect" {
-				if _, err := h.d.Run(context.Background(), h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
+				if _, err := h.bound().Run(context.Background(), h.tenant, h.session.ID, first.TurnID); !errors.Is(err, sessions.ErrTurnConflict) {
 					t.Fatalf("terminal replay: %v", err)
 				}
 			}
@@ -413,7 +445,7 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 				time.Sleep(10 * time.Millisecond)
 			}
 			first := h.message("missing-capability", "Run")
-			if _, err := h.d.Run(context.Background(), h.tenant, h.session.ID, first.TurnID); err == nil || err.Error() != tc.message {
+			if _, err := h.bound().Run(context.Background(), h.tenant, h.session.ID, first.TurnID); err == nil || err.Error() != tc.message {
 				t.Fatalf("Run error = %v, want %q", err, tc.message)
 			}
 			turn, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)

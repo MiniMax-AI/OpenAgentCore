@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
@@ -18,6 +19,8 @@ var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", E
 
 type runtimeManager struct {
 	store               *store.Store
+	sessions            sessions.Reader
+	sessionExecution    *sessions.ExecutionOperations
 	deployment          *deployment.ExecutionOperations
 	deploymentService   *deployment.Service
 	deploymentReader    deployment.Reader
@@ -86,7 +89,9 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 	if n == nil {
 		ctx, stop := context.WithCancel(m.ctx)
 		n = &runtimeNode{lifecycle: &runtimeLifecycle{
-			store: m.store, lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
+			store: m.store, sessions: m.sessions, sessionExecution: m.sessionExecution,
+			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
+			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
 			connections: make(map[string]*runtimeConnection), wakeHints: make(chan struct{}, 1),
 		}}
@@ -136,7 +141,7 @@ func (m *runtimeManager) syncNodes(ctx context.Context) ([]*runtimeNode, error) 
 	// A direct caller may add a newly registered node during the query. Only
 	// entries present before this inventory snapshot can be retired by it.
 	previous := m.snapshotNodes()
-	ids, err := m.store.ListRuntimeLifecycleNodes(ctx)
+	ids, err := m.deploymentReader.LifecycleNodes(ctx)
 	if err != nil {
 		return nil, err
 	}

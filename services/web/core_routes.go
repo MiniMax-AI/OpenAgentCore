@@ -5,11 +5,11 @@ import (
 	"strings"
 )
 
-// coreDirectRequest reports the application (/v1) and machine connection
-// (/api/v1) namespaces. The reverse proxy routes them straight to Core; the
-// console never forwards them, whatever credential they carry.
+// coreDirectRequest reports the application (/v1), machine connection
+// (/api/v1) and API reference (/docs) namespaces. The console forwards them
+// to Core unchanged and adds no credential of its own.
 func coreDirectRequest(r *http.Request) bool {
-	for _, prefix := range []string{"/v1", "/api/v1"} {
+	for _, prefix := range []string{"/v1", "/api/v1", "/docs"} {
 		if r.URL.Path == prefix || strings.HasPrefix(r.URL.Path, prefix+"/") {
 			return true
 		}

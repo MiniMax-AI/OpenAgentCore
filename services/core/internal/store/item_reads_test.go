@@ -17,6 +17,7 @@ import (
 func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "items"})
 	if err != nil {
@@ -42,7 +43,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 		{Kind: "done", Payload: json.RawMessage(`{"content":"corrected answer","metadata":{"agent_session_id":"PRIVATE"}}`)},
 	}
 	for range 2 {
-		if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -119,6 +120,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
 	input, err := s.SubmitMessage(ctx, tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
@@ -130,7 +132,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 		t.Fatal(err)
 	}
 	bad := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"must roll back"}`)}, {Kind: "tool_call", Payload: json.RawMessage(`{"id":"mismatch","stage":"after","observation":{"status":"completed","kind":"invalid"}}`)}}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, bad); err == nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, bad); err == nil {
 		t.Fatal("invalid snapshot accepted")
 	}
 	events, err := s.ListTurnEvents(ctx, tenant, session.ID, input.TurnID, 0, 100)
@@ -154,6 +156,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	for _, receiptOnly := range []bool{true, false} {
 		session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
@@ -166,7 +169,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 			t.Fatal(err)
 		}
 		if receiptOnly {
-			err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "cancel_receipt", Payload: json.RawMessage(`{"applied":true,"outcome":{"content":"retained cancellation text"}}`)}})
+			err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "cancel_receipt", Payload: json.RawMessage(`{"applied":true,"outcome":{"content":"retained cancellation text"}}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -185,6 +188,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "failed-items"})
 	if err != nil {
@@ -205,7 +209,7 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 		{Kind: "error", Payload: json.RawMessage(`{"error":"provider failure"}`)},
 		{Kind: "done", Payload: json.RawMessage(`{"content":"provider failure"}`)},
 	}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 		t.Fatal(err)
 	}
 	_, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"done":{"content":"provider failure"},"error_code":"engine_failed"}`), "", input.Sequence)

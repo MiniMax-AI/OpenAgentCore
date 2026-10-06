@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
@@ -20,8 +21,28 @@ func fixtureDeployment(t testing.TB, db fixtureDB) *deployment.Service {
 }
 
 func fixtureDeploymentService(db fixtureDB) (*deployment.Service, error) {
+	rules, err := placement.NewRules(providers.Builtin(), db.publicURL)
+	if err != nil {
+		return nil, err
+	}
 	adapter := deploymentpg.New(pgunit.NewPool(db.pool), db.cipher)
-	return deployment.NewService(adapter, adapter, providers.Builtin(), db.publicURL)
+	return deployment.NewService(adapter, adapter, providers.Builtin(), rules)
+}
+
+// fixtureRules builds the placement rules on db's public URL, as cmd/server
+// does for the Store's Session creation.
+func fixtureRules(t testing.TB, db fixtureDB) *placement.Rules {
+	t.Helper()
+	rules, err := placement.NewRules(providers.Builtin(), db.publicURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rules
+}
+
+// fixtureReader is the deployment reader on db, as cmd/server builds it.
+func fixtureReader(db fixtureDB) *deploymentpg.Store {
+	return deploymentpg.New(pgunit.NewPool(db.pool), db.cipher)
 }
 
 // fixtureOwnerEpoch reads the execution owner epoch from the deployment store,

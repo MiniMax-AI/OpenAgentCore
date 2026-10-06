@@ -51,6 +51,7 @@ func TestSessionEventsAreVisibleOnlyAfterCommit(t *testing.T) {
 func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "stream"})
 	if err != nil {
@@ -81,12 +82,12 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 		{Kind: "tool_call", Payload: json.RawMessage(`{"id":"cmd","stage":"before","observation":{"status":"in_progress","kind":"command","command":"sleep 10"}}`)},
 	}
 	for range 2 {
-		if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 			t.Fatal(err)
 		}
 	}
 	before, _ = s.SessionEventCursor(ctx, tenant, session.ID)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 5, []sessions.ExecutionEvent{
 		{Kind: "delta", Payload: json.RawMessage(`{"item_id":"discarded","delta":"rollback"}`)},
 		{Kind: "output_message", Payload: json.RawMessage(`{"status":"invalid"}`)},
 	}); err == nil {

@@ -40,12 +40,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: Build standalone commands and verify migration entrypoints
-        env:
-          OAC_TEST_DATABASE_URL: postgres://agents_api:agents_api_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
+      - name: Build standalone commands
         run: |
           OAC_DEV_CORE_BUILD_DIR="$RUNNER_TEMP/oac-core-build" make build-core
-          OAC_DATABASE_URL="$OAC_TEST_DATABASE_URL" "$RUNNER_TEMP/oac-core-build/oac-core-migrate"
           "$RUNNER_TEMP/oac-core-build/oac-core-device" --help
           "$RUNNER_TEMP/oac-core-build/oac-core-environment-key" --help
       - uses: actions/setup-python@v6
@@ -67,6 +64,8 @@ jobs:
         run: |
           python services/core/tests/official_client.py
           go test ./services/core/internal/store -run '^(TestFunctionStateOfficialClientReadsAndLiveEvents|TestSavedReferenceRetryOfficialClient|TestAgentUpdateOfficialClient|TestAgentDeletionOfficialClient|TestSessionAgentFilterOfficialClient|TestSessionDeletionOfficialClient|TestEnvironmentInitialFailureOfficialClient|TestSelfHostedInitialCreationOfficialClient|TestSelfHostedCancellationOfficialClient|TestSelfHostedFunctionsOfficialClient|TestSelfHostedSteeringOfficialClient)$' -count=1
+      - uses: ./.github/actions/e2b-provider
+        if: inputs.container
       - name: Verify the distribution's Core image
         if: inputs.container
         env:

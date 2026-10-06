@@ -64,7 +64,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	if inputTextForTest(t, prompt.Input) != "First\n\nSecond" || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) || prompt.AgentOptions["web_search"] != nil || prompt.AgentOptions["model_verbosity"] != nil {
 		t.Fatal(prompt)
 	}
-	bound, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID)
+	bound, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.ID != h.device.ID {
 		t.Fatal(bound, err)
 	}
@@ -118,7 +118,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	// A native measurement committed before process loss must survive startup
 	// reconciliation even when no Done frame can be recovered.
 	usage := json.RawMessage(`{"tokens":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":13}}`)
-	if err := h.s.AppendTurnEvents(ctx, h.tenant, h.session.ID, first.TurnID, 1, []sessions.ExecutionEvent{{Kind: proto.TypeUsage, Payload: usage}}); err != nil {
+	if err := h.owner().Sessions.AppendTurnEvents(ctx, h.tenant, h.session.ID, first.TurnID, 1, []sessions.ExecutionEvent{{Kind: proto.TypeUsage, Payload: usage}}); err != nil {
 		t.Fatal(err)
 	}
 	checkMeasurement := func(ended bool) {
@@ -148,7 +148,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	if _, err := h.s.SubmitMessage(ctx, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
 		t.Fatal(err)
 	}
-	worker := startWorker(t, ctx, h.db, h.d)
+	worker := startOwnedWorker(t, ctx, h.db, h.d, h.owner())
 	stopped, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := worker.Run(stopped); err != context.Canceled {

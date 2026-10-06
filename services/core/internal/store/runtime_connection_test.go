@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -21,10 +22,10 @@ import (
 
 func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, session, environment := managedSession(t, s)
+	tenant, session, environment := managedSession(t, s, db)
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(s, wsURL)
+	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +55,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 			if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 				t.Fatal(err)
 			}
-			got, err := s.GetEnvironment(t.Context(), tenant, environment.ID)
+			got, err := fixtureSessionStore(db).GetEnvironment(t.Context(), tenant, environment.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -90,7 +91,7 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	if err != nil || got.LastTurn != nil || got.EnvironmentInputActivity != nil {
 		t.Fatal("connection fabricated native execution", err)
 	}
-	if _, err := s.GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := fixtureSessionStore(db).GetEnvironment(t.Context(), uuid.NewString(), environment.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign Environment access", err)
 	}
 	p.unavailable = true
@@ -106,14 +107,14 @@ func TestManagedRuntimeConnectionTracksAuthenticatedSocket(t *testing.T) {
 	stop(w)
 	w = start()
 	assertStatus("connected")
-	retained, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	retained, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || retained.ID != owner.ID || retained.DeviceID != owner.DeviceID || p.creates != 1 {
 		t.Fatal("restart replaced Runtime identity", err)
 	}
 	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
 		t.Fatal(err)
 	}
-	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
+	reconcileManagedState(t, w, db, tenant, environment.ID, "released")
 	if conn, err := dial(p.credential); err == nil {
 		conn.Close()
 		t.Fatal("released Runtime reconnected")

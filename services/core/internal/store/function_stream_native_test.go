@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestNativePublicFunctionStreamHelper(t *testing.T) {
@@ -37,7 +39,7 @@ func TestNativePublicFunctionStreamHelper(t *testing.T) {
 		t.Fatal(proof, err)
 	}
 	for i, callID := range proof.Calls {
-		call, err := h.s.GetFunctionCall(ctx, h.tenant, proof.Session, proof.Turns[i], callID)
+		call, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, proof.Turns[i], callID)
 		if err != nil || !call.Applied {
 			t.Fatal(call, err)
 		}

@@ -1,19 +1,19 @@
 ---
 name: OpenAgentCore Console
-description: The management console for one self-hosted OpenAgentCore deployment; projects, their assets and keys, health and capacity, on hairline cards in a white page panel over a quiet canvas.
+description: The management console for one self-hosted OpenAgentCore deployment; projects, their assets and keys, health and capacity, with flat page surfaces, clear navigation and compact resource tables.
 colors:
   ink: "oklch(0.247 0.006 258.361)"
   ink-muted: "oklch(0.506 0.01 264.477)"
-  ink-subtle: "oklch(0.695 0.009 264.505)"
+  ink-subtle: "oklch(0.55 0.009 264.505)"
   sidebar-ink: "oklch(0.506 0.01 264.477)"
   surface: "oklch(1 0 0)"
   surface-subtle: "oklch(0.979 0.002 247.839)"
   surface-muted: "oklch(0.961 0.001 286.375)"
   canvas: "oklch(0.961 0.002 247.84)"
   frame-line: "color-mix(in oklch, oklch(0.247 0.006 258.361) 11%, transparent)"
-  line: "oklch(0.946 0.003 264.542)"
+  line: "oklch(0.90 0.003 264.542)"
   line-muted: "oklch(0.966 0.002 264.542)"
-  line-strong: "oklch(0.912 0.005 258.326)"
+  line-strong: "oklch(0.85 0.005 258.326)"
   hover: "oklch(0.97 0.002 247.839)"
   pressed: "oklch(0.933 0.003 247.86)"
   tile: "oklch(0.933 0.003 247.86)"
@@ -24,7 +24,7 @@ colors:
   success: "oklch(0.6 0.12 158)"
   warning: "oklch(0.68 0.135 62)"
   danger: "oklch(0.585 0.17 25)"
-  status-queued: "oklch(0.695 0.009 264.505)"
+  status-queued: "oklch(0.55 0.009 264.505)"
   series-1: "oklch(0.56 0.14 277)"
   series-2: "oklch(0.7 0.09 195)"
   series-3: "oklch(0.78 0.11 80)"
@@ -35,38 +35,38 @@ colors:
   meter-fill: "color-mix(in srgb, oklch(0.247 0.006 258.361) 62%, transparent)"
 typography:
   metric:
-    fontFamily: "\"Inter Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
-    fontSize: "20px"
-    fontWeight: 500
-    lineHeight: "28px"
-    letterSpacing: "-0.015em"
+    fontFamily: "\"IBM Plex Sans\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+    fontSize: "28px"
+    fontWeight: 600
+    lineHeight: "36px"
+    letterSpacing: "-0.025em"
     fontFeature: "\"tnum\""
   display:
-    fontFamily: "\"Inter Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+    fontFamily: "\"IBM Plex Sans\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
     fontSize: "20px"
     fontWeight: 500
     lineHeight: "26px"
     letterSpacing: "-0.015em"
     fontFeature: "\"tnum\""
   headline:
-    fontFamily: "\"Inter Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
-    fontSize: "17px"
+    fontFamily: "\"IBM Plex Sans\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+    fontSize: "20px"
     fontWeight: 600
-    lineHeight: "24px"
+    lineHeight: "28px"
     letterSpacing: "-0.015em"
   title:
-    fontFamily: "\"Inter Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+    fontFamily: "\"IBM Plex Sans\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
     fontSize: "14px"
     fontWeight: 600
     lineHeight: "20px"
     letterSpacing: "-0.01em"
   body:
-    fontFamily: "\"Inter Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+    fontFamily: "\"IBM Plex Sans\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: "18px"
   label:
-    fontFamily: "\"Inter Variable\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
+    fontFamily: "\"IBM Plex Sans\", -apple-system, BlinkMacSystemFont, \"PingFang SC\", \"Hiragino Sans GB\", \"Segoe UI\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Helvetica Neue\", Helvetica, Arial, sans-serif"
     fontSize: "12.5px"
     fontWeight: 500
     lineHeight: "18px"
@@ -76,21 +76,21 @@ typography:
     fontWeight: 400
 rounded:
   hairline: "4px"
-  control: "8px"
-  control-inner: "6px"
+  control: "4px"
+  control-inner: "3px"
   segment: "8px"
   tooltip: "8px"
   popover: "14px"
-  frame: "12px"
-  window: "14px"
+  frame: "6px"
+  window: "8px"
   pill: "999px"
 spacing:
   xs: "4px"
   sm: "8px"
   md: "12px"
   lg: "16px"
-  gutter: "28px"
-  section: "28px"
+  gutter: "24px"
+  section: "24px"
 components:
   card:
     backgroundColor: "{colors.surface}"
@@ -100,13 +100,13 @@ components:
     textColor: "{colors.canvas}"
     rounded: "{rounded.control}"
     padding: "0 13px"
-    height: "30px"
+    height: "32px"
   button-outline:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
     padding: "0 13px"
-    height: "30px"
+    height: "32px"
   button-outline-hover:
     backgroundColor: "{colors.surface-subtle}"
   button-danger:
@@ -114,20 +114,20 @@ components:
     textColor: "#ffffff"
     rounded: "{rounded.control}"
     padding: "0 13px"
-    height: "30px"
+    height: "32px"
   button-ghost:
     textColor: "{colors.ink-muted}"
     rounded: "{rounded.control}"
     padding: "0 13px"
-    height: "30px"
+    height: "32px"
   refresh-button:
     textColor: "{colors.ink-muted}"
     rounded: "{rounded.control}"
-    size: "30px"
+    size: "32px"
   back-button:
     textColor: "{colors.ink-muted}"
     rounded: "{rounded.control}"
-    size: "30px"
+    size: "32px"
   text-action:
     textColor: "{colors.ink-muted}"
     typography: "{typography.label}"
@@ -138,18 +138,18 @@ components:
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
     padding: "0 10px"
-    height: "30px"
+    height: "32px"
   search-field:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
-    height: "30px"
+    height: "32px"
   select:
     backgroundColor: "{colors.surface-muted}"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
     padding: "0 30px 0 10px"
-    height: "30px"
+    height: "32px"
   segmented-track:
     backgroundColor: "{colors.pressed}"
     rounded: "{rounded.segment}"
@@ -166,22 +166,21 @@ components:
     textColor: "{colors.sidebar-ink}"
     rounded: "{rounded.control}"
     padding: "0 8px"
-    height: "32px"
+    height: "36px"
   nav-item-active:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "var(--hover-2)"
     textColor: "{colors.ink}"
   metric-tile:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "transparent"
     textColor: "{colors.ink}"
     typography: "{typography.metric}"
-    rounded: "{rounded.frame}"
-    padding: "16px"
+    padding: "0 20px"
   kpi-cell:
     textColor: "{colors.ink}"
     typography: "{typography.display}"
     padding: "14px 16px 16px"
   table-header:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "var(--inset)"
     textColor: "{colors.ink-muted}"
     padding: "0 12px"
     height: "36px"
@@ -215,21 +214,21 @@ components:
 
 **Creative North Star: "The Operator's Ledger"**
 
-The console is a management tool, not a developer showroom. Every screen reads like a ledger page laid on a desk: a quiet canvas, one white page panel, one header, then white cards holding the evidence (figures, charts, tables). Structure comes from the card edge, 1px internal rules and whitespace; there are no cards inside cards. Colour is spent on problems and on the data itself, almost never on decoration. The indigo accent means "you selected this" or "this is a link"; its data shade (`--data`) means "this is the single measured quantity". Primary actions are filled with ink.
+The console is a compact developer and operator workspace. Flat page surfaces, a separated navigation rail and clear typography provide the structure. Resource tables use horizontal rules; independent charts and summaries use small-radius frames. Avoid nested cards. Colour is spent on problems and on the data itself, almost never on decoration. The indigo accent means "you selected this" or "this is a link"; its data shade (`--data`) means "this is the single measured quantity". Primary actions are filled with ink.
 
-Density is deliberately high and calm: 13px body, 44px table rows, 30px controls, tabular figures in every column. The system is bilingual (zh-CN and English) and ships light and dark themes on the same token names; dark swaps values, never structure. It honours reduced motion and treats keyboard focus as a first-class state (2px indigo outline).
+Density is deliberately high and calm: 13px body, 44px table rows, 32px controls, tabular figures in every column. The system is bilingual (zh-CN and English) and ships light and dark themes on the same token names; dark swaps values, never structure. It honours reduced motion and treats keyboard focus as a first-class state (2px indigo outline).
 
 The data contract is part of the look. Core reports only what it observes, so the interface shows absence honestly: an em dash, a gap in a line, the word "Unavailable" or "Unknown". Explanations stay one click away behind a circled question mark, so the page stays a ledger rather than a leaflet.
 
 **Key Characteristics:**
-- Each page sits in one white panel with 14px corners on a cool gray canvas, which also holds the sidebar. Inside the panel, cards are drawn by a hairline ring, and the page header is white with a hairline rule under it.
+- Each page fills the content column without an outer radius or shadow. The sidebar uses a subtle surface and a dividing rule. Page headers and table headers have clear bottom rules.
 - One indigo voice for selection, focus, links and single-series data (`--data`); the primary button is ink.
 - Meters are neutral ink; green, amber and red appear only when something is wrong or a state needs reporting.
 - A six-slot categorical palette for multi-series data, bound to the entity, not its rank.
 - One list grammar on every resource page: project filter, search, count, name with compact ID, creator, row actions.
 - Tabular numerals everywhere a number can line up.
 - Status is always a dot plus a plain-language label.
-- Explanations live behind "?" help tips; errors, warnings and safety notices stay visible. No small print: an empty state's explanation is a help tip beside its title, a field's rules a help tip beside its label, and filler lines are cut.
+- Task instructions and empty-state next steps stay visible. Supplementary definitions belong in help tips. Errors, warnings and safety notices stay visible.
 
 ## Colors
 
@@ -272,16 +271,16 @@ A restrained neutral ledger with one indigo voice, three signal colours and a se
 
 ## Typography
 
-- **Display Font:** Inter Variable (with the system UI sans as fallback: -apple-system, Segoe UI, and PingFang SC / Microsoft YaHei / Noto Sans SC for Chinese)
-- **Body Font:** Inter Variable, the same stack, with Inter's `cv11` and `ss01` alternates
+- **Display Font:** IBM Plex Sans (with the system UI sans as fallback: -apple-system, Segoe UI, and PingFang SC / Microsoft YaHei / Noto Sans SC for Chinese)
+- **Body Font:** IBM Plex Sans, the same stack; locally bundled in weights 400, 500, 600 and 700
 - **Label/Mono Font:** Geist Mono Variable (with ui-monospace / SF Mono / Menlo) for identifiers and code
 
 **Character:** One quiet sans in several weights, sized for dense reading; hierarchy comes from weight and a tight scale, not from a second typeface. Mono appears only for machine identifiers, key prefixes, models and commands.
 
 ### Hierarchy
-- **Metric** (500, 20px, 28px, -0.015em, tabular): the four Overview tiles.
+- **Metric** (600, 24px, 32px, -0.015em, tabular): the four Overview tiles.
 - **Display** (500, 20px, 26px, -0.015em, tabular): KPI strip figures. Figures stand out by weight and position, one step above body text.
-- **Headline** (600, 17px, 24px, -0.015em): the page title in the page header; one per page. Detail pages put the back button before it.
+- **Headline** (600, 20px, 28px, -0.015em): the page title in the page header; one per page. Detail pages put the back button before it.
 - **Title** (600, 14px, 20px, -0.01em): section and card headings. Dialog titles are 600 at 15px; empty-state titles 500 at 13.5px.
 - **Body** (400, 13px, 18px): table cells, controls, form fields, dialog text. The document base is 14px/20px; help tips run 12px/18px.
 - **Label** (500, 12.5px, 18px): KPI labels, column headers, text actions, segmented options and the list count; fact labels 12px/500 Pencil; axis ticks 11px. Status labels are 13px.
@@ -296,38 +295,38 @@ A restrained neutral ledger with one indigo voice, three signal colours and a se
 
 ## Layout
 
-A fixed 232px sidebar on the canvas beside the main column, where each page sits in one white panel with 14px corners; below 640px the sidebar collapses to a 52px icon rail. The desktop minimum is 960px. Every page uses the same frame: a header at least 56px tall (title, optional help tip, actions on the right) on white with a Hairline rule under it, then a scrolling body padded `20px 28px 48px` with sections stacked 28px apart. Inside a section the heading row sits 10px above its content.
+A fixed 224px sidebar sits beside the flat main column, separated by a 1px rule. Below 640px it becomes a 56px icon rail with accessible names and no clipped labels. The header is at least 56px tall, with a 20px/600 title and actions on the right; actions wrap onto a new line when the available width cannot contain them. The scrolling body uses `24px 24px 40px` padding and a 24px section gap; horizontal padding becomes 16px below 640px. Wide tables scroll within their own frame.
 
-The recurring shapes in the body are the KPI strip (auto-fit columns, min 158px; three per row below 1180px), chart grids (two equal columns, single below 1180px), full-width table cards, and a fact row on detail pages. Overview has its own arrangement: Getting started while a step is to do, four metric tiles, Session activity beside the fleet topology (Core in the middle, nodes left and right, solid lines online and dashed offline; Core and each node open an anchored popover with a two-column glance and links to their pages), then the attention table and usage by project, each on its own card with a 16px gap. Popovers are the overlay card (14px radius, overlay shadow, 16px padding): a 14px title, 12px labels over 13px values, links at a ruled foot. Nodes itself is a plain list with a detail page.
+The recurring shapes in the body are the KPI strip (auto-fit columns, min 158px; three per row below 1180px), chart grids (two equal columns, single below 1180px), full-width resource tables, and a fact row on detail pages. Overview has its own arrangement: Getting started while a step is to do, a four-column metric strip separated by vertical rules, Session activity beside a compact fleet inventory, then flat attention and project usage tables. The activity and fleet grid has a 24px gap and stacks below 680px of content width; the metric strip uses two columns below 560px. Core and up to four nodes open anchored popovers with facts and links to their pages. When more nodes exist, offline and degraded nodes take priority and a link leads to the full list. Popovers are the overlay card (8px radius, overlay shadow, 16px padding): a 14px title, 12px labels over 13px values, links at a ruled foot. Nodes itself is a plain list with a detail page.
 
-Spacing follows a 4px base: 4, 8, 12, 16, 28 (page gutter and section gap). Controls are 30px tall, segmented options 26px, table rows 44px (32px compact), table headers 36px.
+Spacing follows a 4px base: 4, 8, 12, 16, 24 (page gutter and section gap). Controls are 32px tall, segmented options 26px, table rows 44px (32px compact), table headers 36px.
 
-**The Liveness Only Rule.** The moving dash on a topology link shows that a connection is live, never traffic or work. An offline link is dashed and still, a stale topology shows no movement, and reduced motion stops the animation.
+Fleet availability uses labeled status dots. Retained observations keep their stale disclosure and never imply live traffic.
 
 **The One Page Grammar Rule.** Every page uses PageHeader, PageBody and Section from `components/console-ui.tsx`, and every resource list uses the list grammar from `components/list-ui.tsx`. No page invents its own header height, gutter, section rhythm or toolbar.
 
 ## Elevation & Depth
 
-Depth comes from the canvas-to-panel step, not from stacked shadows.
+Page structure comes from typography, spacing and dividers. Reserve elevation for overlays.
 
 ### Shadow Vocabulary
-- **Page panel** (a Hairline ring with a soft shadow, `0 1px 2px` at 3% and `0 8px 24px -12px` at 8% black): the white panel that holds each page.
-- **Card** (no shadow; a 1px `frame-line` ring at 11% ink): KPI strips, table frames, chart grids, Overview cards, the Session transcript and the deployment panel. Cards are flat; no page surface is translucent or blurred.
+- **Page surface**: flat and full-height, with no outer radius or shadow.
+- **Card** (no shadow; a 1px `frame-line` ring at 11% ink): KPI strips, chart grids, Overview cards, the Session transcript and the deployment panel. Cards are flat; no page surface is translucent or blurred.
 - **Control ring** (a 1px Firm Rule ring with an extra-small shadow): outline buttons, the active segment, and search fields and selects in toolbars. Inputs inside cards and dialogs carry only a Hairline ring.
 - **Overlay** (a 1px Hairline ring with a large soft shadow): anchored popovers, menus, dialogs, help tips and chart tooltips.
 
 ### Named Rules
-**The One Card Rule.** Figures, charts and tables sit in one card divided by 1px internal rules. A card never contains another bordered, shadowed container; an empty list is itself one card.
+**The One Card Rule.** Figures, charts and tables sit in one card divided by 1px internal rules. A card never contains another bordered, shadowed container; empty states remain unframed, including inside a card.
 
 ## Shapes
 
-14px corners on the page panel, dialogs and anchored popovers; 12px on cards, tables, KPI strips, chart grids and empty states; 8px on buttons, icon buttons, inputs, selects, the search field, the segmented track, coverage notes, help tips and chart tooltips; 6px on segment options and text actions; 4px on small inline marks and segment counts; full pills for meters, count badges and value pills; circles for status dots (6px), KPI tone dots (8px) and tile dots (10px). Legend keys are 9px squares with 2px corners, or 12×2px strokes for line series. Borders are always 1px.
+Use 4px corners on controls, 3px on inner options, 6px on cards and 8px on dialogs. Resource tables and page surfaces have square edges. Keep pills for compact badges and circles for status dots. Borders are 1px.
 
 ## Components
 
 ### Buttons
 Compact and quiet; the primary button is the only filled button in a header.
-- **Shape:** 8px corners, 30px tall, 0 13px padding, 13px/500 label, optional 14px Lucide icon. No button is a pill.
+- **Shape:** 4px corners, 32px tall, 0 13px padding, 13px/500 label, optional 14px Lucide icon. No button is a pill.
 - **Primary:** Ledger Ink fill with Canvas text and a faint inner highlight; hover lowers it to 88% opacity. Used for the one affirmative header action (Create project) and for the submit button of non-destructive dialogs (create, rename, issue, continue).
 - **Outline:** Paper face with the control ring; hover takes Margin Gray. Used for every action in a card or section header (Issue key, Manage nodes, Session log, Projects and keys), Download on the Skill page, Cancel in dialogs and empty-state actions.
 - **Danger:** Fault Red fill, white text: the confirm button of every destructive dialog. On a page, a destructive button such as Delete on a detail page is red text on an outline button that takes a red tint on hover.
@@ -336,13 +335,13 @@ Compact and quiet; the primary button is the only filled button in a header.
 - **Text action:** borderless Graphite 12.5px/500, 24px tall with 6px corners, that turns Ink on the Hover wash; used only for per-row actions in tables (Rename, Archive, Delete) and links in a popover's foot, never in a header. A destructive text action turns red on hover.
 
 ### Refresh button
-A 30px ghost icon button with the refresh glyph. Controls that scope the whole page (project filter, time range) come before it; on detail pages it leads, followed by any outline actions and Delete. It spins while reading; its tooltip carries the last update time instead of a visible timestamp.
+A 32px ghost icon button with the refresh glyph. Controls that scope the whole page (project filter, time range) come before it; on detail pages it leads, followed by any outline actions and Delete. It spins while reading; its tooltip carries the last update time instead of a visible timestamp.
 
 ### Segmented control
 The single style for ranges, order and status filters. A Pressed-gray track (2px padding, 8px corners) holds 26px options in Graphite; the chosen option sits on a Paper thumb with the control ring and Ledger Ink text, and the thumb glides to a new choice (Motion shared layout). Options may carry a tabular count. It is a radiogroup with arrow-key movement.
 
 ### Selects and the project filter
-Selects and inputs are 30px fields filled Well Gray with a Hairline ring inside cards and dialogs, and Paper with the control ring in toolbars and headers. Focus turns them Paper with a 1px indigo ring and a 4px indigo tint around it. Selects draw their own chevron. The project filter is a select whose first option is **All projects**; archived projects are listed with "· archived".
+Selects and inputs are 32px fields filled Well Gray with a Hairline ring inside cards and dialogs, and Paper with the control ring in toolbars and headers. Focus turns them Paper with a 1px indigo ring and a 4px indigo tint around it. Selects draw their own chevron. The project filter is a select whose first option is **All projects**; archived projects are listed with "· archived".
 
 ### List grammar
 Every resource list, the Session log and the project list share one grammar:
@@ -352,11 +351,11 @@ Every resource list, the Session log and the project list share one grammar:
 - **Creator column**: the last column before the actions, headed "Creator" with a help tip. It shows the creating key's name (its prefix when unnamed) with a small "Revoked" flag for revoked keys, "Admin copy" in Graphite for an asset Core records as an administrator copy, "Unknown" in Graphite when Core has no record, and "—" while loading or when the lookup failed.
 - **RowActions**: text actions right-aligned at the end of the row, 16px apart, ending with Delete (red on hover). A row click opens the detail page; action clicks do not.
 - **Partial failure**: when some projects fail to load, one red line names them above the table; the other projects still show.
-- **Empty state**: a solid card (Paper, card ring, 12px, 36px 24px padding) with an optional outline icon in a 32px Margin Gray tile, a 13.5px/500 title, an optional one-line description and an optional action. "No matches" offers Clear search.
+- **Empty state**: an unframed, centered block with an optional 24px outline icon, a clear title, a visible short explanation and a relevant action. First-use states explain how data arrives; filtered states offer Clear search; failed reads retain their error and retry. Empty Overview activity links to Projects and keys for API onboarding.
 - **Load more**: an outline button centred under its table when more rows exist.
 
 ### Detail pages
-- The page header starts with a **back button** (30px ghost icon button, arrow-left, Graphite) before the title; the actions on the right start with Refresh, continue with outline actions such as Download, and end with Delete (red text on an outline button).
+- The page header starts with a **back button** (32px ghost icon button, arrow-left, Graphite) before the title; the actions on the right start with Refresh, continue with outline actions such as Download, and end with Delete (red text on an outline button).
 - Under the header, **resource-facts** lays out the facts in one card as an auto-fill grid of label/value pairs, each column at least 176px wide (a 12px/500 Pencil label over a 13px value, 14px by 24px gaps). It starts with the ID (with its copy button) and the Project and includes the Creator.
 - Sections follow: usage figures in a KPI strip, then tables in cards.
 - A Session's **History** header holds an outline "Jump to the failed Turn" (with the count when several failed) before the view switch while any Turn failed; it shows the conversation (the Turn table when there are no Items), scrolls the page body to the next failed Turn and focuses it.
@@ -364,7 +363,7 @@ Every resource list, the Session log and the project list share one grammar:
 - A self-hosted Session's **Executor credentials** section ends with **Connect a host**: a Linux/macOS or PowerShell selector, the one copyable command Core generated for that platform, and a link to the native installation guide. The console shows Core's command as it is and never builds one. The command installs the daemon and its Harnesses, starts it and checks its connection; its authorization expires after 30 minutes. Requirements and reconnection details belong in the title help. Reconnection after credential rotation requires `stop`, replacement of the configured credential file, then `start`; disconnection does not imply process exit. Connection status comes only from Core. When Core has no command, a note replaces it; an archived project shows a note instead.
 
 ### Dialogs
-Dialogs are 448px Paper cards (960px when wide) with 14px corners, a 52px header and a 56px Margin Gray footer separated by Hairlines, and the overlay shadow. They cannot be closed while a request runs.
+Dialogs are 448px Paper cards (960px when wide) with 8px corners, a 52px header and a 56px Margin Gray footer separated by Hairlines, and the overlay shadow. They cannot be closed while a request runs.
 - **ConfirmDialog**: the one grammar for destructive actions. The body states what will be deleted and its consequences; the footer holds Cancel (outline) and the confirm button (danger), whose label changes while busy. Core's reason for a rejection, or an uncertain-outcome warning, appears in red inside the dialog. The Skill page's delete dialogs follow the same grammar; deleting a whole Skill also requires typing its name. Archiving a project says in bold that it can't be undone, then how many active keys it revokes (the project read's count, or more when its loaded key list shows more) and that assets and accepted work stay; with active keys it too requires typing the project's name, shown in mono with its inner spaces kept (surrounding spaces are forgiven, Unicode compared in NFC). While the project list is read again Archive waits; if that read failed, a red line says the count may be out of date and Archive stays disabled.
 - **Key dialogs**: name fields carry their rules in a help tip and their problem in red underneath. The issued key appears in a read-only field with a copy button, under a notice that it is shown once; only "I've saved this key" dismisses it. Closing the dialog moves the key into a pending notice card on the page.
 - **Executor credential dialog** (640px): the shown-once notice, then a prompt to save the JSON privately before Done. Download credential file is primary; Copy credential is secondary. Installation commands are not repeated here. Done forgets the credential; closing preserves it in the pending card. The native installer reads the unchanged JSON file: its absolute path is entered during interactive installation or passed with `--credential-file`; tokens never enter command arguments.
@@ -375,7 +374,7 @@ Dialogs are 448px Paper cards (960px when wide) with 14px corners, a 52px header
 - **How to call**: wherever a new key is shown, a card under it gives three copyable samples, each a Margin Gray block with a Hairline and its label and copy button in a header row: a Shell block exporting `OPENAI_BASE_URL` (the installation's API base URL) and `OPENAI_API_KEY` (the new key) together, then curl and Python (with the pinned SDK), each listing the project's Agents and creating a Session with a first message (`environment`, an inline `agent` with `model: "<model>"`, and `input`). A copy the clipboard refuses selects the sample and says so in red underneath. One Graphite line says to put a model the model provider serves in place of `<model>`, and that running an Agent needs a model provider: in each request, saved on the Agent, or the deployment default. An active project's page shows the same samples as a section without any key: the Shell block exports a quoted placeholder, and a Graphite line above the samples says to use a key issued for this project, shown only once at issuance. When the public address is loopback, a note above the samples says the API is reachable only on the Core machine; without a public address only a note to set one shows. Before the installation is read, a skeleton holds the first sample's place.
 
 ### Navigation
-Sidebar groups Monitor, Resources and Platform with 12px Pencil group labels; items are 32px rows with a 15px outline icon and Sidebar Ink text. Hover takes the Pressed gray; the active item sits on a white chip (the page panel's surface, ringed) with Ledger Ink at 500, and the chip glides to the next item on navigation. The Platform group sits below a hairline. A secondary page (one Session) highlights its parent. The footer holds Show Getting started, then sign-out and the language/theme menu. A detail page's back arrow returns to the page it was opened from (a Skill opened from a template goes back to the template); opened directly, it goes to its list. The arrow is labelled plainly "Back".
+Sidebar groups Monitor, Resources and Platform with 12px Pencil group labels; items are 36px rows with an 18px outline icon and primary text. Hover takes the Pressed gray; the active item has a neutral background and an indigo edge. Compact icon-rail rows are 40px tall. The Platform group sits below a hairline. A secondary page (one Session) highlights its parent. The footer holds Show Getting started, then sign-out and the language/theme menu. A detail page's back arrow returns to the page it was opened from (a Skill opened from a template goes back to the template); opened directly, it goes to its list. The arrow is labelled plainly "Back".
 
 ### KPI strip and metric tiles
 A KPI strip is one card of equal cells separated by inset rules. Each cell: a 12.5px Graphite label with an optional help tip, then the figure at 20px/500 with any unit or limit small beside it, optionally led by an 8px tone dot. Overview uses four separate metric tiles instead: a 13px label with a help tip, the same 20px figure (the service status as a dot and a word), and one 12.5px line of context. Figures ellipsize rather than wrap. Live figures on monitor pages roll their digits to a new value on refresh (NumberFlow) instead of swapping.
@@ -442,7 +441,7 @@ Motion reports state and never makes anyone wait: the navigation chip and segmen
 ## Do's and Don'ts
 
 ### Do:
-- **Do** put every explanation of a figure, column, section or page behind a circled "?" help tip; report errors in a dialog or a toast; keep warnings and safety notices (deletion consequences, a key shown once) visible.
+- **Do** keep next steps visible and put supplementary definitions behind a circled "?" help tip; report errors in a dialog or a toast; keep warnings and safety notices (deletion consequences, a key shown once) visible.
 - **Do** start every project-scoped toolbar with the project filter, then search, with the count on the right.
 - **Do** end every resource table with the Creator column and then the row actions.
 - **Do** confirm every deletion in ConfirmDialog.
@@ -455,7 +454,7 @@ Motion reports state and never makes anyone wait: the navigation chip and segmen
 - **Do** build every page from PageHeader, PageBody and Section.
 
 ### Don't:
-- **Don't** add lines of small explanatory print under headings, KPIs, fields or charts.
+- **Don't** hide instructions needed to complete a task in a help tip.
 - **Don't** colour healthy meters, bars or states; colour is for problems and data.
 - **Don't** colour multi-series data with the indigo accent.
 - **Don't** nest cards inside cards or draw a dashed empty state.
@@ -465,3 +464,9 @@ Motion reports state and never makes anyone wait: the navigation chip and segmen
 - **Don't** show full IDs in list columns; show the compact ID with its copy button.
 - **Don't** add uppercase letter-spaced micro-labels or eyebrow lines above headings; a section is named by its title alone.
 - **Don't** mix synonyms in zh-CN copy (for example alternating 沙盒 with 沙箱, or API 密钥 with API key).
+
+## Navigation icons and first use
+
+Use Lucide throughout. Navigation icons are 18px with a 1.75px stroke; shared tool icons use the same stroke at their existing compact sizes. Default navigation icons use secondary ink, selected icons use primary ink. The selected row has a neutral background and a narrow indigo marker.
+
+Getting started emphasizes the first confirmed incomplete step with the primary button while leaving every step independently available. Only authoritative, successful zero-Session reads replace the activity chart with first-use guidance. Missing and failed reads retain their existing uncertainty and recovery controls.

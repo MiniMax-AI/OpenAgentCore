@@ -18,7 +18,7 @@ func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := NewWithCredentialCipher(pool, cipher)
+	st := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	ctx := t.Context()
 	tenant := uuid.NewString()
 	input := sessions.CreateSession{Creator: FixtureCreator(), Engine: "mcode", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"actual-model"},"environment":{"type":"openai_hosted"}}`), ModelProvider: &v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://example.com", APIKey: "private-model-canary", ContextWindow: 100000, MaxOutputTokens: 8000}}
@@ -41,7 +41,7 @@ func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
 	if _, err := st.CreateSession(ctx, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("changed credentials accepted", err)
 	}
-	restarted := NewWithCredentialCipher(pool, cipher)
+	restarted := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	provider, err := restarted.SessionModelExecution(ctx, tenant, session.ID)
 	if err != nil || provider.APIKey != "private-model-canary" {
 		t.Fatal("restart lost model credential", err)
@@ -56,7 +56,7 @@ func TestSessionModelExecutionEncryptedAndBound(t *testing.T) {
 		t.Fatal("missing cipher succeeded")
 	}
 	input.IdempotencyKey = uuid.NewString()
-	if _, err := New(pool).CreateSession(ctx, tenant, input); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+	if _, err := withPlacement(t, New(pool)).CreateSession(ctx, tenant, input); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("unencrypted create", err)
 	}
 	var count int

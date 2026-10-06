@@ -18,7 +18,7 @@ type console struct {
 	root                *os.Root
 	nodePayload         *os.Root
 	nodeInstallerDigest string
-	proxy               *httputil.ReverseProxy
+	proxy, direct       *httputil.ReverseProxy
 	transport           *http.Transport
 	host                string
 	auth                *consoleAuth
@@ -57,6 +57,20 @@ func newConsole(c config) (*console, error) {
 	h.transport = http.DefaultTransport.(*http.Transport).Clone()
 	// Credentials go only to the configured Core, never an ambient HTTP proxy.
 	h.transport.Proxy = nil
+	// The default pool keeps two idle connections per host. Core is the only
+	// upstream, and sessions return here between messages.
+	h.transport.MaxIdleConnsPerHost = 64
+	// Application and machine traffic passes through unchanged. Core
+	// authenticates it; the console adds no credential of its own.
+	h.direct = &httputil.ReverseProxy{
+		Transport:     h.transport,
+		FlushInterval: -1,
+		ErrorLog:      stdlog.New(io.Discard, "", 0),
+		Rewrite:       func(r *httputil.ProxyRequest) { r.SetURL(c.upstream) },
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+			http.Error(w, "Core is unavailable", http.StatusBadGateway)
+		},
+	}
 	h.proxy = &httputil.ReverseProxy{
 		Transport:     h.transport,
 		FlushInterval: -1,
@@ -113,7 +127,20 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
-	if coreDirectRequest(r) || r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") {
+	if coreDirectRequest(r) {
+		// These namespaces belong to applications and machines. Their
+		// credentials, streaming responses and WebSocket upgrades pass through
+		// unmodified, ahead of the console's own origin and session checks.
+		// Dot segments and empty segments are still refused, so a path cannot
+		// escape the namespace it arrived on.
+		if !safePath(r.URL.Path) || r.URL.IsAbs() {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		h.direct.ServeHTTP(w, r)
+		return
+	}
+	if r.URL.Path == "/console/api-keys" || strings.HasPrefix(r.URL.Path, "/console/api-keys/") {
 		http.NotFound(w, r)
 		return
 	}
@@ -155,10 +182,6 @@ func (h *console) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			authError(w, http.StatusUnauthorized, "Sign in to the console")
 		}
-		return
-	}
-	if r.URL.Path == "/console/installation/domain" {
-		h.serveInstallationDomain(w, r)
 		return
 	}
 	if r.URL.Path == "/console/config" && r.Method == http.MethodGet {

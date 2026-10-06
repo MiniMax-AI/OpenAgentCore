@@ -34,7 +34,7 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 				t.Fatal("incapable enrolled device received work", frame.Type)
 			case <-time.After(time.Second):
 			}
-			if _, err := h.s.GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("unregistered Runtime was assigned general compute", err)
 			}
 			session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
@@ -44,11 +44,11 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			other := connectFixtureRuntime(t, h, session)
 			otherFrames := workerFrames(t, other)
 			request := nextWorkerFrame(t, otherFrames, proto.TypeExecutionPrepare)
-			selected, err := h.s.GetSessionDevice(t.Context(), h.tenant, pending.SessionID)
+			selected, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, pending.SessionID)
 			if err != nil || selected.ID != other.device.ID {
 				t.Fatal("enrollment did not retain exact Runtime", err)
 			}
-			original, err := h.s.GetSessionDevice(t.Context(), h.tenant, bound.SessionID)
+			original, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, bound.SessionID)
 			if err != nil || original.ID != originalRuntime.device.ID {
 				t.Fatal("existing binding moved to a capable Runtime", err)
 			}

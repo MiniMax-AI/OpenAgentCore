@@ -34,7 +34,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			delete(active, id)
 		case <-ticker.C:
 		}
-		rows, err := w.dispatcher.Store.ListEnvironmentInitializations(ctx, cursor)
+		rows, err := w.dispatcher.SessionsReader.ListEnvironmentInitializations(ctx, cursor)
 		if err != nil {
 			return err
 		}
@@ -48,7 +48,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			}
 			if owner.State == "running" {
 				// Lost process-local progress cannot prove which side effects ran.
-				if err := w.dispatcher.Store.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
+				if err := w.dispatcher.sessionExecution.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
 					return err
 				}
 				continue
@@ -68,12 +68,12 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 				continue
 			}
 			if !found || !harness.Available {
-				if err := w.dispatcher.Store.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{Step: sessions.ProvisioningHarness}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
+				if err := w.dispatcher.sessionExecution.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{Step: sessions.ProvisioningHarness}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
 					return err
 				}
 				continue
 			}
-			if err := w.dispatcher.Store.ClaimEnvironmentInitialization(ctx, owner); err != nil {
+			if err := w.dispatcher.sessionExecution.ClaimEnvironmentInitialization(ctx, owner); err != nil {
 				if errors.Is(err, sessions.ErrNotFound) || errors.Is(err, sessions.ErrTurnConflict) {
 					continue
 				}
@@ -96,19 +96,19 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 	failure := sessions.ProvisioningFailure{}
 	err := w.prepareEnvironment(operation, owner, &failure)
 	if err == nil {
-		err = w.dispatcher.Store.CompleteEnvironmentInitialization(operation, owner)
+		err = w.dispatcher.sessionExecution.CompleteEnvironmentInitialization(operation, owner)
 	}
 	if err != nil {
 		log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)
 		// A later scan settles an unrecorded failure; it never retries the setup.
 		record, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer stop()
-		_ = w.dispatcher.Store.FailEnvironmentInitialization(record, owner, failure)
+		_ = w.dispatcher.sessionExecution.FailEnvironmentInitialization(record, owner, failure)
 	}
 }
 
 func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.EnvironmentInitialization, failure *sessions.ProvisioningFailure) error {
-	environment, err := w.dispatcher.Store.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
+	environment, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	if json.Unmarshal(environment.Configuration, &cfg) != nil || len(cfg.Files) > 50 {
 		return sessions.ErrInvalidInput
 	}
-	setup, err := w.dispatcher.Store.ReadEnvironmentSetup(ctx, owner.TenantID, owner.SessionID)
+	setup, err := w.dispatcher.SessionsReader.ReadEnvironmentSetup(ctx, owner.TenantID, owner.SessionID)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 		if err == nil && index < len(cfg.Files) {
 			var metadata environmentconfig.InitialFileMetadata
 			var body []byte
-			metadata, body, err = w.dispatcher.Store.ReadInitialEnvironmentFile(step, owner.TenantID, owner.SessionID, index)
+			metadata, body, err = w.dispatcher.SessionsReader.ReadInitialEnvironmentFile(step, owner.TenantID, owner.SessionID, index)
 			if err == nil {
 				err = installInitialFile(step, peer, identity, metadata, body)
 			}

@@ -41,8 +41,9 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
+	functions := executionOwner(t, db, s).Sessions
 	for _, id := range []string{"a", "b", "c", "rollback", "late"} {
-		if err := s.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
+		if err := functions.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "native-" + id, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -72,7 +73,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 		t.Fatalf("SDK admission: %s %v %s", line, err, stderr.String())
 	}
 	for _, id := range []string{"a", "b", "c", "rollback", "late"} {
-		call, err := s.GetFunctionCall(ctx, tenant, session.ID, input.TurnID, id)
+		call, err := store.FixtureFunctionCall(ctx, db.pool, tenant, session.ID, input.TurnID, id)
 		if err != nil || call.Applied {
 			t.Fatal(call, err)
 		}

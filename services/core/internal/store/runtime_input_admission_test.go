@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
@@ -14,7 +15,7 @@ import (
 
 func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, session, _ := managedSession(t, s)
+	tenant, session, _ := managedSession(t, s, db)
 	inputs := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"accepted work"}`)}}
 	accepted, err := s.SubmitInputs(t.Context(), tenant, session.ID, "work", inputs)
 	if err != nil {
@@ -23,7 +24,7 @@ func TestManagedRuntimeMaintenancePreservesCancelAndRetry(t *testing.T) {
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w, stop := managedWorkerMode(t, s, db, uuid.NewString(), p, true)
 	defer stop()
-	if _, err := w.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := w.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: session.Configuration}); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("maintenance accepted new hosted Session", err)
 	}
 	cancel := []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}}

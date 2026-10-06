@@ -67,7 +67,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			abort(peer, request.RunID)
 		}
 	}()
-	journal := &journal{store: d.Store, tenant: tenantID, session: sessionID, turn: request.RunID, next: 1,
+	journal := &journal{writer: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, next: 1,
 		observeSubagents: request.ObserveSubagentIdentities}
 	defer func() {
 		finishCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -105,7 +105,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{kind: request.AgentKind, store: d.Store, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
+	functions := &functionExchange{kind: request.AgentKind, store: d.Store, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()

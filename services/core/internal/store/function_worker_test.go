@@ -43,7 +43,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					}
 				}
 				if prebound && isMCP {
-					if err := h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
+					if err := bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -84,7 +84,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					t.Fatal(current, err)
 				}
 				if !prebound {
-					if _, err := h.s.GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
+					if _, err := fixtureSessionStore(h.db).GetSessionDevice(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 						t.Fatal("bound an incapable device", err)
 					}
 				}

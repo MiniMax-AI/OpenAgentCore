@@ -2,8 +2,9 @@ package store
 
 import (
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestSessionExecutionBindingRetainsStartedExecutionRequirement(t *testing.T) {
@@ -11,7 +12,13 @@ func TestSessionExecutionBindingRetainsStartedExecutionRequirement(t *testing.T)
 	tenant, session := newTurnSession(t, s)
 	foreign, _ := newTurnSession(t, s)
 	device, _ := registerTestDevice(t, s, tenant)
-	if err := s.BindSessionDevice(t.Context(), tenant, session.ID, device.ID); err != nil {
+	// The bind runs on an execution lease of its own, which closes before the
+	// pool does.
+	writer := executionWriter(t, s)
+	if err := sessionExecution(t, writer.lease).BindSessionDevice(t.Context(), tenant, session.ID, device.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.lease.Close(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	assertStarted := func(st *Store, want bool) {

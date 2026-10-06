@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify matched distribution inputs and package independently fetched artifacts."""
 
-import gzip
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -19,7 +19,7 @@ import zipapp
 
 RUNTIME_ARCHIVE_SHA256 = "47c223e3ef5298abf05f47ed9f87981106e400d99bb3f1d042d4d6881346b18b"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/install"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/node"))
 import provider_assets
 
 ARTIFACTS = {item["path"]: item["suffix"] for items in provider_assets.CATALOG.values() for item in items}
@@ -37,7 +37,7 @@ BUNDLED_DOCS = (
     "docs/api/public-agent-api.md",
     "docs/development.md",
     "docs/configuration.md",
-    "docs/getting-started/README.md",
+    "docs/getting-started/index.md",
     "docs/getting-started/install.md",
     "docs/getting-started/install-options.md",
     "docs/getting-started/nodes.md",
@@ -86,6 +86,11 @@ def built_image(metadata_file):
     # by its manifest digest; the other value never resolves to itself there.
     config = metadata.get("containerimage.config.digest")
     manifest = metadata.get("containerimage.digest", config)
+    print(resolve_image(config, manifest))
+
+
+def resolve_image(config, manifest):
+    """Resolve the archive identities in either supported Docker image store."""
     if not all(isinstance(value, str) and DIGEST.fullmatch(value) for value in (config, manifest)):
         raise ValueError("Build metadata lacks valid image digests")
     resolved = []
@@ -97,7 +102,7 @@ def built_image(metadata_file):
     if len(resolved) != 1:
         raise ValueError("The local image store does not identify the built image by exactly one of its digests")
     verify_image(resolved[0])
-    print(resolved[0])
+    return resolved[0]
 
 
 def image_identities(archive, build_id):
@@ -248,6 +253,20 @@ def native_offline(bundle, stage):
         os.link(source, path.parent / (platform + ".tar.gz"))
 
 
+@contextmanager
+def compressed_output(path):
+    """Stream deterministic gzip with bounded parallel compression."""
+    command = ["pigz", "-n", "-6", "-p", str(min(4, os.cpu_count() or 1))]
+    with pathlib.Path(path).open("wb") as raw:
+        with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=raw) as compressor:
+            try:
+                yield compressor.stdin
+            finally:
+                compressor.stdin.close()
+            if compressor.wait():
+                raise subprocess.CalledProcessError(compressor.returncode, command)
+
+
 def package_artifacts(bundle, stage, revision):
     """Move optional payload out of Core; the manifest owns every asset digest."""
     assets = stage / "artifacts"
@@ -255,9 +274,8 @@ def package_artifacts(bundle, stage, revision):
     runtime = bundle / "images/runtime.tar"
     compressed = bundle / "images/runtime.tar.gz"
     unpacked = {"unpacked_sha256": sha256(runtime), "unpacked_size": runtime.stat().st_size}
-    with runtime.open("rb") as source, compressed.open("wb") as raw:
-        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0, compresslevel=6) as output:
-            shutil.copyfileobj(source, output, 1024 * 1024)
+    with runtime.open("rb") as source, compressed_output(compressed) as output:
+        shutil.copyfileobj(source, output, 1024 * 1024)
     runtime.unlink()
     result = {}
     for logical, suffix in ARTIFACTS.items():
@@ -273,11 +291,6 @@ def package_artifacts(bundle, stage, revision):
     return result
 
 
-# The installation's management command; it runs without the bundle directory.
-OAC_CLI_MODULES = ("oac_cli.py", "config_model.py", "config.schema.json", "configuration.py",
-                  "native_service.py", "distribution.py", "node_spec.py", "ingress.py", "ingress_config.py")
-
-
 def bootstraps(bundle, epoch, revision):
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Invalid operator source revision")
@@ -290,16 +303,9 @@ def bootstraps(bundle, epoch, revision):
             shutil.copyfile(bundle / original, target)
             os.utime(target, (int(epoch), int(epoch)))
         zipapp.create_archive(directory, bundle / "node-install.pyz", compressed=True)
-    with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
-        for name in OAC_CLI_MODULES:
-            shutil.copyfile(bundle / name, pathlib.Path(directory) / name)
-        (pathlib.Path(directory) / "__main__.py").write_text(f"import oac_cli\n\noac_cli.SOURCE_COMMIT = {revision!r}\noac_cli.entry()\n")
-        for path in pathlib.Path(directory).iterdir():
-            os.utime(path, (int(epoch), int(epoch)))
-        zipapp.create_archive(directory, bundle / "oac.pyz", interpreter="/usr/bin/env python3", compressed=True)
 
 
-def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):
+def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):
     bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
     artifact_base_url = release_base(artifact_base_url)
     if not artifact_base_url and offline != "1":
@@ -314,7 +320,7 @@ def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline
         raise ValueError("msb imported an unexpected Runtime platform")
     identities = {name: image_identities(bundle / "images" / (name + ".tar"),
                                         (stage / (name + ".id")).read_text().strip())
-                  for name in ("core", "web", "runtime", "database", "ingress")}
+                  for name in ("runtime",)}
     metadata = {
         "source_commit": revision,
         "source_tree": source_tree,
@@ -330,6 +336,24 @@ def manifest(bundle, stage, revision, source_tree, artifact_base_url="", offline
             "firmware_sha256": sha256(stage / "core/microsandbox/libkrunfw.so.5.6.1"),
         },
     }
+    payload = stage / "ingress/node-payload"
+    payload.mkdir(parents=True)
+    (payload / "manifest.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+    for name in ("node-install.pyz", "runtime/seccomp.json"):
+        target = payload / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(bundle / name, target)
+    checksums(payload)
+
+
+def manifest(bundle, stage):
+    bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
+    metadata = json.loads((stage / "ingress/node-payload/manifest.json").read_text())
+    for name in ("core", "web", "database", "ingress"):
+        config, digest = image_identities(bundle / "images" / (name + ".tar"),
+                                         (stage / (name + ".id")).read_text().strip())
+        metadata["images"][name] = config
+        metadata["image_manifest_digests"][name] = digest
     (bundle / "manifest.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
     checksums(bundle)
 
@@ -350,8 +374,8 @@ def archive(bundle, epoch, variant=""):
     if variant not in ("", "offline"):
         raise ValueError("Unknown distribution archive variant")
     output = bundle.with_name(bundle.name + ("-" + variant if variant else "") + ".tar.gz")
-    with output.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed:
-        with tarfile.open(fileobj=compressed, mode="w", format=tarfile.PAX_FORMAT) as tar:
+    with compressed_output(output) as compressed:
+        with tarfile.open(fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT) as tar:
             for path in sorted(bundle.rglob("*")):
                 if not path.is_file():
                     continue
@@ -447,12 +471,17 @@ def plain(text):
 
 
 def heading_anchors(text):
-    """GitHub's heading anchors: lowercase, punctuation dropped, spaces to hyphens, repeats numbered."""
+    """Explicit heading IDs, or GitHub slugs for headings without an explicit ID."""
     found, counts = set(), {}
     for line, code in markdown_lines(text):
         match = None if code else HEADING.match(line)
         if match:
-            base = re.sub(r"[^\w\- ]", "", heading_text(match.group(2) or "").strip().lower()).replace(" ", "-")
+            title = match.group(2) or ""
+            explicit = re.search(r"\s+\{#([^\s{}]+)\}\s*$", title)
+            if explicit:
+                found.add(explicit.group(1))
+                continue
+            base = re.sub(r"[^\w\- ]", "", heading_text(title).strip().lower()).replace(" ", "-")
             count = counts.get(base, 0)
             counts[base] = count + 1
             found.add(base if count == 0 else f"{base}-{count}")
@@ -555,7 +584,7 @@ def check_docs(bundle, names=BUNDLED_DOCS, files=BUNDLED_FILES):
 
 if __name__ == "__main__":
     commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
-                "built-image": built_image, "manifest": manifest, "archive": archive, "bootstraps": bootstraps,
+                "built-image": built_image, "node-payload": node_payload, "manifest": manifest, "archive": archive, "bootstraps": bootstraps,
                 "release-base": release_base, "docs": docs, "native-catalog": native_catalog, "native-offline": native_offline}
     try:
         commands[sys.argv[1]](*sys.argv[2:])

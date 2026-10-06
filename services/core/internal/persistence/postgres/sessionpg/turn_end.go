@@ -36,7 +36,7 @@ func LoadEnding(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID)
 // the public changes.
 func ApplyTurnEnd(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUID, end sessions.TurnEnd) error {
 	if end.TerminalActivity {
-		if err := RecordTerminalActivity(ctx, q, session); err != nil {
+		if err := recordTerminalActivity(ctx, q, session); err != nil {
 			return err
 		}
 	}
@@ -74,6 +74,10 @@ func ApplyTurnEnd(ctx context.Context, q *sqlc.Queries, session, turn pgtype.UUI
 
 // RecordTerminalActivity marks the Session's running managed compute active at
 // the database's commit clock.
-func RecordTerminalActivity(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
+func (t *SessionTx) RecordTerminalActivity(ctx context.Context) error {
+	return recordTerminalActivity(ctx, t.q, t.session)
+}
+
+func recordTerminalActivity(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
 	return q.RecordRuntimeTerminalActivity(ctx, session)
 }

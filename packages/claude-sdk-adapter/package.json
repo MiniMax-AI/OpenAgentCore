@@ -13,9 +13,11 @@
     "@modelcontextprotocol/sdk": "1.30.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/node": "^26.1.0"
   },
   "files": [
     "dist"
-  ]
+  ],
+  "packageManager": "pnpm@10.30.3"
 }

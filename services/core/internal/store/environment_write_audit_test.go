@@ -23,12 +23,12 @@ func TestEnvironmentUploadWriteAuditSurvivesRequestAndLeaseContext(t *testing.T)
 	cancel()
 	sessionAuditCount(t, f.s, f.tenant, 0)
 	// Neither the settlement caller nor the newly acquired execution lease owns the request context.
-	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, f.writer.pool)
-	if err := f.writer.lease.Close(context.Background()); err != nil {
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, f.s.pool)
+	if err := f.lease.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease()
-	next := executionWriter(t, f.s)
+	next := sessionExecution(t, executionWriter(t, f.s).lease)
 	var group sync.WaitGroup
 	for range 4 {
 		group.Go(func() {
@@ -62,7 +62,7 @@ func TestEnvironmentUploadWriteAuditRollbackAndRejection(t *testing.T) {
 			if rejected && err != nil || !rejected && err == nil {
 				t.Fatal("unexpected settlement outcome", err)
 			}
-			got, err := f.s.GetEnvironmentFileWrite(t.Context(), f.tenant, f.env.ID, f.key.ID)
+			got, err := FixtureFileWrite(t.Context(), f.s.pool, f.tenant, f.env.ID, f.key.ID)
 			want := "pending"
 			if rejected {
 				want = "rejected"

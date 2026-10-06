@@ -1,8 +1,10 @@
-# Files and Skills
+---
+title: "Files and Skills"
+---
 
 Files (`/v1/files`) and Skills (`/v1/skills`) are Project resources with their own lifecycle, independent of Sessions. A File holds uploaded bytes that Environments copy by ID. A Skill holds immutable, versioned bundles that Templates and Sessions reference. Every API key of a Project shares them.
 
-These routes follow the SDK pinned in [upstream.json](upstream.json): the [Files resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/files.py), [create parameters](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_create_params.py), [FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_object.py) and the [Skills resource](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/skills). They need a Project API key and no `OpenAI-Beta` header. A missing ID and another Project's ID return the same 404.
+These routes follow the SDK pinned in [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json): the [Files resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/files.py), [create parameters](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_create_params.py), [FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_object.py) and the [Skills resource](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/skills). They need a Project API key and no `OpenAI-Beta` header. A missing ID and another Project's ID return the same 404.
 
 ## Files
 
@@ -14,7 +16,7 @@ These routes follow the SDK pinned in [upstream.json](upstream.json): the [Files
 | `GET /files/{file_id}/content` | 400 `Not allowed to download files of purpose: user_data`, with a null code and param. The ID is checked first, so a missing File returns 404 |
 | `DELETE /files/{file_id}` | Deletes the File and its bytes; returns `{"id": …, "object": "file", "deleted": true}` |
 
-Use a File by passing its ID to [Environment files](environment-files.md#create-a-file) or to a Template's or Session's initial `files` ([Environments](environments.md)). Those copies read the bytes internally; the public download stays refused.
+Use a File by passing its ID to [Environment files](./environment-files.md#create-a-file) or to a Template's or Session's initial `files` ([Environments](./environments.md)). Those copies read the bytes internally; the public download stays refused.
 
 ### Upload
 
@@ -43,7 +45,7 @@ Use a File by passing its ID to [Environment files](environment-files.md#create-
 | `after` | ID of a File this Project can see |
 | `purpose` | One of `user_data`, `assistants`, `batch`, `fine-tune`, `vision`, `evals`, `assistants_output`, `batch_output`, `fine-tune-results`. Any other value, including a different case, returns 400 with `param: "purpose"` before the cursor is resolved. Values other than `user_data` return an empty page. An empty value means no filter |
 
-The response is `{"object": "list", "data": [...], "first_id", "last_id", "has_more"}`; an empty page has null IDs. `limit`, query parsing and their errors follow the shared [list rules](wire-semantics.md#lists).
+The response is `{"object": "list", "data": [...], "first_id", "last_id", "has_more"}`; an empty page has null IDs. `limit`, query parsing and their errors follow the shared [list rules](./wire-semantics.md#lists).
 
 ### Errors
 
@@ -71,7 +73,7 @@ A copy into a workspace reads a consistent snapshot of the File and can finish a
 | `GET /skills/{skill_id}/versions/{version}/content` | ZIP of that version |
 | `DELETE /skills/{skill_id}/versions/{version}` | See [Delete a version](#delete-a-version) |
 
-`limit`, cursors and query errors follow the shared [list rules](wire-semantics.md#lists).
+`limit`, cursors and query errors follow the shared [list rules](./wire-semantics.md#lists).
 
 ### Upload a bundle
 
@@ -96,7 +98,7 @@ Core encrypts each version's bundle bound to its Project, Skill and version. ZIP
 - `latest_version` is the highest remaining version.
 - Uploads and deletions of one Skill run one at a time, so a deletion never removes a version whose upload was acknowledged.
 
-How Templates and Sessions select a version (default, `latest` or a number) and freeze its bytes is in [Environments](environments.md#skills-plugins-and-environment-mcp).
+How Templates and Sessions select a version (default, `latest` or a number) and freeze its bytes is in [Environments](./environments.md#skills-plugins-and-environment-mcp).
 
 ### Delete a version
 

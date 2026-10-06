@@ -17,6 +17,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -129,7 +130,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			if !reflect.DeepEqual(texts, item.Texts) {
 				t.Fatal("public initial text order changed")
 			}
-			environment, err := s.GetSessionEnvironment(t.Context(), tenant, item.ID)
+			environment, err := sessionReads(pool).GetSessionEnvironment(t.Context(), tenant, item.ID)
 			if err != nil || environment.ID != item.EnvironmentID || environment.Status != "pending" {
 				t.Fatal("public initial Environment identity changed", err)
 			}
@@ -150,7 +151,9 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			t.Fatal("public initial creation did not retain its database deadline")
 		}
 	}
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, db.pool)
 	stop(false)
+	awaitRelease()
 	server.Close()
 	db.pool.Close()
 	reopened, reopenedDB := newModelTestStoreDB(t)
@@ -211,7 +214,14 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 
 func publicInitialWorker(t *testing.T, s *store.Store, db fixtureDB) (*execution.Worker, func(bool)) {
 	t.Helper()
-	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()})
+	return publicOwnedWorker(t, s, db, executionOwner(t, db, s))
+}
+
+// publicOwnedWorker is publicInitialWorker on owner, for tests that also write
+// as the Worker's execution owner.
+func publicOwnedWorker(t *testing.T, s *store.Store, db fixtureDB, owner execution.Owner) (*execution.Worker, func(bool)) {
+	t.Helper()
+	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}, owner)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()

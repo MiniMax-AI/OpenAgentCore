@@ -40,7 +40,7 @@ export function SystemPage() {
 
   const about = installation.data;
   const facts = about ? (
-    <Section headingId="system-installation-heading" title={t("installation.title")} actions={<button className="button outline" onClick={() => navigate("system", { id: "domain" })}>{t("domain.configure")}</button>}>
+    <Section headingId="system-installation-heading" title={t("installation.title")}>
       <dl className="system-facts">
         <Fact label={t("installation.publicUrl")} help={t("installation.publicUrlHelp")}>{about.public_url ? <code className="system-code">{about.public_url}</code> : <span className="system-muted">{t("installation.notSet")}</span>}</Fact>
         <Fact label={t("installation.apiBaseUrl")} help={t("installation.apiBaseUrlHelp")}>

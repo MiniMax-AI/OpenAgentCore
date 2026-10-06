@@ -1,11 +1,13 @@
-# Execution tools
+---
+title: "Execution tools"
+---
 
-An Agent declares application functions, controls and MCP servers in `tools`, and an optional output schema in `text.format`. This contract states how Core validates each declaration, what crosses the Runtime boundary and how callers recover required actions. [Harness capabilities](harness-capabilities.md) lists which Harness supports each operation on which placement. Native workspace tools and Environment Plugin MCP are part of the [Environment](environments.md#skills-plugins-and-environment-mcp).
+An Agent declares application functions, controls and MCP servers in `tools`, and an optional output schema in `text.format`. This contract states how Core validates each declaration, what crosses the Runtime boundary and how callers recover required actions. [Harness capabilities](./harness-capabilities.md) lists which Harness supports each operation on which placement. Native workspace tools and Environment Plugin MCP are part of the [Environment](./environments.md#skills-plugins-and-environment-mcp).
 
 ## Admission
 
 - Saved Agents keep every pinned tool declaration as resource data. Saving never qualifies execution.
-- Session creation resolves saved references and inline declarations with the execution parser into the immutable Session snapshot, then checks the combination against the selected Harness's profile in `services/core/internal/engine`. An unsupported combination returns 400 `unsupported_or_invalid_configuration` before anything is written. Protocol errors, such as a repeated `web_search` or `tool_search` or a non-object schema root, use the official error fields ([validation](wire-semantics.md#configuration-validation)).
+- Session creation resolves saved references and inline declarations with the execution parser into the immutable Session snapshot, then checks the combination against the selected Harness's profile in `services/core/internal/engine`. An unsupported combination returns 400 `unsupported_or_invalid_configuration` before anything is written. Protocol errors, such as a repeated `web_search` or `tool_search` or a non-object schema root, use the official error fields ([validation](./wire-semantics.md#configuration-validation)).
 - Before dispatch, the selected Runtime must also advertise the operation's capability. An advertisement alone never enables an operation.
 - The native Harness runs the model and tool loop. Core adds no second loop, output repair, schema coercion or prompt wrapper, and selects no native tool names.
 
@@ -23,11 +25,11 @@ A function declaration requires `name`, `description` and a JSON Schema in `para
 | Unknown call, or a call of another Turn, in the caller's Session | 400 `invalid_request_error`; the pending action is unchanged |
 | Missing or foreign Session | 404 |
 
-[Session input conflicts](sessions-events.md#input-errors) records the exact messages. Invalid or unsupported content cannot consume a pending call. Admission is separate from application: the adapter confirms a result only when the matching native tool result appears in the live root Turn ([receipt contract](message-content.md#function-results)). A transport write alone confirms nothing, and a confirmation says nothing about provider consumption or exactly-once external effects. Core never replays a result automatically.
+[Session input conflicts](./sessions-events.md#input-errors) records the exact messages. Invalid or unsupported content cannot consume a pending call. Admission is separate from application: the adapter confirms a result only when the matching native tool result appears in the live root Turn ([receipt contract](./message-content.md#function-results)). A transport write alone confirms nothing, and a confirmation says nothing about provider consumption or exactly-once external effects. Core never replays a result automatically.
 
 ### Required actions and recovery
 
-A pending function appears in Session reads and Session SSE as a required action `{arguments, call_id, name, turn_id, type: "function_call"}` until native application, cancellation or terminal settlement. An offline `self_hosted` Environment with pending input shows `{environment_id, type: "environment_connection"}` ([Environments](environments.md#activity-and-required-actions)).
+A pending function appears in Session reads and Session SSE as a required action `{arguments, call_id, name, turn_id, type: "function_call"}` until native application, cancellation or terminal settlement. An offline `self_hosted` Environment with pending input shows `{environment_id, type: "environment_connection"}` ([Environments](./environments.md#activity-and-required-actions)).
 
 SSE is live only. After a restart or a lost stream, read the Session's `required_actions`; a `function_call` Item in history does not prove the call is still pending. For a pending function, use the returned Session, Turn and call identity. If the application already ran the function, submit the saved result instead of running the external effect again. For an environment action, connect that exact Environment with its enrollment. Neither a registration nor a disappearing action proves that the model ran; read the Turn and its Items for the outcome. Reconnecting never replays events or external effects.
 
@@ -56,7 +58,7 @@ Core sends `PromptRequestPayload.ToolSearch` and each `FunctionTool.DeferLoading
 ]
 ```
 
-Saved Agents keep every pinned `web_search` mode: omitted or null is saved as `live`, and `cached` and `live` as sent ([saved modes](wire-semantics.md#saved-configuration)). Search settings are resource data: omitted or null `context_size` resolves to `medium`; omitted domains and location resolve to null; an empty domain list stays empty; a supplied location, including `{}`, has `city`, `country`, `region` and `timezone`, null where omitted.
+Saved Agents keep every pinned `web_search` mode: omitted or null is saved as `live`, and `cached` and `live` as sent ([saved modes](./wire-semantics.md#saved-configuration)). Search settings are resource data: omitted or null `context_size` resolves to `medium`; omitted domains and location resolve to null; an empty domain list stays empty; a supplied location, including `{}`, has `city`, `country`, `region` and `timezone`, null where omitted.
 
 Execution admits only `mode: "disabled"` and `enabled: false`. Enabled or omitted-mode search and enabled or omitted-`enabled` programmatic calling are rejected at Session admission unless the Session replaces the saved tools. Omitting programmatic configuration keeps each Harness's native behavior, which differs from the official default-on behavior. Unrelated native utility tools are not removed.
 
@@ -82,10 +84,10 @@ Execution admits only `mode: "disabled"` and `enabled: false`. Enabled or omitte
 ```
 
 - `server_label` is nonempty and unique within the Session. Only the `http` transport is accepted; `server_url` is an absolute HTTP or HTTPS URL without credentials, query or fragment. Nonempty `headers` and `request_metadata` are rejected.
-- [Public MCP connection origin](environments.md#public-mcp-connection-origin) owns origin defaults, placement and credential authority; [Harness capabilities](harness-capabilities.md#tools) owns per-Harness support.
+- [Public MCP connection origin](./environments.md#public-mcp-connection-origin) owns origin defaults, placement and credential authority; [Harness capabilities](./harness-capabilities.md#tools) owns per-Harness support.
 - Omitted or null `allowed_tools` permits every server tool; `[]` permits none.
 - `required: true` makes native thread creation and cold resume wait for the server to initialize; a failure stops execution without replacing retained history. It needs the Runtime's `mcp_http_required` capability. Public work can be accepted or queued during the wait.
-- Bearer authentication uses an attached static or OAuth Vault credential. [Vault credentials](vaults.md) owns selection, and [MCP credential authority](environments.md#public-mcp-connection-origin) owns the frozen Runtime binding. Authenticated execution requires `mcp_http_bearer_auth`.
+- Bearer authentication uses an attached static or OAuth Vault credential. [Vault credentials](./vaults.md) owns selection, and [MCP credential authority](./environments.md#public-mcp-connection-origin) owns the frozen Runtime binding. Authenticated execution requires `mcp_http_bearer_auth`.
 - The Runtime must advertise `mcp_http_tools`. The native Harness owns discovery, calls and results; public `mcp_call` Items use the original server and tool names and keep the observed native result.
 
 Codex verifies the exact effective MCP configuration before starting or resuming a thread, excludes undeclared servers, disables native apps and plugins, and rejects reserved native labels and stored native MCP credentials. Claude accepts labels of ASCII letters, digits, underscore and hyphen except `functions`, tool names that may also contain dots, and requires connected servers with static inventories. Anonymous Claude requests send a blank Authorization header to suppress native OAuth injection. Native OAuth login is not supported.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -40,7 +41,7 @@ func (s *Store) TransitionTurn(ctx context.Context, tenantID, sessionID, turnID 
 	if err != nil {
 		return sessions.Turn{}, err
 	}
-	if !validTransition(input.ExpectedStatus, input.Status) || len(input.Outcome) > 512*1024 {
+	if !sessions.ValidTransition(input.ExpectedStatus, input.Status) || len(input.Outcome) > 512*1024 {
 		return sessions.Turn{}, fmt.Errorf("%w: invalid turn transition or outcome size", sessions.ErrInvalidInput)
 	}
 	outcome, err := jsonobject.Normalize(input.Outcome)
@@ -90,7 +91,8 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 		}
 		return row, nil
 	}
-	if err = projectSource(ctx, q, row.SessionID, row.ID, "execution_"+row.Status, 0, row.Outcome, row.CompletedAt); err != nil {
+	outcome := sessions.Source{Turn: uuid.UUID(row.ID.Bytes).String(), Kind: "execution_" + row.Status, Payload: row.Outcome, CreatedAt: row.CompletedAt.Time}
+	if err = sessions.ProjectSource(ctx, sessionpg.BindSession(q, params.TenantID, row.SessionID), outcome); err != nil {
 		return sqlc.Turn{}, err
 	}
 	if row, err = q.GetTurn(ctx, params); err != nil {
@@ -104,19 +106,6 @@ func transitionTurn(ctx context.Context, q *sqlc.Queries, params sqlc.GetTurnPar
 		return sqlc.Turn{}, err
 	}
 	return row, nil
-}
-
-func validTransition(from, to string) bool {
-	switch from {
-	case sessions.TurnQueued:
-		return to == sessions.TurnInProgress || to == sessions.TurnFailed || to == sessions.TurnCancelled
-	case sessions.TurnInProgress:
-		return to == sessions.TurnWaiting || sessions.TerminalStatus(to)
-	case sessions.TurnWaiting:
-		return to == sessions.TurnInProgress || sessions.TerminalStatus(to)
-	default:
-		return false
-	}
 }
 
 // publicTurnLookup resolves caller-supplied path identifiers for a Turn or a

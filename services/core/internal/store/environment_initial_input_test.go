@@ -144,10 +144,10 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 			}
 			writer := executionWriter(t, s)
 			generation := uuid.NewString()
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation); err != nil {
+			if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation); err != nil {
 				t.Fatal(err)
 			}
-			if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation, 1, true); err != nil {
+			if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation, 1, true); err != nil {
 				t.Fatal(err)
 			}
 			connectedStatus := "idle"
@@ -244,10 +244,10 @@ func TestEnvironmentInitialInputExpiryHasNoTurnAndCannotReplay(t *testing.T) {
 				t.Fatal("reopened creation retry reset expiry", got)
 			}
 			generation := uuid.NewString()
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation); err != nil {
+			if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation); err != nil {
 				t.Fatal(err)
 			}
-			if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation, 1, true); err != nil {
+			if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, session.Environment.ID, generation, 1, true); err != nil {
 				t.Fatal(err)
 			}
 			late, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
