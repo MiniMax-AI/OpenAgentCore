@@ -118,8 +118,8 @@ var (
 	ErrUnsupported = errors.New("agenthost: unsupported")
 	// ErrInvalidConfig is a Config that Open or Run rejects.
 	ErrInvalidConfig = errors.New("agenthost: invalid configuration")
-	// ErrStateLocked means another agent host holds the StateDir's
-	// installation lock.
+	// ErrStateLocked means another agent host holds the installation lock
+	// on the StateDir or on the ViewCgroups.
 	ErrStateLocked = errors.New("agenthost: state directory in use")
 	// ErrInvalidSession is a malformed Session.
 	ErrInvalidSession = errors.New("agenthost: invalid session")
@@ -148,17 +148,24 @@ var (
 	ErrTeardown = errors.New("agenthost: teardown incomplete")
 )
 
-// Host is a running agent host. It holds the installation lock on its
-// StateDir from Open until Close.
+// Host is a running agent host. It holds the installation locks on its
+// StateDir and its ViewCgroups from Open until Close.
 type Host struct {
-	cfg  Config
-	lock *os.File
+	cfg Config
+	// state and views hold the locks; nil until taken.
+	state, views *os.File
 }
 
-// Close releases the installation lock. Call it once every Run has
+// Close releases the installation locks. Call it once every Run has
 // returned.
 func (h *Host) Close() error {
-	return h.lock.Close()
+	var errs []error
+	for _, f := range []*os.File{h.state, h.views} {
+		if f != nil {
+			errs = append(errs, f.Close())
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Error is a typed agent host failure. It matches Kind and, when present,

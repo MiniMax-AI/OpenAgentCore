@@ -49,11 +49,13 @@ func TestSweepReclaimsNothingUnrecovered(t *testing.T) {
 }
 
 // TestOpenRecoversWhatAnEarlierAgentHostLeft plants what a crashed agent host
-// leaves: a Session directory whose view's processes keep forking, and a view
-// cgroup that no Session directory names. Open ends every one of their
-// processes before it removes the Session directory, and spares a process
-// outside its view cgroups that has a Session uid, the launcher's argv and
-// PID 1 of its own namespace.
+// leaves: a Session directory whose view's processes keep forking, a view
+// cgroup that no Session directory names, and an empty view cgroup, which
+// together exhaust the descendant limit of ViewCgroups. Open ends every one
+// of their processes before it removes the Session directory, and spares a
+// process outside its view cgroups that has a Session uid, the launcher's
+// argv and PID 1 of its own namespace. While it runs, no other agent host
+// opens the same StateDir or the same ViewCgroups.
 func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 	if os.Getenv(gateEnv) != "1" {
 		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see view_linux_test.go", gateEnv)
@@ -68,6 +70,13 @@ func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 		return err == nil && strings.Count(string(procs), "\n") >= 3
 	})
 	orphan := startInCgroup(t, filepath.Join(cfg.ViewCgroups, "view-orphan"), cfg.UIDs.First+1, "/bin/sleep", "60")
+	// A crash between creating a view's cgroup and cloning its launcher leaves it empty.
+	if err := os.Mkdir(filepath.Join(cfg.ViewCgroups, "view-empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ViewCgroups, "cgroup.max.descendants"), []byte("3"), 0); err != nil {
+		t.Fatal(err)
+	}
 	stdin, hold, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -107,6 +116,11 @@ func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 	}
 	if _, err := Open(cfg); !errors.Is(err, ErrStateLocked) {
 		t.Errorf("a second Open = %v, want ErrStateLocked", err)
+	}
+	other := cfg
+	other.StateDir = t.TempDir()
+	if _, err := Open(other); !errors.Is(err, ErrStateLocked) {
+		t.Errorf("an Open of another StateDir with the same ViewCgroups = %v, want ErrStateLocked", err)
 	}
 }
 
