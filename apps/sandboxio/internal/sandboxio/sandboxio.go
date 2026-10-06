@@ -10,6 +10,7 @@ package sandboxio
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log"
 	"sync/atomic"
 	"time"
@@ -26,26 +27,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-// Step names the startup step a StartupError failed in.
-type Step string
-
-const (
-	StepSubreaper      Step = "become a child subreaper"
-	StepBootstrap      Step = "read the bootstrap file"
-	StepProcessService Step = "start the process service"
-	StepFileService    Step = "start the file service"
-)
-
-// StartupError is a failure before the service serves. Its message names the
-// step and never includes the credential.
-type StartupError struct {
-	Step Step
-	Err  error
-}
-
-func (e *StartupError) Error() string { return string(e.Step) + ": " + e.Err.Error() }
-func (e *StartupError) Unwrap() error { return e.Err }
-
 // shutdownMargin is how long Shutdown waits past the grace limit for killed
 // processes to be observed gone.
 const shutdownMargin = 5 * time.Second
@@ -53,8 +34,9 @@ const shutdownMargin = 5 * time.Second
 // Run serves the sandbox the bootstrap file at bootstrapPath names, with the
 // export world rooted at "/", until ctx ends or the relay refuses the link
 // for good. The caller has made the process a child subreaper running
-// processservice.Reap. Run returns nil when ctx ended, a *StartupError when
-// it could not start, and otherwise the relay's *sandboxlink.Error.
+// processservice.Reap. Run returns nil when ctx ended, an error naming the
+// step and never the credential when it could not start, and otherwise the
+// relay's *sandboxlink.Error.
 func Run(ctx context.Context, bootstrapPath string) error {
 	return run(ctx, bootstrapPath, options{root: "/"})
 }
@@ -69,20 +51,20 @@ type options struct {
 func run(ctx context.Context, bootstrapPath string, opt options) error {
 	raw, err := runtimefs.ReadPrivatePath(bootstrapPath, sandboxbootstrap.MaxBytes)
 	if err != nil {
-		return &StartupError{StepBootstrap, err}
+		return fmt.Errorf("read the bootstrap file: %w", err)
 	}
 	in, err := sandboxbootstrap.Decode(raw)
 	if err != nil {
-		return &StartupError{StepBootstrap, err}
+		return fmt.Errorf("read the bootstrap file: %w", err)
 	}
 	procCfg := processservice.DefaultConfig()
 	procs, err := processservice.New(procCfg)
 	if err != nil {
-		return &StartupError{StepProcessService, err}
+		return fmt.Errorf("start the process service: %w", err)
 	}
 	files, err := fileservice.New(opt.root)
 	if err != nil {
-		return &StartupError{StepFileService, err}
+		return fmt.Errorf("start the file service: %w", err)
 	}
 	defer files.Close()
 	fileServer := sandboxfs.NewServer(files)

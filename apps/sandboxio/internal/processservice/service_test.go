@@ -642,7 +642,7 @@ func TestRevokeWhileStarting(t *testing.T) {
 	h.svc.active.Add(1)
 	h.svc.mu.Unlock()
 	h.svc.AttachmentRevoked(h.att)
-	op.launch(spec)
+	op.launch(sp.StartRequest{OperationRef: sp.OperationRef{ServerInstanceID: h.svc.instance, OperationID: key.operation}, Spec: spec})
 	for deadline := time.Now().Add(10 * time.Second); op.inspect().State != sp.StateExited; time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the launched operation was not cancelled")

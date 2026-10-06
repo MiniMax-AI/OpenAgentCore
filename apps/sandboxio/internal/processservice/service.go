@@ -187,7 +187,7 @@ func (s *Service) Start(_ context.Context, conn *sp.Conn, req sp.StartRequest) (
 	op.observeLocked(conn, 0)
 	op.mu.Unlock()
 	s.mu.Unlock()
-	op.launch(req.Spec)
+	op.launch(req)
 	return sp.StartResponse{Disposition: sp.StartCreated}, nil
 }
 
