@@ -68,7 +68,7 @@ func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	case <-time.After(12 * time.Second):
 		t.Fatal("worker ignored lease loss")
 	}
-	active, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, request.ID)
+	active, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, request.ID)
 	if err != nil || active.Status != sessions.TurnInProgress {
 		t.Fatal("lost owner persisted fallback completion", active, err)
 	}
@@ -78,11 +78,11 @@ func TestWorkerLeaseLossLeavesUncertainWorkForSuccessor(t *testing.T) {
 	if err = successor.Run(stopped); err != context.Canceled {
 		t.Fatal(err)
 	}
-	active, err = h.s.GetTurn(t.Context(), h.tenant, h.session.ID, request.ID)
+	active, err = store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, request.ID)
 	if err != nil || active.Status != sessions.TurnFailed {
 		t.Fatal("successor did not reconcile", active, err)
 	}
-	next, err := h.s.GetTurn(t.Context(), h.tenant, queued.ID, pending[0].TurnID)
+	next, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, queued.ID, pending[0].TurnID)
 	if err != nil || next.Status != sessions.TurnQueued {
 		t.Fatal("successor lost queued work", next, err)
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
@@ -25,7 +27,7 @@ func TestDiagnosticPublicCompatibility(t *testing.T) {
 	key := callerBinding()
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, key).ResolveAPIKey
-	databaseSessionReads(s, pool)(&deps, fakes)
+	databaseSessionReads(pool)(&deps, fakes)
 	h := newTestHandler(t, deps)
 	session, err := s.CreateSession(t.Context(), key.TenantID, sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "compat-test"}, Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"id":"agent_root","model":"test"},"environment":{"type":"none"}}`)})
 	if err != nil {
@@ -62,12 +64,47 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 	return w
 }
 
-// databaseSessionReads serves Session, Turn and diagnostic reads from s, and
-// Item reads from the Session adapter on pool.
-func databaseSessionReads(s *store.Store, pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
+// databaseSessionReads serves Session, Turn, diagnostic and Item reads from
+// the Session adapter on pool.
+func databaseSessionReads(pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 	return func(d *Dependencies, _ *testFakes) {
-		d.Sessions, d.Turns, d.SessionAdmin = s, s, s
-		d.Items = sessionpg.New(pgunit.NewPool(pool), nil)
+		reader := sessionpg.New(pgunit.NewPool(pool), nil)
+		d.SessionsReader, d.SessionAdmin, d.Items, d.Turns = reader, reader, reader, reader
+	}
+}
+
+// submitMessage admits one message input through the Session service on pool.
+func submitMessage(t *testing.T, pool *pgxpool.Pool, tenant, session, key string, payload json.RawMessage) sessions.InputReceipt {
+	t.Helper()
+	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := service.SubmitInputs(t.Context(), tenant, session, key, []sessions.Input{{Kind: "message", Payload: payload}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return receipts[0]
+}
+
+// transitionTurn moves the Turn as the execution owner does, over a pooled
+// Session transaction.
+func transitionTurn(t *testing.T, pool *pgxpool.Pool, tenant, session, turn string, transition sessions.TurnTransition) {
+	t.Helper()
+	tenantID, err := pgunit.ParseID(tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionID, err := pgunit.ParseID(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sessionpg.WithSession(t.Context(), pgunit.NewPool(pool), tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, _ sessions.LockedSession) error {
+		_, err := sessions.TransitionTurn(ctx, sessionpg.BindSession(q, tenantID, sessionID), turn, transition)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

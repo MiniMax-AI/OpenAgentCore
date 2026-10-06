@@ -60,7 +60,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(other), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(w))
+	handler, err := publicHandler(t, h.s, h.db, auth, "codex", workerExecution(t, w))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 	if got := states(); !reflect.DeepEqual(got, map[string]int{"rejected": 3, "committed": 1}) {
 		t.Fatal("successor receipt", got)
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil {
 		t.Fatal("file writes created model execution", err)
 	}

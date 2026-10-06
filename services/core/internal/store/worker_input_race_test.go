@@ -50,7 +50,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 					mutated <- h.s.CommitLegacyDeletion(t.Context(), h.tenant, candidateSession)
 					return
 				}
-				_, err := h.s.SubmitInputs(t.Context(), h.tenant, candidateSession, "cancel", []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
+				_, err := store.SubmitInputs(t.Context(), h.s, h.tenant, candidateSession, "cancel", []sessions.Input{{Kind: "cancel", Payload: json.RawMessage(`{}`)}})
 				mutated <- err
 			}}
 			instrumented, err := pgxpool.NewWithConfig(t.Context(), cfg)
@@ -80,7 +80,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			case <-time.After(10 * time.Second):
 				t.Fatal("input-read interleaving was not reached")
 			}
-			turn, err := h.s.GetTurn(ctx, h.tenant, candidateSession, candidate.TurnID)
+			turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, candidateSession, candidate.TurnID)
 			if err != nil || turn.Status != sessions.TurnCancelled {
 				t.Fatal("candidate was not cancelled", err)
 			}

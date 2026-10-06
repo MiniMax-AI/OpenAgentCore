@@ -38,7 +38,6 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := executionOwner(t, db, s)
-	writer := owner.Store
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -94,7 +93,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	if err := db.pool.QueryRow(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE session_id=$1 AND is_initial RETURNING id", session.ID).Scan(&reservation); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := writer.ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation); err != nil || result.State != sessions.EnvironmentInputExpired {
+	if result, err := store.SessionService(t, s).ExpireEnvironmentInput(t.Context(), tenant, session.ID, reservation); err != nil || result.State != sessions.EnvironmentInputExpired {
 		t.Fatal("initial reservation did not expire", result, err)
 	}
 	observed := <-done

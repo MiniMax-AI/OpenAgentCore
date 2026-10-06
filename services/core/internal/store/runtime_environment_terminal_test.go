@@ -38,7 +38,7 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
-			ended, err := s.GetSession(t.Context(), tenant, session.ID)
+			ended, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 			status := "failed"
 			if expired {
 				status = "expired"
@@ -53,17 +53,17 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("terminal credential remained usable", err)
 			}
-			failed, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
+			failed, err := sessionExecution(t, writer.lease).PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID)
 			if err != nil || failed.State != sessions.EnvironmentInputFailed || len(failed.Receipts) != 0 || failed.SettledAt == nil || !failed.Deadline.Equal(reservation.Deadline) {
 				t.Fatal("late preparation resurrected failed input", failed, err)
 			}
-			if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) || expired == errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
+			if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "new", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) || expired == errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
 				t.Fatal("terminal environment admitted new input", err)
 			}
 			if _, err := s.CreateSession(t.Context(), tenant, input); err != nil {
 				t.Fatal("matching creation retry changed outcome", err)
 			}
-			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,11 +93,11 @@ func TestManagedEnvironmentTerminationSettlesInputAndPreservesIdentity(t *testin
 			} else if last.EnvironmentFailure != nil {
 				t.Fatal("expiry recorded a provisioning failure", last)
 			}
-			cursor, _ := s.SessionEventCursor(t.Context(), tenant, session.ID)
+			cursor, _ := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 			if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
-			if next, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
+			if next, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID); err != nil || next != cursor {
 				t.Fatal("cleanup repeated terminal events", next, err)
 			}
 			if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, session.Environment.ID, uuid.NewString()); !errors.Is(err, sessions.ErrInvalidInput) {
@@ -135,7 +135,7 @@ func TestManagedEnvironmentFailureRollsBackWithSessionEvent(t *testing.T) {
 	if _, err := deploymentExecution(t, writer).RequestCleanup(t.Context(), owner); err == nil {
 		t.Fatal("cleanup committed without failure event")
 	}
-	current, err := s.GetSession(t.Context(), tenant, session.ID)
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || current.Environment.Status != "pending" || current.EnvironmentInputActivity != nil {
 		t.Fatal("partial public termination", err)
 	}

@@ -46,10 +46,9 @@ type TurnDiagnostics struct {
 	ItemsTruncated bool                   `json:"items_truncated"`
 }
 
-// SessionAdmin serves the administrator's per-Session reads: diagnostics
+// SessionAdmin serves the administrator's per-Session reads: Turn diagnostics
 // snapshots, the execution configuration and the managed archive state.
 type SessionAdmin interface {
-	GetSessionDiagnosticsSnapshot(context.Context, string, string) (sessions.Session, error)
 	GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (sessions.TurnDiagnosticsSnapshot, error)
 	GetSessionExecutionConfiguration(context.Context, string, string) (v1.SessionExecutionConfiguration, error)
 	GetManagedSessionArchive(context.Context, string, string) (sessions.ManagedArchive, error)
@@ -68,7 +67,7 @@ type SessionAdmin interface {
 func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	session, err := h.SessionAdmin.GetSessionDiagnosticsSnapshot(ctx, tenantID(r), chi.URLParam(r, "session_id"))
+	session, err := h.SessionsReader.GetSession(ctx, tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

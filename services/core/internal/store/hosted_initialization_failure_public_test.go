@@ -193,15 +193,15 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 				t.Fatal("failed initialization continued or reclaimed compute", p.steps, p.kills)
 			}
 
-			read, err := s.GetSession(t.Context(), tenant, session.ID)
+			read, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 			if err != nil || read.Environment.Status != "failed" || read.EnvironmentFailure == nil || read.EnvironmentFailure.Reason != test.reason || read.EnvironmentInputActivity != nil || read.LastTurn != nil {
 				t.Fatal("Session read", read.EnvironmentFailure, err)
 			}
-			page, err := s.ListSessions(t.Context(), tenant, "", 10, false, nil)
+			page, err := store.SessionAdapter(s).ListSessions(t.Context(), tenant, "", 10, false, nil)
 			if err != nil || len(page.Sessions) != 1 || !reflect.DeepEqual(page.Sessions[0].EnvironmentFailure, read.EnvironmentFailure) {
 				t.Fatal("Session list", page, err)
 			}
-			events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+			events, err := store.SessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 			// Transport may connect while initialization is still running.
 			if len(events) > 0 && events[0].Event.Type == "agent.session.environment.connected" {
 				events = events[1:]
@@ -223,7 +223,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 				!last.EnvironmentFailure.FailedAt.Equal(read.EnvironmentFailure.FailedAt) || last.EnvironmentInputActivity != nil || !last.Settled {
 				t.Fatal("failed snapshot", last)
 			}
-			if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
+			if _, err := store.SessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
 				t.Fatal("failed hosted Environment admitted input", err)
 			}
 			raw, _ := json.Marshal(events)
@@ -232,13 +232,13 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 			}
 			// Tenant B cannot observe the failure.
 			other := uuid.NewString()
-			if _, err := s.GetSession(t.Context(), other, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := store.SessionAdapter(s).GetSession(t.Context(), other, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("foreign Session read", err)
 			}
-			if _, err := s.ListSessionEvents(t.Context(), other, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := store.SessionAdapter(s).ListSessionEvents(t.Context(), other, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal("foreign Session events", err)
 			}
-			if page, err := s.ListSessions(t.Context(), other, "", 10, false, nil); err != nil || len(page.Sessions) != 0 {
+			if page, err := store.SessionAdapter(s).ListSessions(t.Context(), other, "", 10, false, nil); err != nil || len(page.Sessions) != 0 {
 				t.Fatal("foreign Session list", page, err)
 			}
 		})
@@ -257,12 +257,12 @@ func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 	p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, fail: "setup",
 		result: failedInitialization(3)}
 	failHostedInitialization(t, s, db, tenant, environment, p)
-	read, err := s.GetSession(t.Context(), tenant, session.ID)
+	read, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || read.PendingInput || read.EnvironmentInputActivity == nil || read.EnvironmentInputActivity.Status != "failed" ||
 		read.EnvironmentInputActivity.Failure != "environment_unavailable" || read.EnvironmentFailure == nil {
 		t.Fatal("pending input settlement", read.EnvironmentInputActivity, read.EnvironmentFailure, err)
 	}
-	events, err := s.ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	events, err := store.SessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "tenant-b", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(w))
+	handler, err := publicHandler(t, s, db, auth, "codex", workerExecution(t, w))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 	awaitInitialization(t, db.pool, tenant, environment.ID, "failed")
 
 	reason := `Failed to provision environment: script "setup_commands[0]" failed with exit code 3`
-	read, err := s.GetSession(t.Context(), tenant, session.ID)
+	read, err := store.SessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || read.EnvironmentFailure == nil {
 		t.Fatal(err)
 	}

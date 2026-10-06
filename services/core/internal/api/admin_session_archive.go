@@ -11,7 +11,7 @@ import (
 // SessionArchive archives a managed Session through the execution owner;
 // SessionAdmin reads its archive state.
 type SessionArchive interface {
-	ArchiveManagedSession(context.Context, string, string, uint64) (sessions.ManagedArchive, error)
+	ArchiveSession(context.Context, string, string, uint64) (sessions.ManagedArchive, error)
 }
 
 type AdminSessionArchiveRequest struct {
@@ -44,7 +44,7 @@ func (h *Handler) adminArchiveSession(w http.ResponseWriter, r *http.Request) {
 		writeStoreError(w, r, sessions.ErrEnvironmentUnavailable)
 		return
 	}
-	result, err := h.Execution.SessionArchive.ArchiveManagedSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
+	result, err := h.Execution.SessionArchive.ArchiveSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), input.ExpectedGeneration)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

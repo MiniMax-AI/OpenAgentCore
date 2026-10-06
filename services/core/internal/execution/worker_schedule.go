@@ -21,20 +21,20 @@ type scheduledWork struct {
 }
 
 func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool) ([]scheduledWork, error) {
-	turns, err := w.dispatcher.Store.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
+	turns, err := w.dispatcher.SessionsReader.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
 	if err != nil {
 		return nil, err
 	}
 	if len(turns) == 0 && s.turnCursor != "" {
 		s.turnCursor = ""
-		turns, err = w.dispatcher.Store.ListExecutionWork(ctx, "", []string{sessions.TurnQueued}, devices)
+		turns, err = w.dispatcher.SessionsReader.ListExecutionWork(ctx, "", []string{sessions.TurnQueued}, devices)
 		if err != nil {
 			return nil, err
 		}
 	}
 	var environments []sessions.EnvironmentInputWork
 	if !time.Now().Before(s.nextEnvironmentScan) {
-		environments, err = w.dispatcher.Store.ListEnvironmentInputWork(ctx, s.environmentCursor, devices)
+		environments, err = w.dispatcher.SessionsReader.ListEnvironmentInputWork(ctx, s.environmentCursor, devices)
 		if err != nil {
 			return nil, err
 		}
@@ -43,7 +43,7 @@ func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []st
 			s.environmentCursor = ""
 			// Retry the first page now instead of spending a scan interval on EOF.
 			// A single refill preserves the candidate bound and cannot spin when empty.
-			environments, err = w.dispatcher.Store.ListEnvironmentInputWork(ctx, "", devices)
+			environments, err = w.dispatcher.SessionsReader.ListEnvironmentInputWork(ctx, "", devices)
 			if err != nil {
 				return nil, err
 			}
@@ -94,10 +94,10 @@ func (w *Worker) runEnvironmentInput(ctx context.Context, item scheduledWork) er
 		return nil
 	}
 	if errors.Is(err, ErrModelProviderRequired) {
-		return w.dispatcher.Store.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "model_provider_required")
+		return w.dispatcher.sessionExecution.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "model_provider_required")
 	}
 	if errors.Is(err, errPreparationFailed) && run.Reservation.State == sessions.EnvironmentInputPending {
-		return w.dispatcher.Store.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "runtime_preparation_failed")
+		return w.dispatcher.sessionExecution.FailEnvironmentInput(ctx, item.TenantID, item.SessionID, item.reservationID, "runtime_preparation_failed")
 	}
 	if run.Reservation.State == sessions.EnvironmentInputAdmitted {
 		return err

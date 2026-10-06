@@ -34,14 +34,17 @@ type SessionAdmission interface {
 	CreateSessionStream(context.Context, string, sessions.CreateSession) (sessions.Creation, error)
 }
 
-// Sessions reads, updates and deletes Sessions, and records their public write
-// audit.
+// Sessions updates and deletes Sessions, and records their public write audit.
 type Sessions interface {
+	UpdateSessionMetadata(context.Context, sessions.UpdateSessionMetadataCommand) (sessions.Session, error)
+	DeleteSession(context.Context, sessions.DeleteSessionCommand) error
+	AuditSessionOperation(context.Context, sessions.AuditSessionOperationCommand) error
+}
+
+// SessionsReader reads Sessions.
+type SessionsReader interface {
 	GetSession(context.Context, string, string) (sessions.Session, error)
 	ListSessions(context.Context, string, string, int, bool, *string) (sessions.Page, error)
-	UpdateSessionMetadata(context.Context, string, string, map[string]string) (sessions.Session, error)
-	DeleteSession(context.Context, string, string) error
-	AuditSessionOperation(context.Context, string, string, string) error
 }
 
 // routes builds the router. HEAD runs the GET route without a body after the
@@ -302,7 +305,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,500,503 {object} v1.ErrorResponse
 // @Router /agents/sessions/{session_id} [get]
 func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
-	session, err := h.Sessions.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
+	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
 		writeStoreError(w, r, err)
 		return
@@ -349,7 +352,7 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	if values, present := r.URL.Query()["agent_id"]; present {
 		agentID = &values[0]
 	}
-	page, err := h.Sessions.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID)
+	page, err := h.SessionsReader.ListSessions(r.Context(), tenantID(r), options.after, options.limit, options.ascending, agentID)
 	if err != nil {
 		writeStoreError(w, r, err)
 		return

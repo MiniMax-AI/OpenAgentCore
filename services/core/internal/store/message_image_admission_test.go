@@ -46,7 +46,7 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, "image-batch", imageAdmissionBatch()); !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal("batch accepted an unqualified image", err)
 			}
-			session, err = h.s.GetSession(t.Context(), h.tenant, session.ID)
+			session, err = store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, session.ID)
 			if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity != nil {
 				t.Fatal("rejected batch persisted execution activity", err)
 			}

@@ -18,7 +18,7 @@ type wireEvent struct {
 // wireEvents renders recorded Session events as clients receive them.
 func wireEvents(t *testing.T, s *Store, tenant, session string, after int64) []wireEvent {
 	t.Helper()
-	changes, err := s.ListSessionEvents(t.Context(), tenant, session, after)
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session, after)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestAssistantMessageEventsFollowOfficialSequence(t *testing.T) {
 			tenant, session := newTurnSession(t, s)
 			turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 			transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
-			cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+			cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -127,7 +127,7 @@ func TestAssistantMessageEventsFollowOfficialSequence(t *testing.T) {
 func TestInputItemEventsCarryNullOutputIndexAndPhase(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session := newTurnSession(t, s)
-	cursor, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+	cursor, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

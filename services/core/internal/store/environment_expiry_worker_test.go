@@ -26,7 +26,7 @@ func newEnvironmentExpiryReservation(t *testing.T, s *store.Store) (string, sess
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wait for the environment"}`)}})
+	pending, err := store.SessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"wait for the environment"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func waitEnvironmentExpiry(t *testing.T, s *store.Store, tenant string, pending 
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		got, err := s.GetEnvironmentInputReservation(t.Context(), tenant, pending.SessionID, pending.ID)
+		got, err := store.SessionAdapter(s).GetEnvironmentInputReservation(t.Context(), tenant, pending.SessionID, pending.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,7 +107,7 @@ func TestWorkerEnvironmentExpiryWithoutDevicesAndAfterRestart(t *testing.T) {
 	d := &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry()}
 	_, stop := startEnvironmentExpiryWorker(t, db, d)
 	waitEnvironmentExpiry(t, s, dueTenant, due)
-	got, err := s.GetEnvironmentInputReservation(t.Context(), futureTenant, future.SessionID, future.ID)
+	got, err := store.SessionAdapter(s).GetEnvironmentInputReservation(t.Context(), futureTenant, future.SessionID, future.ID)
 	if err != nil || got.State != sessions.EnvironmentInputPending || !got.Deadline.Equal(future.Deadline) {
 		t.Fatal("future input changed", got, err)
 	}

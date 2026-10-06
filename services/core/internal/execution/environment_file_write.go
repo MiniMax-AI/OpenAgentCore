@@ -85,7 +85,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if err != nil || (placement.Type != "openai_hosted" && placement.Type != "self_hosted") {
 		return unavailable
 	}
-	session, err := w.dispatcher.Store.GetSession(ctx, environment.TenantID, environment.SessionID)
+	session, err := w.dispatcher.SessionsReader.GetSession(ctx, environment.TenantID, environment.SessionID)
 	if err != nil {
 		return fileWriteResult{err: err}
 	}

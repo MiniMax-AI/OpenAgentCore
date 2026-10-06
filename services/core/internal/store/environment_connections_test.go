@@ -37,7 +37,7 @@ func connectionSnapshot(t *testing.T, pool *pgxpool.Pool, id string) string {
 
 func connectionChanges(t *testing.T, s *Store, tenant, session string) []sessions.SessionChange {
 	t.Helper()
-	all, err := s.ListSessionEvents(t.Context(), tenant, session, 0)
+	all, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestEnvironmentConnectionDoesNotReviveDeletedOrTerminalResources(t *testing
 				t.Fatal(err)
 			}
 			if status == "deleted" {
-				if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+				if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 					t.Fatal(err)
 				}
 			} else {

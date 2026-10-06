@@ -44,7 +44,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		t.Helper()
 		enabled := []func(*api.Dependencies){acceptUnavailable(t)}
 		if worker != nil {
-			enabled = append(enabled, workerExecution(worker), executorURL(origin))
+			enabled = append(enabled, workerExecution(t, worker), executorURL(origin))
 		} else {
 			// Without a Worker, Core keeps its executor URL but admits nothing.
 			enabled = append(enabled, func(d *api.Dependencies) {
@@ -107,7 +107,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 			if err := pool.QueryRow(t.Context(), "SELECT id FROM environment_input_reservations WHERE session_id=$1 AND is_initial", item.ID).Scan(&id); err != nil {
 				t.Fatal("public creation did not reserve initial input", err)
 			}
-			reservation, err := s.GetEnvironmentInputReservation(t.Context(), tenant, item.ID, id)
+			reservation, err := store.SessionAdapter(s).GetEnvironmentInputReservation(t.Context(), tenant, item.ID, id)
 			if err != nil || !reservation.IsInitial || len(reservation.Inputs) != 1 || len(reservation.Receipts) != 0 {
 				t.Fatal("invalid public initial reservation", err)
 			}

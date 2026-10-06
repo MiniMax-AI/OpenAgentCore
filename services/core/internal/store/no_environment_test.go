@@ -23,7 +23,7 @@ func TestNoEnvironmentRejectsUnadvertisedDeviceBeforeClaim(t *testing.T) {
 	if _, err = h.bound().Run(ctx, h.tenant, h.session.ID, input.TurnID); err == nil {
 		t.Fatal("unsupported environment admitted")
 	}
-	turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnQueued {
 		t.Fatal(turn, err)
 	}

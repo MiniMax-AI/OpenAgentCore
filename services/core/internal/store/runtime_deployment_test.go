@@ -62,7 +62,7 @@ func TestRuntimeDeploymentPendingSessionsCannotMigrate(t *testing.T) {
 	if err := deploymentExecution(t, w).ConfigureProcess(t.Context(), nil); err == nil {
 		t.Fatal("pending Session orphaned by removing provider")
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	deploymentConfigure(t, w, &next)
@@ -81,7 +81,7 @@ func TestRuntimeDeploymentUnknownAllocationsBlockAdoptionAndSwitch(t *testing.T)
 	if err := deploymentExecution(t, w).ConfigureProcess(t.Context(), &old); err == nil || !strings.Contains(err.Error(), "no verified backend identity") {
 		t.Fatal("legacy allocation silently adopted", err)
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {

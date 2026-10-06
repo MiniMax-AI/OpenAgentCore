@@ -2,7 +2,6 @@ package coremetrics
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"runtime"
 	"sync"
@@ -120,7 +119,7 @@ func Window(now time.Time, name string) (Range, error) {
 	case "7d":
 		duration, step = retention, 2*time.Hour
 	default:
-		return Range{}, errors.New("invalid Core metrics range")
+		return Range{}, ErrInvalidRange
 	}
 	end := now.UTC().Truncate(step)
 	return Range{Start: end.Add(-duration), End: end, ResolutionSeconds: int64(step / time.Second)}, nil

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimehistory"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/google/uuid"
@@ -15,6 +16,8 @@ import (
 const maximumRawSamples = 20_000
 const retention = 7 * 24 * time.Hour
 
+// sampleStore is the sample storage the Reader runs on: samples in Core, a
+// fake in the unit tests.
 type sampleStore interface {
 	InsertRuntimeHistorySample(context.Context, runtimeobs.ExportRecord) error
 	ListRuntimeHistorySamples(context.Context, string, string, string, int64, int64, int32) ([]runtimeobs.ExportRecord, error)
@@ -33,8 +36,16 @@ type Reader struct {
 	now          func() time.Time
 }
 
-func New(store sampleStore, config Config) (*Reader, error) {
-	if store == nil || config.QueryTimeout <= 0 || config.Capabilities.Validate() != nil || config.Capabilities.Retention != retention || config.Capabilities.MaximumRange > 24*time.Hour {
+// New builds the Runtime history backend on Core's database.
+func New(units *pgunit.Pool, config Config) (*Reader, error) {
+	if units == nil {
+		return nil, errors.New("invalid Runtime history PostgreSQL configuration")
+	}
+	return newReader(samples{units: units}, config)
+}
+
+func newReader(store sampleStore, config Config) (*Reader, error) {
+	if config.QueryTimeout <= 0 || config.Capabilities.Validate() != nil || config.Capabilities.Retention != retention || config.Capabilities.MaximumRange > 24*time.Hour {
 		return nil, errors.New("invalid Runtime history PostgreSQL configuration")
 	}
 	capabilities := config.Capabilities

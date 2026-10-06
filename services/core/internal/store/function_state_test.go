@@ -17,7 +17,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
-	before, err := s.SessionEventCursor(t.Context(), tenant, session.ID)
+	before, err := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	pool.Close()
 	s, _ = testStore(t)
 	assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 2)
-	if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, turn, sessions.TurnCompleted, nil, "", 1); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := functions.CompleteExecution(t.Context(), tenant, session.ID, turn, sessions.TurnCompleted, nil, "", 1); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("waiting execution completed", err)
 	}
 	for i, id := range []string{"first", "second"} {
@@ -53,7 +53,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 		}
 		assertFunctionState(t, s, tenant, session.ID, status, 1-i)
 	}
-	changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, before)
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,10 +76,10 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 			}
 		}
 	}
-	if _, err := s.GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetSession(t.Context(), uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := s.ListSessionEvents(t.Context(), uuid.NewString(), session.ID, before); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).ListSessionEvents(t.Context(), uuid.NewString(), session.ID, before); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 }
@@ -96,21 +96,21 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 				t.Fatal(err)
 			}
 			if status == sessions.TurnCancelled {
-				before, _ := s.SessionEventCursor(t.Context(), tenant, session.ID)
+				before, _ := sessionAdapter(s).SessionEventCursor(t.Context(), tenant, session.ID)
 				for _, key := range []string{"cancel", "cancel", "another-cancel"} {
-					if _, err := s.RequestCancel(t.Context(), tenant, session.ID, key); err != nil {
+					if _, err := requestCancel(t.Context(), s, tenant, session.ID, key); err != nil {
 						t.Fatal(err)
 					}
 				}
 				assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 0)
-				changes, err := s.ListSessionEvents(t.Context(), tenant, session.ID, before)
+				changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, before)
 				if err != nil || len(changes) != 1 || changes[0].Event.Type != "agent.session.in_progress" || len(changes[0].RequiredActions) != 0 || changes[0].Turn.CancelRequestedAt.IsZero() {
 					t.Fatal(changes, err)
 				}
 			}
 			if status == sessions.TurnCompleted {
 				transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnWaiting, status)
-			} else if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, status, nil, "", input.Sequence); err != nil {
+			} else if _, err := functions.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, status, nil, "", input.Sequence); err != nil {
 				t.Fatal(err)
 			}
 			assertFunctionState(t, s, tenant, session.ID, status, 0)
@@ -154,7 +154,7 @@ func TestFunctionStateReadsRemainConsistentDuringReceipts(t *testing.T) {
 	})
 	defer wg.Wait()
 	for {
-		current, err := s.GetSession(t.Context(), tenant, session.ID)
+		current, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -171,11 +171,11 @@ func TestFunctionStateReadsRemainConsistentDuringReceipts(t *testing.T) {
 
 func assertFunctionState(t *testing.T, s *Store, tenant, sessionID, status string, count int) {
 	t.Helper()
-	current, err := s.GetSession(t.Context(), tenant, sessionID)
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, sessionID)
 	if err != nil || current.LastTurn == nil || current.LastTurn.Status != status || len(current.RequiredActions) != count {
 		t.Fatalf("state: %+v; %v", current, err)
 	}
-	page, err := s.ListSessions(t.Context(), tenant, "", 10, true, nil)
+	page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 10, true, nil)
 	if err != nil || len(page.Sessions) != 1 || len(page.Sessions[0].RequiredActions) != count || page.Sessions[0].LastTurn.Status != status {
 		t.Fatal("list differs from retrieve", page, err)
 	}

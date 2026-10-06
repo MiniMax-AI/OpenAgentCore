@@ -45,7 +45,7 @@ func TestSessionAgentFilterPaginationAndIsolation(t *testing.T) {
 		var got []string
 		cursor := ""
 		for {
-			page, err := s.ListSessions(t.Context(), tenant, cursor, 2, ascending, &root)
+			page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, cursor, 2, ascending, &root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -75,20 +75,20 @@ func TestSessionAgentFilterPaginationAndIsolation(t *testing.T) {
 	if got := read(s, false); !slices.Equal(got, reverse) {
 		t.Fatal(got, reverse)
 	}
-	unfiltered, err := s.ListSessions(t.Context(), tenant, "", 100, false, nil)
+	unfiltered, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 100, false, nil)
 	if err != nil || len(unfiltered.Sessions) != 9 {
 		t.Fatal(unfiltered, err)
 	}
 	for _, id := range []string{"", "unknown", root + " ", "' OR true --"} {
-		page, err := s.ListSessions(t.Context(), tenant, "", 100, false, &id)
+		page, err := sessionAdapter(s).ListSessions(t.Context(), tenant, "", 100, false, &id)
 		if err != nil || page.Sessions == nil || len(page.Sessions) != 0 || page.NextCursor != "" {
 			t.Fatal(page, err)
 		}
 	}
-	if _, err := s.ListSessions(t.Context(), tenant, other.ID, 2, true, &root); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).ListSessions(t.Context(), tenant, other.ID, 2, true, &root); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign cursor", err)
 	}
-	page, err := s.ListSessions(t.Context(), foreign, "", 100, false, &root)
+	page, err := sessionAdapter(s).ListSessions(t.Context(), foreign, "", 100, false, &root)
 	if err != nil || len(page.Sessions) != 1 || page.Sessions[0].ID != other.ID {
 		t.Fatal(page, err)
 	}

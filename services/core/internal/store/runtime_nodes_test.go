@@ -97,7 +97,7 @@ type sessionPlacement struct {
 
 // sessionRuntimePlacement reads the node a Session was placed on.
 func sessionRuntimePlacement(ctx context.Context, s *Store, tenant, session string) (sessionPlacement, error) {
-	value, err := s.GetSession(ctx, tenant, session)
+	value, err := sessionAdapter(s).GetSession(ctx, tenant, session)
 	if err != nil {
 		return sessionPlacement{}, err
 	}
@@ -112,7 +112,11 @@ func sessionRuntimePlacement(ctx context.Context, s *Store, tenant, session stri
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sessionPlacement{}, sessions.ErrNotFound
 	}
-	return sessionPlacement{NodeID: runtimeUUID(p.NodeID), Available: p.Available && !p.ReleasedAt.Valid}, err
+	placement := sessionPlacement{Available: p.Available && !p.ReleasedAt.Valid}
+	if p.NodeID.Valid {
+		placement.NodeID = uuid.UUID(p.NodeID.Bytes).String()
+	}
+	return placement, err
 }
 func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	s, _, d := managerFixture(t, 1, 4)
@@ -157,7 +161,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 	if err := service.RemoveNode(t.Context(), d.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal("removed pending placement", err)
 	}
-	if err := s.DeleteSession(t.Context(), tenant, retained.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: retained.ID}); err != nil {
 		t.Fatal(err)
 	}
 	input := managerSessionInput("retry")
@@ -253,10 +257,10 @@ func TestRuntimeNodesRetention(t *testing.T) {
 	if err := nodes.RemoveNode(t.Context(), next.LocalNodeID); !errors.Is(err, deployment.ErrNodeInUse) {
 		t.Fatal(err)
 	}
-	if err := s.DeleteSession(t.Context(), tenant, pending.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: pending.ID}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DeleteSession(t.Context(), tenant, first.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: first.ID}); err != nil {
 		t.Fatal(err)
 	}
 	retained, err = deploymentExecution(t, w).RequestCleanup(t.Context(), retained)

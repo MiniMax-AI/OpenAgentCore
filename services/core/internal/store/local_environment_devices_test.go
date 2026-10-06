@@ -47,7 +47,7 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 			t.Fatal("dedicated credential bound to another Session")
 		}
 	}
-	devices, err := s.ListExecutionDevices(t.Context(), tenant)
+	devices, err := sessionAdapter(s).ListExecutionDevices(t.Context(), tenant)
 	if err != nil || len(devices) != 0 {
 		t.Fatalf("dedicated device entered general selection: %v %v", devices, err)
 	}
@@ -59,7 +59,7 @@ func TestEnvironmentDeviceAuthorityAndLifecycle(t *testing.T) {
 	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), bound.ID); err != nil || !ok {
 		t.Fatalf("valid credential unavailable: %v", err)
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok, err := sessionAdapter(s).GetDeviceCredential(t.Context(), bound.ID); err != nil || ok {

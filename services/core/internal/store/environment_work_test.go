@@ -23,11 +23,11 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 		case "expired":
 			makeEnvironmentExpiryDue(t, pool, &pending)
 		case "cancelled":
-			if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, pending.SessionID, pending.ID); err != nil {
+			if _, err := store.CancelEnvironmentInput(t.Context(), h.s, h.tenant, pending.SessionID, pending.ID); err != nil {
 				t.Fatal(err)
 			}
 		case "deleted":
-			if err := h.s.DeleteSession(t.Context(), h.tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotIdle) {
+			if err := store.SessionService(t, h.s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: pending.SessionID}); !errors.Is(err, sessions.ErrNotIdle) {
 				t.Fatal("pending input deleted", err)
 			}
 			if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, pending.SessionID); err != nil {
@@ -44,7 +44,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 				if err := fixtureSessionService(t, h.db).RevokeDevice(t.Context(), h.tenant, runtime.device.ID); err != nil {
 					t.Fatal(err)
 				}
-				work, err := h.s.ListEnvironmentInputWork(t.Context(), "", []string{runtime.device.ID})
+				work, err := store.SessionAdapter(h.s).ListEnvironmentInputWork(t.Context(), "", []string{runtime.device.ID})
 				if err != nil || len(work) != 0 {
 					t.Fatal("revoked Runtime selected", work, err)
 				}
@@ -55,7 +55,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 		}
 	}
 	for _, devices := range [][]string{nil, {}, {uuid.NewString()}} {
-		work, err := h.s.ListEnvironmentInputWork(t.Context(), "", devices)
+		work, err := store.SessionAdapter(h.s).ListEnvironmentInputWork(t.Context(), "", devices)
 		if err != nil || len(work) != 0 {
 			t.Fatal("unconnected work selected", work, err)
 		}
@@ -67,7 +67,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 		for _, runtime := range h.environments {
 			devices = append(devices, runtime.device.ID)
 		}
-		work, err := h.s.ListEnvironmentInputWork(t.Context(), cursor, devices)
+		work, err := store.SessionAdapter(h.s).ListEnvironmentInputWork(t.Context(), cursor, devices)
 		if err != nil || len(work) != count {
 			t.Fatal("environment work page", len(work), count, err)
 		}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -17,16 +18,19 @@ type EnvironmentRun struct {
 }
 
 // RunEnvironmentInput reserves a Turn on the Session-owned Runtime Executor. It
-// checks lease, the lease d.Store was built on, before any Runtime preparation.
+// checks lease, the lease the Dispatcher's execution operations hold, before
+// any Runtime preparation.
 func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, tenantID, sessionID, reservationID string) (run EnvironmentRun, err error) {
 	if err = lease.CheckOwnership(ctx); err != nil {
 		return run, err
 	}
-	run.Reservation, err = d.Store.ExpireEnvironmentInput(ctx, tenantID, sessionID, reservationID)
+	expire, cancel := context.WithTimeout(ctx, 5*time.Second)
+	run.Reservation, err = d.Sessions.ExpireEnvironmentInput(expire, tenantID, sessionID, reservationID)
+	cancel()
 	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
-	session, err := d.Store.GetSession(ctx, tenantID, sessionID)
+	session, err := d.SessionsReader.GetSession(ctx, tenantID, sessionID)
 	if err != nil {
 		return run, err
 	}
@@ -42,7 +46,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		// Reserved before providers were required; the caller settles it as failed.
 		return run, ErrModelProviderRequired
 	}
-	bound, err := d.Store.GetSessionExecutionBinding(ctx, tenantID, sessionID)
+	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {
 		return run, err
 	}
@@ -92,7 +96,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
 		return run, err
 	}
-	promoted, err := d.Store.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
+	promoted, err := d.sessionExecution.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)
 	if errors.Is(err, sessions.ErrTurnConflict) {
 		// A rejected claim leaves the reservation pending for a later attempt.
 		return run, err

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -63,6 +64,7 @@ type fakeExecutionStorage struct {
 	withReservation       func(context.Context, AllocationKey, func(sessions.LockedSession, ReservationTx) error) error
 	withAllocation        func(context.Context, AllocationKey, func(AllocationTx) error) error
 	withAllocationCleanup func(context.Context, AllocationKey, func(AllocationCleanupTx) error) error
+	withSessionArchive    func(context.Context, string, string, func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error
 	clearWake             func(context.Context, string, time.Time) error
 }
 
@@ -537,6 +539,13 @@ func (f *fakeExecutionStorage) WithAllocationCleanup(ctx context.Context, key Al
 	return f.withAllocationCleanup(ctx, key, apply)
 }
 
+func (f *fakeExecutionStorage) WithSessionArchive(ctx context.Context, tenantID, sessionID string, apply func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error {
+	if f.withSessionArchive == nil {
+		unexpected(f.t, "WithSessionArchive")
+	}
+	return f.withSessionArchive(ctx, tenantID, sessionID, apply)
+}
+
 func (f *fakeExecutionStorage) ClearWake(ctx context.Context, allocationID string, observed time.Time) error {
 	if f.clearWake == nil {
 		unexpected(f.t, "ClearWake")
@@ -626,4 +635,61 @@ func (f *fakeReader) CountRetainedAllocations(ctx context.Context, installationI
 		unexpected(f.t, "CountRetainedAllocations")
 	}
 	return f.countRetainedAllocations(ctx, installationID)
+}
+
+// fakeSessionReader serves the Session reads the observation resolver makes;
+// every other read fails the test.
+type fakeSessionReader struct {
+	t                    testing.TB
+	getSession           func(context.Context, string, string) (sessions.Session, error)
+	measuredSessionUsage func(context.Context, string, string) (json.RawMessage, error)
+}
+
+func (f *fakeSessionReader) GetSession(ctx context.Context, tenantID, sessionID string) (sessions.Session, error) {
+	if f.getSession == nil {
+		unexpected(f.t, "GetSession")
+	}
+	return f.getSession(ctx, tenantID, sessionID)
+}
+
+func (f *fakeSessionReader) MeasuredSessionUsage(ctx context.Context, tenantID, sessionID string) (json.RawMessage, error) {
+	if f.measuredSessionUsage == nil {
+		unexpected(f.t, "MeasuredSessionUsage")
+	}
+	return f.measuredSessionUsage(ctx, tenantID, sessionID)
+}
+
+func (f *fakeSessionReader) ListSessions(context.Context, string, string, int, bool, *string) (sessions.Page, error) {
+	unexpected(f.t, "ListSessions")
+	return sessions.Page{}, nil
+}
+
+func (f *fakeSessionReader) SessionStreamSnapshot(context.Context, string, string) (sessions.Session, int64, error) {
+	unexpected(f.t, "SessionStreamSnapshot")
+	return sessions.Session{}, 0, nil
+}
+
+func (f *fakeSessionReader) SessionEventCursor(context.Context, string, string) (int64, error) {
+	unexpected(f.t, "SessionEventCursor")
+	return 0, nil
+}
+
+func (f *fakeSessionReader) ListSessionEvents(context.Context, string, string, int64) ([]sessions.SessionChange, error) {
+	unexpected(f.t, "ListSessionEvents")
+	return nil, nil
+}
+
+func (f *fakeSessionReader) GetTurnDiagnosticsSnapshot(context.Context, string, string, string) (sessions.TurnDiagnosticsSnapshot, error) {
+	unexpected(f.t, "GetTurnDiagnosticsSnapshot")
+	return sessions.TurnDiagnosticsSnapshot{}, nil
+}
+
+func (f *fakeSessionReader) GetSessionExecutionConfiguration(context.Context, string, string) (v1.SessionExecutionConfiguration, error) {
+	unexpected(f.t, "GetSessionExecutionConfiguration")
+	return v1.SessionExecutionConfiguration{}, nil
+}
+
+func (f *fakeSessionReader) GetManagedSessionArchive(context.Context, string, string) (sessions.ManagedArchive, error) {
+	unexpected(f.t, "GetManagedSessionArchive")
+	return sessions.ManagedArchive{}, nil
 }

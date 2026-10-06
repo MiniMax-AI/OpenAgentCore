@@ -102,7 +102,7 @@ func (f *creationStreamFixture) FindSessionCreation(context.Context, string, str
 }
 
 // AuditSessionOperation accepts the audit of a replayed creation.
-func (f *creationStreamFixture) AuditSessionOperation(context.Context, string, string, string) error {
+func (f *creationStreamFixture) AuditSessionOperation(context.Context, sessions.AuditSessionOperationCommand) error {
 	return nil
 }
 
@@ -146,7 +146,7 @@ func newCreationStreamHarness(t *testing.T) *creationStreamHarness {
 		OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner",
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: tenant,
 	}).ResolveAPIKey
-	fakes.sessions.getSession, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.AuditSessionOperation
+	fakes.sessionsReader.getSession, fakes.sessions.auditSessionOperation = fixture.GetSession, fixture.AuditSessionOperation
 	fakes.sessionCreation.findSessionCreation = fixture.FindSessionCreation
 	fakes.sessionEvents.sessionEventCursor, fakes.sessionEvents.sessionStreamSnapshot, fakes.sessionEvents.listSessionEvents = fixture.SessionEventCursor, fixture.SessionStreamSnapshot, fixture.ListSessionEvents
 	fakes.modelProviders.resolve = noDeploymentModelProvider

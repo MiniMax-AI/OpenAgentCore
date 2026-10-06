@@ -176,7 +176,7 @@ func testSessionArtifactsPublishVersionScopeAndLifetime(t *testing.T, kind strin
 			t.Fatalf("deleted metadata retained: %v", err)
 		}
 	}
-	if err := s.DeleteSession(t.Context(), tenant, session); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session}); err != nil {
 		t.Fatal(err)
 	}
 	if count := largeObjectCount(t, pool); count != before {
@@ -228,14 +228,14 @@ func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T)
 			want := sessions.ErrNotFound
 			if operation == "delete" {
 				// The idle-only decision itself is not blocked by the transfer.
-				if err := s.DeleteSession(ctx, tenant, session); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatalf("transfer blocked or bypassed the deletion rule: %v", err)
 				}
 				if err := s.commitLegacyDeletion(ctx, tenant, session); err != nil {
 					t.Fatalf("transfer blocked deletion: %v", err)
 				}
 			} else {
-				if _, err := s.RequestCancel(ctx, tenant, session, "cancel-capture"); err != nil {
+				if _, err := requestCancel(ctx, s, tenant, session, "cancel-capture"); err != nil {
 					t.Fatalf("transfer blocked cancellation: %v", err)
 				}
 				want = sessions.ErrTurnConflict
@@ -420,7 +420,7 @@ func TestSessionArtifactsRepublishOnlyNewChangedOrDeletedPaths(t *testing.T) {
 		t.Fatalf("other Session first Turn published %v", got)
 	}
 	for _, id := range []string{session, other.ID} {
-		if err := s.DeleteSession(t.Context(), tenant, id); err != nil {
+		if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: id}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -449,7 +449,7 @@ func TestSessionArtifactsNewestVersionFollowsTurnOrder(t *testing.T) {
 	transition(t, s, tenant, session, first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	stageArtifactOutputs(t, s, tenant, session, env.ID, first.TurnID, map[string]string{"b.txt": "bravo"})
 	future := time.Now().Add(time.Hour).UnixMilli()
-	if _, err := s.CompleteExecution(t.Context(), tenant, session, first.TurnID, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, future)), "", first.Sequence); err != nil {
+	if _, err := completeExecution(t.Context(), t, s, tenant, session, first.TurnID, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, future)), "", first.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	one := publishedByTurn(t, s, tenant, session, first.TurnID)["b.txt"]
@@ -510,7 +510,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.TransitionTurn(t.Context(), tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted})
+		_, err := transitionTurn(t.Context(), s, tenant, session, turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted})
 		done <- err
 	}()
 	// Completion must be blocked on the Session lock before the deletion commits.
@@ -533,7 +533,7 @@ func TestSessionArtifactsCompletionWaitsForConcurrentDeletion(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if status, err := s.GetTurn(t.Context(), tenant, session, turn); err != nil || status.Status != sessions.TurnInProgress {
+	if status, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session, turn); err != nil || status.Status != sessions.TurnInProgress {
 		t.Fatalf("Turn settled while the deletion held the lock: %+v %v", status, err)
 	}
 	if err := tx.Commit(t.Context()); err != nil {

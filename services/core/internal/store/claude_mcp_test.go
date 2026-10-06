@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
@@ -55,7 +56,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 					}
 				}()
 				time.Sleep(650 * time.Millisecond)
-				turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
+				turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
 				if err != nil || turn.Status != sessions.TurnQueued {
 					t.Fatal("incapable runtime claimed work", turn, err)
 				}
@@ -121,7 +122,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 			if result := <-h.run(t.Context(), input.TurnID); result.err == nil {
 				t.Fatal("unsupported MCP configuration claimed")
 			}
-			turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
+			turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, input.TurnID)
 			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal(turn, err)
 			}

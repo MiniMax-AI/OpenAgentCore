@@ -9,6 +9,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
@@ -30,7 +31,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	h.read(testExecutionRequest)
 	h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "pending", Name: "lookup_ticket", Arguments: json.RawMessage(`{}`)})
 	state := functionState(t, h, 1)
-	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+	if err := store.SessionService(t, h.s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("waiting Session deleted", err)
 	}
 	// A marker committed by an earlier release still cancels and settles work.
@@ -47,11 +48,11 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "deleted-native"}}})
 	waitTurn(t, h, input.TurnID, sessions.TurnCancelled)
-	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "deleted-native" {
 		t.Fatal(bound, err)
 	}
-	if _, err := h.s.GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	if _, err := h.bound().Run(ctx, h.tenant, h.session.ID, input.TurnID); !errors.Is(err, sessions.ErrNotFound) {
@@ -68,10 +69,10 @@ func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 	h := newDispatchHarness(t)
 	input := h.message("interrupted", "Run")
 	ctx := t.Context()
-	if _, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := store.TransitionTurn(ctx, h.s, h.tenant, h.session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+	if err := store.SessionService(t, h.s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("running Session deleted", err)
 	}
 	if err := h.s.CommitLegacyDeletion(ctx, h.tenant, h.session.ID); err != nil {
@@ -83,11 +84,11 @@ func TestDeletedSessionRestartStillReconcilesHiddenClaim(t *testing.T) {
 	if err := worker.Run(stopped); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	turn, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnFailed {
 		t.Fatal(turn, err)
 	}
-	if _, err := h.s.GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 }
@@ -113,13 +114,13 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	h.read(testExecutionRequest)
 	h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "pending", Name: "lookup_ticket", Arguments: json.RawMessage(`{}`)})
 	state := functionState(t, h, 1)
-	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+	if err := store.SessionService(t, h.s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("waiting Session deleted", err)
 	}
 	if again := functionState(t, h, 1); again.LastTurn == nil || again.LastTurn.Status != sessions.TurnWaiting || !again.LastTurn.CancelRequestedAt.IsZero() {
 		t.Fatal("rejected deletion changed required actions", again)
 	}
-	if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "cancel-before-delete"); err != nil {
+	if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel-before-delete"); err != nil {
 		t.Fatal(err)
 	}
 	// The explicit cancellation, not the rejected deletion, reaches the daemon.
@@ -127,14 +128,14 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 	if err := h.read(proto.TypePromptCancel).DecodePayload(&request); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+	if err := store.SessionService(t, h.s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("Session deleted before cancellation settled", err)
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}}})
 	waitTurn(t, h, input.TurnID, sessions.TurnCancelled)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		err := h.s.DeleteSession(ctx, h.tenant, h.session.ID)
+		err := store.SessionService(t, h.s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID})
 		if err == nil {
 			break
 		}
@@ -143,14 +144,14 @@ func TestWaitingSessionCancelsThenDeletesThroughWorker(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if err := h.s.DeleteSession(ctx, h.tenant, h.session.ID); err != nil {
+	if err := store.SessionService(t, h.s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); err != nil {
 		t.Fatal("repeated deletion", err)
 	}
 	raw, _ := json.Marshal(sessions.FunctionResultInput{TurnID: input.TurnID, CallID: state.RequiredActions[0].CallID, Result: json.RawMessage(`{"success":true,"output":"late"}`)})
 	if _, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "late", []sessions.Input{{Kind: "tool_result", Payload: raw}}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := h.s.GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := store.SessionAdapter(h.s).GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
 	h.session = publicSession(t, h, "unrelated")

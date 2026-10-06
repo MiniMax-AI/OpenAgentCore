@@ -47,7 +47,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
+	handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), fixtureSessionStore(db), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
 	if err = db.pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
 		t.Fatal("user Runtime acquired managed allocation", allocations, err)
 	}
-	current, err := s.GetSession(t.Context(), principal.TenantID, session.ID)
+	current, err := store.SessionAdapter(s).GetSession(t.Context(), principal.TenantID, session.ID)
 	if err != nil || current.LastTurn != nil {
 		t.Fatal("connection handling created execution", err)
 	}

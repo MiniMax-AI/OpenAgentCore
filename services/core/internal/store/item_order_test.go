@@ -23,11 +23,11 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(ctx, tenant, session.ID, "first", json.RawMessage(`{"text":"question"}`))
+	input, err := store.SendMessage(ctx, s, tenant, session.ID, "first", json.RawMessage(`{"text":"question"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	if _, err = s.SubmitMessage(ctx, tenant, session.ID, "steer", json.RawMessage(`{"text":"continue"}`)); err != nil {
+	if _, err = store.SendMessage(ctx, s, tenant, session.ID, "steer", json.RawMessage(`{"text":"continue"}`)); err != nil {
 		t.Fatal(err)
 	}
 	page, err = sessionReads(pool).ListItems(ctx, tenant, session.ID, "", 100, true)
@@ -128,15 +128,15 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 			t.Fatalf("output index = %d, want %d", output.Int32, index)
 		}
 	}
-	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
+	if _, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	checkOrder()
-	next, err := s.SubmitMessage(ctx, tenant, session.ID, "next-turn", json.RawMessage(`{"text":"new turn"}`))
+	next, err := store.SendMessage(ctx, s, tenant, session.ID, "next-turn", json.RawMessage(`{"text":"new turn"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, next.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = store.TransitionTurn(ctx, s, tenant, session.ID, next.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, next.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"new","delta":"new turn"}`)}}); err != nil {

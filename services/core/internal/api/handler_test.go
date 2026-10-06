@@ -52,7 +52,7 @@ func (s *recordingStore) CreateSession(_ context.Context, tenant string, input s
 // record answers Session creation, reads and listing from s.
 func (s *recordingStore) record(f *testFakes) {
 	f.sessionCreation.createSession, f.sessionCreation.findSessionCreation = s.CreateSession, s.FindSessionCreation
-	f.sessions.getSession, f.sessions.listSessions = s.GetSession, s.ListSessions
+	f.sessionsReader.getSession, f.sessionsReader.listSessions = s.GetSession, s.ListSessions
 }
 
 // testHandler serves strict fakes for a fresh tenant whose caller

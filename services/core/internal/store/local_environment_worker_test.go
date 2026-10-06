@@ -81,7 +81,7 @@ func TestLocalEnvironmentWorkerDirectoryUsesExactAuthorityWithoutModel(t *testin
 	if got := awaitDirectoryResult(t, result); got.err != nil || len(got.value.Entries) != 1 {
 		t.Fatal("local directory failed", got.err)
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity != nil {
 		t.Fatal("local read admitted execution", err)
 	}
@@ -110,7 +110,7 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 
 func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *testing.T) {
 	h, worker, environment := localWorker(t, true, true)
-	reservation, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	reservation, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "local-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	if frame.DecodePayload(&prepare) != nil || prepare.Configuration.LocalEnvironment == nil || prepare.Configuration.LocalEnvironment.ID != environment.ID {
 		t.Fatal("local preparation lost identity")
 	}
-	before, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	before, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || before.LastTurn != nil {
 		t.Fatal("preparation admitted execution before readiness", err)
 	}
@@ -141,14 +141,14 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "complete", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "local-native-history"}})
 	completeLocalArtifactExport(t, h, worker, environment)
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "local completion", func() bool {
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
+		turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
 		return err == nil && turn.Status == sessions.TurnCompleted
 	})
-	settled, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, reservation.ID)
+	settled, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, reservation.ID)
 	if err != nil || settled.State != sessions.EnvironmentInputAdmitted || len(settled.Receipts) != 1 {
 		t.Fatal("local reservation did not settle", err)
 	}
-	bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 	if err != nil || bound.Device.EnvironmentID != environment.ID || bound.NativeSessionID != "local-native-history" {
 		t.Fatal("local native identity was not retained", err)
 	}

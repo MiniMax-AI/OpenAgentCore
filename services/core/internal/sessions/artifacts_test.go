@@ -192,6 +192,11 @@ func (s *fakeArtifactStorage) DeleteSessionArtifact(context.Context, string, str
 	return nil
 }
 
+func (s *fakeArtifactStorage) WithInputs(context.Context, string, string, func(context.Context, InputTx) error) error {
+	s.t.Fatal("unexpected call to WithInputs")
+	return nil
+}
+
 func (s *fakeArtifactStorage) CreateDevice(context.Context, string, DeviceRegistration) (ExecutionDevice, error) {
 	s.t.Fatal("unexpected call to CreateDevice")
 	return ExecutionDevice{}, nil
@@ -254,6 +259,21 @@ func (s *fakeArtifactStorage) WithExecutorCredentials(context.Context, string, f
 
 func (s *fakeArtifactStorage) WithEnvironmentExecutorCredentials(context.Context, string, string, func(context.Context, EnvironmentExecutorCredentialTx, LockedSession) error) error {
 	s.t.Fatal("unexpected call to WithEnvironmentExecutorCredentials")
+	return nil
+}
+
+func (s *fakeArtifactStorage) WithSessionDeletion(context.Context, string, string, func(context.Context, LockedSession, SessionDeletionTx) error) error {
+	s.t.Fatal("unexpected call to WithSessionDeletion")
+	return nil
+}
+
+func (s *fakeArtifactStorage) UpdateSessionMetadata(context.Context, string, string, []byte) (Session, error) {
+	s.t.Fatal("unexpected call to UpdateSessionMetadata")
+	return Session{}, nil
+}
+
+func (s *fakeArtifactStorage) AuditSessionOperation(context.Context, string, string, string) error {
+	s.t.Fatal("unexpected call to AuditSessionOperation")
 	return nil
 }
 

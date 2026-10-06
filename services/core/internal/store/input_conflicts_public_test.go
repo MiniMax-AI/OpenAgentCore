@@ -70,11 +70,11 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// waiting starts a Turn that waits for one function result.
 	waiting := func(session, key, call string) sessions.InputReceipt {
 		t.Helper()
-		receipt, err := s.SubmitMessage(ctx, tenant, session, key, json.RawMessage(`{"text":"work"}`))
+		receipt, err := store.SendMessage(ctx, s, tenant, session, key, json.RawMessage(`{"text":"work"}`))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err := store.TransitionTurn(ctx, s, tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
 		if err := functions.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, sessions.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
@@ -87,7 +87,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		if err := functions.ConfirmFunctionResult(ctx, tenant, session, receipt.TurnID, call); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.CompleteExecution(ctx, tenant, session, receipt.TurnID, sessions.TurnCompleted, nil, "", receipt.Sequence); err != nil {
+		if _, err := functions.CompleteExecution(ctx, tenant, session, receipt.TurnID, sessions.TurnCompleted, nil, "", receipt.Sequence); err != nil {
 			t.Fatal(err)
 		}
 	}

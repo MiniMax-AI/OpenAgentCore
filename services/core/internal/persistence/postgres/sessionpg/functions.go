@@ -150,18 +150,3 @@ func (t *SessionTx) ApplyFunctionResult(ctx context.Context, turn, call string) 
 	}
 	return t.q.ApplyFunctionResult(ctx, sqlc.ApplyFunctionResultParams{SessionID: t.session, TurnID: id, CallID: call})
 }
-
-func (t *SessionTx) ApplyFunctionTurnStatus(ctx context.Context, turn, expected, status string) (sessions.Turn, error) {
-	id, err := parseID(turn)
-	if err != nil {
-		return sessions.Turn{}, err
-	}
-	row, err := t.q.TransitionTurn(ctx, sqlc.TransitionTurnParams{ID: id, SessionID: t.session, ExpectedStatus: expected, NewStatus: status, Outcome: []byte(`{}`)})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return sessions.Turn{}, sessions.ErrTurnConflict
-	}
-	if err != nil {
-		return sessions.Turn{}, err
-	}
-	return TurnFromRow(row), nil
-}

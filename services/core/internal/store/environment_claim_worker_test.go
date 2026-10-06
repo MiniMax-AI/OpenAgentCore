@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
@@ -18,21 +19,20 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			s, db := newTestStoreDB(t)
 			tenant, pending := newEnvironmentExpiryReservation(t, s)
 			owner := executionOwner(t, db, s)
-			writer := owner.Store
-			got, err := writer.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
+			got, err := owner.Sessions.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if err != nil || len(got.Receipts) != 1 || got.Receipts[0].Replayed {
 				t.Fatal(got, err)
 			}
 			turnID := got.Receipts[0].TurnID
 			if deleted {
-				if err := s.DeleteSession(t.Context(), tenant, pending.SessionID); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := store.SessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: pending.SessionID}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("claimed Session deleted", err)
 				}
 				if err := s.CommitLegacyDeletion(t.Context(), tenant, pending.SessionID); err != nil {
 					t.Fatal(err)
 				}
 			}
-			turn, err := s.GetTurn(t.Context(), tenant, pending.SessionID, turnID)
+			turn, err := store.SessionAdapter(s).GetTurn(t.Context(), tenant, pending.SessionID, turnID)
 			if err != nil || turn.Status != sessions.TurnInProgress || (deleted && turn.CancelRequestedAt.IsZero()) {
 				t.Fatal("promotion did not retain the active claim", turn, err)
 			}
@@ -50,7 +50,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitRelease()
-			turn, err = s.GetTurn(t.Context(), tenant, pending.SessionID, turnID)
+			turn, err = store.SessionAdapter(s).GetTurn(t.Context(), tenant, pending.SessionID, turnID)
 			var outcome struct {
 				ErrorCode string `json:"error_code"`
 			}
@@ -65,7 +65,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 			if err != nil || turns != 1 || inputs != 1 || queued != 0 {
 				t.Fatal("restart duplicated or requeued prepared work", turns, inputs, queued, err)
 			}
-			successor := executionOwner(t, db, s).Store
+			successor := executionOwner(t, db, s).Sessions
 			retry, err := successor.PromoteEnvironmentInput(t.Context(), tenant, pending.SessionID, pending.ID)
 			if deleted {
 				if !errors.Is(err, sessions.ErrNotFound) {

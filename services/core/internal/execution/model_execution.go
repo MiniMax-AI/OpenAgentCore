@@ -2,17 +2,13 @@ package execution
 
 import (
 	"context"
-	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func (d *Dispatcher) sessionModelOptions(ctx context.Context, session sessions.Session) (map[string]any, error) {
-	if d.Store == nil {
-		return nil, errors.New("session model configuration is unavailable")
-	}
-	provider, err := d.Store.SessionModelExecution(ctx, session.TenantID, session.ID)
+	provider, err := d.SessionsReader.SessionModelExecution(ctx, session.TenantID, session.ID)
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 
@@ -27,8 +28,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// Use the original Store for administrator reads, as server startup does, and
-// route archive writes through the real Worker's execution-owned Store clone.
+// Serve administrator reads from the pooled Session adapter and archive through
+// the deployment execution operations on the Worker's lease, as server startup
+// does.
 func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	_, pool := store.NewManagedTestStore(t)
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{83}, 32))
@@ -52,7 +54,15 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	}, func(_ context.Context, setup deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
 		return execution.PreparedRuntimeDeployment{Config: providerConfig(setup)}, nil
 	})
-	worker := startWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration})
+	lease, err := pgunit.AcquireLease(t.Context(), pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, err := fixtureOwner(db, s, lease)
+	if err != nil {
+		t.Fatal(errors.Join(err, lease.Close(t.Context())))
+	}
+	worker := startOwnedWorker(t, t.Context(), db, &execution.Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), ManagedRuntimes: configuration}, owner)
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {
@@ -82,22 +92,19 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 		return session
 	}
 	active, untouched := create(), create()
-	owner, err := worker.ProvisionEnvironment(t.Context(), project.TenantID, active.Environment.ID, installation)
+	allocated, err := worker.ProvisionEnvironment(t.Context(), project.TenantID, active.Environment.ID, installation)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := s.SubmitMessage(t.Context(), project.TenantID, active.ID, "pending-turn", json.RawMessage(`{"text":"pending"}`))
+	input, err := store.SendMessage(t.Context(), s, project.TenantID, active.ID, "pending-turn", json.RawMessage(`{"text":"pending"}`))
 	if err != nil {
 		t.Fatal(err)
-	}
-	if _, err := s.ArchiveManagedSession(ctx, project.TenantID, active.ID, 1); !errors.Is(err, store.ErrExecutionAuthority) {
-		t.Fatal("fixture admission Store unexpectedly holds execution ownership", err)
 	}
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("archive-administrator")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), workerExecution(worker), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), workerExecution(t, worker), func(d *api.Dependencies) { d.Execution.SessionArchive = owner.Deployment }, withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,13 +120,13 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	w := request(http.MethodPost, active.ID)
 	var archived sessions.ManagedArchive
 	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &archived) != nil || archived.State != "cleanup_pending" || archived.SessionID != active.ID {
-		t.Fatalf("archive did not use Worker's leased Store: %d %s", w.Code, w.Body)
+		t.Fatalf("archive failed: %d %s", w.Code, w.Body)
 	}
 	allocation, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: active.Environment.ID})
-	if err != nil || allocation.ID != owner.ID || allocation.State != "cleanup_pending" {
+	if err != nil || allocation.ID != allocated.ID || allocation.State != "cleanup_pending" {
 		t.Fatal("archive did not retain cleanup ownership", allocation, err)
 	}
-	turn, err := s.GetTurn(t.Context(), project.TenantID, active.ID, input.TurnID)
+	turn, err := store.SessionAdapter(s).GetTurn(t.Context(), project.TenantID, active.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnCancelled {
 		t.Fatal("archive did not cancel queued work", turn, err)
 	}

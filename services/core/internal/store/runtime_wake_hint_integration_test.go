@@ -13,6 +13,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type wakeHintScanProvider struct {
@@ -125,7 +126,7 @@ func (f *wakeHintIntegration) pending(t *testing.T, target wakeHintIntegrationTa
 			"SELECT id::text FROM environment_input_reservations WHERE session_id=$1 AND idempotency_key=$2",
 			target.session.ID, key).Scan(&id) == nil
 	})
-	pending, err := f.fixture.store.GetEnvironmentInputReservation(t.Context(), target.tenant, target.session.ID, id)
+	pending, err := store.SessionAdapter(f.fixture.store).GetEnvironmentInputReservation(t.Context(), target.tenant, target.session.ID, id)
 	if err != nil || pending.State != sessions.EnvironmentInputPending {
 		t.Fatal("input was not durably pending", pending.State, err)
 	}
@@ -196,7 +197,7 @@ func TestRuntimeWakeHintRejectedSubmitDoesNotAccelerateScan(t *testing.T) {
 			} else {
 				// Persist directly while the sentinel is blocked. Only the failing
 				// Worker submission could emit a hint; Store persistence cannot.
-				if _, err := f.fixture.store.ReserveEnvironmentInput(t.Context(), f.target.tenant, f.target.session.ID, key, inputs); err != nil {
+				if _, err := store.SessionService(t, f.fixture.store).ReserveEnvironmentInput(t.Context(), f.target.tenant, f.target.session.ID, key, inputs); err != nil {
 					t.Fatal(err)
 				}
 				if name == "idempotency conflict" {

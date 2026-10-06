@@ -19,7 +19,7 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	if err != nil || issued.KeyID != keyID || issued.EnvironmentID != "" || len(issued.Token) != 43 {
 		t.Fatal("pre-Session principal issuance failed", err)
 	}
-	page, err := s.ListSessions(ctx, p.TenantID, "", 10, false, nil)
+	page, err := sessionAdapter(s).ListSessions(ctx, p.TenantID, "", 10, false, nil)
 	if err != nil || len(page.Sessions) != 0 {
 		t.Fatal("issuance created a Session", err)
 	}
@@ -92,7 +92,7 @@ func TestExecutorPrincipalBeforeSessionAndSharedLifecycle(t *testing.T) {
 	credentials = sessionService(t, restarted)
 	check(restarted, one.ID, issued, true)
 	check(restarted, two.ID, issued, true)
-	if err := restarted.DeleteSession(ctx, p.TenantID, first.ID); err != nil {
+	if err := sessionService(t, restarted).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: p.TenantID, SessionID: first.ID}); err != nil {
 		t.Fatal(err)
 	}
 	check(restarted, one.ID, issued, false)

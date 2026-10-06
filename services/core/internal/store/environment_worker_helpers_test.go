@@ -34,7 +34,7 @@ func workerEnvironmentCapabilities() proto.AgentKindCapabilities {
 func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessions.EnvironmentInputReservation {
 	t.Helper()
 	pending := unboundWorkerEnvironmentReservation(t, h)
-	session, err := h.s.GetSession(t.Context(), h.tenant, pending.SessionID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, pending.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func unboundWorkerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessi
 	if err != nil {
 		t.Fatal(err)
 	}
-	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "work", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
+	pending, err := store.SessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "work", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,14 +115,14 @@ func awaitWorkerEnvironmentRun(t *testing.T, ctx context.Context, s *store.Store
 	var run execution.EnvironmentRun
 	awaitDaemonRemoteCondition(t, ctx, 5*time.Minute, "worker terminal Environment Turn", func() bool {
 		var err error
-		run.Reservation, err = s.GetEnvironmentInputReservation(ctx, tenant, pending.SessionID, pending.ID)
+		run.Reservation, err = store.SessionAdapter(s).GetEnvironmentInputReservation(ctx, tenant, pending.SessionID, pending.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(run.Reservation.Receipts) == 0 {
 			return false
 		}
-		run.Turn, err = s.GetTurn(ctx, tenant, pending.SessionID, run.Reservation.Receipts[0].TurnID)
+		run.Turn, err = store.SessionAdapter(s).GetTurn(ctx, tenant, pending.SessionID, run.Reservation.Receipts[0].TurnID)
 		if err != nil {
 			t.Fatal(err)
 		}

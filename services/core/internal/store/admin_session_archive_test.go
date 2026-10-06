@@ -67,37 +67,35 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"waiting"}`)}}
 	tenant, session := managedArchiveSession(t, s, input)
 	ctx := adminDeleteContext(t.Context(), tenant, uuid.NewString())
-	active, err := s.GetManagedSessionArchive(t.Context(), tenant, session.ID)
+	active, err := sessionAdapter(s).GetManagedSessionArchive(t.Context(), tenant, session.ID)
 	if err != nil || active.State != "active" || active.SessionID != session.ID || active.EnvironmentID != session.Environment.ID {
 		t.Fatal("unallocated Session status", active, err)
 	}
 	for _, generation := range []uint64{0, 2, ^uint64(0)} {
-		if _, err := w.ArchiveManagedSession(ctx, tenant, session.ID, generation); !errors.Is(err, deployment.ErrConflict) {
+		var stale *deployment.GenerationStaleError
+		if _, err := deploymentExecution(t, w).ArchiveSession(ctx, tenant, session.ID, generation); !errors.As(err, &stale) || stale.CurrentGeneration != 1 || !errors.Is(err, deployment.ErrConflict) {
 			t.Fatal("archive accepted wrong generation", generation, err)
 		}
 	}
-	if _, err := s.ArchiveManagedSession(ctx, tenant, session.ID, 1); !errors.Is(err, ErrExecutionAuthority) {
-		t.Fatal("unleased archive accepted", err)
-	}
 	for _, other := range []string{uuid.NewString(), "malformed"} {
-		if _, err := w.ArchiveManagedSession(ctx, tenant, other, 1); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := deploymentExecution(t, w).ArchiveSession(ctx, tenant, other, 1); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unknown archive", err)
 		}
-		if _, err := s.GetManagedSessionArchive(ctx, tenant, other); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(s).GetManagedSessionArchive(ctx, tenant, other); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("unknown status", err)
 		}
 	}
-	if _, err := w.ArchiveManagedSession(ctx, uuid.NewString(), session.ID, 1); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := deploymentExecution(t, w).ArchiveSession(ctx, uuid.NewString(), session.ID, 1); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign archive", err)
 	}
-	if _, err := s.GetManagedSessionArchive(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionAdapter(s).GetManagedSessionArchive(ctx, uuid.NewString(), session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign status", err)
 	}
-	result, err := w.ArchiveManagedSession(ctx, tenant, session.ID, 1)
+	result, err := deploymentExecution(t, w).ArchiveSession(ctx, tenant, session.ID, 1)
 	if err != nil || result.State != "released" {
 		t.Fatal("unallocated archive", result, err)
 	}
-	row, err := s.GetSession(t.Context(), tenant, session.ID)
+	row, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || row.Environment.Status != "expired" || row.EnvironmentFailure != nil || row.PendingInput || row.EnvironmentInputActivity != nil || row.LastTurn != nil {
 		t.Fatal("archive fabricated failed execution", row, err)
 	}
@@ -106,17 +104,17 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 		t.Fatal("archive left pending initial input", reservationState, err)
 	}
 	before := adminMutationSnapshot(t, s, "sessions", "environments", "environment_input_reservations", "session_events")
-	retry, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
+	retry, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1)
 	if err != nil || retry != result || !reflect.DeepEqual(before, adminMutationSnapshot(t, s, "sessions", "environments", "environment_input_reservations", "session_events")) {
 		t.Fatal("archive retry changed Session history", retry, err)
 	}
-	if status, err := s.GetManagedSessionArchive(ctx, tenant, session.ID); err != nil || status != result {
+	if status, err := sessionAdapter(s).GetManagedSessionArchive(ctx, tenant, session.ID); err != nil || status != result {
 		t.Fatal("status differs from committed archive", status, err)
 	}
 	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("archived Environment allocated after archive", err)
 	}
-	if _, err := s.ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("archived Environment accepted new input", err)
 	}
 	view, err := deploymentService(t, s).View(t.Context())
@@ -146,7 +144,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	transition(t, w, tenant, session.ID, input.TurnID, sessions.TurnInProgress, sessions.TurnCompleted)
 	history := adminMutationSnapshot(t, s, "sessions", "turns", "session_items", "session_artifacts", "source_files", "pg_largeobject", "pg_largeobject_metadata")
 	request := uuid.NewString()
-	result, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, request), tenant, session.ID, 1)
+	result, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, request), tenant, session.ID, 1)
 	if err != nil || result.State != "cleanup_pending" {
 		t.Fatal(result, err)
 	}
@@ -167,7 +165,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if _, err := deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	current, err := s.GetSession(t.Context(), tenant, session.ID)
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || current.EnvironmentFailure != nil || current.LastTurn == nil || current.LastTurn.Status != sessions.TurnCompleted || current.Environment.Status != "expired" {
 		t.Fatal("cleanup rewrote completed outcome", current, err)
 	}
@@ -177,7 +175,7 @@ func TestManagedSessionArchiveRetainsHistoryAndSettledResources(t *testing.T) {
 	if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := s.GetManagedSessionArchive(t.Context(), tenant, session.ID); err != nil || result.State != "released" {
+	if result, err := sessionAdapter(s).GetManagedSessionArchive(t.Context(), tenant, session.ID); err != nil || result.State != "released" {
 		t.Fatal("release not reflected", result, err)
 	}
 	page, err := sessionAdapter(s).ListSessionArtifacts(t.Context(), tenant, session.ID, "", "", 100, true)
@@ -214,15 +212,15 @@ func TestManagedSessionArchiveAuditFailureRollsBack(t *testing.T) {
 	tables := []string{"sessions", "environments", "turns", "session_events", "devices", "runtime_allocations", "runtime_placements", "environment_input_reservations", "admin_audit_log"}
 	before := adminMutationSnapshot(t, s, tables...)
 	count := adminAuditRejections(t, s)
-	_, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, rejectedAdminRequest), tenant, session.ID, 1)
+	_, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, rejectedAdminRequest), tenant, session.ID, 1)
 	requireAdminAuditFailure(t, s, err, count)
 	if !reflect.DeepEqual(before, adminMutationSnapshot(t, s, tables...)) {
 		t.Fatal("failed audit retained archive, revocation or cancellation")
 	}
-	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
+	if _, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	turn, err := s.GetTurn(t.Context(), tenant, session.ID, input.TurnID)
+	turn, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, input.TurnID)
 	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() {
 		t.Fatal("archive did not request cancellation or fabricated settlement", turn, err)
 	}
@@ -238,23 +236,23 @@ func TestManagedSessionArchivePreservesFailuresAndRejectsSelfHosted(t *testing.T
 	if err := sessionExecution(t, w.lease).FailEnvironmentInitialization(t.Context(), sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}, sessions.ProvisioningFailure{Step: sessions.ProvisioningSetupCommand, Index: 0, ExitCode: 2}); err != nil {
 		t.Fatal(err)
 	}
-	failed, err := s.GetSession(t.Context(), tenant, session.ID)
+	failed, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || failed.EnvironmentFailure == nil {
 		t.Fatal("failure fixture", err)
 	}
 	otherTenant, selfHosted := managedArchiveSession(t, s, environmentInput(uuid.NewString(), "self_hosted", "/workspace"))
-	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
+	if _, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), tenant, uuid.NewString()), tenant, session.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	after, err := s.GetSession(t.Context(), tenant, session.ID)
+	after, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(after.EnvironmentFailure, failed.EnvironmentFailure) || after.Environment.Status != "failed" {
 		t.Fatal("archive changed recorded provisioning failure", after, err)
 	}
 	before := adminMutationSnapshot(t, s, "sessions", "environments", "admin_audit_log")
-	if _, err := w.ArchiveManagedSession(adminDeleteContext(t.Context(), otherTenant, uuid.NewString()), otherTenant, selfHosted.ID, 1); !errors.Is(err, sessions.ErrInvalidInput) {
+	if _, err := deploymentExecution(t, w).ArchiveSession(adminDeleteContext(t.Context(), otherTenant, uuid.NewString()), otherTenant, selfHosted.ID, 1); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("self-hosted archive accepted", err)
 	}
-	if _, err := s.GetManagedSessionArchive(t.Context(), otherTenant, selfHosted.ID); !errors.Is(err, sessions.ErrInvalidInput) {
+	if _, err := sessionAdapter(s).GetManagedSessionArchive(t.Context(), otherTenant, selfHosted.ID); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("self-hosted cleanup projected", err)
 	}
 	if !reflect.DeepEqual(before, adminMutationSnapshot(t, s, "sessions", "environments", "admin_audit_log")) {

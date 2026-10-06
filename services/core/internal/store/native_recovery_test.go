@@ -23,11 +23,11 @@ func TestSessionExecutionBindingRetainsStartedExecutionRequirement(t *testing.T)
 	}
 	assertStarted := func(st *Store, want bool) {
 		t.Helper()
-		bound, err := st.GetSessionExecutionBinding(t.Context(), tenant, session.ID)
+		bound, err := sessionAdapter(st).GetSessionExecutionBinding(t.Context(), tenant, session.ID)
 		if err != nil || bound.HasStartedTurn != want || bound.NativeSessionID != "" {
 			t.Fatalf("binding=%+v err=%v", bound, err)
 		}
-		if _, err := st.GetSessionExecutionBinding(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+		if _, err := sessionAdapter(st).GetSessionExecutionBinding(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal("foreign binding", err)
 		}
 	}

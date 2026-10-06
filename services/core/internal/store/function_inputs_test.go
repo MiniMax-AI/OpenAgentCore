@@ -40,7 +40,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	tenant, session, turn := functionInputFixture(t, s, functionExecution(t))
 	full := `{"success":false,"output":[{"type":"input_text","text":""},{"type":"input_image","image_url":"data:image/png;base64,AA=="},{"type":"input_text","text":"after"}],"error":"failed"}`
 	batch := []sessions.Input{resultInput(t, turn, "a", full), {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, resultInput(t, turn, "b", `{"success":true,"output":null,"error":null}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
-	receipts, err := s.SubmitInputs(t.Context(), tenant, session.ID, "batch", batch)
+	receipts, err := submitInputs(t.Context(), s, tenant, session.ID, "batch", batch)
 	if err != nil || len(receipts) != 4 {
 		t.Fatal(receipts, err)
 	}
@@ -60,7 +60,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	next := submitMessage(t, s, tenant, session.ID, "next").TurnID
 	pool.Close()
 	s, _ = testStore(t)
-	retry, err := s.SubmitInputs(t.Context(), tenant, session.ID, "batch", batch)
+	retry, err := submitInputs(t.Context(), s, tenant, session.ID, "batch", batch)
 	if err != nil || len(retry) != len(receipts) {
 		t.Fatal(retry, err)
 	}
@@ -73,24 +73,24 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	if !reflect.DeepEqual(retry, receipts) {
 		t.Fatal(retry, receipts)
 	}
-	history, err := s.ListTurnInputs(t.Context(), tenant, session.ID, turn, 0, 100)
+	history, err := sessionAdapter(s).ListTurnInputs(t.Context(), tenant, session.ID, turn, 0, 100)
 	if err != nil || len(history) != 5 || history[1].Kind != "tool_result" || history[2].Kind != "message" {
 		t.Fatal(history, err)
 	}
-	future, err := s.ListTurnInputs(t.Context(), tenant, session.ID, next, 0, 100)
+	future, err := sessionAdapter(s).ListTurnInputs(t.Context(), tenant, session.ID, next, 0, 100)
 	if err != nil || len(future) != 1 {
 		t.Fatal(future, err)
 	}
-	current, err := s.GetTurn(t.Context(), tenant, session.ID, next)
+	current, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, next)
 	if err != nil || !current.CancelRequestedAt.IsZero() || current.Status != sessions.TurnQueued {
 		t.Fatal(current, err)
 	}
 	changed := []sessions.Input{batch[1], batch[0], batch[2], batch[3]}
-	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "batch", changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+	if _, err := submitInputs(t.Context(), s, tenant, session.ID, "batch", changed); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal(err)
 	}
 	// A new request identity can repeat an identical saved result, without native application.
-	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "same-result", batch[:1]); err != nil {
+	if _, err := submitInputs(t.Context(), s, tenant, session.ID, "same-result", batch[:1]); err != nil {
 		t.Fatal(err)
 	}
 	call, err = FixtureFunctionCall(t.Context(), s.pool, tenant, session.ID, turn, "a")
@@ -136,22 +136,22 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 				batch = append(batch, resultInput(t, turn, "a", `{"success":false}`))
 				expected = sessions.ErrFunctionResultConflict
 			}
-			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "failed-batch", batch); !errors.Is(err, expected) {
+			if _, err := submitInputs(t.Context(), s, tenant, session.ID, "failed-batch", batch); !errors.Is(err, expected) {
 				t.Fatal(err)
 			}
 			call, err := FixtureFunctionCall(t.Context(), s.pool, tenant, session.ID, turn, "a")
 			if err != nil || call.Result != nil || call.Applied {
 				t.Fatal(call, err)
 			}
-			state, err := s.GetTurn(t.Context(), tenant, session.ID, turn)
+			state, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, turn)
 			if err != nil || !state.CancelRequestedAt.IsZero() || state.Status != sessions.TurnWaiting {
 				t.Fatal(state, err)
 			}
-			history, err := s.ListTurnInputs(t.Context(), tenant, session.ID, turn, 0, 100)
+			history, err := sessionAdapter(s).ListTurnInputs(t.Context(), tenant, session.ID, turn, 0, 100)
 			if err != nil || len(history) != 1 {
 				t.Fatal(history, err)
 			}
-			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "failed-batch", []sessions.Input{first, cancel}); err != nil {
+			if _, err := submitInputs(t.Context(), s, tenant, session.ID, "failed-batch", []sessions.Input{first, cancel}); err != nil {
 				t.Fatal("failed transaction retained retry identity", err)
 			}
 		})
@@ -169,7 +169,7 @@ func TestFunctionInputConcurrentBatchesSelectOneResult(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := other.SubmitInputs(t.Context(), tenant, session.ID, fmt.Sprint(i), batch)
+			_, err := submitInputs(t.Context(), other, tenant, session.ID, fmt.Sprint(i), batch)
 			results <- err
 		}()
 	}
@@ -188,7 +188,7 @@ func TestFunctionInputConcurrentBatchesSelectOneResult(t *testing.T) {
 	if wins != 1 || conflicts != 1 {
 		t.Fatal(wins, conflicts)
 	}
-	history, err := s.ListTurnInputs(t.Context(), tenant, session.ID, turn, 0, 100)
+	history, err := sessionAdapter(s).ListTurnInputs(t.Context(), tenant, session.ID, turn, 0, 100)
 	if err != nil || len(history) != 3 {
 		t.Fatal(history, err)
 	}
@@ -198,7 +198,7 @@ func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 	s, _ := testStore(t)
 	tenant, session, turn := functionInputFixture(t, s, functionExecution(t))
 	for _, raw := range []string{`{}`, `{"turn_id":"","call_id":"a","result":{}}`, fmt.Sprintf(`{"turn_id":%q,"call_id":" ","result":{}}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a"}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a","result":null}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a","result":[]}`, turn)} {
-		_, err := s.SubmitInputs(t.Context(), tenant, session.ID, "invalid", []sessions.Input{{Kind: "tool_result", Payload: json.RawMessage(raw)}})
+		_, err := submitInputs(t.Context(), s, tenant, session.ID, "invalid", []sessions.Input{{Kind: "tool_result", Payload: json.RawMessage(raw)}})
 		if !errors.Is(err, sessions.ErrInvalidInput) {
 			t.Fatal(err)
 		}
@@ -207,7 +207,7 @@ func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 	// Missing, foreign and malformed Sessions are not found, whatever the target.
 	for _, scope := range []struct{ tenant, session string }{{uuid.NewString(), session.ID}, {tenant, uuid.NewString()}, {tenant, "sess_malformed"}} {
 		for _, target := range []sessions.Input{input, resultInput(t, "bad", "missing", `{"success":true}`)} {
-			if _, err := s.SubmitInputs(t.Context(), scope.tenant, scope.session, "foreign", []sessions.Input{target}); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := submitInputs(t.Context(), s, scope.tenant, scope.session, "foreign", []sessions.Input{target}); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 		}
@@ -221,15 +221,15 @@ func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 		{uuid.NewString(), "a", sessions.ErrFunctionCallTurnMismatch}, {"bad", "a", sessions.ErrFunctionCallTurnMismatch},
 		{turn, "missing", sessions.ErrUnknownFunctionCall}, {uuid.NewString(), "missing", sessions.ErrUnknownFunctionCall}, {"bad", "missing", sessions.ErrUnknownFunctionCall},
 	} {
-		if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "target", []sessions.Input{resultInput(t, target.turn, target.call, `{"success":true}`)}); !errors.Is(err, target.want) {
+		if _, err := submitInputs(t.Context(), s, tenant, session.ID, "target", []sessions.Input{resultInput(t, target.turn, target.call, `{"success":true}`)}); !errors.Is(err, target.want) {
 			t.Fatal(target, err)
 		}
 	}
 	transition(t, s, tenant, session.ID, turn, sessions.TurnWaiting, sessions.TurnFailed)
-	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "late", []sessions.Input{input}); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := submitInputs(t.Context(), s, tenant, session.ID, "late", []sessions.Input{input}); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal(err)
 	}
-	current, err := s.GetSession(t.Context(), tenant, session.ID)
+	current, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || current.LastTurn.ID != turn || current.LastTurn.Status != sessions.TurnFailed {
 		t.Fatal(current, err)
 	}

@@ -61,6 +61,11 @@ type ExecutionStorage interface {
 	// missing allocation is ErrNotFound.
 	WithAllocation(ctx context.Context, key AllocationKey, apply func(AllocationTx) error) error
 	AllocationCleanupStorage
+	// WithSessionArchive runs apply in one leased transaction that locks the
+	// tenant's Session, deleted or not, and then prunes the Session's journal.
+	// It commits only when both succeed. A malformed tenant is
+	// ErrInvalidInput; a malformed or missing Session is sessions.ErrNotFound.
+	WithSessionArchive(ctx context.Context, tenantID, sessionID string, apply func(context.Context, sessions.LockedSession, SessionArchiveTx) error) error
 	// ClearWake clears the allocation's wake request unless activity newer
 	// than observed arrived. It runs on the lease.
 	ClearWake(ctx context.Context, allocationID string, observed time.Time) error
@@ -131,6 +136,47 @@ type AllocationCleanupTx interface {
 	RevokeDevice(current Allocation) error
 	// RequestCleanup records that the allocation's resources await cleanup.
 	RequestCleanup(current Allocation) (Allocation, error)
+}
+
+// SessionArchiveTx is one Session-locked archive of the Session's hosted
+// Environment, with the Session's cancellation bound to the same transaction.
+type SessionArchiveTx interface {
+	sessions.CancellationTx
+	sessions.InputActivityTx
+	// LoadDeployment locks the deployment and returns it. The Session lock
+	// precedes it, as in Turn, allocation and input admission.
+	LoadDeployment() (Record, error)
+	// LoadEnvironment reads the Session's Environment.
+	LoadEnvironment(ctx context.Context) (sessions.Environment, error)
+	// ExpireEnvironment sets the status of the Session's Environment to
+	// expired.
+	ExpireEnvironment(ctx context.Context, environment string) error
+	// LoadResetBusy reports whether the Session has an in-progress or waiting
+	// Turn or subagent Turn, or a pending Environment file write, which an
+	// automatic reset does not archive.
+	LoadResetBusy() (bool, error)
+	// LoadResetSource returns the administrator source that started the
+	// running reset.
+	LoadResetSource() (adminaudit.Source, error)
+	// LoadProject returns the ID of the tenant's Project.
+	LoadProject() (string, error)
+	// FindAllocation returns the Environment's allocation and whether it has
+	// one.
+	FindAllocation(environment string) (Allocation, bool, error)
+	// RequestArchiveCleanup revokes the allocation's device and records that
+	// its resources await cleanup. The device's first revocation records the
+	// Session's active Turn whose cancellation was requested, which the
+	// archived cancellation receipt reports.
+	RequestArchiveCleanup(current Allocation) error
+	// ReleasePlacement releases the node placement of the Session's
+	// Environments that have no allocation.
+	ReleasePlacement() error
+	// RecordArchiveAudit records the administrator audit of the archive with
+	// the source on ctx.
+	RecordArchiveAudit(ctx context.Context) error
+	// LoadArchive reads the resource disposal of the Session's hosted
+	// Environment.
+	LoadArchive(ctx context.Context) (sessions.ManagedArchive, error)
 }
 
 // Reader answers deployment and node queries.

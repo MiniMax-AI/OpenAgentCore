@@ -82,7 +82,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		for _, id := range receipt.Sessions {
-			if err := s.DeleteSession(context.Background(), tenant, id); err != nil {
+			if err := store.SessionService(t, s).DeleteSession(context.Background(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: id}); err != nil {
 				t.Error(err)
 			}
 		}

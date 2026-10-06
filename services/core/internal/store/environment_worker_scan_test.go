@@ -6,6 +6,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
@@ -43,7 +44,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 	runtime.write(prepare.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "failed"})
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stop()
-	stored, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
+	stored, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, pending.SessionID, pending.ID)
 	if err != nil || stored.State != sessions.EnvironmentInputPending || !stored.Deadline.Equal(pending.Deadline) || len(stored.Receipts) != 0 {
 		t.Fatal("readiness retry changed pending identity or admitted work", stored, err)
 	}
@@ -59,7 +60,7 @@ func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 			last = pending
 		}
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, last.SessionID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, last.SessionID)
 	if err != nil {
 		t.Fatal(err)
 	}

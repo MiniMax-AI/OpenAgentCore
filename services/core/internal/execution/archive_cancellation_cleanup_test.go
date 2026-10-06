@@ -92,14 +92,16 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			input, err := s.SubmitMessage(t.Context(), project.TenantID, session.ID, "start", json.RawMessage(`{"text":"run"}`))
+			_, service := testSessions(t, pool, nil)
+			inputs, err := service.SubmitInputs(t.Context(), project.TenantID, session.ID, "start", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"run"}`)}})
 			if err != nil {
 				t.Fatal(err)
 			}
+			input := inputs[0]
 			// This fixture isolates lifecycle ordering. Protocol-driven waiting is
 			// independently exercised in TestArchiveWaitingCancellationReceipts.
 			for _, transition := range []sessions.TurnTransition{{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}, {ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnWaiting}} {
-				if _, err := writer.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, transition); err != nil {
+				if _, err := leased.Sessions.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, transition); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -116,7 +118,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				server := httptest.NewUnstartedServer(nil)
 				wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
 				credentials, heartbeat := testSessions(t, pool, testCredentialCipher(t))
-				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, s, wsURL)
+				handler, liveRegistry, err := runtime.NewGateway(credentials, heartbeat, credentials, wsURL)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -148,18 +150,19 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				}
 				defer release()
 			}
-			if _, err := writer.ArchiveManagedSession(audit, project.TenantID, session.ID, 1); err != nil {
+			if _, err := leased.Deployment.ArchiveSession(audit, project.TenantID, session.ID, 1); err != nil {
 				t.Fatal(err)
 			}
 			owner, err = reader.EnvironmentAllocation(t.Context(), key)
 			if err != nil {
 				t.Fatal(err)
 			}
+			sessionReader, _ := testSessions(t, pool, testCredentialCipher(t))
 			kills := 0
 			expectedStatus := sessions.TurnWaiting
 			provider := waitingCleanupProvider{beforeKill: func() {
 				kills++
-				turn, err := s.GetTurn(t.Context(), project.TenantID, session.ID, input.TurnID)
+				turn, err := sessionReader.GetTurn(t.Context(), project.TenantID, session.ID, input.TurnID)
 				if err != nil || turn.Status != expectedStatus || turn.CancelRequestedAt.IsZero() || (turn.CompletedAt.IsZero() != (expectedStatus == sessions.TurnWaiting)) {
 					t.Fatal("cleanup observed unexpected terminal state", turn, err)
 				}
@@ -168,7 +171,6 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal("Kill bypassed durable cleanup ownership", allocation, err)
 				}
 			}}
-			sessionReader, _ := testSessions(t, pool, testCredentialCipher(t))
 			lifecycle := &runtimeLifecycle{store: writer, sessions: sessionReader, sessionExecution: leased.Sessions, deployment: leased.Deployment, deployments: deployments, reader: reader, lease: leased.Lease, registry: registry, config: RuntimeProvider{InstallationID: installation, Provider: provider}, connections: map[string]*runtimeConnection{}}
 			if checkpoint {
 				lifecycle.config.Provider = waitingCleanupCheckpoint{beforeKill: provider.beforeKill}
@@ -185,7 +187,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 					t.Fatal(pending, err)
 				}
 				// Controlled terminal receipt fixture; no native cancellation claim.
-				if _, err := writer.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnCancelled}); err != nil {
+				if _, err := leased.Sessions.TransitionTurn(t.Context(), project.TenantID, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnCancelled}); err != nil {
 					t.Fatal(err)
 				}
 				expectedStatus = sessions.TurnCancelled
@@ -197,7 +199,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			if err != nil || after.State != "released" || kills != 1 {
 				t.Fatal("cleanup did not release", after, kills, err)
 			}
-			turn, err := s.GetTurn(t.Context(), project.TenantID, session.ID, input.TurnID)
+			turn, err := sessionReader.GetTurn(t.Context(), project.TenantID, session.ID, input.TurnID)
 			if err != nil || turn.Status != expectedStatus || (turn.CompletedAt.IsZero() != (expectedStatus == sessions.TurnWaiting)) {
 				t.Fatal("cleanup should not fabricate cancellation", turn, err)
 			}

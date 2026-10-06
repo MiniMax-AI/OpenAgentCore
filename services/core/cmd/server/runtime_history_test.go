@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +19,7 @@ func (panicHistoryExporter) Close(context.Context) error                        
 func TestRuntimeHistoryUsesCoreDatabaseByDefault(t *testing.T) {
 	t.Setenv("OAC_HISTORY_SETTINGS_FILE", "")
 	for _, enabled := range []bool{true, false} {
-		setup, err := runtimeHistory(t.Context(), store.New(nil), enabled)
+		setup, err := runtimeHistory(t.Context(), pgunit.NewPool(nil), enabled)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,7 +45,7 @@ func TestRuntimeHistoryOptionalExportAndSamplingConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_HISTORY_SETTINGS_FILE", file)
-	setup, err := runtimeHistory(t.Context(), store.New(nil), true)
+	setup, err := runtimeHistory(t.Context(), pgunit.NewPool(nil), true)
 	if err != nil {
 		t.Fatal(err)
 	}

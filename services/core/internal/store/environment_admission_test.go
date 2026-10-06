@@ -73,7 +73,7 @@ func environmentAdmissionPending(t *testing.T, h *dispatchHarness, key string) s
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "input reservation", func() bool {
 		return pool.QueryRow(t.Context(), "SELECT id::text FROM environment_input_reservations WHERE session_id=$1 AND idempotency_key=$2", h.session.ID, key).Scan(&id) == nil
 	})
-	pending, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, id)
+	pending, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 		default:
 		}
 	}
-	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
+	session, err := store.SessionAdapter(h.s).GetSession(t.Context(), h.tenant, h.session.ID)
 	if err != nil || session.LastTurn != nil || session.EnvironmentInputActivity == nil || session.EnvironmentInputActivity.Status != "requires_action" {
 		t.Fatal("waiting activity", session, err)
 	}
@@ -181,12 +181,12 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 				}
 			case "cancelled":
 				expected = execution.ErrEnvironmentInputCancelled
-				if _, err := h.s.CancelEnvironmentInput(t.Context(), h.tenant, h.session.ID, pending.ID); err != nil {
+				if _, err := store.CancelEnvironmentInput(t.Context(), h.s, h.tenant, h.session.ID, pending.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "deleted":
 				expected = sessions.ErrNotFound
-				if err := h.s.DeleteSession(t.Context(), h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotIdle) {
+				if err := store.SessionService(t, h.s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 					t.Fatal("pending input deleted", err)
 				}
 				if err := h.s.CommitLegacyDeletion(t.Context(), h.tenant, h.session.ID); err != nil {
@@ -220,7 +220,7 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 			if name == "deleted" {
 				return
 			}
-			retained, err := h.s.GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
+			retained, err := store.SessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
 			if err != nil {
 				t.Fatal(err)
 			}

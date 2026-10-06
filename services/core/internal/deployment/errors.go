@@ -30,6 +30,9 @@ var (
 	ErrNodeAddressMismatch = errors.New("sandbox node Core address differs from the public URL")
 	// ErrNodeExists rejects an enrollment whose node ID is already in use.
 	ErrNodeExists = errors.New("sandbox node ID is already enrolled")
+	// ErrSandboxResetSessionBusy reports a hosted Session an automatic reset
+	// does not archive yet because it has active work.
+	ErrSandboxResetSessionBusy = errors.New("the hosted Session is busy")
 )
 
 // GenerationStaleError rejects a change whose expected generation is not the

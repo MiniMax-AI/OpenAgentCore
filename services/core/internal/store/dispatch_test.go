@@ -88,7 +88,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 	}
 	server := httptest.NewUnstartedServer(nil)
 	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
+	server.Config.Handler, h.registry, err = runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), fixtureSessionStore(db), wsURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 func (h *dispatchHarness) message(key, text string) sessions.InputReceipt {
 	h.t.Helper()
 	body, _ := json.Marshal(map[string]string{"text": text})
-	r, err := h.s.SubmitMessage(context.Background(), h.tenant, h.session.ID, key, body)
+	r, err := store.SendMessage(context.Background(), h.s, h.tenant, h.session.ID, key, body)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	newStore, db := newTestStoreDB(t)
 	h.s, h.db, h.owned = newStore, db, nil
 	h.d.Store = newStore
-	bound, err := newStore.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(newStore).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "native-thread-1" {
 		t.Fatalf("native binding lost: %+v %v", bound, err)
 	}
@@ -290,7 +290,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 			first := h.message("first", "Run")
 			result := h.run(context.Background(), first.TurnID)
 			h.read(testExecutionRequest)
-			_, err := h.s.RequestCancel(context.Background(), h.tenant, h.session.ID, "cancel")
+			_, err := store.RequestCancel(context.Background(), h.s, h.tenant, h.session.ID, "cancel")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -300,7 +300,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 			if cancel.DeliveryID == "" {
 				t.Fatal("cancellation has no receipt identity")
 			}
-			current, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
+			current, err := store.SessionAdapter(h.s).GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
 			if err != nil || current.Status != sessions.TurnInProgress {
 				t.Fatal("cancel finished before receipt")
 			}
@@ -379,15 +379,16 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 	h := newDispatchHarness(t)
 	first := h.message("first", "Run")
 	ctx := context.Background()
-	_, err := h.s.TransitionTurn(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err := store.TransitionTurn(ctx, h.s, h.tenant, h.session.ID, first.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
 	late := h.message("second", "Late")
-	if _, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, sessions.ErrUnappliedInputs) {
+	operations := h.owner().Sessions
+	if _, err := operations.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), "native-one", first.Sequence); !errors.Is(err, sessions.ErrUnappliedInputs) {
 		t.Fatalf("unapplied completion: %v", err)
 	}
-	bound, _ := h.s.GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
+	bound, _ := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, h.session.ID)
 	if bound.NativeSessionID != "" {
 		t.Fatal("native ID committed without outcome")
 	}
@@ -397,7 +398,7 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := h.s.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), native, late.Sequence)
+			_, err := operations.CompleteExecution(ctx, h.tenant, h.session.ID, first.TurnID, sessions.TurnCompleted, []byte(`{}`), native, late.Sequence)
 			errs <- err
 		}()
 	}
@@ -448,7 +449,7 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 			if _, err := h.bound().Run(context.Background(), h.tenant, h.session.ID, first.TurnID); err == nil || err.Error() != tc.message {
 				t.Fatalf("Run error = %v, want %q", err, tc.message)
 			}
-			turn, err := h.s.GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
+			turn, err := store.SessionAdapter(h.s).GetTurn(context.Background(), h.tenant, h.session.ID, first.TurnID)
 			if err != nil || turn.Status != sessions.TurnQueued {
 				t.Fatal("Runtime without a required capability claimed work")
 			}

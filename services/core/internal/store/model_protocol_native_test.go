@@ -79,7 +79,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant}})
 	providerRevision := uuid.New()
-	handler, err := publicHandler(t, h.s, h.db, auth, options.Engine, workerExecution(worker), withPolicy(h.d.Policy), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
+	handler, err := publicHandler(t, h.s, h.db, auth, options.Engine, workerExecution(t, worker), withPolicy(h.d.Policy), modelProviderDefaults(func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 		return &modelconfiguration.Snapshot{Model: options.Model, HarnessConfig: options.HarnessConfig, Provider: &options.Provider, Revision: providerRevision}, nil
 	}))
 	if err != nil {
@@ -125,7 +125,7 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 		if err != nil || !call.Applied {
 			t.Fatal("public function result lacks native delivery acknowledgement")
 		}
-		inputs, err := h.s.ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
+		inputs, err := store.SessionAdapter(h.s).ListTurnInputs(ctx, h.tenant, proof.Session, item.Turn, 0, 100)
 		if err != nil || len(inputs) != 2 || inputs[0].Kind != "message" || inputs[1].Kind != "tool_result" {
 			t.Fatal("public function result input was lost or duplicated")
 		}
@@ -136,14 +136,14 @@ func TestNativeModelProtocolPublicExecution(t *testing.T) {
 	if expectedCalls > 0 && failed != 1 {
 		t.Fatal("missing failed function-result scenario")
 	}
-	before, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	before, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID == "" {
 		t.Fatal("native Session binding missing before restart")
 	}
 	stop()
 	stop = startNativeEngineDaemon(t, h, home, binary, options.Engine)
 	run("resume")
-	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
 		t.Fatal("cold Session continuation changed native history")
 	}

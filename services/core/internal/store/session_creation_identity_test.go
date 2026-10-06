@@ -197,7 +197,7 @@ func TestSessionCreationKeepsItsResolvedDeploymentRevision(t *testing.T) {
 		receipt := submitMessage(t, s, tenant, session, uuid.NewString())
 		transition(t, s, tenant, session, receipt.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 		outcome, _ := json.Marshal(map[string]string{"error_code": coreCode, "engine_error_code": nativeCode})
-		turn, err := s.CompleteExecution(t.Context(), tenant, session, receipt.TurnID, status, outcome, "", receipt.Sequence)
+		turn, err := completeExecution(t.Context(), t, s, tenant, session, receipt.TurnID, status, outcome, "", receipt.Sequence)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -233,7 +233,7 @@ func TestSessionCreationKeepsItsResolvedDeploymentRevision(t *testing.T) {
 	if revision(stale.ID) != original {
 		t.Fatal("tuple revision changed during insertion")
 	}
-	frozen, err := s.SessionModelExecution(t.Context(), tenant, stale.ID)
+	frozen, err := sessionAdapter(s).SessionModelExecution(t.Context(), tenant, stale.ID)
 	if err != nil || frozen == nil || *frozen != *before.Provider {
 		t.Fatal("frozen tuple bundle changed", err)
 	}
@@ -253,7 +253,7 @@ func TestSessionCreationKeepsItsResolvedDeploymentRevision(t *testing.T) {
 	if recreated := resolve(); recreated.Revision == original || recreated.Revision == current.Revision {
 		t.Fatal("revision reused")
 	}
-	frozenProvider, err := s.SessionModelExecution(t.Context(), tenant, session.ID)
+	frozenProvider, err := sessionAdapter(s).SessionModelExecution(t.Context(), tenant, session.ID)
 	if err != nil || frozenProvider == nil || *frozenProvider != *input.ModelProvider {
 		t.Fatal("replacement changed the Session bundle", err)
 	}

@@ -53,7 +53,7 @@ func TestRuntimeEnrollmentAuthorityAndRotation(t *testing.T) {
 	if again, err := sessionService(t, s).EnrollRuntime(ctx, environment.ID, executorDigest(key.Token)); err != nil || again != bound {
 		t.Fatalf("retry changed binding: %+v %v", again, err)
 	}
-	if devices, err := s.ListExecutionDevices(ctx, p.TenantID); err != nil || len(devices) != 0 {
+	if devices, err := sessionAdapter(s).ListExecutionDevices(ctx, p.TenantID); err != nil || len(devices) != 0 {
 		t.Fatalf("enrolled Runtime entered general selection: %v", err)
 	}
 	auth := runtimegateway.NewAuthenticator(sessionAdapter(s))
@@ -137,7 +137,7 @@ func TestRuntimeEnrollmentConcurrentAndDeletion(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
 		t.Fatalf("enrollment allocated compute: %d %v", allocations, err)
 	}
-	if err := s.DeleteSession(t.Context(), p.TenantID, session.ID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: p.TenantID, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, executorDigest(key.Token)); !errors.Is(err, sessions.ErrNotFound) {

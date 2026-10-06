@@ -22,11 +22,11 @@ func TestConfigurationSizeLimitSurvivesJSONBRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.GetSession(ctx, tenant, first.ID)
+	got, err := sessionAdapter(s).GetSession(ctx, tenant, first.ID)
 	if err != nil || string(got.Configuration) != string(first.Configuration) {
 		t.Fatalf("configuration failed round trip: %v", err)
 	}
-	page, err := s.ListSessions(ctx, tenant, "", 10, false, nil)
+	page, err := sessionAdapter(s).ListSessions(ctx, tenant, "", 10, false, nil)
 	if err != nil || len(page.Sessions) != 1 || page.Sessions[0].ID != first.ID {
 		t.Fatalf("configuration broke listing: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestConfigurationIsPartOfSessionIdentity(t *testing.T) {
 			t.Fatalf("changed snapshot was accepted: %v", err)
 		}
 	}
-	stored, err := s.GetSession(ctx, tenant, first.ID)
+	stored, err := sessionAdapter(s).GetSession(ctx, tenant, first.ID)
 	if err != nil || string(stored.Configuration) != string(first.Configuration) {
 		t.Fatalf("retry mutated snapshot: %+v, %v", stored, err)
 	}

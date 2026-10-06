@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
@@ -42,7 +43,7 @@ func TestExecutionDurableInputReceiptLifetime(t *testing.T) {
 			case "retry-after-write":
 				h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, ErrorCode: "not_ready"})
 			case "cancel-unknown-first":
-				if _, err := h.s.RequestCancel(ctx, h.tenant, h.session.ID, "cancel"); err != nil {
+				if _, err := store.RequestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 					t.Fatal(err)
 				}
 				var request proto.PromptCancelPayload

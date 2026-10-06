@@ -6,8 +6,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/coremetricspg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,7 +16,7 @@ var buildRevision string
 var processStartedAt = time.Now().UTC()
 
 type coreMetricsSource struct {
-	store    *store.Store
+	store    *coremetricspg.Store
 	pool     *pgxpool.Pool
 	worker   *execution.Worker
 	registry *runtimegateway.Registry
@@ -51,7 +51,7 @@ func (s *coreMetricsSource) Sample(ctx context.Context) coremetrics.Sample {
 	if s.registry != nil {
 		devices = s.registry.Devices()
 	}
-	counts, err := s.store.ReadCoreExecutionSnapshot(ctx, time.Now(), devices)
+	counts, err := s.store.ReadExecutionSnapshot(ctx, time.Now(), devices)
 	if err != nil {
 		sample.Healthy = false
 	} else {
@@ -61,7 +61,7 @@ func (s *coreMetricsSource) Sample(ctx context.Context) coremetrics.Sample {
 			sample.WaitingForDaemon = metricPtr(counts.WaitingForDaemon)
 		}
 	}
-	size, err := s.store.ReadCoreDatabaseSize(ctx)
+	size, err := s.store.ReadDatabaseSize(ctx)
 	if err != nil {
 		sample.Healthy = false
 	} else {
@@ -71,15 +71,7 @@ func (s *coreMetricsSource) Sample(ctx context.Context) coremetrics.Sample {
 	return sample
 }
 func (s *coreMetricsSource) History(ctx context.Context, start, end time.Time, step time.Duration) (coremetrics.History, error) {
-	value, err := s.store.ReadCoreExecutionHistory(ctx, start, end, step)
-	if err != nil {
-		return coremetrics.History{}, err
-	}
-	result := coremetrics.History{Interrupted: value.Interrupted, QueueWaitMS: coremetrics.Latency{P50: value.QueueWaitMS.P50, P95: value.QueueWaitMS.P95}, Buckets: map[time.Time]*float64{}}
-	for _, bucket := range value.Buckets {
-		result.Buckets[bucket.Start.UTC()] = bucket.P95MS
-	}
-	return result, nil
+	return s.store.ReadExecutionHistory(ctx, start, end, step)
 }
 
 func reportCleanupResult(metrics *coremetrics.Service, job string, count int64, err error) {

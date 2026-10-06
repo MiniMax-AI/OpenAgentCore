@@ -181,7 +181,7 @@ func TestRuntimeSuspensionWakeDoesNotLoseNewerWork(t *testing.T) {
 	if _, err := deploymentExecution(t, w).KeepAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.GetSession(t.Context(), owner.TenantID, owner.SessionID); err != nil {
+	if _, err := sessionAdapter(s).GetSession(t.Context(), owner.TenantID, owner.SessionID); err != nil {
 		t.Fatal(err)
 	}
 	quiet, err := deploymentStore(w).Activity(t.Context(), owner.ID)
@@ -246,7 +246,7 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 	if _, err := deploymentExecution(t, w).SetCompute(t.Context(), retained, "restoring", json.RawMessage(`{}`), &until, 0); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("expired snapshot restored from stale observation", err)
 	}
-	if err := s.DeleteSession(t.Context(), owner.TenantID, owner.SessionID); err != nil {
+	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: owner.TenantID, SessionID: owner.SessionID}); err != nil {
 		t.Fatal(err)
 	}
 	if err := deploymentService(t, s).TouchActivity(t.Context(), owner.TenantID, owner.EnvironmentID); !errors.Is(err, sessions.ErrNotFound) {

@@ -22,6 +22,39 @@ import (
 
 func NewTestStore(t *testing.T) (*Store, *pgxpool.Pool) { return testStore(t) }
 
+// SessionAdapter is the Session adapter on s's pool and credential key.
+func SessionAdapter(s *Store) *sessionpg.Store { return sessionAdapter(s) }
+
+// SessionService is the Session service on SessionAdapter(s).
+func SessionService(t testing.TB, s *Store) *sessions.Service { return sessionService(t, s) }
+
+// SubmitInputs admits inputs through the Session service on s's database.
+func SubmitInputs(ctx context.Context, s *Store, tenant, session, key string, inputs []sessions.Input) ([]sessions.InputReceipt, error) {
+	return submitInputs(ctx, s, tenant, session, key, inputs)
+}
+
+// SendMessage admits one message input with payload.
+func SendMessage(ctx context.Context, s *Store, tenant, session, key string, payload json.RawMessage) (sessions.InputReceipt, error) {
+	return sendMessage(ctx, s, tenant, session, key, payload)
+}
+
+// RequestCancel admits one cancel input.
+func RequestCancel(ctx context.Context, s *Store, tenant, session, key string) (sessions.InputReceipt, error) {
+	return requestCancel(ctx, s, tenant, session, key)
+}
+
+// CancelEnvironmentInput cancels the Session's pending Environment input as
+// Session cancellation does, then reads the reservation back.
+func CancelEnvironmentInput(ctx context.Context, s *Store, tenant, session, reservation string) (sessions.EnvironmentInputReservation, error) {
+	return cancelEnvironmentInput(ctx, s, tenant, session, reservation)
+}
+
+// TransitionTurn moves the Turn as the execution owner does, in a Session
+// transaction on s's writer.
+func TransitionTurn(ctx context.Context, s *Store, tenant, session, turn string, transition sessions.TurnTransition) (sessions.Turn, error) {
+	return transitionTurn(ctx, s, tenant, session, turn, transition)
+}
+
 var fixtureCipher, _ = credentialcrypto.New(bytes.Repeat([]byte{61}, 32))
 
 // FixtureCipher is the credential key of NewModelTestStore, for reopened stores.
@@ -132,6 +165,6 @@ func SubmitFixtureFunctionResult(ctx context.Context, s *Store, tenantID, sessio
 	if err != nil {
 		return err
 	}
-	_, err = s.SubmitInputs(ctx, tenantID, sessionID, uuid.NewString(), []sessions.Input{{Kind: "tool_result", Payload: payload}})
+	_, err = SubmitInputs(ctx, s, tenantID, sessionID, uuid.NewString(), []sessions.Input{{Kind: "tool_result", Payload: payload}})
 	return err
 }

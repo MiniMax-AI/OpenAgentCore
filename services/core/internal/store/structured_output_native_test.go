@@ -45,7 +45,7 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 		{OrganizationID: "test", ProjectID: h.tenant, SubjectKind: "service_account", SubjectID: "owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: h.tenant},
 		{OrganizationID: "test", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "other", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, h.s, h.db, auth, "claude_sdk", workerExecution(worker), nativeDeploymentDefaults(model, provider))
+	handler, err := publicHandler(t, h.s, h.db, auth, "claude_sdk", workerExecution(t, worker), nativeDeploymentDefaults(model, provider))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 	if err != nil || !call.Applied {
 		t.Fatal("function application receipt missing", err)
 	}
-	turn, err := h.s.GetTurn(ctx, h.tenant, proof.Session, proof.Turn)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, proof.Session, proof.Turn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,14 +82,14 @@ func TestNativeStructuredOutputPublicExecution(t *testing.T) {
 	if json.Unmarshal(turn.Outcome, &outcome) != nil || outcome.Done.Usage.Raw["claude_sdk_result"] == nil || outcome.AppliedThrough < 1 {
 		t.Fatal("native usage or input receipt missing")
 	}
-	before, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	before, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID == "" {
 		t.Fatal("native binding missing", err)
 	}
 	stop()
 	stop = startNativeEngineDaemon(t, h, home, binary, "claude_sdk")
 	run("resume")
-	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
 		t.Fatal("native history changed", err)
 	}
