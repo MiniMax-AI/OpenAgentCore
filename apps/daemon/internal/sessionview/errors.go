@@ -25,12 +25,12 @@ var (
 	ErrCgroup = errors.New("sessionview: view cgroup unavailable")
 	// ErrCleanup reports a teardown or recovery that did not finish within its bound, or a cgroup that could not be ended and removed. The cgroup stays for Recover, and what remains finishes in the background if it can.
 	ErrCleanup = errors.New("sessionview: cleanup incomplete")
-	// ErrExited is Signal's result once the process has exited. It also matches os.ErrProcessDone.
+	// ErrExited is Signal's and Spawn's result once the process has exited. Signal's also matches os.ErrProcessDone.
 	ErrExited = errors.New("sessionview: process exited")
 )
 
 // errorKinds fixes the wire code of each kind the launcher reports.
-var errorKinds = []error{ErrLauncher, ErrNoFUSE, ErrMountDenied, ErrMountTarget, ErrNetwork, ErrRestrict, ErrExec}
+var errorKinds = []error{ErrLauncher, ErrNoFUSE, ErrMountDenied, ErrMountTarget, ErrNetwork, ErrRestrict, ErrExec, ErrExited}
 
 // Error is a typed sessionview failure. It matches Kind and, when present, Err.
 type Error struct {

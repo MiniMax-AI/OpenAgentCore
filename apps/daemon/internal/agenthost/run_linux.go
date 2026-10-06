@@ -104,6 +104,7 @@ func run(ctx context.Context, cfg Config, in Session, d deps) error {
 		Proxy:  s.plan.proxy,
 		MCP:    s.plan.mcp,
 		Launch: s.launch,
+		Spawn:  s.spawn,
 	})
 	if err != nil {
 		err = executorError(err)

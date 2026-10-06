@@ -150,6 +150,15 @@ var ErrInvalidView = errors.New("agent: invalid view declaration")
 // a connection option.
 var ErrViewHandoff = errors.New("agent: view request carries a connection outside the Session's gateway")
 
+// ViewSession.Launch and ViewSession.Spawn outcomes.
+var (
+	// ErrNotLocalExec is a Launch or Spawn whose Binary is not a LocalExec path.
+	ErrNotLocalExec = errors.New("agent: binary is not a LocalExec path")
+	// ErrNoLiveView is a Spawn while no view runs its Harness: none was
+	// launched yet, or its Harness has exited or its view has ended.
+	ErrNoLiveView = errors.New("agent: the Session has no live view")
+)
+
 // View declares how the Harness runs in an agent-host Session view. View
 // paths are absolute and clean. The closure, Exec overlays and the shim are
 // the only executable mounts, and all are read-only; the world, the home and
@@ -250,6 +259,22 @@ type ViewSession struct {
 	// TERM unless Cancel already did, and ends once they exit or KillTimeout
 	// passes from the first TERM.
 	Launch func(clirunner.StartOptions) (*clirunner.Process, error)
+	// Spawn runs Binary, a LocalExec path, as another process in the live
+	// view while its Harness runs, with StartOptions as Launch takes them. The
+	// process runs as the Harness does: as the same user, in the same
+	// namespaces, view cgroup, world and network, with no capabilities,
+	// no_new_privs and the same seccomp filter, in a process group of its own.
+	// The view starts one Spawn at a time, and Parent bounds the wait for its
+	// turn and for the start; once Parent ends, Spawn returns its error and
+	// kills a process that starts after all. Cancel sends TERM to the group
+	// and kills it after KillTimeout; once the process has exited, Cancel
+	// delivers nothing and what it left runs on as other processes in the view
+	// do. The view's end ends them all: a Cancel of the Harness reaches them,
+	// and when the Harness exits they are among the processes that remain. A
+	// view that ends after Spawn returned shows in the process's Wait. Spawn
+	// returns ErrNotLocalExec, ErrNoLiveView, or the error that kept the
+	// process from starting.
+	Spawn func(clirunner.StartOptions) (*clirunner.Process, error)
 }
 
 // checkViewHandoff enforces, before the factory runs, that the view request

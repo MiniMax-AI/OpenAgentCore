@@ -38,6 +38,7 @@ type runningView interface {
 	Wait() (sessionview.Exit, error)
 	Close() error
 	Relay() *os.File
+	Spawn(ctx context.Context, path string, args, env []string, dir string, stdin bool) (*sessionview.Spawned, error)
 }
 
 // viewWorld is the part of *worldfs.World the Session watches.
@@ -61,15 +62,23 @@ func (s *session) closeLive() {
 	}
 }
 
-// launch is ViewSession.Launch: it builds one view and runs opts.Binary in it.
-func (s *session) launch(opts clirunner.StartOptions) (*clirunner.Process, error) {
+// checkStart checks the options of Launch and Spawn.
+func (s *session) checkStart(opts clirunner.StartOptions) error {
 	switch {
 	case !slices.Contains(s.plan.view.LocalExec, opts.Binary):
-		return nil, &Error{Kind: ErrLaunch, Err: fmt.Errorf("%q is not a LocalExec path", opts.Binary)}
+		return &Error{Kind: ErrLaunch, Err: fmt.Errorf("%w: %q", agent.ErrNotLocalExec, opts.Binary)}
 	case !isViewPath(opts.Dir):
-		return nil, &Error{Kind: ErrLaunch, Err: fmt.Errorf("directory %q is not absolute and clean", opts.Dir)}
+		return &Error{Kind: ErrLaunch, Err: fmt.Errorf("directory %q is not absolute and clean", opts.Dir)}
 	case !opts.OwnProcessGroup:
-		return nil, &Error{Kind: ErrLaunch, Err: errors.New("a view process runs in its own process group")}
+		return &Error{Kind: ErrLaunch, Err: errors.New("a view process runs in its own process group")}
+	}
+	return nil
+}
+
+// launch is ViewSession.Launch: it builds one view and runs opts.Binary in it.
+func (s *session) launch(opts clirunner.StartOptions) (*clirunner.Process, error) {
+	if err := s.checkStart(opts); err != nil {
+		return nil, err
 	}
 	if opts.Parent == nil {
 		opts.Parent = context.Background()
@@ -91,6 +100,40 @@ func (s *session) launch(opts clirunner.StartOptions) (*clirunner.Process, error
 	s.views.Add(1)
 	s.mu.Unlock()
 	return s.start(lv, opts)
+}
+
+// spawn is ViewSession.Spawn: it runs opts.Binary in the live view.
+func (s *session) spawn(opts clirunner.StartOptions) (*clirunner.Process, error) {
+	if err := s.checkStart(opts); err != nil {
+		return nil, err
+	}
+	var v runningView
+	s.mu.Lock()
+	if s.live != nil {
+		v = s.live.view
+	}
+	s.mu.Unlock()
+	if v == nil {
+		return nil, &Error{Kind: ErrLaunch, Op: "spawn", Err: agent.ErrNoLiveView}
+	}
+	if opts.Parent == nil {
+		opts.Parent = context.Background()
+	}
+	p, err := v.Spawn(opts.Parent, opts.Binary, append([]string{opts.Binary}, opts.Args...), opts.Env, opts.Dir, opts.NeedStdin)
+	if err != nil {
+		// Only a view that has ended has no live view; any other failure keeps its own error.
+		if errors.Is(err, sessionview.ErrExited) || errors.Is(err, sessionview.ErrClosed) {
+			err = fmt.Errorf("%w: %w", agent.ErrNoLiveView, err)
+		}
+		return nil, &Error{Kind: ErrLaunch, Op: "spawn", Err: err}
+	}
+	var stdin io.WriteCloser
+	if p.Stdin != nil {
+		stdin = p.Stdin
+	}
+	// FromHandle fails only without stdout and stderr, which a spawned process always has.
+	process, _ := clirunner.FromHandle(p, clirunner.HandleOptions{Parent: opts.Parent, Stdin: stdin, Stdout: p.Stdout, Stderr: p.Stderr, KillTimeout: opts.KillTimeout})
+	return process, nil
 }
 
 // release frees the view slot and ends the launch's count.

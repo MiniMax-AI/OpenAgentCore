@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 54cdb8254d7f00fbcd78f8ea4a836556db90f12f21dd606a933adb0ead24f652
+source_hash: aa5ee32e9ae72b923addad7b049d586a32ec18319e6454c52cc21a96e0f69614
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -291,7 +291,7 @@ agent host 在沙箱之外、在每个 Session 一个的视图中运行 Harness�
 
 ### 可执行文件 {#executables}
 
-只有挂载标志授予执行权限。closure、`Exec` overlay 和 shim 是只读的，也是仅有的可执行挂载；沙箱的文件和 home 都是 noexec。`Launch` 只接受 `LocalExec` 路径作为 `Binary`。动态二进制（例如 `node`）需要把它的 ELF 解释器作为 `Exec` overlay 放在其 `PT_INTERP` 路径上，并且它加载的每个库都要在 closure 中，通过 `LD_LIBRARY_PATH` 找到。任何内容都不从沙箱的文件加载。`viewloader.For` 根据二进制的 ELF header 构建这些内容：解释器所在的主机目录作为 `lib` closure 挂载、解释器 overlay、覆盖 `/etc/ld.so.preload` 和 `/etc/ld.so.cache` 的空 mask，以及 `LD_LIBRARY_PATH` 的值。它无法呈现的布局（例如位于解释器目录之外的库）返回 `ErrUnsupportedOperation`。
+只有挂载标志授予执行权限。closure、`Exec` overlay 和 shim 是只读的，也是仅有的可执行挂载；沙箱的文件和 home 都是 noexec。`Launch` 和 `Spawn` 只接受 `LocalExec` 路径作为 `Binary`，否则返回 `ErrNotLocalExec`。动态二进制（例如 `node`）需要把它的 ELF 解释器作为 `Exec` overlay 放在其 `PT_INTERP` 路径上，并且它加载的每个库都要在 closure 中，通过 `LD_LIBRARY_PATH` 找到。任何内容都不从沙箱的文件加载。`viewloader.For` 根据二进制的 ELF header 构建这些内容：解释器所在的主机目录作为 `lib` closure 挂载、解释器 overlay、覆盖 `/etc/ld.so.preload` 和 `/etc/ld.so.cache` 的空 mask，以及 `LD_LIBRARY_PATH` 的值。它无法呈现的布局（例如位于解释器目录之外的库）返回 `ErrUnsupportedOperation`。
 
 ### Shim {#shims}
 
@@ -324,6 +324,15 @@ agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在
 - Cancel 向视图中的每个进程发送 TERM，并在 `KillTimeout` 后关闭视图。如果 Cancel 发现 Harness 已退出，即使它遗留的进程仍在结束中，也保持其退出结果不变。
 - Harness 退出而仍有其他进程时，除非 Cancel 已发送过 TERM，视图会向它们发送 TERM，并在它们退出或自首次 TERM 起经过 `KillTimeout` 后结束。
 - `Wait` 关闭 stdio 端；当 Cancel 的 TERM 到达运行中的 Harness 且 Harness 随后以 0 退出时，`Wait` 返回 context 错误；`Done` 关闭后，`ExitCode` 报告退出结果。
+
+### Spawn {#spawn}
+
+`ViewSession.Spawn` 在 Harness 运行期间，把一个 `LocalExec` 二进制作为另一个进程运行在活动视图中，例如读取 Harness 原生历史的程序。读取 Harness 所写数据的 Harness 侧代码在这里运行，从不在视图之外的 agent host 上运行，也从不获得自己的视图。`Spawn` 像 `Launch` 一样接收 `StartOptions`，并返回同样的 `clirunner.Process`。该进程的运行方式与 Harness 相同：同一用户，同一组命名空间、视图 cgroup、world 和网络，没有 capability，设置 `no_new_privs` 并使用同一 seccomp 过滤器，且位于自己的进程组中。
+
+- 视图一次只启动一个 `Spawn`。`Parent` 限定等待轮次和等待启动的时间。它结束后，`Spawn` 返回它的错误，并杀死此后仍然启动的进程。
+- Cancel 向它的进程组发送 TERM，并在 `KillTimeout` 后杀死该进程组。进程退出后，Cancel 不再投递任何信号，它遗留的进程像视图中的其他进程一样继续运行。
+- 视图结束时它们全部随之结束。Harness 的 Cancel 会到达它们；Harness 退出时，它们属于仍然存在的进程。`Spawn` 返回之后视图才结束的情况，体现在该进程的 `Wait` 中。
+- `Binary` 不是 `LocalExec` 路径时，`Spawn` 返回 `ErrNotLocalExec`；没有视图在运行其 Harness 时返回 `ErrNoLiveView`：尚未启动视图，或其 Harness 已退出，或其视图已结束。其他失败（例如二进制无法启动或描述符耗尽）保留各自的错误。
 
 ### 认定视图资格 {#qualify-the-view}
 

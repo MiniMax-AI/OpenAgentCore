@@ -125,7 +125,7 @@ var (
 	// ErrWorld is a world that no longer shows the sandbox faithfully, or
 	// that cannot show that its attachment holds nothing.
 	ErrWorld = errors.New("agenthost: world lost")
-	// ErrLaunch is a view that could not be launched.
+	// ErrLaunch is a view, or a process in a view, that could not be started.
 	ErrLaunch = errors.New("agenthost: launch failed")
 	// ErrProcessBroker is a view's process broker that could not start, or
 	// whose process relay was lost while the view ran

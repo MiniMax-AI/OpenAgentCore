@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-// Handle is a running process that clirunner did not start, such as a Harness in an agent-host Session view. Its end also ends every descendant.
+// Handle is a running process that clirunner did not start, such as a Harness in an agent-host Session view. The implementation says which of the process's descendants Signal reaches and Wait waits for.
 type Handle interface {
-	// Signal delivers sig to the process and every descendant it still has. Once the process itself has exited it delivers nothing and returns an error that matches os.ErrProcessDone, even while its descendants are still ending.
+	// Signal delivers sig to the process and the descendants the implementation reaches. Once the process itself has exited it delivers nothing and returns an error that matches os.ErrProcessDone, even while its descendants are still ending.
 	Signal(syscall.Signal) error
-	// Wait returns once the process and its descendants have ended. The code is -1 when a signal ended the process. An error means the exit is unknown.
+	// Wait returns once the process, and the descendants the implementation waits for, have ended. The code is -1 when a signal ended the process. An error means the exit is unknown.
 	Wait() (int, error)
 	// Close kills whatever still runs and releases the handle. It never closes the stdio ends in HandleOptions, which the Process owns. It is safe to call more than once and after Wait.
 	Close() error

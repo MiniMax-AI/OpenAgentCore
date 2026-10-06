@@ -4,13 +4,13 @@ package sessionview
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"sync"
 	"syscall"
 	"time"
 
@@ -33,14 +33,19 @@ type launchSpec struct {
 	Private  []PrivateDir
 	Overlays []Overlay
 	Shim     Shim
-	Path     string
-	Args     []string
-	Env      []string
-	Dir      string
+	Command  command
 	UID      uint32
 	GID      uint32
 	Groups   []uint32
 	Grace    time.Duration
+}
+
+// command is what a process of the view runs.
+type command struct {
+	Path string
+	Args []string
+	Env  []string
+	Dir  string
 }
 
 type msgKind uint8
@@ -50,13 +55,17 @@ const (
 	msgProceed                     // daemon: the world serves and the network is set up; carries the mount targets
 	msgStarted                     // launcher: the process runs
 	msgFailed                      // launcher: construction failed
-	msgExited                      // launcher: the process ended
-	msgSignal                      // daemon: signal the process
-	msgSignaled                    // launcher: whether msgSignal reached the running process
+	msgExited                      // launcher: the process, or the spawned process ID, ended
+	msgSignal                      // daemon: signal the process, or the spawned process Spawn
+	msgSignaled                    // launcher: whether msgSignal reached it
+	msgSpawn                       // daemon: start another process; carries a pipe with its command, then its stdin, stdout and stderr
+	msgSpawned                     // launcher: the spawned process's Pid, or why none started
 )
 
 type message struct {
 	Kind      msgKind
+	ID        uint64 // pairs a reply with its request; a spawn's ID also names the process it started, and 0 names the process
+	Spawn     uint64 // the ID of the spawned process msgSignal signals, or 0
 	Pid       int
 	Signal    syscall.Signal
 	Delivered bool
@@ -65,7 +74,7 @@ type message struct {
 	Targets   map[string]string // each mountpoint's view path to the path the world presents it at
 }
 
-// failure carries a launcher *Error across the control socket.
+// failure carries a launcher *Error across the control socket. A failure to start a command leaves the command out, so that no message grows with what a caller passed: the daemon has the command, and startErr puts it back.
 type failure struct {
 	Kind  int
 	Op    string
@@ -108,10 +117,23 @@ func (f failure) err() error {
 	return e
 }
 
+// startErr returns the error f reports while the launcher starts c, with the directory or path of c that a failed chdir or exec concerns.
+func (f failure) startErr(c command) error {
+	if f.Path == "" {
+		switch f.Op {
+		case "chdir":
+			f.Path = c.Dir
+		case "exec":
+			f.Path = c.Path
+		}
+	}
+	return f.err()
+}
+
 // control is one end of the launcher's SOCK_SEQPACKET control socket. Each packet holds one gob-encoded message.
 type control struct {
-	conn *net.UnixConn
-	mu   sync.Mutex
+	conn    *net.UnixConn
+	sending chan struct{} // held by the send in progress
 }
 
 func newControl(f *os.File) (*control, error) {
@@ -125,10 +147,11 @@ func newControl(f *os.File) (*control, error) {
 		c.Close()
 		return nil, fmt.Errorf("control socket is a %T", c)
 	}
-	return &control{conn: uc}, nil
+	return &control{conn: uc, sending: make(chan struct{}, 1)}, nil
 }
 
-func (c *control) send(m message, fds ...int) error {
+// send sends m with fds. It returns ctx's error when ctx ends before m is sent, whether it waits for another send or for room on the socket; a packet goes whole or not at all. Once the socket is shut down, a waiting send fails.
+func (c *control) send(ctx context.Context, m message, fds ...int) error {
 	var buf bytes.Buffer
 	if err := gob.NewEncoder(&buf).Encode(m); err != nil {
 		return err
@@ -137,16 +160,32 @@ func (c *control) send(m message, fds ...int) error {
 	if len(fds) > 0 {
 		oob = unix.UnixRights(fds...)
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	select {
+	case c.sending <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-c.sending }()
+	expired := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		c.conn.SetWriteDeadline(time.Unix(1, 0))
+		close(expired)
+	})
 	_, _, err := c.conn.WriteMsgUnix(buf.Bytes(), oob, nil)
+	if !stop() {
+		<-expired
+		c.conn.SetWriteDeadline(time.Time{})
+		if err != nil {
+			err = ctx.Err()
+		}
+	}
 	return err
 }
 
 // recv returns the next message and the files it carries. It returns io.EOF once the peer has closed its end.
 func (c *control) recv() (message, []*os.File, error) {
 	buf := make([]byte, 64<<10)
-	oob := make([]byte, unix.CmsgSpace(2*4))
+	oob := make([]byte, unix.CmsgSpace(4*4))
 	n, oobn, flags, _, err := c.conn.ReadMsgUnix(buf, oob)
 	if err != nil {
 		return message{}, nil, err
@@ -169,7 +208,7 @@ func (c *control) recv() (message, []*os.File, error) {
 	return m, files, nil
 }
 
-// interrupt shuts the daemon's end down in both directions, so that a pending recv returns io.EOF and every later send fails.
+// interrupt shuts the socket down in both directions, whoever else holds it, so that a pending recv at either end returns io.EOF and every later send fails.
 func (c *control) interrupt() {
 	c.conn.CloseRead()
 	c.conn.CloseWrite()

@@ -40,12 +40,13 @@
 // and calls the view's Executor factory. Each ViewSession.Launch builds one
 // sessionview view, of which one at a time is live, over the world that
 // worldfs serves from the attachment's File service, with the gateway
-// listening in the view's network namespace. A view with a shim gets its own
-// process broker, started once the view runs and closed once it has ended. The
-// broker runs the shims' commands over the attachment's Process service in the
-// strongest scope the service declares, with the view's ForwardEnv and the
-// Session's Environment, and cancels a forwarded process whose shim is lost
-// with the launch's kill timeout as its grace.
+// listening in the view's network namespace. ViewSession.Spawn runs another
+// process in the live view (sessionview.View.Spawn). A view with a shim gets
+// its own process broker, started once the view runs and closed once it has
+// ended. The broker runs the shims' commands over the attachment's Process
+// service in the strongest scope the service declares, with the view's
+// ForwardEnv and the Session's Environment, and cancels a forwarded process
+// whose shim is lost with the launch's kill timeout as its grace.
 //
 // Each view presents the closure directories read-only and executable, the
 // Session home read-write and noexec, the agent host's /etc/passwd, group,

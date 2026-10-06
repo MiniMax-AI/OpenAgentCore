@@ -77,6 +77,23 @@ func TestViewEndReleasesTheSlotBeforeTheProcessEnds(t *testing.T) {
 	}
 }
 
+// TestSpawnKeepsItsErrors checks that only a view that has ended makes a Spawn fail with ErrNoLiveView, and that every other failure keeps its own error.
+func TestSpawnKeepsItsErrors(t *testing.T) {
+	emfile := &sessionview.Error{Kind: sessionview.ErrLauncher, Op: "pipe", Err: syscall.EMFILE}
+	for _, c := range []struct {
+		err   error
+		ended bool
+	}{{sessionview.ErrExited, true}, {sessionview.ErrClosed, true}, {emfile, false}, {sessionview.ErrExec, false}, {context.Canceled, false}} {
+		s := newOwnerSession(t)
+		s.plan = &plan{view: agent.View{LocalExec: []string{"/bin/true"}}}
+		s.live = &liveView{view: &fakeView{exit: make(chan struct{}), spawnErr: c.err}}
+		_, err := s.spawn(clirunner.StartOptions{Binary: "/bin/true", Dir: "/", OwnProcessGroup: true})
+		if !errors.Is(err, c.err) || errors.Is(err, agent.ErrNoLiveView) != c.ended {
+			t.Errorf("Spawn failing with %v = %v; want that error, and ErrNoLiveView only for an ended view", c.err, err)
+		}
+	}
+}
+
 func TestFailureDuringTeardownCounts(t *testing.T) {
 	s := newOwnerSession(t)
 	// The relay revokes the attachment while Executor.Close waits.
@@ -334,15 +351,20 @@ func (t *fakeTurn) AwaitSettlement(context.Context) (agent.TurnSettlement, error
 	return agent.TurnSettlement{Reusable: t.settleErr == nil}, t.settleErr
 }
 
-// fakeView is a view that ends when closed.
+// fakeView is a view that ends when closed and whose spawns fail with spawnErr.
 type fakeView struct {
-	exit chan struct{}
-	once sync.Once
+	exit     chan struct{}
+	once     sync.Once
+	spawnErr error
 }
 
 func (v *fakeView) Signal(syscall.Signal) error { return nil }
 
 func (v *fakeView) Relay() *os.File { return nil }
+
+func (v *fakeView) Spawn(context.Context, string, []string, []string, string, bool) (*sessionview.Spawned, error) {
+	return nil, v.spawnErr
+}
 
 func (v *fakeView) Wait() (sessionview.Exit, error) {
 	<-v.exit
