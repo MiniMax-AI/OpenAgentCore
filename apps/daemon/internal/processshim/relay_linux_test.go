@@ -5,6 +5,7 @@ package processshim
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -296,6 +297,59 @@ func TestTerminalOutputWaitsForRawMode(t *testing.T) {
 	}
 	if got := readN(t, int(ptm.Fd()), len(out)); string(got) != out {
 		t.Fatalf("the terminal got %q, want %q", got, out)
+	}
+}
+
+// A Notice reaches fd 2 after the stderr queued before it, even while that
+// stderr waits in its pump and the control goroutine has moved on.
+func TestNoticeFollowsQueuedStderr(t *testing.T) {
+	answered := make(chan struct{})
+	r := startTestRelay(t, func(r *relay) {
+		r.gating = func() {
+			select {
+			case <-answered:
+			case <-time.After(10 * time.Second):
+				t.Error("the shim never got its Result")
+			}
+		}
+	})
+	go func() {
+		for {
+			m, err := r.read()
+			if err != nil {
+				return
+			}
+			switch m := m.(type) {
+			case Open:
+				id := m.ID
+				// The Exit has no Marks, so its Result shows that the
+				// control goroutine is past the Notice.
+				r.send(Accept{ID: id}, Started{ID: id}, Output{ID: id, FD: 2, Seq: 1, Data: []byte("err\n")},
+					Notice{ID: id, Message: []byte("note")}, Exit{ID: id, Result: Result{Code: 0}}, Close{ID: id, FD: 2, Seq: 2})
+			case Written:
+				if m.Seq == 2 {
+					r.send(End{ID: m.ID})
+				}
+			}
+		}
+	}()
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	fds := devNull(t)
+	fds[2] = int(pw.Fd())
+	conn := r.shim(t, "sh", fds)
+	pw.Close()
+	if res, err := finished(conn); err != nil || res.Code != 0 {
+		t.Fatalf("Result %+v, %v", res, err)
+	}
+	close(answered)
+	pr.SetDeadline(time.Now().Add(10 * time.Second))
+	got, err := io.ReadAll(pr)
+	if want := "err\noac-process-shim: note\n"; err != nil || string(got) != want {
+		t.Fatalf("fd 2 got %q, %v; want %q", got, err, want)
 	}
 }
 

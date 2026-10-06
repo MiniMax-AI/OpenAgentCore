@@ -172,13 +172,13 @@ func (e endpoint) write(data []byte) (int, error) {
 }
 
 // readFD reads once. It returns 0 and nil at end of file.
-func readFD(e endpoint, buf []byte, stops ...*stopFlag) (int, error) {
+func readFD(e endpoint, buf []byte, stop *stopFlag) (int, error) {
 	for {
-		if stopped(stops) {
+		if stop.isSet() {
 			return 0, errStopped
 		}
 		if e.kind == ioShared {
-			if err := waitFD(e.io, unix.POLLIN, stops...); err != nil {
+			if err := waitFD(e.io, unix.POLLIN, stop); err != nil {
 				return 0, err
 			}
 		}
@@ -187,7 +187,7 @@ func readFD(e endpoint, buf []byte, stops ...*stopFlag) (int, error) {
 		case unix.EINTR:
 			continue
 		case unix.EAGAIN:
-			if err := waitFD(e.io, unix.POLLIN, stops...); err != nil {
+			if err := waitFD(e.io, unix.POLLIN, stop); err != nil {
 				return 0, err
 			}
 			continue
@@ -197,13 +197,13 @@ func readFD(e endpoint, buf []byte, stops ...*stopFlag) (int, error) {
 }
 
 // writeFD writes all of data, handling short writes.
-func writeFD(e endpoint, data []byte, stops ...*stopFlag) error {
+func writeFD(e endpoint, data []byte, stop *stopFlag) error {
 	for len(data) > 0 {
-		if stopped(stops) {
+		if stop.isSet() {
 			return errStopped
 		}
 		if e.kind == ioShared {
-			if err := waitFD(e.io, unix.POLLOUT, stops...); err != nil {
+			if err := waitFD(e.io, unix.POLLOUT, stop); err != nil {
 				return err
 			}
 		}
@@ -212,7 +212,7 @@ func writeFD(e endpoint, data []byte, stops ...*stopFlag) error {
 		case err == unix.EINTR:
 			continue
 		case err == unix.EAGAIN:
-			if err := waitFD(e.io, unix.POLLOUT, stops...); err != nil {
+			if err := waitFD(e.io, unix.POLLOUT, stop); err != nil {
 				return err
 			}
 			continue
@@ -235,21 +235,9 @@ func tryWrite(e endpoint, data []byte) {
 	e.write(data[:min(len(data), pipeBuf)])
 }
 
-func stopped(stops []*stopFlag) bool {
-	for _, s := range stops {
-		if s.isSet() {
-			return true
-		}
-	}
-	return false
-}
-
-// waitFD waits until fd has events or a stop flag is set.
-func waitFD(fd int, events int16, stops ...*stopFlag) error {
-	pfds := []unix.PollFd{{Fd: int32(fd), Events: events}}
-	for _, s := range stops {
-		pfds = append(pfds, unix.PollFd{Fd: int32(s.fd), Events: unix.POLLIN})
-	}
+// waitFD waits until fd has events or stop is set.
+func waitFD(fd int, events int16, stop *stopFlag) error {
+	pfds := []unix.PollFd{{Fd: int32(fd), Events: events}, {Fd: int32(stop.fd), Events: unix.POLLIN}}
 	for {
 		if _, err := unix.Poll(pfds, -1); err != nil {
 			if err == unix.EINTR {
@@ -257,12 +245,9 @@ func waitFD(fd int, events int16, stops ...*stopFlag) error {
 			}
 			return err
 		}
-		for _, p := range pfds[1:] {
-			if p.Revents != 0 {
-				return errStopped
-			}
-		}
 		switch r := pfds[0].Revents; {
+		case pfds[1].Revents != 0:
+			return errStopped
 		case r&unix.POLLNVAL != 0:
 			return unix.EBADF
 		case r != 0:

@@ -3,6 +3,7 @@
 package processshim
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -29,26 +30,23 @@ func NewConn(c *net.UnixConn) *Conn { return &Conn{c: c, first: true} }
 // Close closes the socket.
 func (c *Conn) Close() error { return c.c.Close() }
 
-// Unix returns the socket.
-func (c *Conn) Unix() *net.UnixConn { return c.c }
-
 // SendRequest sends r with fds attached to its first byte.
 func (c *Conn) SendRequest(r Request, fds [3]int) error {
 	f := Frame(r)
 	if len(f.Payload) > MaxRequestBytes {
 		return fmt.Errorf("%w: request of %d bytes exceeds %d", ErrProtocol, len(f.Payload), MaxRequestBytes)
 	}
-	var b frameBuffer
+	var b bytes.Buffer
 	if err := sandboxwire.WriteFrame(&b, f); err != nil {
 		return err
 	}
-	n, _, err := c.c.WriteMsgUnix(b, unix.UnixRights(fds[:]...), nil)
+	n, _, err := c.c.WriteMsgUnix(b.Bytes(), unix.UnixRights(fds[:]...), nil)
 	// An empty write fails with EPIPE once the relay has run the invocation
 	// and closed the connection, so write only what remains.
-	if err != nil || n == len(b) {
+	if err != nil || n == b.Len() {
 		return err
 	}
-	_, err = c.c.Write(b[n:])
+	_, err = c.c.Write(b.Bytes()[n:])
 	return err
 }
 
@@ -148,11 +146,4 @@ func closeAll(fds []int) {
 	for _, fd := range fds {
 		unix.Close(fd)
 	}
-}
-
-type frameBuffer []byte
-
-func (b *frameBuffer) Write(p []byte) (int, error) {
-	*b = append(*b, p...)
-	return len(p), nil
 }

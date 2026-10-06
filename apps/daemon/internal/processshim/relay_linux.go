@@ -340,6 +340,8 @@ func (inv *invocation) receive(m BrokerMessage) {
 			inv.out[2].push(item{hold: e.written})
 		}
 		inv.control(e)
+	case Notice:
+		inv.out[2].push(item{notice: m.Message})
 	case End:
 		inv.end.set()
 		inv.control(m)
@@ -393,8 +395,6 @@ func (inv *invocation) run() {
 			inv.rawOnce.Do(func() { close(inv.raw) })
 		case exiting:
 			inv.exit(m)
-		case Notice:
-			inv.out[2].message(m.Message)
 		case End:
 			inv.finish("")
 			return
@@ -553,15 +553,16 @@ func (in *input) run() {
 	}
 }
 
-// item is an Output or Close for an output pump, or a hold. A local Close
-// closes the descriptor without a report. A hold keeps the items behind it
-// until it closes.
+// item is an Output, Close or Notice for an output pump, or a hold. A local
+// Close closes the descriptor without a report. A hold keeps the items
+// behind it until it closes.
 type item struct {
-	seq   uint64
-	data  []byte
-	close bool
-	local bool
-	hold  <-chan struct{}
+	seq    uint64
+	data   []byte
+	close  bool
+	local  bool
+	hold   <-chan struct{}
+	notice []byte
 }
 
 // output writes one descriptor's Output in order and reports each write.
@@ -628,6 +629,10 @@ func (o *output) run() {
 			case <-o.inv.end.c:
 				return
 			}
+			continue
+		}
+		if it.notice != nil {
+			o.message(it.notice)
 			continue
 		}
 		if it.close {
