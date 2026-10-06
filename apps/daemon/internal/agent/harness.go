@@ -150,6 +150,16 @@ var ErrInvalidView = errors.New("agent: invalid view declaration")
 // a connection option.
 var ErrViewHandoff = errors.New("agent: view request carries a connection outside the Session's gateway")
 
+// ViewSession.Launch and ViewSession.Spawn outcomes.
+var (
+	// ErrNotLocalExec is a Launch or Spawn whose Binary is not a LocalExec path.
+	ErrNotLocalExec = errors.New("agent: binary is not a LocalExec path")
+	// ErrNoLiveView is a Spawn while the Session has no running view.
+	ErrNoLiveView = errors.New("agent: the Session has no live view")
+	// ErrViewEnded is a Spawn after the view's Harness exited or its view closed.
+	ErrViewEnded = errors.New("agent: the view has ended")
+)
+
 // View declares how the Harness runs in an agent-host Session view. View
 // paths are absolute and clean. The closure, Exec overlays and the shim are
 // the only executable mounts, and all are read-only; the world, the home and
@@ -250,6 +260,17 @@ type ViewSession struct {
 	// TERM unless Cancel already did, and ends once they exit or KillTimeout
 	// passes from the first TERM.
 	Launch func(clirunner.StartOptions) (*clirunner.Process, error)
+	// Spawn runs Binary, a LocalExec path, as another process in the live
+	// view while its Harness runs, with StartOptions as Launch takes them. The
+	// process runs as the Harness does: as the same user, in the same
+	// namespaces, view cgroup, world and network, with no capabilities,
+	// no_new_privs and the same seccomp filter, in a process group of its own.
+	// Cancel sends TERM to that group and kills it after KillTimeout, and the
+	// group is killed once the process exits. The view's end ends it too: a
+	// Cancel of the Harness reaches it, and when the Harness exits it is one
+	// of the processes that remain. Spawn returns ErrNotLocalExec,
+	// ErrNoLiveView or ErrViewEnded.
+	Spawn func(clirunner.StartOptions) (*clirunner.Process, error)
 }
 
 // checkViewHandoff enforces, before the factory runs, that the view request

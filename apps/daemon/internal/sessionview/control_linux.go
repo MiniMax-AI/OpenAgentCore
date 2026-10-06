@@ -33,14 +33,19 @@ type launchSpec struct {
 	Private  []PrivateDir
 	Overlays []Overlay
 	Shim     Shim
-	Path     string
-	Args     []string
-	Env      []string
-	Dir      string
+	Command  command
 	UID      uint32
 	GID      uint32
 	Groups   []uint32
 	Grace    time.Duration
+}
+
+// command is what a process of the view runs.
+type command struct {
+	Path string
+	Args []string
+	Env  []string
+	Dir  string
 }
 
 type msgKind uint8
@@ -50,9 +55,11 @@ const (
 	msgProceed                     // daemon: the world serves and the network is set up; carries the mount targets
 	msgStarted                     // launcher: the process runs
 	msgFailed                      // launcher: construction failed
-	msgExited                      // launcher: the process ended
-	msgSignal                      // daemon: signal the process
-	msgSignaled                    // launcher: whether msgSignal reached the running process
+	msgExited                      // launcher: the process, or the spawned process Pid, ended
+	msgSignal                      // daemon: signal the process, or the spawned process Pid
+	msgSignaled                    // launcher: whether msgSignal reached it
+	msgSpawn                       // daemon: start Command as another process; carries its stdin, stdout and stderr
+	msgSpawned                     // launcher: the spawned process's Pid, or why none started
 )
 
 type message struct {
@@ -63,6 +70,7 @@ type message struct {
 	Exit      Exit
 	Fail      failure
 	Targets   map[string]string // each mountpoint's view path to the path the world presents it at
+	Command   command
 }
 
 // failure carries a launcher *Error across the control socket.
@@ -146,7 +154,7 @@ func (c *control) send(m message, fds ...int) error {
 // recv returns the next message and the files it carries. It returns io.EOF once the peer has closed its end.
 func (c *control) recv() (message, []*os.File, error) {
 	buf := make([]byte, 64<<10)
-	oob := make([]byte, unix.CmsgSpace(2*4))
+	oob := make([]byte, unix.CmsgSpace(3*4))
 	n, oobn, flags, _, err := c.conn.ReadMsgUnix(buf, oob)
 	if err != nil {
 		return message{}, nil, err

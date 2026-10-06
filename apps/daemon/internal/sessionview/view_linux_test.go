@@ -183,6 +183,67 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	}
 }
 
+// TestSpawnRunsInTheView checks that a spawned process runs as the process's user, unprivileged and in the view's cgroup, that its output and exit come back, and that the view's end ends it.
+func TestSpawnRunsInTheView(t *testing.T) {
+	requireView(t)
+	f := newFixture(t)
+	w := &loopbackWorld{dir: f.world}
+	v, err := Start(context.Background(), f.spec(w, "wait", "OAC_VIEW_TOKEN=oac-unused"))
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer v.Close()
+	if line, err := bufio.NewReader(v.Stdout()).ReadString('\n'); err != nil || line != "ready\n" {
+		t.Fatalf("harness said %q, %v", line, err)
+	}
+	null, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer null.Close()
+	token := fmt.Sprintf("oac-spawned-%d", time.Now().UnixNano())
+	spawn := func(mode string, stdout *os.File) *Spawned {
+		t.Helper()
+		s, err := v.Spawn("/.oac/harness/harness", []string{"harness", token}, []string{helperEnv + "=" + mode}, "/data", [3]*os.File{null, stdout, stdout})
+		if err != nil {
+			t.Fatalf("Spawn %s: %v", mode, err)
+		}
+		return s
+	}
+	r, wr, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := spawn("report", wr)
+	wr.Close()
+	out, err := io.ReadAll(r)
+	r.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, err := report.Wait(); err != nil || code != 3 {
+		t.Fatalf("spawned Wait = %d, %v; want exit code 3", code, err)
+	}
+	cgroups := sessionviewtest.Cgroups(t, f.cgroups)
+	want := fmt.Sprintf("%d %d <nil> 0::", viewID, viewID)
+	if len(cgroups) != 1 || !strings.HasPrefix(string(out), want) || !strings.HasSuffix(string(out), "/"+filepath.Base(cgroups[0])+"\n") {
+		t.Fatalf("spawned process reported %q in cgroups %v, want %q and the view's cgroup", out, cgroups, want)
+	}
+	sleeper := spawn("sleep", null)
+	if n := processesWith(t, token); n != 1 {
+		t.Fatalf("%d spawned processes running, want 1", n)
+	}
+	if err := v.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := sleeper.Wait(); !errors.Is(err, ErrClosed) {
+		t.Errorf("spawned Wait after the view ended = %v, want ErrClosed", err)
+	}
+	if n := processesWith(t, token); n != 0 {
+		t.Errorf("%d spawned processes survived the view", n)
+	}
+}
+
 // TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it, and that the view's cgroup stays for Recover after its processes end past the bound.
 func TestTeardownIsBounded(t *testing.T) {
 	requireView(t)
@@ -748,6 +809,10 @@ func runHelper(mode string) int {
 		return 0
 	case "noop":
 		return 0
+	case "report":
+		cgroup, err := os.ReadFile("/proc/self/cgroup")
+		fmt.Printf("%d %d %v %s", os.Getuid(), os.Getgid(), errors.Join(err, noPrivileges()), cgroup)
+		return 3
 	case "hang":
 		f, err := os.OpenFile("/data/hang", os.O_WRONLY, 0)
 		if err != nil {

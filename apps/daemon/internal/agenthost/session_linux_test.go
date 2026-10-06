@@ -77,6 +77,19 @@ func TestViewEndReleasesTheSlotBeforeTheProcessEnds(t *testing.T) {
 	}
 }
 
+func TestSpawnNeedsARunningView(t *testing.T) {
+	s := newOwnerSession(t)
+	s.plan = &plan{view: agent.View{LocalExec: []string{"/.oac/tool/tool"}}}
+	opts := clirunner.StartOptions{Binary: "/.oac/tool/tool", Dir: "/", OwnProcessGroup: true}
+	if _, err := s.spawn(opts); !errors.Is(err, agent.ErrNoLiveView) {
+		t.Fatalf("Spawn without a view = %v, want ErrNoLiveView", err)
+	}
+	s.live = &liveView{view: &fakeView{exit: make(chan struct{})}}
+	if _, err := s.spawn(opts); !errors.Is(err, agent.ErrViewEnded) {
+		t.Fatalf("Spawn in a closed view = %v, want ErrViewEnded", err)
+	}
+}
+
 func TestFailureDuringTeardownCounts(t *testing.T) {
 	s := newOwnerSession(t)
 	// The relay revokes the attachment while Executor.Close waits.
@@ -343,6 +356,10 @@ type fakeView struct {
 func (v *fakeView) Signal(syscall.Signal) error { return nil }
 
 func (v *fakeView) Relay() *os.File { return nil }
+
+func (v *fakeView) Spawn(string, []string, []string, string, [3]*os.File) (*sessionview.Spawned, error) {
+	return nil, sessionview.ErrClosed
+}
 
 func (v *fakeView) Wait() (sessionview.Exit, error) {
 	<-v.exit

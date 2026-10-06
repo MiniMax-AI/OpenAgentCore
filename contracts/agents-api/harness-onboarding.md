@@ -289,7 +289,7 @@ An agent host runs the Harness outside the sandbox, in a per-Session view. The v
 
 ### Executables
 
-Only mount flags grant execution. The closure, `Exec` overlays and the shim are read-only and are the only executable mounts; the sandbox's files and the home are noexec. `Launch` accepts only a `LocalExec` path as `Binary`. A dynamic binary, such as `node`, needs its ELF interpreter as an `Exec` overlay at its `PT_INTERP` path, and every library it loads in the closure, reached through `LD_LIBRARY_PATH`. Nothing loads from the sandbox's files. `viewloader.For` builds this from the binaries' ELF headers: the interpreter's host directory as the `lib` closure mount, the interpreter overlay, empty masks over `/etc/ld.so.preload` and `/etc/ld.so.cache`, and the `LD_LIBRARY_PATH` value. A layout it cannot present, such as a library outside the interpreter's directory, returns `ErrUnsupportedOperation`.
+Only mount flags grant execution. The closure, `Exec` overlays and the shim are read-only and are the only executable mounts; the sandbox's files and the home are noexec. `Launch` and `Spawn` accept only a `LocalExec` path as `Binary` and otherwise return `ErrNotLocalExec`. A dynamic binary, such as `node`, needs its ELF interpreter as an `Exec` overlay at its `PT_INTERP` path, and every library it loads in the closure, reached through `LD_LIBRARY_PATH`. Nothing loads from the sandbox's files. `viewloader.For` builds this from the binaries' ELF headers: the interpreter's host directory as the `lib` closure mount, the interpreter overlay, empty masks over `/etc/ld.so.preload` and `/etc/ld.so.cache`, and the `LD_LIBRARY_PATH` value. A layout it cannot present, such as a library outside the interpreter's directory, returns `ErrUnsupportedOperation`.
 
 ### Shims
 
@@ -322,6 +322,14 @@ With `ViewProxyNone`, `ViewSession.Proxy` is empty and the view has no generic p
 - Cancel sends TERM to every process in the view and closes the view after `KillTimeout`. A Cancel that finds the Harness exited leaves its exit as it was, even while the processes it left still end.
 - When the Harness exits while other processes remain, the view sends them TERM unless Cancel already did, and ends once they exit or `KillTimeout` passes from the first TERM.
 - `Wait` closes the stdio ends, returns the context error when Cancel's TERM reached the running Harness and it then exited 0, and `ExitCode` reports the exit once `Done` closes.
+
+### Spawn
+
+`ViewSession.Spawn` runs a `LocalExec` binary as another process in the live view while the Harness runs, such as a reader of the Harness's native history. Harness-side code that reads Harness-written data runs here, never on the agent host outside the view and never in a view of its own. `Spawn` takes `StartOptions` as `Launch` does and returns the same `clirunner.Process`. The process runs as the Harness does: as the same user, in the same namespaces, view cgroup, world and network, with no capabilities, `no_new_privs` and the same seccomp filter, in a process group of its own.
+
+- Cancel sends TERM to its process group and kills the group after `KillTimeout`. Once the process exits, what remains of its group is killed.
+- The view's end ends it. A Cancel of the Harness reaches it, and when the Harness exits it is one of the processes that remain.
+- `Spawn` returns `ErrNotLocalExec` when `Binary` is not a `LocalExec` path, `ErrNoLiveView` when the Session runs no view, and `ErrViewEnded` once the Harness has exited or the view has closed.
 
 ### Qualify the view
 
