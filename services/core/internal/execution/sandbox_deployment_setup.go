@@ -158,7 +158,7 @@ func (m *runtimeManager) prepareCandidate(ctx context.Context, input sandbox.Sel
 	return candidate, nil
 }
 
-// The store commit is the point of no return. Publishing a validated candidate
+// The deployment commit is the point of no return. Publishing a validated candidate
 // is infallible, including when shutdown or request cancellation follows commit.
 func (m *runtimeManager) publishDeployment(candidate PreparedRuntimeDeployment, committed deployment.View) {
 	m.mu.Lock()

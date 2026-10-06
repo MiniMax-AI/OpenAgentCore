@@ -186,7 +186,7 @@ func (m *runtimeManager) applyInventory(previous map[string]*runtimeNode, ids []
 	}
 	m.mu.Unlock()
 	// Inventory includes offline nodes. Only explicit removal retires a lane;
-	// the Store requires all retained resources to be cleaned before removal.
+	// deployment removes only a node that retains no resources.
 	if err := m.cancelLifecycles(retired); err != nil {
 		// No cancellation was authorized. Keep each retiring identity and gate;
 		// acquiring its gate later cannot substitute for successful cancellation.

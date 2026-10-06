@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: d657e6189ebc5e55ed5201dceaa304b157a6b6ca1f45dcbe9756ef866d63ed05
+source_hash: b995996e38d7a1591d1db0a548a616f6c0ac687f36185a13e95cb52d2e2ff0c3
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -141,4 +141,4 @@ Harness 和默认模型读取结果包含可空的 `last_used_at`、`last_error_
 
 ## 验收 {#acceptance}
 
-`TestNativeModelProtocolPublicExecution`（`services/core/internal/store/model_protocol_native_test.go`）结合 `services/core/tests/official_model_protocol_native.py`，通过固定版本的官方客户端针对真实提供商 API 运行每个 Harness。当 `OAC_TEST_OFFICIAL_SDK_PYTHON`、`OAC_TEST_NATIVE_DAEMON_BIN`、`OAC_TEST_NATIVE_PROOF_DIR` 和 `OAC_TEST_MODEL_PROTOCOL_OPTIONS` 均已设置时运行；最后一项指定一个私有模型设置文件。绝不提交这些设置或打印其值。
+`TestNativeModelProtocolPublicExecution`（`services/core/tests/integration/model_protocol_native_test.go`）结合 `services/core/tests/official_model_protocol_native.py`，通过固定版本的官方客户端针对真实提供商 API 运行每个 Harness。当 `OAC_TEST_OFFICIAL_SDK_PYTHON`、`OAC_TEST_NATIVE_DAEMON_BIN`、`OAC_TEST_NATIVE_PROOF_DIR` 和 `OAC_TEST_MODEL_PROTOCOL_OPTIONS` 均已设置时运行；最后一项指定一个私有模型设置文件。绝不提交这些设置或打印其值。

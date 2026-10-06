@@ -30,7 +30,7 @@ class SelectionTests(unittest.TestCase):
 
     def test_web_and_core_have_different_consumers(self):
         self.assertEqual(self.jobs("apps/web/src/app.tsx"), {"hygiene", "web", "web-acceptance"})
-        plan = ci.select(["services/core/internal/store/sessions.go"])
+        plan = ci.select(["services/core/internal/persistence/postgres/sessionpg/creation.go"])
         self.assertEqual(set(plan["jobs"]), {"hygiene", "backend", "api", "compose"})
         self.assertFalse(plan["image"])
 
@@ -151,7 +151,7 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(self.jobs(path), {"hygiene"})
 
     def test_workflow_and_code_changes_accumulate(self):
-        self.assertEqual(self.jobs(".github/workflows/ci-review.yml", "services/core/internal/store/sessions.go"),
+        self.assertEqual(self.jobs(".github/workflows/ci-review.yml", "services/core/internal/persistence/postgres/sessionpg/creation.go"),
                          {"hygiene", "lint", "backend", "api", "compose"})
         self.assertEqual(self.jobs(".github/workflows/native.yml", "apps/web/src/app.tsx"),
                          {"hygiene", "lint", "native", "web", "web-acceptance"})

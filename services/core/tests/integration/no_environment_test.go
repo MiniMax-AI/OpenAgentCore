@@ -1,0 +1,29 @@
+package integration
+
+import (
+	"context"
+	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+)
+
+func TestNoEnvironmentRejectsUnadvertisedDeviceBeforeClaim(t *testing.T) {
+	h := newDispatchHarness(t)
+	ctx := context.Background()
+	var err error
+	h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "none", Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
+		t.Fatal(err)
+	}
+	input := h.message("first", "Answer")
+	if _, err = h.bound().Run(ctx, h.tenant, h.session.ID, input.TurnID); err == nil {
+		t.Fatal("unsupported environment admitted")
+	}
+	turn, err := sessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
+	if err != nil || turn.Status != sessions.TurnQueued {
+		t.Fatal(turn, err)
+	}
+}
