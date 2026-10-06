@@ -549,29 +549,26 @@ func Decode(f sandboxwire.Frame) (Message, error) {
 	if (kind == sandboxwire.KindEvent) == sandboxwire.ValidRequestID(f.RequestID) {
 		return nil, fmt.Errorf("%w: request ID %d for message type %#04x", sandboxwire.ErrMalformed, f.RequestID, f.Type)
 	}
-	r := &reader{d: sandboxwire.NewDecoder(f.Payload)}
+	d := sandboxwire.NewDecoder(f.Payload)
 	var m Message
 	switch kind {
 	case sandboxwire.KindRequest:
-		m = decodeRequest(r, Op(f.Type))
+		m = decodeRequest(d, Op(f.Type))
 	case sandboxwire.KindResponse:
 		op := Op(f.Type &^ sandboxwire.ResponseType(0))
-		if r.enum(func(v uint16) bool { return v == resultSuccess || v == resultFailure }) == resultFailure {
-			m = Failure{Op: op, Code: Code(r.enum(func(v uint16) bool { return Code(v).Valid() })), Effect: r.effect()}
+		if d.Enum(func(v uint16) bool { return v == resultSuccess || v == resultFailure }) == resultFailure {
+			m = Failure{Op: op, Code: Code(d.Enum(func(v uint16) bool { return Code(v).Valid() })), Effect: d.Effect()}
 		} else {
-			m = decodeSuccess(r, op)
+			m = decodeSuccess(d, op)
 		}
 	case sandboxwire.KindEvent:
-		m = AttachmentClosed{AttachmentID: r.id(), Reason: CloseReason(r.enum(func(v uint16) bool { return CloseReason(v).Valid() }))}
+		m = AttachmentClosed{AttachmentID: d.ID(), Reason: CloseReason(d.Enum(func(v uint16) bool { return CloseReason(v).Valid() }))}
 	}
-	if r.otherVersion {
+	if m == nil {
 		return nil, Fail(VersionMismatch)
 	}
-	if r.err == nil {
-		r.err = r.d.Finish()
-	}
-	if r.err != nil {
-		return nil, r.err
+	if err := d.Finish(); err != nil {
+		return nil, err
 	}
 	if err := m.validate(); err != nil {
 		return nil, err
@@ -645,68 +642,68 @@ func reply(op Op, m Message) (Message, error) {
 	return m, nil
 }
 
-func decodeRequest(r *reader, op Op) Message {
+// decodeRequest returns nil for a Hello of another version.
+func decodeRequest(d *sandboxwire.Decoder, op Op) Message {
 	switch op {
 	case OpHello:
-		if r.u16() != Version && r.err == nil {
+		if d.U16() != Version && d.Err() == nil {
 			// Nothing after the version is readable in another version.
-			r.otherVersion = true
 			return nil
 		}
-		if Role(r.enum(func(v uint16) bool { return Role(v) == RoleServe || Role(v) == RoleAttach })) == RoleServe {
-			h := ServeHello{Version: Version, Credential: r.bytes(), Resource: r.resource(), ServerInstanceID: r.id()}
-			n := r.count(uint32(ServiceNetwork))
+		if Role(d.Enum(func(v uint16) bool { return Role(v) == RoleServe || Role(v) == RoleAttach })) == RoleServe {
+			h := ServeHello{Version: Version, Credential: d.Bytes(), Resource: readResource(d), ServerInstanceID: d.ID()}
+			n := d.Count(uint32(ServiceNetwork))
 			for range n {
-				h.Services = append(h.Services, ServiceVersion{Service: r.service(), Version: r.u16()})
+				h.Services = append(h.Services, ServiceVersion{Service: readService(d), Version: d.U16()})
 			}
 			return h
 		}
-		return AttachHello{Version: Version, RuntimeID: r.id(), Credential: r.bytes()}
+		return AttachHello{Version: Version, RuntimeID: d.ID(), Credential: d.Bytes()}
 	case OpOpen:
-		o := Open{Service: r.service(), Version: r.u16(), Resource: r.resource()}
-		if r.present() {
-			o.ExpectedServerInstanceID = r.id()
+		o := Open{Service: readService(d), Version: d.U16(), Resource: readResource(d)}
+		if d.Present() {
+			o.ExpectedServerInstanceID = d.ID()
 		}
-		o.AttachmentID, o.SessionID, o.AssignmentID = r.id(), r.id(), r.id()
-		o.AssignmentEpoch, o.AttachGrant = r.u64(), r.bytes()
+		o.AttachmentID, o.SessionID, o.AssignmentID = d.ID(), d.ID(), d.ID()
+		o.AssignmentEpoch, o.AttachGrant = d.U64(), d.Bytes()
 		return o
 	case OpBind:
-		b := Bind{AttachmentID: r.id(), Service: r.service(), Version: r.u16(), SessionID: r.id(), AssignmentID: r.id(),
-			AssignmentEpoch: r.u64(), LeaseExpiresAt: r.time(), ExpectedServerInstanceID: r.id()}
-		if r.present() != (b.Service == ServiceFile) && r.err == nil {
-			r.err = invalid("exports presence does not match service %s", b.Service)
+		b := Bind{AttachmentID: d.ID(), Service: readService(d), Version: d.U16(), SessionID: d.ID(), AssignmentID: d.ID(),
+			AssignmentEpoch: d.U64(), LeaseExpiresAt: readTime(d), ExpectedServerInstanceID: d.ID()}
+		if d.Present() != (b.Service == ServiceFile) {
+			d.Fail(invalid("exports presence does not match service %s", b.Service))
 		}
 		if b.Service == ServiceFile {
-			for range r.count(MaxExports) {
-				b.Exports = append(b.Exports, ExportGrant{ID: ExportID(r.bytes()), ReadOnly: r.boolean()})
+			for range d.Count(MaxExports) {
+				b.Exports = append(b.Exports, ExportGrant{ID: ExportID(d.Bytes()), ReadOnly: d.Bool()})
 			}
 		}
-		if r.present() != (b.Service == ServiceNetwork) && r.err == nil {
-			r.err = invalid("egress presence does not match service %s", b.Service)
+		if d.Present() != (b.Service == ServiceNetwork) {
+			d.Fail(invalid("egress presence does not match service %s", b.Service))
 		}
 		if b.Service == ServiceNetwork {
-			for range r.count(MaxEgressRules) {
-				b.Egress = append(b.Egress, r.egressRule())
+			for range d.Count(MaxEgressRules) {
+				b.Egress = append(b.Egress, readEgressRule(d))
 			}
 		}
 		return b
 	case OpRenewAttachment:
-		return RenewAttachment{AttachmentID: r.id(), AttachGrant: r.bytes()}
+		return RenewAttachment{AttachmentID: d.ID(), AttachGrant: d.Bytes()}
 	default: // OpCloseAttachment; Classify admits no other request tag.
-		return CloseAttachment{AttachmentID: r.id()}
+		return CloseAttachment{AttachmentID: d.ID()}
 	}
 }
 
-func decodeSuccess(r *reader, op Op) Message {
+func decodeSuccess(d *sandboxwire.Decoder, op Op) Message {
 	switch op {
 	case OpHello:
 		return HelloAccepted{}
 	case OpOpen:
-		return Opened{AttachmentID: r.id(), ServerInstanceID: r.id(), LeaseExpiresAt: r.time()}
+		return Opened{AttachmentID: d.ID(), ServerInstanceID: d.ID(), LeaseExpiresAt: readTime(d)}
 	case OpBind:
 		return Bound{}
 	case OpRenewAttachment:
-		return AttachmentRenewed{AttachmentID: r.id(), LeaseExpiresAt: r.time()}
+		return AttachmentRenewed{AttachmentID: d.ID(), LeaseExpiresAt: readTime(d)}
 	default: // OpCloseAttachment
 		return CloseAccepted{}
 	}
@@ -1031,62 +1028,29 @@ func (f Failure) validate() error {
 	return nil
 }
 
-// reader decodes fields in order, keeping the first error.
-type reader struct {
-	d            *sandboxwire.Decoder
-	err          error
-	otherVersion bool // a Hello of another version
+func readService(d *sandboxwire.Decoder) Service {
+	return Service(d.Enum(func(v uint16) bool { return Service(v).Valid() }))
 }
 
-func read[T any](r *reader, f func() (T, error)) T {
-	var v T
-	if r.err == nil {
-		v, r.err = f()
-	}
-	return v
-}
-
-func (r *reader) u8() uint8                  { return read(r, r.d.U8) }
-func (r *reader) u16() uint16                { return read(r, r.d.U16) }
-func (r *reader) u32() uint32                { return read(r, r.d.U32) }
-func (r *reader) u64() uint64                { return read(r, r.d.U64) }
-func (r *reader) id() sandboxwire.ID         { return read(r, r.d.ID) }
-func (r *reader) bytes() []byte              { return read(r, r.d.Bytes) }
-func (r *reader) present() bool              { return read(r, r.d.Present) }
-func (r *reader) boolean() bool              { return read(r, r.d.Bool) }
-func (r *reader) effect() sandboxwire.Effect { return read(r, r.d.Effect) }
-
-func (r *reader) enum(valid func(uint16) bool) uint16 {
-	return read(r, func() (uint16, error) { return r.d.Enum(valid) })
-}
-
-func (r *reader) count(max uint32) int {
-	return read(r, func() (int, error) { return r.d.Count(max) })
-}
-
-func (r *reader) service() Service {
-	return Service(r.enum(func(v uint16) bool { return Service(v).Valid() }))
-}
-
-// egressRule reads a rule; checkEgress validates it after decoding.
-func (r *reader) egressRule() EgressRule {
+// readEgressRule reads a rule; checkEgress validates it after decoding.
+func readEgressRule(d *sandboxwire.Decoder) EgressRule {
 	var a netip.Addr
-	if AddressFamily(r.enum(func(v uint16) bool { return AddressFamily(v) == FamilyIPv4 || AddressFamily(v) == FamilyIPv6 })) == FamilyIPv4 {
+	if AddressFamily(d.Enum(func(v uint16) bool { return AddressFamily(v) == FamilyIPv4 || AddressFamily(v) == FamilyIPv6 })) == FamilyIPv4 {
 		var v [4]byte
-		binary.BigEndian.PutUint32(v[:], r.u32())
+		binary.BigEndian.PutUint32(v[:], d.U32())
 		a = netip.AddrFrom4(v)
 	} else {
 		var v [16]byte
-		binary.BigEndian.PutUint64(v[:8], r.u64())
-		binary.BigEndian.PutUint64(v[8:], r.u64())
+		binary.BigEndian.PutUint64(v[:8], d.U64())
+		binary.BigEndian.PutUint64(v[8:], d.U64())
 		a = netip.AddrFrom16(v)
 	}
-	return EgressRule{Prefix: netip.PrefixFrom(a, int(r.u8())), PortFirst: r.u16(), PortLast: r.u16()}
+	return EgressRule{Prefix: netip.PrefixFrom(a, int(d.U8())), PortFirst: d.U16(), PortLast: d.U16()}
 }
 
-func (r *reader) time() time.Time { return time.UnixMilli(read(r, r.d.I64)).UTC() }
+func readTime(d *sandboxwire.Decoder) time.Time { return time.UnixMilli(d.I64()).UTC() }
 
-func (r *reader) resource() ResourceRef {
-	return ResourceRef{TenantID: r.id(), EnvironmentID: r.id(),
-		Kind: ResourceKind(r.enum(func(v uint16) bool { return ResourceKind(v).Valid() })), ID: r.id(), Generation: r.u64()}
+func readResource(d *sandboxwire.Decoder) ResourceRef {
+	return ResourceRef{TenantID: d.ID(), EnvironmentID: d.ID(),
+		Kind: ResourceKind(d.Enum(func(v uint16) bool { return ResourceKind(v).Valid() })), ID: d.ID(), Generation: d.U64()}
 }

@@ -2,17 +2,16 @@ package sandboxnet
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"io"
 	"net/netip"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire/sandboxwiretest"
 )
 
 var goldenFrames = []struct {
@@ -24,26 +23,8 @@ var goldenFrames = []struct {
 	{1, ConnectResponse{Result: ResultFailed, Code: CodeDenied, Effect: sandboxwire.EffectNone}},
 }
 
-func readHexFixture(t testing.TB, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var digits strings.Builder
-	for _, line := range strings.Split(string(raw), "\n") {
-		line, _, _ = strings.Cut(line, "#")
-		digits.WriteString(strings.Join(strings.Fields(line), ""))
-	}
-	b, err := hex.DecodeString(digits.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
-
 func TestGolden(t *testing.T) {
-	want := readHexFixture(t, "testdata/network_v1.hex")
+	want := sandboxwiretest.ReadHex(t, "network_v1.hex")
 	var buf bytes.Buffer
 	for _, g := range goldenFrames {
 		if err := WriteMessage(&buf, g.requestID, g.m); err != nil {
@@ -154,7 +135,7 @@ func TestEgress(t *testing.T) {
 }
 
 func FuzzDecode(f *testing.F) {
-	golden := readHexFixture(f, "testdata/network_v1.hex")
+	golden := sandboxwiretest.ReadHex(f, "network_v1.hex")
 	for r := bytes.NewReader(golden); r.Len() > 0; {
 		start := len(golden) - r.Len()
 		if _, err := sandboxwire.ReadFrame(r, MaxMessageBytes); err != nil {

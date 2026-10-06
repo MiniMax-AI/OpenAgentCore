@@ -2,36 +2,17 @@ package sandboxfs
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"math"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire/sandboxwiretest"
 )
-
-func readHexFixture(t testing.TB, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var digits strings.Builder
-	for _, line := range strings.Split(string(raw), "\n") {
-		line, _, _ = strings.Cut(line, "#")
-		digits.WriteString(strings.Join(strings.Fields(line), ""))
-	}
-	b, err := hex.DecodeString(digits.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
 
 var (
 	testNode    = NodeRef{ID: 1, Generation: 7}
@@ -80,7 +61,7 @@ func TestGoldenFixtures(t *testing.T) {
 		{file: "write_request.hex", op: OpWrite, id: 8, req: &WriteRequest{Handle: 9, Append: true, Data: []byte("log\n")}},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
-			want := readHexFixture(t, tc.file)
+			want := sandboxwiretest.ReadHex(t, tc.file)
 			typ := uint16(tc.op)
 			var payload []byte
 			var err error
@@ -245,7 +226,7 @@ func FuzzDecode(f *testing.F) {
 	entries, _ := os.ReadDir("testdata")
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".hex") {
-			f.Add(readHexFixture(f, e.Name()))
+			f.Add(sandboxwiretest.ReadHex(f, e.Name()))
 		}
 	}
 	for i, s := range samples() {

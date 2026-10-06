@@ -3,15 +3,12 @@ package sandboxprocess
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire/sandboxwiretest"
 )
 
 var (
@@ -57,28 +54,10 @@ var fixtures = []struct {
 	{"failure.hex", 1, ResponseFailure{OpStart, Failure{CodeOperationConflict, sandboxwire.EffectNone, "operation has a different spec"}}},
 }
 
-func readHexFixture(t testing.TB, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("testdata", name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var digits strings.Builder
-	for _, line := range strings.Split(string(raw), "\n") {
-		line, _, _ = strings.Cut(line, "#")
-		digits.WriteString(strings.Join(strings.Fields(line), ""))
-	}
-	frame, err := hex.DecodeString(digits.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return frame
-}
-
 func TestGoldenFixtures(t *testing.T) {
 	for _, fx := range fixtures {
 		t.Run(fx.name, func(t *testing.T) {
-			want := readHexFixture(t, fx.name)
+			want := sandboxwiretest.ReadHex(t, fx.name)
 			var got bytes.Buffer
 			if err := sandboxwire.WriteFrame(&got, sandboxwire.Frame{Type: fx.msg.MessageType(), RequestID: fx.requestID, Payload: Encode(fx.msg)}); err != nil {
 				t.Fatal(err)

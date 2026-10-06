@@ -914,7 +914,7 @@ type Request interface {
 
 type message interface {
 	encode(*sandboxwire.Encoder)
-	decode(*decoder)
+	decode(*sandboxwire.Decoder)
 	validate() error
 }
 
@@ -1142,45 +1142,6 @@ func malformed(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{sandboxwire.ErrMalformed}, args...)...)
 }
 
-// decoder keeps the first error and reads nothing after it.
-type decoder struct {
-	d   *sandboxwire.Decoder
-	err error
-}
-
-func read[T any](d *decoder, f func() (T, error)) T {
-	var v T
-	if d.err == nil {
-		v, d.err = f()
-	}
-	return v
-}
-
-func (d *decoder) u16() uint16        { return read(d, d.d.U16) }
-func (d *decoder) u32() uint32        { return read(d, d.d.U32) }
-func (d *decoder) u64() uint64        { return read(d, d.d.U64) }
-func (d *decoder) i64() int64         { return read(d, d.d.I64) }
-func (d *decoder) bool() bool         { return read(d, d.d.Bool) }
-func (d *decoder) bytes() []byte      { return read(d, d.d.Bytes) }
-func (d *decoder) present() bool      { return read(d, d.d.Present) }
-func (d *decoder) id() sandboxwire.ID { return read(d, d.d.ID) }
-
-func (d *decoder) count(max uint32) int {
-	return read(d, func() (int, error) { return d.d.Count(max) })
-}
-
-func decodeMessage(m message, payload []byte) error {
-	d := &decoder{d: sandboxwire.NewDecoder(payload)}
-	m.decode(d)
-	if d.err != nil {
-		return d.err
-	}
-	if err := d.d.Finish(); err != nil {
-		return err
-	}
-	return m.validate()
-}
-
 func encodeMessage(e *sandboxwire.Encoder, m message) error {
 	if err := m.validate(); err != nil {
 		return err
@@ -1209,7 +1170,7 @@ func decodeRequest(op Op, payload []byte) (Request, error) {
 		return nil, malformed("unknown request %d", uint16(op))
 	}
 	r := opSpecs[op].newRequest()
-	return r, decodeMessage(r, payload)
+	return r, decodeRest(sandboxwire.NewDecoder(payload), r)
 }
 
 // encodeResponse encodes a success carrying r, or the failure f when it is
@@ -1236,10 +1197,10 @@ func decodeResponse(op Op, payload []byte) (message, *Failure, error) {
 	if op < 1 || op > OpCancelRequest {
 		return nil, nil, malformed("unknown request %d", uint16(op))
 	}
-	d := &decoder{d: sandboxwire.NewDecoder(payload)}
-	switch result := Result(d.u16()); {
-	case d.err != nil:
-		return nil, nil, d.err
+	d := sandboxwire.NewDecoder(payload)
+	switch result := Result(d.U16()); {
+	case d.Err() != nil:
+		return nil, nil, d.Err()
 	case result == ResultSuccess:
 		r := opSpecs[op].newResponse()
 		return r, nil, decodeRest(d, r)
@@ -1251,12 +1212,10 @@ func decodeResponse(op Op, payload []byte) (message, *Failure, error) {
 	}
 }
 
-func decodeRest(d *decoder, m message) error {
+// decodeRest decodes m from the rest of d and validates it.
+func decodeRest(d *sandboxwire.Decoder, m message) error {
 	m.decode(d)
-	if d.err != nil {
-		return d.err
-	}
-	if err := d.d.Finish(); err != nil {
+	if err := d.Finish(); err != nil {
 		return err
 	}
 	return m.validate()
@@ -1264,8 +1223,8 @@ func decodeRest(d *decoder, m message) error {
 
 // Shared values.
 
-func (r NodeRef) encode(e *sandboxwire.Encoder) { e.U64(r.ID); e.U64(r.Generation) }
-func (r *NodeRef) decode(d *decoder)            { r.ID = d.u64(); r.Generation = d.u64() }
+func (r NodeRef) encode(e *sandboxwire.Encoder)  { e.U64(r.ID); e.U64(r.Generation) }
+func (r *NodeRef) decode(d *sandboxwire.Decoder) { r.ID = d.U64(); r.Generation = d.U64() }
 func (r NodeRef) validate() error {
 	if r.ID == 0 || r.Generation == 0 {
 		return malformed("node reference %d/%d", r.ID, r.Generation)
@@ -1280,8 +1239,8 @@ func (h HandleID) validate() error {
 	return nil
 }
 
-func (t Timestamp) encode(e *sandboxwire.Encoder) { e.I64(t.Sec); e.U32(t.Nsec) }
-func (t *Timestamp) decode(d *decoder)            { t.Sec = d.i64(); t.Nsec = d.u32() }
+func (t Timestamp) encode(e *sandboxwire.Encoder)  { e.I64(t.Sec); e.U32(t.Nsec) }
+func (t *Timestamp) decode(d *sandboxwire.Decoder) { t.Sec = d.I64(); t.Nsec = d.U32() }
 func (t Timestamp) validate() error {
 	if t.Nsec >= 1e9 {
 		return malformed("nanoseconds %d", t.Nsec)
@@ -1304,16 +1263,16 @@ func (a *Attr) encode(e *sandboxwire.Encoder) {
 	a.Ctime.encode(e)
 }
 
-func (a *Attr) decode(d *decoder) {
-	a.Ino = d.u64()
-	a.Mode = d.u32()
-	a.Nlink = d.u32()
-	a.UID = d.u32()
-	a.GID = d.u32()
-	a.Rdev = d.u64()
-	a.Size = d.u64()
-	a.Blocks = d.u64()
-	a.Blksize = d.u32()
+func (a *Attr) decode(d *sandboxwire.Decoder) {
+	a.Ino = d.U64()
+	a.Mode = d.U32()
+	a.Nlink = d.U32()
+	a.UID = d.U32()
+	a.GID = d.U32()
+	a.Rdev = d.U64()
+	a.Size = d.U64()
+	a.Blocks = d.U64()
+	a.Blksize = d.U32()
 	a.Atime.decode(d)
 	a.Mtime.decode(d)
 	a.Ctime.decode(d)
@@ -1330,7 +1289,7 @@ func (a *Attr) validate() error {
 }
 
 func (en *Entry) encode(e *sandboxwire.Encoder) { en.Node.encode(e); en.Attr.encode(e) }
-func (en *Entry) decode(d *decoder)             { en.Node.decode(d); en.Attr.decode(d) }
+func (en *Entry) decode(d *sandboxwire.Decoder) { en.Node.decode(d); en.Attr.decode(d) }
 func (en *Entry) validate() error               { return errors.Join(en.Node.validate(), en.Attr.validate()) }
 
 func (t *Target) encode(e *sandboxwire.Encoder) {
@@ -1342,12 +1301,12 @@ func (t *Target) encode(e *sandboxwire.Encoder) {
 	}
 }
 
-func (t *Target) decode(d *decoder) {
-	switch t.Kind = TargetKind(d.u16()); t.Kind {
+func (t *Target) decode(d *sandboxwire.Decoder) {
+	switch t.Kind = TargetKind(d.U16()); t.Kind {
 	case TargetNode:
 		t.Node.decode(d)
 	case TargetHandle:
-		t.Handle = HandleID(d.u64())
+		t.Handle = HandleID(d.U64())
 	}
 }
 
@@ -1368,7 +1327,11 @@ func (t *Target) validate() error {
 }
 
 func (l *Lock) encode(e *sandboxwire.Encoder) { e.Enum(uint16(l.Mode)); e.U64(l.Start); e.U64(l.End) }
-func (l *Lock) decode(d *decoder)             { l.Mode = LockMode(d.u16()); l.Start = d.u64(); l.End = d.u64() }
+func (l *Lock) decode(d *sandboxwire.Decoder) {
+	l.Mode = LockMode(d.U16())
+	l.Start = d.U64()
+	l.End = d.U64()
+}
 func (l *Lock) validate() error {
 	if l.Mode < LockRead || l.Mode > LockUnlock {
 		return malformed("lock mode %d", l.Mode)
@@ -1389,15 +1352,15 @@ func (f *Failure) encode(e *sandboxwire.Encoder) {
 	e.Bytes([]byte(f.Message))
 }
 
-func (f *Failure) decode(d *decoder) {
-	f.Code = ErrorCode(d.u16())
-	if d.present() {
-		if f.Errno = Errno(d.u16()); f.Errno == 0 && d.err == nil {
-			d.err = malformed("zero errno")
+func (f *Failure) decode(d *sandboxwire.Decoder) {
+	f.Code = ErrorCode(d.U16())
+	if d.Present() {
+		if f.Errno = Errno(d.U16()); f.Errno == 0 {
+			d.Fail(malformed("zero errno"))
 		}
 	}
-	f.Effect = sandboxwire.Effect(d.u16())
-	f.Message = string(d.bytes())
+	f.Effect = sandboxwire.Effect(d.U16())
+	f.Message = string(d.Bytes())
 }
 
 func (f *Failure) validate() error {
@@ -1423,8 +1386,8 @@ func encodeOptionalFailure(e *sandboxwire.Encoder, f *Failure) {
 	}
 }
 
-func decodeOptionalFailure(d *decoder) *Failure {
-	if !d.present() {
+func decodeOptionalFailure(d *sandboxwire.Decoder) *Failure {
+	if !d.Present() {
 		return nil
 	}
 	f := new(Failure)
@@ -1492,15 +1455,15 @@ func (c *Capabilities) encode(e *sandboxwire.Encoder) {
 	}
 }
 
-func (c *Capabilities) decode(d *decoder) {
-	c.PathProfile = PathProfile(d.u16())
-	c.CacheProfile = CacheProfile(d.u16())
-	c.Durability = Durability(d.u16())
+func (c *Capabilities) decode(d *sandboxwire.Decoder) {
+	c.PathProfile = PathProfile(d.U16())
+	c.CacheProfile = CacheProfile(d.U16())
+	c.Durability = Durability(d.U16())
 	for _, v := range []*uint32{&c.MaxNameBytes, &c.MaxPathBytes, &c.MaxReadBytes, &c.MaxWriteBytes, &c.MaxWalkComponents, &c.MaxReadDirBytes, &c.MaxOpenHandles} {
-		*v = d.u32()
+		*v = d.U32()
 	}
 	for _, v := range c.flags() {
-		*v = d.bool()
+		*v = d.Bool()
 	}
 }
 
@@ -1534,7 +1497,7 @@ func (c *Capabilities) validate() error {
 // Messages.
 
 func (*DescribeRequest) encode(*sandboxwire.Encoder) {}
-func (*DescribeRequest) decode(*decoder)             {}
+func (*DescribeRequest) decode(*sandboxwire.Decoder) {}
 func (*DescribeRequest) validate() error             { return nil }
 
 func (r *DescribeResponse) encode(e *sandboxwire.Encoder) {
@@ -1548,14 +1511,14 @@ func (r *DescribeResponse) encode(e *sandboxwire.Encoder) {
 	}
 }
 
-func (r *DescribeResponse) decode(d *decoder) {
-	r.ServerInstanceID = d.id()
-	r.Identity.UID = d.u32()
-	r.Identity.GID = d.u32()
+func (r *DescribeResponse) decode(d *sandboxwire.Decoder) {
+	r.ServerInstanceID = d.ID()
+	r.Identity.UID = d.U32()
+	r.Identity.GID = d.U32()
 	r.Capabilities.decode(d)
-	r.Exports = make([]sandboxlink.ExportID, d.count(sandboxlink.MaxExports))
+	r.Exports = make([]sandboxlink.ExportID, d.Count(sandboxlink.MaxExports))
 	for i := range r.Exports {
-		r.Exports[i] = sandboxlink.ExportID(d.bytes())
+		r.Exports[i] = sandboxlink.ExportID(d.Bytes())
 	}
 }
 
@@ -1577,9 +1540,9 @@ func (r *DescribeResponse) validate() error {
 }
 
 func (r *AttachRequest) encode(e *sandboxwire.Encoder) { e.Bytes([]byte(r.Export)); e.Bool(r.ReadOnly) }
-func (r *AttachRequest) decode(d *decoder) {
-	r.Export = sandboxlink.ExportID(d.bytes())
-	r.ReadOnly = d.bool()
+func (r *AttachRequest) decode(d *sandboxwire.Decoder) {
+	r.Export = sandboxlink.ExportID(d.Bytes())
+	r.ReadOnly = d.Bool()
 }
 func (r *AttachRequest) validate() error {
 	if !r.Export.Valid() {
@@ -1589,7 +1552,7 @@ func (r *AttachRequest) validate() error {
 }
 
 func (r *AttachResponse) encode(e *sandboxwire.Encoder) { r.Root.encode(e) }
-func (r *AttachResponse) decode(d *decoder)             { r.Root.decode(d) }
+func (r *AttachResponse) decode(d *sandboxwire.Decoder) { r.Root.decode(d) }
 func (r *AttachResponse) validate() error {
 	if r.Root.Attr.Mode&ModeType != ModeDirectory {
 		return malformed("export root is not a directory")
@@ -1598,18 +1561,18 @@ func (r *AttachResponse) validate() error {
 }
 
 func (*DetachRequest) encode(*sandboxwire.Encoder)  {}
-func (*DetachRequest) decode(*decoder)              {}
+func (*DetachRequest) decode(*sandboxwire.Decoder)  {}
 func (*DetachRequest) validate() error              { return nil }
 func (*DetachResponse) encode(*sandboxwire.Encoder) {}
-func (*DetachResponse) decode(*decoder)             {}
+func (*DetachResponse) decode(*sandboxwire.Decoder) {}
 func (*DetachResponse) validate() error             { return nil }
 
 func (r *LookupRequest) encode(e *sandboxwire.Encoder) { r.Parent.encode(e); e.Bytes(r.Name) }
-func (r *LookupRequest) decode(d *decoder)             { r.Parent.decode(d); r.Name = d.bytes() }
+func (r *LookupRequest) decode(d *sandboxwire.Decoder) { r.Parent.decode(d); r.Name = d.Bytes() }
 func (r *LookupRequest) validate() error               { return errors.Join(r.Parent.validate(), validName(r.Name)) }
 
 func (r *LookupResponse) encode(e *sandboxwire.Encoder) { r.Entry.encode(e) }
-func (r *LookupResponse) decode(d *decoder)             { r.Entry.decode(d) }
+func (r *LookupResponse) decode(d *sandboxwire.Decoder) { r.Entry.decode(d) }
 func (r *LookupResponse) validate() error               { return r.Entry.validate() }
 
 func (r *WalkRequest) encode(e *sandboxwire.Encoder) {
@@ -1620,11 +1583,11 @@ func (r *WalkRequest) encode(e *sandboxwire.Encoder) {
 	}
 }
 
-func (r *WalkRequest) decode(d *decoder) {
+func (r *WalkRequest) decode(d *sandboxwire.Decoder) {
 	r.Parent.decode(d)
-	r.Names = make([][]byte, d.count(maxWalkNames))
+	r.Names = make([][]byte, d.Count(maxWalkNames))
 	for i := range r.Names {
-		r.Names[i] = d.bytes()
+		r.Names[i] = d.Bytes()
 	}
 }
 
@@ -1648,8 +1611,8 @@ func (r *WalkResponse) encode(e *sandboxwire.Encoder) {
 	encodeOptionalFailure(e, r.Failure)
 }
 
-func (r *WalkResponse) decode(d *decoder) {
-	r.Entries = make([]Entry, d.count(maxWalkNames))
+func (r *WalkResponse) decode(d *sandboxwire.Decoder) {
+	r.Entries = make([]Entry, d.Count(maxWalkNames))
 	for i := range r.Entries {
 		r.Entries[i].decode(d)
 	}
@@ -1672,11 +1635,11 @@ func (r *WalkResponse) validate() error {
 }
 
 func (r *GetAttrRequest) encode(e *sandboxwire.Encoder) { r.Target.encode(e) }
-func (r *GetAttrRequest) decode(d *decoder)             { r.Target.decode(d) }
+func (r *GetAttrRequest) decode(d *sandboxwire.Decoder) { r.Target.decode(d) }
 func (r *GetAttrRequest) validate() error               { return r.Target.validate() }
 
 func (r *GetAttrResponse) encode(e *sandboxwire.Encoder) { r.Attr.encode(e) }
-func (r *GetAttrResponse) decode(d *decoder)             { r.Attr.decode(d) }
+func (r *GetAttrResponse) decode(d *sandboxwire.Decoder) { r.Attr.decode(d) }
 func (r *GetAttrResponse) validate() error               { return r.Attr.validate() }
 
 func (r *SetAttrRequest) encode(e *sandboxwire.Encoder) {
@@ -1702,20 +1665,20 @@ func (r *SetAttrRequest) encode(e *sandboxwire.Encoder) {
 	}
 }
 
-func (r *SetAttrRequest) decode(d *decoder) {
+func (r *SetAttrRequest) decode(d *sandboxwire.Decoder) {
 	r.Target.decode(d)
-	r.Set = AttrMask(d.u32())
+	r.Set = AttrMask(d.U32())
 	if r.Set&AttrSize != 0 {
-		r.Size = d.u64()
+		r.Size = d.U64()
 	}
 	if r.Set&AttrMode != 0 {
-		r.Mode = d.u32()
+		r.Mode = d.U32()
 	}
 	if r.Set&AttrUID != 0 {
-		r.UID = d.u32()
+		r.UID = d.U32()
 	}
 	if r.Set&AttrGID != 0 {
-		r.GID = d.u32()
+		r.GID = d.U32()
 	}
 	if r.Set&AttrAtime != 0 {
 		r.Atime.decode(d)
@@ -1744,11 +1707,14 @@ func (r *SetAttrRequest) validate() error {
 }
 
 func (r *SetAttrResponse) encode(e *sandboxwire.Encoder) { r.Attr.encode(e) }
-func (r *SetAttrResponse) decode(d *decoder)             { r.Attr.decode(d) }
+func (r *SetAttrResponse) decode(d *sandboxwire.Decoder) { r.Attr.decode(d) }
 func (r *SetAttrResponse) validate() error               { return r.Attr.validate() }
 
 func (r *AccessRequest) encode(e *sandboxwire.Encoder) { r.Node.encode(e); e.U32(uint32(r.Mask)) }
-func (r *AccessRequest) decode(d *decoder)             { r.Node.decode(d); r.Mask = AccessMask(d.u32()) }
+func (r *AccessRequest) decode(d *sandboxwire.Decoder) {
+	r.Node.decode(d)
+	r.Mask = AccessMask(d.U32())
+}
 func (r *AccessRequest) validate() error {
 	if r.Mask&^accessMaskAll != 0 {
 		return malformed("access mask %#x", uint32(r.Mask))
@@ -1757,7 +1723,7 @@ func (r *AccessRequest) validate() error {
 }
 
 func (*AccessResponse) encode(*sandboxwire.Encoder) {}
-func (*AccessResponse) decode(*decoder)             {}
+func (*AccessResponse) decode(*sandboxwire.Decoder) {}
 func (*AccessResponse) validate() error             { return nil }
 
 func (r *OpenRequest) encode(e *sandboxwire.Encoder) {
@@ -1767,11 +1733,11 @@ func (r *OpenRequest) encode(e *sandboxwire.Encoder) {
 	e.U32(uint32(r.Flags))
 }
 
-func (r *OpenRequest) decode(d *decoder) {
-	r.Handle = HandleID(d.u64())
+func (r *OpenRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
 	r.Node.decode(d)
-	r.Access = AccessMode(d.u16())
-	r.Flags = OpenFlags(d.u32())
+	r.Access = AccessMode(d.U16())
+	r.Flags = OpenFlags(d.U32())
 }
 
 func (r *OpenRequest) validate() error {
@@ -1779,7 +1745,7 @@ func (r *OpenRequest) validate() error {
 }
 
 func (*OpenResponse) encode(*sandboxwire.Encoder) {}
-func (*OpenResponse) decode(*decoder)             {}
+func (*OpenResponse) decode(*sandboxwire.Decoder) {}
 func (*OpenResponse) validate() error             { return nil }
 
 func (r *CreateRequest) encode(e *sandboxwire.Encoder) {
@@ -1792,14 +1758,14 @@ func (r *CreateRequest) encode(e *sandboxwire.Encoder) {
 	e.Bool(r.Exclusive)
 }
 
-func (r *CreateRequest) decode(d *decoder) {
-	r.Handle = HandleID(d.u64())
+func (r *CreateRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
 	r.Parent.decode(d)
-	r.Name = d.bytes()
-	r.Mode = d.u32()
-	r.Access = AccessMode(d.u16())
-	r.Flags = OpenFlags(d.u32())
-	r.Exclusive = d.bool()
+	r.Name = d.Bytes()
+	r.Mode = d.U32()
+	r.Access = AccessMode(d.U16())
+	r.Flags = OpenFlags(d.U32())
+	r.Exclusive = d.Bool()
 }
 
 func (r *CreateRequest) validate() error {
@@ -1807,7 +1773,7 @@ func (r *CreateRequest) validate() error {
 }
 
 func (r *CreateResponse) encode(e *sandboxwire.Encoder) { r.Entry.encode(e) }
-func (r *CreateResponse) decode(d *decoder)             { r.Entry.decode(d) }
+func (r *CreateResponse) decode(d *sandboxwire.Decoder) { r.Entry.decode(d) }
 func (r *CreateResponse) validate() error               { return r.Entry.validate() }
 
 func (r *ReadRequest) encode(e *sandboxwire.Encoder) {
@@ -1815,10 +1781,10 @@ func (r *ReadRequest) encode(e *sandboxwire.Encoder) {
 	e.U64(r.Offset)
 	e.U32(r.Size)
 }
-func (r *ReadRequest) decode(d *decoder) {
-	r.Handle = HandleID(d.u64())
-	r.Offset = d.u64()
-	r.Size = d.u32()
+func (r *ReadRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Offset = d.U64()
+	r.Size = d.U32()
 }
 
 func (r *ReadRequest) validate() error {
@@ -1829,7 +1795,7 @@ func (r *ReadRequest) validate() error {
 }
 
 func (r *ReadResponse) encode(e *sandboxwire.Encoder) { e.Bytes(r.Data) }
-func (r *ReadResponse) decode(d *decoder)             { r.Data = d.bytes() }
+func (r *ReadResponse) decode(d *sandboxwire.Decoder) { r.Data = d.Bytes() }
 func (r *ReadResponse) validate() error {
 	if len(r.Data) > sandboxwire.MaxChunk {
 		return malformed("read of %d bytes", len(r.Data))
@@ -1843,11 +1809,11 @@ func (r *WriteRequest) encode(e *sandboxwire.Encoder) {
 	e.Bool(r.Append)
 	e.Bytes(r.Data)
 }
-func (r *WriteRequest) decode(d *decoder) {
-	r.Handle = HandleID(d.u64())
-	r.Offset = d.u64()
-	r.Append = d.bool()
-	r.Data = d.bytes()
+func (r *WriteRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Offset = d.U64()
+	r.Append = d.Bool()
+	r.Data = d.Bytes()
 }
 
 func (r *WriteRequest) validate() error {
@@ -1861,7 +1827,10 @@ func (r *WriteResponse) encode(e *sandboxwire.Encoder) {
 	e.U32(r.Written)
 	encodeOptionalFailure(e, r.Failure)
 }
-func (r *WriteResponse) decode(d *decoder) { r.Written = d.u32(); r.Failure = decodeOptionalFailure(d) }
+func (r *WriteResponse) decode(d *sandboxwire.Decoder) {
+	r.Written = d.U32()
+	r.Failure = decodeOptionalFailure(d)
+}
 func (r *WriteResponse) validate() error {
 	if r.Written > sandboxwire.MaxChunk {
 		return malformed("wrote %d bytes", r.Written)
@@ -1879,35 +1848,44 @@ func (r *FlushRequest) encode(e *sandboxwire.Encoder) {
 	e.U64(uint64(r.Handle))
 	e.U64(uint64(r.Owner))
 }
-func (r *FlushRequest) decode(d *decoder) { r.Handle = HandleID(d.u64()); r.Owner = LockOwner(d.u64()) }
-func (r *FlushRequest) validate() error   { return r.Handle.validate() }
+func (r *FlushRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Owner = LockOwner(d.U64())
+}
+func (r *FlushRequest) validate() error { return r.Handle.validate() }
 
 func (*FlushResponse) encode(*sandboxwire.Encoder) {}
-func (*FlushResponse) decode(*decoder)             {}
+func (*FlushResponse) decode(*sandboxwire.Decoder) {}
 func (*FlushResponse) validate() error             { return nil }
 
 func (r *FsyncRequest) encode(e *sandboxwire.Encoder) { e.U64(uint64(r.Handle)); e.Bool(r.DataOnly) }
-func (r *FsyncRequest) decode(d *decoder)             { r.Handle = HandleID(d.u64()); r.DataOnly = d.bool() }
-func (r *FsyncRequest) validate() error               { return r.Handle.validate() }
+func (r *FsyncRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.DataOnly = d.Bool()
+}
+func (r *FsyncRequest) validate() error { return r.Handle.validate() }
 
 func (*FsyncResponse) encode(*sandboxwire.Encoder) {}
-func (*FsyncResponse) decode(*decoder)             {}
+func (*FsyncResponse) decode(*sandboxwire.Decoder) {}
 func (*FsyncResponse) validate() error             { return nil }
 
 func (r *ReleaseRequest) encode(e *sandboxwire.Encoder) { e.U64(uint64(r.Handle)) }
-func (r *ReleaseRequest) decode(d *decoder)             { r.Handle = HandleID(d.u64()) }
+func (r *ReleaseRequest) decode(d *sandboxwire.Decoder) { r.Handle = HandleID(d.U64()) }
 func (r *ReleaseRequest) validate() error               { return r.Handle.validate() }
 
 func (*ReleaseResponse) encode(*sandboxwire.Encoder) {}
-func (*ReleaseResponse) decode(*decoder)             {}
+func (*ReleaseResponse) decode(*sandboxwire.Decoder) {}
 func (*ReleaseResponse) validate() error             { return nil }
 
 func (r *OpenDirRequest) encode(e *sandboxwire.Encoder) { e.U64(uint64(r.Handle)); r.Node.encode(e) }
-func (r *OpenDirRequest) decode(d *decoder)             { r.Handle = HandleID(d.u64()); r.Node.decode(d) }
-func (r *OpenDirRequest) validate() error               { return errors.Join(r.Handle.validate(), r.Node.validate()) }
+func (r *OpenDirRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Node.decode(d)
+}
+func (r *OpenDirRequest) validate() error { return errors.Join(r.Handle.validate(), r.Node.validate()) }
 
 func (*OpenDirResponse) encode(*sandboxwire.Encoder) {}
-func (*OpenDirResponse) decode(*decoder)             {}
+func (*OpenDirResponse) decode(*sandboxwire.Decoder) {}
 func (*OpenDirResponse) validate() error             { return nil }
 
 func (r *ReadDirRequest) encode(e *sandboxwire.Encoder) {
@@ -1917,11 +1895,11 @@ func (r *ReadDirRequest) encode(e *sandboxwire.Encoder) {
 	e.Bool(r.WithAttrs)
 }
 
-func (r *ReadDirRequest) decode(d *decoder) {
-	r.Handle = HandleID(d.u64())
-	r.Cookie = d.u64()
-	r.Limit = d.u32()
-	r.WithAttrs = d.bool()
+func (r *ReadDirRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Cookie = d.U64()
+	r.Limit = d.U32()
+	r.WithAttrs = d.Bool()
 }
 
 func (r *ReadDirRequest) validate() error {
@@ -1947,20 +1925,20 @@ func (r *ReadDirResponse) encode(e *sandboxwire.Encoder) {
 	e.Bool(r.End)
 }
 
-func (r *ReadDirResponse) decode(d *decoder) {
-	r.Entries = make([]DirEntry, d.count(maxReadDirBytes/dirEntryWireSize))
+func (r *ReadDirResponse) decode(d *sandboxwire.Decoder) {
+	r.Entries = make([]DirEntry, d.Count(maxReadDirBytes/dirEntryWireSize))
 	for i := range r.Entries {
 		x := &r.Entries[i]
-		x.Name = d.bytes()
-		x.Ino = d.u64()
-		x.Type = d.u32()
-		x.Cookie = d.u64()
-		if d.present() {
+		x.Name = d.Bytes()
+		x.Ino = d.U64()
+		x.Type = d.U32()
+		x.Cookie = d.U64()
+		if d.Present() {
 			x.Entry = new(Entry)
 			x.Entry.decode(d)
 		}
 	}
-	r.End = d.bool()
+	r.End = d.Bool()
 }
 
 func (r *ReadDirResponse) validate() error {
@@ -1999,11 +1977,11 @@ func (r *ReadDirResponse) validate() error {
 }
 
 func (r *ReleaseDirRequest) encode(e *sandboxwire.Encoder) { e.U64(uint64(r.Handle)) }
-func (r *ReleaseDirRequest) decode(d *decoder)             { r.Handle = HandleID(d.u64()) }
+func (r *ReleaseDirRequest) decode(d *sandboxwire.Decoder) { r.Handle = HandleID(d.U64()) }
 func (r *ReleaseDirRequest) validate() error               { return r.Handle.validate() }
 
 func (*ReleaseDirResponse) encode(*sandboxwire.Encoder) {}
-func (*ReleaseDirResponse) decode(*decoder)             {}
+func (*ReleaseDirResponse) decode(*sandboxwire.Decoder) {}
 func (*ReleaseDirResponse) validate() error             { return nil }
 
 func (r *MkdirRequest) encode(e *sandboxwire.Encoder) {
@@ -2011,29 +1989,33 @@ func (r *MkdirRequest) encode(e *sandboxwire.Encoder) {
 	e.Bytes(r.Name)
 	e.U32(r.Mode)
 }
-func (r *MkdirRequest) decode(d *decoder) { r.Parent.decode(d); r.Name = d.bytes(); r.Mode = d.u32() }
+func (r *MkdirRequest) decode(d *sandboxwire.Decoder) {
+	r.Parent.decode(d)
+	r.Name = d.Bytes()
+	r.Mode = d.U32()
+}
 func (r *MkdirRequest) validate() error {
 	return errors.Join(r.Parent.validate(), validName(r.Name), validPerm(r.Mode))
 }
 
 func (r *MkdirResponse) encode(e *sandboxwire.Encoder) { r.Entry.encode(e) }
-func (r *MkdirResponse) decode(d *decoder)             { r.Entry.decode(d) }
+func (r *MkdirResponse) decode(d *sandboxwire.Decoder) { r.Entry.decode(d) }
 func (r *MkdirResponse) validate() error               { return r.Entry.validate() }
 
 func (r *UnlinkRequest) encode(e *sandboxwire.Encoder) { r.Parent.encode(e); e.Bytes(r.Name) }
-func (r *UnlinkRequest) decode(d *decoder)             { r.Parent.decode(d); r.Name = d.bytes() }
+func (r *UnlinkRequest) decode(d *sandboxwire.Decoder) { r.Parent.decode(d); r.Name = d.Bytes() }
 func (r *UnlinkRequest) validate() error               { return errors.Join(r.Parent.validate(), validName(r.Name)) }
 
 func (*UnlinkResponse) encode(*sandboxwire.Encoder) {}
-func (*UnlinkResponse) decode(*decoder)             {}
+func (*UnlinkResponse) decode(*sandboxwire.Decoder) {}
 func (*UnlinkResponse) validate() error             { return nil }
 
 func (r *RmdirRequest) encode(e *sandboxwire.Encoder) { r.Parent.encode(e); e.Bytes(r.Name) }
-func (r *RmdirRequest) decode(d *decoder)             { r.Parent.decode(d); r.Name = d.bytes() }
+func (r *RmdirRequest) decode(d *sandboxwire.Decoder) { r.Parent.decode(d); r.Name = d.Bytes() }
 func (r *RmdirRequest) validate() error               { return errors.Join(r.Parent.validate(), validName(r.Name)) }
 
 func (*RmdirResponse) encode(*sandboxwire.Encoder) {}
-func (*RmdirResponse) decode(*decoder)             {}
+func (*RmdirResponse) decode(*sandboxwire.Decoder) {}
 func (*RmdirResponse) validate() error             { return nil }
 
 func (r *RenameRequest) encode(e *sandboxwire.Encoder) {
@@ -2044,12 +2026,12 @@ func (r *RenameRequest) encode(e *sandboxwire.Encoder) {
 	e.Enum(uint16(r.Mode))
 }
 
-func (r *RenameRequest) decode(d *decoder) {
+func (r *RenameRequest) decode(d *sandboxwire.Decoder) {
 	r.Parent.decode(d)
-	r.Name = d.bytes()
+	r.Name = d.Bytes()
 	r.NewParent.decode(d)
-	r.NewName = d.bytes()
-	r.Mode = RenameMode(d.u16())
+	r.NewName = d.Bytes()
+	r.Mode = RenameMode(d.U16())
 }
 
 func (r *RenameRequest) validate() error {
@@ -2060,7 +2042,7 @@ func (r *RenameRequest) validate() error {
 }
 
 func (*RenameResponse) encode(*sandboxwire.Encoder) {}
-func (*RenameResponse) decode(*decoder)             {}
+func (*RenameResponse) decode(*sandboxwire.Decoder) {}
 func (*RenameResponse) validate() error             { return nil }
 
 func (r *LinkRequest) encode(e *sandboxwire.Encoder) {
@@ -2068,17 +2050,17 @@ func (r *LinkRequest) encode(e *sandboxwire.Encoder) {
 	r.NewParent.encode(e)
 	e.Bytes(r.NewName)
 }
-func (r *LinkRequest) decode(d *decoder) {
+func (r *LinkRequest) decode(d *sandboxwire.Decoder) {
 	r.Node.decode(d)
 	r.NewParent.decode(d)
-	r.NewName = d.bytes()
+	r.NewName = d.Bytes()
 }
 func (r *LinkRequest) validate() error {
 	return errors.Join(r.Node.validate(), r.NewParent.validate(), validName(r.NewName))
 }
 
 func (r *LinkResponse) encode(e *sandboxwire.Encoder) { r.Entry.encode(e) }
-func (r *LinkResponse) decode(d *decoder)             { r.Entry.decode(d) }
+func (r *LinkResponse) decode(d *sandboxwire.Decoder) { r.Entry.decode(d) }
 func (r *LinkResponse) validate() error               { return r.Entry.validate() }
 
 func (r *SymlinkRequest) encode(e *sandboxwire.Encoder) {
@@ -2086,29 +2068,29 @@ func (r *SymlinkRequest) encode(e *sandboxwire.Encoder) {
 	e.Bytes(r.Name)
 	e.Bytes(r.Target)
 }
-func (r *SymlinkRequest) decode(d *decoder) {
+func (r *SymlinkRequest) decode(d *sandboxwire.Decoder) {
 	r.Parent.decode(d)
-	r.Name = d.bytes()
-	r.Target = d.bytes()
+	r.Name = d.Bytes()
+	r.Target = d.Bytes()
 }
 func (r *SymlinkRequest) validate() error {
 	return errors.Join(r.Parent.validate(), validName(r.Name), validTarget(r.Target))
 }
 
 func (r *SymlinkResponse) encode(e *sandboxwire.Encoder) { r.Entry.encode(e) }
-func (r *SymlinkResponse) decode(d *decoder)             { r.Entry.decode(d) }
+func (r *SymlinkResponse) decode(d *sandboxwire.Decoder) { r.Entry.decode(d) }
 func (r *SymlinkResponse) validate() error               { return r.Entry.validate() }
 
 func (r *ReadlinkRequest) encode(e *sandboxwire.Encoder) { r.Node.encode(e) }
-func (r *ReadlinkRequest) decode(d *decoder)             { r.Node.decode(d) }
+func (r *ReadlinkRequest) decode(d *sandboxwire.Decoder) { r.Node.decode(d) }
 func (r *ReadlinkRequest) validate() error               { return r.Node.validate() }
 
 func (r *ReadlinkResponse) encode(e *sandboxwire.Encoder) { e.Bytes(r.Target) }
-func (r *ReadlinkResponse) decode(d *decoder)             { r.Target = d.bytes() }
+func (r *ReadlinkResponse) decode(d *sandboxwire.Decoder) { r.Target = d.Bytes() }
 func (r *ReadlinkResponse) validate() error               { return validTarget(r.Target) }
 
 func (r *StatFSRequest) encode(e *sandboxwire.Encoder) { r.Node.encode(e) }
-func (r *StatFSRequest) decode(d *decoder)             { r.Node.decode(d) }
+func (r *StatFSRequest) decode(d *sandboxwire.Decoder) { r.Node.decode(d) }
 func (r *StatFSRequest) validate() error               { return r.Node.validate() }
 
 func (r *StatFSResponse) encode(e *sandboxwire.Encoder) {
@@ -2120,13 +2102,13 @@ func (r *StatFSResponse) encode(e *sandboxwire.Encoder) {
 	e.U32(r.NameMax)
 }
 
-func (r *StatFSResponse) decode(d *decoder) {
+func (r *StatFSResponse) decode(d *sandboxwire.Decoder) {
 	for _, v := range []*uint64{&r.Blocks, &r.BlocksFree, &r.BlocksAvailable, &r.Files, &r.FilesFree} {
-		*v = d.u64()
+		*v = d.U64()
 	}
-	r.BlockSize = d.u32()
-	r.FragmentSize = d.u32()
-	r.NameMax = d.u32()
+	r.BlockSize = d.U32()
+	r.FragmentSize = d.U32()
+	r.NameMax = d.U32()
 }
 
 func (*StatFSResponse) validate() error { return nil }
@@ -2139,11 +2121,11 @@ func (r *ForgetRequest) encode(e *sandboxwire.Encoder) {
 	}
 }
 
-func (r *ForgetRequest) decode(d *decoder) {
-	r.Entries = make([]ForgetEntry, d.count(maxForgetEntries))
+func (r *ForgetRequest) decode(d *sandboxwire.Decoder) {
+	r.Entries = make([]ForgetEntry, d.Count(maxForgetEntries))
 	for i := range r.Entries {
 		r.Entries[i].Node.decode(d)
-		r.Entries[i].Count = d.u64()
+		r.Entries[i].Count = d.U64()
 	}
 }
 
@@ -2165,7 +2147,7 @@ func (r *ForgetRequest) validate() error {
 }
 
 func (*ForgetResponse) encode(*sandboxwire.Encoder) {}
-func (*ForgetResponse) decode(*decoder)             {}
+func (*ForgetResponse) decode(*sandboxwire.Decoder) {}
 func (*ForgetResponse) validate() error             { return nil }
 
 func (r *GetLockRequest) encode(e *sandboxwire.Encoder) {
@@ -2174,9 +2156,9 @@ func (r *GetLockRequest) encode(e *sandboxwire.Encoder) {
 	r.Lock.encode(e)
 }
 
-func (r *GetLockRequest) decode(d *decoder) {
-	r.Handle = HandleID(d.u64())
-	r.Owner = LockOwner(d.u64())
+func (r *GetLockRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Owner = LockOwner(d.U64())
 	r.Lock.decode(d)
 }
 
@@ -2194,8 +2176,8 @@ func (r *GetLockResponse) encode(e *sandboxwire.Encoder) {
 	}
 }
 
-func (r *GetLockResponse) decode(d *decoder) {
-	if d.present() {
+func (r *GetLockResponse) decode(d *sandboxwire.Decoder) {
+	if d.Present() {
 		r.Conflict = new(Lock)
 		r.Conflict.decode(d)
 	}
@@ -2219,12 +2201,12 @@ func (r *SetLockRequest) encode(e *sandboxwire.Encoder) {
 	e.Bool(r.Wait)
 }
 
-func (r *SetLockRequest) decode(d *decoder) {
-	r.Handle = HandleID(d.u64())
-	r.Kind = LockKind(d.u16())
-	r.Owner = LockOwner(d.u64())
+func (r *SetLockRequest) decode(d *sandboxwire.Decoder) {
+	r.Handle = HandleID(d.U64())
+	r.Kind = LockKind(d.U16())
+	r.Owner = LockOwner(d.U64())
 	r.Lock.decode(d)
-	r.Wait = d.bool()
+	r.Wait = d.Bool()
 }
 
 func (r *SetLockRequest) validate() error {
@@ -2241,11 +2223,11 @@ func (r *SetLockRequest) validate() error {
 }
 
 func (*SetLockResponse) encode(*sandboxwire.Encoder) {}
-func (*SetLockResponse) decode(*decoder)             {}
+func (*SetLockResponse) decode(*sandboxwire.Decoder) {}
 func (*SetLockResponse) validate() error             { return nil }
 
 func (r *CancelRequestRequest) encode(e *sandboxwire.Encoder) { e.U64(r.Target) }
-func (r *CancelRequestRequest) decode(d *decoder)             { r.Target = d.u64() }
+func (r *CancelRequestRequest) decode(d *sandboxwire.Decoder) { r.Target = d.U64() }
 func (r *CancelRequestRequest) validate() error {
 	if !sandboxwire.ValidRequestID(r.Target) {
 		return malformed("cancel of request 0")
@@ -2254,5 +2236,5 @@ func (r *CancelRequestRequest) validate() error {
 }
 
 func (*CancelRequestResponse) encode(*sandboxwire.Encoder) {}
-func (*CancelRequestResponse) decode(*decoder)             {}
+func (*CancelRequestResponse) decode(*sandboxwire.Decoder) {}
 func (*CancelRequestResponse) validate() error             { return nil }

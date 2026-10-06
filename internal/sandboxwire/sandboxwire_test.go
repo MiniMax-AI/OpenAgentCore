@@ -3,13 +3,12 @@ package sandboxwire
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"io"
-	"os"
 	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire/sandboxwiretest"
 )
 
 // sample exercises every primitive in the order the golden fixture lists them.
@@ -49,65 +48,25 @@ func (s sample) encode(e *Encoder) {
 	}
 }
 
-// get runs read unless an earlier read failed, keeping the first error.
-func get[T any](err *error, read func() (T, error)) T {
-	var v T
-	if *err == nil {
-		v, *err = read()
-	}
-	return v
-}
-
 func decodeSample(t *testing.T, p []byte) (sample, error) {
-	var s sample
-	var err error
 	d := NewDecoder(p)
-	s.A = get(&err, d.U8)
-	s.B = get(&err, d.U16)
-	s.C = get(&err, d.U32)
-	s.D = get(&err, d.U64)
-	s.E = get(&err, d.I64)
-	s.F = get(&err, d.Bool)
-	s.Kind = get(&err, func() (uint16, error) { return d.Enum(sampleKind) })
-	s.Effect = get(&err, d.Effect)
-	if get(&err, d.Present) {
-		id := get(&err, d.ID)
+	s := sample{A: d.U8(), B: d.U16(), C: d.U32(), D: d.U64(), E: d.I64(), F: d.Bool(), Kind: d.Enum(sampleKind), Effect: d.Effect()}
+	if d.Present() {
+		id := d.ID()
 		s.Ref = &id
 	}
-	remaining := d.Remaining()
-	n := get(&err, func() (int, error) { return d.Count(sampleMaxItems) })
-	if n > sampleMaxItems || n > remaining {
-		t.Fatalf("count %d escapes its bounds (max %d, %d bytes remained)", n, sampleMaxItems, remaining)
+	n := d.Count(sampleMaxItems)
+	if n > sampleMaxItems || n > len(p) {
+		t.Fatalf("count %d escapes its bounds (max %d, %d payload bytes)", n, sampleMaxItems, len(p))
 	}
 	s.Items = make([][]byte, n)
 	for i := range s.Items {
-		s.Items[i] = get(&err, d.Bytes)
+		s.Items[i] = d.Bytes()
 		if cap(s.Items[i]) != len(s.Items[i]) {
 			t.Fatalf("byte string capacity %d exceeds its length %d", cap(s.Items[i]), len(s.Items[i]))
 		}
 	}
-	if err != nil {
-		return s, err
-	}
 	return s, d.Finish()
-}
-
-func readHexFixture(t testing.TB, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var digits strings.Builder
-	for _, line := range strings.Split(string(raw), "\n") {
-		line, _, _ = strings.Cut(line, "#")
-		digits.WriteString(strings.Join(strings.Fields(line), ""))
-	}
-	b, err := hex.DecodeString(digits.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
 }
 
 type countingWriter struct {
@@ -121,7 +80,7 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 }
 
 func TestGoldenFrame(t *testing.T) {
-	want := readHexFixture(t, "testdata/frame_v1.hex")
+	want := sandboxwiretest.ReadHex(t, "frame_v1.hex")
 	ref := ID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
 	msg := sample{A: 7, B: 0x0102, C: 0x03040506, D: 0x0708090a0b0c0d0e, E: -2, F: true, Kind: 2, Effect: EffectPossible, Ref: &ref, Items: [][]byte{[]byte("ab"), {}}}
 
@@ -157,6 +116,13 @@ func header(length uint32, flags uint16) []byte {
 
 func errOf[T any](_ T, err error) error { return err }
 
+// readErr returns the error of read on a Decoder over p.
+func readErr[T any](p []byte, read func(*Decoder) T) error {
+	d := NewDecoder(p)
+	read(d)
+	return d.Err()
+}
+
 func TestRejectsMalformed(t *testing.T) {
 	anyEnum := func(uint16) bool { return true }
 	tags := Tags{Requests: 2, Events: 1}
@@ -170,14 +136,14 @@ func TestRejectsMalformed(t *testing.T) {
 		{"nonzero flags", errOf(ReadFrame(bytes.NewReader(header(0, 1)), MaxPayload))},
 		{"oversize write", WriteFrame(io.Discard, Frame{Type: 1, RequestID: 1, Payload: make([]byte, MaxPayload+1)})},
 		{"trailing bytes", NewDecoder([]byte{0}).Finish()},
-		{"bool 2", errOf(NewDecoder([]byte{2}).Bool())},
-		{"zero enum", errOf(NewDecoder([]byte{0, 0}).Enum(anyEnum))},
-		{"unknown enum", errOf(NewDecoder([]byte{0, 4}).Enum(sampleKind))},
-		{"zero ID", errOf(NewDecoder(make([]byte, 16)).ID())},
-		{"count above remaining bytes", errOf(NewDecoder([]byte{0, 0, 0, 2, 0}).Count(10))},
-		{"count above maximum", errOf(NewDecoder([]byte{0, 0, 0, 2, 0, 0}).Count(1))},
-		{"byte string above remaining bytes", errOf(NewDecoder([]byte{0, 0, 0, 2, 0}).Bytes())},
-		{"truncated integer", errOf(NewDecoder([]byte{0, 0, 0}).U32())},
+		{"bool 2", readErr([]byte{2}, (*Decoder).Bool)},
+		{"zero enum", readErr([]byte{0, 0}, func(d *Decoder) uint16 { return d.Enum(anyEnum) })},
+		{"unknown enum", readErr([]byte{0, 4}, func(d *Decoder) uint16 { return d.Enum(sampleKind) })},
+		{"zero ID", readErr(make([]byte, 16), (*Decoder).ID)},
+		{"count above remaining bytes", readErr([]byte{0, 0, 0, 2, 0}, func(d *Decoder) int { return d.Count(10) })},
+		{"count above maximum", readErr([]byte{0, 0, 0, 2, 0, 0}, func(d *Decoder) int { return d.Count(1) })},
+		{"byte string above remaining bytes", readErr([]byte{0, 0, 0, 2, 0}, (*Decoder).Bytes)},
+		{"truncated integer", readErr([]byte{0, 0, 0}, (*Decoder).U32)},
 		{"unknown request", errOf(tags.Classify(3))},
 		{"unknown response", errOf(tags.Classify(ResponseType(3)))},
 		{"unknown event", errOf(tags.Classify(FirstEvent + 1))},
@@ -186,6 +152,17 @@ func TestRejectsMalformed(t *testing.T) {
 		if !errors.Is(tc.err, ErrMalformed) {
 			t.Errorf("%s: got %v, want ErrMalformed", tc.name, tc.err)
 		}
+	}
+}
+
+// After the first error every read returns the zero value and the error stays.
+func TestFirstErrorSticks(t *testing.T) {
+	d := NewDecoder([]byte{2, 0, 0, 0, 1, 7})
+	d.Bool()
+	first := d.Err()
+	d.Fail(errors.New("later"))
+	if v, b := d.U32(), d.Bytes(); v != 0 || b != nil || d.Finish() != first || !errors.Is(first, ErrMalformed) {
+		t.Fatalf("after %v: read %d and %q, finished with %v", first, v, b, d.Finish())
 	}
 }
 
@@ -219,7 +196,7 @@ func TestRequestSequence(t *testing.T) {
 // allocation may exceed the input: the payload limit is the input length and
 // the item count is bounded.
 func FuzzDecoder(f *testing.F) {
-	f.Add(readHexFixture(f, "testdata/frame_v1.hex"))
+	f.Add(sandboxwiretest.ReadHex(f, "frame_v1.hex"))
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, data []byte) {
 		fr, err := ReadFrame(bytes.NewReader(data), uint32(len(data)))

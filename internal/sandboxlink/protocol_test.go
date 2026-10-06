@@ -2,17 +2,15 @@ package sandboxlink
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
 	"io"
 	"net/netip"
-	"os"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire/sandboxwiretest"
 )
 
 func testID(b byte) sandboxwire.ID {
@@ -56,26 +54,8 @@ var goldenFrames = []golden{
 	{0, AttachmentClosed{AttachmentID: testID(0x07), Reason: CloseLeaseExpired}},
 }
 
-func readHexFixture(t testing.TB, name string) []byte {
-	t.Helper()
-	raw, err := os.ReadFile(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var digits strings.Builder
-	for _, line := range strings.Split(string(raw), "\n") {
-		line, _, _ = strings.Cut(line, "#")
-		digits.WriteString(strings.Join(strings.Fields(line), ""))
-	}
-	b, err := hex.DecodeString(digits.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
-
 func TestGolden(t *testing.T) {
-	want := readHexFixture(t, "testdata/link_v1.hex")
+	want := sandboxwiretest.ReadHex(t, "link_v1.hex")
 	var buf bytes.Buffer
 	for _, g := range goldenFrames {
 		if err := WriteMessage(&buf, g.requestID, g.m); err != nil {
@@ -197,7 +177,7 @@ func TestCheckRelayURL(t *testing.T) {
 // FuzzDecode decodes arbitrary frames. Whatever decodes re-encodes to the same
 // bytes; every failure is ErrMalformed or, for a Hello, VersionMismatch.
 func FuzzDecode(f *testing.F) {
-	golden := readHexFixture(f, "testdata/link_v1.hex")
+	golden := sandboxwiretest.ReadHex(f, "link_v1.hex")
 	for r := bytes.NewReader(golden); r.Len() > 0; {
 		start := len(golden) - r.Len()
 		if _, err := sandboxwire.ReadFrame(r, sandboxwire.MaxPayload); err != nil {
