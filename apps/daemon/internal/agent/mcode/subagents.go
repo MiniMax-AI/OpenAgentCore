@@ -82,6 +82,7 @@ func (s *Session) readSubagents(ctx context.Context) (nativeSubagentSnapshot, er
 	if err != nil {
 		return snapshot, fmt.Errorf("mcode: child history reader is unavailable")
 	}
+	go io.Copy(io.Discard, process.Stderr)
 	raw, readErr := io.ReadAll(io.LimitReader(process.Stdout, 64*1024*1024+1))
 	if readErr != nil || len(raw) > 64*1024*1024 {
 		process.Cancel()
