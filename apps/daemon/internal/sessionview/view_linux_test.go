@@ -32,12 +32,13 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 )
 
-// The view tests need root with CAP_SYS_ADMIN and CAP_NET_ADMIN, /dev/fuse and no AppArmor confinement. Run them in a throwaway container:
+// The view tests need root with CAP_SYS_ADMIN and CAP_NET_ADMIN, /dev/fuse, no AppArmor confinement and a private cgroup namespace, in which sessionviewtest mounts a writable cgroup v2 hierarchy for the views. Run them in a throwaway container:
 //
 //	CGO_ENABLED=0 go test -c -o /tmp/sessionview.test ./apps/daemon/internal/sessionview
-//	docker run --rm --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
+//	docker run --rm --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
 //	  -e OAC_TEST_SESSIONVIEW=1 -v /tmp/sessionview.test:/t.test:ro debian:bookworm-slim /t.test -test.v
 const (
 	gateEnv    = "OAC_TEST_SESSIONVIEW"
@@ -115,6 +116,11 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	if staged, _ := os.ReadDir(f.staging); len(staged) != 1 {
 		t.Fatalf("staging parent holds %v, want the view's staging directory", staged)
 	}
+	if cgroups := cgroupsIn(t, f.cgroups); len(cgroups) != 1 {
+		t.Fatalf("cgroup parent holds %v, want the view's cgroup", cgroups)
+	} else if populated, err := isPopulated(cgroups[0]); err != nil || !populated {
+		t.Fatalf("view cgroup populated = %v, %v; want the view's processes in it", populated, err)
+	}
 	if err := v.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("Signal: %v", err)
 	}
@@ -131,6 +137,9 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	}
 	if left, _ := os.ReadDir(f.staging); len(left) != 0 {
 		t.Errorf("staging directories left: %v", left)
+	}
+	if left := cgroupsIn(t, f.cgroups); len(left) != 0 {
+		t.Errorf("view cgroups left: %v", left)
 	}
 }
 
@@ -174,7 +183,7 @@ func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	}
 }
 
-// TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it.
+// TestTeardownIsBounded checks that a world server that never ends the request the view's process is blocked on fails the teardown with ErrCleanup within the bound instead of hanging it, and that the teardown keeps the view's cgroup for Recover.
 func TestTeardownIsBounded(t *testing.T) {
 	requireView(t)
 	f := newFixture(t)
@@ -204,12 +213,32 @@ func TestTeardownIsBounded(t *testing.T) {
 	if _, err := v.Wait(); !errors.Is(err, ErrClosed) || !errors.Is(err, ErrCleanup) {
 		t.Errorf("Wait = %v, want ErrClosed and ErrCleanup", err)
 	}
-	// Once the world answers, what was left finishes.
+	if kept := cgroupsIn(t, f.cgroups); len(kept) != 1 {
+		t.Errorf("cgroup parent holds %v after the bound, want the view's cgroup", kept)
+	}
+	// Once the world answers, what was left finishes, and Recover removes the cgroup.
 	close(w.release)
 	select {
 	case <-w.served:
 	case <-time.After(10 * time.Second):
 		t.Error("the view outlived the world's answer")
+	}
+	if err := Recover(f.cgroups); err != nil {
+		t.Errorf("Recover: %v", err)
+	}
+	if left := cgroupsIn(t, f.cgroups); len(left) != 0 {
+		t.Errorf("view cgroups left after Recover: %v", left)
+	}
+}
+
+// TestCheckCgroups checks that a cgroup v2 directory the tests own passes and that a plain directory fails with ErrCgroup.
+func TestCheckCgroups(t *testing.T) {
+	if err := CheckCgroups(t.TempDir()); !errors.Is(err, ErrCgroup) {
+		t.Errorf("CheckCgroups of a plain directory = %v, want ErrCgroup", err)
+	}
+	requireView(t)
+	if err := CheckCgroups(sessionviewtest.CgroupParent(t)); err != nil {
+		t.Errorf("CheckCgroups: %v", err)
 	}
 }
 
@@ -320,9 +349,13 @@ func TestStartRejectsInvalidSpec(t *testing.T) {
 		"missing staging parent":      {StagingParent: filepath.Join(t.TempDir(), "missing")},
 		"private run directory":       {Private: []PrivateDir{{Name: "run", HostDir: t.TempDir()}}},
 		"shim named as the relay":     {Shim: Shim{Binary: "/bin/true", Names: []string{processshim.RelayName}}},
+		"relative cgroup parent":      {CgroupParent: "sys/fs/cgroup/oac"},
 	} {
 		if spec.StagingParent == "" {
 			spec.StagingParent = t.TempDir()
+		}
+		if spec.CgroupParent == "" {
+			spec.CgroupParent = "/sys/fs/cgroup/oac"
 		}
 		spec.World = (&loopbackWorld{}).serve
 		spec.Process = Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: viewID, GID: viewID}
@@ -343,7 +376,7 @@ func requireView(t *testing.T) {
 }
 
 type fixture struct {
-	self, world, harness, home, overlay, staging string
+	self, world, harness, home, overlay, staging, cgroups string
 }
 
 // newFixture lays out a world with the mountpoints the real world frontend presents synthetically, plus the local sources.
@@ -360,6 +393,7 @@ func newFixture(t *testing.T) *fixture {
 		home:    filepath.Join(base, "home"),
 		overlay: filepath.Join(base, "overlay"),
 		staging: filepath.Join(base, "staging"),
+		cgroups: sessionviewtest.CgroupParent(t),
 	}
 	for _, d := range []string{".oac/harness", ".oac/home", ".oac/run", ".oac/bin", "proc", "dev", "bin", "usr/bin", "data", "etc/oac-overlay"} {
 		mkdir(t, filepath.Join(f.world, d))
@@ -403,6 +437,7 @@ func (f *fixture) spec(w *loopbackWorld, mode string, env ...string) Spec {
 			Stderr: os.Stderr,
 		},
 		StagingParent: f.staging,
+		CgroupParent:  f.cgroups,
 	}
 }
 
@@ -562,6 +597,22 @@ func serveBroker(t *testing.T) func(*os.File) error {
 }
 
 // processesWith counts processes whose command line contains token.
+// cgroupsIn lists the cgroups in parent.
+func cgroupsIn(t *testing.T, parent string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, filepath.Join(parent, e.Name()))
+		}
+	}
+	return dirs
+}
+
 func processesWith(t *testing.T, token string) int {
 	t.Helper()
 	cmdlines, err := filepath.Glob("/proc/[0-9]*/cmdline")

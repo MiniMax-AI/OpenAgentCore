@@ -5,6 +5,7 @@ package sessionview
 import (
 	"encoding/gob"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"runtime"
@@ -19,14 +20,21 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 )
 
-// Init runs the launcher when the process was started as one, and then never returns. The daemon calls it first thing in main.
+// Init runs the launcher, or CheckCgroups's process, when the process was started as one, and then never returns. The daemon calls it first thing in main.
 func Init() {
-	if len(os.Args) != 1 || os.Args[0] != launcherArg0 {
+	if len(os.Args) != 1 {
 		return
 	}
-	// Capability sets, no_new_privs and seccomp filters are per thread: the thread that sets them must be the one that forks the process.
-	runtime.LockOSThread()
-	os.Exit(runLauncher())
+	switch os.Args[0] {
+	case launcherArg0:
+		// Capability sets, no_new_privs and seccomp filters are per thread: the thread that sets them must be the one that forks the process.
+		runtime.LockOSThread()
+		os.Exit(runLauncher())
+	case probeArg0:
+		// CheckCgroups kills it, or closes its stdin when it cannot.
+		io.Copy(io.Discard, os.Stdin)
+		os.Exit(0)
+	}
 }
 
 // launcher is PID 1 of the view.

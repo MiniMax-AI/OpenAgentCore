@@ -23,6 +23,8 @@ type Spec struct {
 	Network  Network
 	// StagingParent is an existing absolute host directory, such as the Session directory, in which the view creates its staging directory and removes it at teardown.
 	StagingParent string
+	// CgroupParent is the absolute path of a cgroup v2 directory that the caller owns and that CheckCgroups accepts. The view creates its own cgroup in it, runs every process there and removes it at teardown.
+	CgroupParent string
 }
 
 // World starts serving the view's root file system on dev, a /dev/fuse connection that the launcher has already mounted as mount describes, and reports how it presents mount's mountpoints. ctx is Start's: it bounds connecting, attaching and presenting, not the serving. The server runs in the daemon, outside the view, and never mounts or unmounts anything. sessionview closes dev after Stop returns.
@@ -123,6 +125,9 @@ type Exit struct {
 func (s *Spec) validate() error {
 	if s.World == nil {
 		return invalid("world is required")
+	}
+	if !filepath.IsAbs(s.CgroupParent) || filepath.Clean(s.CgroupParent) != s.CgroupParent {
+		return invalid("cgroup parent %q must be absolute and clean", s.CgroupParent)
 	}
 	if info, err := hostSource(s.StagingParent); err != nil {
 		return err

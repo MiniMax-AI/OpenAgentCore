@@ -14,6 +14,12 @@ func Init() {}
 // Probe reports that views need Linux.
 func Probe() error { return ErrUnsupported }
 
+// CheckCgroups reports that view cgroups need Linux.
+func CheckCgroups(string) error { return ErrUnsupported }
+
+// Recover reports that view cgroups need Linux.
+func Recover(string) error { return ErrUnsupported }
+
 // Start reports that views need Linux.
 func Start(context.Context, Spec) (*View, error) { return nil, ErrUnsupported }
 
