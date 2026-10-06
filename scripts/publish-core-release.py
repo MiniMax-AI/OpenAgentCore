@@ -2,12 +2,16 @@
 """Create and upload one draft, then publish its fixed ID without automatic retries."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import importlib.util
 import json
 import os
 import pathlib
 import re
 import subprocess
+import shutil
+import gzip
+import tempfile
 import tarfile
 from urllib.parse import quote
 
@@ -15,8 +19,24 @@ spec = importlib.util.spec_from_file_location(
     "distribution", pathlib.Path(__file__).with_name("core-distribution-manifest.py"))
 distribution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(distribution)
+render_spec = importlib.util.spec_from_file_location(
+    "render_compose", pathlib.Path(__file__).with_name("render-compose.py"))
+render_compose = importlib.util.module_from_spec(render_spec)
+render_spec.loader.exec_module(render_compose)
 
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+
+
+def parallel_each(function, items):
+    """Bound network transfers and propagate failures before publication."""
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(function, item) for item in items]
+        try:
+            return [future.result() for future in as_completed(futures)]
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
 
 
 def api(repository, endpoint, *args):
@@ -55,6 +75,119 @@ def verify_draft(release, tag, revision):
             or release["target_commitish"] != revision
             or type(release["id"]) is not int or release["id"] <= 0):
         raise ValueError("Release draft identity changed")
+
+
+IMAGE_NAMES = ("core", "web", "runtime", "ingress")
+
+
+def registry_manifest(reference):
+    result = subprocess.run(["docker", "manifest", "inspect", reference],
+                            text=True, capture_output=True)
+    if result.returncode:
+        # Authentication, transport and registry failures must not authorize a push.
+        if "manifest unknown" in result.stderr.lower() or "no such manifest:" in result.stderr.lower():
+            return None
+        raise RuntimeError("Cannot inspect registry image " + reference + ": " + result.stderr)
+    return json.loads(result.stdout)
+
+
+def registry_image(reference):
+    manifest = registry_manifest(reference)
+    selected = reference
+    if manifest is not None and "manifests" in manifest:
+        descriptors = manifest["manifests"]
+        if len(descriptors) != 1:
+            raise ValueError("Expected one Linux amd64 registry image: " + reference)
+        digest = descriptors[0]["digest"]
+        if not distribution.DIGEST.fullmatch(digest):
+            raise ValueError("Invalid registry image descriptor")
+        selected = reference.rsplit(":", 1)[0] + "@" + digest
+        manifest = registry_manifest(selected)
+        if manifest is None:
+            raise ValueError("Registry index refers to a missing image")
+    return manifest, selected
+
+
+def publish_images(assets, repository, revision, tag, floating_latest=False):
+    """Load the checked release archives; never rebuild or replace another image."""
+    image_tag = tag.replace("+", "_")
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", image_tag):
+        raise ValueError("Release version exceeds the container tag format")
+    stem = "oac-" + revision + "-linux-amd64"
+    # Extract named regular members only, never archive-controlled paths.
+    with tempfile.TemporaryDirectory(prefix="oac-ghcr-") as directory:
+        directory = pathlib.Path(directory)
+        with tarfile.open(assets / (stem + ".tar.gz"), "r:gz") as archive:
+            manifest = json.load(archive.extractfile(stem + "/manifest.json"))
+            if manifest["source_commit"] != revision or manifest["platform"] != "linux/amd64":
+                raise ValueError("Registry images do not match the release")
+            for name in IMAGE_NAMES:
+                if name == "runtime":
+                    continue
+                member = archive.getmember(stem + "/images/" + name + ".tar")
+                if not member.isfile():
+                    raise ValueError("Expected a regular image archive")
+                with archive.extractfile(member) as source, (directory / (name + ".tar")).open("wb") as target:
+                    shutil.copyfileobj(source, target)
+        runtime = manifest["artifacts"]["images/runtime.tar.gz"]
+        filename = runtime["filename"]
+        if pathlib.Path(filename).name != filename:
+            raise ValueError("Invalid Runtime asset filename")
+        runtime_path = assets / filename
+        if runtime_path.is_symlink() or distribution.sha256(runtime_path) != runtime["sha256"]:
+            raise ValueError("Runtime image checksum mismatch")
+        with gzip.open(runtime_path, "rb") as source, (directory / "runtime.tar").open("wb") as target:
+            shutil.copyfileobj(source, target)
+        for name in IMAGE_NAMES:
+            expected = (manifest["images"][name], manifest["image_manifest_digests"][name])
+            if distribution.image_identities(directory / (name + ".tar"), expected[0]) != expected:
+                raise ValueError("Release image identity mismatch: " + name)
+        references = {}
+        # Validate every local image and every existing tag before the first push.
+        for name in IMAGE_NAMES:
+            path = directory / (name + ".tar")
+            subprocess.run(["docker", "load", "--input", str(path)], check=True)
+            config = manifest["images"][name]
+            local = distribution.resolve_image(config, manifest["image_manifest_digests"][name])
+            reference = "ghcr.io/" + repository.lower() + "/" + name + ":" + image_tag
+            remote, selected = registry_image(reference)
+            if remote is not None and remote.get("config", {}).get("digest") != config:
+                raise ValueError("Registry tag already names a different image: " + reference)
+            references[name] = (reference, config, local, remote)
+        def push_image(item):
+            name, (reference, config, local, remote) = item
+            print("Publishing registry image " + name, flush=True)
+            if remote is None:
+                subprocess.run(["docker", "tag", local, reference], check=True)
+                subprocess.run(["docker", "push", reference], check=True)
+            remote, selected = registry_image(reference)
+            if remote is None or remote.get("config", {}).get("digest") != config:
+                raise ValueError("Registry image verification failed: " + reference)
+            # Inspect the registry's descriptor, not the local Docker image ID.
+            details = json.loads(subprocess.check_output(
+                ["docker", "manifest", "inspect", "--verbose", selected], text=True))
+            digest = details["Descriptor"]["digest"]
+            if not distribution.DIGEST.fullmatch(digest):
+                raise ValueError("Invalid registry manifest digest")
+            print("Verified registry image " + name, flush=True)
+            return name, {"tag": reference, "digest": reference.rsplit(":", 1)[0] + "@" + digest}
+        result = dict(sorted(parallel_each(push_image, references.items())))
+        if floating_latest:
+            def push_latest(item):
+                name, (reference, config, local, remote) = item
+                latest = reference.rsplit(":", 1)[0] + ":latest"
+                current, _selected = registry_image(latest)
+                if current is not None and current.get("config", {}).get("digest") == config:
+                    return name, latest
+                print("Publishing registry image " + name + ":latest", flush=True)
+                subprocess.run(["docker", "tag", local, latest], check=True)
+                subprocess.run(["docker", "push", latest], check=True)
+                current, selected = registry_image(latest)
+                if current is None or current.get("config", {}).get("digest") != config:
+                    raise ValueError("Registry image verification failed: " + latest)
+                return name, latest
+            parallel_each(push_latest, references.items())
+        return result
 
 
 def publish(assets, repository, revision, tag, mode):
@@ -119,7 +252,8 @@ def publish(assets, repository, revision, tag, mode):
     # Keep every operation bound to the ID returned by creation. No tag lookup,
     # overwrite, deletion or automatic retry can select another release.
     expected = {p.name: p.stat().st_size for p in files}
-    for path in files:
+    def upload(path):
+        print(f"Uploading {path.name} ({expected[path.name]} bytes)", flush=True)
         uploaded = api(repository, "https://uploads.github.com/repos/" + repository
                        + "/" + endpoint + "/assets?name=" + quote(path.name, safe=""),
                        "--method", "POST", "-H", "Content-Type: application/octet-stream",
@@ -127,6 +261,8 @@ def publish(assets, repository, revision, tag, mode):
         if (uploaded["state"] != "uploaded" or uploaded["name"] != path.name
                 or uploaded["size"] != expected[path.name]):
             raise ValueError("Asset upload was not confirmed; inspect the draft")
+        print("Uploaded " + path.name, flush=True)
+    parallel_each(upload, sorted(files, key=lambda path: expected[path.name], reverse=True))
     release = api(repository, endpoint)
     verify_draft(release, tag, revision)
     actual = release["assets"]
@@ -134,9 +270,30 @@ def publish(assets, repository, revision, tag, mode):
             or any(a["state"] != "uploaded" for a in actual)
             or {a["name"]: a["size"] for a in actual} != expected):
         raise ValueError("Release asset inventory differs from the build")
+    stable = re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:\+[0-9A-Za-z.-]+)?", tag) is not None
+    images = publish_images(assets, repository, revision, tag, floating_latest=mode == "publish" and stable)
+    compose_files = render_compose.write_assets(assets, {
+        "REVISION": revision,
+        "INIT_IMAGE": images["ingress"]["digest"],
+    })
+    expected.update({path.name: path.stat().st_size for path in compose_files})
+    parallel_each(upload, compose_files)
+    release = api(repository, endpoint)
+    verify_draft(release, tag, revision)
+    expected.update({path.name: path.stat().st_size for path in compose_files})
+    actual = release["assets"]
+    if (len(actual) != len(expected)
+            or any(a["state"] != "uploaded" for a in actual)
+            or {a["name"]: a["size"] for a in actual} != expected):
+        raise ValueError("Compose asset inventory differs from the build")
+    inventory = json.dumps({"source_commit": revision, "images": images}, indent=2) + "\n"
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+            summary.write("## GHCR images\n\n```json\n" + inventory + "```\n")
+    print(inventory)
     if mode == "draft":
         return
-    # Uploads can take minutes. Recheck immediately before the one publish request.
+    # Uploads can take minutes. Recheck the tag immediately before publishing the draft.
     verify_tag(repository, tag, revision)
     result = api(repository, endpoint, "--method", "PATCH", "-F", "draft=false")
     if result["id"] != release_id or result["draft"] or result["tag_name"] != tag:

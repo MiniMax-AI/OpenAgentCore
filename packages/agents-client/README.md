@@ -5,7 +5,7 @@ This package holds the typed clients that OpenAgentCore code uses to call Core:
 - a TypeScript client, `@oac/agents-client` (`src/index.ts`), for the Agents API (`/v1`) and the Core API (`/core/v1`). The console (`apps/web`) and the example application under `example/` use it; it is a private workspace package;
 - a Go client, `v1`, that configures the official openai-go SDK for the Agents API.
 
-[API namespaces and credentials](../../docs/api/README.md) explains which credential each namespace takes.
+[API namespaces and credentials](../../docs/api/index.md) explains which credential each namespace takes.
 
 ## TypeScript client
 
@@ -133,6 +133,6 @@ session, err := sessions.New(ctx, openai.BetaAgentSessionNewParams{
 - Per-request SDK options are trusted application code; do not accept them from end users.
 - Inspect errors with `errors.As(err, &apiErr)` and `*openai.Error`. They retain the request and response, so log selected status and code fields, not raw errors, request dumps or credentials.
 
-The SDK has more methods than Core supports. The [Agents API contract](../../contracts/agents-api/README.md) lists the implemented routes; other methods receive explicit errors.
+The SDK has more methods than Core supports. The [Agents API contract](../../contracts/agents-api/index.md) lists the implemented routes; other methods receive explicit errors.
 
 `make check-core` runs the Go client's tests. The real-service harness, `services/core/tests/official_client.py`, also runs `TestService` against a Core with fresh Projects and a dedicated PostgreSQL database, and checks the Go-created Sessions through the official Python SDK. It calls no model.

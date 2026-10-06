@@ -34,7 +34,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if err := s.EnsureProjectScopes(t.Context(), []identity.ProjectScope{{TenantID: tenant, OrganizationID: principal.OrganizationID, ProjectID: tenant}, {TenantID: foreignTenant, OrganizationID: principal.OrganizationID, ProjectID: foreignTenant}}); err != nil {
 		t.Fatal(err)
 	}
-	executor, err := s.IssueExecutorCredential(t.Context(), principal, uuid.NewString(), "")
+	executor, err := fixtureSessionService(t, db).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		if !revoked {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := s.RevokeExecutorCredential(ctx, principal, executor.KeyID); err != nil {
+			if err := fixtureSessionService(t, db).RevokeExecutorCredential(ctx, principal, executor.KeyID); err != nil {
 				t.Error("owned executor credential cleanup failed", err)
 			}
 		}
@@ -76,11 +76,11 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		return result
 	}
 	result := run()
-	before, err := s.GetEnvironment(t.Context(), tenant, result["environment_id"])
+	before, err := fixtureSessionStore(db).GetEnvironment(t.Context(), tenant, result["environment_id"])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.RevokeExecutorCredential(t.Context(), principal, executor.KeyID); err != nil {
+	if err := fixtureSessionService(t, db).RevokeExecutorCredential(t.Context(), principal, executor.KeyID); err != nil {
 		t.Fatal(err)
 	}
 	revoked = true
@@ -98,7 +98,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 		settings[key] = value
 	}
 	run()
-	after, err := reopened.GetEnvironment(t.Context(), tenant, before.ID)
+	after, err := fixtureSessionStore(reopenedDB).GetEnvironment(t.Context(), tenant, before.ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatal("public retrieval changed durable Environment state", err)
 	}

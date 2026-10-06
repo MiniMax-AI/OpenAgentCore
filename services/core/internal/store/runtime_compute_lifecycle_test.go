@@ -15,7 +15,9 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -272,7 +274,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 	s, db := newManagedTestStoreDB(t)
 	registry := runtimegateway.NewRegistry()
 	p := &fakeCheckpointProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, computes: map[string]sandbox.ComputeState{}, snapshots: map[string]sandbox.SnapshotIdentity{}, bootstraps: map[string]sandbox.Bootstrap{}, peers: map[string]*websocket.Conn{}, registry: registry}
-	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(s), Registry: registry})
+	handler := runtimegateway.NewHandler(runtimegateway.HandlerConfig{Authenticator: runtimegateway.NewAuthenticator(fixtureSessionStore(db)), Registry: registry})
 	server := httptest.NewServer(http.HandlerFunc(handler.WS))
 	p.endpoint = "ws" + strings.TrimPrefix(server.URL, "http")
 	t.Cleanup(func() {
@@ -290,7 +292,21 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 func (f *computeLifecycleFixture) start() {
 	t := f.t
 	t.Helper()
-	w := startWorker(t, t.Context(), f.db, &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}})
+	dispatcher := &execution.Dispatcher{Store: f.store, Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}}
+	// Closing the previous Worker's connection can return before PostgreSQL drops its advisory lock.
+	deadline := time.Now().Add(2 * time.Second)
+	var w *execution.Worker
+	var err error
+	for {
+		w, err = startWorkerErr(t.Context(), f.db, dispatcher)
+		if err == nil || !errors.Is(err, pgunit.ErrLeaseHeld) || !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 	var once sync.Once
 	stop := func() {
 		once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
@@ -304,10 +320,10 @@ func (f *computeLifecycleFixture) sql(query string, args ...any) {
 		f.t.Fatal(err)
 	}
 }
-func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.Environment, store.RuntimeAllocation) {
+func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.Environment, deployment.Allocation) {
 	t := f.t
 	t.Helper()
-	tenant, session, environment := managedSession(t, f.store)
+	tenant, session, environment := managedSession(t, f.store, f.db)
 	owner, err := f.worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, f.key)
 	if err != nil {
 		t.Fatal(err)
@@ -321,9 +337,9 @@ func (f *computeLifecycleFixture) create() (string, sessions.Session, sessions.E
 	owner = f.phase(tenant, environment.ID, "running")
 	return tenant, session, environment, owner
 }
-func (f *computeLifecycleFixture) phase(tenant, environment, phase string) store.RuntimeAllocation {
+func (f *computeLifecycleFixture) phase(tenant, environment, phase string) deployment.Allocation {
 	f.t.Helper()
-	var owner store.RuntimeAllocation
+	var owner deployment.Allocation
 	for range 100 {
 		ctx, cancel := context.WithTimeout(f.t.Context(), 3*time.Second)
 		err := f.worker.ReconcileManagedRuntimes(ctx)
@@ -331,7 +347,7 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) store
 		if err != nil {
 			f.t.Fatal(err)
 		}
-		owner, err = f.store.GetRuntimeAllocation(f.t.Context(), tenant, environment)
+		owner, err = fixtureReader(f.db).EnvironmentAllocation(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment})
 		if err != nil {
 			f.t.Fatal(err)
 		}
@@ -342,13 +358,13 @@ func (f *computeLifecycleFixture) phase(tenant, environment, phase string) store
 	f.t.Fatalf("compute phase=%s, want %s state=%s", owner.ComputePhase, phase, owner.ComputeState)
 	return owner
 }
-func (f *computeLifecycleFixture) complete(owner store.RuntimeAllocation) string {
+func (f *computeLifecycleFixture) complete(owner deployment.Allocation) string {
 	id := uuid.NewString()
 	f.sql(`INSERT INTO turns(id,session_id,status,completed_at) VALUES($1,$2,'completed',clock_timestamp()-interval '2 minutes')`, id, owner.SessionID)
 	f.sql(`UPDATE runtime_allocations SET compute_activity_at=clock_timestamp()-interval '2 minutes' WHERE id=$1`, owner.ID)
 	return id
 }
-func (f *computeLifecycleFixture) queued(owner store.RuntimeAllocation) string {
+func (f *computeLifecycleFixture) queued(owner deployment.Allocation) string {
 	id := uuid.NewString()
 	f.sql(`INSERT INTO turns(id,session_id,status) VALUES($1,$2,'queued')`, id, owner.SessionID)
 	return id
@@ -439,7 +455,7 @@ func TestRuntimeComputeLifecycleQuiesceRejectionAndUnknownIntentRollback(t *test
 	}
 	// A restart with persisted quiescing but no acknowledgement must resume the
 	// source. Inject only the durable phase, never a fake snapshot or new source.
-	current, err := f.store.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	current, err := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,9 +477,10 @@ func TestRuntimeComputeLifecycleWakeDuringQuiesceResumesSource(t *testing.T) {
 	tenant, _, env, owner := f.create()
 	f.complete(owner)
 	wakeResult := make(chan error, 1)
+	activity := fixtureDeployment(t, f.db)
 	f.provider.mu.Lock()
 	f.provider.beforeQuiesce = func() {
-		wakeResult <- f.store.TouchRuntimeActivity(t.Context(), tenant, env.ID)
+		wakeResult <- activity.TouchActivity(t.Context(), tenant, env.ID)
 	}
 	f.provider.mu.Unlock()
 	for range 100 {
@@ -499,11 +516,11 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 			} else {
 				f.sql(`UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID)
 			}
-			reconcileManagedState(t, f.worker, f.store, tenant, env.ID, "released")
+			reconcileManagedState(t, f.worker, f.db, tenant, env.ID, "released")
 			if len(f.provider.computes) != 0 || len(f.provider.snapshots) != 0 || f.provider.snapshotDeletes != 1 {
 				t.Fatal("retained snapshot survived cleanup")
 			}
-			if _, ok, err := f.store.GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
+			if _, ok, err := fixtureSessionStore(f.db).GetDeviceCredential(t.Context(), owner.DeviceID); err != nil || ok {
 				t.Fatal("cleanup retained daemon authority", err)
 			}
 		})
@@ -513,7 +530,7 @@ func TestRuntimeComputeLifecycleSuspendedDeletionAndExpiryCleanup(t *testing.T) 
 func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	f := newComputeLifecycleFixture(t, 1, 2)
 	tenant, _, env, owner := f.create()
-	tenant2, _, env2 := managedSession(t, f.store)
+	tenant2, _, env2 := managedSession(t, f.store, f.db)
 	if _, err := f.worker.ProvisionEnvironment(t.Context(), tenant2, env2.ID, f.key); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatalf("active capacity ignored: %v", err)
 	}
@@ -530,7 +547,7 @@ func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	for range 4 {
 		f.worker.ReconcileManagedRuntimes(t.Context())
 	}
-	first, err := f.store.GetRuntimeAllocation(t.Context(), tenant, env.ID)
+	first, err := fixtureReader(f.db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID})
 	if err != nil || first.ComputePhase != "suspended" || f.provider.restores != 0 {
 		t.Fatal("wake exceeded active capacity", err)
 	}
@@ -545,7 +562,7 @@ func TestRuntimeComputeLifecycleCapacityBoundsActiveAndRetained(t *testing.T) {
 	f.complete(second)
 	f.phase(tenant2, env2.ID, "suspended")
 	// Both retained allocations count even when their source VMs are gone.
-	tenant3, _, env3 := managedSession(t, f.store)
+	tenant3, _, env3 := managedSession(t, f.store, f.db)
 	if _, err := f.worker.ProvisionEnvironment(t.Context(), tenant3, env3.ID, f.key); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatalf("retained capacity ignored: %v", err)
 	}

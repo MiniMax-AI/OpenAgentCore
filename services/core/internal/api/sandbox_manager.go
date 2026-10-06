@@ -8,7 +8,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -16,7 +15,7 @@ type SandboxNodeList struct {
 	Data []deployment.Node `json:"data"`
 }
 type SandboxAllocationList struct {
-	Data []store.RuntimeNodeAllocation `json:"data"`
+	Data []deployment.NodeAllocation `json:"data"`
 }
 type SandboxEnrollmentToken struct {
 	Token     string    `json:"token"`
@@ -54,7 +53,7 @@ type Deployment interface {
 
 // NodeAllocations lists the allocations a sandbox node holds.
 type NodeAllocations interface {
-	ListNodeRuntimeAllocations(ctx context.Context, nodeID string) ([]store.RuntimeNodeAllocation, error)
+	NodeAllocations(ctx context.Context, nodeID string) ([]deployment.NodeAllocation, error)
 }
 
 // registerSandboxNodeRoutes serves node machine connections. They authenticate
@@ -179,9 +178,9 @@ func (h *Handler) removeSandboxNode(w http.ResponseWriter, r *http.Request) {
 // @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id}/allocations [get]
 func (h *Handler) sandboxAllocations(w http.ResponseWriter, r *http.Request) {
-	value, err := h.Sandboxes.NodeAllocations.ListNodeRuntimeAllocations(r.Context(), chi.URLParam(r, "node_id"))
+	value, err := h.Sandboxes.NodeAllocations.NodeAllocations(r.Context(), chi.URLParam(r, "node_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeDeploymentError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, SandboxAllocationList{Data: value})

@@ -13,11 +13,13 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
@@ -105,6 +107,12 @@ func newObserved(t *testing.T) observed {
 		},
 	}
 	sessions := store.NewWithCredentialCipher(f.pool, f.cipher)
+	// cmd/server gives the store its placement rules; hosted creation needs them.
+	rules, err := placement.NewRules(providers.Builtin(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions.SetPlacement(rules)
 	tenant := uuid.NewString()
 	session, err := sessions.CreateSession(t.Context(), tenant, input)
 	if err != nil {

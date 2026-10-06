@@ -8,7 +8,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 // A missing key is credentialcrypto.ErrUnavailable, and a credential sealed
@@ -19,10 +18,7 @@ func TestStoredCredentialNeedsTheKeyAndItsBinding(t *testing.T) {
 	changes, _ := f.execution(t)
 	id, view := f.initialize(t, changes, setupE2BSelection())
 	keyless := deploymentpg.New(pgunit.NewPool(f.pool), nil)
-	service, err := deployment.NewService(keyless, keyless, providers.Builtin(), fixturePublicURL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := newService(t, keyless, fixturePublicURL)
 	if _, err := service.Setup(t.Context()); !errors.Is(err, credentialcrypto.ErrUnavailable) {
 		t.Fatal("a keyless Store opened the credential", err)
 	}

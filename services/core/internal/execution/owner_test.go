@@ -123,10 +123,16 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Lease: lease})
 			return err
 		},
-		"missing deployment": func(t *testing.T, lease *closeCountingLease) error {
+		"missing Session operations": func(t *testing.T, lease *closeCountingLease) error {
 			_, owner, deployments, deploymentReader := resetManagerStore(t)
 			service, reader := unusedSessions(t)
 			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Lease: lease, Store: owner.Store})
+			return err
+		},
+		"missing deployment": func(t *testing.T, lease *closeCountingLease) error {
+			_, owner, deployments, deploymentReader := resetManagerStore(t)
+			service, reader := unusedSessions(t)
+			_, err := StartWorker(canceled, &Dispatcher{Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Lease: lease, Store: owner.Store, Sessions: owner.Sessions})
 			return err
 		},
 		"deployment claim": func(t *testing.T, lease *closeCountingLease) error {
@@ -135,7 +141,7 @@ func TestStartWorkerFailureClosesLeaseOnce(t *testing.T) {
 			id := uuid.NewString()
 			service, reader := unusedSessions(t)
 			dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
-			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Store: owner.Store, Deployment: owner.Deployment})
+			_, err := StartWorker(canceled, dispatcher, Owner{Lease: lease, Store: owner.Store, Deployment: owner.Deployment, Sessions: owner.Sessions})
 			if ping := owner.Lease.CheckOwnership(t.Context()); !errors.Is(ping, pgunit.ErrLeaseClosed) {
 				t.Error("failed start kept the database lease", ping)
 			}
@@ -159,28 +165,28 @@ func TestStartWorkerChecksDeploymentAfterItsDependencies(t *testing.T) {
 	_, owner, deployments, deploymentReader := resetManagerStore(t)
 	credentials, observer := &recordingCredentials{}, unusedObserver{t}
 	service, reader := unusedSessions(t)
+	bound := Owner{Store: owner.Store, Sessions: owner.Sessions}
 	for _, test := range []struct {
 		name       string
 		dispatcher Dispatcher
-		store      bool
+		owner      Owner
 		want       string
 	}{
-		{"missing Credentials", Dispatcher{Observer: observer}, true, "execution worker requires MCP Credentials"},
-		{"missing observer", Dispatcher{Credentials: credentials}, true, "execution requires a model configuration observer"},
-		{"missing deployment service", Dispatcher{Credentials: credentials, Observer: observer}, true, "execution worker requires the deployment service"},
-		{"missing deployment reader", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments}, true, "execution worker requires the deployment reader"},
-		{"missing Session service", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader}, true, "execution worker requires the Session service"},
-		{"missing Session reader", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service}, true, "execution worker requires the Session reader"},
-		{"missing Store", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, false, "execution worker requires the execution Store"},
-		{"missing deployment", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, true, "execution worker requires the deployment execution operations"},
+		{"missing Credentials", Dispatcher{Observer: observer}, bound, "execution worker requires MCP Credentials"},
+		{"missing observer", Dispatcher{Credentials: credentials}, bound, "execution requires a model configuration observer"},
+		{"missing deployment service", Dispatcher{Credentials: credentials, Observer: observer}, bound, "execution worker requires the deployment service"},
+		{"missing deployment reader", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments}, bound, "execution worker requires the deployment reader"},
+		{"missing Session service", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader}, bound, "execution worker requires the Session service"},
+		{"missing Session reader", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service}, bound, "execution worker requires the Session reader"},
+		{"missing Store", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Sessions: owner.Sessions}, "execution requires the execution Store"},
+		{"missing Session operations", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, Owner{Store: owner.Store}, "execution requires the Session execution operations"},
+		{"missing deployment", Dispatcher{Credentials: credentials, Observer: observer, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader}, bound, "execution worker requires the deployment execution operations"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			lease := &closeCountingLease{t: t}
 			lease.closable.Store(true)
-			started := Owner{Lease: lease}
-			if test.store {
-				started.Store = owner.Store
-			}
+			started := test.owner
+			started.Lease = lease
 			if _, err := StartWorker(t.Context(), &test.dispatcher, started); err == nil || err.Error() != test.want {
 				t.Fatalf("StartWorker without deployment operations = %v, want %q", err, test.want)
 			}
@@ -194,7 +200,7 @@ func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
 	id := uuid.NewString()
 	service, reader := unusedSessions(t)
 	dispatcher := &Dispatcher{Store: s, Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil })}
-	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Store: owner.Store, Deployment: owner.Deployment})
+	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Store: owner.Store, Deployment: owner.Deployment, Sessions: owner.Sessions})
 	if err != nil {
 		t.Fatal(err)
 	}

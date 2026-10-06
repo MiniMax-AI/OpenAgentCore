@@ -17,7 +17,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
 
 func presenceContext(t *testing.T) context.Context {
@@ -165,10 +164,7 @@ func TestNodePresenceCanceledBeforeCommit(t *testing.T) {
 	}
 	defer pool.Close()
 	adapter := deploymentpg.New(pgunit.NewPool(pool), f.cipher)
-	service, err := deployment.NewService(adapter, adapter, providers.Builtin(), fixturePublicURL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := newService(t, adapter, fixturePublicURL)
 	if err := service.ConnectNode(ctx, node, uuid.NewString(), epoch); !errors.Is(err, context.Canceled) {
 		t.Fatal("canceled UPDATE published presence", err)
 	}

@@ -53,7 +53,7 @@ func TestEnvironmentExecutorOperatorCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(t.Context(), tenant, session.ID)
+	environment, err := sessionReads(pool).GetSessionEnvironment(t.Context(), tenant, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,14 +65,14 @@ func TestEnvironmentExecutorOperatorCommand(t *testing.T) {
 	if next == first {
 		t.Fatal("rotation returned the same key")
 	}
-	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(first)); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionReads(pool).AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(first)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("old command credential retained authority", err)
 	}
-	if owner, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); err != nil || owner != tenant {
+	if owner, err := sessionReads(pool).AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); err != nil || owner != tenant {
 		t.Fatal("rotated command credential failed", err)
 	}
 	command(tenant, true, "--revoke")
-	if _, err := s.AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := sessionReads(pool).AuthenticateEnvironmentExecutor(t.Context(), environment.ID, runtimedevice.HashCredential(next)); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("revoked command credential retained authority", err)
 	}
 	t.Log("built operator command issued before Session creation, rejected duplicate/foreign requests, rotated and revoked durable credentials")

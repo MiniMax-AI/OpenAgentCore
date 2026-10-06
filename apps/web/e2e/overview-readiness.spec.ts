@@ -67,7 +67,9 @@ test("partial and failed refreshes retain rows with a durable caveat and recover
 
 test("successful empty reads preserve true zero counts and empty states", async ({ page, request }) => {
   await openConsole(page, request, "overview", { fresh: true });
-  await expect(page.locator(".overview-activity .ts-chart-plot").first()).toBeVisible();
+  await expect(page.locator(".overview-activity")).toContainText("Your first Session starts here");
+  await expect(page.locator(".overview-activity .ts-chart-plot")).toHaveCount(0);
+  await expect(page.locator(".getting-started .button.primary")).toHaveCount(1);
   await expect(page.getByRole("article").filter({ hasText: "Running Sessions" }).locator(".metric-tile-sub")).toHaveText("0 total, 0 idle");
   await expect(failed(page)).toHaveCount(0);
   await page.locator(".app-sidebar").getByRole("button", { name: "Session log", exact: true }).click();
@@ -75,19 +77,19 @@ test("successful empty reads preserve true zero counts and empty states", async 
   await expect(failed(page)).toHaveCount(0);
 });
 
-test("local-only address has a domain setup link on all three pages and blocks Add node", async ({ page, request }) => {
+test("local-only address links to System on other pages and blocks Add node", async ({ page, request }) => {
   await openConsole(page, request, "overview", { installation: "local" });
   const notice = page.getByRole("status", { name: "Public address needs attention" });
-  await expect(notice.getByRole("button", { name: "Configure domain and HTTPS" })).toBeVisible();
+  await expect(notice.getByRole("button", { name: "Review the public address" })).toBeVisible();
   await expect(page.locator(".getting-started-step").first()).toContainText("To do");
-  await expect(page.locator(".getting-started-step").first()).toContainText("Configure HTTPS");
+  await expect(page.locator(".getting-started-step").first()).toContainText("Set a public address");
   await page.getByRole("button", { name: "Nodes", exact: true }).click();
   await expect(notice).toBeVisible();
   await expect(page.getByRole("button", { name: "Add node", exact: true })).toBeDisabled();
   await expect(page.getByText("Add node is unavailable while the public address is local only.")).toBeVisible();
   await page.getByRole("button", { name: "System", exact: true }).click();
   await expect(notice).toBeVisible();
-  await expect(page.getByRole("button", { name: "Configure domain and HTTPS" })).toHaveCount(1);
+  await expect(notice.getByRole("button", { name: "Review the public address" })).toHaveCount(0);
   expect(await writes(request)).toEqual([]);
 });
 
@@ -100,7 +102,7 @@ for (const language of ["en", "zh-CN"] as const) {
       await page.getByRole("menuitemradio", { name: "简体中文" }).click();
     }
     await expect(page.locator(".overview-activity .error-state")).toContainText(language === "en" ? "Could not read the data" : "无法读取数据");
-    await expect(page.locator(".installation-notice")).toContainText(language === "en" ? "Configure HTTPS before connecting" : "连接外部应用和节点前");
+    await expect(page.locator(".installation-notice")).toContainText(language === "en" ? "Set a public address other machines can reach" : "连接外部应用和节点前");
     if (language === "zh-CN") await expect(page.locator("body")).not.toContainText("Core request failed");
     await expect(page.getByRole("article").first()).toContainText(language === "en" ? "Down" : "不可用");
     for (const width of [1280, 1440]) {
@@ -172,6 +174,6 @@ test("installation failure cannot complete onboarding and its retry reveals loca
   await page.unroute("**/core/v1/installation");
   await step.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(step).toContainText("To do");
-  await expect(step).toContainText("Configure HTTPS");
+  await expect(step).toContainText("Set a public address");
   await expect(page.locator(".installation-notice")).toBeVisible();
 });

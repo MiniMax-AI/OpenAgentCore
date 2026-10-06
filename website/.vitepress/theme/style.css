@@ -1,0 +1,97 @@
+/* OpenAgentCore brand on top of the VitePress default theme. */
+:root {
+  --vp-font-family-base: 'Inter Variable', Inter, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --vp-font-family-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --vp-c-brand-1: #15803d;
+  --vp-c-brand-2: #166534;
+  --vp-c-brand-3: #15803d;
+  --vp-c-brand-soft: rgba(21, 128, 61, 0.12);
+
+  --vp-c-bg: #f3efe3;
+  --vp-c-bg-alt: #eae5d8;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #eae5d8;
+
+  --vp-button-brand-bg: #15803d;
+  --vp-button-brand-hover-bg: #166534;
+  --vp-button-brand-active-bg: #14532d;
+  --vp-home-hero-name-color: #15803d;
+}
+
+.dark {
+  --vp-c-brand-1: #4ade80;
+  --vp-c-brand-2: #22c55e;
+  --vp-c-brand-3: #16a34a;
+  --vp-c-brand-soft: rgba(74, 222, 128, 0.14);
+
+  --vp-c-bg: #111712;
+  --vp-c-bg-alt: #080b0a;
+  --vp-c-bg-elv: #121817;
+  --vp-c-bg-soft: #121817;
+  --vp-c-divider: rgba(232, 241, 235, 0.08);
+  --vp-c-gutter: rgba(232, 241, 235, 0.06);
+  --vp-code-block-bg: #0b100e;
+
+  --vp-button-brand-text: #04210f;
+  --vp-button-brand-bg: #4ade80;
+  --vp-button-brand-hover-text: #04210f;
+  --vp-button-brand-hover-bg: #86efac;
+  --vp-button-brand-active-bg: #22c55e;
+}
+
+/* Headings in the documentation use the monospace face, as on the Web console. */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.oac-doc-title {
+  font-family: var(--vp-font-family-mono);
+  letter-spacing: -0.02em;
+}
+
+.oac-doc-title {
+  margin: 0 0 24px;
+  font-size: 32px;
+  line-height: 1.25;
+  font-weight: 650;
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc img {
+  border-radius: 8px;
+}
+
+.dark .vp-doc img[src*='architecture'],
+.dark .vp-doc img[src*='development-architecture'] {
+  background: #fff;
+}
+
+.VPNavBarTitle .title {
+  font-family: var(--vp-font-family-mono);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Landing page: translucent navbar over the full-bleed page. The selector
+   matches in the pre-rendered HTML, so the navbar never flashes opaque. */
+html:has(.landing) .VPNav,
+html:has(.landing) .VPNavBar,
+html:has(.landing) .VPNavBar .content-body,
+html:has(.landing) .VPNavBar .divider-line {
+  background: transparent !important;
+}
+html:has(.landing) .VPNav {
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  background: color-mix(in srgb, var(--vp-c-bg) 70%, transparent) !important;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+html:has(.landing) .VPContent.is-page {
+  padding-top: var(--vp-nav-height);
+}
+html:has(.landing) .VPPage {
+  padding: 0 !important;
+}
+html:has(.landing) .VPFooter {
+  border-top: 1px solid var(--vp-c-divider);
+}

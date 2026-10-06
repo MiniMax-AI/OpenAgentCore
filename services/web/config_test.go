@@ -49,3 +49,17 @@ func TestConfigRejectsUnsafeURLsAndSecretFiles(t *testing.T) {
 		t.Fatal("publicly readable secret accepted")
 	}
 }
+
+func TestBootstrapFollowsManagedHTTPOrigin(t *testing.T) {
+	directory := t.TempDir()
+	key := filepath.Join(directory, "core.key")
+	if err := os.WriteFile(key, []byte(strings.Repeat("k", 32)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("OAC_WEB_CORE_KEY_FILE", key)
+	t.Setenv("OAC_WEB_DIST", directory)
+	t.Setenv("OAC_WEB_ORIGIN", "http://localhost:8080")
+	if _, err := loadConfig(); err != nil {
+		t.Fatal(err)
+	}
+}

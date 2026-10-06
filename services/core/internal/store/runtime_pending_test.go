@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -15,12 +16,12 @@ import (
 
 func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	tenant, idle, idleEnvironment := managedSession(t, s)
+	tenant, idle, idleEnvironment := managedSession(t, s, db)
 	initial, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"test"},"environment":{"type":"openai_hosted"}}`), InitialInputs: []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"hello"}`)}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, deleted, deletedEnvironment := managedSession(t, s)
+	_, deleted, deletedEnvironment := managedSession(t, s, db)
 	if err := s.DeleteSession(t.Context(), deleted.TenantID, deleted.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -48,15 +49,15 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	idleOwner, err := s.GetRuntimeAllocation(t.Context(), tenant, idleEnvironment.ID)
+	idleOwner, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: idleEnvironment.ID})
 	if err != nil || idleOwner.State != "running" {
 		t.Fatal("idle creation was stranded", idleOwner, err)
 	}
-	initialOwner, err := s.GetRuntimeAllocation(t.Context(), tenant, initial.Environment.ID)
+	initialOwner, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: initial.Environment.ID})
 	if err != nil || initialOwner.State != "running" {
 		t.Fatal("initial creation was stranded", initialOwner, err)
 	}
-	if _, err := s.GetRuntimeAllocation(t.Context(), deleted.TenantID, deletedEnvironment.ID); err == nil {
+	if _, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: deleted.TenantID, EnvironmentID: deletedEnvironment.ID}); err == nil {
 		t.Fatal("deleted Session provisioned")
 	}
 	waiting, err := s.GetSession(t.Context(), tenant, initial.ID)
@@ -80,8 +81,8 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 	if p.creates != creates {
 		t.Fatal("restart repeated bootstrap", creates, p.creates)
 	}
-	for _, owner := range []store.RuntimeAllocation{idleOwner, initialOwner} {
-		got, err := s.GetRuntimeAllocation(t.Context(), tenant, owner.EnvironmentID)
+	for _, owner := range []deployment.Allocation{idleOwner, initialOwner} {
+		got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: owner.EnvironmentID})
 		if err != nil || got.ID != owner.ID || got.DeviceID != owner.DeviceID {
 			t.Fatal("restart replaced allocation identity", got, err)
 		}

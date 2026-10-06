@@ -66,9 +66,9 @@ func (h *Handler) listExecutorCredentials(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	state, err := h.Environments.ProjectExecutorCredentialState(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"))
+	state, err := h.EnvironmentsReader.ProjectExecutorCredentialState(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	connection := ExecutorConnection{Status: "never_enrolled"}
@@ -111,7 +111,7 @@ func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request
 	var input EnvironmentExecutorCredentialRequest
 	var fields map[string]json.RawMessage
 	if decodeInputObject(raw, &input, "key_id", "rotate") != nil || json.Unmarshal(raw, &fields) != nil || bytes.Equal(bytes.TrimSpace(fields["rotate"]), []byte("null")) || !executorManagementID(input.KeyID) {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return
 	}
 	binding, ok := h.adminProjectScope(w, r)
@@ -120,7 +120,7 @@ func (h *Handler) issueExecutorCredential(w http.ResponseWriter, r *http.Request
 	}
 	credential, err := h.Environments.IssueProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), input.KeyID, input.Rotate)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, credential)
@@ -143,11 +143,11 @@ func (h *Handler) revokeExecutorCredential(w http.ResponseWriter, r *http.Reques
 	}
 	keyID := chi.URLParam(r, "key_id")
 	if !executorManagementID(keyID) {
-		writeStoreError(w, r, sessions.ErrNotFound)
+		writeSessionsError(w, r, sessions.ErrNotFound)
 		return
 	}
 	if err := h.Environments.RevokeProjectExecutorCredential(r.Context(), binding.Principal, chi.URLParam(r, "environment_id"), keyID); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

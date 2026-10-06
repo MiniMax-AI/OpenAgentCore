@@ -61,7 +61,7 @@ func seed() error {
 		if _, err = s.TransitionTurn(ctx, f.Tenant, f.Session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			return err
 		}
-		if err = observeItems(ctx, s, f.Tenant, f.Session, receipt.TurnID, status); err != nil {
+		if err = observeItems(ctx, pool, f.Tenant, f.Session, receipt.TurnID, status); err != nil {
 			return err
 		}
 		if status != sessions.TurnInProgress {

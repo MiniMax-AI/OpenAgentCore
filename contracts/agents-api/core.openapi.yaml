@@ -437,10 +437,10 @@ definitions:
       configuration:
         allOf:
           - $ref: '#/definitions/api.InstallationConfiguration'
-        description: The installer's settings snapshot (OAC_SETTINGS_FILE); null when the installer did not start Core.
+        description: The process settings Core loaded. path and apply_command are empty, and applied_at is null, because Core reports its environment rather than an installer file.
         x-nullable: true
       installation_id:
-        description: OAC_INSTALLATION_ID; null when Core runs without the sandbox manager.
+        description: The ID in OAC_INSTALLATION_ID_FILE; null when Core runs without the sandbox manager.
         type: string
         x-nullable: true
       local_only:
@@ -462,12 +462,14 @@ definitions:
   api.InstallationConfiguration:
     properties:
       applied_at:
+        description: Null when Core reports its own environment.
         type: string
+        x-nullable: true
       apply_command:
-        description: Command that applies config.json changes.
+        description: Command that applies config.json changes. Empty when Core reports its own environment.
         type: string
       path:
-        description: Absolute host path of the installation's config.json.
+        description: Absolute host path of config.json. Empty when Core reports its own environment.
         type: string
       settings:
         items:
@@ -546,7 +548,7 @@ definitions:
     properties:
       data:
         items:
-          $ref: '#/definitions/store.RuntimeNodeAllocation'
+          $ref: '#/definitions/deployment.NodeAllocation'
         type: array
     type: object
   api.SandboxDeploymentChangeInput:
@@ -998,6 +1000,35 @@ definitions:
       snapshots:
         type: integer
     type: object
+  deployment.NodeAllocation:
+    properties:
+      compute_phase:
+        type: string
+      compute_phase_changed_at:
+        description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+        type: string
+        x-nullable: true
+      created_at:
+        type: string
+      deployment_generation:
+        type: integer
+      diagnostic:
+        type: string
+      environment_id:
+        type: string
+      id:
+        type: string
+      initialization:
+        type: string
+      node_id:
+        type: string
+      session_id:
+        type: string
+      state:
+        type: string
+      tenant_id:
+        type: string
+    type: object
   deployment.NodeDetail:
     properties:
       active:
@@ -1407,35 +1438,6 @@ definitions:
         type: integer
       vaults:
         type: integer
-    type: object
-  store.RuntimeNodeAllocation:
-    properties:
-      compute_phase:
-        type: string
-      compute_phase_changed_at:
-        description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
-        type: string
-        x-nullable: true
-      created_at:
-        type: string
-      deployment_generation:
-        type: integer
-      diagnostic:
-        type: string
-      environment_id:
-        type: string
-      id:
-        type: string
-      initialization:
-        type: string
-      node_id:
-        type: string
-      session_id:
-        type: string
-      state:
-        type: string
-      tenant_id:
-        type: string
     type: object
   v1.Agent:
     properties:
@@ -3594,7 +3596,7 @@ paths:
         - Deployment Model Providers
   /core/v1/installation:
     get:
-      description: Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the installer's settings snapshot with where to change it, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
+      description: Core key only; available before any sandbox deployment exists. Reports the public URL that applications, nodes, sandboxes and self-hosted executors use, the API base URL, Core's source commit and installation ID, the process settings Core loaded, and what is bound to the current public URL. Sensitive settings report only whether they are configured.
       produces:
         - application/json
       responses:
@@ -4256,6 +4258,14 @@ paths:
             $ref: '#/definitions/api.CoreErrorResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.CoreErrorResponse'
+        "503":
+          description: Service Unavailable
           schema:
             $ref: '#/definitions/api.CoreErrorResponse'
       security:

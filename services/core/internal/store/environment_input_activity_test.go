@@ -54,10 +54,10 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 	reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")
 	writer := executionWriter(t, s)
 	generation := uuid.NewString()
-	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
+	if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
 	idle := requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
@@ -75,14 +75,14 @@ func TestEnvironmentInputActivityWaitsBeforeTurnAndClearsOnConnection(t *testing
 	if !idle.PendingInput || changes[2].Settled || changes[0].Settled {
 		t.Fatal("pending input reported as settled")
 	}
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, false); err != nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 2, false); err != nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 2, false); err != nil {
 		t.Fatal(err)
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "requires_action", environment)
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 3, true); err != nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 3, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := writer.PromoteEnvironmentInput(t.Context(), tenant, session.ID, reservation.ID); err != nil {
@@ -187,14 +187,14 @@ func TestEnvironmentInputActivityRollsBackReservationAndConnection(t *testing.T)
 	value := requireEnvironmentInputActivity(t, s, tenant, session.ID, "requires_action", session.Environment.ID)
 	writer := executionWriter(t, s)
 	generation := uuid.NewString()
-	if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, value.Environment.ID, generation); err != nil {
+	if err := sessionExecution(t, writer.lease).ReplaceEnvironmentConnection(t.Context(), tenant, value.Environment.ID, generation); err != nil {
 		t.Fatal(err)
 	}
 	before := connectionSnapshot(t, pool, value.Environment.ID)
 	if _, err := pool.Exec(t.Context(), "ALTER TABLE session_events ADD CONSTRAINT "+constraint+" CHECK (session_id <> '"+session.ID+"' OR payload->'event'->>'type' <> 'agent.session.idle') NOT VALID"); err != nil {
 		t.Fatal(err)
 	}
-	if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, value.Environment.ID, generation, 1, true); err == nil {
+	if err := sessionExecution(t, writer.lease).ObserveEnvironmentConnection(t.Context(), tenant, value.Environment.ID, generation, 1, true); err == nil {
 		t.Fatal("connection committed without activity")
 	}
 	if connection := connectionSnapshot(t, pool, value.Environment.ID); connection != before {
@@ -210,10 +210,10 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 	old := executionWriter(t, s)
 	generation := uuid.NewString()
 	environment := session.Environment.ID
-	if err := old.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
+	if err := sessionExecution(t, old.lease).ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
 		t.Fatal(err)
 	}
-	if err := old.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
+	if err := sessionExecution(t, old.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "idle", "")
@@ -223,7 +223,7 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 	}
 	awaitRelease()
 	next := executionWriter(t, s)
-	if err := next.ReconcileEnvironmentConnections(t.Context()); err != nil {
+	if err := sessionExecution(t, next.lease).ReconcileEnvironmentConnections(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	requireEnvironmentInputActivity(t, s, tenant, session.ID, "requires_action", environment)
@@ -235,7 +235,7 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := next.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 2, true); err != nil {
+	if err := sessionExecution(t, next.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 2, true); err != nil {
 		t.Fatal(err)
 	}
 	if after, err := s.SessionEventCursor(t.Context(), tenant, session.ID); err != nil || after != cursor {

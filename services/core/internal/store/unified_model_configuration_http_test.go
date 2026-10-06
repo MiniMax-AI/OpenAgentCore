@@ -21,7 +21,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, st, db), withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
+	handler, err := publicHandler(t, st, db, auth, "codex", storeExecution(t, st), managedSandboxes(t, db), withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
 	if err != nil {
 		t.Fatal(err)
 	}

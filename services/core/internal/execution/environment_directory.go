@@ -27,7 +27,7 @@ func (r directoryReadRequest) reply(result directoryReadResult) { r.result <- re
 func (w *Worker) ReadEnvironmentDirectory(ctx context.Context, environment sessions.Environment, path string) (proto.WorkspaceDirectoryResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	current, err := w.admission.GetEnvironment(ctx, environment.TenantID, environment.ID)
+	current, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, environment.TenantID, environment.ID)
 	if err != nil {
 		return proto.WorkspaceDirectoryResult{}, err
 	}
@@ -63,7 +63,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		}
 		touch, stop := context.WithTimeout(context.WithoutCancel(owner), 5*time.Second)
 		defer stop()
-		if err := w.dispatcher.Store.TouchRuntimeActivity(touch, request.environment.TenantID, request.environment.ID); err != nil {
+		if err := w.dispatcher.Deployment.TouchActivity(touch, request.environment.TenantID, request.environment.ID); err != nil {
 			result.err = err
 		}
 	}()
@@ -72,7 +72,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	if w.CheckOwnership(check) != nil {
 		return
 	}
-	environment, err := w.dispatcher.Store.GetEnvironment(check, request.environment.TenantID, request.environment.ID)
+	environment, err := w.dispatcher.SessionsReader.GetEnvironment(check, request.environment.TenantID, request.environment.ID)
 	if err != nil {
 		result.err = err
 		return
@@ -105,7 +105,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	}
 	// Capture retains the public Turn after its native Run has been released.
 	prepare := reserved || session.LastTurn != nil && session.LastTurn.ArtifactCaptureStarted
-	bound, err := w.dispatcher.Store.GetSessionDevice(check, session.TenantID, session.ID)
+	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(check, session.TenantID, session.ID)
 	if err != nil || !environmentDeviceMatches(session, environment, bound) || !w.directoryDeviceReady(check, bound.ID, session.Engine, placement, prepare) {
 		return
 	}

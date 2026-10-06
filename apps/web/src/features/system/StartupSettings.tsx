@@ -28,7 +28,7 @@ export function StartupSettings({ configuration }: { configuration: CoreInstalla
     <Section headingId="system-startup-heading" title={t("startup.title")} help={t("startup.help")}>
       {configuration === null ? <p className="system-note">{t("startup.none")}</p> : <>
         <p className="system-where">
-          <span>
+          {configuration.path ? <span>
             <Trans
               t={t}
               i18nKey="startup.where"
@@ -37,7 +37,7 @@ export function StartupSettings({ configuration }: { configuration: CoreInstalla
                 command: <CopyableId id={configuration.apply_command} label={t("startup.copyCommand")} />,
               }}
             />
-          </span>
+          </span> : <span>{t("startup.effective")}</span>}
           {configuration.applied_at ? <span className="system-applied">{t("startup.appliedAt", { time: formatDateTime(Date.parse(configuration.applied_at) / 1000, locale) })}</span> : null}
         </p>
         <div className="table-frame">

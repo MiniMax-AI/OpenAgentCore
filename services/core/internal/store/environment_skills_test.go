@@ -20,7 +20,7 @@ func TestSkillsFrozenInSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	header := &zip.FileHeader{Name: "proof/SKILL.md", Method: zip.Store}
@@ -40,11 +40,11 @@ func TestSkillsFrozenInSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frozen, err := s.ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(frozen.Skills, setup.Skills) {
 		t.Fatal("frozen content changed", err)
 	}
-	if _, err = s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign content", err)
 	}
 }

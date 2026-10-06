@@ -1,8 +1,9 @@
 package store_test
 
 import (
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func inputTextForTest(t *testing.T, input proto.MessageInput) string {

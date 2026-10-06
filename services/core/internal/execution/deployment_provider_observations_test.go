@@ -73,7 +73,11 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	if err != nil {
 		t.Fatal(err)
 	}
-	return finishObservationFixture{s, owner.Store, owner.Lease, pool, defaults, tenant, session, Dispatcher{Store: owner.Store, Observer: defaults}}
+	dispatcher, err := (&Dispatcher{Observer: defaults}).Bind(owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return finishObservationFixture{s, owner.Store, owner.Lease, pool, defaults, tenant, session, *dispatcher}
 }
 func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	t.Helper()

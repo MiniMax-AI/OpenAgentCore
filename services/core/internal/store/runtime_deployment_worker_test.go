@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -15,7 +16,7 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	key := uuid.NewString()
 	old := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	worker, stop := managedWorker(t, s, db, key, old)
-	tenant, _, environment := managedSession(t, s)
+	tenant, _, environment := managedSession(t, s, db)
 	owner, err := worker.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +46,7 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	if replacement.creates != 0 || replacement.kills != 0 {
 		t.Fatal("rejected startup touched new backend")
 	}
-	got, err := s.GetRuntimeAllocation(t.Context(), tenant, environment.ID)
+	got, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || got.ID != owner.ID || got.ProviderKey != key {
 		t.Fatal("rejected startup rewrote resource owner", got, err)
 	}

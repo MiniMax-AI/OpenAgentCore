@@ -25,6 +25,7 @@ trap 'rm -rf "$build_context"' EXIT
 tar -C "$repo_root" -cf - \
   go.mod go.sum \
   contracts/agents-api/v1 \
+  contracts/agents-api/openapi.go contracts/agents-api/openapi.yaml contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml \
   internal/agentdaemon/proto \
   internal/runtimefs internal/runtimebootstrap internal/agentnetwork internal/agentbundle internal/agentcapabilities internal/agentplugin internal/agentskill internal/harnessconfig internal/modelprovider internal/providerassets internal/obs/log services/core \
   | tar -C "$build_context" -xf -
@@ -32,10 +33,11 @@ tar -C "$repo_root" -cf - \
 (
   cd "$build_context"
   export GOWORK=off CGO_ENABLED=0
-  for command in server migrate device environment-key sandbox-node; do
+  for command in server device environment-key sandbox-node oac; do
     artifact="oac-core-$command"
     if [[ "$command" == server ]]; then artifact=oac-core; fi
     if [[ "$command" == sandbox-node ]]; then artifact=oac-node; fi
+    if [[ "$command" == oac ]]; then artifact=oac; fi
     go build -mod=readonly -trimpath -buildvcs=false -ldflags "-X main.buildRevision=$revision" \
       -o "$build_context/bin/$artifact" "./services/core/cmd/$command"
   done
@@ -43,7 +45,7 @@ tar -C "$repo_root" -cf - \
 
 # Publish only after every command builds successfully.
 mkdir -p "$output_dir"
-for artifact in oac-core oac-core-migrate oac-core-device oac-core-environment-key oac-node; do
+for artifact in oac-core oac-core-device oac-core-environment-key oac-node oac; do
   mv -f "$build_context/bin/$artifact" "$output_dir/$artifact"
 done
 printf 'Core commands: %s\n' "$output_dir"

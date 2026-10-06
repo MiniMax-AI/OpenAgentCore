@@ -5,17 +5,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"testing"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"testing"
 )
 
 func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 	ctx := context.Background()
 	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "usage"})
 	if err != nil {
@@ -42,12 +44,12 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 		}
 		batch := []sessions.ExecutionEvent{{Kind: "usage", Payload: usage(10)}}
 		for range 2 {
-			if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 1, batch); err != nil {
+			if err = journal.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 1, batch); err != nil {
 				t.Fatal(err)
 			}
 		}
 		// A later snapshot replaces the earlier measurement; it is not a delta.
-		if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 2, []sessions.ExecutionEvent{{Kind: "usage", Payload: usage(20)}}); err != nil {
+		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 2, []sessions.ExecutionEvent{{Kind: "usage", Payload: usage(20)}}); err != nil {
 			t.Fatal(err)
 		}
 		measured, err := s.GetTurn(ctx, tenant, session.ID, admission.TurnID)
@@ -105,7 +107,8 @@ func TestTokenUsageDurableSnapshotsAndSessionTotals(t *testing.T) {
 
 func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 	ctx := context.Background()
-	s, _ := store.NewTestStore(t)
+	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "cancel-recovery"})
 	if err != nil {
@@ -120,7 +123,7 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	receipt := json.RawMessage(`{"applied":true,"outcome":{"usage":{"tokens":{"input_tokens":10,"cached_input_tokens":4,"output_tokens":3,"reasoning_output_tokens":2,"total_tokens":13}}}}`)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 1, []sessions.ExecutionEvent{{Kind: "cancel_receipt", Payload: receipt}}); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, admission.TurnID, 1, []sessions.ExecutionEvent{{Kind: "cancel_receipt", Payload: receipt}}); err != nil {
 		t.Fatal(err)
 	}
 	// Startup recovery has no in-memory cancellation outcome.
@@ -139,7 +142,8 @@ func TestCancellationReceiptUsageSurvivesRecovery(t *testing.T) {
 // and after a Turn ends with unknown usage (EVT-13).
 func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	ctx := context.Background()
-	s, _ := store.NewTestStore(t)
+	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "unknown-usage"})
 	if err != nil {
@@ -215,7 +219,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	first := submit("first")
 	total(-1)
 	move(first.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, first.TurnID, 1, usage(10)); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, first.TurnID, 1, usage(10)); err != nil {
 		t.Fatal(err)
 	}
 	// An active Turn's recorded snapshot does not count yet.
@@ -231,7 +235,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	total(-1)
 	move(second.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
 	total(-1)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, usage(20)); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, second.TurnID, 1, usage(20)); err != nil {
 		t.Fatal(err)
 	}
 	total(-1)
@@ -252,7 +256,7 @@ func TestSessionUsageRequiresEveryRootTurnEndedAndMeasured(t *testing.T) {
 	}
 	fourth := submit("fourth")
 	move(fourth.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, fourth.TurnID, 1, usage(30)); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, fourth.TurnID, 1, usage(30)); err != nil {
 		t.Fatal(err)
 	}
 	finish(fourth, sessions.TurnCompleted)

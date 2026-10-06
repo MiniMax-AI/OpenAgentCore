@@ -9,7 +9,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 type enrollmentStub struct {
@@ -17,12 +16,12 @@ type enrollmentStub struct {
 	err   error
 }
 
-func (s *enrollmentStub) EnrollRuntime(_ context.Context, environment, digest string) (store.RuntimeEnrollment, error) {
+func (s *enrollmentStub) EnrollRuntime(_ context.Context, environment, digest string) (sessions.RuntimeEnrollment, error) {
 	s.calls++
 	if environment != "environment" || digest != runtimedevice.HashCredential("private-test-token") {
-		return store.RuntimeEnrollment{}, errors.New("unexpected enrollment input")
+		return sessions.RuntimeEnrollment{}, errors.New("unexpected enrollment input")
 	}
-	return store.RuntimeEnrollment{DeviceID: "device", SessionID: "session", EnvironmentID: environment, WorkspaceDirectory: "/workspace"}, s.err
+	return sessions.RuntimeEnrollment{DeviceID: "device", SessionID: "session", EnvironmentID: environment, WorkspaceDirectory: "/workspace"}, s.err
 }
 
 func TestEnrollmentConnectionContract(t *testing.T) {

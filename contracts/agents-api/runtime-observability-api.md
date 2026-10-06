@@ -1,6 +1,8 @@
-# Runtime telemetry API
+---
+title: "Runtime telemetry API"
+---
 
-Core reports what hosted Runtimes and sandbox nodes consume through read-only administrator routes under `/core/v1`: current Runtime observations, the stored Runtime history of one Session, and the host observations and history of a sandbox node. Reads never create, wake, renew or change compute and never add samples to history. [Runtime observability](runtime-observability.md) defines how Core collects and keeps these values; [Console API usage](../../docs/web/console-api-usage.md) lists the Web pages that read them.
+Core reports what hosted Runtimes and sandbox nodes consume through read-only administrator routes under `/core/v1`: current Runtime observations, the stored Runtime history of one Session, and the host observations and history of a sandbox node. Reads never create, wake, renew or change compute and never add samples to history. [Runtime observability](./runtime-observability.md) defines how Core collects and keeps these values; [Console API usage](../../docs/web/console-api-usage.md) lists the Web pages that read them.
 
 Every route requires the Core key as the bearer credential; a missing or invalid key returns 401 `invalid_admin_key`. A Project ID in a path selects the target Project and does not authenticate. Responses carry `Cache-Control: no-store`, use the Core error envelope and never contain provider responses, native identifiers, paths or credentials.
 
@@ -220,7 +222,7 @@ Disk is not kept in history.
 
 ### Token usage
 
-`token_usage` belongs to the Session, not to an allocation. Each point holds the last cumulative measured Session usage sampled in its bucket: `start`, `end`, `sampled_at`, `input_tokens` and `output_tokens`. Measured Session usage is a Core extension that sums every recorded root Turn snapshot, active Turns included. It differs from [public Session usage](sessions-events.md#usage), which is null while a root Turn runs or after one ends unmeasured. These counters are measured model tokens, not prices or billing records.
+`token_usage` belongs to the Session, not to an allocation. Each point holds the last cumulative measured Session usage sampled in its bucket: `start`, `end`, `sampled_at`, `input_tokens` and `output_tokens`. Measured Session usage is a Core extension that sums every recorded root Turn snapshot, active Turns included. It differs from [public Session usage](./sessions-events.md#usage), which is null while a root Turn runs or after one ends unmeasured. These counters are measured model tokens, not prices or billing records.
 
 ### Errors and bounds
 
@@ -246,7 +248,7 @@ GET /core/v1/sandbox/nodes/{node_id}?range=1h
 Authorization: Bearer <Core key>
 ```
 
-`range` is `1h` (the default), `6h` or `24h`. Another parameter, a repeated or invalid `range`, or a malformed node ID returns 400 `invalid_request`; a missing or removed node returns 404 `not_found_error`. The response is the node object of the [node list](sandbox-deployment.md) plus `host` and `history`:
+`range` is `1h` (the default), `6h` or `24h`. Another parameter, a repeated or invalid `range`, or a malformed node ID returns 400 `invalid_request`; a missing or removed node returns 404 `not_found_error`. The response is the node object of the [node list](./sandbox-deployment.md) plus `host` and `history`:
 
 ```json
 {

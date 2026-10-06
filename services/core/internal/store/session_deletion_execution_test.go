@@ -15,7 +15,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	h := newFunctionHarness(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	worker := startWorker(t, ctx, h.db, h.d)
+	worker := startOwnedWorker(t, ctx, h.db, h.d, h.owner())
 	done := make(chan error, 1)
 	go func() { done <- worker.Run(ctx) }()
 	defer func() {
@@ -54,7 +54,7 @@ func TestDeletedSessionWaitingTurnSettlesWithoutStoppingWorker(t *testing.T) {
 	if _, err := h.s.GetSession(ctx, h.tenant, h.session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal(err)
 	}
-	if _, err := h.d.Run(ctx, h.tenant, h.session.ID, input.TurnID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := h.bound().Run(ctx, h.tenant, h.session.ID, input.TurnID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("deleted Session must be unavailable to new dispatch", err)
 	}
 	h.session = publicSession(t, h, "unrelated")

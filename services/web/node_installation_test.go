@@ -18,7 +18,11 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 	var calls atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.Header.Get("Authorization") != "Bearer server-admin" {
+		if r.URL.Path == "/api/v1/sandbox-node/enroll" {
+			if r.Header.Get("Authorization") != "Bearer node-token" {
+				t.Errorf("node credential was replaced for %s", r.URL.Path)
+			}
+		} else if r.Header.Get("Authorization") != "Bearer server-admin" {
 			t.Errorf("incorrect upstream authority for %s", r.URL.Path)
 		}
 		if r.URL.Path == "/core/v1/sandbox/deployment/maintenance" {
@@ -57,7 +61,7 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 		{"DELETE", "/core/v1/sandbox/deployment/reset?expected_generation=7", "none", 401},
 		{"GET", "/core/v1/sandbox/nodes", "node", 401},
 		{"GET", "/core/v1/projects", "session", 200},
-		{"POST", "/api/v1/sandbox-node/enroll", "node", 404},
+		{"POST", "/api/v1/sandbox-node/enroll", "node", 200},
 		{"GET", "/console/config", "session", 200},
 		{"GET", "/console/config", "none", 401},
 		{"GET", "/node-install/node-install.pyz", "none", 200},
@@ -90,7 +94,7 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 			t.Fatalf("console configuration = %s", body)
 		}
 	}
-	if calls.Load() != 6 {
+	if calls.Load() != 7 {
 		t.Fatalf("unexpected upstream requests: %d", calls.Load())
 	}
 	r := consoleRequest(t, server, "POST", "/core/v1/sandbox/deployment")

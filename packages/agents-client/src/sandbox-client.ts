@@ -180,7 +180,7 @@ function invalidSandboxResponse(): never {
 
 /**
  * The object has every required member, optional ones only where listed, and nothing else. The projections below
- * follow Core's deployment.View, deployment.Node, deployment.NodeDetail and store.RuntimeNodeAllocation serialization.
+ * follow Core's deployment.View, deployment.Node, deployment.NodeDetail and deployment.NodeAllocation serialization.
  */
 function members(value: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
   if (!isRecord(value) || !required.every((field) => hasOwn(value, field)) || !onlyFields(value, new Set([...required, ...optional]))) return invalidSandboxResponse();

@@ -141,7 +141,7 @@ func TestEnvironmentFileCreateRejectionsLeaveNoReceiptOrConsumption(t *testing.T
 		done := post(token, environment.ID, tc.body)
 		id := serveFileWrite(h, rejected(tc.reason))
 		assertError(await(done), tc.message)
-		if intent, err := h.s.GetEnvironmentFileWrite(t.Context(), h.tenant, environment.ID, id); err != nil || intent.State != "rejected" {
+		if intent, err := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, id); err != nil || intent.State != "rejected" {
 			t.Fatal("rejection did not settle", intent, err)
 		}
 	}

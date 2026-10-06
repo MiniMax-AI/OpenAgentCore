@@ -43,7 +43,7 @@ const DEFAULT_RETAINED = "8";
  * sudo (or directly as root), which installs the node as a system service.
  * The log hint names that system service. No command is issued until the installation
  * is read: one whose public URL other machines can't use (loopback, as
- * `local_only` says, or not HTTPS), an unreadable one, or a console that
+ * `local_only` says), an unreadable one, or a console that
  * reports no node files for the deployment's provider (`node_artifacts`) says
  * so instead. Each opening, and each return to the window while open, reads
  * the installation and the console again, so a fix on the Core host shows
@@ -103,7 +103,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     : installation.data === undefined
     ? installation.isError ? { text: t("The installation couldn't be read, so no command can be issued."), failed: true } : { text: t("Checking this installation's public URL…") }
     : !publicUrl
-      ? { text: t("Configure a domain and HTTPS in System before adding nodes.") }
+      ? { text: t("Set a public address other machines can reach before adding nodes.") }
       : !nodeFilesAvailable(consoleConfig, deployment.provider)
         ? { text: t("This console has no node files for {{provider}}. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.", { provider: backend }) }
         : null;

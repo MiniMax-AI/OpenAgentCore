@@ -6,7 +6,7 @@ import nodeDiagnosticFixture from "../../../services/core/internal/sandbox/testd
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
 
-// Shapes as Core serializes them (deployment.Node, deployment.NodeDetail, store.RuntimeNodeAllocation, deployment.View).
+// Shapes as Core serializes them (deployment.Node, deployment.NodeDetail, deployment.NodeAllocation, deployment.View).
 const created = "2026-09-25T08:00:00.123456789Z";
 /** A ready node: Core omits `diagnostic`. */
 const node = {

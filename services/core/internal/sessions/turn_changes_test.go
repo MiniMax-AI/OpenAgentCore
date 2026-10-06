@@ -37,6 +37,32 @@ func TestTerminalStatus(t *testing.T) {
 	}
 }
 
+func TestValidTransition(t *testing.T) {
+	for _, test := range []struct {
+		from, to string
+		want     bool
+	}{
+		{TurnQueued, TurnInProgress, true},
+		{TurnQueued, TurnFailed, true},
+		{TurnQueued, TurnCancelled, true},
+		{TurnQueued, TurnWaiting, false},
+		{TurnQueued, TurnCompleted, false},
+		{TurnInProgress, TurnWaiting, true},
+		{TurnInProgress, TurnCompleted, true},
+		{TurnInProgress, TurnQueued, false},
+		{TurnWaiting, TurnInProgress, true},
+		{TurnWaiting, TurnCancelled, true},
+		{TurnWaiting, TurnQueued, false},
+		{TurnCompleted, TurnInProgress, false},
+		{TurnFailed, TurnCompleted, false},
+		{TurnCancelled, TurnCancelled, false},
+	} {
+		if got := ValidTransition(test.from, test.to); got != test.want {
+			t.Errorf("%s -> %s: %v", test.from, test.to, got)
+		}
+	}
+}
+
 func TestTurnChangesReportTheNewStatus(t *testing.T) {
 	for _, test := range []struct {
 		status  string

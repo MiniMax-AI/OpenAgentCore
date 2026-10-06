@@ -1,9 +1,10 @@
 package store
 
 import (
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"sync"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {

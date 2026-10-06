@@ -35,12 +35,11 @@
   /* Inside the white page panel, frames are hairlines, not raised cards. */
   --frame-line: color-mix(in oklch, var(--ink) 11%, transparent);
   --shadow-card: 0 0 0 1px var(--frame-line);
-  --panel-shadow: 0 0 0 1px var(--line), 0 1px 2px oklch(0 0 0 / 3%), 0 8px 24px -12px oklch(0 0 0 / 8%);
-  --control-height: 30px;
-  --radius-chip: 6px;
-  --radius-control: 8px;
-  --radius-card: 12px;
-  --radius-window: 14px;
+  --control-height: 32px;
+  --radius-chip: 3px;
+  --radius-control: 4px;
+  --radius-card: 6px;
+  --radius-window: 8px;
   --frame-radius: var(--radius-card);
   --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
 }
@@ -65,7 +64,6 @@ html[data-theme="dark"] {
   --series-other: oklch(0.45 0.01 264);
   --frame-line: oklch(1 0 0 / 10%);
   --shadow-card: 0 0 0 1px var(--frame-line);
-  --panel-shadow: 0 0 0 1px oklch(1 0 0 / 8%), 0 8px 28px -12px oklch(0 0 0 / 50%);
 }
 
 /* Browser surfaces ------------------------------------------------------ */
@@ -78,7 +76,6 @@ html {
 body {
   font-size: 14px;
   letter-spacing: -0.01em;
-  font-feature-settings: "cv11", "ss01";
 }
 
 ::selection {
@@ -111,32 +108,31 @@ pre {
 
 /* Shell ----------------------------------------------------------------- */
 
-/* The gray canvas is the app frame; each page lives in one white panel. */
+/* Flat application surfaces; borders separate navigation from content. */
 .app-shell,
 .app-main {
-  background: var(--canvas);
+  background: var(--page);
 }
 
 .app-main {
-  padding: 8px 8px 8px 0;
+  padding: 0;
 }
 
 .app-main > .page-transition {
   overflow: hidden;
-  background: var(--surface);
-  border-radius: var(--radius-window);
-  box-shadow: var(--panel-shadow);
+  background: var(--page);
+  border-radius: 0;
 }
 
 .page-section {
-  background: var(--surface);
+  background: var(--page);
 }
 
 .app-sidebar {
-  padding: 10px 8px;
-  color: var(--ink-2);
-  background: var(--canvas);
-  border-right: 0;
+  padding: 12px 8px;
+  color: var(--ink);
+  background: var(--inset);
+  border-right: 1px solid var(--line);
 }
 
 .brand-lockup {
@@ -167,11 +163,11 @@ pre {
 }
 
 .main-nav button {
-  height: 32px;
-  margin: 0 0 1px;
+  height: 36px;
+  margin: 0 0 2px;
   padding: 0 8px;
   gap: 8px;
-  color: var(--ink-2);
+  color: var(--ink);
   border-radius: var(--radius-control);
   transition:
     color 150ms var(--ease-out-strong),
@@ -185,7 +181,7 @@ pre {
 }
 
 .main-nav button svg {
-  color: var(--ink-3);
+  color: var(--ink-2);
   transition: color 150ms var(--ease-out-strong);
 }
 
@@ -198,8 +194,7 @@ pre {
   transform: scale(0.98);
 }
 
-/* The current page is a white chip, the same surface as the panel it opens.
- * One chip glides between items (a Motion shared layout); labels sit above it. */
+/* Selection has a stable background and a narrow accent marker. */
 .main-nav {
   isolation: isolate;
 }
@@ -224,9 +219,9 @@ pre {
   position: absolute;
   z-index: 0;
   inset: 0;
-  background: var(--surface);
+  background: var(--hover-2);
   border-radius: var(--radius-control);
-  box-shadow: 0 0 0 1px var(--frame-line), 0 1px 2px oklch(0 0 0 / 4%);
+  box-shadow: inset 2px 0 var(--accent);
   pointer-events: none;
 }
 
@@ -250,30 +245,58 @@ pre {
   border-top-color: var(--line);
 }
 
+/* Compact navigation keeps labels accessible without clipping visible text. */
+@media (max-width: 640px) {
+  :root { --page-gutter: 16px; }
+
+  .app-sidebar {
+    width: 56px;
+    min-width: 56px;
+    flex-basis: 56px;
+    padding: 8px 6px;
+    overflow-x: hidden;
+  }
+
+  .console-nav .nav-label,
+  .brand-product,
+  .console-account-menu > button > span {
+    display: none;
+  }
+
+  .main-nav button { height: 40px; }
+  .main-nav button .nav-active-chip { display: block; }
+  .sidebar-account { flex-direction: column; }
+  .console-account-menu > button { justify-content: center; }
+}
+
 /* Page frame ------------------------------------------------------------ */
 
 .console-page > .page-header,
 .page-header {
   min-height: 56px;
   flex-basis: auto;
+  flex-wrap: wrap;
   gap: 12px;
-  padding: 10px var(--page-gutter);
-  background: var(--surface);
+  padding: 18px var(--page-gutter);
+  background: var(--page);
   border-bottom: 1px solid var(--line);
 }
 
 .page-header h1,
 .page-header .console-page-heading h1 {
   color: var(--ink);
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 24px;
+  line-height: 28px;
   letter-spacing: -0.015em;
 }
 
+.console-page-intro { min-width: 0; max-width: 100%; }
+.console-page-description { margin: 4px 0 0; color: var(--ink-2); font-size: 13px; line-height: 20px; }
+
 .console-page-body {
-  gap: 28px;
-  padding: 20px var(--page-gutter) 48px;
+  gap: 24px;
+  padding: 24px var(--page-gutter) 40px;
 }
 
 /* A list toolbar belongs to the table under it: 12px apart, not a section gap. */
@@ -684,10 +707,8 @@ pre {
 /* Cards ----------------------------------------------------------------- */
 
 .kpi-strip,
-.table-frame,
 .chart-grid,
-.overview-card,
-.console-empty {
+.overview-card {
   background: var(--surface);
   border: 0;
   border-radius: var(--radius-card);
@@ -721,6 +742,10 @@ pre {
 
 .table-frame {
   overflow: auto;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .data-table {
@@ -732,9 +757,9 @@ pre {
   height: 36px;
   padding: 0 12px;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
-  background: var(--surface);
+  background: var(--inset);
   border-bottom: 1px solid var(--line);
 }
 
@@ -1189,24 +1214,6 @@ pre {
   box-shadow: var(--shadow-card);
 }
 
-/* Overview figures: large, light and tabular, set in Inter's display cut. */
-.metric-tile-value {
-  height: auto;
-  margin-top: 6px;
-  color: var(--ink);
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 28px;
-  letter-spacing: -0.015em;
-  font-optical-sizing: auto;
-  font-variant-numeric: tabular-nums;
-}
-
-.metric-tile-label,
-.overview-card-header h2 {
-  color: var(--ink);
-}
-
 /* A pill after a name keeps a small gap from it. */
 :where(span, strong, a, button, code) + .pill {
   margin-left: 6px;
@@ -1240,7 +1247,7 @@ pre {
 
 /* Shape and spacing scale ------------------------------------------------ */
 
-/* Radii: 6 inner option, 8 control, 12 card, 14 panel and dialog; badges are
+/* Radii: 3 inner option, 4 control, 6 card, 8 dialog; badges are
    pills. Every card starts its content 16px in, so text in stacked cards and
    the first table column share one left edge. */
 .data-table thead th:first-child,
@@ -1253,14 +1260,6 @@ pre {
 .data-table tbody th:last-child,
 .data-table tbody td:last-child {
   padding-right: 16px;
-}
-
-.fleet-node {
-  border-radius: 10px;
-}
-
-.fleet-core {
-  border-radius: var(--radius-card);
 }
 
 .coverage-note,

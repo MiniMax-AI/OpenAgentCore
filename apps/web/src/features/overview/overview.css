@@ -1,12 +1,10 @@
-/* Overview: four figures, then Session activity beside the fleet (Core and
-   its sandbox hosts), then usage by project and the Sessions that need
-   attention. Every card sits on the page canvas; colour only marks data
-   (indigo) or a problem. */
+/* Overview: a summary strip, activity and fleet inventory, then operational tables. */
 
 .overview-tiles {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
+  padding: 4px 0 24px;
+  border-bottom: 1px solid var(--line);
 }
 
 .metric-tile {
@@ -14,10 +12,12 @@
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  padding: 16px;
-  animation: overview-rise 520ms var(--ease-settle) both;
-  animation-delay: calc(var(--i, 0) * 70ms);
+  padding: 0 20px;
+  border-left: 1px solid var(--line);
 }
+
+.metric-tile:first-child { padding-left: 0; border-left: 0; }
+.metric-tile:last-child { padding-right: 0; }
 
 .metric-tile-label {
   color: var(--fg-muted);
@@ -27,11 +27,11 @@
 
 .metric-tile-value {
   display: flex;
-  height: 36px;
+  min-height: 36px;
   align-items: center;
-  margin-top: 10px;
+  margin-top: 8px;
   color: var(--fg);
-  font-size: 20px;
+  font-size: 28px;
   font-weight: 600;
   line-height: 36px;
   letter-spacing: -0.025em;
@@ -95,7 +95,7 @@
   align-items: center;
   gap: 12px;
   min-height: 60px;
-  padding: 10px 0;
+  padding: 6px 0;
   border-top: 1px solid var(--line-muted);
 }
 
@@ -182,8 +182,8 @@
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.6fr) minmax(270px, 1fr);
+  gap: 24px;
   align-items: stretch;
 }
 
@@ -206,7 +206,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px 6px;
+  padding: 12px 20px;
 }
 
 .overview-card-header h2 {
@@ -231,7 +231,7 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  padding: 4px 16px 16px;
+  padding: 4px 20px 20px;
 }
 
 .overview-card-note {
@@ -242,191 +242,31 @@
   flex: 1;
 }
 
-/* Fleet: Core in the middle, sandbox nodes left and right of it. Lines use a
-   0-1000 viewBox stretched to the card, so node columns are in percent. */
-
-.fleet-body {
-  justify-content: center;
-}
-
-.fleet-topology {
-  position: relative;
-  min-width: 0;
-  isolation: isolate;
-}
-
-.fleet-topology-lines {
-  position: absolute;
-  inset: 0;
+/* Inventory rows share one frame and open details only when requested. */
+.fleet-inventory { display: flex; flex-direction: column; }
+.fleet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.fleet-link {
-  color: var(--line-strong);
-}
-
-.fleet-link-available {
-  color: color-mix(in srgb, var(--fg) 45%, transparent);
-}
-
-.fleet-link-degraded {
-  color: var(--warning);
-}
-
-.fleet-link path {
-  fill: none;
-  vector-effect: non-scaling-stroke;
-}
-
-.fleet-link-edge {
-  stroke: currentColor;
-  stroke-width: 1.25px;
-  opacity: 0.6;
-}
-
-.fleet-link-offline .fleet-link-edge {
-  stroke-dasharray: 4 6;
-  opacity: 0.9;
-}
-
-.fleet-link-flow {
-  stroke: currentColor;
-  stroke-width: 2px;
-  stroke-linecap: round;
-  stroke-dasharray: 3 27;
-  opacity: 0.7;
-  animation: fleet-link-flow 4s linear infinite;
-}
-
-.fleet-topology-stale .fleet-link-flow {
-  display: none;
-}
-
-.fleet-core {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  width: 104px;
-  justify-items: center;
-  gap: 6px;
-  padding: 14px 8px 12px;
-  color: var(--fg-muted);
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
-  transform: translate(-50%, -50%);
-}
-
-button.fleet-core {
-  font: inherit;
-  cursor: pointer;
-  transition: border-color 160ms ease;
-}
-
-button.fleet-core:hover:not(:disabled),
-button.fleet-core[data-popup-open] {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
-}
-
-button.fleet-core:disabled {
-  cursor: default;
-}
-
-.fleet-core strong {
-  color: var(--fg);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.fleet-core .status-dot,
-.fleet-node .status-dot {
-  color: var(--fg-muted);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.fleet-node {
-  position: absolute;
-  z-index: 1;
-  display: grid;
-  width: 30%;
-  gap: 4px;
-  padding: 9px 12px;
-  color: var(--fg);
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 0;
+  color: var(--ink-2);
   font: inherit;
   text-align: left;
-  background: var(--surface);
+  background: transparent;
   border: 0;
-  border-radius: 10px;
-  box-shadow: var(--card-shadow);
+  border-top: 1px solid var(--line-soft);
   cursor: pointer;
-  transform: translateY(-50%);
-  transition: box-shadow 160ms ease;
 }
-
-.fleet-node:hover,
-.fleet-node[data-popup-open] {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--line)), var(--card-shadow);
-}
-
-.fleet-node:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.fleet-node-left {
-  left: 0;
-}
-
-.fleet-node-right {
-  right: 0;
-}
-
-.fleet-node-name {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* E2B's cloud stands where the machines would: its name carries the cloud icon. */
-.fleet-node-name svg {
-  margin-right: 6px;
-  vertical-align: -2px;
-  color: var(--ink-2);
-}
-
-.fleet-node-foot {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.fleet-node-slots {
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.fleet-more {
-  align-self: center;
-  margin-top: 8px;
-}
-
-@keyframes fleet-link-flow {
-  to { stroke-dashoffset: -60; }
-}
+.fleet-row:hover, .fleet-row[data-popup-open] { background: var(--hover); }
+.fleet-row > svg { flex-shrink: 0; }
+.fleet-row-info { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.fleet-row-info strong { overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.fleet-row .status-dot { color: var(--ink-2); font-size: 12px; line-height: 16px; }
+.fleet-node-slots { color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fleet-more { align-self: flex-start; margin-top: 12px; }
 
 .fleet-list-footer {
   display: flex;
@@ -446,11 +286,13 @@ button.fleet-core:disabled {
   color: var(--danger);
 }
 
+.overview-attention-reason { max-width: 32ch; margin-top: 4px; color: var(--ink-2); font-size: 12px; line-height: 18px; white-space: normal; overflow-wrap: anywhere; }
+
 /* Tables inside cards ----------------------------------------------------- */
 
 .overview-table-scroll {
   min-width: 0;
-  margin: 0 16px 16px;
+  margin: 0;
   overflow-x: auto;
 }
 
@@ -458,19 +300,8 @@ button.fleet-core:disabled {
   background: transparent;
 }
 
-/* Inside a card, table text starts where the card title starts. */
-.overview-table-card .data-table thead tr:first-child > :first-child,
-.overview-table-card .data-table tbody tr > :first-child {
-  padding-left: 0;
-}
-
-.overview-table-card .data-table thead tr:first-child > :last-child,
-.overview-table-card .data-table tbody tr > :last-child {
-  padding-right: 0;
-}
-
 .overview-table-card .console-empty {
-  padding: 22px 16px;
+  padding: 16px 0;
 }
 
 /* Grouped headers: "Assets" and "Sessions" span their columns. */
@@ -510,32 +341,21 @@ button.fleet-core:disabled {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@media (max-width: 1180px) {
-  .overview-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .overview-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* Respond to the content column, including when the console is in a side panel. */
+.overview-page .console-page-body { container-type: inline-size; }
+.overview-page .overview-table-card { background: transparent; box-shadow: none; border-radius: 0; }
+.overview-table-card .overview-card-header { padding: 0 0 12px; }
+.overview-table-card .overview-table-scroll { border-top: 1px solid var(--line); }
+@container (max-width: 680px) {
+  .overview-grid { grid-template-columns: minmax(0, 1fr); }
 }
-
+@container (max-width: 560px) {
+  .overview-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 0; }
+  .metric-tile:nth-child(3) { padding-left: 0; border-left: 0; }
+  .metric-tile { padding-right: 12px; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .getting-started,
-  .metric-tile,
-  .overview-activity,
-  .overview-fleet,
-  .overview-table-card {
-    animation: none;
-  }
-
-  .fleet-link-flow {
-    animation: none;
-  }
-
-  .fleet-node {
-    transition: none;
-  }
+  .getting-started, .overview-activity, .overview-fleet, .overview-table-card { animation: none; }
 }
 
 .detail-note {

@@ -28,7 +28,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = h.s.BindSessionDevice(t.Context(), h.tenant, h.session.ID, h.device.ID); err != nil {
+	if err = bindSessionDevice(t, h.db, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
 	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})

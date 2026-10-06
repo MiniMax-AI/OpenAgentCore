@@ -9,6 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -52,7 +53,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	if begin.DecodePayload(&request) != nil || request.Step != "begin" || request.EnvironmentID != environment.ID || request.SessionID != h.session.ID || request.Path != "input" || request.SizeBytes != 3 {
 		t.Fatal("upload identity changed")
 	}
-	intent, err := h.s.GetEnvironmentFileWrite(t.Context(), h.tenant, environment.ID, begin.ID)
+	intent, err := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, begin.ID)
 	if err != nil || intent.State != "pending" || intent.Identity.DeviceID != h.device.ID {
 		t.Fatal("dispatch preceded durable ownership", intent, err)
 	}
@@ -75,7 +76,7 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	}
 	h.write(begin.ID, proto.TypeWorkspaceWriteResult, proto.WorkspaceWriteResultPayload{Outcome: "completed", SizeBytes: 3})
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "detached durable commit", func() bool {
-		got, e := h.s.GetEnvironmentFileWrite(t.Context(), h.tenant, environment.ID, begin.ID)
+		got, e := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, begin.ID)
 		return e == nil && got.State == "committed"
 	})
 	session, err := h.s.GetSession(t.Context(), h.tenant, h.session.ID)
@@ -94,7 +95,7 @@ func TestLocalEnvironmentFileWriteLostReceiptRemainsPending(t *testing.T) {
 	if result := awaitLocalWrite(t, done); !errors.Is(result.err, execution.ErrExecutionUnavailable) {
 		t.Fatal(result.err)
 	}
-	intent, err := h.s.GetEnvironmentFileWrite(t.Context(), h.tenant, environment.ID, begin.ID)
+	intent, err := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, begin.ID)
 	if err != nil || intent.State != "pending" {
 		t.Fatal("disconnect guessed rejection", intent, err)
 	}
@@ -112,7 +113,7 @@ func TestLocalEnvironmentFileWriteKnownRejectionReleasesMutation(t *testing.T) {
 		if result := awaitLocalWrite(t, done); !errors.Is(result.err, execution.ErrExecutionUnavailable) {
 			t.Fatal(result.err)
 		}
-		intent, err := h.s.GetEnvironmentFileWrite(t.Context(), h.tenant, environment.ID, begin.ID)
+		intent, err := store.FixtureFileWrite(t.Context(), h.db.pool, h.tenant, environment.ID, begin.ID)
 		if err != nil || intent.State != "rejected" {
 			t.Fatal("rejection did not settle", intent, err)
 		}

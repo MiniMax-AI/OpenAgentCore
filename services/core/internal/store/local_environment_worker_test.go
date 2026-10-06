@@ -22,7 +22,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 		_, pool := store.NewTestStore(t)
 		insertWorkerRuntimeAllocation(t, pool, h, "disabled")
 	}
-	environment, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
+	environment, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, h.session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,14 +96,14 @@ func TestLocalEnvironmentWorkerRejectsGeneralDeviceDespiteCapability(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	unassigned, err := h.s.GetSessionEnvironment(t.Context(), h.tenant, other.ID)
+	unassigned, err := fixtureSessionStore(h.db).GetSessionEnvironment(t.Context(), h.tenant, other.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := w.ReadEnvironmentDirectory(t.Context(), unassigned, "reports"); !errors.Is(err, execution.ErrExecutionUnavailable) {
 		t.Fatal("unassigned environment selected general device", err)
 	}
-	if _, err := h.s.GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := fixtureSessionStore(h.db).GetSessionDevice(t.Context(), h.tenant, other.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("read persisted an unauthorized placement", err)
 	}
 }

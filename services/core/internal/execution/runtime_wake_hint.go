@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -23,11 +24,11 @@ func (w *Worker) hintRuntimeWake(ctx context.Context, session sessions.Session) 
 	}
 	lookup, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	environment, err := w.admission.GetSessionEnvironment(lookup, session.TenantID, session.ID)
+	environment, err := w.dispatcher.SessionsReader.GetSessionEnvironment(lookup, session.TenantID, session.ID)
 	if err != nil || environment.Initialization != "complete" {
 		return
 	}
-	owner, err := w.admission.GetRuntimeAllocation(lookup, session.TenantID, environment.ID)
+	owner, err := w.dispatcher.DeploymentReader.EnvironmentAllocation(lookup, deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: environment.ID})
 	if err != nil || owner.ProviderKey != config.InstallationID || owner.State != "running" ||
 		!owner.CreateSettled || owner.SessionDeleted || owner.Expired {
 		return

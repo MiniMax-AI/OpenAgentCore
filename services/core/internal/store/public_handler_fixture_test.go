@@ -37,10 +37,11 @@ const testExecutorURL = "wss://core.example/api/v1/agent-daemon/ws"
 
 // publicHandler serves s through api.NewHandler. s backs every area the Store
 // implements, and db is the database and credential key that built s; the
-// audit reads, Agents, Files, Vaults, Items, Subagents and Artifacts come from
-// db. keys authenticate as Project keys and "admin" as the Core key. Metrics,
-// Runtime observation and history, and executor connections are strict
-// stand-ins. Execution and Sandboxes stay disabled unless configure sets them.
+// audit reads, Agents, Files, Vaults, Environment reads, Items, Subagents and
+// Artifacts come from db. keys authenticate as Project keys and "admin" as the
+// Core key. Metrics, Runtime observation and history, and executor connections
+// are strict stand-ins. Execution and Sandboxes stay disabled unless configure
+// sets them.
 func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyResolver, engine string, configure ...func(*api.Dependencies)) (http.Handler, error) {
 	t.Helper()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential("admin")})
@@ -92,7 +93,7 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		Subagents:       sessionStore,
 		Artifacts:       sessionService,
 		ArtifactsReader: sessionStore,
-		SessionAdmin:    s, Environments: s, Admin: s, AdminAudit: audit, WriteAudit: audit,
+		SessionAdmin:    s, Environments: sessionService, EnvironmentsReader: sessionStore, Admin: s, AdminAudit: audit, WriteAudit: audit,
 		ExecutorConnections: strict, Metrics: strict, RuntimeObservations: strict, RuntimeHistory: strict,
 	}
 	for _, c := range configure {
@@ -180,11 +181,11 @@ func executorURL(url string) func(*api.Dependencies) {
 // administration and node routes and openai_hosted Environments. Deployment
 // changes, reset and discovery need the Worker and are strict stand-ins. It
 // follows the option that enables Execution.
-func managedSandboxes(t testing.TB, s *store.Store, db fixtureDB) func(*api.Dependencies) {
+func managedSandboxes(t testing.TB, db fixtureDB) func(*api.Dependencies) {
 	return func(d *api.Dependencies) {
 		d.Sandboxes = &api.Sandboxes{
 			Deployment:             fixtureDeployment(t, db),
-			NodeAllocations:        s,
+			NodeAllocations:        fixtureReader(db),
 			DeploymentChanges:      strictStandIn{t},
 			DeploymentReset:        strictStandIn{t},
 			ConfigurationDiscovery: strictStandIn{t},

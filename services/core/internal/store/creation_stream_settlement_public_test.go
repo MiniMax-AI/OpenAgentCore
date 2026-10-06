@@ -127,14 +127,14 @@ func TestCreationStreamPublicLifetimes(t *testing.T) {
 		handler.ServeHTTP(w, r)
 	}))
 	defer server.Close()
-	writer := executionOwner(t, db, s).Store
+	sessionExecution := executionOwner(t, db, s).Sessions
 	connect := func(environment string) {
 		t.Helper()
 		generation := uuid.NewString()
-		if err := writer.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
+		if err := sessionExecution.ReplaceEnvironmentConnection(t.Context(), tenant, environment, generation); err != nil {
 			t.Fatal(err)
 		}
-		if err := writer.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
+		if err := sessionExecution.ObserveEnvironmentConnection(t.Context(), tenant, environment, generation, 1, true); err != nil {
 			t.Fatal(err)
 		}
 	}

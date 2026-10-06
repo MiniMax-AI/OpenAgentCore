@@ -3,9 +3,10 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestEnvironmentActiveInputSerializesWithCompletion(t *testing.T) {

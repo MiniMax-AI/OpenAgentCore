@@ -11,7 +11,6 @@ import (
 )
 
 type receiptStore struct {
-	*fakeHeartbeatStore
 	mu      sync.Mutex
 	receipt runtimedevice.ArchivedCancellationReceipt
 }
@@ -36,7 +35,8 @@ func TestArchivedReceiptTracksDeliveryBeyondDoneAndRejectsNewWork(t *testing.T) 
 	defer peer.Close("test complete")
 	peer.credentialHash = "original-hash"
 	receipt := runtimedevice.ArchivedCancellationReceipt{RunID: "run", Deadline: time.Now().Add(time.Second)}
-	peer.heartbeat = &receiptStore{fakeHeartbeatStore: newFakeHeartbeatStore(), receipt: receipt}
+	peer.heartbeat = newFakeHeartbeatStore()
+	peer.archivedCancellations = &receiptStore{receipt: receipt}
 	if draining, err := peer.DrainArchivedCancellation(t.Context()); err != nil || draining {
 		t.Fatal("unowned delivery got drain", draining, err)
 	}
@@ -127,7 +127,8 @@ func TestArchivedReceiptDeadlineDoesNotRenew(t *testing.T) {
 	defer peer.Close("test complete")
 	peer.credentialHash = "original-hash"
 	receipt := runtimedevice.ArchivedCancellationReceipt{RunID: "run", Deadline: time.Now().Add(100 * time.Millisecond)}
-	peer.heartbeat = &receiptStore{fakeHeartbeatStore: newFakeHeartbeatStore(), receipt: receipt}
+	peer.heartbeat = newFakeHeartbeatStore()
+	peer.archivedCancellations = &receiptStore{receipt: receipt}
 	release, err := peer.TrackExecutionDelivery("run")
 	if err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -113,14 +114,14 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 					t.Fatal("late readiness moved pin or erased serving readiness", n)
 				}
 			}
-			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, pending.Environment.ID, first.InstallationID, runtimedevice.HashCredential("runtime"))
+			owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: pending.Environment.ID}, first.InstallationID, runtimedevice.HashCredential("runtime"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if owner.NodeID != pendingNode || owner.DeploymentGeneration != uint64(pendingGeneration) {
 				t.Fatal("pending placement moved", owner)
 			}
-			n, g, err := s.ResolveRuntimeGeneration(t.Context(), sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID})
+			n, g, err := deploymentService(t, s).AllocationGeneration(t.Context(), sandbox.Reference{TenantID: tenant, EnvironmentID: owner.EnvironmentID, AllocationID: owner.ID})
 			if err != nil || n != pendingNode || g != 1 {
 				t.Fatal(n, g, err)
 			}
@@ -162,7 +163,7 @@ func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 	if err != nil || nodes[0].ProviderReady || *nodes[0].Rollout.ReadyGeneration != 1 {
 		t.Fatal("reconnect inherited readiness or lost pin", nodes, err)
 	}
-	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
+	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("unconfirmed connection admitted", err)
 	}
 	if err = service.Heartbeat(t.Context(), node.NodeID, connection, first.OwnerEpoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
@@ -182,7 +183,7 @@ func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testin
 	}
 	generationHeartbeat(t, s, node, connection, first, "preparing")
 	tenant := uuid.NewString()
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodesPreparing) {
+	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodesPreparing) {
 		t.Fatal("actual preparation was not identified", err)
 	}
 	var sessions, placements int
@@ -190,7 +191,7 @@ func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testin
 		t.Fatal("refusal left provisional ownership", sessions, placements, err)
 	}
 	generationHeartbeat(t, s, node, connection, first, "failed")
-	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
+	if _, err := s.CreateSession(t.Context(), tenant, managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("failed preparation advertised active work", err)
 	}
 }

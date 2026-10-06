@@ -1,6 +1,8 @@
-# Core operational metrics
+---
+title: "Core operational metrics"
+---
 
-`GET /core/v1/metrics?range=1h|6h|24h|7d` reports Core's own health: its process, execution queue and slots, PostgreSQL and background jobs. It requires the Core key ([Core administration API](admin-api.md)).
+`GET /core/v1/metrics?range=1h|6h|24h|7d` reports Core's own health: its process, execution queue and slots, PostgreSQL and background jobs. It requires the Core key ([Core administration API](./admin-api.md)).
 
 `range` is the only parameter, sent at most once; it defaults to `1h`. An empty, repeated or unsupported value, or any other parameter, returns 400 `invalid_request`. When Core cannot read its metrics, the route returns 503 `core_metrics_unavailable`. When only some measurements fail, the response is still `200` with `service.status` set to `degraded` and each missing value set to null. The response never contains database or native error text, credentials, bodies, resource IDs or tenant labels.
 
@@ -27,7 +29,7 @@ The response has `object: "core.metrics"`, `range`, `service`, `execution`, `dat
 
 | Field | Meaning |
 | --- | --- |
-| `service.status` | `running`, or `degraded` when a measurement or job fails, the latest sample is missing or stale, or execution ownership is unknown or Core has execution slots but does not hold the execution lease. A sandbox reset is reported by the [deployment](sandbox-deployment.md), not here |
+| `service.status` | `running`, or `degraded` when a measurement or job fails, the latest sample is missing or stale, or execution ownership is unknown or Core has execution slots but does not hold the execution lease. A sandbox reset is reported by the [deployment](./sandbox-deployment.md), not here |
 | `service.revision` | The full source commit injected at build time; null for builds without one |
 | `service.started_at` | When the process initialized |
 | `service.execution_owner` | Whether this process holds the execution worker's database lease |

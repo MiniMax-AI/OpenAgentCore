@@ -54,7 +54,7 @@ func (f *executorManagementFixture) RevokeProjectExecutorCredential(ctx context.
 func executorManagementHandler(t *testing.T, key APIKey, f *executorManagementFixture, connected func(context.Context, string, string) (bool, error)) http.Handler {
 	t.Helper()
 	deps, fakes := managementFakes(t, key)
-	fakes.environments.projectExecutorCredentialState = f.ProjectExecutorCredentialState
+	fakes.environmentsReader.projectExecutorCredentialState = f.ProjectExecutorCredentialState
 	fakes.environments.issueProjectExecutorCredential = f.IssueProjectExecutorCredential
 	fakes.environments.revokeProjectExecutorCredential = f.RevokeProjectExecutorCredential
 	fakes.executorConnections.executorConnected = connected

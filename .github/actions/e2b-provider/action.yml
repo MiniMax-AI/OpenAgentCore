@@ -1,0 +1,9 @@
+name: E2B helper cache
+description: Restore the input-addressed E2B helper builds that scripts/build-e2b-provider.sh reuses.
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v6
+      with:
+        path: ~/.oac/cache/e2b-provider
+        key: e2b-provider-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('services/core/tools/e2b-provider/**', 'LICENSE', 'scripts/build-e2b-provider.sh') }}

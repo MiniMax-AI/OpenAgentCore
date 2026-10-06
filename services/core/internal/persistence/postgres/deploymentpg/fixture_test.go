@@ -12,6 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -47,11 +48,23 @@ func newFixture(t *testing.T) fixture {
 func (f fixture) withPublicURL(t *testing.T, publicURL string) (*deploymentpg.Store, *deployment.Service) {
 	t.Helper()
 	adapter := deploymentpg.New(pgunit.NewPool(f.pool), f.cipher)
-	service, err := deployment.NewService(adapter, adapter, providers.Builtin(), publicURL)
+	return adapter, newService(t, adapter, publicURL)
+}
+
+// newService builds the deployment service on adapter, with the placement
+// rules for this public URL, as cmd/server does.
+func newService(t *testing.T, adapter *deploymentpg.Store, publicURL string) *deployment.Service {
+	t.Helper()
+	registry := providers.Builtin()
+	rules, err := placement.NewRules(registry, publicURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return adapter, service
+	service, err := deployment.NewService(adapter, adapter, registry, rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
 }
 
 // execution acquires the execution lease and builds the deployment execution

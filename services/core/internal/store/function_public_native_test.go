@@ -12,6 +12,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -43,7 +44,7 @@ func TestNativePublicFunctionExecution(t *testing.T) {
 		t.Fatal(proof, err)
 	}
 	for i, callID := range proof.Calls {
-		call, err := h.s.GetFunctionCall(ctx, h.tenant, proof.Session, proof.Turns[i], callID)
+		call, err := store.FixtureFunctionCall(ctx, h.db.pool, h.tenant, proof.Session, proof.Turns[i], callID)
 		if err != nil || call.Applied != (i < 2) {
 			t.Fatal(call, err)
 		}

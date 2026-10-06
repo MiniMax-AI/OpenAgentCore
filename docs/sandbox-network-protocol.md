@@ -1,19 +1,21 @@
-# Sandbox network protocol
+---
+title: "Sandbox network protocol"
+---
 
 The Network protocol is how the agent host opens a TCP connection that originates in a sandbox. The agent host opens a Network stream through the Link and sends one `Connect`. The Sandbox I/O service resolves the name with the sandbox's resolver, checks the destination against the egress the Link bound to the stream, dials from the sandbox's network and answers. After `Connected` the stream carries the connection's raw bytes in both directions. Credentials and TLS stay with the agent host: the service carries the bytes the client writes and reads nothing in them.
 
-[`internal/sandboxnet/protocol.go`](../internal/sandboxnet/protocol.go) is the authored definition: message tags, payload layouts, validators, the egress rule and the `Service` interface. The same package has the client and the generic server. [`apps/sandboxio/internal/netservice`](../apps/sandboxio/internal/netservice) is the Linux service. Frames use the shared [framing](sandbox-link-protocol.md#framing). A stream's authority, including its `Egress`, comes from the Link when the stream [opens](sandbox-link-protocol.md#opening-a-stream), never from `Connect`.
+[`internal/sandboxnet/protocol.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxnet/protocol.go) is the authored definition: message tags, payload layouts, validators, the egress rule and the `Service` interface. The same package has the client and the generic server. [`apps/sandboxio/internal/netservice`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/sandboxio/internal/netservice) is the Linux service. Frames use the shared [framing](./sandbox-link-protocol.md#framing). A stream's authority, including its `Egress`, comes from the Link when the stream [opens](./sandbox-link-protocol.md#opening-a-stream), never from `Connect`.
 
 ## How a connection works
 
 1. The client opens a Link stream for `ServiceNetwork` version 1.
-2. The client sends one `Connect` with a request ID that follows the [request ID rule](sandbox-link-protocol.md#framing), and writes nothing else until the answer.
+2. The client sends one `Connect` with a request ID that follows the [request ID rule](./sandbox-link-protocol.md#framing), and writes nothing else until the answer.
 3. The service checks the request against the stream's egress, resolves the host, and dials the first permitted address within `TimeoutMillis`, as described in [Egress check](#egress-check).
 4. The service answers `Connected` or `Failed` with the request's ID. After `Failed` it ends the stream in order. After `Connected` both directions carry raw bytes without framing.
 
 Each direction ends on its own. The client's orderly end (`CloseWrite`, a FIN) reaches the destination as a TCP half-close after every byte before it, and the destination's half-close reaches the client as EOF after every byte before it. A half-close starts no timeout, and the other direction carries on.
 
-Anything else aborts both directions: a reset from the destination, a failed read or write on either side, the end of the attachment or the loss of a link. The client then reads an error that is never EOF, and the service resets the socket. After `Connected` a failure is never reported as a frame. The service learns of a reset only when it next reads or writes the stream, as [Stream ends](sandbox-link-protocol.md#stream-ends) describes: if the serve link drops after the client's half-close while the destination stays silent, the socket stays open until the destination sends or ends, or the attachment closes.
+Anything else aborts both directions: a reset from the destination, a failed read or write on either side, the end of the attachment or the loss of a link. The client then reads an error that is never EOF, and the service resets the socket. After `Connected` a failure is never reported as a frame. The service learns of a reset only when it next reads or writes the stream, as [Stream ends](./sandbox-link-protocol.md#stream-ends) describes: if the serve link drops after the client's half-close while the destination stays silent, the socket stays open until the destination sends or ends, or the attachment closes.
 
 A stream carries one connection. There is no replay or resumption: a lost answer leaves the attempt uncertain, and nothing retries it automatically.
 
@@ -73,7 +75,7 @@ A payload is at most 265 bytes. Unknown enum values, a failure field after `Conn
 
 ### Egress check
 
-The service checks a `Connect` against the stream's [`Egress`](sandbox-link-protocol.md#opening-a-stream) in this order:
+The service checks a `Connect` against the stream's [`Egress`](./sandbox-link-protocol.md#opening-a-stream) in this order:
 
 1. When no rule admits the port, the answer is `Denied` and nothing is resolved.
 2. An IP literal is the only candidate address. Otherwise the service resolves the name, and each address it returns is a candidate.

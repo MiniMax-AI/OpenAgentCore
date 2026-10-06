@@ -21,10 +21,10 @@ func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
 	for range 33 {
 		tenant, session, environment := connectionFixture(t, s)
 		generation := uuid.NewString()
-		if err := old.ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
+		if err := sessionExecution(t, old.lease).ReplaceEnvironmentConnection(t.Context(), tenant, environment.ID, generation); err != nil {
 			t.Fatal(err)
 		}
-		if err := old.ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
+		if err := sessionExecution(t, old.lease).ObserveEnvironmentConnection(t.Context(), tenant, environment.ID, generation, 1, true); err != nil {
 			t.Fatal(err)
 		}
 		targets = append(targets, target{tenant, session, environment, generation})
@@ -33,19 +33,16 @@ func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), "SELECT pg_terminate_backend($1,1000)", executionOwnerPID(t, pool)).Scan(&killed); err != nil || !killed {
 		t.Fatal(killed, err)
 	}
-	next := executionWriter(t, s)
+	next := sessionExecution(t, executionWriter(t, s).lease)
 	first := targets[0]
-	if err := old.ObserveEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, first.generation, 2, false); err == nil {
+	if err := sessionExecution(t, old.lease).ObserveEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, first.generation, 2, false); err == nil {
 		t.Fatal("lost owner wrote state")
-	}
-	if err := s.ReconcileEnvironmentConnections(t.Context()); err == nil {
-		t.Fatal("unleased reconciliation accepted")
 	}
 	if err := next.ReconcileEnvironmentConnections(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	for _, target := range targets {
-		got, err := s.GetEnvironment(t.Context(), target.tenant, target.environment.ID)
+		got, err := sessionAdapter(s).GetEnvironment(t.Context(), target.tenant, target.environment.ID)
 		if err != nil || got.Status != "disconnected" {
 			t.Fatal("old process remained connected", got, err)
 		}
@@ -74,7 +71,7 @@ func TestEnvironmentConnectionRecoveryFencesLostOwnerAcrossPages(t *testing.T) {
 	if err := next.ObserveEnvironmentConnection(t.Context(), first.tenant, first.environment.ID, generation, 1, true); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.GetEnvironment(t.Context(), first.tenant, first.environment.ID)
+	got, err := sessionAdapter(s).GetEnvironment(t.Context(), first.tenant, first.environment.ID)
 	if err != nil || got.Status != "connected" {
 		t.Fatal("new generation could not connect", got, err)
 	}

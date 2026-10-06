@@ -108,7 +108,7 @@ func (s *liveConnectionStore) GetDeviceCredential(context.Context, string) (runt
 	if s.deviceRevokedAtRecheck && s.authCalls >= 2 {
 		return runtimedevice.Credential{}, false, nil
 	}
-	return runtimedevice.Credential{ID: "device", WorkspaceID: "tenant", Type: runtimegateway.RuntimeTypeAgentDaemon, CredentialHash: s.digest}, true, nil
+	return runtimedevice.Credential{ID: "device", WorkspaceID: "tenant", Type: runtimedevice.RuntimeTypeAgentDaemon, CredentialHash: s.digest}, true, nil
 }
 func TestRuntimeConnectedCurrentAuthorityAfterPeer(t *testing.T) {
 	for _, name := range []string{"connected", "rotated before read", "revoked after peer", "device revoked after peer", "retired after peer", "store error after peer", "device store error after peer", "closed", "no registry"} {

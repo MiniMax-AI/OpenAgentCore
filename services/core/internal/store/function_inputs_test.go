@@ -22,13 +22,13 @@ func resultInput(t *testing.T, turn, call, result string) sessions.Input {
 	return sessions.Input{Kind: "tool_result", Payload: raw}
 }
 
-func functionInputFixture(t *testing.T, s *Store) (string, sessions.Session, string) {
+func functionInputFixture(t *testing.T, s *Store, functions *sessions.ExecutionOperations) (string, sessions.Session, string) {
 	t.Helper()
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
 	for _, id := range []string{"a", "b"} {
-		if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
+		if err := functions.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -37,7 +37,7 @@ func functionInputFixture(t *testing.T, s *Store) (string, sessions.Session, str
 
 func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	s, pool := testStore(t)
-	tenant, session, turn := functionInputFixture(t, s)
+	tenant, session, turn := functionInputFixture(t, s, functionExecution(t))
 	full := `{"success":false,"output":[{"type":"input_text","text":""},{"type":"input_image","image_url":"data:image/png;base64,AA=="},{"type":"input_text","text":"after"}],"error":"failed"}`
 	batch := []sessions.Input{resultInput(t, turn, "a", full), {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, resultInput(t, turn, "b", `{"success":true,"output":null,"error":null}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
 	receipts, err := s.SubmitInputs(t.Context(), tenant, session.ID, "batch", batch)
@@ -49,7 +49,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 			t.Fatal(receipts)
 		}
 	}
-	call, err := s.GetFunctionCall(t.Context(), tenant, session.ID, turn, "a")
+	call, err := FixtureFunctionCall(t.Context(), s.pool, tenant, session.ID, turn, "a")
 	got, _ := jsonobject.Normalize(call.Result)
 	want, _ := jsonobject.Normalize(json.RawMessage(full))
 	if err != nil || call.Applied || string(got) != string(want) {
@@ -93,7 +93,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "same-result", batch[:1]); err != nil {
 		t.Fatal(err)
 	}
-	call, err = s.GetFunctionCall(t.Context(), tenant, session.ID, turn, "a")
+	call, err = FixtureFunctionCall(t.Context(), s.pool, tenant, session.ID, turn, "a")
 	if err != nil || call.Applied {
 		t.Fatal(call, err)
 	}
@@ -103,7 +103,8 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 	for _, mode := range []string{"missing-call", "foreign-turn", "same-tenant-turn", "cancel-first", "changed-result"} {
 		t.Run(mode, func(t *testing.T) {
 			s, _ := testStore(t)
-			tenant, session, turn := functionInputFixture(t, s)
+			functions := functionExecution(t)
+			tenant, session, turn := functionInputFixture(t, s, functions)
 			message := sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"Must roll back"}`)}
 			cancel := sessions.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
 			first := resultInput(t, turn, "a", `{"success":true}`)
@@ -123,7 +124,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 				}
 				otherTurn := submitMessage(t, s, otherTenant, other.ID, "start").TurnID
 				transition(t, s, otherTenant, other.ID, otherTurn, sessions.TurnQueued, sessions.TurnInProgress)
-				if err := s.RecordFunctionCall(t.Context(), otherTenant, other.ID, otherTurn, functionCallFixture("a")); err != nil {
+				if err := functions.RecordFunctionCall(t.Context(), otherTenant, other.ID, otherTurn, functionCallFixture("a")); err != nil {
 					t.Fatal(err)
 				}
 				batch = append(batch, resultInput(t, otherTurn, "a", `{"success":true}`))
@@ -138,7 +139,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 			if _, err := s.SubmitInputs(t.Context(), tenant, session.ID, "failed-batch", batch); !errors.Is(err, expected) {
 				t.Fatal(err)
 			}
-			call, err := s.GetFunctionCall(t.Context(), tenant, session.ID, turn, "a")
+			call, err := FixtureFunctionCall(t.Context(), s.pool, tenant, session.ID, turn, "a")
 			if err != nil || call.Result != nil || call.Applied {
 				t.Fatal(call, err)
 			}
@@ -160,7 +161,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 func TestFunctionInputConcurrentBatchesSelectOneResult(t *testing.T) {
 	s, _ := testStore(t)
 	other, _ := testStore(t)
-	tenant, session, turn := functionInputFixture(t, s)
+	tenant, session, turn := functionInputFixture(t, s, functionExecution(t))
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
 	for i := range 2 {
@@ -195,7 +196,7 @@ func TestFunctionInputConcurrentBatchesSelectOneResult(t *testing.T) {
 
 func TestFunctionInputsRejectInvalidTargetsAndStorageObjects(t *testing.T) {
 	s, _ := testStore(t)
-	tenant, session, turn := functionInputFixture(t, s)
+	tenant, session, turn := functionInputFixture(t, s, functionExecution(t))
 	for _, raw := range []string{`{}`, `{"turn_id":"","call_id":"a","result":{}}`, fmt.Sprintf(`{"turn_id":%q,"call_id":" ","result":{}}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a"}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a","result":null}`, turn), fmt.Sprintf(`{"turn_id":%q,"call_id":"a","result":[]}`, turn)} {
 		_, err := s.SubmitInputs(t.Context(), tenant, session.ID, "invalid", []sessions.Input{{Kind: "tool_result", Payload: json.RawMessage(raw)}})
 		if !errors.Is(err, sessions.ErrInvalidInput) {

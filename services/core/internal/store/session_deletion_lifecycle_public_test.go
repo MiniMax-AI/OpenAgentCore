@@ -39,7 +39,8 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer := executionOwner(t, db, s).Store
+	leased := executionOwner(t, db, s)
+	writer := leased.Store
 
 	create := func(environment string, initial bool) sessions.Session {
 		t.Helper()
@@ -70,7 +71,7 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			case "cancel":
 				_, err = s.RequestCancel(ctx, tenant, session.ID, "cancel")
 			case "function":
-				err = s.RecordFunctionCall(ctx, tenant, session.ID, receipt.TurnID, sessions.FunctionCall{CallID: "pending", ExecutorCallID: "native-pending", Name: "lookup", Arguments: json.RawMessage(`{}`)})
+				err = leased.Sessions.RecordFunctionCall(ctx, tenant, session.ID, receipt.TurnID, sessions.FunctionCall{CallID: "pending", ExecutorCallID: "native-pending", Name: "lookup", Arguments: json.RawMessage(`{}`)})
 			case sessions.TurnCompleted, sessions.TurnFailed:
 				_, err = s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence)
 			default:
@@ -94,10 +95,10 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 	connect := func(session sessions.Session) {
 		t.Helper()
 		generation := uuid.NewString()
-		if err := writer.ReplaceEnvironmentConnection(ctx, tenant, session.Environment.ID, generation); err != nil {
+		if err := leased.Sessions.ReplaceEnvironmentConnection(ctx, tenant, session.Environment.ID, generation); err != nil {
 			t.Fatal(err)
 		}
-		if err := writer.ObserveEnvironmentConnection(ctx, tenant, session.Environment.ID, generation, 1, true); err != nil {
+		if err := leased.Sessions.ObserveEnvironmentConnection(ctx, tenant, session.Environment.ID, generation, 1, true); err != nil {
 			t.Fatal(err)
 		}
 	}

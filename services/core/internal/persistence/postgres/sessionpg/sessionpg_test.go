@@ -20,18 +20,19 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 )
 
-// newTurn stores a fresh Session with one Turn of status and returns their IDs.
-func newTurn(t *testing.T, pool *pgxpool.Pool, status string) (pgtype.UUID, pgtype.UUID) {
+// newTurn stores a fresh tenant's Session with one Turn of status and returns
+// their IDs.
+func newTurn(t *testing.T, pool *pgxpool.Pool, status string) (pgtype.UUID, pgtype.UUID, pgtype.UUID) {
 	t.Helper()
-	session, turn := uuid.New(), uuid.New()
-	if _, err := pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash) VALUES ($1, $2, 'codex', 'key', 'hash')`, session, uuid.New()); err != nil {
+	tenant, session, turn := uuid.New(), uuid.New(), uuid.New()
+	if _, err := pool.Exec(t.Context(), `INSERT INTO sessions(id, tenant_id, engine, idempotency_key, request_hash) VALUES ($1, $2, 'codex', 'key', 'hash')`, session, tenant); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(t.Context(), `INSERT INTO turns(id, session_id, status, completed_at)
 		VALUES ($1, $2, $3::text, CASE WHEN $3::text IN ('completed', 'failed', 'cancelled') THEN clock_timestamp() END)`, turn, session, status); err != nil {
 		t.Fatal(err)
 	}
-	return pgtype.UUID{Bytes: session, Valid: true}, pgtype.UUID{Bytes: turn, Valid: true}
+	return pgtype.UUID{Bytes: tenant, Valid: true}, pgtype.UUID{Bytes: session, Valid: true}, pgtype.UUID{Bytes: turn, Valid: true}
 }
 
 // inTx runs apply in one committed transaction on transaction-bound queries.
@@ -66,7 +67,7 @@ func journal(t *testing.T, pool *pgxpool.Pool, session pgtype.UUID) ([]int64, []
 
 func TestAppendChangesSequencesAndPruneKeepsTheNewest(t *testing.T) {
 	pool := pgtest.Open(t)
-	session, _ := newTurn(t, pool, sessions.TurnInProgress)
+	_, session, _ := newTurn(t, pool, sessions.TurnInProgress)
 	total := sessions.RetainedChanges + 2
 	inTx(t, pool, func(q *sqlc.Queries) error {
 		for range total {
@@ -91,9 +92,9 @@ func TestAppendChangesSequencesAndPruneKeepsTheNewest(t *testing.T) {
 
 func TestItemsTakePositionsAndOutputIndexes(t *testing.T) {
 	pool := pgtest.Open(t)
-	session, turn := newTurn(t, pool, sessions.TurnInProgress)
+	tenant, session, turn := newTurn(t, pool, sessions.TurnInProgress)
 	turnID := uuid.UUID(turn.Bytes).String()
-	created := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	created := time.Now()
 	text := func(value string) *string { return &value }
 	input := v1.Item{ID: uuid.NewString(), TurnID: turnID, Type: "message", Role: "user", Status: "completed", Content: []v1.ItemContent{{Type: "input_text", Text: text("hi")}}}
 	answer := v1.Item{ID: uuid.NewString(), TurnID: turnID, Type: "message", Role: "assistant", Status: "in_progress", Content: []v1.ItemContent{{Type: "output_text", Text: text("draft")}}}
@@ -101,7 +102,7 @@ func TestItemsTakePositionsAndOutputIndexes(t *testing.T) {
 	var indexes []*int32
 	inTx(t, pool, func(q *sqlc.Queries) error {
 		for _, change := range []items.Change{{Item: input}, {Item: answer, Output: true}, {Item: search, Output: true}, {Previous: answer, Item: answer, Output: true}} {
-			index, err := PutItem(t.Context(), q, session, turn, created, change)
+			index, err := BindSession(q, tenant, session).PutItem(t.Context(), turnID, created, change)
 			if err != nil {
 				return err
 			}
@@ -121,11 +122,12 @@ func TestItemsTakePositionsAndOutputIndexes(t *testing.T) {
 		t.Fatalf("Session positions %q, %v", positions, err)
 	}
 	inTx(t, pool, func(q *sqlc.Queries) error {
-		stored, err := LoadItem(t.Context(), q, session, turn, items.Update{Item: v1.Item{ID: answer.ID}})
+		bound := BindSession(q, tenant, session)
+		stored, err := bound.LoadItem(t.Context(), turnID, items.Update{Item: v1.Item{ID: answer.ID}})
 		if err != nil || !reflect.DeepEqual(stored, items.Stored{Item: answer}) {
 			t.Fatalf("stored %+v, %v", stored, err)
 		}
-		legacy, err := LoadItem(t.Context(), q, session, turn, items.Update{Item: v1.Item{ID: uuid.NewString()}, LegacyFinal: true})
+		legacy, err := bound.LoadItem(t.Context(), turnID, items.Update{Item: v1.Item{ID: uuid.NewString()}, LegacyFinal: true})
 		if err != nil || !legacy.NativeMessage || legacy.Item.ID != "" {
 			t.Fatalf("legacy aggregate %+v, %v", legacy, err)
 		}
@@ -135,12 +137,12 @@ func TestItemsTakePositionsAndOutputIndexes(t *testing.T) {
 
 func TestUnstorableTextIsTheSharedError(t *testing.T) {
 	pool := pgtest.Open(t)
-	session, turn := newTurn(t, pool, sessions.TurnInProgress)
+	tenant, session, turn := newTurn(t, pool, sessions.TurnInProgress)
 	nul := "a\x00b"
 	item := v1.Item{ID: uuid.NewString(), TurnID: uuid.UUID(turn.Bytes).String(), Type: "message", Role: "user", Status: "completed", Content: []v1.ItemContent{{Type: "input_text", Text: &nul}}}
 	for name, write := range map[string]func(*sqlc.Queries) error{
 		"item": func(q *sqlc.Queries) error {
-			_, err := PutItem(t.Context(), q, session, turn, pgtype.Timestamptz{Time: time.Now(), Valid: true}, items.Change{Item: item})
+			_, err := BindSession(q, tenant, session).PutItem(t.Context(), item.TurnID, time.Now(), items.Change{Item: item})
 			return err
 		},
 		"change": func(q *sqlc.Queries) error {
@@ -159,16 +161,16 @@ func TestUnstorableTextIsTheSharedError(t *testing.T) {
 // settlement time.
 func TestTurnEndAppliesItemsTurnAndActivityInOrder(t *testing.T) {
 	pool := pgtest.Open(t)
-	session, turn := newTurn(t, pool, sessions.TurnCompleted)
+	tenant, session, turn := newTurn(t, pool, sessions.TurnCompleted)
 	turnID := uuid.UUID(turn.Bytes).String()
-	created := pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}
+	created := time.Now().Add(-time.Minute)
 	text := "partial"
 	answer := v1.Item{ID: uuid.NewString(), TurnID: turnID, Type: "message", Role: "assistant", Status: "in_progress", Content: []v1.ItemContent{{Type: "output_text", Text: &text}}}
 	search := v1.Item{ID: uuid.NewString(), TurnID: turnID, Type: "web_search_call", Status: "in_progress"}
 	done := v1.Item{ID: uuid.NewString(), TurnID: turnID, Type: "web_search_call", Status: "completed"}
 	inTx(t, pool, func(q *sqlc.Queries) error {
 		for _, item := range []v1.Item{answer, search, done} {
-			if _, err := PutItem(t.Context(), q, session, turn, created, items.Change{Item: item, Output: true}); err != nil {
+			if _, err := BindSession(q, tenant, session).PutItem(t.Context(), turnID, created, items.Change{Item: item, Output: true}); err != nil {
 				return err
 			}
 		}
@@ -217,7 +219,7 @@ func TestTurnEndAppliesItemsTurnAndActivityInOrder(t *testing.T) {
 	if statuses[answer.ID] != "incomplete" || statuses[search.ID] != "incomplete" || statuses[done.ID] != "completed" {
 		t.Fatalf("statuses %v", statuses)
 	}
-	if !settled[answer.ID].Equal(settled[search.ID]) || !settled[answer.ID].After(created.Time) || !settled[done.ID].Equal(created.Time.Truncate(time.Microsecond)) {
+	if !settled[answer.ID].Equal(settled[search.ID]) || !settled[answer.ID].After(created) || !settled[done.ID].Equal(created.Truncate(time.Microsecond)) {
 		t.Fatalf("settlement times %v", settled)
 	}
 }

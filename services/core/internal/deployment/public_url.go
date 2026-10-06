@@ -9,7 +9,8 @@ import (
 )
 
 // ValidateCoreURL accepts a canonical public origin, never a path or
-// credential. Plain HTTP is reserved for explicit loopback development hosts.
+// credential. It may be http or https: a reverse proxy in front of Web
+// terminates TLS when the installation uses it.
 // OAC_PUBLIC_URL must pass it.
 func ValidateCoreURL(value string) error {
 	u, err := url.Parse(value)
@@ -25,10 +26,7 @@ func ValidateCoreURL(value string) error {
 			return ErrInvalidInput
 		}
 	}
-	loopback := u.Hostname() == "localhost"
-	if ip := net.ParseIP(u.Hostname()); ip != nil {
-		loopback = ip.IsLoopback()
-	} else {
+	if net.ParseIP(u.Hostname()) == nil {
 		if len(u.Hostname()) > 253 || strings.ContainsAny(u.Host, "[]") {
 			return ErrInvalidInput
 		}
@@ -43,23 +41,10 @@ func ValidateCoreURL(value string) error {
 			}
 		}
 	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && loopback) {
+	if u.Scheme != "https" && u.Scheme != "http" {
 		return ErrInvalidInput
 	}
 	return nil
-}
-
-// LoopbackOrigin reports whether a validated origin names a loopback host, which
-// nothing outside the Core host can reach.
-func LoopbackOrigin(value string) bool {
-	u, err := url.Parse(value)
-	if err != nil {
-		return false
-	}
-	if ip := net.ParseIP(u.Hostname()); ip != nil {
-		return ip.IsLoopback()
-	}
-	return u.Hostname() == "localhost"
 }
 
 // AddressBindings counts what is bound to an installation address: nodes
@@ -75,5 +60,5 @@ type AddressBindings struct {
 
 // AddressBindings counts what is bound to the installation public URL.
 func (s *Service) AddressBindings(ctx context.Context) (AddressBindings, error) {
-	return s.reader.AddressBindings(ctx, s.publicURL)
+	return s.reader.AddressBindings(ctx, s.rules.PublicURL())
 }

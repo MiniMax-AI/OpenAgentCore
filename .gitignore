@@ -18,8 +18,8 @@ __pycache__/
 /target/
 # `go build ./services/web` in the repository root writes this binary.
 /web
-/playwright-report/
-/test-results/
+playwright-report/
+test-results/
 /.agents/
 /.issue-agent/
 /ISSUE_AGENT.md

@@ -74,7 +74,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if w.CheckOwnership(ctx) != nil {
 		return unavailable
 	}
-	environment, err := w.dispatcher.Store.GetEnvironment(ctx, request.environment.TenantID, request.environment.ID)
+	environment, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, request.environment.TenantID, request.environment.ID)
 	if err != nil {
 		return fileWriteResult{err: err}
 	}
@@ -89,7 +89,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if err != nil {
 		return fileWriteResult{err: err}
 	}
-	bound, err := w.dispatcher.Store.GetSessionDevice(ctx, session.TenantID, session.ID)
+	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(ctx, session.TenantID, session.ID)
 	if err != nil || !environmentDeviceMatches(session, environment, bound) || w.dispatcher.Registry == nil {
 		return unavailable
 	}
@@ -109,7 +109,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		return fileWriteResult{err: sessions.ErrInvalidInput}
 	}
 	key := sessions.FileWriteIdentity{ID: uuid.NewString(), DeviceID: bound.ID, RequestSHA256: hex.EncodeToString(digest[:])}
-	intent, err := w.dispatcher.Store.ReserveEnvironmentFileWrite(ctx, environment.TenantID, environment.ID, key)
+	intent, err := w.dispatcher.sessionExecution.ReserveEnvironmentFileWrite(ctx, environment.TenantID, environment.ID, key)
 	if err != nil {
 		return fileWriteResult{err: err}
 	}
@@ -126,7 +126,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	}
 	settle, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
-	if _, err := w.dispatcher.Store.SettleEnvironmentFileWrite(settle, environment.TenantID, environment.ID, key, state); err != nil {
+	if _, err := w.dispatcher.sessionExecution.SettleEnvironmentFileWrite(settle, environment.TenantID, environment.ID, key, state); err != nil {
 		return unavailable
 	}
 	if state == "rejected" {

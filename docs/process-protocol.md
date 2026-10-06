@@ -1,13 +1,15 @@
-# Process protocol
+---
+title: "Process protocol"
+---
 
 The process protocol is how the agent host starts and controls processes in a sandbox. The Sandbox I/O service in the sandbox serves it, and the agent host's broker is its client. It launches a process from an explicit spec, streams its output as ordered events, accepts stdin at exact offsets, and reports the leader's exit, the end of output and the end of the process scope as separate facts.
 
-[`internal/sandboxprocess/protocol.go`](../internal/sandboxprocess/protocol.go) is the authored definition: message tags, payload layouts, validators and the `Service` interface. The same package has the generic client and server. [`apps/sandboxio/internal/processservice`](../apps/sandboxio/internal/processservice) is the Linux service. Frames use the shared [framing](sandbox-link-protocol.md#framing), and the Link layer supplies the authenticated attachment of each stream.
+[`internal/sandboxprocess/protocol.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxprocess/protocol.go) is the authored definition: message tags, payload layouts, validators and the `Service` interface. The same package has the generic client and server. [`apps/sandboxio/internal/processservice`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/sandboxio/internal/processservice) is the Linux service. Frames use the shared [framing](./sandbox-link-protocol.md#framing), and the Link layer supplies the authenticated attachment of each stream.
 
 ## Streams and operations
 
 - A stream belongs to one attachment. No request names an attachment, an OS user or a credential; the stream's attachment scopes every operation ID it uses.
-- A request's RequestID follows the [request ID rule](sandbox-link-protocol.md#framing), and its response carries the same RequestID. Requests on one stream run concurrently, so responses can arrive in any order. A service may refuse a request beyond its concurrency limit with `Busy` and `EffectNone`.
+- A request's RequestID follows the [request ID rule](./sandbox-link-protocol.md#framing), and its response carries the same RequestID. Requests on one stream run concurrently, so responses can arrive in any order. A service may refuse a request beyond its concurrency limit with `Busy` and `EffectNone`.
 - An operation is one launch, named by an `OperationID` the client chooses. Its record lives in one service incarnation, named by `ServerInstanceID`.
 - Events are frames with RequestID 0. Each carries its `OperationID` and a `Sequence` that starts at 1 and grows by one per event of that operation.
 - An operation has one observer: the stream that started it, or the stream of its latest `Attach`. A later `Attach` moves the observer. The response to the `Start` or `Attach` that subscribes a stream arrives before any event it subscribes.

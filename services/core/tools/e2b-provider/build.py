@@ -55,8 +55,7 @@ def main():
         report = json.loads(subprocess.check_output([str(exported / NAME), '--check'], text=True))
         if report != {'Version': PROTOCOL_VERSION, 'SDKVersion': SDK_VERSION}:
             raise RuntimeError('Unexpected helper readiness report')
-        manifest = {'format_version': 1, 'source_revision': os.environ['E2B_SOURCE_REVISION'],
-                    'sdk_version': report['SDKVersion'], 'python_version': platform.python_version(),
+        manifest = {'format_version': 1, 'sdk_version': report['SDKVersion'], 'python_version': platform.python_version(),
                     'platform': 'linux-amd64', 'libc': platform.libc_ver(), 'build_image': BASE,
                     'entrypoint': NAME,
                     'source_sha256': {file.name: hashlib.sha256(file.read_bytes()).hexdigest()

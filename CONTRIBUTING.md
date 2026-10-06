@@ -11,8 +11,8 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Projects, keys, resource isolation, administrator authority, secrets and audit concepts | [Concepts and ownership](docs/concepts.md) |
 | Component responsibilities and Session flow | [Architecture](docs/architecture.md) |
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
-| API callers, credentials and route inventory | [API index](docs/api/README.md) |
-| Public wire semantics and protocol coverage | [Agents API contracts](contracts/agents-api/README.md) |
+| API callers, credentials and route inventory | [API index](docs/api/index.md) |
+| Public wire semantics and protocol coverage | [Agents API contracts](contracts/agents-api/index.md) |
 | Machine connection routes | [Machine connection API](contracts/agents-api/machine-api.md) |
 | Core service setup, tests and generation | [Core service guide](services/core/README.md) |
 | Core implementation constraints beyond the public contracts | [Implementation constraints](services/core/IMPLEMENTATION.md) |
@@ -31,8 +31,9 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Runtime telemetry responses | [Runtime telemetry API](contracts/agents-api/runtime-observability-api.md) |
 | Runtime observation, sampling, retention and export | [Runtime observability](contracts/agents-api/runtime-observability.md) |
 | Distribution builds, Runtime image builds, CI and publication | [Maintainer guide](docs/maintainers.md) |
+| Website: landing page, bilingual documentation maintenance, documentation site build and GitHub Pages publication | [Website guide](website/README.md) |
 | Self-hosted Runtime installation, recovery and local operation | [Self-hosted execution](docs/getting-started/self-hosted.md) |
-| Installer lifecycle, locking, generated state, managed HTTPS and downloads | [Installer design rules](deploy/install/README.md) |
+| Installer lifecycle, locking, generated state, managed HTTPS and downloads | [Deployment](deploy/README.md) and [Node installer](deploy/node/README.md) |
 | Operator installation and alternatives | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md) |
 | Settings, defaults, files and installation layout | [Configuration](docs/configuration.md) |
 | Operator commands, keys, backup and version policy | [Operations](docs/getting-started/operations.md) |
@@ -55,7 +56,7 @@ Core must build, deploy and run independently of product services, frontends and
 
 ### Optional application example
 
-`example/parsar/` is an optional, independently started Agent workbench maintained in this repository, with no dependency on the external Parsar product repository. Its [README](example/parsar/README.md) owns its product behavior. The boundary rules are:
+`example/parsar/` is an optional Agent workbench in this repository. Its [README](example/parsar/README.md) owns its product behavior.
 
 - It calls only public `/v1` APIs. Its Project key stays server-side; it never holds a Core key or issues machine credentials. Self-hosted connection displays the public Session installation command unchanged; Core owns bootstrap authorization and machine credential issuance.
 - It may keep a small product-owned SQLite database (Node's built-in module, Node 22.13+), outside the checkout and isolated by Core origin and Project key fingerprint. Provider keys never reach the browser.
@@ -67,25 +68,23 @@ Core must build, deploy and run independently of product services, frontends and
 
 ### Before you start
 
-1. Record the requirements, acceptance criteria and scope.
-2. Work in an isolated Git worktree on a feature branch and submit a PR. Do not edit or commit implementation directly on `main`.
-3. Make only the changes that scope needs; keep unrelated refactors separate.
+Follow the [worktree rule](AGENTS.md#working-in-this-repository). Do not edit or commit implementation directly on `main`.
 
 When documents conflict, apply the latest explicit user decision and update the affected current guidance. Recorded evidence does not override it.
 
-If requirements are unresolved, object ownership is unclear, or a design would need parallel compatibility paths, raise the issue with a concrete recommendation and tradeoffs before implementing it. Continue independent work meanwhile. Do not silently preserve obsolete private designs.
+If requirements are unresolved, object ownership is unclear, or a design would need parallel compatibility paths, raise it with a concrete recommendation and tradeoffs before implementing. Continue independent work meanwhile. Do not silently preserve obsolete private designs.
 
-Record unrelated findings without automatically starting them. Scope compatibility claims to the operations and placements verified.
+Record unrelated findings without starting them. Scope compatibility claims to the operations and placements verified.
 
 ### Implementation conventions
 
-- Search for existing formatters, parsers, validation and error mappers before adding one. Keep one error mapper per API surface.
-- Share frontend formatting and labels in `apps/web/src/lib/`; reuse components and tokens.
-- Split growing files at an existing ownership boundary instead of adding unrelated responsibilities.
+- Apply the [simplicity and performance principles](AGENTS.md#simplicity-and-performance) when adding structure or optimizing execution.
+- Keep one formatter, parser, validator and error mapper per job, and one error mapper per API surface.
+- Share frontend formatting and labels in `apps/web/src/lib/`.
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs. Harness profiles must not copy Runtime tool environment values; see the [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
 - Require absolute user-supplied working directories.
 - Keep test artifacts under `~/.oac/`.
-- New or changed routes identify their caller and credential in the [API index](docs/api/README.md) and link their detailed contract.
+- New or changed routes identify their caller and credential in the [API index](docs/api/index.md) and link their detailed contract.
 
 ### Review
 
@@ -102,7 +101,9 @@ Toolchain setup and focused commands are in [Develop OpenAgentCore](docs/develop
 
 ### Checks for a change
 
-Run the checks for the changed behavior and its consumers before completion, including database migration and cross-component tests when affected. Use the [CI selection policy](docs/maintainers.md#continuous-integration) to determine the relevant groups; record what passed and any validation limits. A small follow-up needs its relevant checks, not another unrelated full run. The [Makefile](Makefile) retains `make check` as the complete local gate; main and release CI run all groups, and releases require the full gate. [Live acceptance](#live-acceptance) qualifies native execution beyond fixtures and builds.
+Validate the current diff and the behavior it directly affects, with the smallest checks that establish correctness. Include migration or cross-component tests only when those behaviors change. A review, documentation edit or CI configuration change does not need a full repository test run. After a follow-up edit, rerun only the checks that edit affects, and record what passed and any limits.
+
+The [CI selection policy](docs/maintainers.md#continuous-integration) names affected groups. A narrower check is enough when it covers the change. `make check` is the full gate for an explicitly requested full validation and for releases. [Live acceptance](#live-acceptance) applies when native execution behavior changes.
 
 ### Test database
 
@@ -116,17 +117,16 @@ The role needs `CREATE DATABASE`: tests of database-wide state, such as the exec
 ### Contract and schema rules
 
 - `internal/harnessconfig/builtin/catalog.json` is the single authored public Harness registration list. `make generate-harness-catalog` generates Go configuration/profile registration, client identifiers/names and the reference; `make openapi` derives the matching enums. `make check-harness-catalog` verifies freshness in the full gate. Native configuration rules stay in their adapter declarations; Core qualification and Runtime availability stay separate.
-
 - `make sqlc-generate` owns only `services/core/internal/db/sqlc` (sqlc v1.29.0). Do not rewrite landed migrations.
 - `make check-runtime-contract` is the focused Core–Runtime contract entry point; see [Contract verification](docs/runtime-protocol.md#contract-verification). It also runs through `check-go` and `check-core`.
 
 ### Compatibility evidence
 
-Use official SDKs and upstream types or schemas where suitable. Validate raw HTTP payloads and observable workflows alongside SDK behavior. API changes preserve the pinned contracts, coverage ledger, official-client tests and Core's independent build. Verify the official-client workflow before application integration; an OpenAI endpoint is a test target only when the required capabilities and credentials are available.
+Use official SDKs and upstream types or schemas. Validate raw HTTP payloads and observable workflows alongside SDK behavior. API changes preserve the pinned contracts, coverage ledger, official-client tests and Core's independent build. Verify the official-client workflow before application integration. An OpenAI endpoint is a test target only when the required capabilities and credentials are available.
 
-Controlled fixtures and synthetic model responses qualify deterministic behavior. Live execution acceptance calls a real model API through Core, the daemon and the Harness adapter. Direct native probes establish feasibility. Keep provider credentials in private test configuration, outside source, logs and task records.
+Controlled fixtures and synthetic model responses qualify deterministic behavior. Live acceptance calls a real model API through Core, the daemon and the Harness adapter. Direct native probes establish feasibility only. Keep provider credentials in private test configuration, outside source, logs and task records.
 
-For wire details unspecified by the pinned SDK, probe resources you own and retain request evidence. Distinguish observed behavior from guarantees, accepted profiles from complete coverage, and provider connectivity from deployment qualification. Maintain those distinctions in the [coverage ledger](contracts/agents-api/README.md).
+For wire details the pinned SDK does not specify, probe resources you own and retain the request evidence. In the [coverage ledger](contracts/agents-api/index.md), keep observed behavior distinct from guarantees, accepted profiles distinct from complete coverage, and provider connectivity distinct from deployment qualification.
 
 ### Live acceptance
 

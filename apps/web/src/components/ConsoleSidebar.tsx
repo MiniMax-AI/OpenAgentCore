@@ -60,7 +60,6 @@ export function ConsoleSidebar({
           <img className="brand-mark" src="/oac-mark.svg" width="18" height="18" alt="" aria-hidden="true" />
         </span>
         <span className="brand-name">OpenAgentCore</span>
-        <span className="brand-product">{t("console")}</span>
       </div>
 
       <nav className="main-nav console-nav" aria-label={t("mainNavigation")}>
@@ -85,7 +84,7 @@ export function ConsoleSidebar({
                   onFocus={() => onIntent?.(view)}
                 >
                   {active === view ? <m.span className="nav-active-chip" layoutId="console-nav-active" aria-hidden="true" /> : null}
-                  <Icon size={15} strokeWidth={1.5} aria-hidden="true" />
+                  <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
                   <span>{label}</span>
                 </button>
               );
@@ -97,7 +96,7 @@ export function ConsoleSidebar({
       <div className="sidebar-footer">
         <div className="main-nav sidebar-help">
           <button type="button" aria-label={t("showGettingStarted")} title={t("showGettingStarted")} onClick={onGettingStarted}>
-            <ListChecks size={15} strokeWidth={1.5} aria-hidden="true" />
+            <ListChecks size={18} strokeWidth={1.75} aria-hidden="true" />
             <span>{t("showGettingStarted")}</span>
           </button>
         </div>

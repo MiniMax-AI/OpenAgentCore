@@ -40,5 +40,5 @@ export const coreErrors = {
   "sandbox_credential_invalid": "The E2B API key was rejected. The saved configuration is unchanged.",
   "sandbox_configuration_invalid": "Select a ready immutable E2B template build with matching resources.",
   "sandbox_verification_unconfirmed": "E2B verification could not be confirmed. Refresh before submitting again.",
-  "sandbox_configuration_error": "E2B sandboxes need a public HTTPS address. Configure a domain and HTTPS in System."
+  "sandbox_configuration_error": "E2B sandboxes need a public HTTPS address. Set OAC_PUBLIC_URL to an HTTPS origin."
 } as const;

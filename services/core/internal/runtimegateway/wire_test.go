@@ -28,7 +28,7 @@ const wait = 3 * time.Second
 type credentialStore struct{}
 
 func (credentialStore) GetDeviceCredential(context.Context, string) (runtimedevice.Credential, bool, error) {
-	return runtimedevice.Credential{ID: prototest.DeviceID, WorkspaceID: "tenant", Type: runtimegateway.RuntimeTypeAgentDaemon, CredentialHash: runtimedevice.HashCredential(prototest.Credential)}, true, nil
+	return runtimedevice.Credential{ID: prototest.DeviceID, WorkspaceID: "tenant", Type: runtimedevice.RuntimeTypeAgentDaemon, CredentialHash: runtimedevice.HashCredential(prototest.Credential)}, true, nil
 }
 
 func newGateway(t *testing.T) (*runtimegateway.Registry, string) {

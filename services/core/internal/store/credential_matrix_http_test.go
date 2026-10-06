@@ -30,22 +30,22 @@ import (
 // own /api/v1 machine connection routes.
 func TestCredentialNamespaceMatrix(t *testing.T) {
 	s, db := newManagedTestStoreDB(t)
-	s.SetPublicURL("https://core.example")
 	db.publicURL = "https://core.example"
+	s.SetPlacement(fixtureRules(t, db))
 	ctx := t.Context()
 	coreKey := uuid.NewString()
 	admin, err := api.NewDeploymentAuthenticator([]string{runtimedevice.HashCredential(coreKey)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, s, db), withCoreKeys(admin))
+	handler, err := publicHandler(t, s, db, nil, "codex", storeKeys(s), storeExecution(t, s), managedSandboxes(t, db), withCoreKeys(admin))
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The server composition: daemon transport beside the API handler.
 	mux := http.NewServeMux()
-	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(s))
-	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(s, runtimegateway.NewRegistry()))
+	mux.Handle("/api/v1/agent-daemon/enroll", runtimeenrollment.EnrollmentHandler(fixtureSessionService(t, db)))
+	mux.Handle("/api/v1/agent-daemon/connection", runtimeenrollment.ConnectionHandler(fixtureSessionStore(db), runtimegateway.NewRegistry()))
 	mux.Handle("/", handler)
 	server := api.CanonicalPaths(mux)
 	call := func(method, path, token, body string) *httptest.ResponseRecorder {
@@ -81,7 +81,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	environment, err := s.GetSessionEnvironment(ctx, binding.Principal.TenantID, session.ID)
+	environment, err := fixtureSessionStore(db).GetSessionEnvironment(ctx, binding.Principal.TenantID, session.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

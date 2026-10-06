@@ -33,6 +33,8 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	}
 	s, reopenedStore := store.NewWithCredentialCipher(pool, cipher), store.NewWithCredentialCipher(pool, cipher)
 	db := fixtureDB{pool: pool, cipher: cipher} // built both Stores
+	s.SetPlacement(fixtureRules(t, db))
+	reopenedStore.SetPlacement(fixtureRules(t, db))
 	tenant, foreignTenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "composition-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
@@ -41,7 +43,7 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 	serve := func(current *store.Store) *httptest.Server {
 		t.Helper()
 		// Hosted admission and freezing use the real Store; no Runtime or model runs.
-		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, current, db), fixtureDeploymentProvider())
+		h, err := publicHandler(t, current, db, auth, "codex", storeExecution(t, current), managedSandboxes(t, db), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,31 +105,31 @@ func TestTemplateCompositionOfficialClientPostgres(t *testing.T) {
 		default:
 			t.Fatalf("unknown case %q", label)
 		}
-		for _, current := range []*store.Store{s, reopenedStore} {
-			setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
-			if err != nil || !reflect.DeepEqual(setup.Env, env) || !reflect.DeepEqual(setup.PackageMetadata(), packages) || len(setup.Commands) != len(commands) {
-				t.Fatalf("%s durable setup differs: %v", label, err)
+		// A reader built after the requests reads the frozen setup and files.
+		current := fixtureSessionStore(db)
+		setup, err := current.ReadEnvironmentSetup(t.Context(), tenant, id)
+		if err != nil || !reflect.DeepEqual(setup.Env, env) || !reflect.DeepEqual(setup.PackageMetadata(), packages) || len(setup.Commands) != len(commands) {
+			t.Fatalf("%s durable setup differs: %v", label, err)
+		}
+		for i, want := range commands {
+			if setup.Commands[i] != want {
+				t.Fatalf("%s command order differs", label)
 			}
-			for i, want := range commands {
-				if setup.Commands[i] != want {
-					t.Fatalf("%s command order differs", label)
-				}
+		}
+		if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
+			t.Fatalf("%s foreign setup read: %v", label, err)
+		}
+		for position, want := range contents {
+			metadata, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
+			if err != nil || string(body) != want || metadata.Path != paths[position] || metadata.SizeBytes == nil || *metadata.SizeBytes != int64(len(want)) {
+				t.Fatalf("%s frozen file %d differs: %v", label, position, err)
 			}
-			if _, err := current.ReadEnvironmentSetup(t.Context(), foreignTenant, id); !errors.Is(err, sessions.ErrNotFound) {
-				t.Fatalf("%s foreign setup read: %v", label, err)
+			if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, position); err == nil {
+				t.Fatalf("%s foreign file read succeeded", label)
 			}
-			for position, want := range contents {
-				metadata, body, err := current.ReadInitialEnvironmentFile(t.Context(), tenant, id, position)
-				if err != nil || string(body) != want || metadata.Path != paths[position] || metadata.SizeBytes == nil || *metadata.SizeBytes != int64(len(want)) {
-					t.Fatalf("%s frozen file %d differs: %v", label, position, err)
-				}
-				if _, _, err := current.ReadInitialEnvironmentFile(t.Context(), foreignTenant, id, position); err == nil {
-					t.Fatalf("%s foreign file read succeeded", label)
-				}
-				var encrypted []byte
-				if err := pool.QueryRow(t.Context(), "SELECT contents FROM initial_environment_files WHERE id=$1", metadata.ID).Scan(&encrypted); err != nil || bytes.Contains(encrypted, []byte(marker)) {
-					t.Fatalf("%s plaintext file storage: %v", label, err)
-				}
+			var encrypted []byte
+			if err := pool.QueryRow(t.Context(), "SELECT contents FROM initial_environment_files WHERE id=$1", metadata.ID).Scan(&encrypted); err != nil || bytes.Contains(encrypted, []byte(marker)) {
+				t.Fatalf("%s plaintext file storage: %v", label, err)
 			}
 		}
 		var encrypted, configuration []byte

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
@@ -64,29 +65,29 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			secret := uuid.NewString()
-			owner, err := writer.ReserveRuntimeAllocation(t.Context(), project.TenantID, session.Environment.ID, installation, runtimedevice.HashCredential(secret))
+			owner, err := leased.Deployment.ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(secret))
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, step := range []func(context.Context, store.RuntimeAllocation) (store.RuntimeAllocation, error){writer.ObserveRuntimeRunning, writer.SettleRuntimeCreation} {
+			for _, step := range []func(context.Context, deployment.Allocation) (deployment.Allocation, error){leased.Deployment.ObserveRunning, leased.Deployment.SettleCreation} {
 				owner, err = step(t.Context(), owner)
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
-			if err := writer.BindSessionDevice(t.Context(), project.TenantID, session.ID, owner.DeviceID); err != nil {
+			if err := leased.Sessions.BindSessionDevice(t.Context(), project.TenantID, session.ID, owner.DeviceID); err != nil {
 				t.Fatal(err)
 			}
 			generation := uuid.NewString()
-			if err := writer.ReplaceEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation); err != nil {
+			if err := leased.Sessions.ReplaceEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation); err != nil {
 				t.Fatal(err)
 			}
-			if err := writer.ObserveEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation, 1, true); err != nil {
+			if err := leased.Sessions.ObserveEnvironmentConnection(t.Context(), project.TenantID, session.Environment.ID, generation, 1, true); err != nil {
 				t.Fatal(err)
 			}
 			server := httptest.NewUnstartedServer(nil)
 			wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
-			handler, registry, err := runtime.NewGateway(s, wsURL)
+			handler, registry, err := runtime.NewGateway(fixtureSessionStore(db), fixtureSessionService(t, db), s, wsURL)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -104,7 +105,8 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h := &dispatchHarness{t: t, s: s, db: db, lease: leased.Lease, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Store: writer, Registry: registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}}
+			h := &dispatchHarness{t: t, s: s, db: db, lease: leased.Lease, owned: &leased, tenant: project.TenantID, session: session, conn: conn, registry: registry, d: &execution.Dispatcher{Registry: registry, Observer: modelconfigurationpg.New(pgunit.NewPool(db.pool), db.cipher), Sessions: sessionService, SessionsReader: sessionStore}}
+			h.d = h.bound()
 			capabilities := workerEnvironmentCapabilities()
 			capabilities.FunctionTools = proto.CapabilitySupported
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
@@ -146,14 +148,14 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 			}
 			if scenario == "revoke_before_archive" || scenario == "cancel_revoke_archive" {
-				if err := s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
+				if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
 					t.Fatal(err)
 				}
 			}
 			var revokeDone chan error
 			if scenario == "revoke_concurrent_archive" {
 				revokeDone = make(chan error, 1)
-				go func() { revokeDone <- s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
+				go func() { revokeDone <- fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID) }()
 			}
 
 			archived, err := writer.ArchiveManagedSession(auditCtx, h.tenant, session.ID, 1)
@@ -166,7 +168,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 			}
 			if scenario == "revoke_after_archive" {
-				if err := s.RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
+				if err := fixtureSessionService(t, db).RevokeDevice(t.Context(), h.tenant, owner.DeviceID); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -176,7 +178,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if _, err := writer.ArchiveManagedSession(repeatAudit, h.tenant, session.ID, 1); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+			if _, err := leased.Deployment.RequestCleanup(t.Context(), owner); err != nil {
 				t.Fatal(err)
 			}
 
@@ -184,7 +186,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err != nil || current.Status != sessions.TurnWaiting || current.CancelRequestedAt.IsZero() {
 				t.Fatal("archive must request rather than invent cancellation", current, err)
 			}
-			if _, err := runtimegateway.NewAuthenticator(s).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
+			if _, err := runtimegateway.NewAuthenticator(fixtureSessionStore(db)).AuthenticateBearer(t.Context(), owner.DeviceID, secret); !errors.Is(err, runtimegateway.ErrAuthUnknownDevice) {
 				t.Fatal("archive allowed renewed authority", err)
 			}
 			rejected, response, dialErr := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + secret}})
@@ -314,7 +316,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			}
 			// The original cleanup owner survives every delivery outcome; only
 			// provider receipts can release its resources.
-			allocation, err := s.GetRuntimeAllocation(t.Context(), h.tenant, session.Environment.ID)
+			allocation, err := fixtureReader(db).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: h.tenant, EnvironmentID: session.Environment.ID})
 			if err != nil || allocation.State != "cleanup_pending" {
 				t.Fatal(allocation, err)
 			}

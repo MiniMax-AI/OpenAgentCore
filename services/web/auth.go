@@ -18,7 +18,7 @@ const sessionCookie = "core_console_session"
 const sessionLifetime = 12 * time.Hour
 
 // minimumCoreKeyLength keeps guessing infeasible even though a correct key is
-// never rate limited. Installer-generated keys have 64 characters.
+// never rate limited. Installer-generated keys carry 256 bits of random entropy.
 const minimumCoreKeyLength = 32
 
 // consoleAuth signs the browser in with the Core key. Sessions live only in

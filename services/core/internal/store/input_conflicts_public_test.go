@@ -52,6 +52,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
+	functions := executionOwner(t, db, s).Sessions
 
 	create := func(environment string, initial bool) string {
 		t.Helper()
@@ -76,14 +77,14 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		if _, err := s.TransitionTurn(ctx, tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, sessions.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
+		if err := functions.RecordFunctionCall(ctx, tenant, session, receipt.TurnID, sessions.FunctionCall{CallID: call, ExecutorCallID: "native-" + call, Name: "lookup", Arguments: json.RawMessage(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 		return receipt
 	}
 	complete := func(session string, receipt sessions.InputReceipt, call string) {
 		t.Helper()
-		if err := s.ConfirmFunctionResult(ctx, tenant, session, receipt.TurnID, call); err != nil {
+		if err := functions.ConfirmFunctionResult(ctx, tenant, session, receipt.TurnID, call); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := s.CompleteExecution(ctx, tenant, session, receipt.TurnID, sessions.TurnCompleted, nil, "", receipt.Sequence); err != nil {
@@ -160,7 +161,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	none := `{"type":"none"}`
 	session := create(none, false)
 	first := waiting(session, "first", "first-call")
-	if err := s.SubmitFunctionResult(ctx, tenant, session, first.TurnID, "first-call", json.RawMessage(`{"success":true,"output":"one"}`)); err != nil {
+	if err := store.SubmitFixtureFunctionResult(ctx, s, tenant, session, first.TurnID, "first-call", json.RawMessage(`{"success":true,"output":"one"}`)); err != nil {
 		t.Fatal(err)
 	}
 	complete(session, first, "first-call")
@@ -232,7 +233,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	if status, body := submit(owner, session, "same-after-completion", valid); status != http.StatusAccepted || body != "" {
 		t.Fatalf("identical result after completion: %d %s", status, body)
 	}
-	if call, err := s.GetFunctionCall(ctx, tenant, session, current.TurnID, "pending-call"); err != nil || !bytes.Contains(call.Result, []byte(`"value"`)) {
+	if call, err := store.FixtureFunctionCall(ctx, db.pool, tenant, session, current.TurnID, "pending-call"); err != nil || !bytes.Contains(call.Result, []byte(`"value"`)) {
 		t.Fatal("saved result changed", call, err)
 	}
 
@@ -246,7 +247,7 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 		{"after-cancel", owner, session, []string{late}, 409, turnConflictBody, ""},
 		{"after-cancel-foreign", foreign, session, []string{late}, 404, missingSessionBody, ""},
 	}, session)
-	if call, err := s.GetFunctionCall(ctx, tenant, session, cancelled.TurnID, "late-call"); err != nil || call.Result != nil {
+	if call, err := store.FixtureFunctionCall(ctx, db.pool, tenant, session, cancelled.TurnID, "late-call"); err != nil || call.Result != nil {
 		t.Fatal("late result was saved", call, err)
 	}
 

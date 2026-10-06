@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
@@ -23,7 +24,7 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, dep
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	w := executionWriter(t, s)
 	id := uuid.NewString()
 	changes := deploymentExecution(t, w)
@@ -49,7 +50,7 @@ func specificationNode(t *testing.T, s *Store, view deployment.View) deployment.
 		t.Fatal(err)
 	}
 	input := deployment.Enrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
-		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.publicURL}
+		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.placement.PublicURL()}
 	if _, err := nodes.Enroll(t.Context(), token, input); err != nil {
 		t.Fatal(err)
 	}
@@ -135,14 +136,14 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			var owner RuntimeAllocation
+			var owner deployment.Allocation
 			if state != "pending" {
-				owner, err = w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+				owner, err = deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 				if err != nil {
 					t.Fatal(err)
 				}
 				if state != "creating" {
-					owner, err = w.ObserveRuntimeRunning(t.Context(), owner)
+					owner, err = deploymentExecution(t, w).ObserveRunning(t.Context(), owner)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -151,7 +152,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 				case "stopped":
 					// A stopped native instance retains its allocation; the Store only
 					// records that running compute could not be confirmed.
-					if err := w.RecordRuntimeObservation(t.Context(), owner, "compute_unconfirmed"); err != nil {
+					if err := deploymentExecution(t, w).RecordObservation(t.Context(), owner, "compute_unconfirmed"); err != nil {
 						t.Fatal(err)
 					}
 				case "snapshot":
@@ -161,7 +162,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 						t.Fatal(err)
 					}
 				case "cleanup_pending":
-					owner, err = w.RequestRuntimeCleanup(t.Context(), owner)
+					owner, err = deploymentExecution(t, w).RequestCleanup(t.Context(), owner)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -211,15 +212,15 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 				if !bytes.Equal(allocationBefore, allocationAfter) {
 					t.Fatal("online change mutated or deleted retained ownership")
 				}
-				owner, err = w.RequestRuntimeCleanup(t.Context(), owner)
+				owner, err = deploymentExecution(t, w).RequestCleanup(t.Context(), owner)
 				if err != nil {
 					t.Fatal(err)
 				}
-				owner, err = w.SettleRuntimeCreation(t.Context(), owner)
+				owner, err = deploymentExecution(t, w).SettleCreation(t.Context(), owner)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
+				if _, err := deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 					t.Fatal(err)
 				}
 			} else if err := s.DeleteSession(t.Context(), tenant, session.ID); err != nil {
@@ -255,7 +256,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	}
 	type result struct {
 		session sessions.Session
-		owner   RuntimeAllocation
+		owner   deployment.Allocation
 		err     error
 	}
 	start := make(chan struct{})
@@ -264,7 +265,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	for _, session := range created {
 		go func() {
 			<-start
-			owner, err := w.ReserveRuntimeAllocation(t.Context(), tenant, session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+			owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 			results <- result{session, owner, err}
 		}()
 	}
@@ -282,15 +283,15 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 		result := <-results
 		if result.err == nil {
 			allocated++
-			retry, err := w.ReserveRuntimeAllocation(t.Context(), tenant, result.session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+			retry, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: result.session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil || retry.ID != result.owner.ID || !retry.Replayed {
 				t.Fatal("maintenance changed an admitted allocation retry", err)
 			}
 		} else {
-			if !errors.Is(result.err, ErrSandboxResetAdmission) {
+			if !errors.Is(result.err, placement.ErrResetAdmission) {
 				t.Fatal("allocation race failed outside admission", result.err)
 			}
-			if _, err := w.ReserveRuntimeAllocation(t.Context(), tenant, result.session.Environment.ID, view.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, ErrSandboxResetAdmission) {
+			if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: result.session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrResetAdmission) {
 				t.Fatal("fresh allocation passed committed maintenance", err)
 			}
 		}
@@ -310,21 +311,21 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 // receives no new sandboxes until it is re-added.
 func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
 	s, _, view, _ := webSpecificationFixture(t, "docker")
-	s.SetPublicURL("https://old.example")
+	s.SetPlacement(placementRules(t, "https://old.example"))
 	node := specificationNode(t, s, view)
 	nodes, err := deploymentService(t, s).ListNodes(t.Context())
 	if err != nil || len(nodes) != 1 || nodes[0].ID != node.NodeID || nodes[0].CoreURL != "https://old.example" {
 		t.Fatal("enrollment did not record the node's address", nodes, err)
 	}
-	s.SetPublicURL("https://new.example")
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrNodeUnavailable) {
+	s.SetPlacement(placementRules(t, "https://new.example"))
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("placed a new sandbox on a node bound to the old address", err)
 	}
 	bindings, err := deploymentService(t, s).AddressBindings(t.Context())
 	if err != nil || bindings.Nodes != 1 || bindings.NodesOnOtherAddress != 1 || bindings.HostedSandboxes != 0 {
 		t.Fatal(bindings, err)
 	}
-	s.SetPublicURL("https://old.example")
+	s.SetPlacement(placementRules(t, "https://old.example"))
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
 		t.Fatal("node on the current address rejected placement", err)
 	}
@@ -334,14 +335,14 @@ func TestNodeBoundToAnotherPublicURLGetsNoNewSandboxes(t *testing.T) {
 // Session, and its configuration stays readable for cleanup.
 func TestE2BAdmitsNothingWhileThePublicURLIsLoopback(t *testing.T) {
 	s, _, _, _ := webSpecificationFixture(t, "e2b")
-	s.SetPublicURL("http://127.0.0.1:8091")
-	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, deployment.ErrPublicURLUnreachable) {
+	s.SetPlacement(placementRules(t, "http://127.0.0.1:8091"))
+	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrPublicURLUnreachable) {
 		t.Fatal("admitted an E2B Session that could not reach Core", err)
 	}
 	if setup, err := deploymentService(t, s).Setup(t.Context()); err != nil || setup.Provider != "e2b" {
 		t.Fatal("the saved E2B selection became unreadable", err)
 	}
-	s.SetPublicURL("https://core.example")
+	s.SetPlacement(placementRules(t, "https://core.example"))
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
 		t.Fatal(err)
 	}

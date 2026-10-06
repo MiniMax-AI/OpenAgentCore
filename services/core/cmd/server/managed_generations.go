@@ -201,7 +201,7 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			}
 		}
 		for after := ""; ; {
-			page, err := s.allocations.SandboxCredentialAllocationPage(ctx, after)
+			page, err := s.allocations.CredentialAllocations(ctx, after)
 			if err != nil {
 				return err
 			}

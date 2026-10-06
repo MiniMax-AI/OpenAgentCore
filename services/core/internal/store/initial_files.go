@@ -10,7 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -81,22 +80,4 @@ func readInitialSourceFile(ctx context.Context, tx pgx.Tx, source sqlc.SourceFil
 		return nil, sessions.ErrInvalidInput
 	}
 	return body, reader.Close()
-}
-
-// ReadInitialEnvironmentFile decrypts only the next frozen file, bounding memory per installation.
-func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, session string, position int) (environmentconfig.InitialFileMetadata, []byte, error) {
-	lookup, err := sessionpg.DeviceLookup(tenant, session)
-	if err != nil {
-		return environmentconfig.InitialFileMetadata{}, nil, err
-	}
-	row, err := s.queries.GetInitialEnvironmentFile(ctx, sqlc.GetInitialEnvironmentFileParams{TenantID: lookup.TenantID, SessionID: lookup.ID, Position: int32(position)})
-	if err != nil {
-		return environmentconfig.InitialFileMetadata{}, nil, err
-	}
-	id := uuid.UUID(row.ID.Bytes).String()
-	body, err := s.credentialCipher.OpenEnvironmentFile(row.Contents, credentialcrypto.EnvironmentFileBinding{TenantID: uuid.UUID(lookup.TenantID.Bytes).String(), Resource: "session", OwnerID: uuid.UUID(lookup.ID.Bytes).String(), FileID: id})
-	if err == nil && int64(len(body)) != row.SizeBytes {
-		err = sessions.ErrInvalidInput
-	}
-	return environmentconfig.InitialFileMetadata{ID: id, Path: row.Path, SizeBytes: &row.SizeBytes}, body, err
 }

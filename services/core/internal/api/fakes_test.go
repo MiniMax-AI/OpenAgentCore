@@ -266,15 +266,15 @@ func (f *fakeDeployment) DecodeConfiguration(a0 string, a1 json.RawMessage, a2 j
 }
 
 type fakeNodeAllocations struct {
-	t                          testing.TB
-	listNodeRuntimeAllocations func(context.Context, string) ([]store.RuntimeNodeAllocation, error)
+	t               testing.TB
+	nodeAllocations func(context.Context, string) ([]deployment.NodeAllocation, error)
 }
 
-func (f *fakeNodeAllocations) ListNodeRuntimeAllocations(a0 context.Context, a1 string) ([]store.RuntimeNodeAllocation, error) {
-	if f.listNodeRuntimeAllocations == nil {
-		unexpectedCall(f.t, "ListNodeRuntimeAllocations")
+func (f *fakeNodeAllocations) NodeAllocations(a0 context.Context, a1 string) ([]deployment.NodeAllocation, error) {
+	if f.nodeAllocations == nil {
+		unexpectedCall(f.t, "NodeAllocations")
 	}
-	return f.listNodeRuntimeAllocations(a0, a1)
+	return f.nodeAllocations(a0, a1)
 }
 
 type fakeDeploymentChanges struct {
@@ -393,22 +393,33 @@ func (f *fakeEnvironmentWorkspaces) WriteEnvironmentFile(a0 context.Context, a1 
 	return f.writeEnvironmentFile(a0, a1, a2, a3)
 }
 
-type fakeEnvironments struct {
-	t                                testing.TB
-	getEnvironment                   func(context.Context, string, string) (sessions.Environment, error)
-	authorizeEnvironmentInstallation func(context.Context, identity.Principal, string, string) (string, int64, error)
-	validateEnvironmentInstallation  func(context.Context, string, string) (sessions.InstallationAuthorization, error)
-	claimEnvironmentInstallation     func(context.Context, string, string, string) error
-	projectExecutorCredentialState   func(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
-	issueProjectExecutorCredential   func(context.Context, identity.Principal, string, string, bool) (sessions.IssuedExecutorCredential, error)
-	revokeProjectExecutorCredential  func(context.Context, identity.Principal, string, string) error
+type fakeEnvironmentsReader struct {
+	t                              testing.TB
+	getEnvironment                 func(context.Context, string, string) (sessions.Environment, error)
+	projectExecutorCredentialState func(context.Context, identity.Principal, string) (sessions.ExecutorCredentialState, error)
 }
 
-func (f *fakeEnvironments) GetEnvironment(a0 context.Context, a1 string, a2 string) (sessions.Environment, error) {
+func (f *fakeEnvironmentsReader) GetEnvironment(a0 context.Context, a1 string, a2 string) (sessions.Environment, error) {
 	if f.getEnvironment == nil {
 		unexpectedCall(f.t, "GetEnvironment")
 	}
 	return f.getEnvironment(a0, a1, a2)
+}
+
+func (f *fakeEnvironmentsReader) ProjectExecutorCredentialState(a0 context.Context, a1 identity.Principal, a2 string) (sessions.ExecutorCredentialState, error) {
+	if f.projectExecutorCredentialState == nil {
+		unexpectedCall(f.t, "ProjectExecutorCredentialState")
+	}
+	return f.projectExecutorCredentialState(a0, a1, a2)
+}
+
+type fakeEnvironments struct {
+	t                                testing.TB
+	authorizeEnvironmentInstallation func(context.Context, identity.Principal, string, string) (string, int64, error)
+	validateEnvironmentInstallation  func(context.Context, string, string) (sessions.InstallationAuthorization, error)
+	claimEnvironmentInstallation     func(context.Context, string, string, string) error
+	issueProjectExecutorCredential   func(context.Context, identity.Principal, string, string, bool) (sessions.IssuedExecutorCredential, error)
+	revokeProjectExecutorCredential  func(context.Context, identity.Principal, string, string) error
 }
 
 func (f *fakeEnvironments) AuthorizeEnvironmentInstallation(a0 context.Context, a1 identity.Principal, a2 string, a3 string) (string, int64, error) {
@@ -430,13 +441,6 @@ func (f *fakeEnvironments) ClaimEnvironmentInstallation(a0 context.Context, a1 s
 		unexpectedCall(f.t, "ClaimEnvironmentInstallation")
 	}
 	return f.claimEnvironmentInstallation(a0, a1, a2, a3)
-}
-
-func (f *fakeEnvironments) ProjectExecutorCredentialState(a0 context.Context, a1 identity.Principal, a2 string) (sessions.ExecutorCredentialState, error) {
-	if f.projectExecutorCredentialState == nil {
-		unexpectedCall(f.t, "ProjectExecutorCredentialState")
-	}
-	return f.projectExecutorCredentialState(a0, a1, a2)
 }
 
 func (f *fakeEnvironments) IssueProjectExecutorCredential(a0 context.Context, a1 identity.Principal, a2 string, a3 string, a4 bool) (sessions.IssuedExecutorCredential, error) {

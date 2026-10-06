@@ -21,7 +21,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := NewWithCredentialCipher(pool, cipher)
+	s := withPlacement(t, NewWithCredentialCipher(pool, cipher))
 	var archive bytes.Buffer
 	writer := zip.NewWriter(&archive)
 	for path, body := range map[string]string{
@@ -56,7 +56,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err = json.Unmarshal(session.Configuration, &cfg); err != nil || len(cfg.Environment.Plugins) != 1 || !reflect.DeepEqual(cfg.Environment.Directories, setup.CapabilityDirectories) {
 		t.Fatal("frozen public metadata", err)
 	}
-	frozen, err := s.ReadEnvironmentSetup(t.Context(), tenant, session.ID)
+	frozen, err := sessionAdapter(s).ReadEnvironmentSetup(t.Context(), tenant, session.ID)
 	if err != nil || !reflect.DeepEqual(frozen.Plugins, setup.Plugins) || !reflect.DeepEqual(frozen.CapabilityDirectories, setup.CapabilityDirectories) {
 		t.Fatal("frozen snapshot changed", err)
 	}
@@ -64,7 +64,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err != nil || retry.ID != session.ID {
 		t.Fatal("retry", err)
 	}
-	if _, err = s.ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err = sessionAdapter(s).ReadEnvironmentSetup(t.Context(), foreign, session.ID); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("foreign snapshot", err)
 	}
 }

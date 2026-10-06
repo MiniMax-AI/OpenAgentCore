@@ -1,4 +1,6 @@
-# Root Session and Turn diagnostics
+---
+title: "Root Session and Turn diagnostics"
+---
 
 These read-only routes require the Core key. The Project ID selects the target Project and does not authenticate. Both return `Cache-Control: no-store`:
 
@@ -15,7 +17,7 @@ The object is `core.session_diagnostics`, with `session_id`, the official Sessio
 | --- | --- |
 | `source` | `turn`, `environment` or `environment_input` |
 | `turn_id` | Present only for `source: turn` |
-| `code` | Fixed category from [the diagnostics catalog](core-errors.md#diagnostic-failure-categories) |
+| `code` | Fixed category from [the diagnostics catalog](./core-errors.md#diagnostic-failure-categories) |
 | `params` | An object of fixed safe values; `{}` for categories without parameters |
 | `failed_at` | RFC 3339 timestamp, or null when the time is unknown |
 

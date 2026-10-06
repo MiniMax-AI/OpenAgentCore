@@ -8,6 +8,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
@@ -52,7 +53,7 @@ func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
 	}
 	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
 	h.finished(running, sessions.TurnCompleted)
-	saved, err := h.s.GetFunctionCall(t.Context(), h.tenant, h.session.ID, input.TurnID, state.RequiredActions[0].CallID)
+	saved, err := store.FixtureFunctionCall(t.Context(), h.db.pool, h.tenant, h.session.ID, input.TurnID, state.RequiredActions[0].CallID)
 	if err != nil || !saved.Applied {
 		t.Fatal(saved, err)
 	}

@@ -57,13 +57,13 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 	if err != nil || len(generations) != 1 || generations[0].Generation != 1 || generations[0].Configuration.(*e2b.DeploymentConfiguration).APIURL != "https://api.e2b.app" {
 		t.Fatal(generations, err)
 	}
-	if _, err = w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+	if _, err = deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.SettleRuntimeCreation(t.Context(), owner); err != nil {
+	if _, err = deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
+	if _, err = deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	if err = changes.CollectGenerations(t.Context()); err != nil {
@@ -73,7 +73,7 @@ func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
 	if err != nil || len(generations) != 0 {
 		t.Fatal(generations, err)
 	}
-	historical, err := s.GetRuntimeAllocation(t.Context(), tenant, owner.EnvironmentID)
+	historical, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: owner.EnvironmentID})
 	if err != nil || historical.DeploymentGeneration != 1 {
 		t.Fatal("historical generation erased", err)
 	}
@@ -231,13 +231,13 @@ func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
 	if _, err = migrations.Up(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.RequestRuntimeCleanup(t.Context(), owner); err != nil {
+	if _, err = deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.SettleRuntimeCreation(t.Context(), owner); err != nil {
+	if _, err = deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = w.ReleaseRuntimeAllocation(t.Context(), owner); err != nil {
+	if _, err = deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = migrations.DownTo(t.Context(), 80); err != nil {

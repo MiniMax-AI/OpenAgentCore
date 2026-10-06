@@ -14,7 +14,8 @@ import (
 
 func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	ctx := context.Background()
-	s, _ := store.NewTestStore(t)
+	s, pool := store.NewTestStore(t)
+	journal := executionOwner(t, fixtureDB{pool: pool}, s).Sessions
 	tenant := uuid.NewString()
 	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: store.FixtureCreator(), Engine: "codex", IdempotencyKey: "events"})
 	if err != nil {
@@ -33,7 +34,10 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	errs := make(chan error, 8)
 	for range 8 {
 		wg.Add(1)
-		go func() { defer wg.Done(); errs <- s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch) }()
+		go func() {
+			defer wg.Done()
+			errs <- journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch)
+		}()
 	}
 	wg.Wait()
 	close(errs)
@@ -43,14 +47,14 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 		}
 	}
 	conflict := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"changed"}`)}}
-	if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, conflict); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+	if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, conflict); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal(err)
 	}
-	if err := s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, conflict); !errors.Is(err, sessions.ErrTurnConflict) {
+	if err := journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, conflict); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal(err)
 	}
 	for _, owner := range []string{uuid.NewString()} {
-		if err := s.AppendTurnEvents(ctx, owner, session.ID, input.TurnID, 1, batch); !errors.Is(err, sessions.ErrNotFound) {
+		if err := journal.AppendTurnEvents(ctx, owner, session.ID, input.TurnID, 1, batch); !errors.Is(err, sessions.ErrNotFound) {
 			t.Fatal(err)
 		}
 		if _, err := s.ListTurnEvents(ctx, owner, session.ID, input.TurnID, 0, 100); !errors.Is(err, sessions.ErrNotFound) {
@@ -72,10 +76,10 @@ func TestTurnEventBatchesAreOrderedIsolatedAndDurable(t *testing.T) {
 	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{"content":""}}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 		t.Fatal("retry after terminal", err)
 	}
-	if err = s.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, conflict); !errors.Is(err, sessions.ErrTurnConflict) {
+	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, conflict); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal(err)
 	}
 	reopened, pool := store.NewTestStore(t)
@@ -104,7 +108,7 @@ func TestEventLimitStillAllowsTerminalFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	events := []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"more"}`)}}
-	if err = h.s.AppendTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 1, events); !errors.Is(err, sessions.ErrEventLimit) {
+	if err = h.owner().Sessions.AppendTurnEvents(ctx, h.tenant, h.session.ID, input.TurnID, 1, events); !errors.Is(err, sessions.ErrEventLimit) {
 		t.Fatal(err)
 	}
 	if _, err = h.s.CompleteExecution(ctx, h.tenant, h.session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"error_code":"event_limit"}`), "", input.Sequence); err != nil {

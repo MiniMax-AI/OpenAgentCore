@@ -23,8 +23,7 @@ func preparedDispatchHarness(t *testing.T) (*dispatchHarness, sessions.Environme
 	t.Helper()
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	assertNoRuntimeAllocation(t, h)
-	owner := executionOwner(t, h.db, h.s)
-	h.d.Store, h.lease = owner.Store, owner.Lease
+	h.d, h.lease = h.bound(), h.owner().Lease
 	enableWorkerEnvironment(t, h)
 	pending, err := h.s.ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
 	if err != nil {

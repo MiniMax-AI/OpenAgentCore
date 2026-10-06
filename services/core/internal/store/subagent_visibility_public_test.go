@@ -82,7 +82,8 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := pathIDClient{t: t, server: server}
-	writer := executionOwner(t, db, s).Store
+	leased := executionOwner(t, db, s)
+	writer := leased.Store
 	ctx := t.Context()
 
 	created := openStream(t, server, token, http.MethodPost, "/v1/agents/sessions",
@@ -119,11 +120,11 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 		t.Fatal(page, err)
 	}
 	root := page.Turns[0].ID
-	host, err := s.CreateDevice(ctx, tenant, "subagent visibility", runtimedevice.HashCredential(uuid.NewString()))
+	host, err := fixtureSessionService(t, db).CreateDevice(ctx, tenant, "subagent visibility", runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = writer.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
+	if err = leased.Sessions.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = writer.TransitionTurn(ctx, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
@@ -147,7 +148,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 		subagentFixture(proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "nested", TurnID: "nested-turn", Status: sessions.TurnCompleted, CreatedAtMS: opened, StartedAtMS: &opened, CompletedAtMS: &finished}),
 		subagentFixture(proto.TypeSubagentCoordination, proto.SubagentCoordinationPayload{ID: "wait", Kind: "wait_for_subagents_call", Status: "completed", Recipients: []string{"child"}}),
 	}
-	if err = writer.AppendTurnEvents(ctx, tenant, session, root, 1, facts); err != nil {
+	if err = leased.Sessions.AppendTurnEvents(ctx, tenant, session, root, 1, facts); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = writer.TransitionTurn(ctx, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {

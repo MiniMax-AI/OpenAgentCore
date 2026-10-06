@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
@@ -15,18 +16,20 @@ type Service struct {
 	storage  Storage
 	reader   Reader
 	registry *providers.Registry
-	// publicURL is OAC_PUBLIC_URL. Core reports it as the deployment and node
-	// configuration core_url and records it on each node it enrolls.
-	publicURL string
+	// rules decide admission and placement. Their public URL is OAC_PUBLIC_URL:
+	// Core reports it as the deployment and node configuration core_url and
+	// records it on each node it enrolls.
+	rules *placement.Rules
 }
 
-// NewService returns the deployment service. publicURL is the validated
-// installation public URL, empty when the installation has none.
-func NewService(storage Storage, reader Reader, registry *providers.Registry, publicURL string) (*Service, error) {
-	if storage == nil || reader == nil || registry == nil {
-		return nil, errors.New("deployment service requires storage, a reader and a provider registry")
+// NewService returns the deployment service. rules are the installation's
+// placement rules, built once with its provider declarations and validated
+// public URL.
+func NewService(storage Storage, reader Reader, registry *providers.Registry, rules *placement.Rules) (*Service, error) {
+	if storage == nil || reader == nil || registry == nil || rules == nil {
+		return nil, errors.New("deployment service requires storage, a reader, a provider registry and placement rules")
 	}
-	return &Service{storage: storage, reader: reader, registry: registry, publicURL: publicURL}, nil
+	return &Service{storage: storage, reader: reader, registry: registry, rules: rules}, nil
 }
 
 // View returns the deployment as administrators read it.
@@ -41,7 +44,7 @@ func (s *Service) View(ctx context.Context) (View, error) {
 // view reports the public URL as the deployment's read-only core_url.
 func (s *Service) view(snapshot Snapshot) (View, error) {
 	d := snapshot.Record
-	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.publicURL, OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: d.Mode, Rollout: snapshot.Rollout, Resources: snapshot.Resources}
+	result := View{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), OwnerEpoch: d.OwnerEpoch, Generation: d.Generation, Mode: d.Mode, Rollout: snapshot.Rollout, Resources: snapshot.Resources}
 	if len(d.Specification) > 0 && string(d.Specification) != "{}" {
 		var spec sandbox.DeploymentSpec
 		if json.Unmarshal(d.Specification, &spec) == nil {
@@ -247,12 +250,8 @@ func (s *Service) SetupForSelection(installationID string, input sandbox.Selecti
 		return Setup{}, configurationError(err)
 	}
 	// Adapters declare whether their guests require a public Core origin.
-	publicOrigin, err := s.registry.RequiresPublicOrigin(input.Provider)
-	if err != nil {
+	if err := s.rules.CheckPublicOrigin(input.Provider); err != nil {
 		return Setup{}, err
-	}
-	if publicOrigin && LoopbackOrigin(s.publicURL) {
-		return Setup{}, ErrPublicURLUnreachable
 	}
 	result := Setup{InstallationID: installationID, Provider: input.Provider, Mode: description.Mode, Specification: normalized.DeploymentSpec, Configuration: normalized.Configuration, BackendFingerprint: description.BackendFingerprint}
 	return s.describe(result, description.IdleSeconds, description.RetentionSeconds)

@@ -40,5 +40,5 @@ export const coreErrors = {
   "sandbox_credential_invalid": "E2B API 密钥被拒绝。已保存的配置未改变。",
   "sandbox_configuration_invalid": "请选择已就绪且资源匹配的不可变 E2B 模板构建。",
   "sandbox_verification_unconfirmed": "无法确认 E2B 验证结果。请刷新后再提交。",
-  "sandbox_configuration_error": "E2B 沙箱需要可从互联网访问的 HTTPS 地址，请在系统中配置域名与 HTTPS。"
+  "sandbox_configuration_error": "E2B 沙箱需要可从互联网访问的 HTTPS 地址，请把 OAC_PUBLIC_URL 设为一个 HTTPS 源地址。"
 } as const;

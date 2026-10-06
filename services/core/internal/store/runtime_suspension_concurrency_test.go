@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -123,7 +124,7 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)
 			go func() {
-				_, err := w.SetRuntimeCompute(ctx, owner, "suspending", json.RawMessage(`{}`), &until, 0)
+				_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "suspending", json.RawMessage(`{}`), &until, 0)
 				done <- err
 			}()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -144,10 +145,10 @@ func TestRuntimeSuspensionCaptureRechecksNewPendingWork(t *testing.T) {
 			if err := tx.Commit(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := <-done; !errors.Is(err, sessions.ErrTurnConflict) {
+			if err := <-done; !errors.Is(err, deployment.ErrAllocationConflict) {
 				t.Fatal("capture ignored work admitted after quiesce", err)
 			}
-			got, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
+			got, err := deploymentStore(s).EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 			if err != nil || got.ComputePhase != "quiescing" || got.ComputeRevision != owner.ComputeRevision {
 				t.Fatal("failed capture CAS changed its owner", got, err)
 			}
@@ -161,7 +162,7 @@ func TestRuntimeSuspensionWakeUsesSessionLock(t *testing.T) {
 			s, _, pool, owner := runtimeSuspensionFixture(t)
 			ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 			done := make(chan error, 1)
-			go func() { done <- s.TouchRuntimeActivity(ctx, owner.TenantID, owner.EnvironmentID) }()
+			go func() { done <- deploymentService(t, s).TouchActivity(ctx, owner.TenantID, owner.EnvironmentID) }()
 			runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
 			if deleted {
 				if _, err := tx.Exec(ctx, `UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=$1`, owner.SessionID); err != nil {
@@ -177,7 +178,7 @@ func TestRuntimeSuspensionWakeUsesSessionLock(t *testing.T) {
 			if deleted && !errors.Is(err, sessions.ErrNotFound) || !deleted && err != nil {
 				t.Fatal("wake did not observe locked state", err)
 			}
-			got, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
+			got, err := deploymentStore(s).EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 			if err != nil || got.ComputeWakeRequested == deleted {
 				t.Fatal("wake was lost or crossed deletion", got, err)
 			}
@@ -192,7 +193,7 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	ctx, tx, blocker := runtimeSuspensionLockedSession(t, pool, owner.SessionID)
 	done := make(chan error, 1)
 	go func() {
-		_, err := w.SetRuntimeCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
+		_, err := deploymentExecution(t, w).SetCompute(ctx, owner, "quiescing", json.RawMessage(`{}`), &until, time.Nanosecond)
 		done <- err
 	}()
 	runtimeSuspensionWaitBlocked(t, ctx, pool, blocker, done)
@@ -210,10 +211,10 @@ func TestRuntimeSuspensionQuiesceCannotOvertakeClaim(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := <-done; !errors.Is(err, sessions.ErrTurnConflict) {
+	if err := <-done; !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("quiesce overtook an admitted Turn", err)
 	}
-	got, err := s.GetRuntimeAllocation(ctx, owner.TenantID, owner.EnvironmentID)
+	got, err := deploymentStore(s).EnvironmentAllocation(ctx, deployment.AllocationKey{TenantID: owner.TenantID, EnvironmentID: owner.EnvironmentID})
 	if err != nil || got.ComputePhase != "running" || got.ComputeRevision != owner.ComputeRevision {
 		t.Fatal("active work was quiesced", got, err)
 	}

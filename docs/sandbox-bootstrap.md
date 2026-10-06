@@ -1,6 +1,8 @@
-# Sandbox bootstrap
+---
+title: "Sandbox bootstrap"
+---
 
-A Sandbox Provider starts the Sandbox I/O service by handing it one bootstrap file. This document owns that Provider-to-service startup input. The type and validator live in [`internal/sandboxbootstrap`](../internal/sandboxbootstrap/bootstrap.go). With it, the service connects to the relay as the serve peer of the [Sandbox link protocol](sandbox-link-protocol.md).
+A Sandbox Provider starts the Sandbox I/O service by handing it one bootstrap file. This document owns that Provider-to-service startup input. The type and validator live in [`internal/sandboxbootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxbootstrap/bootstrap.go). With it, the service connects to the relay as the serve peer of the [Sandbox link protocol](./sandbox-link-protocol.md).
 
 ## Launch input
 
@@ -15,7 +17,7 @@ The command takes no other argument and reads no environment variable or configu
 | Field | Meaning |
 | --- | --- |
 | `version` | The exact bootstrap version, `sandboxbootstrap.Version` |
-| `link_url` | The relay's URL under the Link protocol's [URL rule](sandbox-link-protocol.md#handshake): `wss://`, or `ws://` only to a loopback host, without user, query or fragment |
+| `link_url` | The relay's URL under the Link protocol's [URL rule](./sandbox-link-protocol.md#handshake): `wss://`, or `ws://` only to a loopback host, without user, query or fragment |
 | `credential` | The serve credential Core issued for this resource: nonempty, at most 4 KiB, without whitespace or NUL |
 | `resource` | The resource the credential serves, an object with exactly the fields below |
 | `resource.tenant_id`, `resource.environment_id`, `resource.id` | Canonical nonzero UUIDs |
@@ -36,9 +38,9 @@ The Provider creates the account and the sandbox, delivers this file and starts 
 
 The service validates the input and owns the link: it connects as the serve peer, serves bound streams and reconnects while the credential stays valid. `resource`, including its generation, must be the resource the credential serves, or the relay refuses the link.
 
-The File service serves the single export `world`, rooted at the sandbox's `/`, and the Provider's sandbox setup owns that topology's isolation. The [Process service](process-protocol.md#implement-a-service) runs processes as the service's account, and the service, a child subreaper, reaps their orphaned descendants. The service also serves the [Network protocol](sandbox-network-protocol.md): it resolves names and dials TCP from the sandbox's network namespace, within the egress each stream's `Bind` carries.
+The File service serves the single export `world`, rooted at the sandbox's `/`, and the Provider's sandbox setup owns that topology's isolation. The [Process service](./process-protocol.md#implement-a-service) runs processes as the service's account, and the service, a child subreaper, reaps their orphaned descendants. The service also serves the [Network protocol](./sandbox-network-protocol.md): it resolves names and dials TCP from the sandbox's network namespace, within the egress each stream's `Bind` carries.
 
-The service exits nonzero with a message naming the failed step when it cannot start, and with the relay's failure code when `Serve` returns a [refusal](sandbox-link-protocol.md#implement-a-serve-peer). Neither message includes the credential. On SIGTERM it stops accepting streams, cancels its live operations as [ownership cleanup](process-protocol.md#ownership) does, waits for them to end, at most the cancel grace limit plus five seconds, and exits 0.
+The service exits nonzero with a message naming the failed step when it cannot start, and with the relay's failure code when `Serve` returns a [refusal](./sandbox-link-protocol.md#implement-a-serve-peer). Neither message includes the credential. On SIGTERM it stops accepting streams, cancels its live operations as [ownership cleanup](./process-protocol.md#ownership) does, waits for them to end, at most the cancel grace limit plus five seconds, and exits 0.
 
 A successful launch proves only the handoff. The service is ready when the relay holds it as the resource's current serve peer, so that an `Open` of the resource reaches it instead of failing with `ServiceUnavailable`.
 

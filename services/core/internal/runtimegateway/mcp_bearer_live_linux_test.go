@@ -51,7 +51,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	})
 	id := uuid.NewString()
 	registry := NewRegistry()
-	auth := NewAuthenticator(&stubRuntimeStore{ok: true, row: runtimedevice.Credential{ID: id, WorkspaceID: uuid.NewString(), Type: RuntimeTypeAgentDaemon, CredentialHash: runtimedevice.HashCredential(runner)}})
+	auth := NewAuthenticator(&stubRuntimeStore{ok: true, row: runtimedevice.Credential{ID: id, WorkspaceID: uuid.NewString(), Type: runtimedevice.RuntimeTypeAgentDaemon, CredentialHash: runtimedevice.HashCredential(runner)}})
 	router := chi.NewRouter()
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)

@@ -205,9 +205,9 @@
     "reason": "The examples guide describes the explicitly named Parsar application example; it does not rename the Core runtime."
   },
   {
-    "path": "pnpm-lock.yaml",
-    "regex": "(?:example/parsar|@oac/parsar-example)",
-    "reason": "The explicitly named Parsar application example retains product branding; it does not rename the Core runtime."
+    "path": "docs/zh/examples.md",
+    "regex": "(?i)parsar",
+    "reason": "The Chinese examples guide describes the explicitly named Parsar application example and its preserved source paths."
   },
   {
     "path": "Makefile",
@@ -268,5 +268,20 @@
     "path": "packages/agents-client/src/fixtures/parsar-*",
     "regex": "services/agents-api/internal/api/",
     "reason": "Historical Parsar protocol snapshots record the upstream source path they were captured from."
+  },
+  {
+    "path": ".github/workflows/check.yml",
+    "regex": "(?:example/parsar|@oac/parsar-example)",
+    "reason": "The named Parsar example owns its dependency lock and component checks."
+  },
+  {
+    "path": "scripts/ci_plan.py",
+    "regex": "(?:example/parsar|@oac/parsar-example)",
+    "reason": "The named Parsar example owns its dependency lock and component checks."
+  },
+  {
+    "path": "scripts/ci_plan_test.py",
+    "regex": "(?:example/parsar|@oac/parsar-example)",
+    "reason": "The named Parsar example owns its dependency lock and component checks."
   }
 ]

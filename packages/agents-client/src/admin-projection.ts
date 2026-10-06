@@ -295,8 +295,8 @@ export function projectInstallation(value: unknown): CoreInstallation {
   let configuration: CoreInstallation["configuration"] = null;
   if (installation.configuration !== null) {
     const applied = record(installation.configuration, ["path", "apply_command", "applied_at", "settings"]);
-    if (typeof applied.path !== "string" || !applied.path.startsWith("/") || typeof applied.apply_command !== "string" || !applied.apply_command ||
-      typeof applied.applied_at !== "string" || !date(applied.applied_at) || !Array.isArray(applied.settings)) return invalidAdminResponse();
+    if (typeof applied.path !== "string" || (applied.path !== "" && !applied.path.startsWith("/")) || typeof applied.apply_command !== "string" ||
+      (applied.applied_at !== null && (typeof applied.applied_at !== "string" || !date(applied.applied_at))) || !Array.isArray(applied.settings)) return invalidAdminResponse();
     const settings = applied.settings.map(projectInstallationSetting);
     if (new Set(settings.map((setting) => setting.key)).size !== settings.length) return invalidAdminResponse();
     configuration = { path: applied.path, apply_command: applied.apply_command, applied_at: applied.applied_at, settings };

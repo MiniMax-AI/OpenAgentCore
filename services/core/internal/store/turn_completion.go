@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -75,7 +76,7 @@ func (s *Store) CompleteExecution(ctx context.Context, tenantID, sessionID, turn
 		if err != nil {
 			return err
 		}
-		if err = insertTurnEvent(ctx, q, row, "execution_"+status, outcome); err != nil {
+		if err = sessions.AppendTurnEvent(ctx, sessionpg.BindSession(q, p.TenantID, session), uuid.UUID(row.ID.Bytes).String(), row.EventCount, sessions.ExecutionEvent{Kind: "execution_" + status, Payload: outcome}); err != nil {
 			return err
 		}
 		if nativeID != "" {

@@ -10,6 +10,6 @@ export function InstallationNotice({ installation }: { installation: CoreInstall
   if (!installation?.local_only) return null;
   return <aside className="installation-notice" role="status" aria-label={t("installationNotice.title")}>
     <p>{t("installationNotice.body")}</p>
-    {view !== "system" || params.id ? <button className="text-action" onClick={() => navigate("system", { id: "domain" })}>{t("installationNotice.configure")}</button> : null}
+    {view !== "system" || params.id ? <button className="text-action" onClick={() => navigate("system")}>{t("installationNotice.configure")}</button> : null}
   </aside>;
 }

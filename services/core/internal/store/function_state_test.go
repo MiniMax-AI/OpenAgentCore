@@ -13,6 +13,7 @@ import (
 
 func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	s, pool := testStore(t)
+	functions := functionExecution(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
@@ -22,14 +23,14 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	}
 	for _, id := range []string{"first", "second"} {
 		for range 2 {
-			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
+			if err := functions.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 	assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 2)
 	for _, id := range []string{"first", "second"} {
-		if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(`{"success":true,"output":"private result"}`)); err != nil {
+		if err := SubmitFixtureFunctionResult(t.Context(), s, tenant, session.ID, turn, id, json.RawMessage(`{"success":true,"output":"private result"}`)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -42,7 +43,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	}
 	for i, id := range []string{"first", "second"} {
 		for range 2 {
-			if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, id); err != nil {
+			if err := functions.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, id); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -87,10 +88,11 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 	for _, status := range []string{sessions.TurnCancelled, sessions.TurnFailed, sessions.TurnCompleted} {
 		t.Run(status, func(t *testing.T) {
 			s, _ := testStore(t)
+			functions := functionExecution(t)
 			tenant, session := newTurnSession(t, s)
 			input := submitMessage(t, s, tenant, session.ID, "start")
 			transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnQueued, sessions.TurnInProgress)
-			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, input.TurnID, functionCallFixture("call")); err != nil {
+			if err := functions.RecordFunctionCall(t.Context(), tenant, session.ID, input.TurnID, functionCallFixture("call")); err != nil {
 				t.Fatal(err)
 			}
 			if status == sessions.TurnCancelled {
@@ -112,7 +114,7 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertFunctionState(t, s, tenant, session.ID, status, 0)
-			if _, err := s.GetFunctionCall(t.Context(), tenant, session.ID, input.TurnID, "call"); err != nil {
+			if _, err := FixtureFunctionCall(t.Context(), s.pool, tenant, session.ID, input.TurnID, "call"); err != nil {
 				t.Fatal("history lost", err)
 			}
 			next := submitMessage(t, s, tenant, session.ID, "next")
@@ -126,6 +128,7 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 
 func TestFunctionStateReadsRemainConsistentDuringReceipts(t *testing.T) {
 	s, _ := testStore(t)
+	functions := functionExecution(t)
 	tenant, session := newTurnSession(t, s)
 	turn := submitMessage(t, s, tenant, session.ID, "start").TurnID
 	transition(t, s, tenant, session.ID, turn, sessions.TurnQueued, sessions.TurnInProgress)
@@ -135,15 +138,15 @@ func TestFunctionStateReadsRemainConsistentDuringReceipts(t *testing.T) {
 		defer close(done)
 		for i := range 30 {
 			id := fmt.Sprint(i)
-			if err := s.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
+			if err := functions.RecordFunctionCall(t.Context(), tenant, session.ID, turn, functionCallFixture(id)); err != nil {
 				t.Error(err)
 				return
 			}
-			if err := s.SubmitFunctionResult(t.Context(), tenant, session.ID, turn, id, json.RawMessage(`{"success":true}`)); err != nil {
+			if err := SubmitFixtureFunctionResult(t.Context(), s, tenant, session.ID, turn, id, json.RawMessage(`{"success":true}`)); err != nil {
 				t.Error(err)
 				return
 			}
-			if err := s.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, id); err != nil {
+			if err := functions.ConfirmFunctionResult(t.Context(), tenant, session.ID, turn, id); err != nil {
 				t.Error(err)
 				return
 			}
