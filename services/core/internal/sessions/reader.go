@@ -10,5 +10,7 @@ type Reader interface {
 	EnvironmentReader
 	ExecutorCredentialReader
 	ItemReader
+	ModelExecutionReader
 	SubagentReader
+	TurnReader
 }

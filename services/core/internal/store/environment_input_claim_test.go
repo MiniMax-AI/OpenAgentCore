@@ -53,7 +53,7 @@ func TestEnvironmentInputConcurrentPromotionClaimsOnce(t *testing.T) {
 	if received != count || fresh != 1 {
 		t.Fatal("promotion authorized multiple starts", received, fresh)
 	}
-	turn, err := s.GetTurn(t.Context(), tenant, session.ID, turnID)
+	turn, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, turnID)
 	if err != nil || turn.Status != sessions.TurnInProgress || turn.StartedAt.IsZero() {
 		t.Fatal("promotion did not persist its execution claim", turn, err)
 	}

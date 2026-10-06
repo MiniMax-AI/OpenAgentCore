@@ -23,12 +23,8 @@ func TestDiagnosticsCoreHandlerDatabaseBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"device_disconnected","error":"Bearer raw-secret-canary https://private.example/key","done":{"native_id":"secret-native-canary"}}`)}); err != nil {
-		t.Fatal(err)
-	}
+	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"device_disconnected","error":"Bearer raw-secret-canary https://private.example/key","done":{"native_id":"secret-native-canary"}}`)})
 	base := adminSessionsPath + session.ID
 	for _, path := range []string{base + "/diagnostics", base + "/turns/" + receipt.TurnID + "/diagnostics"} {
 		if w := diagnosticRequest(h, path, ""); w.Code != 401 {

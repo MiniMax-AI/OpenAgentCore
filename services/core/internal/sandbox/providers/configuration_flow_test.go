@@ -136,7 +136,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		Sessions:        s,
 		SessionCreation: s,
 		SessionEvents:   s,
-		Turns:           s,
+		Turns:           struct{ api.Turns }{},
 		Items:           struct{ api.Items }{},
 		Subagents:       struct{ api.Subagents }{},
 		Artifacts:       struct{ api.Artifacts }{},

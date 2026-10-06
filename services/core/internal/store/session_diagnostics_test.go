@@ -76,7 +76,7 @@ func TestDiagnosticForceSettlementIgnoresNativeClock(t *testing.T) {
 			}
 			source := runtimeDatabaseTime(t, s).Add(skew).UnixMilli()
 			before := runtimeDatabaseTime(t, s)
-			completed, err := w.CompleteExecution(t.Context(), owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
+			completed, err := completeExecution(t.Context(), t, w, owner.TenantID, owner.SessionID, turn, sessions.TurnCompleted, json.RawMessage(fmt.Sprintf(`{"done":{"source_completed_at_ms":%d}}`, source)), "", 0)
 			after := runtimeDatabaseTime(t, s)
 			if err != nil || completed.CompletedAt.UnixMilli() != source {
 				t.Fatal("public native completion changed", completed, err)
@@ -112,7 +112,7 @@ func TestDiagnosticSettlementWaitsForSessionLock(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
+		_, err := transitionTurn(t.Context(), s, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
 		done <- err
 	}()
 	// Wait for the actual competing transaction to block, not a scheduler delay.

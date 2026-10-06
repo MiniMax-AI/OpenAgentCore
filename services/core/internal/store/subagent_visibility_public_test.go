@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -115,7 +116,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	}
 	observed := collectEvents(t, live)
 
-	page, err := s.ListTurns(ctx, tenant, session, "", 10, true)
+	page, err := store.SessionAdapter(s).ListTurns(ctx, tenant, session, "", 10, true)
 	if err != nil || len(page.Turns) != 1 {
 		t.Fatal(page, err)
 	}
@@ -127,7 +128,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	if err = leased.Sessions.BindSessionDevice(ctx, tenant, session, host.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = store.TransitionTurn(ctx, writer, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	identity := func(child, parent string, created int64) sessions.ExecutionEvent {
@@ -151,7 +152,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 	if err = leased.Sessions.AppendTurnEvents(ctx, tenant, session, root, 1, facts); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = writer.TransitionTurn(ctx, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
+	if _, err = store.TransitionTurn(ctx, writer, tenant, session, root, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted}); err != nil {
 		t.Fatal(err)
 	}
 

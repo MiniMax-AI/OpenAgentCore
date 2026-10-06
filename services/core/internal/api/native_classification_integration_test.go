@@ -26,18 +26,14 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
-				t.Fatal(err)
-			}
+			transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			status := 503
 			result := execution.Result{ErrorCode: "engine_failed", Error: "Bearer secret-canary https://private.example/key", EngineErrorCode: code, EngineHTTPStatus: &status, Done: proto.DonePayload{Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-secret-canary"}}}
 			outcome, err := json.Marshal(result)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = s.TransitionTurn(t.Context(), tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: outcome}); err != nil {
-				t.Fatal(err)
-			}
+			transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed, Outcome: outcome})
 			snap, err := s.GetTurnDiagnosticsSnapshot(t.Context(), tenant, session.ID, receipt.TurnID)
 			if err != nil {
 				t.Fatal(err)

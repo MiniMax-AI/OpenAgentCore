@@ -118,10 +118,10 @@ func TestSessionMetadataPreservesTerminalActivity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		if _, err := transitionTurn(ctx, s, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status}); err != nil {
+		if _, err := transitionTurn(ctx, s, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: status}); err != nil {
 			t.Fatal(err)
 		}
 		before, err := s.GetSession(ctx, tenant, session.ID)

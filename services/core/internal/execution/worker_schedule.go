@@ -21,13 +21,13 @@ type scheduledWork struct {
 }
 
 func (s *workerSchedule) selectWork(ctx context.Context, w *Worker, devices []string, active map[string]bool) ([]scheduledWork, error) {
-	turns, err := w.dispatcher.Store.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
+	turns, err := w.dispatcher.SessionsReader.ListExecutionWork(ctx, s.turnCursor, []string{sessions.TurnQueued}, devices)
 	if err != nil {
 		return nil, err
 	}
 	if len(turns) == 0 && s.turnCursor != "" {
 		s.turnCursor = ""
-		turns, err = w.dispatcher.Store.ListExecutionWork(ctx, "", []string{sessions.TurnQueued}, devices)
+		turns, err = w.dispatcher.SessionsReader.ListExecutionWork(ctx, "", []string{sessions.TurnQueued}, devices)
 		if err != nil {
 			return nil, err
 		}

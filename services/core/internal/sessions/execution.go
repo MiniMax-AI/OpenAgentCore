@@ -20,5 +20,5 @@ func NewExecutionOperations(storage ExecutionStorage) (*ExecutionOperations, err
 type ExecutionStorage interface {
 	EnvironmentExecution
 	FunctionExecution
-	JournalExecution
+	TurnExecution
 }

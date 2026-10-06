@@ -72,7 +72,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if before != after {
 		t.Fatal("input retry published duplicate events")
 	}
-	if _, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	batch := []sessions.ExecutionEvent{
@@ -97,7 +97,7 @@ func TestSessionEventsCommitSnapshotsRetriesAndIsolation(t *testing.T) {
 	if before != after {
 		t.Fatal("failed transaction published events")
 	}
-	if _, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"private":"must not escape"}`), "", input.Sequence); err != nil {
+	if _, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"private":"must not escape"}`), "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	var all []sessions.SessionChange

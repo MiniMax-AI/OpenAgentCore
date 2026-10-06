@@ -137,7 +137,7 @@ func TestCreationStreamStartsBeforeOwnInputsAndRetriesAtUpsertCursor(t *testing.
 			t.Fatal("later Turn events are out of order", i, future[i].Event.Type)
 		}
 	}
-	turns, err := s.ListTurns(ctx, tenant, id, "", 100, true)
+	turns, err := sessionAdapter(s).ListTurns(ctx, tenant, id, "", 100, true)
 	if err != nil || len(turns.Turns) != 2 {
 		t.Fatal(turns, err)
 	}

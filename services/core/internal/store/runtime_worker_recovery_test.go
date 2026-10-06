@@ -124,7 +124,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		t.Fatal("completed preparation was not released")
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "original input completed once", func() bool {
-		turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
+		turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
 		return err == nil && turn.Status == sessions.TurnCompleted
 	})
 	var turns int
@@ -154,7 +154,7 @@ func TestWorkerRestartPreservesQueuedTurnWhileComputeWakes(t *testing.T) {
 	if err := worker.Run(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	got, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, turn)
+	got, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, turn)
 	if err != nil || got.Status != sessions.TurnQueued || !got.StartedAt.IsZero() {
 		t.Fatal("startup consumed queued work before restore", got, err)
 	}

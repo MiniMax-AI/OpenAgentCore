@@ -11,31 +11,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func executionWorkCursor(after string, connectedDevices []string) (pgtype.UUID, []pgtype.UUID, error) {
-	id := pgtype.UUID{Valid: true}
-	var err error
-	if after != "" {
-		id, err = parseID(after)
-		if err != nil {
-			return id, nil, err
-		}
-	}
-	devices := make([]pgtype.UUID, 0, len(connectedDevices))
-	for _, value := range connectedDevices {
-		device, err := parseID(value)
-		if err != nil {
-			return id, nil, err
-		}
-		devices = append(devices, device)
-	}
-	return id, devices, nil
-}
-
 func (s *Store) ListEnvironmentInputWork(ctx context.Context, after string, connectedDevices []string) ([]sessions.EnvironmentInputWork, error) {
-	id, devices, err := executionWorkCursor(after, connectedDevices)
+	id, devices, err := sessionpg.ExecutionWorkCursor(after, connectedDevices)
 	if err != nil {
 		return nil, err
 	}
@@ -48,38 +27,6 @@ func (s *Store) ListEnvironmentInputWork(ctx context.Context, after string, conn
 		work = append(work, sessions.EnvironmentInputWork{TenantID: uuid.UUID(row.TenantID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), ReservationID: uuid.UUID(row.ID.Bytes).String()})
 	}
 	return work, nil
-}
-
-func (s *Store) ListExecutionWork(ctx context.Context, after string, statuses []string, connectedDevices []string) ([]sessions.ExecutionWork, error) {
-	id, devices, err := executionWorkCursor(after, connectedDevices)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.queries.ListExecutionWork(ctx, sqlc.ListExecutionWorkParams{AfterID: id, Statuses: statuses, ConnectedOnly: connectedDevices != nil, ConnectedDevices: devices})
-	if err != nil {
-		return nil, err
-	}
-	work := make([]sessions.ExecutionWork, 0, len(rows))
-	for _, row := range rows {
-		work = append(work, sessions.ExecutionWork{TenantID: uuid.UUID(row.TenantID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), TurnID: uuid.UUID(row.ID.Bytes).String(), Status: row.Status})
-	}
-	return work, nil
-}
-
-func (s *Store) ListExecutionDevices(ctx context.Context, tenantID string) ([]sessions.ExecutionDevice, error) {
-	tenant, err := parseID(tenantID)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := s.queries.ListExecutionDevices(ctx, tenant)
-	if err != nil {
-		return nil, err
-	}
-	devices := make([]sessions.ExecutionDevice, 0, len(rows))
-	for _, row := range rows {
-		devices = append(devices, sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name})
-	}
-	return devices, nil
 }
 
 func (s *Store) sessionActivity(ctx context.Context, session sessions.Session, err error) (sessions.Session, error) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -64,7 +65,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 				Session string `json:"session"`
 			}
 			_ = json.Unmarshal(data, &identity)
-			if page, e := h.s.ListTurns(ctx, h.tenant, identity.Session, "", 100, true); e == nil {
+			if page, e := store.SessionAdapter(h.s).ListTurns(ctx, h.tenant, identity.Session, "", 100, true); e == nil {
 				diagnostic, _ := json.Marshal(page)
 				text := strings.ReplaceAll(string(diagnostic), provider.APIKey, "[REDACTED]")
 				_ = os.WriteFile(filepath.Join(home, "failed-turns.json"), []byte(text), 0600)
@@ -84,7 +85,7 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 	if json.Unmarshal(data, &proof) != nil {
 		t.Fatal("invalid evidence")
 	}
-	turn, err := h.s.GetTurn(ctx, h.tenant, proof.Session, proof.FirstTurn)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, proof.Session, proof.FirstTurn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,14 +97,14 @@ func TestNativeMCodePublicExecution(t *testing.T) {
 	if json.Unmarshal(turn.Outcome, &outcome) != nil || outcome.AppliedThrough != inputs[1].Sequence {
 		t.Fatal("native applied receipt missing")
 	}
-	before, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	before, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID == "" {
 		t.Fatal("native binding missing", err)
 	}
 	stop()
 	stop = startNativeEngineDaemon(t, h, home, binary, "mcode")
 	run("resume")
-	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
 		t.Fatal("native history changed", err)
 	}

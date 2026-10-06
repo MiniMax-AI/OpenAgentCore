@@ -406,7 +406,7 @@ func run() error {
 		Sessions:        executionStore,
 		SessionCreation: executionStore,
 		SessionEvents:   executionStore,
-		Turns:           executionStore,
+		Turns:           sessionStore,
 		Items:           sessionStore,
 		Subagents:       sessionStore,
 		Artifacts:       sessionService,

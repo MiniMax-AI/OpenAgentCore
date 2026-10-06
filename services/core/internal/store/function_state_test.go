@@ -38,7 +38,7 @@ func TestFunctionStateSnapshotsRecoveryAndRetries(t *testing.T) {
 	pool.Close()
 	s, _ = testStore(t)
 	assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 2)
-	if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, turn, sessions.TurnCompleted, nil, "", 1); !errors.Is(err, sessions.ErrTurnConflict) {
+	if _, err := functions.CompleteExecution(t.Context(), tenant, session.ID, turn, sessions.TurnCompleted, nil, "", 1); !errors.Is(err, sessions.ErrTurnConflict) {
 		t.Fatal("waiting execution completed", err)
 	}
 	for i, id := range []string{"first", "second"} {
@@ -110,7 +110,7 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 			}
 			if status == sessions.TurnCompleted {
 				transition(t, s, tenant, session.ID, input.TurnID, sessions.TurnWaiting, status)
-			} else if _, err := s.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, status, nil, "", input.Sequence); err != nil {
+			} else if _, err := functions.CompleteExecution(t.Context(), tenant, session.ID, input.TurnID, status, nil, "", input.Sequence); err != nil {
 				t.Fatal(err)
 			}
 			assertFunctionState(t, s, tenant, session.ID, status, 0)

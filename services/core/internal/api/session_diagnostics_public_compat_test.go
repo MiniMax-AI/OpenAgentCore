@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
@@ -66,8 +68,30 @@ func diagnosticRequest(handler http.Handler, path, token string) *httptest.Respo
 // Item reads from the Session adapter on pool.
 func databaseSessionReads(s *store.Store, pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 	return func(d *Dependencies, _ *testFakes) {
-		d.Sessions, d.Turns, d.SessionAdmin = s, s, s
-		d.Items = sessionpg.New(pgunit.NewPool(pool), nil)
+		d.Sessions, d.SessionAdmin = s, s
+		reads := sessionpg.New(pgunit.NewPool(pool), nil)
+		d.Items, d.Turns = reads, reads
+	}
+}
+
+// transitionTurn moves the Turn as the execution owner does, over a pooled
+// Session transaction.
+func transitionTurn(t *testing.T, pool *pgxpool.Pool, tenant, session, turn string, transition sessions.TurnTransition) {
+	t.Helper()
+	tenantID, err := pgunit.ParseID(tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionID, err := pgunit.ParseID(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = sessionpg.WithSession(t.Context(), pgunit.NewPool(pool), tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, _ sessions.LockedSession) error {
+		_, err := sessions.TransitionTurn(ctx, sessionpg.BindSession(q, tenantID, sessionID), turn, transition)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -23,7 +23,7 @@ func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID 
 	if after < 0 || limit < 1 || limit > 100 {
 		return nil, sessions.ErrInvalidInput
 	}
-	if _, err = s.GetTurn(ctx, tenantID, sessionID, turnID); err != nil {
+	if _, err = sessionAdapter(s).GetTurn(ctx, tenantID, sessionID, turnID); err != nil {
 		return nil, err
 	}
 	rows, err := s.queries.ListTurnEvents(ctx, sqlc.ListTurnEventsParams{TenantID: p.TenantID, SessionID: p.SessionID, TurnID: p.ID, Ordinal: after, Limit: int32(limit)})

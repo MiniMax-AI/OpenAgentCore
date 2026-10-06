@@ -79,7 +79,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 					}
 				}()
 				time.Sleep(650 * time.Millisecond)
-				current, err := h.s.GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
+				current, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, h.session.ID, input.TurnID)
 				if err != nil || current.Status != sessions.TurnQueued {
 					t.Fatal(current, err)
 				}

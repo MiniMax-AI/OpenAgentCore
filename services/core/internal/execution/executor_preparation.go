@@ -37,7 +37,7 @@ func (d *Dispatcher) awaitTurnExecutor(ctx context.Context, tenant, session, tur
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-tick.C:
-			current, err := d.Store.GetTurn(ctx, tenant, session, turn)
+			current, err := d.SessionsReader.GetTurn(ctx, tenant, session, turn)
 			if err != nil {
 				return err
 			}

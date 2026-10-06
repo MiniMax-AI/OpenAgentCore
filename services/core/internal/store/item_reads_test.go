@@ -27,7 +27,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	if page.Items[4].Status != "in_progress" || page.Items[5].Status != "in_progress" {
 		t.Fatal(page.Items)
 	}
-	_, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence)
+	_, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{}`), "", input.Sequence)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal(page, err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted, Outcome: json.RawMessage(`{"done":{"content":"legacy answer","metadata":{"private":"SECRET"}}}`)})
+	_, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted, Outcome: json.RawMessage(`{"done":{"content":"legacy answer","metadata":{"private":"SECRET"}}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+		_, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -174,7 +174,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		_, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{"content":"retained cancellation text"}}`), "", input.Sequence)
+		_, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCancelled, json.RawMessage(`{"done":{"content":"retained cancellation text"}}`), "", input.Sequence)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -198,7 +198,7 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
+	_, err = store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 1, batch); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"done":{"content":"provider failure"},"error_code":"engine_failed"}`), "", input.Sequence)
+	_, err = journal.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnFailed, json.RawMessage(`{"done":{"content":"provider failure"},"error_code":"engine_failed"}`), "", input.Sequence)
 	if err != nil {
 		t.Fatal(err)
 	}

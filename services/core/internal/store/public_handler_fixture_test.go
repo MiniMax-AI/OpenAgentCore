@@ -88,7 +88,7 @@ func publicHandler(t testing.TB, s *store.Store, db fixtureDB, keys fixtureKeyRe
 		Sessions:        s,
 		SessionCreation: s,
 		SessionEvents:   s,
-		Turns:           s,
+		Turns:           sessionStore,
 		Items:           sessionStore,
 		Subagents:       sessionStore,
 		Artifacts:       sessionService,

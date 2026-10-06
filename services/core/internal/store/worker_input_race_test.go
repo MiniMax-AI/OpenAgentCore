@@ -80,7 +80,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			case <-time.After(10 * time.Second):
 				t.Fatal("input-read interleaving was not reached")
 			}
-			turn, err := h.s.GetTurn(ctx, h.tenant, candidateSession, candidate.TurnID)
+			turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, candidateSession, candidate.TurnID)
 			if err != nil || turn.Status != sessions.TurnCancelled {
 				t.Fatal("candidate was not cancelled", err)
 			}

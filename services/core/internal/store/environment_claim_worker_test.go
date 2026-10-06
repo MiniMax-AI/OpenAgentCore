@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
@@ -32,7 +33,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			turn, err := s.GetTurn(t.Context(), tenant, pending.SessionID, turnID)
+			turn, err := store.SessionAdapter(s).GetTurn(t.Context(), tenant, pending.SessionID, turnID)
 			if err != nil || turn.Status != sessions.TurnInProgress || (deleted && turn.CancelRequestedAt.IsZero()) {
 				t.Fatal("promotion did not retain the active claim", turn, err)
 			}
@@ -50,7 +51,7 @@ func TestWorkerReconcilesEnvironmentPromotionBeforeStart(t *testing.T) {
 				t.Fatal(err)
 			}
 			awaitRelease()
-			turn, err = s.GetTurn(t.Context(), tenant, pending.SessionID, turnID)
+			turn, err = store.SessionAdapter(s).GetTurn(t.Context(), tenant, pending.SessionID, turnID)
 			var outcome struct {
 				ErrorCode string `json:"error_code"`
 			}

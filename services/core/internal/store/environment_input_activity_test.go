@@ -107,7 +107,7 @@ func TestEnvironmentInputActivitySettlementAndNewerWork(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := writer.TransitionTurn(t.Context(), tenant, session.ID, prior[0].TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: []byte(`{}`)}); err != nil {
+			if _, err := transitionTurn(t.Context(), writer, tenant, session.ID, prior[0].TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnFailed, Outcome: []byte(`{}`)}); err != nil {
 				t.Fatal(err)
 			}
 			reservation := reserveEnvironmentInput(t, s, tenant, session.ID, "waiting")

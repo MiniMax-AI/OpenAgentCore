@@ -81,7 +81,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	if err != nil || len(future) != 1 {
 		t.Fatal(future, err)
 	}
-	current, err := s.GetTurn(t.Context(), tenant, session.ID, next)
+	current, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, next)
 	if err != nil || !current.CancelRequestedAt.IsZero() || current.Status != sessions.TurnQueued {
 		t.Fatal(current, err)
 	}
@@ -143,7 +143,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 			if err != nil || call.Result != nil || call.Applied {
 				t.Fatal(call, err)
 			}
-			state, err := s.GetTurn(t.Context(), tenant, session.ID, turn)
+			state, err := sessionAdapter(s).GetTurn(t.Context(), tenant, session.ID, turn)
 			if err != nil || !state.CancelRequestedAt.IsZero() || state.Status != sessions.TurnWaiting {
 				t.Fatal(state, err)
 			}

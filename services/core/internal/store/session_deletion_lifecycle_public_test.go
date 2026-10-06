@@ -73,9 +73,9 @@ func TestSessionDeletionLifecyclePostgres(t *testing.T) {
 			case "function":
 				err = leased.Sessions.RecordFunctionCall(ctx, tenant, session.ID, receipt.TurnID, sessions.FunctionCall{CallID: "pending", ExecutorCallID: "native-pending", Name: "lookup", Arguments: json.RawMessage(`{}`)})
 			case sessions.TurnCompleted, sessions.TurnFailed:
-				_, err = s.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence)
+				_, err = leased.Sessions.CompleteExecution(ctx, tenant, session.ID, receipt.TurnID, status, nil, "", receipt.Sequence)
 			default:
-				_, err = s.TransitionTurn(ctx, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: from, Status: status})
+				_, err = store.TransitionTurn(ctx, s, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: from, Status: status})
 				from = status
 			}
 			if err != nil {

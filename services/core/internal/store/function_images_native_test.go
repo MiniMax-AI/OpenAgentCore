@@ -82,14 +82,14 @@ func TestNativeFunctionImagePublicExecution(t *testing.T) {
 			t.Fatal("function result admission duplicated or mutated", err)
 		}
 	}
-	before, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	before, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID == "" {
 		t.Fatal("native binding missing", err)
 	}
 	stop()
 	stop = startNativeEngineDaemon(t, h, home, binary, kind)
 	run("resume")
-	after, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
+	after, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, proof.Session)
 	if err != nil || before.NativeSessionID != after.NativeSessionID {
 		t.Fatal("native history changed", err)
 	}

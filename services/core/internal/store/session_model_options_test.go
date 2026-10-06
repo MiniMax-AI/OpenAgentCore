@@ -25,7 +25,7 @@ func TestSessionModelExecutionStoresOnlyProviderBundle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	flat, err := st.SessionModelExecution(ctx, tenant, session.ID)
+	flat, err := sessionAdapter(st).SessionModelExecution(ctx, tenant, session.ID)
 	if err != nil || flat == nil || *flat != *provider {
 		t.Fatal("new Session did not store a flat provider bundle", err)
 	}
@@ -47,7 +47,7 @@ func TestSessionModelExecutionStoresOnlyProviderBundle(t *testing.T) {
 	if _, err := pool.Exec(ctx, "UPDATE session_model_execution SET encrypted_config=$2 WHERE session_id=$1", session.ID, ciphertext); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewWithCredentialCipher(pool, cipher).SessionModelExecution(ctx, tenant, session.ID); err == nil {
+	if _, err := sessionAdapter(NewWithCredentialCipher(pool, cipher)).SessionModelExecution(ctx, tenant, session.ID); err == nil {
 		t.Fatal("retired native options accepted in provider bundle")
 	}
 }

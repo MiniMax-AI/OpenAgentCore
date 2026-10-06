@@ -20,14 +20,60 @@ func (s *Store) GetSessionDevice(ctx context.Context, tenant, session string) (s
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
-	ready, err := s.units.Queries().GetSessionInitializationReady(ctx, sqlc.GetSessionInitializationReadyParams(lookup))
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !ready) {
-		return sessions.ExecutionDevice{}, sessions.ErrNotFound
-	}
-	if err != nil {
+	if err := requireInitialized(ctx, s.units.Queries(), lookup); err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
 	return s.GetSessionRuntimeDevice(ctx, tenant, session)
+}
+
+func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenant, session string) (sessions.ExecutionBinding, error) {
+	lookup, err := DeviceLookup(tenant, session)
+	if err != nil {
+		return sessions.ExecutionBinding{}, err
+	}
+	q := s.units.Queries()
+	if err := requireInitialized(ctx, q, lookup); err != nil {
+		return sessions.ExecutionBinding{}, err
+	}
+	row, err := q.GetSessionExecutionBinding(ctx, sqlc.GetSessionExecutionBindingParams(lookup))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.ExecutionBinding{}, sessions.ErrNotFound
+	}
+	if err != nil {
+		return sessions.ExecutionBinding{}, err
+	}
+	return sessions.ExecutionBinding{
+		Device:          sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name, EnvironmentID: optionalID(row.EnvironmentID)},
+		NativeSessionID: row.NativeSessionID,
+		HasStartedTurn:  row.HasStartedTurn,
+	}, nil
+}
+
+// requireInitialized requires that the tenant's Session completed its
+// Environment preparation; before that, and for a missing Session, it is
+// sessions.ErrNotFound.
+func requireInitialized(ctx context.Context, q *sqlc.Queries, lookup sqlc.GetDeviceParams) error {
+	ready, err := q.GetSessionInitializationReady(ctx, sqlc.GetSessionInitializationReadyParams(lookup))
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !ready) {
+		return sessions.ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) ListExecutionDevices(ctx context.Context, tenant string) ([]sessions.ExecutionDevice, error) {
+	id, err := parseID(tenant)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.units.Queries().ListExecutionDevices(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	devices := make([]sessions.ExecutionDevice, 0, len(rows))
+	for _, row := range rows {
+		devices = append(devices, sessions.ExecutionDevice{ID: uuid.UUID(row.ID.Bytes).String(), Name: row.Name})
+	}
+	return devices, nil
 }
 
 func (s *Store) GetSessionRuntimeDevice(ctx context.Context, tenant, session string) (sessions.ExecutionDevice, error) {

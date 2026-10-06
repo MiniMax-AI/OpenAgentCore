@@ -103,7 +103,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err = journal.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{subagentIdentityEvent("other-child", "root", 101)}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("known root binding ignored", err)
 	}
-	if _, err = w.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
+	if _, err = completeExecution(ctx, t, w, tenant, session.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{}`), "root", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, w.pool)

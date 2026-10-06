@@ -139,7 +139,7 @@ func TestAppendTurnEvent(t *testing.T) {
 func TestExecutionOperationsValidationOrder(t *testing.T) {
 	big := json.RawMessage(`{"text":"` + strings.Repeat("x", 400*1024) + `"}`)
 	oversized := []ExecutionEvent{{Kind: "delta", Payload: big}, {Kind: "delta", Payload: big}, {Kind: "delta", Payload: big}}
-	operations, err := NewExecutionOperations(&fakeExecutionStorage{t: t, withTurnJournal: func(context.Context, string, string, func(context.Context, TurnJournalTx) error) error {
+	operations, err := NewExecutionOperations(&fakeExecutionStorage{t: t, withTurns: func(context.Context, string, string, func(context.Context, TurnTx) error) error {
 		return ErrNotFound
 	}})
 	if err != nil {

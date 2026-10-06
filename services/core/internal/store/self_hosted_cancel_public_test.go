@@ -15,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -124,7 +125,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	pending := map[string]string{created.InitialID: snapshot(created.InitialID), created.LaterID: snapshot(created.LaterID)}
 	transition := func(id, from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(t.Context(), tenant, created.ID, id, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := store.TransitionTurn(t.Context(), s, tenant, created.ID, id, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -158,7 +159,7 @@ func TestSelfHostedCancellationOfficialClient(t *testing.T) {
 	}
 	run("active")
 	activeReceipts := receipts(created.ActiveKey, first)
-	turn, err := s.GetTurn(t.Context(), tenant, created.ID, first)
+	turn, err := store.SessionAdapter(s).GetTurn(t.Context(), tenant, created.ID, first)
 	if err != nil || turn.Status != sessions.TurnInProgress || turn.CancelRequestedAt.IsZero() || !turn.CompletedAt.IsZero() {
 		t.Fatal("202 must admit cancellation without fabricating native completion", err)
 	}

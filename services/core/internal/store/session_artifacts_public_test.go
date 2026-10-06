@@ -43,7 +43,7 @@ func completeArtifactTurn(t *testing.T, s *store.Store, artifacts *sessions.Serv
 	}
 	transition := func(from, to string) {
 		t.Helper()
-		if _, err := s.TransitionTurn(t.Context(), tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
+		if _, err := store.TransitionTurn(t.Context(), s, tenant, session, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: from, Status: to}); err != nil {
 			t.Fatal(err)
 		}
 	}

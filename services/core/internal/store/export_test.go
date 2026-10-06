@@ -22,6 +22,15 @@ import (
 
 func NewTestStore(t *testing.T) (*Store, *pgxpool.Pool) { return testStore(t) }
 
+// SessionAdapter is the Session adapter on s's pool and credential key.
+func SessionAdapter(s *Store) *sessionpg.Store { return sessionAdapter(s) }
+
+// TransitionTurn moves the Turn as the execution owner does, in a Session
+// transaction on s's writer.
+func TransitionTurn(ctx context.Context, s *Store, tenant, session, turn string, transition sessions.TurnTransition) (sessions.Turn, error) {
+	return transitionTurn(ctx, s, tenant, session, turn, transition)
+}
+
 var fixtureCipher, _ = credentialcrypto.New(bytes.Repeat([]byte{61}, 32))
 
 // FixtureCipher is the credential key of NewModelTestStore, for reopened stores.

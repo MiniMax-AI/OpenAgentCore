@@ -35,7 +35,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.TransitionTurn(ctx, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+	if _, err := store.TransitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
 		t.Fatal(err)
 	}
 	functions := executionOwner(t, db, s).Sessions
@@ -79,7 +79,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := s.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, nil, "", input.Sequence); err != nil {
+	if _, err := functions.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, nil, "", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	if err := command.Wait(); err != nil {

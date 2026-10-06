@@ -22,6 +22,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 )
 
@@ -99,7 +100,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"finish"}]}]}]}`, 202)
 	waitTurn(t, h, first.RunID, sessions.TurnCompleted)
-	turn, err := h.s.GetTurn(ctx, h.tenant, created.ID, first.RunID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(ctx, h.tenant, created.ID, first.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	if err = json.Unmarshal(turn.Outcome, &result); err != nil || result.AppliedThrough != inputs[1].Sequence || result.Done.Content != "readyfinish" {
 		t.Fatal(string(turn.Outcome), err)
 	}
-	bound, err := h.s.GetSessionExecutionBinding(ctx, h.tenant, created.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(ctx, h.tenant, created.ID)
 	if err != nil || bound.NativeSessionID == "" {
 		t.Fatal(bound, err)
 	}

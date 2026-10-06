@@ -66,7 +66,7 @@ func readyPreparedDispatch(t *testing.T, h *dispatchHarness, request, handle str
 	if frame.ID != request || frame.DecodePayload(&start) != nil || start.Handle != handle || start.RunID == "" || inputTextForTest(t, start.Input) != "first\n\nsecond" {
 		t.Fatal("Start changed preparation or original batch", frame.ID, start)
 	}
-	turn, err := h.s.GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
+	turn, err := store.SessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)
 	if err != nil || turn.Status != sessions.TurnInProgress {
 		t.Fatal("Start preceded atomic claim", turn, err)
 	}
@@ -106,7 +106,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 		t.Fatal("prepared completion", got)
 	}
 	assertPreparationReleased(t, h, frame.ID, handle)
-	bound, err := h.s.GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
+	bound, err := store.SessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
 	if err != nil || bound.NativeSessionID != "retained-prepared-native" {
 		t.Fatal("native identity was not committed", bound, err)
 	}
