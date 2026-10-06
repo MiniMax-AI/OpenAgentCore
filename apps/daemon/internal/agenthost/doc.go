@@ -5,21 +5,27 @@
 //
 // The process that runs the agent host calls Open once at startup, runs each
 // Session with Host.Run and calls Close after the last Run has returned. Open
-// takes the installation lock, an exclusive flock on StateDir/lock that
-// allows one agent host per StateDir, and the Host holds it until Close.
-// Under the lock, Open checks the requirements below, then recovers what an
-// earlier agent host left, as Config describes. The cgroup hierarchy is the
-// only record of what the views own: recovery ends each cgroup in
-// Config.ViewCgroups with every process in it, and identifies no process by
-// name or credentials.
+// takes two installation locks, exclusive flocks that the Host holds until
+// Close: StateDir/lock allows one agent host per StateDir and its Session
+// directories, and a flock on the Config.ViewCgroups directory allows one
+// agent host per set of view cgroups. Under the locks, Open checks the
+// requirements that create nothing, recovers what an earlier agent host left,
+// checks that ViewCgroups can hold a new cgroup, and only then removes the
+// Session directories, as Config describes, so nothing an earlier agent host
+// left can block the checks. A step that fails fails Open, which then has
+// reclaimed nothing. The cgroup hierarchy is the only record of what the views
+// own: recovery ends each cgroup in ViewCgroups with every process in it, and
+// identifies no process by name or credentials.
 //
-// The agent host requires root with the capabilities, /dev/fuse and the
-// mount and seccomp support that sessionview.Probe checks, and a cgroup v2
-// directory, Config.ViewCgroups, delegated to it and writable, in which it
-// can create cgroups, clone a process into one with CLONE_INTO_CGROUP (Linux
-// 5.7) and end its processes with cgroup.kill (Linux 5.14). A missing
-// requirement fails Open with ErrUnsupported and the sessionview error that
-// names it; nothing falls back.
+// The agent host requires root with the capabilities, /dev/fuse and the mount
+// and seccomp support that sessionview.Probe checks, and a cgroup v2
+// directory, Config.ViewCgroups, that is delegated to it, lies outside the
+// agent host's own cgroup and can hold cgroups with cgroup.kill (Linux 5.14,
+// which brings CLONE_INTO_CGROUP from Linux 5.7). Open checks each of these,
+// without starting a process, and a missing one fails Open with ErrUnsupported
+// and the sessionview error that names it; nothing falls back. A delegation
+// that refuses only cloning a process into a view's cgroup shows when a view
+// starts: its launch fails with ErrLaunch and sessionview.ErrLauncher.
 //
 // Host.Run runs one Session. It admits the Session before any effect: the kind
 // must declare an agent.View, the request must use only what a view runs and
