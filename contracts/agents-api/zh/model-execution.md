@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 98ea700b7eb77e000bead198fb190faf5621c288372e7e8bd196b135793f54fa
+source_hash: 6c82db7d1507e24305c91449e6fdfad01063659c7f865ffd899ca60e1c9f4502
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -98,7 +98,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 Harness 通过 agent host 上 Session 本地的凭据网关访问其冻结的上游。Harness 的原生 base URL 指向网关，Harness 只收到一个非机密的占位凭据，从不收到密钥。
 
-- 网关只转发提供商协议已声明的原生路由，除下述凭据规则外，请求和响应保持不变。未声明的路径或方法，以及未声明的 WebSocket 升级，都会被拒绝，绝不会到达上游。
+- 网关只转发提供商协议已声明的原生路由，除下述凭据规则外，请求和响应保持不变。未声明的路径或方法，以及任何协议升级（例如 WebSocket），都会被拒绝，绝不会到达上游。
 - 它移除每个被剥离 header 的所有值（名称匹配不区分大小写），然后在协议声明的 header 中注入上游凭据，并去除密钥首尾的空白。
 - 它移除所有包含密钥的响应 header 和 trailer 值，informational 响应也不例外。响应 body 原样通过，因此在 body 中回显密钥的上游会把密钥泄露给 Harness。对于 HTTP MCP server，网关注入绑定的 bearer token 和 HTTP header，替换 Harness 的凭据 header 和同名 header，并对每个注入的值应用同一规则。
 - 它从不带着凭据跟随重定向。

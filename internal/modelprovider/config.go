@@ -88,13 +88,10 @@ const Placeholder = "oac-gateway-placeholder"
 
 // Route is one native HTTP route of a protocol. Path is relative to the
 // upstream base URL; UpstreamPath joins the two, and the gateway relays the
-// request's query unchanged.
+// request's query unchanged. No route admits a protocol upgrade.
 type Route struct {
 	Method string
 	Path   string
-	// WebSocket allows an upgrade on this route; otherwise the gateway
-	// rejects a request that asks for one.
-	WebSocket bool
 }
 
 // UpstreamPath is the escaped upstream path for a route: the base URL's escaped

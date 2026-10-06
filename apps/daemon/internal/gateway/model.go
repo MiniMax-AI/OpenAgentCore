@@ -61,8 +61,8 @@ func (m *modelRelay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		http.NotFound(w, r)
 		return
-	case wantsUpgrade(r) && !route.WebSocket:
-		http.Error(w, "upgrade not declared for this route", http.StatusBadRequest)
+	case wantsUpgrade(r):
+		http.Error(w, "no model route admits an upgrade", http.StatusBadRequest)
 		return
 	}
 	target := m.targets[route.Path]
