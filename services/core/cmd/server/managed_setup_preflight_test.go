@@ -19,7 +19,7 @@ import (
 
 func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 	helper := filepath.Join(t.TempDir(), "provider")
-	if err := os.WriteFile(helper, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":1,\"ErrorCode\":\"invalid\"}'\n"), 0700); err != nil {
+	if err := os.WriteFile(helper, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":2,\"ErrorCode\":\"invalid\"}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	state := filepath.Join(t.TempDir(), "e2b")
@@ -49,12 +49,12 @@ op = q['Operation']
 with (pathlib.Path(q['Config']['StateDir']) / 'operations').open('a') as log:
     log.write(op + '\n')
 if op == 'validate_deployment':
-    print(json.dumps({'Version': 1, 'ErrorCode': 'invalid'}))
+    print(json.dumps({'Version': 2, 'ErrorCode': 'invalid'}))
 else:
     info = dict(q['Reference'], ProviderID='owned-compute', State='stopped', CreateSettled=True)
     if op == 'kill':
         info.update(ProviderID='', State='absent')
-    print(json.dumps({'Version': 1, 'Info': info}))
+    print(json.dumps({'Version': 2, 'Info': info}))
 `
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 	}
 	helper := filepath.Join(t.TempDir(), "provider")
 	requests := filepath.Join(state, "requests")
-	script := "#!/bin/sh\ncat >>" + requests + "\necho >>" + requests + "\nprintf '%s' '{\"Version\":1,\"ErrorCode\":\"\",\"DeploymentValid\":true,\"TemplateBuild\":{\"Status\":\"ready\",\"CPUs\":4,\"MemoryMiB\":4096,\"RootDiskMiB\":24063}}'\n"
+	script := "#!/bin/sh\ncat >>" + requests + "\necho >>" + requests + "\nprintf '%s' '{\"Version\":2,\"ErrorCode\":\"\",\"DeploymentValid\":true,\"TemplateBuild\":{\"Status\":\"ready\",\"CPUs\":4,\"MemoryMiB\":4096,\"RootDiskMiB\":24063}}'\n"
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestE2BCandidateAdoptsTemplateBuildForOmittedResources(t *testing.T) {
 
 func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 	helper := filepath.Join(t.TempDir(), "provider")
-	if err := os.WriteFile(helper, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":1,\"ErrorCode\":\"team_mismatch\"}'\n"), 0700); err != nil {
+	if err := os.WriteFile(helper, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":2,\"ErrorCode\":\"team_mismatch\"}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	state := filepath.Join(t.TempDir(), "e2b")
