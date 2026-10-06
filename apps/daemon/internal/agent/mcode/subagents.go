@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"slices"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -66,26 +67,27 @@ func subagentReader() (string, string, error) {
 
 func (s *Session) readSubagents(ctx context.Context) (nativeSubagentSnapshot, error) {
 	var snapshot nativeSubagentSnapshot
-	node, reader, err := subagentReader()
-	if err != nil {
-		return snapshot, err
+	reader, start := s.opts.reader, s.opts.spawn
+	if start == nil {
+		node, script, err := subagentReader()
+		if err != nil {
+			return snapshot, err
+		}
+		reader, start = clirunner.StartOptions{Binary: node, Args: []string{script, s.opts.DataDir}, Env: executionEnvironment()}, clirunner.Start
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, node, "--disable-warning=ExperimentalWarning", reader, s.opts.DataDir, s.sessionID)
-	command.Env = executionEnvironment()
-	stdout, err := command.StdoutPipe()
+	reader.Parent, reader.Args = ctx, slices.Concat([]string{"--disable-warning=ExperimentalWarning"}, reader.Args, []string{s.sessionID})
+	process, err := start(reader)
 	if err != nil {
 		return snapshot, fmt.Errorf("mcode: child history reader is unavailable")
 	}
-	if err := command.Start(); err != nil {
-		return snapshot, fmt.Errorf("mcode: child history reader is unavailable")
-	}
-	raw, readErr := io.ReadAll(io.LimitReader(stdout, 64*1024*1024+1))
+	go io.Copy(io.Discard, process.Stderr)
+	raw, readErr := io.ReadAll(io.LimitReader(process.Stdout, 64*1024*1024+1))
 	if readErr != nil || len(raw) > 64*1024*1024 {
-		_ = command.Process.Kill()
+		process.Cancel()
 	}
-	err = command.Wait()
+	err = process.Wait()
 	if err != nil || readErr != nil || len(raw) > 64*1024*1024 {
 		return snapshot, fmt.Errorf("mcode: complete child history is unavailable")
 	}

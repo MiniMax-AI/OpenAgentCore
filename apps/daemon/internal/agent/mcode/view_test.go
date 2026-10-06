@@ -75,11 +75,6 @@ func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
 	var launched clirunner.StartOptions
 	session := viewSession(&launched)
 	session.Home = agent.ViewDir{Host: t.TempDir(), View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}
-	subagents := req
-	subagents.DisableSubagents, subagents.MaxConcurrentSubagents = false, new(2)
-	if _, err := view.Executor(t.Context(), subagents, session); !errors.Is(err, agent.ErrUnsupportedOperation) || launched.Binary != "" {
-		t.Fatalf("Executor with Subagents = %v, launched %q", err, launched.Binary)
-	}
 	if _, err := view.Executor(t.Context(), req, session); err == nil || err.Error() != "launch recorded" {
 		t.Fatalf("Executor = %v", err)
 	}
@@ -121,6 +116,31 @@ func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestViewReadsSubagentsBesideTheCLI(t *testing.T) {
+	install, _, req := viewFixture(t)
+	req.DisableSubagents, req.MaxConcurrentSubagents = false, new(2)
+	var launched, spawned clirunner.StartOptions
+	session := viewSession(&launched)
+	session.Home = agent.ViewDir{Host: t.TempDir(), View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}
+	session.Spawn = func(options clirunner.StartOptions) (*clirunner.Process, error) {
+		spawned = options
+		return clirunner.Start(clirunner.StartOptions{Parent: options.Parent, Binary: "/bin/echo", Args: []string{`{"version":1,"complete":true,"rootSessionId":"root"}`}})
+	}
+	opts, err := install.prepare(t.Context(), req, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Session{sessionID: "root", opts: opts}
+	if _, err := s.readSubagents(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	data := path.Join(session.Home.View, viewDataName)
+	args := []string{"--disable-warning=ExperimentalWarning", path.Join(path.Dir(install.bridge), "subagent-snapshot.mjs"), data, "root"}
+	if spawned.Binary != install.node || !slices.Equal(spawned.Args, args) || spawned.Dir != data || !spawned.OwnProcessGroup || !slices.Contains(spawned.Env, "LD_LIBRARY_PATH="+install.loader.LibraryPath) {
+		t.Fatalf("spawned %+v", spawned)
 	}
 }
 

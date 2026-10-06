@@ -19,13 +19,8 @@ func validateExecutionRequest(req proto.PromptRequestPayload) error {
 	if req.ExecutionControls == nil || req.ExecutionControls.OutputFormat != nil || req.ExecutionControls.WebSearch != "disabled" || (req.ExecutionControls.TextVerbosity != "" && req.ExecutionControls.TextVerbosity != "medium") {
 		return fmt.Errorf("mcode: unsupported execution controls")
 	}
-	if !req.DisableSubagents {
-		if req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1 {
-			return fmt.Errorf("mcode: Subagent concurrency limit is required")
-		}
-		if _, _, err := subagentReader(); err != nil {
-			return err
-		}
+	if !req.DisableSubagents && (req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1) {
+		return fmt.Errorf("mcode: Subagent concurrency limit is required")
 	}
 	if mode := optionString(req.AgentOptions, "mode"); mode != "" {
 		return fmt.Errorf("mcode: text execution uses default native permissions")
