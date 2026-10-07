@@ -9,9 +9,13 @@ import (
 	"testing"
 )
 
-func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
+func TestDeploymentContractProjectionsAreCurrent(t *testing.T) {
 	registry := Builtin()
-	raw, err := os.ReadFile("../../../../../deploy/node/node_spec.py")
+	python, err := os.ReadFile("../../../../../deploy/node/node_spec.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	typescript, err := os.ReadFile("../../../../../packages/agents-client/src/deployment-contract.ts")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,8 +23,8 @@ func TestInstallerDeploymentProjectionIsCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), expected) {
-		t.Fatal("node_spec.py contract is stale; regenerate with go run ./services/core/cmd/specification-contract -write")
+	if !strings.Contains(string(python), expected) || string(typescript) != sandbox.TypeScriptDeploymentContract() {
+		t.Fatal("deployment contract projection is stale; regenerate with go run ./services/core/cmd/specification-contract -write")
 	}
 }
 func TestDeploymentContractFixtures(t *testing.T) {

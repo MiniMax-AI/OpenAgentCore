@@ -365,7 +365,7 @@ export const chinese = {
   "{{name}} will be removed from this deployment.": "{{name}} 将从此部署中移除。",
   "Open {{name}}": "打开 {{name}}",
   "Remove {{name}}": "移除 {{name}}",
-  "1–255 CPUs, 512–1048576 MiB of memory. microsandbox disks are at least 1024 MiB.": "CPU 1–255 核，内存 512–1048576 MiB；microsandbox 的磁盘至少 1024 MiB。",
+  "{{cpus}} CPUs, {{memory}} MiB of memory. microsandbox disks are at least {{disk}} MiB.": "CPU {{cpus}} 核，内存 {{memory}} MiB；microsandbox 的磁盘至少 {{disk}} MiB。",
   "Advanced settings": "高级设置",
   "CPUs": "CPU（核）",
   "Check this value": "请检查这个值",

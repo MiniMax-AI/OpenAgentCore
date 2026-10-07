@@ -1,4 +1,4 @@
-import { coreHarnessKinds } from "./harness-catalog";
+import { coreHarnessKinds, modelProviderProtocols } from "./harness-catalog";
 import { AgentCoreError, projectRuntimeObservation, projectSavedAgentConfiguration } from "./client";
 import { projectTokenUsage } from "./usage-projection";
 import { safeProvider } from "./execution-configuration-projection";
@@ -227,7 +227,7 @@ export function projectHarnessModelConfiguration(value: unknown, harness?: CoreH
 }
 function projectModelConfigurationSupport(value: unknown): CoreHarness["model_configuration_support"] {
   const support = record(value, ["protocols", "accepts_harness_config", "token_limits_required"]);
-  const known = new Set(["anthropic", "responses", "chat_completions"]);
+  const known: ReadonlySet<unknown> = new Set(modelProviderProtocols);
   const protocols = support.protocols;
   if (!Array.isArray(protocols) || protocols.length === 0 || protocols.some((protocol) => !known.has(protocol)) ||
     new Set(protocols).size !== protocols.length ||

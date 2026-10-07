@@ -1,4 +1,4 @@
-import type { CoreHarnessKind } from "./harness-catalog";
+import type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
 export type PageOrder = "asc" | "desc";
 
 export interface ListPage<T> {
@@ -1185,11 +1185,11 @@ export interface RuntimeHistory {
   token_usage: RuntimeHistoryTokenUsagePoint[];
 }
 
-export type { CoreHarnessKind } from "./harness-catalog";
+export type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
 
 /** A complete replacement bundle. API keys are write-only. */
 export interface ModelProviderInput {
-  protocol: "anthropic" | "responses" | "chat_completions";
+  protocol: ModelProviderProtocol;
   base_url: string;
   api_key: string;
   context_window?: number;
@@ -1198,7 +1198,7 @@ export interface ModelProviderInput {
 }
 
 export interface ModelProviderView {
-  protocol: "anthropic" | "responses" | "chat_completions";
+  protocol: ModelProviderProtocol;
   base_url: string;
   context_window?: number;
   max_output_tokens?: number;

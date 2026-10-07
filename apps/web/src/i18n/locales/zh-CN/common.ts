@@ -1,7 +1,8 @@
-import { coreErrors } from "./core-errors";
+import { coreErrorDetails, coreErrors } from "./core-errors";
 
 export const common = {
   coreErrors,
+  coreErrorDetails,
   readFailure: {
     title: "无法读取数据",
     partial: "部分读取失败。当前数字和列表仅来自已读取的数据，可能不完整或已过期。",
