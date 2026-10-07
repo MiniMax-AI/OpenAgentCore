@@ -90,7 +90,11 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 		}
 	}
 	for _, owner := range r.executors {
-		attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: executor %s cleanup unconfirmed: %w", owner.id, owner.closeErr))
+		cause := owner.closeErr
+		if cause == nil {
+			cause = errors.New("cleanup has not settled")
+		}
+		attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: executor %s: %w", owner.id, cause))
 	}
 	close(attempt.done)
 	r.mu.Unlock()
