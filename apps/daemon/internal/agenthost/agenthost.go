@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -42,7 +41,8 @@ type Config struct {
 	// agent host trusts. The gateway trusts exactly these for upstream TLS,
 	// and the view presents the directory read-only at the same path.
 	CADir string
-	// Log receives each view's presentation report. Nil discards it.
+	// Log receives each view's presentation report and each failure of a
+	// Session, which no Turn reports. Nil discards it.
 	Log *slog.Logger
 }
 
@@ -51,27 +51,10 @@ type UIDRange struct {
 	First, Count uint32
 }
 
-// Session is one Session the agent host runs.
-type Session struct {
-	// Binding is the Session's Link attachment.
-	Binding Binding
-	// Environment is what processes forwarded to the sandbox receive.
-	Environment Environment
-	// Request is the Session's frozen request. Its Input is ignored; each
-	// Turn's input arrives on Input.
-	Request proto.PromptRequestPayload
-	// Input carries one Turn each. Run runs them in order and ends the
-	// Session once Input is closed and the last Turn has settled.
-	Input <-chan Input
-	// Output receives every Turn's envelopes. Run never closes it.
-	Output chan<- proto.Envelope
-}
-
-// Binding is the identity of the Session's Link attachment, as each Open
-// carries it.
+// Binding is the Session's Link assignment, as each Open carries it. Each
+// Executor of the Session opens its own attachment under it.
 type Binding struct {
 	Resource        sandboxlink.ResourceRef
-	AttachmentID    sandboxwire.ID
 	SessionID       sandboxwire.ID
 	AssignmentID    sandboxwire.ID
 	AssignmentEpoch uint64
@@ -89,14 +72,9 @@ type Environment struct {
 	Tool map[string]string
 }
 
-// Input is one Turn: its run ID and its input.
-type Input struct {
-	RunID   string
-	Message proto.MessageInput
-}
-
-// Error kinds. Every error Open and Run return matches one of them with
-// errors.Is.
+// Error kinds. Every error that Open, Host.Registry's Executor factory and
+// Executors, and Host.RemoveHome return, and every Session failure the agent
+// host logs, matches one of them with errors.Is.
 var (
 	// ErrUnsupported is a platform other than Linux, a host that lacks a
 	// requirement, or a Session that asks for what the agent host does not
@@ -106,17 +84,18 @@ var (
 	// agent.ErrInvalidView for a view whose paths meet the agent host's own
 	// overlays.
 	ErrUnsupported = errors.New("agenthost: unsupported")
-	// ErrInvalidConfig is a Config that Open or Run rejects.
+	// ErrInvalidConfig is a Config that Open or an Executor factory rejects.
 	ErrInvalidConfig = errors.New("agenthost: invalid configuration")
 	// ErrStateLocked means another agent host holds the StateDir or the
 	// ViewCgroups.
 	ErrStateLocked = errors.New("agenthost: state in use")
-	// ErrInvalidSession is a malformed Session.
+	// ErrInvalidSession is a malformed request, binding or Environment.
 	ErrInvalidSession = errors.New("agenthost: invalid session")
 	// ErrCapacity means every Session uid is in use.
 	ErrCapacity = errors.New("agenthost: no free session uid")
-	// ErrSessionExists means the Session's directory already exists.
-	ErrSessionExists = errors.New("agenthost: session directory exists")
+	// ErrSessionExists means an Executor of the Session has not closed, or
+	// Host.RemoveHome is removing the Session's directory.
+	ErrSessionExists = errors.New("agenthost: session in use")
 	// ErrExecutor is a view Executor factory that failed.
 	ErrExecutor = errors.New("agenthost: view executor failed")
 	// ErrLink is a Link attachment that failed or ended.
@@ -130,8 +109,6 @@ var (
 	// whose process relay was lost while the view ran
 	// (processbroker.ErrRelayLost).
 	ErrProcessBroker = errors.New("agenthost: process broker failed")
-	// ErrTurn is a Turn that failed or left its Executor unusable.
-	ErrTurn = errors.New("agenthost: turn failed")
 	// ErrTeardown is a Session resource that could not be released, such as
 	// a view whose teardown did not finish (sessionview.ErrCleanup), or what
 	// an earlier agent host left that Open could not recover.
@@ -145,8 +122,8 @@ type Host struct {
 	state, views *os.File
 }
 
-// Close releases the installation locks. Call it once every Run has
-// returned.
+// Close releases the installation locks. Call it once every Executor has
+// closed.
 func (h *Host) Close() error {
 	var errs []error
 	for _, f := range []*os.File{h.state, h.views} {

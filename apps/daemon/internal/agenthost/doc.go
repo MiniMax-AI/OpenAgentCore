@@ -3,19 +3,22 @@
 // Session's Link attachment. It needs Linux; elsewhere Open returns
 // ErrUnsupported.
 //
-// The process that runs the agent host calls Open once at startup, runs each
-// Session with Host.Run and calls Close after the last Run has returned. Open
-// takes two installation locks, which the Host holds until Close: a flock on
-// StateDir/lock for the Session directories and one on the Config.ViewCgroups
-// directory for the view cgroups. Under the locks, Open checks the
-// requirements that need nothing created, ends every cgroup in ViewCgroups
-// with all its processes (sessionview.Recover), checks the requirements that
-// create something, and only then removes the Session directories. So no
-// process of an earlier Session still uses a directory or uid that a new
-// Session gets, and nothing an earlier agent host left can fail a check. If a
-// step fails, Open fails and has reclaimed nothing. The cgroup hierarchy is
-// the only record of what the views own; no process is identified by name or
-// credentials.
+// The process that runs the agent host calls Open once at startup, hands
+// Host.Registry to the daemon's dispatch, which drives each Turn of each
+// Executor, and calls Close once every Executor has closed. No production
+// caller constructs Host.Registry yet; oac-daemon connect still runs
+// Harnesses in the sandbox. Open takes two installation locks, which the
+// Host holds until Close: a flock on StateDir/lock for the Session
+// directories and one on the Config.ViewCgroups directory for the view
+// cgroups. Under the locks, Open checks the requirements that need nothing
+// created, ends every cgroup in ViewCgroups with all its processes
+// (sessionview.Recover), checks the requirements that create something, and
+// only then sweeps the Session directories: it removes their transient
+// entries and keeps their homes. So no process of an earlier Executor still
+// uses a directory or uid that a new Executor gets, and nothing an earlier
+// agent host left can fail a check. If a step fails, Open fails and has
+// reclaimed nothing. The cgroup hierarchy is the only record of what the
+// views own; no process is identified by name or credentials.
 //
 // The agent host requires root with the capabilities, /dev/fuse and the mount
 // and seccomp support that sessionview.Probe checks; clone3, which some
@@ -28,25 +31,29 @@
 // a delegation that fails them fails each view's launch with ErrLaunch and
 // sessionview.ErrLauncher.
 //
-// Run runs one Session. It admits the Session before any effect: the kind must
-// declare an agent.View, the request must use only what a view runs and no
-// function tools, whose results Input cannot carry, and when the view declares
-// shim names, which run on the sandbox PATH, the Session's Environment must
-// set PATH. It then allocates the Session uid, skipping each uid that a
-// running thread holds as its real, effective, saved or file-system uid; this
-// check only detects a conflict and never ends a process. It creates the
-// Session directory under Config.StateDir, rewrites the request so the model
-// provider and HTTP MCP reach the network only through the Session's gateway,
-// and calls the view's Executor factory. Each ViewSession.Launch builds one
-// sessionview view, of which one at a time is live, over the world that
-// worldfs serves from the attachment's File service, with the gateway
-// listening in the view's network namespace. ViewSession.Spawn runs another
-// process in the live view (sessionview.View.Spawn). A view with a shim gets
-// its own process broker, started once the view runs and closed once it has
-// ended. The broker runs the shims' commands over the attachment's Process
-// service in the strongest scope the service declares, with the view's
-// ForwardEnv and the Session's Environment, and cancels a forwarded process
-// whose shim is lost with the launch's kill timeout as its grace.
+// Host.Registry's Executor factory prepares an Executor of the Session that
+// its bind function binds the request to. It admits the request before any
+// effect: the kind must declare an agent.View, the request must use only
+// what a view runs and no function tools, and when the view declares shim
+// names, which run on the sandbox PATH, the Session's Environment must set
+// PATH. The registry's Info marks what admission rejects, and what needs a
+// local workspace, unsupported. The factory then allocates the Executor's
+// uid, skipping each uid that a running thread holds as its real,
+// effective, saved or file-system uid; this check only detects a conflict
+// and never ends a process. It prepares the Session directory under
+// Config.StateDir, rewrites the request so the model provider and HTTP MCP
+// reach the network only through the Session's gateway, and calls the
+// view's Executor factory. Each ViewSession.Launch gives the Session home to
+// the Executor's uid and builds one sessionview view, of which one at a time
+// is live, over the world that worldfs serves from the attachment's File
+// service, with the gateway listening in the view's network namespace.
+// ViewSession.Spawn runs another process in the live view
+// (sessionview.View.Spawn). A view with a shim gets its own process broker,
+// started once the view runs and closed once it has ended. The broker runs
+// the shims' commands over the attachment's Process service in the
+// strongest scope the service declares, with the view's ForwardEnv and the
+// Session's Environment, and cancels a forwarded process whose shim is lost
+// with the launch's kill timeout as its grace.
 //
 // Each view presents the closure directories read-only and executable, the
 // Session home read-write and noexec, the agent host's /etc/passwd, group,
@@ -54,34 +61,34 @@
 // host path, then the adapter's overlays and masks and the process shim with
 // its relay. Everything else is the world.
 //
-// The agent host owns the Session's Link attachment: it opens each stream
-// with the Session's binding, renews the lease and fails the Session when the
-// relay closes the attachment, a Link request fails in a way that is not
-// retryable, the world is lost or did not stop cleanly, which leaves what the
-// attachment holds uncertain, a view's process relay is lost while the view
-// runs, or a view's teardown does not finish within sessionview's bound. A
-// failure cancels the running Turn and closes the live view. A view's end is
-// settled before its clirunner.Process reports it: the gateway and the
-// process broker have stopped, the world's end is recorded and the view slot
-// is free. Teardown releases, in order, the Executor, the view with its
-// process broker, the Link attachment, the Session directory and the uid;
-// Run decides its result only afterwards, so a failure recorded during
-// teardown counts, and from the close of the attachment on, what the Link
-// reports changes nothing. When Executor.Close fails, teardown ends the
-// views, which kills their processes, and retries Close once. If Close
-// fails again, the Executor may still use the Session directory: Run returns
-// ErrTeardown and keeps the directory, and the uid stays in use until the
-// agent host exits. A view whose teardown did not finish keeps both the same
-// way, because its processes may still run.
+// The Session directory, StateDir/sessions/<Session ID>, stays root-owned
+// and private. Its home holds the Harness's native history and persists
+// across the Session's Executors and the agent host's restarts until
+// Host.RemoveHome removes it. Its other entries are transient: each Executor
+// creates them. The Host claims a Session in memory from an Executor's open
+// until its Close succeeds, and while RemoveHome runs, so one of them at a
+// time uses the directory.
 //
-// Run drives each Turn as the daemon's dispatch drives a prepared execution.
-// One output consumer starts before StartTurn and forwards the Turn's
-// envelopes to Output in order. The Turn's Done waits until the Turn has
-// settled and, when the Turn leaves the Executor unusable, until the
-// Executor has closed; a failed Turn publishes an Error envelope before it.
-// When Close fails, nothing more is published. A Turn that fails or leaves
-// the Executor unusable ends the Session, and nothing is sent to Output
-// after Run returns.
+// Each Executor owns its own Link attachment: it opens each stream with the
+// Session's binding, renews the lease and fails the Session when the relay
+// closes the attachment, a Link request fails in a way that is not
+// retryable, the world is lost or did not stop cleanly, which leaves what
+// the attachment holds uncertain, a view's process relay is lost while the
+// view runs, or a view's teardown does not finish within sessionview's
+// bound. A failure is logged and closes the live view, which ends the
+// running Turn, and later launches fail. A view's end is settled before its
+// clirunner.Process reports it: the gateway and the process broker have
+// stopped, the world's end is recorded and the view slot is free.
+// Executor.Close releases, in order, the view Executor, the views with their
+// process brokers, the Link attachment, the transient entries, and the uid
+// with the Session's claim. When the view Executor's Close fails, Close ends
+// the views, which kills their processes, and retries it once. If the view
+// Executor still fails, or the relay does not confirm the attachment's close,
+// Close returns ErrTeardown and keeps the transient entries, the uid and the
+// claim until a later Close succeeds. A view whose teardown did not finish
+// may leave processes that use the Session directory, so every Close then
+// returns ErrTeardown and the uid and the claim stay until the agent host
+// exits.
 //
 // The Harness view protocol is in contracts/agents-api/harness-onboarding.md
 // and the gateway's in contracts/agents-api/model-execution.md.

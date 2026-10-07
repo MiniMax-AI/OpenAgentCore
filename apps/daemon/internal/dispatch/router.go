@@ -56,6 +56,7 @@ type Router struct {
 	workspaceExport     *workspaceExport
 	workspaceReads      map[string]struct{}
 	localWorkspace      *localworkspace.Binding
+	sessionEnvironments bool
 }
 
 type appliedInteractionDecision struct {
@@ -102,6 +103,10 @@ type Config struct {
 	IdleTimeout        time.Duration
 	PreparationTimeout time.Duration
 	LocalWorkspace     *localworkspace.Binding
+	// SessionEnvironments says that a prepared execution's LocalEnvironment
+	// is its Session's Environment, which the Executor factory binds, and not
+	// a local workspace of this daemon. It excludes LocalWorkspace.
+	SessionEnvironments bool
 }
 
 const defaultIdleTimeout = time.Hour
@@ -113,6 +118,9 @@ func New(cfg Config) (*Router, error) {
 	}
 	if cfg.Sender == nil {
 		return nil, errors.New("dispatch.New: Sender is required")
+	}
+	if cfg.SessionEnvironments && cfg.LocalWorkspace != nil {
+		return nil, errors.New("dispatch.New: SessionEnvironments excludes LocalWorkspace")
 	}
 	log := cfg.Log
 	if log == nil {
@@ -143,6 +151,7 @@ func New(cfg Config) (*Router, error) {
 		preparationRequests: make(map[string]*preparationState),
 		preparationTimeout:  preparationTimeout,
 		localWorkspace:      cfg.LocalWorkspace,
+		sessionEnvironments: cfg.SessionEnvironments,
 	}, nil
 }
 

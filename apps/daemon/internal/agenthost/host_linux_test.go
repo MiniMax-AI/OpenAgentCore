@@ -3,6 +3,7 @@
 package agenthost
 
 import (
+	"context"
 	"crypto/x509"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 
@@ -22,7 +24,7 @@ import (
 
 // TestOpenReclaimsNothingWithoutViewCgroups checks that Open rejects a
 // ViewCgroups that is not a cgroup v2 directory, or that is a symlink, here to
-// a cgroup tree this process runs in, and keeps every Session directory.
+// a cgroup tree this process runs in, and keeps every transient entry.
 func TestOpenReclaimsNothingWithoutViewCgroups(t *testing.T) {
 	link := filepath.Join(t.TempDir(), "link")
 	if err := os.Symlink("/sys/fs/cgroup", link); err != nil {
@@ -37,22 +39,22 @@ func TestOpenReclaimsNothingWithoutViewCgroups(t *testing.T) {
 	} {
 		cfg := newConfig(t, agent.NewRegistry(), testCA())
 		cfg.ViewCgroups = c.dir
-		left := plantSession(t, cfg)
+		left := plantSession(t, cfg, sandboxwire.NewID())
 		_, err := Open(cfg)
 		for _, want := range c.want {
 			if !errors.Is(err, want) {
 				t.Errorf("Open with ViewCgroups %s = %v, want %v", c.dir, err, want)
 			}
 		}
-		if _, err := os.Stat(left); err != nil {
-			t.Errorf("Open with ViewCgroups %s reclaimed a Session directory: %v", c.dir, err)
+		if _, err := os.Stat(left.entry(etcEntry)); err != nil {
+			t.Errorf("Open with ViewCgroups %s reclaimed a transient entry: %v", c.dir, err)
 		}
 	}
 }
 
 // TestOpenReclaimsNothingUnrecovered checks that a view cgroup that Open
-// cannot remove, here one that holds a cgroup of its own, keeps every Session
-// directory.
+// cannot remove, here one that holds a cgroup of its own, keeps every
+// transient entry.
 func TestOpenReclaimsNothingUnrecovered(t *testing.T) {
 	if os.Getenv(gateEnv) != "1" {
 		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see view_linux_test.go", gateEnv)
@@ -63,15 +65,15 @@ func TestOpenReclaimsNothingUnrecovered(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(stuck, "nested"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	left := plantSession(t, cfg)
+	left := plantSession(t, cfg, sandboxwire.NewID())
 	_, err := Open(cfg)
 	os.Remove(filepath.Join(stuck, "nested"))
 	os.Remove(stuck)
 	if !errors.Is(err, ErrTeardown) || !errors.Is(err, sessionview.ErrCleanup) {
 		t.Errorf("Open = %v, want ErrTeardown with sessionview.ErrCleanup", err)
 	}
-	if _, err := os.Stat(left); err != nil {
-		t.Errorf("Open reclaimed a Session directory before recovery: %v", err)
+	if _, err := os.Stat(left.entry(etcEntry)); err != nil {
+		t.Errorf("Open reclaimed a transient entry before recovery: %v", err)
 	}
 }
 
@@ -79,17 +81,17 @@ func TestOpenReclaimsNothingUnrecovered(t *testing.T) {
 // leaves: a Session directory whose view's processes keep forking, a view
 // cgroup that no Session directory names, and an empty view cgroup, which
 // together exhaust the descendant limit of ViewCgroups. Open ends every one
-// of their processes before it removes the Session directory, and spares a
-// process outside its view cgroups that has a Session uid, the launcher's
-// argv and PID 1 of its own namespace. While it runs, no other agent host
-// opens the same StateDir or the same ViewCgroups.
+// of their processes before it removes the transient entries, keeps the
+// home, and spares a process outside its view cgroups that has a Session
+// uid, the launcher's argv and PID 1 of its own namespace. While it runs, no
+// other agent host opens the same StateDir or the same ViewCgroups.
 func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 	if os.Getenv(gateEnv) != "1" {
 		t.Skipf("set %s=1 and run the test binary as root in a privileged container; see view_linux_test.go", gateEnv)
 	}
 	cfg := newConfig(t, agent.NewRegistry(), testCA())
 	cfg.ViewCgroups = sessionviewtest.CgroupParent(t)
-	plantSession(t, cfg)
+	planted := plantSession(t, cfg, sandboxwire.NewID())
 	crashed := filepath.Join(cfg.ViewCgroups, "view-crashed")
 	forking := startInCgroup(t, crashed, cfg.UIDs.First, "/bin/sh", "-c", "while :; do sleep 60 & sleep 0.01; done")
 	until(t, "the crashed view's processes to fork", func() bool {
@@ -134,8 +136,11 @@ func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 	if left := sessionviewtest.Cgroups(t, cfg.ViewCgroups); len(left) != 0 {
 		t.Errorf("view cgroups left after Open: %v", left)
 	}
-	if left := leftSessions(t, cfg); len(left) != 0 {
-		t.Errorf("%d Session directories left after Open", len(left))
+	if left := leftEntries(t, cfg); len(left) != 0 {
+		t.Errorf("transient entries left after Open: %v", left)
+	}
+	if data, err := os.ReadFile(planted.entry(homeEntry, "history")); err != nil || string(data) != "kept" {
+		t.Errorf("the home holds %q, %v after Open", data, err)
 	}
 	hold.Close()
 	if err := unrelated.Wait(); err != nil {
@@ -151,14 +156,78 @@ func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 	}
 }
 
-// plantSession creates a Session directory as an earlier agent host leaves it.
-func plantSession(t *testing.T, cfg Config) string {
+// plantSession creates the directory of Session id as an earlier agent host
+// leaves it: a home that holds history, and the transient entries.
+func plantSession(t *testing.T, cfg Config, id sandboxwire.ID) sessionDir {
 	t.Helper()
-	dir := filepath.Join(sessionsDir(cfg.StateDir), sandboxwire.NewID().String())
-	if err := os.MkdirAll(filepath.Join(dir, homeEntry), 0o700); err != nil {
+	dir := sessionDir(filepath.Join(sessionsDir(cfg.StateDir), id.String()))
+	for _, name := range []string{homeEntry, etcEntry, maskEntry, stagingEntry} {
+		if err := os.MkdirAll(dir.entry(name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(dir.entry(homeEntry, "history"), []byte("kept"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+// TestRemoveHome checks that RemoveHome refuses a Session while an Executor
+// of it opens and until that Executor has closed, that no Executor opens
+// while a removal holds the Session, and that removal is idempotent.
+func TestRemoveHome(t *testing.T) {
+	f := newViewFixture(t)
+	h, b := &Host{cfg: f.cfg}, newBinding(newResource())
+	req := request("viewed", "/workspace", "https://model.test", "sk-test")
+	var dials atomic.Int32
+	// The open stops once it has claimed the Session, before its uid.
+	claimed, proceed := make(chan struct{}), make(chan struct{})
+	tasks := func() ([][4]uint32, error) {
+		close(claimed)
+		<-proceed
+		return nil, nil
+	}
+	opened := make(chan agent.Executor, 1)
+	go func() {
+		e, _ := open(context.Background(), f.cfg, req, bindTo(b), deps{dial: countingDial(&dials), tasks: tasks})
+		opened <- e
+	}()
+	<-claimed
+	if err := h.RemoveHome(b.SessionID); !errors.Is(err, ErrSessionExists) {
+		t.Fatalf("RemoveHome during an open = %v, want ErrSessionExists", err)
+	}
+	close(proceed)
+	e := <-opened
+	if e == nil {
+		t.Fatal("open returned no Executor to close")
+	}
+	if err := h.RemoveHome(b.SessionID); !errors.Is(err, ErrSessionExists) {
+		t.Errorf("RemoveHome before the Executor closed = %v, want ErrSessionExists", err)
+	}
+	if _, err := os.Stat(f.session.Home.Host); err != nil {
+		t.Errorf("the home: %v", err)
+	}
+	if err := e.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// A removal in progress holds the Session as RemoveHome does.
+	if !claimSession(b.SessionID) {
+		t.Fatal("the closed Executor still holds the Session")
+	}
+	e, err := open(context.Background(), f.cfg, req, bindTo(b), deps{dial: countingDial(&dials), tasks: noTasks})
+	releaseSession(b.SessionID)
+	if e != nil || !errors.Is(err, ErrSessionExists) {
+		t.Errorf("open during a removal = %v, want ErrSessionExists and no Executor", err)
+	}
+	// Removal is idempotent: an absent home is removed.
+	for range 2 {
+		if err := h.RemoveHome(b.SessionID); err != nil {
+			t.Fatalf("RemoveHome = %v", err)
+		}
+	}
+	if _, err := os.Stat(filepath.Dir(f.session.Home.Host)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the Session directory remains: %v", err)
+	}
 }
 
 // startInCgroup starts args as uid in a new cgroup dir, as a view's processes

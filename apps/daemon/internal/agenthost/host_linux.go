@@ -49,8 +49,8 @@ func Open(cfg Config) (_ *Host, err error) {
 	if err := sessionview.Probe(); err != nil {
 		return nil, fmt.Errorf("%w: views: %w", ErrUnsupported, err)
 	}
-	if err := os.RemoveAll(sessionsDir(cfg.StateDir)); err != nil {
-		return nil, fmt.Errorf("%w: remove session directories: %w", ErrTeardown, err)
+	if err := sweep(cfg.StateDir); err != nil {
+		return nil, fmt.Errorf("%w: sweep session directories: %w", ErrTeardown, err)
 	}
 	return h, nil
 }

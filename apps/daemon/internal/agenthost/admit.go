@@ -17,16 +17,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
 // etcFiles are the files the agent host writes for each Session and presents
 // at /etc/<name>.
 var etcFiles = []string{"passwd", "group", "hosts", "resolv.conf", "nsswitch.conf"}
 
-// plan is an admitted Session: everything Run derives before any effect.
+// plan is an admitted request: everything an Executor derives before any
+// effect.
 type plan struct {
 	view    agent.View
 	gateway gateway.Config
@@ -89,13 +88,10 @@ func loadRoots(dir string) (*x509.CertPool, error) {
 	return roots, nil
 }
 
-// admit checks the Session and derives its plan without touching anything.
-// openNetwork is the Session's Network dial for the gateway.
-func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context.Context) (sandboxlink.Stream, error)) (*plan, error) {
-	if err := checkSession(s); err != nil {
-		return nil, err
-	}
-	req := s.Request
+// admit checks req and derives its plan without touching anything. env is
+// the Session's Environment, and openNetwork its Network dial for the
+// gateway.
+func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env Environment, openNetwork func(context.Context) (sandboxlink.Stream, error)) (*plan, error) {
 	view, err := cfg.Harnesses.ResolveView(req.AgentKind)
 	if err != nil {
 		return nil, fmt.Errorf("%w: admit: %w", ErrUnsupported, err)
@@ -106,8 +102,8 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 		return nil, unsupported("a Session without an execution environment")
 	case local == nil:
 		return nil, unsupported("a Session without a workspace")
-	case !isViewPath(local.WorkspaceRoot):
-		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceRoot)
+	case !isViewPath(local.WorkspaceDirectory):
+		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceDirectory)
 	case !req.StrictResume:
 		return nil, unsupported("a Session without strict resume")
 	case local.Capabilities || len(local.Skills) > 0 || local.CapabilityRoot != "":
@@ -115,9 +111,8 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 	case local.NetworkAccess != "enabled" || len(local.AllowedDomains) > 0:
 		return nil, unsupported("a restricted workspace network")
 	case len(req.FunctionTools) > 0 || req.ToolSearch:
-		// A function call waits for a result that Input cannot deliver.
 		return nil, unsupported("function tools and their discovery")
-	case len(view.Shims) > 0 && !hasPATH(s.Environment):
+	case len(view.Shims) > 0 && !hasPATH(env):
 		return nil, invalidSession("the view's shims run names on the sandbox PATH, and the Environment sets no PATH")
 	}
 	raw, ok := req.AgentOptions["model_provider"]
@@ -166,15 +161,16 @@ func admit(cfg Config, roots *x509.CertPool, s Session, openNetwork func(context
 }
 
 // handoff rewrites the request as a view Executor receives it: the model
-// provider is the gateway's listener with the placeholder key, and MCP is
-// only in ViewSession.MCP.
+// provider is the gateway's listener with the placeholder key, MCP is only in
+// ViewSession.MCP, and the workspace is the Environment's declared directory,
+// which the view shows from the sandbox.
 func handoff(req proto.PromptRequestPayload, provider modelprovider.Provider, endpoints gateway.Endpoints) proto.PromptRequestPayload {
 	provider.BaseURL, provider.APIKey = endpoints.Model, modelprovider.Placeholder
 	req.AgentOptions = maps.Clone(req.AgentOptions)
 	req.AgentOptions["model_provider"] = provider
 	req.MCPHTTPServers = nil
 	local := *req.LocalEnvironment
-	local.MCP = nil
+	local.MCP, local.WorkspaceRoot = nil, local.WorkspaceDirectory
 	req.LocalEnvironment = &local
 	return req
 }
@@ -203,17 +199,14 @@ func checkLayout(cfg Config, view agent.View) error {
 	return nil
 }
 
-// checkSession checks the Session's own fields. Its binding is valid when the
-// Open the Session sends is, as Link encoding checks it.
-func checkSession(s Session) error {
-	if _, err := sandboxlink.Encode(1, s.Binding.open(sandboxlink.ServiceFile, sandboxfs.Version, sandboxwire.ID{})); err != nil {
+// checkBinding checks the Session's binding and Environment. The binding is
+// valid when open, an Open it carries, is, as Link encoding checks it.
+func checkBinding(open sandboxlink.Open, env Environment) error {
+	if _, err := sandboxlink.Encode(1, open); err != nil {
 		return invalidSession("binding: %v", err)
 	}
-	if s.Input == nil || s.Output == nil {
-		return invalidSession("no input or output channel")
-	}
-	for _, env := range []map[string]string{s.Environment.Sandbox, s.Environment.Tool} {
-		for name, value := range env {
+	for _, vars := range []map[string]string{env.Sandbox, env.Tool} {
+		for name, value := range vars {
 			if name == "" || strings.ContainsAny(name, "=\x00") || strings.ContainsRune(value, 0) {
 				return invalidSession("environment variable %q", name)
 			}

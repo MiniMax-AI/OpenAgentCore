@@ -1,8 +1,8 @@
 //go:build linux
 
 // Package agenthostqualify runs one agent-host Session per real Harness
-// against a sandbox container running oac-sandbox-io, with a real model behind
-// the gateway.
+// through the daemon's dispatch against a sandbox container running
+// oac-sandbox-io, with a real model behind the gateway.
 package agenthostqualify
 
 import (
@@ -28,6 +28,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/codex"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/mcode"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agenthost"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -141,31 +142,35 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		"   It prints a value and exits with a non-zero status; that is expected.\n" +
 		"3. Answer with exactly one line: VALUE=<the printed value> EXIT=<the exit status>"
 
-	in, out := make(chan agenthost.Input), make(chan proto.Envelope, 64)
-	s := agenthost.Session{
-		Binding: sb.binding(),
-		Environment: agenthost.Environment{
-			Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root", "LANG": "C.UTF-8"},
-			Tool:    map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)},
-		},
-		Request: proto.PromptRequestPayload{AgentKind: kind, AgentStateKey: "qualify-" + kind, StrictResume: true, DisableSubagents: true,
-			AgentOptions: options, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
-			LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: workspace, NetworkAccess: "enabled"}},
-		Input: in, Output: out,
+	// dispatch drives the Session's Turn through the agent host's Executor.
+	b := sb.binding()
+	sb.grant(b, cfg.RuntimeID)
+	env := agenthost.Environment{
+		Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root", "LANG": "C.UTF-8"},
+		Tool:    map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)},
 	}
-	sb.grant(s.Binding, cfg.RuntimeID)
-	done := make(chan error, 1)
-	go func() { done <- h.Run(context.Background(), s) }()
-
-	select {
-	case in <- agenthost.Input{RunID: "qualify", Message: proto.TextInput(prompt)}:
-	case err := <-done:
-		t.Fatalf("Run ended before the Turn: %v", err)
+	out := make(sender, 256)
+	router, err := dispatch.New(dispatch.Config{Sender: out, SessionEnvironments: true, Log: cfg.Log,
+		Registry: h.Registry(func(proto.PromptRequestPayload) (agenthost.Binding, agenthost.Environment, error) { return b, env, nil })})
+	if err != nil {
+		t.Fatal(err)
 	}
-	answer := collect(t, out, done)
-	close(in)
-	if err := <-done; err != nil {
-		t.Errorf("Run: %v", err)
+	session := uuid.NewString()
+	handle(t, router, proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{
+		AgentKind: kind, AgentStateKey: "agents-api-" + session, StrictResume: true, DisableSubagents: true,
+		AgentOptions: options, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
+		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"}}})
+	ready := out.status(t, "prepare")
+	if ready.State != "ready" {
+		t.Fatalf("the preparation is %s (%s), want ready; the log above says why", ready.State, ready.ErrorCode)
+	}
+	handle(t, router, proto.TypeExecutionStart, "prepare", proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID,
+		RunID: "qualify", Input: proto.TextInput(prompt)})
+	answer := out.collect(t, "qualify")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	if err := router.Shutdown(ctx); err != nil {
+		t.Errorf("Shutdown: %v", err)
 	}
 
 	if !strings.Contains(answer, "VALUE="+value) || !strings.Contains(answer, fmt.Sprintf("EXIT=%d", exit)) {
@@ -176,28 +181,70 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 	}
 }
 
-// collect reads the Turn's envelopes until its Done and returns its content.
-func collect(t *testing.T, out <-chan proto.Envelope, done <-chan error) string {
+func handle(t *testing.T, router *dispatch.Router, typ, id string, payload any) {
+	t.Helper()
+	e, err := proto.NewEnvelope(typ, id, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := router.Handle(context.Background(), e); err != nil {
+		t.Fatalf("%s: %v", typ, err)
+	}
+}
+
+// sender holds what dispatch sends.
+type sender chan proto.Envelope
+
+func (s sender) Send(_ context.Context, e proto.Envelope) error {
+	s <- e
+	return nil
+}
+
+// next returns the next envelope with id.
+func (s sender) next(t *testing.T, id string, deadline <-chan time.Time) proto.Envelope {
+	t.Helper()
+	for {
+		select {
+		case e := <-s:
+			if e.ID == id {
+				return e
+			}
+		case <-deadline:
+			t.Fatalf("%s did not finish", id)
+		}
+	}
+}
+
+// status returns the preparation's first status other than preparing.
+func (s sender) status(t *testing.T, id string) proto.PreparationStatusPayload {
 	t.Helper()
 	deadline := time.After(turnLimit)
 	for {
-		select {
-		case e := <-out:
-			switch e.Type {
-			case proto.TypeError:
-				t.Errorf("Turn error: %s", e.Payload)
-			case proto.TypeDone:
-				var d proto.DonePayload
-				if err := json.Unmarshal(e.Payload, &d); err != nil {
-					t.Fatal(err)
-				}
-				t.Logf("answer: %s", d.Content)
-				return d.Content
+		var p proto.PreparationStatusPayload
+		if err := s.next(t, id, deadline).DecodePayload(&p); err != nil {
+			t.Fatal(err)
+		}
+		if p.State != "preparing" {
+			return p
+		}
+	}
+}
+
+// collect reads the Turn's envelopes until its Done and returns its content.
+func (s sender) collect(t *testing.T, run string) string {
+	t.Helper()
+	deadline := time.After(turnLimit)
+	for {
+		switch e := s.next(t, run, deadline); e.Type {
+		case proto.TypeError:
+			t.Errorf("Turn error: %s", e.Payload)
+		case proto.TypeDone:
+			var d proto.DonePayload
+			if err := json.Unmarshal(e.Payload, &d); err != nil {
+				t.Fatal(err)
 			}
-		case err := <-done:
-			t.Fatalf("Run ended during the Turn: %v", err)
-		case <-deadline:
-			t.Fatal("the Turn did not finish")
+			t.Logf("answer: %s", d.Content)
+			return d.Content
 		}
 	}
 }
@@ -250,8 +297,8 @@ func startSandbox(t *testing.T) *sandbox {
 }
 
 func (sb *sandbox) binding() agenthost.Binding {
-	return agenthost.Binding{Resource: sb.resource, AttachmentID: sandboxwire.NewID(), SessionID: sandboxwire.NewID(),
-		AssignmentID: sandboxwire.NewID(), AssignmentEpoch: 1, AttachGrant: []byte("grant-" + rand.Text())}
+	return agenthost.Binding{Resource: sb.resource, SessionID: sandboxwire.NewID(), AssignmentID: sandboxwire.NewID(), AssignmentEpoch: 1,
+		AttachGrant: []byte("grant-" + rand.Text())}
 }
 
 func (sb *sandbox) grant(b agenthost.Binding, runtimeID sandboxwire.ID) {
@@ -265,14 +312,14 @@ func (sb *sandbox) files(t *testing.T, cfg agenthost.Config, f func(ctx context.
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	b := sb.binding()
+	b, attachment := sb.binding(), sandboxwire.NewID()
 	sb.grant(b, cfg.RuntimeID)
 	link, err := sandboxlink.DialAttach(ctx, sandboxlink.AttachConfig{URL: sb.url, RuntimeID: cfg.RuntimeID, Credential: cfg.Credential})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer link.Close()
-	open := sandboxlink.Open{Service: sandboxlink.ServiceFile, Version: sandboxfs.Version, Resource: b.Resource, AttachmentID: b.AttachmentID,
+	open := sandboxlink.Open{Service: sandboxlink.ServiceFile, Version: sandboxfs.Version, Resource: b.Resource, AttachmentID: attachment,
 		SessionID: b.SessionID, AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch, AttachGrant: b.AttachGrant}
 	st, _, err := link.OpenService(ctx, open)
 	for errors.Is(err, sandboxlink.ServiceUnavailable) && ctx.Err() == nil {
@@ -289,7 +336,7 @@ func (sb *sandbox) files(t *testing.T, cfg agenthost.Config, f func(ctx context.
 		t.Fatal(err)
 	}
 	f(ctx, c, attached.Root.Node)
-	if err := link.CloseAttachment(ctx, b.AttachmentID); err != nil {
+	if err := link.CloseAttachment(ctx, attachment); err != nil {
 		t.Fatal(err)
 	}
 }

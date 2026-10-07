@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -75,7 +76,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 			r.DisableExecutionEnvironment, r.LocalEnvironment = true, nil
 		}, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
 		"shim name without PATH": {func(r *proto.PromptRequestPayload) { r.AgentKind = "shimmed" }, []error{ErrInvalidSession}},
-		"relative workspace":     {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceRoot = "workspace" }, []error{ErrInvalidSession}},
+		"relative workspace":     {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceDirectory = "workspace" }, []error{ErrInvalidSession}},
 		"no model provider":      {func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }, []error{ErrUnsupported}},
 		"no strict resume":       {func(r *proto.PromptRequestPayload) { r.StrictResume = false }, []error{ErrUnsupported}},
 		"capabilities":           {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, []error{ErrUnsupported}},
@@ -88,16 +89,15 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 	} {
 		req := request("viewed", "/workspace", "https://model.test", "sk-test")
 		c.change(&req)
-		s, _, _ := newSession(newResource(), req)
 		var dials atomic.Int32
-		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
+		e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
 		for _, want := range c.want {
 			if !errors.Is(err, want) {
-				t.Errorf("%s: Run = %v, want %v", name, err, want)
+				t.Errorf("%s: open = %v, want %v", name, err, want)
 			}
 		}
-		if dials.Load() != 0 || len(leftSessions(t, f.cfg)) != 0 {
-			t.Errorf("%s: %d dials and %d Session directories", name, dials.Load(), len(leftSessions(t, f.cfg)))
+		if e != nil || dials.Load() != 0 {
+			t.Errorf("%s: an Executor after %d dials", name, dials.Load())
 		}
 		if _, err := os.Stat(sessionsDir(f.cfg.StateDir)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s: the sessions directory exists", name)
@@ -109,16 +109,33 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"invalid resource kind":  func(b *Binding) { b.Resource.Kind = 0 },
 		"oversized attach grant": func(b *Binding) { b.AttachGrant = make([]byte, sandboxlink.MaxGrantBytes+1) },
 	} {
-		s, _, _ := newSession(newResource(), request("viewed", "/workspace", "https://model.test", "sk-test"))
-		change(&s.Binding)
+		b := newBinding(newResource())
+		change(&b)
 		var dials atomic.Int32
-		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
-		if !errors.Is(err, ErrInvalidSession) || dials.Load() != 0 {
-			t.Errorf("%s: Run = %v after %d dials, want ErrInvalidSession", name, err, dials.Load())
+		e, err := open(context.Background(), f.cfg, request("viewed", "/workspace", "https://model.test", "sk-test"), bindTo(b), deps{dial: countingDial(&dials), tasks: noTasks})
+		if e != nil || !errors.Is(err, ErrInvalidSession) || dials.Load() != 0 {
+			t.Errorf("%s: open = %v after %d dials, want ErrInvalidSession", name, err, dials.Load())
 		}
 		if _, err := os.Stat(sessionsDir(f.cfg.StateDir)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("%s: the sessions directory exists", name)
 		}
+	}
+}
+
+func TestRegistryDescribesTheViewPath(t *testing.T) {
+	f := newViewFixture(t)
+	var kinds []string
+	for _, info := range (&Host{cfg: f.cfg}).Registry(nil).SupportedAgentKinds() {
+		kinds = append(kinds, info.Kind)
+		c := info.Capabilities
+		if !c.Preparation.IsSupported() || !c.LocalEnvironment.IsSupported() || !c.MCPHTTPTools.IsSupported() || c.EnvironmentNone.IsSupported() ||
+			c.FunctionTools.IsSupported() || c.WorkspaceOutputExport.IsSupported() || c.WorkspaceReadPreparation.IsSupported() {
+			t.Errorf("%s: capabilities %+v do not describe the view path", info.Kind, c)
+		}
+	}
+	slices.Sort(kinds)
+	if !slices.Equal(kinds, []string{"masked", "shimmed", "viewed"}) {
+		t.Errorf("kinds %v, want those that declare a view", kinds)
 	}
 }
 
@@ -128,11 +145,10 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	req := request("viewed", "/workspace", "https://model.test", "sk-test")
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs?tenant=a", BearerToken: &bearer}}
 	original := maps.Clone(req.AgentOptions)
-	s, _, _ := newSession(newResource(), req)
 	var dials atomic.Int32
-	err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
-	if !errors.Is(err, ErrExecutor) || !errors.Is(err, errFactory) {
-		t.Fatalf("Run = %v, want the factory's error as ErrExecutor", err)
+	d := newDaemon(t, f.cfg, deps{dial: countingDial(&dials), tasks: noTasks})
+	if _, p := d.prepare(t, newBinding(newResource()), req); p.State != "failed" || p.ErrorCode != "preparation_failed" {
+		t.Fatalf("the preparation is %s (%s), want failed with the factory", p.State, p.ErrorCode)
 	}
 	provider, err := modelprovider.ParseProvider(f.req.AgentOptions["model_provider"])
 	if err != nil || provider.BaseURL != "http://127.0.0.1:17101" || provider.APIKey != modelprovider.Placeholder || provider.Protocol != modelprovider.Anthropic {
@@ -142,7 +158,7 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 		t.Error("the Session's request changed")
 	}
 	if f.req.MCPHTTPServers != nil || f.req.LocalEnvironment == nil || f.req.LocalEnvironment.MCP != nil || f.req.LocalEnvironment.WorkspaceRoot != "/workspace" {
-		t.Error("the request still carries MCP or lost its workspace")
+		t.Error("the request still carries MCP or does not run in the Environment's workspace")
 	}
 	mcp := f.session.MCP
 	if len(mcp) != 1 || mcp[0].ServerLabel != "docs" || mcp[0].ServerURL != "http://127.0.0.1:17102/docs" || mcp[0].BearerToken != nil || mcp[0].HTTPHeaders != nil {
@@ -154,21 +170,21 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	if !strings.HasPrefix(f.session.Home.Host, sessionsDir(f.cfg.StateDir)+string(filepath.Separator)) {
 		t.Errorf("home %s is outside the Session directories", f.session.Home.Host)
 	}
-	if dials.Load() != 0 || len(leftSessions(t, f.cfg)) != 0 {
-		t.Errorf("%d dials and %d Session directories after Run", dials.Load(), len(leftSessions(t, f.cfg)))
+	// The failed preparation closed its Executor, which keeps only the home.
+	if _, err := os.Stat(f.session.Home.Host); dials.Load() != 0 || err != nil || len(leftEntries(t, f.cfg)) != 0 {
+		t.Errorf("%d dials, home %v and transient entries %v after the preparation", dials.Load(), err, leftEntries(t, f.cfg))
 	}
 
 	// A connection option reaches the factory's handoff check, which rejects
 	// it before the adapter runs.
 	req = request("viewed", "/workspace", "https://model.test", "sk-test")
 	req.AgentOptions["mcp_servers"] = map[string]any{}
-	s, _, _ = newSession(newResource(), req)
 	f.req = proto.PromptRequestPayload{}
-	err = run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
-	if !errors.Is(err, ErrUnsupported) || !errors.Is(err, agent.ErrViewHandoff) || f.req.AgentKind != "" {
-		t.Errorf("Run with a connection option = %v, want ErrUnsupported and ErrViewHandoff before the adapter", err)
+	e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
+	if e == nil || !errors.Is(err, ErrUnsupported) || !errors.Is(err, agent.ErrViewHandoff) || f.req.AgentKind != "" {
+		t.Fatalf("open with a connection option = %v, want ErrUnsupported and ErrViewHandoff before the adapter, and an Executor to close", err)
 	}
-	if dials.Load() != 0 || len(leftSessions(t, f.cfg)) != 0 {
-		t.Errorf("%d dials and %d Session directories after Run", dials.Load(), len(leftSessions(t, f.cfg)))
+	if err := e.Close(context.Background()); err != nil || dials.Load() != 0 || len(leftEntries(t, f.cfg)) != 0 {
+		t.Errorf("Close = %v; %d dials and transient entries %v", err, dials.Load(), leftEntries(t, f.cfg))
 	}
 }

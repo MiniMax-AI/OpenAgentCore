@@ -56,9 +56,10 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if err != nil || !caps.Preparation.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_preparation")
 	}
-	req, err = r.localWorkspace.Configure(req)
-	if err != nil {
-		return r.rejectPreparation(env, "invalid_configuration")
+	if !r.sessionEnvironments {
+		if req, err = r.localWorkspace.Configure(req); err != nil {
+			return r.rejectPreparation(env, "invalid_configuration")
+		}
 	}
 	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_configuration")
@@ -181,7 +182,9 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	var native agent.Executor
 	var err error
 	if owner.ctx.Err() == nil {
-		req, err = r.localWorkspace.Prepare(owner.ctx, req)
+		if !r.sessionEnvironments {
+			req, err = r.localWorkspace.Prepare(owner.ctx, req)
+		}
 		if err == nil && owner.ctx.Err() == nil {
 			native, err = factory(owner.ctx, req)
 		}
