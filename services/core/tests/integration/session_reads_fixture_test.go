@@ -24,7 +24,7 @@ func FixtureEnvironmentDevice(ctx context.Context, pool *pgxpool.Pool, tenant, e
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
-	lookup, err := sessionpg.DeviceLookup(tenant, current.SessionID)
+	lookup, err := sessionpg.ResourceLookup(tenant, current.SessionID)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}

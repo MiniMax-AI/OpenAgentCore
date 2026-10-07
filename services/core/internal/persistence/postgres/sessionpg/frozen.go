@@ -19,7 +19,7 @@ import (
 // data that does not open, decode or validate is corrupt stored data, never
 // the caller's input, so it is an internal error.
 func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string) (environmentconfig.Setup, error) {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return environmentconfig.Setup{}, sessions.ErrNotFound
 	}
@@ -51,7 +51,7 @@ func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string
 // position. A file that does not open or match its recorded size is corrupt
 // stored data, so it is an internal error.
 func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, session string, position int) (environmentconfig.InitialFileMetadata, []byte, error) {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return environmentconfig.InitialFileMetadata{}, nil, err
 	}
