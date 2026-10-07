@@ -7,8 +7,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
@@ -84,6 +85,21 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 		r.LocalEnvironment = &local
 	}
 	return r, nil
+}
+
+// Resolve is the Session's Environment owner: b for the one Session it is
+// bound to, and none for any other.
+func (b *Binding) Resolve(ref proto.AssignmentRef, bind proto.AssignmentBindPayload) dispatch.Environment {
+	if !b.Matches(bind.EnvironmentID, ref.SessionID) {
+		return nil
+	}
+	return b
+}
+
+// Support is what the guest serves: its bound Session's local Environment,
+// or, when b is nil, environment none.
+func (b *Binding) Support() agent.EnvironmentSupport {
+	return agent.EnvironmentSupport{Local: b != nil, None: b == nil}
 }
 
 func (b *Binding) Matches(environment, session string) bool {

@@ -52,7 +52,7 @@ func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
-				done <- runSuspendLoop(ctx, dial, registry, &transport.BootstrapResponse{HeartbeatSeconds: 1}, agentCLIDiscovery{}, control)
+				done <- runSuspendLoop(ctx, dial, registry, nil, &transport.BootstrapResponse{HeartbeatSeconds: 1}, agentCLIDiscovery{}, control)
 			}()
 			var first *websocket.Conn
 			select {
@@ -217,7 +217,7 @@ func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- runSuspendLoop(ctx, dial, agent.NewRegistry(), &transport.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
+		done <- runSuspendLoop(ctx, dial, agent.NewRegistry(), nil, &transport.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
 	}()
 	var peer *websocket.Conn
 	select {
@@ -278,7 +278,7 @@ func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 			}
 			setup := <-peers
 			defer setup.Close()
-			state, err := newSuspendedRouter(conn, agent.NewRegistry())
+			state, err := newSuspendedRouter(conn, agent.NewRegistry(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}

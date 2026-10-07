@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
@@ -36,12 +35,8 @@ var capabilityRef = proto.AssignmentRef{SessionID: "0b6f1f3e-6f0a-4d38-9c1e-2f5d
 func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string, string) {
 	t.Helper()
 	environment, session := uuid.NewString(), capabilityRef.SessionID
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, t.TempDir(), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
 	sender := &capabilitiesTestSender{frames: make(chan proto.Envelope, 64)}
-	router, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: LocalEnvironments(binding)})
+	router, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment { return stubEnvironment{} }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,28 +171,38 @@ func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 }
 
 func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
-	for _, mode := range []string{"write", "export", "read", "run", "executor", "preparation"} {
+	for _, mode := range []string{"write", "export", "read", "run", "executor", "preparation", "other session"} {
 		t.Run(mode, func(t *testing.T) {
 			r, sender, environment, session := capabilitiesTestRouter(t)
+			own := proto.Envelope{Assignment: capabilityRef}
 			switch mode {
 			case "write":
-				r.workspaceWrite = &workspaceUpload{}
+				r.workspaceWrite = &workspaceUpload{envelope: own}
 			case "export":
-				r.workspaceExport = &workspaceExport{}
+				r.workspaceExport = &workspaceExport{request: own}
 			case "read":
-				r.workspaceReads = map[string]struct{}{"read": {}}
+				r.workspaceReads = map[string]string{"read": session}
 			case "run":
-				r.sessions["run"] = &sessionState{}
+				r.sessions["run"] = &sessionState{assignment: capabilityRef}
 			case "executor":
 				r.executors[session] = &executorState{}
 			case "preparation":
-				r.preparations["p"] = &preparationState{owns: true}
+				r.preparations["p"] = &preparationState{owns: true, request: own}
+			case "other session":
+				// Another Session's Executor never blocks this Environment.
+				r.executors[uuid.NewString()] = &executorState{preparing: true}
 			}
 			id := uuid.NewString()
 			if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, session, []byte("abc")))); err != nil {
 				t.Fatal(err)
 			}
-			if got := capabilitiesReceipt(t, sender, id, "rejected"); got.ErrorCode != "resource_unavailable" {
+			if mode == "other session" {
+				capabilitiesReceipt(t, sender, id, "ready")
+				r.mu.Lock()
+				r.finishRuntimePreparationTransferLocked(r.runtimePreparation, false)
+				r.mu.Unlock()
+				capabilitiesReceipt(t, sender, id, "rejected")
+			} else if got := capabilitiesReceipt(t, sender, id, "rejected"); got.ErrorCode != "resource_unavailable" {
 				t.Fatal(got)
 			}
 			if r.runtimePreparation != nil {
@@ -256,14 +261,14 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
 	request := proto.RuntimePreparePayload{Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
-	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+	owner := &runtimePreparationTransfer{id: uuid.MustParse(id), envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
 	r.shutdownWG.Add(1)
 	started, interrupted, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	retained := filepath.Join(t.TempDir(), "installed.json")
-	go r.runRuntimePreparationTransfer(ctx, owner, func(ctx context.Context, got proto.RuntimePreparePayload, data []byte) error {
-		if got.Action != "finalize" || len(data) != 0 {
+	go r.runRuntimePreparationTransfer(ctx, owner, func(ctx context.Context, transfer uuid.UUID, got proto.RuntimePreparePayload, data []byte) error {
+		if transfer.String() != id || got.Action != "finalize" || len(data) != 0 {
 			return agentcapabilities.ErrInvalid
 		}
 		close(started)
@@ -299,7 +304,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 
 func TestRuntimePreparationInitializationReceipts(t *testing.T) {
 	for _, code := range []int{-1, 0, 1, 255, 256} {
-		got := runtimePreparationResult(&localworkspace.InitializationFailure{ExitCode: &code}, 0)
+		got := runtimePreparationResult(&InitializationFailure{ExitCode: &code}, 0)
 		if code > 0 && code <= 255 {
 			if got.Outcome != "failed" || got.ExitCode != code {
 				t.Fatalf("lost confirmed exit code: %+v", got)
@@ -308,10 +313,10 @@ func TestRuntimePreparationInitializationReceipts(t *testing.T) {
 			t.Fatalf("accepted invalid failure receipt: %+v", got)
 		}
 	}
-	if got := runtimePreparationResult(&localworkspace.InitializationFailure{}, 0); got.Outcome != "failed" || got.ExitCode != 0 {
+	if got := runtimePreparationResult(&InitializationFailure{}, 0); got.Outcome != "failed" || got.ExitCode != 0 {
 		t.Fatalf("lost confirmed generic failure: %+v", got)
 	}
-	if got := runtimePreparationResult(errors.Join(&localworkspace.InitializationFailure{}, context.Canceled), 0); got.Outcome != "unknown" {
+	if got := runtimePreparationResult(errors.Join(&InitializationFailure{}, context.Canceled), 0); got.Outcome != "unknown" {
 		t.Fatalf("cancellation reported confirmed: %+v", got)
 	}
 }
@@ -323,6 +328,7 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	}{
 		{nil, "completed", ""},
 		{agentcapabilities.ErrInvalid, "failed", "runtime_preparation_failed"},
+		{ErrEnvironmentUnavailable, "rejected", "resource_unavailable"},
 		{context.DeadlineExceeded, "unknown", "runtime_preparation_unconfirmed"},
 		{errors.Join(agentcapabilities.ErrInvalid, context.Canceled), "unknown", "runtime_preparation_unconfirmed"},
 		{errors.New("private native diagnostic"), "unknown", "runtime_preparation_unconfirmed"},
@@ -336,11 +342,13 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
 	request := capabilityBegin(environment, session, []byte("abc"))
-	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+	owner := &runtimePreparationTransfer{id: uuid.MustParse(id), envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
 	r.shutdownWG.Add(1)
-	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, proto.RuntimePreparePayload, []byte) error { return context.DeadlineExceeded }, func() {})
+	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {
+		return context.DeadlineExceeded
+	}, func() {})
 	capabilitiesReceipt(t, sender, id, "unknown")
 	r.mu.Lock()
 	owned := r.runtimePreparation == owner && owner.uncertain && owner.data == nil

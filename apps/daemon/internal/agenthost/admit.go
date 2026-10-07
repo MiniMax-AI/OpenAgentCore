@@ -97,24 +97,18 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 	if err != nil {
 		return nil, fmt.Errorf("%w: admit: %w", ErrUnsupported, err)
 	}
-	caps, local, none := view.Capabilities, req.LocalEnvironment, req.DisableExecutionEnvironment
+	local, none := req.LocalEnvironment, req.DisableExecutionEnvironment
 	switch {
 	case local == nil && !none:
 		return nil, invalidSession("a Session with neither a workspace nor environment none is an incomplete binding")
-	case none && !caps.EnvironmentNone.IsSupported():
-		return nil, unsupported("environment none")
 	case local != nil && !isViewPath(local.WorkspaceDirectory):
 		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceDirectory)
 	case local != nil && local.Capabilities && local.CapabilityRoot == "":
 		return nil, unsupported("installed Capabilities that no preparation resolved")
-	case local != nil && len(local.Skills) > 0 && !caps.Skills.IsSupported():
+	case local != nil && len(local.Skills) > 0:
 		return nil, unsupported("Skills")
 	case local != nil && (local.NetworkAccess != "enabled" || len(local.AllowedDomains) > 0):
 		return nil, unsupported("a restricted workspace network")
-	case len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported():
-		return nil, unsupported("function tools")
-	case req.ToolSearch && !caps.ToolSearch.IsSupported():
-		return nil, unsupported("tool search")
 	case !none && len(view.Shims) > 0 && !hasPATH(env):
 		return nil, invalidSession("the view's shims run names on the sandbox PATH, and the Environment sets no PATH")
 	}
@@ -147,8 +141,6 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 		switch {
 		case b.CredentialAuthority != "none":
 			return nil, fmt.Errorf("%w: admit: %w: stdio MCP server %q needs a credential", ErrUnsupported, agent.ErrViewHandoff, b.ServerLabel)
-		case !caps.StdioMCP.IsSupported():
-			return nil, unsupported("stdio MCP server %q", b.ServerLabel)
 		case !path.IsAbs(dir):
 			return nil, invalidSession("stdio MCP server %q has no absolute working directory", b.ServerLabel)
 		case !strings.Contains(server.Command, "/") && !hasPATH(env):

@@ -100,16 +100,13 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		t.Fatal(err)
 	}
 	copyExecutable(t, filepath.Join(closure, "harness"))
-	caps := declared(proto.CapabilityUnsupported)
-	caps.EnvironmentNone, caps.StdioMCP = proto.CapabilitySupported, proto.CapabilitySupported
 	register(reg, "test", &agent.View{
-		Closure:      []agent.ViewMount{{Name: "harness", HostDir: closure}},
-		Masks:        []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
-		LocalExec:    []string{harnessPath},
-		ShimPaths:    []string{"/bin/sh"},
-		ForwardEnv:   []string{"KEEP"},
-		Proxy:        agent.ViewProxyEnv,
-		Capabilities: caps,
+		Closure:    []agent.ViewMount{{Name: "harness", HostDir: closure}},
+		Masks:      []agent.ViewMask{{Path: "/etc/ld.so.preload"}, {Path: "/etc/hostname"}, {Path: "/etc/apt", Dir: true}},
+		LocalExec:  []string{harnessPath},
+		ShimPaths:  []string{"/bin/sh"},
+		ForwardEnv: []string{"KEEP"},
+		Proxy:      agent.ViewProxyEnv,
 		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
 			e := &testExecutor{session: s, dir: workDir,
 				env: []string{harnessEnv + "=1", modelEnv + "=" + req.ModelProvider.BaseURL, caEnv + "=" + cfg.CADir, proxyEnv + "=" + s.Proxy}}
@@ -129,13 +126,19 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 	defer func() { h.Close() }()
-	workspace, err := os.MkdirTemp("/tmp", "agenthost-workspace-")
-	if err != nil {
+	// The sandbox's world is this container's /, which holds one Environment
+	// at a time: each Session in it starts from an empty initialization area.
+	workspace := sandboxWorkspace
+	if err := os.MkdirAll(workspace, 0o777); err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(workspace)
 	if err := os.Chmod(workspace, 0o777); err != nil {
 		t.Fatal(err)
+	}
+	reset := func(t *testing.T) {
+		if err := os.RemoveAll(sandboxInitialization); err != nil {
+			t.Fatal(err)
+		}
 	}
 	req := request("test", workspace, upstream.URL, upstreamKey)
 	// Each subtest's daemon drives its Sessions over the relay.
@@ -148,6 +151,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("one Session", func(t *testing.T) {
 		d, b := newRun(t), sb.bind(cfg.RuntimeID, 2*time.Second)
+		reset(t)
 		r := d.turn(t, b, req, "check")
 		for _, name := range harnessChecks {
 			if msg, ok := r.Checks[name]; !ok || msg != "" {
@@ -198,7 +202,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("environment none runs in an empty root", func(t *testing.T) {
 		var dials atomic.Int32
-		d, b := newDaemon(t, cfg, deps{dial: countingDial(&dials), tasks: taskUIDs}), Binding{SessionID: sandboxwire.NewID()}
+		d, b := newDaemon(t, cfg, deps{dial: countingDial(&dials), tasks: taskUIDs}), newBinding(sandboxlink.ResourceRef{})
 		none := request("test", "", upstream.URL, upstreamKey)
 		none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
 		r := d.turn(t, b, none, "none")
@@ -228,6 +232,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("a stdio MCP server runs its frozen command under its alias", func(t *testing.T) {
 		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		reset(t)
 		pkg := filepath.Join(workspace, "pkg")
 		if err := os.Mkdir(pkg, 0o755); err != nil {
 			t.Fatal(err)
@@ -250,6 +255,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("a command runs in the sandbox through the shim", func(t *testing.T) {
 		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		reset(t)
 		if r := d.turn(t, b, req, "shim"); r.Stdout != "42\n" || r.Code != 3 {
 			t.Errorf("the forwarded command printed %q and exited %d, want 42 and 3; stderr %s", r.Stdout, r.Code, r.Stderr)
 		}
@@ -261,6 +267,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("two Sessions run at once", func(t *testing.T) {
 		d, waiting, other := newRun(t), sb.bind(cfg.RuntimeID, time.Minute), sb.bind(cfg.RuntimeID, time.Minute)
+		reset(t)
 		run := d.start(t, waiting, req, "wait")
 		defer os.Remove(beat)
 		until(t, "the Harness to run", beating)
@@ -274,6 +281,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		if err := p.Wait(); err != nil || string(out) != "{\"touch\":\"\"}\n" {
 			t.Errorf("the spawned process printed %q and ended with %v", out, err)
 		}
+		reset(t)
 		if r := d.turn(t, other, req, "shim"); r.Stdout != "42\n" || r.Code != 3 {
 			t.Errorf("the other Session's command printed %q and exited %d; stderr %s", r.Stdout, r.Code, r.Stderr)
 		}
@@ -291,6 +299,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("a lost relay fails the Session", func(t *testing.T) {
 		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		reset(t)
 		run := d.start(t, b, req, "wait")
 		defer os.Remove(beat)
 		until(t, "the Harness to run", beating)
@@ -313,6 +322,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("a restarted sandbox service fails the Session", func(t *testing.T) {
 		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		reset(t)
 		run := d.start(t, b, req, "wait")
 		defer os.Remove(beat)
 		until(t, "the Harness to write to the world", beating)
@@ -332,6 +342,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 
 	t.Run("a home survives a restart", func(t *testing.T) {
 		d, b := newRun(t), sb.bind(cfg.RuntimeID, time.Minute)
+		reset(t)
 		if r := d.turn(t, b, req, "check"); r.Checks["home"] != "" {
 			t.Fatalf("home: %q", r.Checks["home"])
 		}

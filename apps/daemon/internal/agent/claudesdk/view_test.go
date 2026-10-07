@@ -180,7 +180,7 @@ func resolveTestView(t *testing.T) agent.View {
 	loader := viewloader.Fragment{Closure: []agent.ViewMount{lib}, Overlays: []agent.ViewOverlay{{Path: "/lib64/ld-linux-x86-64.so.2", Source: filepath.Join(root, "lib", "ld.so"), Exec: true}}, LibraryPath: lib.Path()}
 	declared := declareView(probe, RuntimeInfo{NativePath: "native/claude"}, probe.Node, filepath.Join(root, "bundle"), "dist/main.js", loader)
 	registry := agent.NewRegistry()
-	registry.Register(Declaration, agent.Runtime{Info: Declaration.Info, View: declared})
+	registry.Register(Declaration, agent.Runtime{Info: Declaration.Info, View: declared}, agent.EnvironmentSupport{Local: true, None: true})
 	view, err := registry.ResolveView(Declaration.Info.Kind)
 	if err != nil {
 		t.Fatal(err)

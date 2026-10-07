@@ -15,8 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/google/uuid"
 )
 
 // The test executable doubles as a native package-manager fixture on all OSes.
@@ -262,7 +264,7 @@ func TestRuntimeInitializationMissingDependenciesAndInvalidRequests(t *testing.T
 		t.Fatal(err)
 	}
 	for _, input := range []proto.RuntimeInitialization{{Action: "setup", Command: "true"}, {Action: "npm", Packages: []string{"valid"}}, {Action: "python", Packages: []string{"valid"}}} {
-		var failed *InitializationFailure
+		var failed *dispatch.InitializationFailure
 		if err := b.initializeRuntime(t.Context(), input); !errors.As(err, &failed) || !strings.Contains(err.Error(), "requires") {
 			t.Fatal("missing dependency was not explicit", input.Action, err)
 		}
@@ -287,7 +289,7 @@ func TestRuntimeInitializationProcessSettlesAndDiscardsOutput(t *testing.T) {
 	}
 	env = append(initializationEnvironment(nil), "OAC_INITIALIZATION_FIXTURE=fail")
 	err = runInitializationProcess(t.Context(), binary, []string{"-test.run=^TestRuntimeInitializationChild$"}, directory, env)
-	var failed *InitializationFailure
+	var failed *dispatch.InitializationFailure
 	if !errors.As(err, &failed) || failed.ExitCode == nil || *failed.ExitCode != 7 {
 		t.Fatal("exit status", err)
 	}
@@ -350,14 +352,14 @@ func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 	digest := sha256.Sum256(nil)
 	input := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: b.environment, SessionID: b.capabilityIdentity().SessionID,
 		Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/file"}, SHA256: hex.EncodeToString(digest[:])}
-	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
+	if err = b.ApplyRuntimePreparation(t.Context(), uuid.New(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted file", err)
 	}
 	input.Action = "initialize"
 	input.File = nil
 	input.SHA256 = ""
 	input.Initialization = &proto.RuntimeInitialization{Action: "configure", Env: map[string]string{}}
-	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
+	if err = b.ApplyRuntimePreparation(t.Context(), uuid.New(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted initialize", err)
 	}
 }

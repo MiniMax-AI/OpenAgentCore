@@ -100,34 +100,27 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if err != nil {
 		return fail(err)
 	}
+	caps := &out.Info.Capabilities
 	if config.Workspace != nil {
 		if !info.SupportsLocalRuntime() {
 			return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
 		}
-		caps := &out.Info.Capabilities
-		caps.EnvironmentNone, caps.FunctionTools = proto.CapabilityUnsupported, proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
-		caps.LocalEnvironment = proto.CapabilitySupported
 		caps.NativeSessionRecovery = proto.CapabilitySupported
 	}
+	// One declaration holds for every Executor of the install: the workspace
+	// bridge, the agent-host view and a Runtime without a workspace, so each
+	// feature is its workspace variant, which the others also support.
 	out.Info.Available, out.Info.Version = true, info.SDK
-	out.Info.Capabilities.MessageImages = proto.CapabilityFromBool(info.SupportsMessageImages())
-	out.Info.Capabilities.FunctionResultImages = proto.CapabilityFromBool(info.SupportsFunctionResultImages())
-	out.Info.Capabilities.ToolSearch = proto.CapabilityFromBool(info.SupportsToolSearch())
-	if config.Workspace != nil {
-		out.Info.Capabilities.ToolSearch = proto.CapabilityFromBool(info.SupportsWorkspaceToolSearch())
-	}
-	out.Info.Capabilities.StructuredOutput = proto.CapabilityFromBool(info.SupportsStructuredOutput())
-	if config.Workspace != nil {
-		out.Info.Capabilities.StructuredOutput = proto.CapabilityFromBool(info.SupportsWorkspaceStructuredOutput())
-	}
-	out.Info.Capabilities.SubagentObservations = proto.CapabilityFromBool(info.SupportsSubagents())
-	out.Info.Capabilities.MCPHTTPTools = proto.CapabilityFromBool(info.SupportsHTTPMCP())
-	out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityFromBool(info.SupportsHTTPMCPBearer())
-	out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityFromBool(info.SupportsHTTPMCPRequired())
-	if config.Workspace != nil && !info.SupportsWorkspaceMCP() {
-		out.Info.Capabilities.MCPHTTPTools, out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityUnsupported, proto.CapabilityUnsupported
-		out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityUnsupported
-	}
+	caps.LocalEnvironment = proto.CapabilityFromBool(info.SupportsLocalRuntime())
+	caps.FunctionTools = proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
+	caps.MessageImages = proto.CapabilityFromBool(info.SupportsMessageImages())
+	caps.FunctionResultImages = proto.CapabilityFromBool(info.SupportsFunctionResultImages())
+	caps.ToolSearch = proto.CapabilityFromBool(info.SupportsWorkspaceToolSearch())
+	caps.StructuredOutput = proto.CapabilityFromBool(info.SupportsWorkspaceStructuredOutput())
+	caps.SubagentObservations = proto.CapabilityFromBool(info.SupportsSubagents())
+	caps.MCPHTTPTools = proto.CapabilityFromBool(info.SupportsWorkspaceMCP())
+	caps.MCPHTTPBearerAuth = proto.CapabilityFromBool(info.SupportsWorkspaceMCP() && info.SupportsHTTPMCPBearer())
+	caps.MCPHTTPRequired = proto.CapabilityFromBool(info.SupportsWorkspaceMCP() && info.SupportsHTTPMCPRequired())
 	out.Executor = NewExecutorFactory(config)
 	// The view runs the same install; its probe stays on this host.
 	if view, err := newView(Config{Node: node, Entrypoint: entrypoint}, info); err != nil {

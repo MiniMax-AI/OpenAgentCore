@@ -11,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
+	"github.com/google/uuid"
 )
 
 func markerBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
@@ -187,7 +188,7 @@ func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T)
 	b, _ := markerBinding(t)
 	identity := b.capabilityIdentity()
 	finalize := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "finalize", Sources: &agentcapabilities.Input{}}
-	if err := b.ApplyRuntimePreparation(t.Context(), finalize, nil); err != nil {
+	if err := b.ApplyRuntimePreparation(t.Context(), uuid.New(), finalize, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(markerPath(b)); err != nil {
@@ -198,10 +199,10 @@ func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T)
 		t.Fatal(err)
 	}
 	skill := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "skill", Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 1, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
-	if err := b.ApplyRuntimePreparation(t.Context(), skill, []byte("x")); err == nil {
+	if err := b.ApplyRuntimePreparation(t.Context(), uuid.New(), skill, []byte("x")); err == nil {
 		t.Fatal("completed identity accepted import")
 	}
-	if err := b.ApplyRuntimePreparation(t.Context(), finalize, nil); err == nil {
+	if err := b.ApplyRuntimePreparation(t.Context(), uuid.New(), finalize, nil); err == nil {
 		t.Fatal("completed identity finalized again")
 	}
 	if _, err := os.Stat(b.capabilityRoot); !os.IsNotExist(err) {

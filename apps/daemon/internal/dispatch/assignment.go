@@ -26,6 +26,9 @@ type assignmentState struct {
 	// preparations until each has sent its terminal result. A release waits
 	// for it, and the released assignment admits no more.
 	work sync.WaitGroup
+	// cleanup serializes release cleanups, so a retried release never closes
+	// the owner while an earlier Close runs.
+	cleanup sync.Mutex
 }
 
 // admitLocked returns why ref admits no new work of sessionID in
@@ -139,7 +142,8 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 		return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus("", code))
 	}
 	preparations := r.fenceSessionWorkLocked(ref.SessionID)
-	work, environment := &r.assignments[ref.SessionID].work, r.assignments[ref.SessionID].environment
+	a = r.assignments[ref.SessionID]
+	work, environment := &a.work, a.environment
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go func() {
@@ -150,6 +154,8 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 			r.releasePreparation(p, "failed", proto.AssignmentStale, true)
 		}
 		work.Wait()
+		a.cleanup.Lock()
+		defer a.cleanup.Unlock()
 		state, code := proto.AssignmentReleased, ""
 		err := r.closeSessionExecutor(ref.SessionID)
 		if err == nil && environment != nil {

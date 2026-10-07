@@ -48,7 +48,7 @@ func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayl
 	registry := agent.NewRegistry()
 	info := Declaration.Info
 	info.Available = true
-	registry.Register(Declaration, agent.Runtime{Info: info, View: &declared})
+	registry.Register(Declaration, agent.Runtime{Info: info, View: &declared}, agent.EnvironmentSupport{Local: true, None: true})
 	view, err := registry.ResolveView("mcode")
 	if err != nil {
 		t.Fatal(err)

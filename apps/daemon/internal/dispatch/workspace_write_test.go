@@ -26,7 +26,7 @@ func localWriterRouter(t *testing.T) (*dispatch.Router, *recSender, proto.Worksp
 		t.Fatal(err)
 	}
 	sender := &recSender{}
-	r, err := dispatch.New(dispatch.Config{Registry: agent.NewRegistry(), Sender: sender, Environments: dispatch.LocalEnvironments(binding)})
+	r, err := dispatch.New(dispatch.Config{Registry: agent.NewRegistry(), Sender: sender, Environments: binding.Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}

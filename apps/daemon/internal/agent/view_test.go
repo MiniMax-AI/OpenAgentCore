@@ -36,7 +36,6 @@ func TestViewValidate(t *testing.T) {
 		"duplicate shim":              func(v *agent.View) { v.Shims = append(v.Shims, "git") },
 		"shim named as the relay":     func(v *agent.View) { v.Shims = append(v.Shims, agent.ViewRelayName) },
 		"shim named as an alias":      func(v *agent.View) { v.Shims = append(v.Shims, path.Base(agent.ViewAlias(0))) },
-		"undeclared capability":       func(v *agent.View) { v.Capabilities.StdioMCP = proto.CapabilityUnspecified },
 		"forwarded assignment":        func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "A=B") },
 		"forwarded broker variable":   func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "PATH") },
 		"forwarded proxy variable":    func(v *agent.View) { v.ForwardEnv = append(v.ForwardEnv, "https_proxy") },
@@ -54,7 +53,7 @@ func TestRegistryResolvesOnlyDeclaredViews(t *testing.T) {
 	declared := validView(t)
 	for kind, view := range map[string]*agent.View{"with_view": &declared, "without_view": nil} {
 		info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
-		reg.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, View: view})
+		reg.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, View: view}, agent.EnvironmentSupport{})
 	}
 	if _, err := reg.ResolveView("without_view"); !errors.Is(err, agent.ErrUnsupportedOperation) {
 		t.Fatalf("ResolveView without a view = %v, want ErrUnsupportedOperation", err)
@@ -76,7 +75,7 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 		Info:          info,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Responses)}}},
 	}
-	reg.Register(declaration, agent.Runtime{Info: info, View: &declared})
+	reg.Register(declaration, agent.Runtime{Info: info, View: &declared}, agent.EnvironmentSupport{})
 	view, err := reg.ResolveView("viewed")
 	if err != nil {
 		t.Fatal(err)
@@ -139,9 +138,6 @@ func validView(t *testing.T) agent.View {
 		ShimPaths:  []string{"/bin/sh"},
 		ForwardEnv: []string{"GIT_EDITOR"},
 		Proxy:      agent.ViewProxyEnv,
-		Capabilities: agent.ViewCapabilities{EnvironmentNone: proto.CapabilityUnsupported, Skills: proto.CapabilitySupported,
-			FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilityUnsupported, ToolSearch: proto.CapabilityUnsupported,
-			StdioMCP: proto.CapabilityUnsupported},
 		Executor: func(context.Context, proto.PromptRequestPayload, agent.ViewSession) (agent.Executor, error) {
 			return nil, errors.New("not started")
 		},

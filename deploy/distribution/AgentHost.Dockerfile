@@ -12,7 +12,8 @@ FROM base AS sandbox
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates bash git python3 python3-pip ripgrep \
     && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /environment/workspace /workspace /home/runtime
+    && mkdir -p /environment/workspace /environment/initialization /environment/packages /workspace /home/runtime \
+    && chown 1000:1000 /environment/initialization /environment/packages
 COPY --chmod=0555 oac-sandbox-io /usr/local/bin/
 ENV HOME=/home/runtime
 USER 1000:1000

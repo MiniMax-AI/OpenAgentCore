@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -46,7 +45,8 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		return ErrRouterClosed
 	}
 	if request.Step == "begin" {
-		if r.workspaceExport != nil || r.runtimePreparation != nil {
+		if r.workspaceExport != nil && r.workspaceExport.request.Assignment.SessionID == request.SessionID ||
+			r.runtimePreparation != nil && r.runtimePreparation.envelope.Assignment.SessionID == request.SessionID {
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 		}
@@ -67,21 +67,10 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("write_unsupported"))
 		}
-		if len(r.sessions) != 0 || len(r.workspaceReads) != 0 {
+		if owner := r.executors[request.SessionID]; r.sessionWorkLocked(request.SessionID) ||
+			owner != nil && (owner.preparing || owner.admission != nil || owner.run != nil || owner.invalid) {
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
-		}
-		for _, owner := range r.executors {
-			if owner.preparing || owner.admission != nil || owner.run != nil || owner.invalid {
-				r.mu.Unlock()
-				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
-			}
-		}
-		for _, p := range r.preparations {
-			if p.owns {
-				r.mu.Unlock()
-				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
-			}
 		}
 		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{})}
 		r.workspaceWrite = u
@@ -155,7 +144,7 @@ func rejectedWorkspaceWrite(code string) proto.WorkspaceWriteResultPayload {
 	return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: code}
 }
 
-func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int) proto.WorkspaceWriteResultPayload {
+func workspaceWriteResult(write WorkspaceWriteResult, err error, size int) proto.WorkspaceWriteResultPayload {
 	if err == nil && write.SizeBytes == int64(size) {
 		return proto.WorkspaceWriteResultPayload{Outcome: "completed", SizeBytes: size}
 	}
@@ -163,8 +152,8 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 		err    error
 		reason string
 	}{
-		{agent.ErrWorkspaceWriteDirectory, proto.WorkspaceWriteReasonDirectory},
-		{agent.ErrWorkspaceWriteUnsafe, proto.WorkspaceWriteReasonUnsafe},
+		{ErrWorkspaceWriteDirectory, proto.WorkspaceWriteReasonDirectory},
+		{ErrWorkspaceWriteUnsafe, proto.WorkspaceWriteReasonUnsafe},
 	} {
 		if errors.Is(err, conflict.err) {
 			return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "write_rejected", Reason: conflict.reason}
@@ -174,10 +163,10 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceWriteUnavailable, "resource_unavailable"},
-		{agent.ErrWorkspaceWriteBusy, "write_capacity"},
-		{agent.ErrWorkspaceWriteInvalid, "invalid_request"},
-		{agent.ErrWorkspaceWriteRejected, "write_rejected"},
+		{ErrEnvironmentUnavailable, "resource_unavailable"},
+		{ErrWorkspaceWriteBusy, "write_capacity"},
+		{ErrWorkspaceWriteInvalid, "invalid_request"},
+		{ErrWorkspaceWriteRejected, "write_rejected"},
 	} {
 		if errors.Is(err, failure.err) {
 			return rejectedWorkspaceWrite(failure.code)

@@ -10,15 +10,11 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
-
-// InitializationFailure contains only a confirmed step's safe exit status.
-type InitializationFailure struct{ ExitCode *int }
-
-func (*InitializationFailure) Error() string { return "Runtime initialization failed" }
 
 var ErrInitializationUnconfirmed = errors.New("Runtime initialization unconfirmed")
 
@@ -42,46 +38,35 @@ func (b *Binding) initializeRuntime(ctx context.Context, input proto.RuntimeInit
 	}
 	values, err := ReadToolEnvironment()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	packages, err := PackageDirectory()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
+	}
+	tail, err := agentcapabilities.InitializationArgs(input.Action, input.Command, input.Packages, filepath.Join(packages, "npm"), filepath.Join(packages, "python"))
+	if err != nil {
+		return err
 	}
 	var binary string
 	var args []string
 	switch input.Action {
 	case "setup":
-		if input.Command == "" || strings.ContainsRune(input.Command, 0) {
-			return agentcapabilities.ErrInvalid
-		}
 		binary, err = initializationBash()
-		args = []string{"--noprofile", "--norc", "-c", input.Command}
 	case "npm", "python":
-		if len(input.Packages) == 0 {
-			return agentcapabilities.ErrInvalid
-		}
-		for _, value := range input.Packages {
-			if value == "" || strings.HasPrefix(value, "-") || strings.ContainsAny(value, "\x00\r\n") {
-				return agentcapabilities.ErrInvalid
-			}
-		}
 		if err = os.MkdirAll(packages, 0700); err != nil {
-			return &InitializationFailure{}
+			return &dispatch.InitializationFailure{}
 		}
 		if input.Action == "npm" {
 			binary, args, err = initializationNPM()
-			args = append(args, "install", "--global", "--prefix", filepath.Join(packages, "npm"), "--")
 		} else {
 			binary, err = initializationPython()
-			args = []string{"-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--target", filepath.Join(packages, "python"), "--"}
 		}
-		args = append(args, input.Packages...)
 	}
 	if err != nil {
 		return err
 	}
-	return runInitializationProcess(ctx, binary, args, directory, initializationEnvironment(values))
+	return runInitializationProcess(ctx, binary, append(args, tail...), directory, initializationEnvironment(values))
 }
 
 func (b *Binding) initializationCWD(value string) (string, error) {
@@ -99,41 +84,41 @@ func (b *Binding) initializationCWD(value string) (string, error) {
 }
 
 func configureRuntime(values map[string]string) error {
-	if !validToolEnvironment(values) {
+	if !agentcapabilities.ValidToolEnvironment(values, runtime.GOOS == "windows") {
 		return agentcapabilities.ErrInvalid
 	}
 	path, err := initializedToolEnvironmentPath()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	packages, err := PackageDirectory()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	if os.MkdirAll(filepath.Dir(path), 0700) != nil || os.MkdirAll(packages, 0700) != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	root, err := os.OpenRoot(filepath.Dir(path))
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer root.Close()
 	unlock, err := runtimefs.LockDirectory(root)
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer unlock()
 	if _, err = root.Stat(filepath.Base(path)); !errors.Is(err, os.ErrNotExist) {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	configured := make(map[string]string, len(values)+2)
 	if source := os.Getenv("OAC_RUNTIME_TOOL_ENV_FILE"); source != "" {
 		if runtimefs.ValidateLocalPath(source) != nil {
-			return &InitializationFailure{}
+			return &dispatch.InitializationFailure{}
 		}
 		local, err := readToolEnvironmentFile(source)
 		if err != nil {
-			return &InitializationFailure{}
+			return &dispatch.InitializationFailure{}
 		}
 		for key, value := range local {
 			if runtime.GOOS == "windows" {
@@ -149,23 +134,13 @@ func configureRuntime(values map[string]string) error {
 		}
 		configured[key] = value
 	}
-	separator := string(os.PathListSeparator)
 	npmBin := filepath.Join(packages, "npm", "bin")
 	pythonBin := filepath.Join(packages, "python", "bin")
 	if runtime.GOOS == "windows" {
 		npmBin = filepath.Join(packages, "npm")
 		pythonBin = filepath.Join(packages, "python", "Scripts")
 	}
-	pathValue, exists := configured["PATH"]
-	if !exists {
-		pathValue = os.Getenv("PATH")
-	}
-	configured["PATH"] = npmBin + separator + pythonBin + separator + pathValue
-	pythonPath := configured["PYTHONPATH"]
-	configured["PYTHONPATH"] = filepath.Join(packages, "python")
-	if pythonPath != "" {
-		configured["PYTHONPATH"] += separator + pythonPath
-	}
+	configured = agentcapabilities.ToolEnvironment(configured, os.Getenv("PATH"), npmBin, pythonBin, filepath.Join(packages, "python"), string(os.PathListSeparator))
 	raw, err := json.Marshal(configured)
 	if err != nil || len(raw) > proto.RuntimePrepareMaxFrameBytes {
 		return agentcapabilities.ErrInvalid
@@ -198,15 +173,15 @@ func (b *Binding) installInitialFile(ctx context.Context, input proto.RuntimeIni
 	defer func() { w.uncertain = errors.Is(err, ErrInitializationUnconfirmed) }()
 	root, err := os.OpenRoot(b.workspace)
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer root.Close()
 	if root.MkdirAll(filepath.Dir(relative), 0700) != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	parent, err := root.OpenRoot(filepath.Dir(relative))
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer parent.Close()
 	// Initial files replace existing contents, unlike public Files create. Finish
@@ -218,5 +193,5 @@ func (b *Binding) installInitialFile(ctx context.Context, input proto.RuntimeIni
 }
 
 func initializationDependency(name string) error {
-	return fmt.Errorf("Runtime initialization requires %s: %w", name, &InitializationFailure{})
+	return fmt.Errorf("Runtime initialization requires %s: %w", name, &dispatch.InitializationFailure{})
 }

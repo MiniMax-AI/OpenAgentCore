@@ -39,6 +39,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
@@ -112,24 +113,27 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 			if runtime == nil || runtime.View == nil {
 				t.Fatalf("%s declares no agent-host view; discovery reported why above", kind)
 			}
-			reg.Register(declaration, *runtime)
-			qualify(t, h, cfg, sb, kind, runtime.View.Capabilities, sessionModel(t, raw, key))
+			reg.RegisterKind(runtime.Info, declaration.Configuration)
+			reg.RegisterView(kind, *runtime.View)
+			qualify(t, h, cfg, sb, kind, runtime.Info.Capabilities, sessionModel(t, raw, key))
 		})
 	}
 }
 
-// qualify runs the kind's Turns through dispatch. The first writes a file,
-// runs a failing command and reports what it printed and its exit status,
-// then the test checks all three; only the sandbox's tool environment holds
-// the value and the status. A view that declares function tools runs a second
-// Turn in a new Executor, which resumes the Session's native history, and
-// calls a function there. A view that declares tool search runs a Turn in
-// another Session that finds the function, deferred, with tool search. A view
-// that declares environment none answers a Turn in a Session without an
-// Environment, and its native state names the work directory.
-// A view that declares stdio MCP calls a tool of a stdio MCP server that runs
-// in the sandbox.
-func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps agent.ViewCapabilities, model proto.PromptRequestPayload) {
+// qualify runs the kind's Turns through dispatch. runtime_prepare first
+// freezes the Session's tool environment and runs a setup step that writes a
+// file with a value only the tool environment holds. The first Turn writes a
+// file, runs a failing command and reports what it printed and its exit
+// status, then the test checks all of them. A view that declares function
+// tools runs a second Turn in a new Executor, which resumes the Session's
+// native history, and calls a function there. A view that declares tool
+// search runs a Turn in a new Executor without native history that finds the
+// function, deferred, with tool search. A view that declares environment none
+// answers a Turn in a Session without an Environment, and its native state
+// names the work directory. Every view calls a tool of a stdio MCP server
+// that runs in the sandbox. Each Executor after the first reopens the
+// Environment that runtime_prepare prepared.
+func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps proto.AgentKindCapabilities, model proto.PromptRequestPayload) {
 	name := "qualify-" + kind + ".txt"
 	value, content := strings.ToLower(rand.Text()), "qualified "+strings.ToLower(rand.Text()[:12])
 	code, _ := rand.Int(rand.Reader, big.NewInt(90))
@@ -140,18 +144,24 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		"   It prints a value and exits with a non-zero status; that is expected.\n" +
 		"3. Answer with exactly one line: VALUE=<the printed value> EXIT=<the exit status>"
 
-	env := agenthost.Environment{
-		Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/home/runtime", "LANG": "C.UTF-8"},
-		Tool:    map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)},
-	}
 	configuration := proto.PromptRequestPayload{AgentKind: kind, DisableSubagents: true,
 		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"}}
+		LocalEnvironment: &proto.LocalEnvironment{ID: uuid.UUID(sb.resource.EnvironmentID).String(), WorkspaceDirectory: workspace, NetworkAccess: "enabled",
+			CapabilitySources: &agentcapabilities.Input{}}}
 	if caps.FunctionTools.IsSupported() {
 		configuration.FunctionTools = []proto.FunctionTool{lookupTicket}
 	}
 	k := newTicket(t)
-	s := sb.session(h, cfg, env, configuration)
+	// The sandbox holds one Environment Session's preparation at a time.
+	sb.reset(t, cfg)
+	s := sb.session(h, cfg, configuration)
+	setup := "setup-" + kind + ".txt"
+	s.prepare(t,
+		proto.RuntimeInitialization{Action: "configure", Env: map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)}},
+		proto.RuntimeInitialization{Action: "setup", Command: `printf '%s' "$QUALIFY_VALUE" > ` + setup})
+	if got := sb.read(t, cfg, workspace+"/"+setup); got != value {
+		t.Errorf("the setup step wrote %q, want the tool environment's %q", got, value)
+	}
 	done, answer, _ := s.turn(t, "qualify", prompt, k)
 	if !strings.Contains(answer, "VALUE="+value) || !strings.Contains(answer, fmt.Sprintf("EXIT=%d", exit)) {
 		t.Errorf("the answer %q does not report VALUE=%s EXIT=%d", answer, value, exit)
@@ -166,8 +176,9 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		if native == "" {
 			t.Fatal("the first Turn reported no native session to resume")
 		}
-		s.configuration.AgentSessionID = native
-		done, answer, calls := s.turn(t, "resumed-function", k.prompt("Call the lookup_ticket function"), k)
+		resumed := s.with(configuration)
+		resumed.configuration.AgentSessionID = native
+		done, answer, calls := resumed.turn(t, "resumed-function", k.prompt("Call the lookup_ticket function"), k)
 		if resumed, _ := done.Metadata[proto.DoneMetaAgentSessionID].(string); resumed != native {
 			t.Errorf("the resumed Turn reported the native session %q, want %q", resumed, native)
 		}
@@ -177,25 +188,24 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		deferred := lookupTicket
 		deferred.DeferLoading = true
 		configuration.ToolSearch, configuration.FunctionTools = true, []proto.FunctionTool{deferred}
-		search := sb.session(h, cfg, env, configuration)
-		_, answer, calls := search.turn(t, "tool-search", k.prompt("Search your tools for the function that looks up support tickets"), k)
+		_, answer, calls := s.with(configuration).turn(t, "tool-search", k.prompt("Search your tools for the function that looks up support tickets"), k)
 		k.check(t, answer, calls)
 	}
 	if caps.EnvironmentNone.IsSupported() {
 		none := configuration
 		none.LocalEnvironment, none.DisableExecutionEnvironment, none.FunctionTools, none.ToolSearch = nil, true, nil, false
-		s := sb.session(h, cfg, agenthost.Environment{}, none)
+		s := sb.session(h, cfg, none)
 		_, answer, _ := s.turn(t, "environment-none", "What is 17 times 23? Answer with exactly one line: PRODUCT=<the number>", k)
 		if !strings.Contains(answer, "PRODUCT=391") {
 			t.Errorf("the answer %q does not report PRODUCT=391", answer)
 		}
 		s.checkCwd(t, agent.ViewPrivateRoot+"/"+agent.ViewHomeName+"/"+agent.ViewWorkName)
 	}
-	if caps.StdioMCP.IsSupported() {
+	{
 		code := strings.ToLower(rand.Text()[:12])
 		stdio := configuration
 		stdio.FunctionTools, stdio.ToolSearch = nil, false
-		s := sb.session(h, cfg, env, stdio)
+		s := s.with(stdio)
 		s.mcp = []proto.EnvironmentMCP{{InstallationRoot: workspace, Server: agentplugin.MCPServer{Name: "qualify", Type: "stdio", Command: "python3", Args: []string{"-c", mcpServer, code}}}}
 		_, answer, _ := s.turn(t, "stdio-mcp", "Call the reveal_code tool of the qualify MCP server once.\nAnswer with exactly one line: CODE=<the code it returns>", k)
 		if !strings.Contains(answer, "CODE="+code) {
@@ -267,13 +277,14 @@ func (k ticket) check(t *testing.T, answer string, calls []proto.FunctionCallPay
 	}
 }
 
-// session is a Session bound to the sandbox. Each Turn runs in a new
-// Executor through a new dispatch Router.
+// session is a Session bound to the sandbox, in the sandbox's Environment
+// unless its configuration disables it. Each Turn runs in a new Executor
+// through a new dispatch Router, which binds the Session to the Host's
+// Environment owner.
 type session struct {
 	h             *agenthost.Host
 	cfg           agenthost.Config
 	binding       agenthost.Binding
-	env           agenthost.Environment
 	id            string
 	configuration proto.PromptRequestPayload
 	// mcp is the installed MCP that the Environment's preparation resolves
@@ -281,11 +292,75 @@ type session struct {
 	mcp []proto.EnvironmentMCP
 }
 
-func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, env agenthost.Environment, configuration proto.PromptRequestPayload) *session {
-	s := &session{h: h, cfg: cfg, binding: sb.binding(), env: env, id: uuid.NewString(), configuration: configuration}
+func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, configuration proto.PromptRequestPayload) *session {
+	s := &session{h: h, cfg: cfg, binding: sb.binding(), configuration: configuration}
+	s.id = uuid.UUID(s.binding.SessionID).String()
 	s.configuration.AgentStateKey = "agents-api-" + s.id
 	sb.grant(s.binding, cfg.RuntimeID)
 	return s
+}
+
+// with is the Session with configuration for its next Executors.
+func (s *session) with(configuration proto.PromptRequestPayload) *session {
+	next := *s
+	next.configuration, next.mcp = configuration, nil
+	next.configuration.AgentStateKey = s.configuration.AgentStateKey
+	return &next
+}
+
+// router returns a new Router that serves the Host's kinds, with the
+// Session bound to it.
+func (s *session) router(t *testing.T, out sender, id string) (*dispatch.Router, proto.AssignmentRef) {
+	t.Helper()
+	reg := s.h.Registry()
+	if s.mcp != nil {
+		reg = withMCP(t, reg, s.mcp)
+	}
+	router, err := dispatch.New(dispatch.Config{Sender: out, Environments: s.h.Environments, Log: s.cfg.Log, Registry: reg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := proto.AssignmentRef{SessionID: s.id, AssignmentID: uuid.UUID(s.binding.AssignmentID).String(), Epoch: s.binding.AssignmentEpoch}
+	bind := proto.AssignmentBindPayload{EnvironmentID: s.configuration.EnvironmentID()}
+	if bind.EnvironmentID != "" {
+		r := s.binding.Resource
+		bind.Resource = &sandboxbootstrap.Resource{TenantID: uuid.UUID(r.TenantID).String(), EnvironmentID: bind.EnvironmentID, Kind: "allocation",
+			ID: uuid.UUID(r.ID).String(), Generation: r.Generation}
+		bind.AttachGrant = s.binding.AttachGrant
+	}
+	handle(t, router, ref, proto.TypeAssignmentBind, id, bind)
+	var bound proto.AssignmentStatusPayload
+	if err := out.next(t, id, time.After(turnLimit)).DecodePayload(&bound); err != nil || bound.State != proto.AssignmentBound {
+		t.Fatalf("assignment_bind: %+v %v", bound, err)
+	}
+	return router, ref
+}
+
+// prepare applies each step to the Session's Environment with
+// runtime_prepare, then the empty selection's finalize.
+func (s *session) prepare(t *testing.T, steps ...proto.RuntimeInitialization) {
+	t.Helper()
+	out := make(sender, 64)
+	router, ref := s.router(t, out, uuid.NewString())
+	defer router.Shutdown(context.Background())
+	transfer := func(p proto.RuntimePreparePayload) {
+		p.Step, p.EnvironmentID, p.SessionID = "begin", s.configuration.EnvironmentID(), s.id
+		id := uuid.NewString()
+		for i, step := range []proto.RuntimePreparePayload{p, {Step: "commit"}} {
+			handle(t, router, ref, proto.TypeRuntimePrepare, id, step)
+			var result proto.RuntimePrepareResultPayload
+			if err := out.next(t, id, time.After(turnLimit)).DecodePayload(&result); err != nil {
+				t.Fatal(err)
+			}
+			if want := []string{"ready", "completed"}[i]; result.Outcome != want {
+				t.Fatalf("runtime_prepare %s %s: %+v, want %s", p.Action, step.Step, result, want)
+			}
+		}
+	}
+	for _, step := range steps {
+		transfer(proto.RuntimePreparePayload{Action: "initialize", Initialization: &step})
+	}
+	transfer(proto.RuntimePreparePayload{Action: "finalize", Sources: s.configuration.LocalEnvironment.CapabilitySources})
 }
 
 // turn binds the Session's assignment, prepares an Executor of the Session,
@@ -295,22 +370,7 @@ func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, env agenthos
 func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePayload, string, []proto.FunctionCallPayload) {
 	t.Helper()
 	out := make(sender, 256)
-	reg := s.h.Registry(func(proto.PromptRequestPayload) (agenthost.Binding, agenthost.Environment, error) {
-		return s.binding, s.env, nil
-	})
-	if s.mcp != nil {
-		reg = withMCP(t, reg, s.mcp)
-	}
-	router, err := dispatch.New(dispatch.Config{Sender: out, SessionEnvironments: true, Log: s.cfg.Log, Registry: reg})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ref := proto.AssignmentRef{SessionID: s.id, AssignmentID: s.binding.AssignmentID.String(), Epoch: s.binding.AssignmentEpoch}
-	handle(t, router, ref, proto.TypeAssignmentBind, "bind-"+run, proto.AssignmentBindPayload{EnvironmentID: s.configuration.EnvironmentID()})
-	var bound proto.AssignmentStatusPayload
-	if err := out.next(t, "bind-"+run, time.After(turnLimit)).DecodePayload(&bound); err != nil || bound.State != proto.AssignmentBound {
-		t.Fatalf("assignment_bind: %+v %v", bound, err)
-	}
+	router, ref := s.router(t, out, "bind-"+run)
 	prepare := "prepare-" + run
 	handle(t, router, ref, proto.TypeExecutionPrepare, prepare, proto.ExecutionPreparePayload{SessionID: s.id, Configuration: s.configuration})
 	ready := out.status(t, prepare)
@@ -621,4 +681,53 @@ func (sb *sandbox) read(t *testing.T, cfg agenthost.Config, name string) (conten
 		content = string(got.Data)
 	})
 	return content
+}
+
+// reset empties the sandbox's initialization area.
+func (sb *sandbox) reset(t *testing.T, cfg agenthost.Config) {
+	sb.files(t, cfg, func(ctx context.Context, c *sandboxfs.Client, root sandboxfs.NodeRef) {
+		walked, err := c.Walk(ctx, &sandboxfs.WalkRequest{Parent: root, Names: [][]byte{[]byte("environment"), []byte("initialization")}})
+		if err != nil || walked.Failure != nil {
+			t.Fatalf("the initialization area: %v %v", err, walked.Failure)
+		}
+		empty(ctx, t, c, new(sandboxfs.HandleIDs), walked.Entries[1].Node)
+	})
+}
+
+// empty removes what dir holds.
+func empty(ctx context.Context, t *testing.T, c *sandboxfs.Client, handles *sandboxfs.HandleIDs, dir sandboxfs.NodeRef) {
+	h := handles.Next()
+	if _, err := c.OpenDir(ctx, &sandboxfs.OpenDirRequest{Handle: h, Node: dir}); err != nil {
+		t.Fatal(err)
+	}
+	var entries []sandboxfs.DirEntry
+	for cookie := uint64(0); ; {
+		r, err := c.ReadDir(ctx, &sandboxfs.ReadDirRequest{Handle: h, Cookie: cookie, Limit: 64 << 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		entries = append(entries, r.Entries...)
+		if r.End || len(r.Entries) == 0 {
+			break
+		}
+		cookie = r.Entries[len(r.Entries)-1].Cookie
+	}
+	if _, err := c.ReleaseDir(ctx, &sandboxfs.ReleaseDirRequest{Handle: h}); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		var err error
+		if e.Type == sandboxfs.ModeDirectory {
+			var child *sandboxfs.LookupResponse
+			if child, err = c.Lookup(ctx, &sandboxfs.LookupRequest{Parent: dir, Name: e.Name}); err == nil {
+				empty(ctx, t, c, handles, child.Entry.Node)
+				_, err = c.Rmdir(ctx, &sandboxfs.RmdirRequest{Parent: dir, Name: e.Name})
+			}
+		} else {
+			_, err = c.Unlink(ctx, &sandboxfs.UnlinkRequest{Parent: dir, Name: e.Name})
+		}
+		if err != nil {
+			t.Fatalf("remove %s: %v", e.Name, err)
+		}
+	}
 }

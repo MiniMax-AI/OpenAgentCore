@@ -4,8 +4,8 @@
 // ErrUnsupported.
 //
 // The process that runs the agent host calls Open once at startup, hands
-// Host.Registry to the daemon's dispatch, which drives each Turn of each
-// Executor, and calls Close once every Executor has closed. No production
+// Host.Registry and Host.Environments to the daemon's dispatch, which drives
+// each Turn of each Executor, and calls Close once every Executor has closed. No production
 // caller constructs Host.Registry yet; oac-daemon connect still runs
 // Harnesses in the sandbox. Open takes two installation locks, which the
 // Host holds until Close: a flock on StateDir/lock for the Session
@@ -31,16 +31,35 @@
 // a delegation that fails them fails each view's launch with ErrLaunch and
 // sessionview.ErrLauncher.
 //
-// Host.Registry's Executor factory prepares an Executor of the Session that
-// its bind function binds the request to. It admits the request before any
-// effect: the kind must declare an agent.View, the request must use only
-// what the view's agent.ViewCapabilities declare, and when the view declares
+// Host.Environments gives each Session bound to the agent host one
+// Environment owner, a dispatch.Environment, from its first assignment_bind
+// until Host.RemoveHome, so the owner outlives Executors and Routers. It
+// opens its own Link attachment on first use and closes it when dispatch
+// closes the owner at release, quiescence or shutdown; its next operation
+// opens a new one. Over the attachment's File service it applies
+// runtime_prepare to the sandbox: initial files in /workspace, the frozen
+// tool environment and the completion marker in /environment/initialization,
+// and Skills, plugins and the declared directories' snapshot in
+// agentcapabilities.Directory. A setup, npm or python step runs over the
+// Process service as the operation the transfer's ID names. Before each
+// Executor factory runs, the owner checks the installation, without
+// initializing a completed one again, and fills the request's Skills, MCP and
+// capability root as sandbox paths. It also serves workspace reads, Files
+// create and outputs export. A File mutation or setup step whose effect is
+// unknown quarantines the owner: it sends no mutation again until
+// Host.RemoveHome forgets it. A Session with environment none gets an owner
+// without an Environment, which never attaches.
+//
+// Host.Registry's Executor factory prepares an Executor of the Session whose
+// owner prepared the request, with the sandbox's baseline environment and the
+// frozen tool environment as its Environment. It admits the request before
+// any effect: the kind must declare an agent.View, and when the view declares
 // shim names or a stdio MCP server's command is a bare name, both of which
 // run on the sandbox PATH, the Session's Environment must set PATH. A
-// Session without strict resume, with a restricted network, or with a stdio
-// MCP server that needs a credential is rejected whatever the view declares.
-// The registry's Info follows the declarations and marks what needs a local
-// workspace unsupported. The factory then allocates the
+// Session with Skills, with a restricted network, or with a stdio MCP server
+// that needs a credential is rejected. The registry declares each kind in a
+// local Environment and with environment none, as agent.EnvironmentSupport
+// composes them. The factory then allocates the
 // Executor's uid, skipping each uid that a running thread holds as its real,
 // effective, saved or file-system uid; this check only detects a conflict
 // and never ends a process. It prepares the Session directory under

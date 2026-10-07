@@ -32,8 +32,10 @@ type Config struct {
 	// RuntimeID and Credential authenticate the agent host to the relay.
 	RuntimeID  sandboxwire.ID
 	Credential []byte
-	// Harnesses holds the Harness declarations. A kind runs only when it
-	// declares an agent.View.
+	// Harnesses holds the Harness declarations as their adapters state
+	// them, registered with RegisterKind and RegisterView: Registry composes
+	// them with the Environments the agent host serves. A kind runs only
+	// when it declares an agent.View.
 	Harnesses *agent.Registry
 	// Shim is the absolute host path of the static oac-process-shim binary.
 	Shim string
@@ -65,8 +67,8 @@ type Binding struct {
 // Environment is the remote environment policy of processes forwarded to the
 // sandbox.
 type Environment struct {
-	// Sandbox holds the Environment's fixed values, such as HOME, PATH,
-	// TMPDIR and LANG in the sandbox.
+	// Sandbox holds the Environment's fixed values in the sandbox: HOME,
+	// PATH and LANG.
 	Sandbox map[string]string
 	// Tool is the Environment's tool environment.
 	Tool map[string]string
@@ -120,6 +122,7 @@ type Host struct {
 	cfg Config
 	// state and views hold the locks; nil until taken.
 	state, views *os.File
+	owners       owners
 }
 
 // Close releases the installation locks. Call it once every Executor has

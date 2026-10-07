@@ -51,6 +51,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 	// Native preparation verifies the applied admission/tool profile before input.
 	result.Capabilities.SubagentObservations = proto.CapabilitySupported
 	result.Capabilities.EnvironmentNone = proto.CapabilitySupported
+	result.Capabilities.LocalEnvironment = proto.CapabilitySupported
 	result.Capabilities.MCPHTTPTools = proto.CapabilitySupported
 	result.Capabilities.MCPHTTPBearerAuth = proto.CapabilitySupported
 	runtime.Info = result

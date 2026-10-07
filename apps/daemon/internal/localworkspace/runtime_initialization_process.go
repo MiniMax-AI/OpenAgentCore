@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
@@ -98,6 +99,10 @@ func initializationEnvironment(configured map[string]string) []string {
 	return result
 }
 
+// InitializationGrace is how long a cancelled setup step may run before it is
+// killed.
+const InitializationGrace = 250 * time.Millisecond
+
 // The shared process owner settles the leader and descendants. Readers finish
 // before return; output is discarded with constant memory, never put in errors.
 func runInitializationProcess(ctx context.Context, binary string, args []string, directory string, env []string) error {
@@ -107,10 +112,10 @@ func runInitializationProcess(ctx context.Context, binary string, args []string,
 		return ErrInitializationUnconfirmed
 	}
 	if info, err := os.Stat(directory); err != nil || !info.IsDir() {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	process, err := clirunner.Start(clirunner.StartOptions{Parent: operation, Binary: binary, Args: args,
-		Dir: directory, Env: env, KillTimeout: 250 * time.Millisecond})
+		Dir: directory, Env: env, KillTimeout: InitializationGrace})
 	if err != nil {
 		return ErrInitializationUnconfirmed
 	}
@@ -137,5 +142,5 @@ func runInitializationProcess(ctx context.Context, binary string, args []string,
 	if code < 1 || code > 255 {
 		return ErrInitializationUnconfirmed
 	}
-	return &InitializationFailure{ExitCode: &code}
+	return &dispatch.InitializationFailure{ExitCode: &code}
 }

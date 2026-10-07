@@ -15,11 +15,11 @@ func TestNativeDirectoryFailureMapping(t *testing.T) {
 		err           error
 		outcome, code string
 	}{
-		{agent.ErrWorkspaceNotDirectory, "rejected", proto.WorkspaceReadNotDirectory},
-		{agent.ErrWorkspaceReadInvalid, "rejected", "invalid_request"},
+		{ErrWorkspaceNotDirectory, "rejected", proto.WorkspaceReadNotDirectory},
+		{ErrWorkspaceReadInvalid, "rejected", "invalid_request"},
 		{fs.ErrNotExist, "rejected", "not_found"},
 		{fs.ErrPermission, "rejected", "permission_denied"},
-		{agent.ErrWorkspaceReadUncertain, "unknown", "read_unconfirmed"},
+		{ErrWorkspaceReadUncertain, "unknown", "read_unconfirmed"},
 	} {
 		got := workspaceReadFailure(test.err)
 		if got.Outcome != test.outcome || got.ErrorCode != test.code {
@@ -33,7 +33,7 @@ func TestLocalUploadUnknownRetainsOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := workspaceWriteResult(agent.WorkspaceWriteResult{}, errors.New("unconfirmed mutation"), 3)
+	got := workspaceWriteResult(WorkspaceWriteResult{}, errors.New("unconfirmed mutation"), 3)
 	if got.Outcome != "unknown" {
 		t.Fatal(got)
 	}

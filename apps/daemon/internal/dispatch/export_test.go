@@ -1,21 +1,5 @@
 package dispatch
 
-import (
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-)
-
-// LocalEnvironments resolves binding as the owner of the Session it binds, as
-// the daemon composes it.
-func LocalEnvironments(binding *localworkspace.Binding) func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment {
-	return func(ref proto.AssignmentRef, bind proto.AssignmentBindPayload) Environment {
-		if !binding.Matches(bind.EnvironmentID, ref.SessionID) {
-			return nil
-		}
-		return binding
-	}
-}
-
 func (r *Router) PreparationOwnershipForTest(handle string) (bool, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

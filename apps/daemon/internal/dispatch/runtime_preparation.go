@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
@@ -18,6 +17,7 @@ const runtimePreparationTimeout = 120 * time.Second
 // Router.mu protects one connection-local transfer. Partial installation data
 // belongs to the bound Environment and is never removed by transfer cleanup.
 type runtimePreparationTransfer struct {
+	id        uuid.UUID // the envelope's ID
 	envelope  proto.Envelope
 	request   proto.RuntimePreparePayload
 	data      []byte
@@ -70,13 +70,13 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("runtime_preparation_unsupported"))
 		}
-		if r.runtimePreparationResourcesBusyLocked() {
+		if r.runtimePreparationResourcesBusyLocked(request.SessionID) {
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("resource_unavailable"))
 		}
 		owner, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimePreparationTimeout)
 		u := &runtimePreparationTransfer{
-			envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
+			id: id, envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
 			ready: make(chan struct{}), cancel: cancel,
 		}
 		r.runtimePreparation = u
@@ -123,12 +123,44 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 	return nil
 }
 
-func (r *Router) runtimePreparationResourcesBusyLocked() bool {
-	if r.workspaceWrite != nil || r.workspaceExport != nil || len(r.workspaceReads) != 0 || len(r.sessions) != 0 || len(r.executors) != 0 {
+// runtimePreparationResourcesBusyLocked reports whether the Session has a
+// transfer, a read, a Run, an Executor or an owned preparation. Router.mu must
+// be held.
+func (r *Router) runtimePreparationResourcesBusyLocked(sessionID string) bool {
+	if r.environmentTransferLocked(sessionID) || r.executors[sessionID] != nil || r.sessionWorkLocked(sessionID) {
 		return true
 	}
 	for _, p := range r.preparations {
-		if p.owns || p.busy {
+		if p.busy && p.request.Assignment.SessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+// environmentTransferLocked reports whether the Session has a workspace write,
+// a workspace export or a Runtime preparation. Router.mu must be held.
+func (r *Router) environmentTransferLocked(sessionID string) bool {
+	return r.workspaceWrite != nil && r.workspaceWrite.envelope.Assignment.SessionID == sessionID ||
+		r.workspaceExport != nil && r.workspaceExport.request.Assignment.SessionID == sessionID ||
+		r.runtimePreparation != nil && r.runtimePreparation.envelope.Assignment.SessionID == sessionID
+}
+
+// sessionWorkLocked reports whether the Session has a Run, a workspace read or
+// an owned preparation. Router.mu must be held.
+func (r *Router) sessionWorkLocked(sessionID string) bool {
+	for _, state := range r.sessions {
+		if state.assignment.SessionID == sessionID {
+			return true
+		}
+	}
+	for _, session := range r.workspaceReads {
+		if session == sessionID {
+			return true
+		}
+	}
+	for _, p := range r.preparations {
+		if p.owns && p.request.Assignment.SessionID == sessionID {
 			return true
 		}
 	}
@@ -143,7 +175,7 @@ func (r *Router) finishRuntimePreparationTransferLocked(u *runtimePreparationTra
 // apply must return only after its local mutations stop. Cancellation requests
 // shutdown, but cannot release ownership while that call is still running.
 // done runs once the result is sent.
-func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, proto.RuntimePreparePayload, []byte) error, done func()) {
+func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error, done func()) {
 	defer r.shutdownWG.Done()
 	defer done()
 	defer u.cancel()
@@ -165,7 +197,7 @@ func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePr
 		result = rejectedRuntimePreparation(fenced)
 	}
 	if admitted {
-		result = runtimePreparationResult(apply(ctx, u.request, data), u.request.SizeBytes)
+		result = runtimePreparationResult(apply(ctx, u.id, u.request, data), u.request.SizeBytes)
 	}
 	// Release the potentially large body before waiting on transport delivery.
 	data = nil
@@ -187,7 +219,10 @@ func runtimePreparationResult(err error, size int) proto.RuntimePrepareResultPay
 	if err == nil {
 		return proto.RuntimePrepareResultPayload{Outcome: "completed", SizeBytes: size}
 	}
-	var initialization *localworkspace.InitializationFailure
+	if errors.Is(err, ErrEnvironmentUnavailable) {
+		return rejectedRuntimePreparation("resource_unavailable")
+	}
+	var initialization *InitializationFailure
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && errors.As(err, &initialization) {
 		code := 0
 		if initialization.ExitCode != nil {

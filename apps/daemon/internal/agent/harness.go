@@ -14,7 +14,9 @@
 // static declaration list and installs each resulting Runtime through Register.
 // Availability and factory selection belong to the adapter. RegisterKind resets
 // the factories, so Register installs it first. The Runtime's Environment
-// owner, not the adapter, serves and declares workspace operations.
+// owner, not the adapter, serves and declares the Environments a kind runs
+// in: Register composes its EnvironmentSupport with the Harness's own
+// declaration once.
 //
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising
@@ -70,14 +72,36 @@ type Runtime struct {
 	View *View
 }
 
-// Register installs a discovered Runtime with its declaration's configuration.
-func (r *Registry) Register(declaration Declaration, runtime Runtime) {
+// EnvironmentSupport is what the Runtime's Environment owner serves. The
+// Harness's own declaration states LocalEnvironment and EnvironmentNone as
+// what its Executors can run; the owner decides which of them the Runtime
+// offers, and serves read-only preparation and output export wherever it
+// offers a local Environment.
+type EnvironmentSupport struct {
+	// Local serves executions in a local Environment.
+	Local bool
+	// None serves executions with environment none.
+	None bool
+}
+
+// Compose narrows caps, a Harness's own declaration, to what s serves.
+func (s EnvironmentSupport) Compose(caps proto.AgentKindCapabilities) proto.AgentKindCapabilities {
+	caps.LocalEnvironment = proto.CapabilityFromBool(s.Local && caps.LocalEnvironment.IsSupported())
+	caps.WorkspaceReadPreparation, caps.WorkspaceOutputExport = caps.LocalEnvironment, caps.LocalEnvironment
+	caps.EnvironmentNone = proto.CapabilityFromBool(s.None && caps.EnvironmentNone.IsSupported())
+	return caps
+}
+
+// Register installs a discovered Runtime with its declaration's configuration,
+// in the Environments that environments serves.
+func (r *Registry) Register(declaration Declaration, runtime Runtime, environments EnvironmentSupport) {
 	if runtime.Info.Kind != declaration.Info.Kind {
 		panic("agent.Registry.Register: discovery kind differs from declaration")
 	}
 	if !runtime.Info.Available && runtime.Executor != nil {
 		panic("agent.Registry.Register: unavailable runtime has factories")
 	}
+	runtime.Info.Capabilities = environments.Compose(runtime.Info.Capabilities)
 	r.RegisterKind(runtime.Info, declaration.Configuration)
 	if runtime.Executor != nil {
 		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
@@ -91,8 +115,8 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 // view: the sandbox world at /, the closure, home and shims under
 // ViewPrivateRoot, and a loopback-only network whose model, MCP and proxy
 // endpoints belong to the Session's credential gateway. The declaration is
-// data; the agent host builds each view from it and the Session, and admits a
-// request only when the view declares each capability the request uses.
+// data; the agent host builds each view from it and the Session. A view runs
+// every request that the Runtime's declaration admits.
 //
 // Environment none. A request with DisableExecutionEnvironment runs in an
 // empty-root view: a read-only, noexec tmpfs root that holds only the
@@ -207,28 +231,7 @@ type View struct {
 	// environment wins over a forwarded variable of the same name.
 	ForwardEnv []string
 	Proxy      ViewProxy
-	// Capabilities declares what the view supports.
-	Capabilities ViewCapabilities
-	Executor     ViewExecutorFactory
-}
-
-// ViewCapabilities declares, field by field, what a view supports. Each field
-// is set explicitly.
-type ViewCapabilities struct {
-	// EnvironmentNone runs a request with DisableExecutionEnvironment in an
-	// empty-root view.
-	EnvironmentNone proto.CapabilitySupport
-	// Skills runs a request with resolved Skills (LocalEnvironment.Skills).
-	Skills proto.CapabilitySupport
-	// FunctionTools, FunctionResultImages and ToolSearch mean what the
-	// proto.AgentKindCapabilities fields of the same names mean.
-	FunctionTools        proto.CapabilitySupport
-	FunctionResultImages proto.CapabilitySupport
-	ToolSearch           proto.CapabilitySupport
-	// StdioMCP runs stdio MCP bindings under their aliases. A stdio binding
-	// whose CredentialAuthority is not "none" is rejected with ErrViewHandoff
-	// whatever the view declares.
-	StdioMCP proto.CapabilitySupport
+	Executor   ViewExecutorFactory
 }
 
 // ViewMount presents HostDir at ViewPrivateRoot/<Name>.
@@ -371,12 +374,6 @@ func (v View) Validate() error {
 	}
 	if v.Proxy != ViewProxyNone && v.Proxy != ViewProxyEnv {
 		return invalidView("proxy %d", v.Proxy)
-	}
-	c := reflect.ValueOf(v.Capabilities)
-	for i := range c.NumField() {
-		if s := c.Field(i).Interface().(proto.CapabilitySupport); s != proto.CapabilitySupported && s != proto.CapabilityUnsupported {
-			return invalidView("capability %s is not declared", c.Type().Field(i).Name)
-		}
 	}
 	names := map[string]bool{ViewShimName: true, ViewHomeName: true, ViewRunName: true}
 	for _, m := range v.Closure {

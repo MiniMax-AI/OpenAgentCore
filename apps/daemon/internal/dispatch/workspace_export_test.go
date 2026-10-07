@@ -4,14 +4,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
+	"errors"
 	"io"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -31,32 +29,46 @@ func (s exportSender) Send(ctx context.Context, env proto.Envelope) error {
 	}
 }
 
+// stubEnvironment is an owner whose export writes outputs/a, 131089 zero
+// bytes, and fails after it when fail is set.
+type stubEnvironment struct{ fail bool }
+
+func (stubEnvironment) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
+	return r, nil
+}
+func (stubEnvironment) Prepare(_ context.Context, r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
+	return r, nil
+}
+func (stubEnvironment) ApplyRuntimePreparation(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {
+	return errors.New("stub")
+}
+func (stubEnvironment) ListWorkspaceDirectory(context.Context, string, int) (WorkspaceDirectoryResult, error) {
+	return WorkspaceDirectoryResult{}, ErrWorkspaceReadUnavailable
+}
+func (stubEnvironment) WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error) {
+	return WorkspaceWriteResult{}, ErrEnvironmentUnavailable
+}
+func (e stubEnvironment) ExportOutputs(_ context.Context, w io.Writer) error {
+	archive := tar.NewWriter(w)
+	if err := archive.WriteHeader(&tar.Header{Name: "outputs/a", Mode: 0600, Size: 131089, Typeflag: tar.TypeReg}); err != nil {
+		return err
+	}
+	if _, err := archive.Write(make([]byte, 131089)); err != nil {
+		return err
+	}
+	if e.fail {
+		return errors.New("output too large")
+	}
+	return archive.Close()
+}
+func (stubEnvironment) Close(context.Context) error { return nil }
+
 func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.WorkspaceExportPayload) {
 	t.Helper()
-	workspace := t.TempDir()
-	if err := os.Mkdir(filepath.Join(workspace, "outputs"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(workspace, "outputs", "a"), make([]byte, 131089), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if program == "failure" {
-		f, err := os.Create(filepath.Join(workspace, "outputs", "z"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = f.Truncate(201 << 20); err != nil {
-			t.Fatal(err)
-		}
-		f.Close()
-	}
-	environment, session := uuid.NewString(), capabilityRef.SessionID
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	environment := uuid.NewString()
+	owner := stubEnvironment{fail: program == "failure"}
 	sender := exportSender{make(chan proto.Envelope, 8)}
-	r, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: LocalEnvironments(binding)})
+	r, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment { return owner }})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -70,7 +70,7 @@ type Command struct {
 type Environment struct {
 	// Pass names the shim environment entries that pass through.
 	Pass []string
-	// Sandbox holds fixed sandbox values such as HOME, PATH, TMPDIR and LANG.
+	// Sandbox holds fixed sandbox values: HOME, PATH and LANG.
 	Sandbox map[string]string
 	// Tool is the Environment's tool environment.
 	Tool map[string]string

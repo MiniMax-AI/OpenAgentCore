@@ -86,14 +86,6 @@ func newView(binary string, codeModeHost bool) agent.View {
 		ShimPaths:  []string{"/bin/bash"},
 		ForwardEnv: slices.Clone(viewForwardEnv),
 		Proxy:      agent.ViewProxyEnv,
-		Capabilities: agent.ViewCapabilities{
-			EnvironmentNone:      proto.CapabilitySupported,
-			Skills:               proto.CapabilityUnsupported,
-			FunctionTools:        proto.CapabilitySupported,
-			FunctionResultImages: proto.CapabilitySupported,
-			ToolSearch:           proto.CapabilityUnsupported,
-			StdioMCP:             proto.CapabilitySupported,
-		},
 		Executor: func(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
 			cfg := defaultSessionConfig()
 			cfg.codexBinary = binary

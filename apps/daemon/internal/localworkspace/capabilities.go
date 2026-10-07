@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
+	"github.com/google/uuid"
 )
 
 // Prepare runs under the admitted executor's lifetime, before native startup.
@@ -79,7 +80,7 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 
 // ApplyRuntimePreparation settles every filesystem operation before returning. A
 // cancelled caller never leaves an unowned installation goroutine behind.
-func (b *Binding) ApplyRuntimePreparation(ctx context.Context, input proto.RuntimePreparePayload, data []byte) error {
+func (b *Binding) ApplyRuntimePreparation(ctx context.Context, _ uuid.UUID, input proto.RuntimePreparePayload, data []byte) error {
 	if b == nil || !b.Matches(input.EnvironmentID, input.SessionID) || !proto.ValidRuntimePrepareRequest(input) || input.Step != "begin" {
 		return agentcapabilities.ErrInvalid
 	}

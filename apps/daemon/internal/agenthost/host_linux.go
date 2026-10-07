@@ -27,7 +27,7 @@ func Open(cfg Config) (_ *Host, err error) {
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
 		return nil, fmt.Errorf("%w: state directory: %w", ErrInvalidConfig, err)
 	}
-	h := &Host{cfg: cfg}
+	h := &Host{cfg: cfg, owners: owners{d: deps{dial: relayDial(cfg), tasks: taskUIDs}}}
 	defer func() {
 		if err != nil {
 			h.Close()

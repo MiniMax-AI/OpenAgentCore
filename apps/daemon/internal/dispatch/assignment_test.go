@@ -207,3 +207,58 @@ func TestAssignmentBindCarriesLink(t *testing.T) {
 		t.Fatalf("bind with another grant = %+v", got)
 	}
 }
+
+// closingOwner counts its Closes and fails if two overlap. The first Close
+// waits for release.
+type closingOwner struct {
+	dispatch.Environment
+	closes, active atomic.Int32
+	overlapped     atomic.Bool
+	entered        chan struct{}
+	release        chan struct{}
+}
+
+func (o *closingOwner) Close(context.Context) error {
+	if o.active.Add(1) > 1 {
+		o.overlapped.Store(true)
+	}
+	defer o.active.Add(-1)
+	if o.closes.Add(1) == 1 && o.entered != nil {
+		close(o.entered)
+		<-o.release
+	}
+	return nil
+}
+
+func TestReleaseRetryAndShutdownCloseOwnersOnce(t *testing.T) {
+	const other = "33333333-3333-4333-8333-333333333333"
+	released := &closingOwner{entered: make(chan struct{}), release: make(chan struct{})}
+	unreleased := &closingOwner{}
+	sender := &recSender{}
+	r, err := dispatch.New(dispatch.Config{Registry: agent.NewRegistry(), Sender: sender, Environments: func(ref proto.AssignmentRef, _ proto.AssignmentBindPayload) dispatch.Environment {
+		if ref.SessionID == other {
+			return unreleased
+		}
+		return released
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assign(t, r, preparationSessionID, preparationEnvironmentID)
+	assign(t, r, other, preparationEnvironmentID)
+	release(t, r, preparationSessionID, "release", 2, false)
+	<-released.entered
+	release(t, r, preparationSessionID, "retry", 2, false)
+	close(released.release)
+	for _, id := range []string{"release", "retry"} {
+		if got := waitAssignmentStatus(t, sender, id); got.State != proto.AssignmentReleased {
+			t.Fatalf("%s = %+v", id, got)
+		}
+	}
+	if err := r.Shutdown(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if released.closes.Load() != 2 || released.overlapped.Load() || unreleased.closes.Load() != 1 {
+		t.Fatalf("released owner closes = %d (overlapped %t), unreleased owner closes = %d", released.closes.Load(), released.overlapped.Load(), unreleased.closes.Load())
+	}
+}
