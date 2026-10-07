@@ -134,16 +134,10 @@ type Session struct {
 	closed    chan struct{}
 }
 
-// NewSession wires a freshly-upgraded WS connection into a Session.
+// newSession wires a freshly-upgraded WS connection into a Session.
 // The session does NOT start its goroutines automatically — Start runs
 // once the handler is ready so the session can't race with response writes.
-func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
-	if log == nil {
-		log = func(string, ...any) {}
-	}
-	if reg == nil {
-		reg = NewRegistry()
-	}
+func newSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
 	now := time.Now()
 	return &Session{
 		DeviceID:      deviceID,

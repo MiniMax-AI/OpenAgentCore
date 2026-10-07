@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 3d8e6a03d6a54c7dc86a27164749ffae963b5ef52cbede0e0da843c7da0216ba
+source_hash: 78fcbde855beafae4d1f5eb38b87596eeca25c99c025c6c54978db988d2a534a
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -10,7 +10,7 @@ source_hash: 3d8e6a03d6a54c7dc86a27164749ffae963b5ef52cbede0e0da843c7da0216ba
 {"error":{"message":"A valid Core key is required as the bearer credential.","type":"invalid_request_error","code":"invalid_admin_key","param":null}}
 ```
 
-`/v1` 和 `/api/v1` 上的错误仍使用各自的封装结构，且绝不包含 `details`。
+`/v1` 和 `/api/v1` 上的错误仍使用各自的封装结构，且绝不包含 `details`。下面各表列出 `/core/v1` 或控制台调用方可能收到的所有代码，[线路词汇](wire-semantics.md#errors)除外；例如 `invalid_request`、`not_found_error` 或 `idempotency_conflict` 沿用其在 `/v1` 上的含义。`/v1` Session 输入和机器路由的代码（例如 `turn_conflict` 或 `invalid_node_credential`）不会到达这些调用方。共享目录 `services/core/internal/api/testdata/core-errors.json` 恰好包含所列代码。Go 测试要求每个代码都有生产者、与这些表完全一致，并要求 Core 错误写入函数产生的其他代码都登记在目录中；Web 测试要求每种语言恰好为这些代码提供消息。
 
 ## 可选详细信息 {#optional-details}
 
@@ -49,7 +49,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 409 | `sandbox_credential_ownership` | 候选凭据无法管理保留的部署；更换账户前必须重置 | `credential` |
 | 503 | `sandbox_verification_unconfirmed` | 无法确认验证结果、回执结算结果或凭据隔离状态 | null |
 
-每次写入部署时，类型化客户端都会将上述代码及其他 `sandbox_*` 部署代码的消息替换为固定的本地文本。`details` 中仅保留 `current_generation`、`allocations`、`pending`、`min` 和 `max`，并且仅当 status、code 和 param 与上表或下方 `invalid_sandbox_configuration` 各行完全匹配时，才保留 `param`。`409 sandbox_configuration_error` 会转换为有关公开 URL 的固定指引，并将 `param` 设为 null，即使对于未提供密钥的 `PUT` 也是如此。其他任何错误都会转换为 `sandbox_configuration_unconfirmed` 且不会重新发送，因为拒绝响应可能会回显密钥。
+每次写入部署时，类型化客户端都会将上述代码及其他 `sandbox_*` 部署代码的消息替换为固定的本地文本。`details` 中仅保留 `current_generation`、`allocations`、`pending`、`min` 和 `max`，并且仅当 status、code 和 param 与上表或下方 `invalid_sandbox_configuration` 各行完全匹配时，才保留 `param`。`409 sandbox_configuration_error` 会转换为有关公开 URL 的固定指引，并将 `param` 设为 null，即使对于未提供密钥的 `PUT` 也是如此。其他任何错误都会转换为仅客户端使用的代码 `sandbox_configuration_unconfirmed`（Core 从不返回它），且不会重新发送，因为拒绝响应可能会回显密钥。
 
 ## 操作验证 {#operation-validation}
 
@@ -72,6 +72,35 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `invalid_sandbox_configuration` | `runtime` | 省略 | Runtime release 缺失、可变、无效或 E2B 不允许 |
 
 这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；Project 名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、常规限制、Harness 协议，然后是 Harness 的必需限制；沙箱资源依次为 CPU、内存、磁盘，然后是 Runtime。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
+
+## 其他管理错误 {#other-administration-errors}
+
+这些代码的 `param` 为 null，且没有 `details`。[沙箱部署](./sandbox-deployment.md#errors)说明各沙箱代码何时出现。
+
+| HTTP | 代码 | 含义 |
+| --- | --- | --- |
+| 400 | `sandbox_operation_unsupported` | 所选沙箱提供商不支持该操作 |
+| 401 | `invalid_admin_key` | Bearer 凭据不是有效的 Core Key |
+| 404 | `not_found` | 操作不存在、Harness 未知，或该 Harness 没有部署默认模型服务 |
+| 409 | `project_archived` | 目标 Project 已归档 |
+| 409 | `project_exists` | 该 Project ID 已存在 |
+| 409 | `project_api_key_exists` | 该 API Key ID 已存在 |
+| 409 | `executor_credential_exists` | 该执行器凭证 ID 已存在；要替换密钥，请轮换它 |
+| 409 | `sandbox_not_configured` | 沙箱部署尚未配置 |
+| 409 或 503 | `sandbox_reset_in_progress` | 沙箱正在重置 |
+| 409 | `sandbox_configuration_error` | 当前安装无法支持所选提供商，例如公开 URL 为 loopback 时选择 E2B |
+| 409 | `sandbox_deployment_conflict` | 沙箱部署在当前状态下无法更改 |
+| 409 | `sandbox_specification_mismatch` | 已保存的部署规格对其提供商不再有效 |
+| 409 | `runtime_node_in_use` | 节点仍有资源分配、快照、预留资源或待清理项 |
+| 409 | `environment_unavailable` | Session 的环境已不可用，例如在不提供执行的 Core 上归档 |
+| 409 | `runtime_history_unsupported` | 该 Session 不支持 Runtime 历史 |
+| 500 | `internal_error` | Core 未能完成操作 |
+| 503 | `runtime_node_unavailable` | 没有可用或有剩余容量的沙箱节点 |
+| 503 | `credential_storage_unavailable` | Core 没有凭证加密密钥 |
+| 503 | `execution_unavailable` | 此 Core 不提供执行功能 |
+| 503 | `runtime_history_unavailable` | 持久 Runtime 历史未配置或暂时不可用 |
+| 503 | `core_metrics_unavailable` | 无法读取 Core 指标 |
+| 503 | `file_transfer_unavailable` | 有界内容传输不可用 |
 
 ## 诊断失败类别 {#diagnostic-failure-categories}
 

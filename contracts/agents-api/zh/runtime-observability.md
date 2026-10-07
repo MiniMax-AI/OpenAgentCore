@@ -1,7 +1,7 @@
 ---
 title: "运行时可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: f79a077350118f5f9bb3f4e8874242af3cb716e92f5e090f6652b001ae5780a1
+source_hash: 103575f3971e77d5ba149cacb27e972e429a46713b2bda7da36cae43bbf313fa
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `internal/runtimeobs/otlpexporter`。
@@ -91,7 +91,7 @@ CPU 静默状态、心跳时龄、连接状态和保活时间都不是空闲时�
 
 采样器在启动时扫描一次，此后每次扫描结束后再经过一个采样间隔再次扫描。一次扫描按 Session ID 顺序，对未删除、状态为 `openai_hosted` 且没有已释放分配的 Session 执行 keyset 扫描。它通过与当前读取相同的解析器和源，以 32 个 Session 为一页进行读取，并发数为 8，每个源时限为 2 秒。采样器在每页之前以及扫描期间每 100 ms 检查租约；失去所有权时取消进行中的读取；将每条记录交给导出之前再次检查租约。失败的行不会停止扫描；未完成的扫描会在下一个间隔重复。
 
-每次观测，无论来自当前读取还是周期采集，都会标记采集源 `on_read` 或 `periodic`，并放入每个导出器的有界队列。队列已满时会丢弃记录；该记录将成为缺失采样，而绝不会成为零。PostgreSQL 历史存储和可选 OTLP 导出器使用彼此独立的队列，因此导出器故障不会延迟本地历史记录或执行。[`core.runtime_history` settings](../../../docs/zh/configuration.md#settings) 用于设置采样间隔、队列容量、超时和 OTLP 目标。
+每次观测，无论来自当前读取还是周期采集，都会标记采集源 `on_read` 或 `periodic`，并放入每个导出器的有界队列。队列已满时会丢弃记录；该记录将成为缺失采样，而绝不会成为零。PostgreSQL 历史存储和可选 OTLP 导出器使用彼此独立的队列，因此导出器故障不会延迟本地历史记录或执行。[Runtime 历史文件](../../../docs/zh/configuration.md#runtime-history-file) 用于设置采样间隔、队列容量、超时和 OTLP 目标。
 
 ### 存储的历史记录 {#stored-history}
 

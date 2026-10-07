@@ -1,11 +1,10 @@
-import type { AgentSession, CoreProjectReader } from "@oac/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 
-import type { Owned } from "../../lib/projects";
+import type { Owned, ProjectClient } from "../../lib/projects";
 
 /**
- * Session log model: every Session of one project or of all projects, read
- * tolerantly so one malformed Session is listed as unrecognized instead of
- * failing the page, then filtered and ordered in the browser.
+ * Session log model: every Session of one project or of all projects,
+ * filtered and ordered in the browser.
  */
 
 export const SESSION_LOG_LIMIT = 10_000;
@@ -18,11 +17,6 @@ export type StatusFilter = "all" | SessionStatusKey;
 export const environmentKinds = ["openai_hosted", "self_hosted", "none"] as const;
 export type EnvironmentKind = (typeof environmentKinds)[number] | "other";
 
-export type SessionLogEntry =
-  | { kind: "session"; session: AgentSession }
-  /** A listed entry this console cannot read; only its Session ID (when it has one) is kept. */
-  | { kind: "unrecognized"; id: string | null; key: string };
-
 export interface SessionLogFilters {
   status: StatusFilter;
   agentId: string;
@@ -32,20 +26,17 @@ export interface SessionLogFilters {
 
 export const initialSessionLogFilters: SessionLogFilters = { status: "all", agentId: "", environment: "", query: "" };
 
-type TolerantLister = Pick<CoreProjectReader, "listSessionsTolerant">;
-
-/** Walks every Session page of one project, newest first, bounded at `limit` entries. */
-export async function readSessionLog(client: TolerantLister, signal?: AbortSignal, limit = SESSION_LOG_LIMIT): Promise<SessionLogEntry[]> {
-  const entries: SessionLogEntry[] = [];
+/** Walks every Session page of one project, newest first, bounded at `limit` Sessions. */
+export async function readSessionLog(client: Pick<ProjectClient, "listSessions">, signal?: AbortSignal, limit = SESSION_LOG_LIMIT): Promise<AgentSession[]> {
+  const sessions: AgentSession[] = [];
   let after: string | undefined;
-  for (let page = 0; entries.length < limit; page += 1) {
-    const result = await client.listSessionsTolerant({ after, limit: SESSION_PAGE_SIZE, order: "desc", signal });
-    for (const session of result.data) entries.push({ kind: "session", session });
-    for (const entry of result.unrecognized) entries.push({ kind: "unrecognized", id: entry.id, key: entry.id ?? `${page}:${entry.index}` });
+  while (sessions.length < limit) {
+    const result = await client.listSessions({ after, limit: SESSION_PAGE_SIZE, order: "desc", signal });
+    sessions.push(...result.data);
     if (!result.has_more || !result.last_id || result.last_id === after) break;
     after = result.last_id;
   }
-  return entries.slice(0, limit);
+  return sessions.slice(0, limit);
 }
 
 export function environmentKind(session: AgentSession): EnvironmentKind {
@@ -79,40 +70,18 @@ function matches(session: AgentSession, filters: SessionLogFilters, query: strin
     && matchesQuery(session, query);
 }
 
-function neutral(filters: SessionLogFilters): boolean {
-  return filters.status === "all" && !filters.agentId && !filters.environment;
-}
-
-/**
- * Rows of every selected project merged into one list: most recent activity first
- * (ties by Session ID), unrecognized entries last. Unrecognized entries carry no
- * status, Agent or environment, so any such filter hides them; search matches their ID.
- */
-export function filterSessionLog(rows: readonly Owned<SessionLogEntry>[], filters: SessionLogFilters): Owned<SessionLogEntry>[] {
+/** Rows of every selected project merged into one list: most recent activity first, ties by Session ID. */
+export function filterSessionLog(rows: readonly Owned<AgentSession>[], filters: SessionLogFilters): Owned<AgentSession>[] {
   const query = filters.query.trim().toLowerCase();
-  const sessions: Array<Owned<SessionLogEntry> & { value: { kind: "session" } }> = [];
-  const unrecognized: Owned<SessionLogEntry>[] = [];
-  for (const row of rows) {
-    if (row.value.kind === "session") {
-      if (matches(row.value.session, filters, query)) sessions.push(row as Owned<SessionLogEntry> & { value: { kind: "session" } });
-    } else if (neutral(filters) && (!query || (row.value.id ?? "").toLowerCase().includes(query))) {
-      unrecognized.push(row);
-    }
-  }
-  sessions.sort((a, b) => b.value.session.last_active_at - a.value.session.last_active_at || a.value.session.id.localeCompare(b.value.session.id));
-  return [...sessions, ...unrecognized];
+  return rows.filter((row) => matches(row.value, filters, query))
+    .sort((a, b) => b.value.last_active_at - a.value.last_active_at || a.value.id.localeCompare(b.value.id));
 }
 
 /** Counts per status for the rows the other filters (search, Agent, environment) keep. */
-export function statusCounts(rows: readonly Owned<SessionLogEntry>[], filters: SessionLogFilters): Record<StatusFilter, number> {
+export function statusCounts(rows: readonly Owned<AgentSession>[], filters: SessionLogFilters): Record<StatusFilter, number> {
   const query = filters.query.trim().toLowerCase();
   const counts: Record<StatusFilter, number> = { all: 0, in_progress: 0, requires_action: 0, failed: 0, idle: 0 };
-  for (const row of rows) {
-    if (row.value.kind !== "session") {
-      if (neutral({ ...filters, status: "all" }) && (!query || (row.value.id ?? "").toLowerCase().includes(query))) counts.all += 1;
-      continue;
-    }
-    const session = row.value.session;
+  for (const { value: session } of rows) {
     if (!matches(session, filters, query, true)) continue;
     counts.all += 1;
     const key = statusKey(session.status);
@@ -131,11 +100,10 @@ export interface AgentOption {
  * project is shown, a name used by Agents of different projects carries the
  * project name.
  */
-export function agentOptions(rows: readonly Owned<SessionLogEntry>[], fallback: string): AgentOption[] {
+export function agentOptions(rows: readonly Owned<AgentSession>[], fallback: string): AgentOption[] {
   const agents = new Map<string, { name: string; project: string }>();
   for (const row of rows) {
-    if (row.value.kind !== "session") continue;
-    const agent = row.value.session.agent;
+    const agent = row.value.agent;
     if (!agents.has(agent.id)) agents.set(agent.id, { name: agent.name?.trim() || fallback, project: row.project.name });
   }
   const names = new Map<string, Set<string>>();
@@ -146,7 +114,7 @@ export function agentOptions(rows: readonly Owned<SessionLogEntry>[], fallback: 
 }
 
 /** True when some project hit the read bound, so more Sessions exist than are shown. */
-export function isLogTruncated(rows: readonly Owned<SessionLogEntry>[], limit = SESSION_LOG_LIMIT): boolean {
+export function isLogTruncated(rows: readonly Owned<AgentSession>[], limit = SESSION_LOG_LIMIT): boolean {
   const perProject = new Map<string, number>();
   for (const row of rows) perProject.set(row.project.id, (perProject.get(row.project.id) ?? 0) + 1);
   return [...perProject.values()].some((count) => count >= limit);

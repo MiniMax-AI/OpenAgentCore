@@ -146,7 +146,6 @@ export const overview = {
     more: "{{count}} more nodes on the Nodes page",
     more_one: "{{count}} more node on the Nodes page",
     more_other: "{{count}} more nodes on the Nodes page",
-    unconfigured: "This console has no sandbox administration.",
     loading: "Loading nodes…",
     failed: "Nodes could not be loaded.",
     noNodes: "No sandbox nodes yet. Hosted Sessions need at least one.",

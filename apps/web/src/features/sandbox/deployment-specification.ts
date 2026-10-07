@@ -1,5 +1,4 @@
-import type { SandboxDeployment, SandboxE2BTemplateBuild, SandboxProvider, SandboxResources, SandboxRuntimeRelease, SandboxSpecification } from "@oac/agents-client";
-import { RUNTIME_REF_PATTERN } from "./runtime-release";
+import { deploymentContract, type SandboxDeployment, type SandboxE2BTemplateBuild, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
 import standardSizes from "./standard-sizes.json";
 
 interface Manifest {
@@ -15,12 +14,25 @@ export function defaultSandboxResources(provider: SandboxProvider): SandboxResou
   return { ...(provider === "microsandbox" ? standardSizes.microsandbox : standardSizes.docker) };
 }
 
+/** Core's resource rule: optional disk fields stay zero unless the provider supports disk limits. */
 export function validSandboxResources(provider: SandboxProvider, resources: SandboxResources): boolean {
-  const bounded = (value: number | undefined, minimum: number, maximum: number) => Number.isInteger(value) && value! >= minimum && value! <= maximum;
-  if (!bounded(resources.cpus, 1, 255) || !bounded(resources.memory_mib, 512, 1048576)) return false;
-  return provider === "microsandbox"
-    ? bounded(resources.root_disk_mib, 1024, 4294967295) && bounded(resources.environment_disk_mib, 1024, 4294967295)
-    : (resources.root_disk_mib ?? 0) === 0 && (resources.environment_disk_mib ?? 0) === 0;
+  return deploymentContract.resources.every((rule) => {
+    const [min, max] = !rule.omit_zero ? [rule.min, rule.max] : provider === "microsandbox" ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
+    const value = resources[rule.name] ?? 0;
+    return Number.isInteger(value) && value >= min && value <= max;
+  });
+}
+
+const releasePatterns = Object.fromEntries(deploymentContract.runtime.map(({ name, pattern }) => [name, new RegExp(`^(?:${pattern})$`)])) as Record<keyof SandboxRuntimeRelease, RegExp>;
+
+export const RUNTIME_RELEASE_FIELDS = deploymentContract.runtime.map(({ name }) => name);
+
+export function isRuntimeReleaseField(field: keyof SandboxRuntimeRelease, value: string): boolean {
+  return releasePatterns[field].test(value);
+}
+
+export function isRuntimeRelease(value: Partial<SandboxRuntimeRelease>): value is SandboxRuntimeRelease {
+  return RUNTIME_RELEASE_FIELDS.every((field) => typeof value[field] === "string" && releasePatterns[field].test(value[field]));
 }
 
 export function savedSpecification(provider: SandboxProvider, savedProvider?: SandboxProvider | "", specification?: SandboxSpecification): SandboxSpecification | null {
@@ -59,12 +71,8 @@ export async function distributionRuntime(signal: AbortSignal): Promise<SandboxR
   const response = await fetch("/node-install/manifest.json", { signal, credentials: "include", redirect: "error" });
   if (!response.ok) throw new Error("distribution unavailable");
   const manifest = await response.json() as Manifest;
-  const hash = /^[a-f0-9]{64}$/;
-  const image = /^sha256:[a-f0-9]{64}$/;
-  if (manifest.platform !== "linux/amd64" || !/^[a-f0-9]{40}$/.test(manifest.source_commit ?? "")
-    || !image.test(manifest.images?.runtime ?? "") || !image.test(manifest.image_manifest_digests?.runtime ?? "")
-    || !RUNTIME_REF_PATTERN.test(manifest.runtime_ref ?? "")
-    || !hash.test(manifest.microsandbox?.runtime_sha256 ?? "") || !hash.test(manifest.microsandbox?.firmware_sha256 ?? "")) throw new Error("invalid distribution");
-  return { source_commit: manifest.source_commit!, image_id: manifest.images!.runtime!, image_manifest_digest: manifest.image_manifest_digests!.runtime!,
-    microsandbox_ref: manifest.runtime_ref!, runtime_sha256: manifest.microsandbox!.runtime_sha256!, firmware_sha256: manifest.microsandbox!.firmware_sha256! };
+  const release = { source_commit: manifest.source_commit, image_id: manifest.images?.runtime, image_manifest_digest: manifest.image_manifest_digests?.runtime,
+    microsandbox_ref: manifest.runtime_ref, runtime_sha256: manifest.microsandbox?.runtime_sha256, firmware_sha256: manifest.microsandbox?.firmware_sha256 };
+  if (manifest.platform !== "linux/amd64" || !isRuntimeRelease(release)) throw new Error("invalid distribution");
+  return release;
 }

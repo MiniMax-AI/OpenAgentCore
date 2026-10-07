@@ -1,7 +1,7 @@
 ---
 title: "Vault 与 Credential"
 source: contracts/agents-api/vaults.md
-source_hash: 9e56ee84c782d1f9c0f5506f960a275d9afa3e554634131bf09a74e736135926
+source_hash: 95626340ee36faee3418dd1155a0e50c378ead09c09c91e86f30e09bd8f409e0
 ---
 
 Vault 是 Project 所有的 Credential 容器。Credential 保存一个 HTTPS MCP server 的秘密：`static_bearer` token 或 `mcp_oauth` grant。Session 在 `vault_ids` 中关联 Vault；Core 在创建 Session 时为每个 HTTP MCP server 选择一个 Credential，只在分派工作时将解密 token 交给 Runtime。秘密只能写入：任何读取都不返回 token、refresh token、client secret 或密文。
@@ -139,7 +139,7 @@ Token endpoint 必须为 HTTPS。Core 解析主机，拒绝回环、私有、链
 
 ## 存储密钥 {#storage-key}
 
-Core 使用安装的 [`secrets/credential.key`](../../../docs/zh/configuration.md#installation-directory)，以 AES-256-GCM 加密每个 token、refresh token 和 client secret，绑定 Project、Vault、Credential、auth type 和 `mcp_server_url`。错误密钥、修改的行或移动到其他绑定的行均无法解密。名称是不参与绑定的元数据。key 和明文 token 存在于可信服务内存中；加密保护存储的秘密，不保护已被攻破的服务主机。
+Core 使用安装的 [`secrets/core/credential.key`](../../../docs/zh/configuration.md#compose-installations)，以 AES-256-GCM 加密每个 token、refresh token 和 client secret，绑定 Project、Vault、Credential、auth type 和 `mcp_server_url`。错误密钥、修改的行或移动到其他绑定的行均无法解密。名称是不参与绑定的元数据。key 和明文 token 存在于可信服务内存中；加密保护存储的秘密，不保护已被攻破的服务主机。
 
 未配置 key 时，Credential 创建和替换在写入前返回 503 `credential_storage_unavailable`；读取、列表、删除和 Vault 操作仍可用。key 文件不可读或格式错误会使 Core 启动失败。丢失或替换 key 使全部已存储秘密无法使用；Core 只支持一个 key，不支持轮换或重新加密。
 

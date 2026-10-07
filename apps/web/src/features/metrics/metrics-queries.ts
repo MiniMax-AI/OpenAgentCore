@@ -22,7 +22,6 @@ export interface LoadedAgentMetrics {
   metrics: AgentMetrics;
   truncatedLists: Project[];
   listFailures: ProjectReadFailure[];
-  unrecognizedSessions: number;
   /** Epoch milliseconds. */
   loadedAt: number;
 }
@@ -47,7 +46,6 @@ export function agentMetricsQuery(targets: readonly Project[], filter: string, r
         metrics: aggregateAgentMetrics(window, load.activities, load.coverage),
         truncatedLists: load.truncatedLists,
         listFailures: load.listFailures,
-        unrecognizedSessions: load.unrecognizedSessions,
         loadedAt: Date.now(),
       };
     },

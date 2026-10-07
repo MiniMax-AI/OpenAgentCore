@@ -1,7 +1,7 @@
 ---
-title: "OpenAgentCore 文档"
+title: "概览"
 source: docs/getting-started/index.md
-source_hash: b00e7833d6dc323fc53a9e6dd145bd0e08069a421346ee48c9454397494aa5a8
+source_hash: 232aae563b4d7614f065118f2a625b7b06d4d7384295aab77ac072856b9af380
 ---
 
 OpenAgentCore 在你自己的基础设施上运行 AI Agent，并提供 OpenAI Agents API。[架构概览](../architecture.md)介绍各个组成部分。根据你的角色选择指南。

@@ -365,7 +365,7 @@ describe("Agent metrics across projects", () => {
       window,
       {
         clientFor: (target) => {
-          if (target.id === "down") return { ...clients.busy!, listSessionsTolerant: async () => { throw new Error("HTTP 502"); } };
+          if (target.id === "down") return { ...clients.busy!, listSessions: async () => { throw new Error("HTTP 502"); } };
           return clients[target.id]!;
         },
         summary: [

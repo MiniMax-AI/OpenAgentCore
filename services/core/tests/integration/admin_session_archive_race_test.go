@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -59,7 +58,7 @@ func TestManagedSessionArchiveOrdersConcurrentInput(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "racing-input", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"racing"}`)}})
+			_, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "racing-input", []sessions.Input{messageInput("racing")})
 			if err != nil && !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 				t.Error(err)
 			}

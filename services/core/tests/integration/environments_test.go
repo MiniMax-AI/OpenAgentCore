@@ -189,7 +189,7 @@ func TestEnvironmentCreationFailureRollsBackAllResources(t *testing.T) {
 			constraint := "environment_failure_" + strings.ReplaceAll(marker, "-", "")
 			table, expression := "environments", "status <> 'pending'"
 			if phase == "input" {
-				table, expression = "environment_input_reservations", "NOT (batch @> '[{\"payload\":{\"text\":\""+marker+"\"}}]'::jsonb)"
+				table, expression = "environment_input_reservations", "NOT (batch @> '[{\"payload\":{\"input\":[{\"content\":[{\"text\":\""+marker+"\"}]}]}}]'::jsonb)"
 			}
 			if phase == "activity" {
 				table, expression = "session_events", "NOT (payload ? 'environment_input_activity')"

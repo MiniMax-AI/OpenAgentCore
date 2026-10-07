@@ -2,10 +2,13 @@ package coremetrics
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 const SampleInterval = 30 * time.Second
@@ -14,7 +17,6 @@ const retention = 7 * 24 * time.Hour
 // The 7d window ends at a complete 2h bucket, so retain its leading padding too.
 const sampleCapacity = int((retention+2*time.Hour)/SampleInterval) + 2
 
-var jobIDs = []string{"scheduler", "runtime_sampler", "history_cleanup", "audit_cleanup"}
 var revisionPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
 type refusalSlot struct {
@@ -31,19 +33,43 @@ type Service struct {
 	nextSample int
 	refusals   [sampleCapacity]refusalSlot
 	latest     Sample
+	jobIDs     []string
 	jobs       map[string]Job
+	periodic   []Periodic
 	process    processSampler
 }
 
-func New(started time.Time, revision string, source Source) *Service {
-	s := &Service{source: source, started: started.UTC(), now: time.Now, jobs: map[string]Job{}}
+// Periodic is a background job the metrics report. Run makes one bounded pass
+// and returns what it processed, nil when the pass counted nothing, and what
+// failed. The next pass starts Every after a pass ends; a panic fails that pass
+// only. A job without Run is disabled and reports stopped.
+type Periodic struct {
+	ID    string
+	Every time.Duration
+	Run   func(context.Context) (processed *int64, failed int64, err error)
+}
+
+// errPanicked is the error of a pass that panicked.
+var errPanicked = errors.New("periodic job pass panicked")
+
+// New reports the scheduler, which the Source reads live, and then jobs in
+// their order. Run runs the jobs. An enabled job needs a positive Every.
+func New(started time.Time, revision string, source Source, jobs ...Periodic) (*Service, error) {
+	s := &Service{source: source, started: started.UTC(), now: time.Now, jobIDs: []string{"scheduler"}, jobs: map[string]Job{"scheduler": {ID: "scheduler", Status: "unknown"}}, periodic: jobs}
 	if revisionPattern.MatchString(revision) {
 		s.revision = &revision
 	}
-	for _, id := range jobIDs {
-		s.jobs[id] = Job{ID: id, Status: "unknown"}
+	for _, job := range jobs {
+		status := "unknown"
+		if job.Run == nil {
+			status = "stopped"
+		} else if job.Every <= 0 {
+			return nil, errors.New("coremetrics: periodic job " + job.ID + " needs a positive interval")
+		}
+		s.jobIDs = append(s.jobIDs, job.ID)
+		s.jobs[job.ID] = Job{ID: job.ID, Status: status}
 	}
-	return s
+	return s, nil
 }
 func slot(t time.Time) (int64, int) {
 	tick := t.Unix() / int64(SampleInterval/time.Second)
@@ -61,7 +87,7 @@ func (s *Service) RecordUnavailable() {
 	}
 	s.refusals[i].count++
 }
-func (s *Service) ReportJob(id string, at time.Time, processed *int64, failed *int64, err error) {
+func (s *Service) reportJob(id string, at time.Time, processed *int64, failed *int64, err error) {
 	status := "ok"
 	if err != nil || (failed != nil && *failed > 0) {
 		status = "failing"
@@ -73,7 +99,7 @@ func (s *Service) ReportJob(id string, at time.Time, processed *int64, failed *i
 	}
 	s.jobs[id] = Job{ID: id, Status: status, LastRunAt: ptr(at.UTC()), Processed: processed, Failed: failed}
 }
-func (s *Service) StopJob(id string) {
+func (s *Service) stopJob(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j, ok := s.jobs[id]; ok {
@@ -81,7 +107,46 @@ func (s *Service) StopJob(id string) {
 		s.jobs[id] = j
 	}
 }
+
+// Run samples Core and runs every enabled job until ctx ends, then waits for
+// them to stop.
 func (s *Service) Run(ctx context.Context) {
+	var jobs sync.WaitGroup
+	for _, job := range s.periodic {
+		if job.Run != nil {
+			jobs.Go(func() { s.runJob(ctx, job) })
+		}
+	}
+	s.sample(ctx)
+	jobs.Wait()
+}
+
+func (s *Service) runJob(ctx context.Context, job Periodic) {
+	defer s.stopJob(job.ID)
+	for {
+		s.pass(ctx, job)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(job.Every):
+		}
+	}
+}
+
+// pass runs and reports one pass of job. A panic is reported as a failed pass.
+func (s *Service) pass(ctx context.Context, job Periodic) {
+	var processed *int64
+	failed, err := int64(1), errPanicked
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Ctx(ctx).Error("Periodic job panicked", "job", job.ID, "panic", recovered)
+		}
+		s.reportJob(job.ID, s.now(), processed, &failed, err)
+	}()
+	processed, failed, err = job.Run(ctx)
+}
+
+func (s *Service) sample(ctx context.Context) {
 	ticker := time.NewTicker(SampleInterval)
 	defer ticker.Stop()
 	for {
@@ -132,7 +197,7 @@ func (s *Service) Read(ctx context.Context, name string) (View, error) {
 	}
 	live := s.source.Live()
 	view := View{Object: "core.metrics", Range: window, Service: ServiceState{Status: "running", Revision: s.revision, StartedAt: ptr(s.started), ExecutionOwner: live.ExecutionOwner},
-		Execution: Execution{SlotsInUse: live.SlotsInUse, SlotsTotal: live.SlotsTotal, ConnectedDaemons: live.ConnectedDaemons}, Database: Database{Pool: live.Pool}, Jobs: make([]Job, 0, len(jobIDs))}
+		Execution: Execution{SlotsInUse: live.SlotsInUse, SlotsTotal: live.SlotsTotal, ConnectedDaemons: live.ConnectedDaemons}, Database: Database{Pool: live.Pool}, Jobs: make([]Job, 0, len(s.jobIDs))}
 	s.mu.Lock()
 	latest := s.latest
 	if latest.At.IsZero() || now.Sub(latest.At) > 2*SampleInterval || !latest.Healthy {
@@ -145,7 +210,7 @@ func (s *Service) Read(ctx context.Context, name string) (View, error) {
 		view.Process = latest.Process
 
 	}
-	for _, id := range jobIDs {
+	for _, id := range s.jobIDs {
 		j := s.jobs[id]
 		if id == "scheduler" && live.Scheduler.ID != "" {
 			j = live.Scheduler

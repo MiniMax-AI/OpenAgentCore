@@ -17,6 +17,8 @@ import (
 type NativeInstaller struct {
 	// Version is the build revision executors install and claim.
 	Version string
+	// Base is the public URL prefix of the versioned installer downloads.
+	Base string
 	// Catalog holds the matching installation artifacts. It is nil when the
 	// operator installed none: installations then report unavailable and the
 	// grant routes answer 503 installation_unavailable.
@@ -46,9 +48,7 @@ func (h *Handler) installationFor(ctx context.Context, principal identity.Princi
 	if err != nil {
 		return nil, err
 	}
-	origin := strings.TrimSuffix(h.Execution.ExecutorURL, "/api/v1/agent-daemon/ws")
-	origin = strings.Replace(strings.Replace(origin, "wss://", "https://", 1), "ws://", "http://", 1)
-	return &v1.EnvironmentInstallation{Status: "available", Version: installer.Version, ExpiresAt: expires, Commands: installer.Catalog.Commands(origin, token)}, nil
+	return &v1.EnvironmentInstallation{Status: "available", Version: installer.Version, ExpiresAt: expires, Commands: installer.Catalog.Commands(installer.Base, token)}, nil
 }
 
 func (h *Handler) addSessionInstallation(w http.ResponseWriter, r *http.Request, response *v1.Session) error {

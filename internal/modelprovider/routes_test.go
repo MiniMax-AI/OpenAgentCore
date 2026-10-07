@@ -13,7 +13,7 @@ func TestLookupRouteMatchesOnlyDeclaredRoutes(t *testing.T) {
 			t.Fatalf("stripped header %q is not canonical", header)
 		}
 	}
-	for _, protocol := range []Protocol{Anthropic, Responses, ChatCompletions} {
+	for _, protocol := range Protocols() {
 		routes := Routes(protocol)
 		if len(routes) == 0 {
 			t.Fatalf("%s declares no routes", protocol)
@@ -59,7 +59,7 @@ func TestLookupRouteMatchesOnlyDeclaredRoutes(t *testing.T) {
 }
 
 func TestPlaceholderPassesProviderValidation(t *testing.T) {
-	for _, protocol := range []Protocol{Anthropic, Responses, ChatCompletions} {
+	for _, protocol := range Protocols() {
 		gateway := Provider{Protocol: protocol, BaseURL: "http://127.0.0.1:41000", APIKey: Placeholder, ContextWindow: 64000, MaxOutputTokens: 4096}
 		if err := gateway.Validate(); err != nil {
 			t.Fatalf("%s rejected the placeholder: %v", protocol, err)

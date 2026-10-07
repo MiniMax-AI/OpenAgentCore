@@ -153,7 +153,6 @@ function coverageNote(loaded: Loaded, t: TFunction<"metrics">): string | null {
   const { coverage } = loaded.metrics;
   const parts: string[] = [];
   if (loaded.truncatedLists.length) parts.push(t("coverage.listTruncated", { names: loaded.truncatedLists.map((project) => project.name).join(", ") }));
-  if (loaded.unrecognizedSessions) parts.push(t("coverage.unrecognized", { count: loaded.unrecognizedSessions }));
   if (coverage.skippedSessions) parts.push(t("coverage.skipped", { loaded: coverage.loadedSessions, total: coverage.candidateSessions }));
   if (coverage.truncatedSessions) parts.push(t("coverage.truncated", { count: coverage.truncatedSessions }));
   if (coverage.failedSessions) parts.push(t("coverage.failed", { count: coverage.failedSessions }));

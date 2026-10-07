@@ -33,7 +33,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"fixture"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "start", messageText("fixture"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestFunctionInputsOfficialClientAtomicAdmission(t *testing.T) {
 	if _, err := transitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnWaiting, Status: sessions.TurnFailed}); err != nil {
 		t.Fatal(err)
 	}
-	next, err := sendMessage(ctx, s, tenant, session.ID, "next", json.RawMessage(`{"text":"next"}`))
+	next, err := sendMessage(ctx, s, tenant, session.ID, "next", messageText("next"))
 	if err != nil {
 		t.Fatal(err)
 	}

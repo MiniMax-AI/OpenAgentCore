@@ -71,8 +71,8 @@ func prepareAuditMutation(t *testing.T, f fixture, tenant, name string, bundle [
 
 func writeAuditContext(ctx context.Context, tenant, request string) context.Context {
 	return writeaudit.WithSource(ctx, writeaudit.Source{
-		KeyID: "static:" + strings.Repeat("a", 64), Name: "resource audit fixture", Prefix: "aaaaaaaa",
-		Kind: "static", TenantID: tenant, RequestID: request, TraceID: "resource-audit-trace",
+		KeyID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", Name: "resource audit fixture", Prefix: "pc_aaaaaaaa",
+		Kind: "issued", TenantID: tenant, RequestID: request, TraceID: "resource-audit-trace",
 	})
 }
 
@@ -194,12 +194,12 @@ func TestAdminDeleteAuditTransactions(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var credential, actor, project, trace, action, kind, gotID, mappings, raw string
-			if err := pool.QueryRow(ctx, `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,result_ids::text,to_jsonb(a)::text
- FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &trace, &action, &kind, &gotID, &mappings, &raw); err != nil {
+			var credential, actor, project, trace, action, kind, gotID, raw string
+			if err := pool.QueryRow(ctx, `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,to_jsonb(a)::text
+ FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &trace, &action, &kind, &gotID, &raw); err != nil {
 				t.Fatal(err)
 			}
-			if credential != "87654321" || actor != "administrator fixture" || project != tenant || trace != "admin-mutation-trace" || action != "delete" || kind != mutation.kind || gotID != id || mappings != "[]" {
+			if credential != "87654321" || actor != "administrator fixture" || project != tenant || trace != "admin-mutation-trace" || action != "delete" || kind != mutation.kind || gotID != id {
 				t.Fatal("administrator audit identity differs")
 			}
 			if strings.Contains(raw, "admin-private-archive") {

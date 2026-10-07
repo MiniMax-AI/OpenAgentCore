@@ -105,9 +105,11 @@ func TestEnvironmentInitialInputCreationRetainsCursorIdentityAndPromotion(t *tes
 				t.Fatal("creation snapshot differs from the committed projection", session.EnvironmentInputActivity, session.PendingInput)
 			}
 			reservation := initialEnvironmentReservation(t, s, pool, tenant, session.ID)
-			storedBatch, marshalErr := json.Marshal(reservation.Inputs)
-			originalBatch, _ := json.Marshal(input.InitialInputs)
-			if marshalErr != nil || reservation.State != sessions.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute || string(storedBatch) != string(originalBatch) {
+			// jsonb keeps the batch's JSON value, not its key order.
+			var storedBatch, originalBatch any
+			stored, marshalErr := json.Marshal(reservation.Inputs)
+			original, _ := json.Marshal(input.InitialInputs)
+			if marshalErr != nil || json.Unmarshal(stored, &storedBatch) != nil || json.Unmarshal(original, &originalBatch) != nil || reservation.State != sessions.EnvironmentInputPending || reservation.Deadline.Sub(reservation.CreatedAt) != 5*time.Minute || !reflect.DeepEqual(storedBatch, originalBatch) {
 				t.Fatal("initial batch/deadline changed", reservation)
 			}
 			environmentInputHistory(t, pool, session.ID, 0, 0)

@@ -64,15 +64,6 @@ func TestItemWireFieldsAreExplicitlyNull(t *testing.T) {
 			expectField(t, got, "output", test.output)
 			expectField(t, got, "error", test.error)
 			expectField(t, got, "phase", "")
-			// Stored payloads keep the original field presence.
-			stored, err := item.MarshalStored()
-			if err != nil {
-				t.Fatal(err)
-			}
-			var original, persisted map[string]json.RawMessage
-			if json.Unmarshal([]byte(test.raw), &original) != nil || json.Unmarshal(stored, &persisted) != nil || len(original) != len(persisted) {
-				t.Fatalf("stored payload changed: %s", stored)
-			}
 		})
 	}
 
@@ -84,14 +75,6 @@ func TestItemWireFieldsAreExplicitlyNull(t *testing.T) {
 	reasoning := fields(t, Item{ID: "rs", TurnID: "turn", Type: "reasoning"})
 	expectField(t, reasoning, "status", "null")
 	expectField(t, reasoning, "summary", "[]")
-
-	stored, err := user.MarshalStored()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(stored) != `{"id":"user","turn_id":"turn","type":"message","status":"completed","role":"user","content":[{"type":"input_text","text":"question"}]}` {
-		t.Fatalf("stored message encoding changed: %s", stored)
-	}
 }
 
 func TestItemEventsCarryNullableOutputIndex(t *testing.T) {
@@ -156,7 +139,7 @@ func TestReasoningResponsesCarryBothKeys(t *testing.T) {
 	expectField(t, fields(t, stored["agent"]), "reasoning", `{"effort":"low"}`)
 }
 
-func TestStoredSearchItemRoundTripPreservesPayload(t *testing.T) {
+func TestSearchItemWireAction(t *testing.T) {
 	for _, raw := range []string{
 		`{"id":"search","turn_id":"turn","type":"web_search_call","status":"completed","action":{"type":"search","query":"reference"}}`,
 		`{"id":"search","turn_id":"turn","type":"web_search_call","status":"completed","action":{"type":"search"}}`,
@@ -165,13 +148,6 @@ func TestStoredSearchItemRoundTripPreservesPayload(t *testing.T) {
 		var item Item
 		if err := json.Unmarshal([]byte(raw), &item); err != nil {
 			t.Fatal(err)
-		}
-		stored, err := item.MarshalStored()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(stored) != raw {
-			t.Fatalf("stored replay changed: %s, want %s", stored, raw)
 		}
 		wire := fields(t, item)
 		if item.Action == nil {

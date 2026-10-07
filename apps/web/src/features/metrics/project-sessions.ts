@@ -1,6 +1,6 @@
-import type { AgentSession, CoreProjectReader } from "@oac/agents-client";
+import type { AgentSession } from "@oac/agents-client";
 
-import type { Owned } from "../../lib/projects";
+import type { Owned, ProjectClient } from "../../lib/projects";
 import { type Project } from "../../lib/admin-view";
 
 /**
@@ -12,15 +12,13 @@ import { type Project } from "../../lib/admin-view";
 
 export const SESSION_PAGE_SIZE = 100;
 
-export type SessionLister = Pick<CoreProjectReader, "listSessionsTolerant">;
+export type SessionLister = Pick<ProjectClient, "listSessions">;
 
 /** A value and the project it belongs to. */
 export type InProject<T> = Owned<T>;
 
 export interface SessionRead {
   sessions: AgentSession[];
-  /** Entries the client did not recognize; they are not counted anywhere. */
-  unrecognized: number;
   /** False when the read stopped at `maxSessions` before the list ended or `enough` held. */
   complete: boolean;
 }
@@ -34,20 +32,16 @@ export interface SessionReadOptions {
 
 export async function readSessions(client: SessionLister, options: SessionReadOptions): Promise<SessionRead> {
   const sessions: AgentSession[] = [];
-  let unrecognized = 0;
   let after: string | undefined;
-  let read = 0;
-  while (read < options.maxSessions) {
-    const limit = Math.min(SESSION_PAGE_SIZE, options.maxSessions - read);
-    const page = await client.listSessionsTolerant({ order: "desc", limit, after, signal: options.signal });
+  while (sessions.length < options.maxSessions) {
+    const limit = Math.min(SESSION_PAGE_SIZE, options.maxSessions - sessions.length);
+    const page = await client.listSessions({ order: "desc", limit, after, signal: options.signal });
     sessions.push(...page.data);
-    unrecognized += page.unrecognized.length;
-    read += page.data.length + page.unrecognized.length;
-    if (!page.has_more || !page.last_id || page.last_id === after) return { sessions, unrecognized, complete: true };
-    if (options.enough?.(sessions)) return { sessions, unrecognized, complete: true };
+    if (!page.has_more || !page.last_id || page.last_id === after) return { sessions, complete: true };
+    if (options.enough?.(sessions)) return { sessions, complete: true };
     after = page.last_id;
   }
-  return { sessions, unrecognized, complete: false };
+  return { sessions, complete: false };
 }
 
 export interface ProjectSessionRead extends SessionRead {

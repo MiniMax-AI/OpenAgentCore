@@ -12,7 +12,6 @@ import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { sandboxConfigurationRejection, sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import { sandboxAdmin } from "./sandbox-queries";
-import { SandboxPageAccess } from "./SandboxPageAccess";
 import { useSandboxPageState } from "./use-sandbox-page-state";
 import { sandboxWriteOwnershipQuery } from "./sandbox-write-ownership";
 import { writeSandboxDeployment } from "./sandbox-deployment-write";
@@ -36,7 +35,7 @@ function DeploymentHeader({ actions }: { actions?: ReactNode }) {
 export function SandboxDeploymentPage() {
   const { i18n } = useTranslation("sandbox");
   return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en"}>
-    <SandboxPageAccess header={<DeploymentHeader />}>{() => <DeploymentConfiguration />}</SandboxPageAccess>
+    <DeploymentConfiguration />
   </section>;
 }
 

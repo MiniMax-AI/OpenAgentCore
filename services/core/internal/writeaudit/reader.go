@@ -27,13 +27,11 @@ type APIKey struct {
 	RevokedAt *time.Time `json:"revoked_at"`
 }
 
-// ResourceOwner is the recorded creator of one resource. Both creator fields
-// are null for a resource without recorded creation provenance.
+// ResourceOwner is the recorded creator of one resource. APIKey is null for a
+// resource without recorded creation provenance.
 type ResourceOwner struct {
-	ResourceID   string  `json:"resource_id"`
-	APIKey       *APIKey `json:"api_key"`
-	Source       *string `json:"source"`
-	AdminAuditID *string `json:"admin_audit_id"`
+	ResourceID string  `json:"resource_id"`
+	APIKey     *APIKey `json:"api_key"`
 }
 
 // Operation is one committed write.

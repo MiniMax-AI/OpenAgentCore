@@ -7,3 +7,5 @@ export const coreHarnessNames: Record<CoreHarnessKind, string> = {
   "codex": "Codex",
   "mcode": "MiniMax Code",
 };
+export const modelProviderProtocols = ["anthropic", "responses", "chat_completions"] as const;
+export type ModelProviderProtocol = (typeof modelProviderProtocols)[number];

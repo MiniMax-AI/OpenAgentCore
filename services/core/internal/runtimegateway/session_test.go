@@ -14,6 +14,17 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
+// NewSession builds a Session over a test connection.
+func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
+	if log == nil {
+		log = func(string, ...any) {}
+	}
+	if reg == nil {
+		reg = NewRegistry()
+	}
+	return newSession(conn, deviceID, workspaceID, daemonVersion, reg, log)
+}
+
 // fakeConn is the WSConn implementation used by session + registry
 // tests. Concurrency-safe.
 type fakeConn struct {

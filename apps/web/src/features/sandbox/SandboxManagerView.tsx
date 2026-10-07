@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { type SandboxNode } from "@oac/agents-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -12,9 +12,8 @@ import { InstallationNotice } from "../../components/InstallationNotice";
 import { installationQuery } from "../../lib/installation";
 import { sandboxRequestError } from "../../lib/sandbox-labels";
 import type { SandboxConsoleConfig } from "./console-config";
-import { sandboxAdmin } from "./sandbox-queries";
+import { sandboxAdmin, sandboxConsoleConfigQuery } from "./sandbox-queries";
 import { useSandboxPageState } from "./use-sandbox-page-state";
-import { SandboxPageAccess } from "./SandboxPageAccess";
 import { NodeEnrollment } from "./NodeEnrollment";
 import { NodeList, onOldAddress } from "./NodeList";
 import { NodeDetail } from "./NodeDetail";
@@ -25,10 +24,16 @@ import "./SandboxManagerView.css";
 
 /** Nodes owns node enrollment, the list and individual node management. */
 export function SandboxManagerView() {
-  const { i18n } = useTranslation("sandbox");
+  const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh" : "en";
+  const { data: config, isError, isFetching, refetch } = useQuery(sandboxConsoleConfigQuery);
   return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={locale}>
-    <SandboxPageAccess header={<NodesPageHeader />}>{(config) => <SandboxManager consoleConfig={config} />}</SandboxPageAccess>
+    {config ? <SandboxManager consoleConfig={config} /> : <>
+      <NodesPageHeader />
+      <div className="console-page-body">{isError
+        ? <><p role="alert">{t("The console configuration could not be read. Refresh to try again.")}</p><button type="button" className="button outline" disabled={isFetching} onClick={() => { void refetch(); }}>{t("Refresh sandbox state")}</button></>
+        : <p role="status">{t("Connecting to this console's Core…")}</p>}</div>
+    </>}
   </section>;
 }
 

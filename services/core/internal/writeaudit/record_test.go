@@ -1,8 +1,6 @@
 package writeaudit
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
@@ -11,33 +9,29 @@ import (
 	"github.com/google/uuid"
 )
 
-func staticSource(tenant string) Source {
-	sum := sha256.Sum256([]byte("key"))
-	digest := hex.EncodeToString(sum[:])
-	return Source{KeyID: "static:" + digest, Prefix: digest[:8], Name: "key", Kind: "static", TenantID: tenant, RequestID: "request", TraceID: "trace"}
+func issuedSource(tenant string) Source {
+	return Source{KeyID: uuid.NewString(), Prefix: "pc_Ab3_-xyz", Name: "key", Kind: "issued", TenantID: tenant, RequestID: "request", TraceID: "trace"}
 }
 
 func TestValidateRecord(t *testing.T) {
 	tenant := uuid.NewString()
 	agent := []Resource{{Type: "agent", ID: "agent"}}
-	issued := staticSource(tenant)
-	issued.KeyID, issued.Prefix, issued.Kind = uuid.NewString(), "pc_Ab3_-xyz", "issued"
-	if err := ValidateRecord(staticSource(tenant), tenant, "create", agent); err != nil {
+	if err := ValidateRecord(issuedSource(tenant), tenant, "create", agent); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateRecord(issued, tenant, "update_default_version", []Resource{{Type: "skill_version", ID: "1", ParentID: "skill"}}); err != nil {
+	if err := ValidateRecord(issuedSource(tenant), tenant, "update_default_version", []Resource{{Type: "skill_version", ID: "1", ParentID: "skill"}}); err != nil {
 		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*Source, *string, *[]Resource){
 		"other tenant":  func(s *Source, _ *string, _ *[]Resource) { s.TenantID = uuid.NewString() },
 		"nil tenant":    func(s *Source, _ *string, _ *[]Resource) { s.TenantID = uuid.Nil.String() },
-		"short digest":  func(s *Source, _ *string, _ *[]Resource) { s.KeyID = "static:abcd" },
+		"key ID":        func(s *Source, _ *string, _ *[]Resource) { s.KeyID = "key" },
 		"prefix":        func(s *Source, _ *string, _ *[]Resource) { s.Prefix = "bad" },
-		"kind":          func(s *Source, _ *string, _ *[]Resource) { s.Kind = "unknown" },
+		"prefix chars":  func(s *Source, _ *string, _ *[]Resource) { s.Prefix = "pc_Ab3_-xy!" },
+		"kind":          func(s *Source, _ *string, _ *[]Resource) { s.Kind = "static" },
 		"request":       func(s *Source, _ *string, _ *[]Resource) { s.RequestID = "" },
 		"trace":         func(s *Source, _ *string, _ *[]Resource) { s.TraceID = "bad\x01" },
 		"name":          func(s *Source, _ *string, _ *[]Resource) { s.Name = strings.Repeat("x", 81) },
-		"issued key ID": func(s *Source, _ *string, _ *[]Resource) { s.Kind = "issued" },
 		"action":        func(_ *Source, a *string, _ *[]Resource) { *a = "copy" },
 		"resource type": func(_ *Source, _ *string, r *[]Resource) { *r = []Resource{{Type: "project", ID: "p"}} },
 		"resource ID":   func(_ *Source, _ *string, r *[]Resource) { *r = []Resource{{Type: "agent"}} },
@@ -45,7 +39,7 @@ func TestValidateRecord(t *testing.T) {
 			*r = []Resource{{Type: "agent", ID: "a", ParentID: strings.Repeat("x", 257)}}
 		},
 	} {
-		source, action, resources := staticSource(tenant), "create", agent
+		source, action, resources := issuedSource(tenant), "create", agent
 		change(&source, &action, &resources)
 		if err := ValidateRecord(source, tenant, action, resources); !errors.Is(err, ErrInvalidSource) {
 			t.Errorf("%s accepted: %v", name, err)

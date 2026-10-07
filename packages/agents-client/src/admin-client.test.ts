@@ -176,7 +176,7 @@ describe("AdminClient transport boundary", () => {
   });
 
   it("accepts deployment-wide audit entries without a Project", async () => {
-    const entry = { id: "audit", created_at: "2026-09-26T08:00:00Z", admin_credential_id: "digest", actor_label: "console", action: "set", project_id: null, resource_type: "deployment_model_provider", resource_id: "codex", result_ids: [], request_id: "request", trace_id: "trace" };
+    const entry = { id: "audit", created_at: "2026-09-26T08:00:00Z", admin_credential_id: "digest", actor_label: "console", action: "set", project_id: null, resource_type: "deployment_model_provider", resource_id: "codex", request_id: "request", trace_id: "trace" };
     const audit = { data: [entry], has_more: false, next_cursor: "" };
     expect(await clientWith(audit).client.listAuditLog()).toEqual(audit);
     await expect(clientWith({ ...audit, data: [{ ...entry, project_id: 1 }] }).client.listAuditLog()).rejects.toMatchObject({ code: "invalid_admin_response" });
@@ -266,7 +266,7 @@ describe("AdminClient response contracts", () => {
   });
 
   it("retains owner ordering and strips no unexpected secret fields", async () => {
-    const owners = { data: [{ resource_id: "a", api_key: null, source: null, admin_audit_id: null }] };
+    const owners = { data: [{ resource_id: "a", api_key: null }] };
     expect(await clientWith(owners).client.retrieveResourceOwners(projectId, "agent", ["a"])).toEqual(owners);
     await expect(clientWith(owners).client.retrieveResourceOwners(projectId, "agent", ["b"])).rejects.toBeInstanceOf(AgentCoreError);
     await expect(clientWith({ data: [{ resource_id: "a", api_key: { id: projectId, name: "SDK", prefix: "p", kind: "issued", revoked_at: null, key: "leak" } }] }).client.retrieveResourceOwners(projectId, "agent", ["a"])).rejects.toBeInstanceOf(AgentCoreError);
@@ -294,13 +294,11 @@ describe("AdminClient deployment read models", () => {
     await expect(clientWith({ ...summary, data: [{ ...summary.data[0], coverage: { measured_sessions: 3, total_sessions: 2, ratio: 1.5 } }] }).client.retrieveSummary()).rejects.toBeInstanceOf(AgentCoreError);
   });
 
-  it("validates historical copy provenance and safe audit mappings", async () => {
-    const owners = { data: [{ resource_id: "a", api_key: null, source: "admin_copy", admin_audit_id: "audit" }] };
-    expect(await clientWith(owners).client.retrieveResourceOwners(projectId, "agent", ["a"])).toEqual(owners);
-    const audit = { data: [{ id: "audit", created_at: "2026-09-24T00:00:00Z", admin_credential_id: "digest", actor_label: "admin", action: "copy", project_id: projectId, resource_type: "agent", resource_id: "a", result_ids: [{ type: "agent", source_id: "a", target_id: "b" }], request_id: "request", trace_id: "trace" }], has_more: false, next_cursor: "" };
+  it("passes audit filters and rejects audit entries with unexpected fields", async () => {
+    const audit = { data: [{ id: "audit", created_at: "2026-09-24T00:00:00Z", admin_credential_id: "digest", actor_label: "admin", action: "delete", project_id: projectId, resource_type: "agent", resource_id: "a", request_id: "request", trace_id: "trace" }], has_more: false, next_cursor: "" };
     const { client, fetch } = clientWith(audit);
-    expect(await client.listAuditLog({ action: "copy", resource_type: "agent", project_id: projectId, after: "cursor" })).toEqual(audit);
-    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/audit-log?after=cursor&project_id=${projectId}&resource_type=agent&action=copy`);
+    expect(await client.listAuditLog({ action: "delete", resource_type: "agent", project_id: projectId, after: "cursor" })).toEqual(audit);
+    expect(fetch.mock.calls[0]![0]).toBe(`/core/v1/audit-log?after=cursor&project_id=${projectId}&resource_type=agent&action=delete`);
     await expect(clientWith({ ...audit, data: [{ ...audit.data[0], request_body: { token: "leak" } }] }).client.listAuditLog()).rejects.toBeInstanceOf(AgentCoreError);
   });
 
@@ -328,19 +326,20 @@ describe("AdminClient installation", () => {
   const installation = {
     object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
     local_only: false, source_commit: "a".repeat(40),
-    configuration: { path: "/home/alice/.oac/core/config.json", apply_command: "/home/alice/.oac/core/oac apply", applied_at: "2026-09-25T09:30:00Z", settings: [port, headers] },
+    configuration: { settings: [port, headers] },
     address_bindings: { nodes: 2, nodes_on_other_address: 1, hosted_sandboxes: 3, self_hosted_executors: 1 },
   };
   it("reads installation facts before any deployment and rejects inconsistent snapshots", async () => {
     expect(await clientWith(installation).client.retrieveInstallation()).toEqual(installation);
-    expect(await clientWith({ ...installation, installation_id: null, public_url: null, api_base_url: null, source_commit: null, configuration: null }).client.retrieveInstallation()).toMatchObject({ public_url: null });
-    const configuration = (settings: unknown[]) => ({ ...installation, configuration: { ...installation.configuration, settings } });
+    expect(await clientWith({ ...installation, installation_id: null, public_url: null, api_base_url: null, source_commit: null }).client.retrieveInstallation()).toMatchObject({ public_url: null });
+    const configuration = (settings: unknown[]) => ({ ...installation, configuration: { settings } });
     for (const invalid of [
       configuration([port, { ...headers, value: { authorization: "leak" } }]),
       configuration([port, { key: headers.key, value: null, default: null, changeable: true, sensitive: true, restarts: ["core"] }]),
       configuration([port, port]),
       { ...installation, address_bindings: { ...installation.address_bindings, nodes_on_other_address: 3 } },
       { ...installation, token: "leak" },
+      { ...installation, configuration: null },
       configuration([{ ...port, configured: true }]),
     ]) {
       await expect(clientWith(invalid).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });
@@ -475,8 +474,10 @@ describe("AdminClient database-owned identities", () => {
     expect(await client.listSkillVersions(projectId, "skill", { limit: 0 })).toEqual(page);
   });
 
-  it.each(["issued", "static", "console"])("preserves %s key provenance in historical ownership records", async (kind) => {
-    const owner = { resource_id: resourceId, api_key: { id: keyId, name: "Original key", prefix: "p", kind, revoked_at: null }, source: "api_key", admin_audit_id: null };
+  it("preserves issued key provenance and rejects other key kinds", async () => {
+    const owner = { resource_id: resourceId, api_key: { id: keyId, name: "Original key", prefix: "p", kind: "issued", revoked_at: null } };
     expect(await clientWith({ data: [owner] }).client.retrieveResourceOwners(projectId, "agent", [resourceId])).toEqual({ data: [owner] });
+    const other = { ...owner, api_key: { ...owner.api_key, kind: "static" } };
+    await expect(clientWith({ data: [other] }).client.retrieveResourceOwners(projectId, "agent", [resourceId])).rejects.toMatchObject({ code: "invalid_admin_response" });
   });
 });

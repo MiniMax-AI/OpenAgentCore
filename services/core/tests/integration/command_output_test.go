@@ -21,7 +21,7 @@ func TestCommandOutputCommitsFragmentsSnapshotsAndRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"run commands"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "start", messageText("run commands"))
 	if err != nil {
 		t.Fatal(err)
 	}

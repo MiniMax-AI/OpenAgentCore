@@ -42,12 +42,11 @@ test("explains an E2B rejection in the wizard, with a link to domain setup", asy
   await expect(page.getByRole("heading", { name: "Connect E2B" })).toBeVisible();
 });
 
-test("lists the startup settings on System with where to change them", async ({ page, request }) => {
+test("lists the startup settings on System", async ({ page, request }) => {
   await openConsole(page, request, "system");
   const installation = page.getByRole("region", { name: "Installation" });
   await expect(installation).toContainText("https://core.example.com/v1");
   const startup = page.getByRole("region", { name: "Startup settings" });
-  await expect(startup).toContainText("Change these in /opt/oac/config.json, then run sudo oac apply");
   const settings = startup.getByRole("table", { name: "Startup settings" });
   await expect(settings.getByRole("row", { name: /^log_level/ })).toContainText("debug");
   await expect(settings.getByRole("row", { name: /^listen_address/ })).toContainText("Default");

@@ -10,7 +10,7 @@
 | `cmd/device` | `oac-core-device` | Provisions or revokes an [operator device profile](../../contracts/agents-api/machine-api.md#operator-device-profile) for `environment: none` engine hosts |
 | `cmd/environment-key` | `oac-core-environment-key` | The [break-glass executor credential command](../../contracts/agents-api/environment-executor-credentials.md#break-glass-command) |
 | `cmd/sandbox-node` | `oac-node` | The sandbox node program; see the [nodes guide](../../docs/getting-started/nodes.md) |
-| `cmd/specification-contract` | None | Regenerates the installer's node specification projection |
+| `cmd/specification-contract` | None | Regenerates the deployment contract projections of the node installer and the TypeScript client |
 
 `make build-core` builds the four executables into `~/.oac/build/oac-core`; [Standalone Core builds](../../docs/maintainers.md#standalone-core-builds) describes the build and its options. `make build-daemon` builds `oac-daemon`.
 

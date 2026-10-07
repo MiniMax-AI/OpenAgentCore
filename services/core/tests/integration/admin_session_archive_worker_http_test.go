@@ -94,7 +94,7 @@ func TestAdminSessionArchiveWorkerHTTPPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(t.Context(), s, project.TenantID, active.ID, "pending-turn", json.RawMessage(`{"text":"pending"}`))
+	input, err := sendMessage(t.Context(), s, project.TenantID, active.ID, "pending-turn", messageText("pending"))
 	if err != nil {
 		t.Fatal(err)
 	}

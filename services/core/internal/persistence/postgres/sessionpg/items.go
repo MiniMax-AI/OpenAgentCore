@@ -64,7 +64,7 @@ func (t *SessionTx) PutItem(ctx context.Context, turnID string, created time.Tim
 	if err != nil {
 		return nil, err
 	}
-	payload, err := change.Item.MarshalStored()
+	payload, err := json.Marshal(change.Item)
 	if err != nil {
 		return nil, err
 	}

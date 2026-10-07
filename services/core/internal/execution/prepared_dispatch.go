@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -41,10 +40,6 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	var snapshot Snapshot
 	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
 		return run, sessions.ErrInvalidInput
-	}
-	if !snapshot.ModelProviderConfigured && snapshot.Environment != nil && v1.ModelProviderRequired(snapshot.Environment.Type) {
-		// Reserved before providers were required; the caller settles it as failed.
-		return run, ErrModelProviderRequired
 	}
 	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
 	if err != nil {

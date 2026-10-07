@@ -5,7 +5,7 @@ import { summary } from "../overview/test-fixtures";
 import { keyUsageRows } from "./key-usage";
 import { type KeyRef } from "../../lib/admin-view";
 
-const key = (id: string): KeyRef => ({ id, name: id, prefix: `pc_${id}`, kind: "issued", revoked_at: null });
+const key = (id: string): KeyRef => ({ id, name: id, prefix: `pc_${id}`, revoked_at: null });
 const sessions = (total: number) => ({ total, idle: total, in_progress: 0, requires_action: 0, failed: 0 });
 const usage = (total: number) => ({ input_tokens: total, output_tokens: 0, total_tokens: total, cached_tokens: 0, reasoning_tokens: 0 });
 

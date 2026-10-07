@@ -24,7 +24,7 @@ func preparedDispatchHarness(t *testing.T) (*dispatchHarness, sessions.Environme
 	assertNoRuntimeAllocation(t, h)
 	h.d, h.lease = h.bound(), h.owner().Lease
 	enableWorkerEnvironment(t, h)
-	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "pending", []sessions.Input{messageInput("first"), messageInput("second")})
 	if err != nil {
 		t.Fatal(err)
 	}
