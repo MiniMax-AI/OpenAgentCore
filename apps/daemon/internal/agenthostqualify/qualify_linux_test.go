@@ -6,14 +6,18 @@
 package agenthostqualify
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"math/big"
@@ -107,15 +111,19 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 				t.Fatalf("%s declares no agent-host view; discovery reported why above", kind)
 			}
 			reg.Register(declaration, *runtime)
-			qualify(t, h, cfg, sb, kind, sessionModel(t, raw, key))
+			qualify(t, h, cfg, sb, kind, runtime.View.Capabilities, sessionModel(t, raw, key))
 		})
 	}
 }
 
-// qualify runs one Turn that writes a file, runs a failing command and
-// reports what it printed and its exit status, then checks all three. Only
-// the sandbox's tool environment holds the value and the status.
-func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, model proto.PromptRequestPayload) {
+// qualify runs the kind's Turns through dispatch. The first writes a file,
+// runs a failing command and reports what it printed and its exit status,
+// then the test checks all three; only the sandbox's tool environment holds
+// the value and the status. A view that declares function tools runs a second
+// Turn in a new Executor, which resumes the Session's native history, and
+// calls a function there. A view that declares tool search runs a Turn in
+// another Session that finds the function, deferred, with tool search.
+func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps agent.ViewCapabilities, model proto.PromptRequestPayload) {
 	name := "qualify-" + kind + ".txt"
 	value, content := strings.ToLower(rand.Text()), "qualified "+strings.ToLower(rand.Text()[:12])
 	code, _ := rand.Int(rand.Reader, big.NewInt(90))
@@ -126,43 +134,136 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		"   It prints a value and exits with a non-zero status; that is expected.\n" +
 		"3. Answer with exactly one line: VALUE=<the printed value> EXIT=<the exit status>"
 
-	// dispatch drives the Session's Turn through the agent host's Executor.
-	b := sb.binding()
-	sb.grant(b, cfg.RuntimeID)
 	env := agenthost.Environment{
 		Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/home/runtime", "LANG": "C.UTF-8"},
 		Tool:    map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)},
 	}
+	configuration := proto.PromptRequestPayload{AgentKind: kind, StrictResume: true, DisableSubagents: true,
+		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
+		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"}}
+	if caps.FunctionTools.IsSupported() {
+		configuration.FunctionTools = []proto.FunctionTool{lookupTicket}
+	}
+	k := newTicket(t)
+	s := sb.session(h, cfg, env, configuration)
+	done, _ := s.turn(t, "qualify", prompt, k)
+	if !strings.Contains(done.Content, "VALUE="+value) || !strings.Contains(done.Content, fmt.Sprintf("EXIT=%d", exit)) {
+		t.Errorf("the answer %q does not report VALUE=%s EXIT=%d", done.Content, value, exit)
+	}
+	if got := sb.read(t, cfg, workspace+"/"+name); strings.TrimRight(got, "\n") != content {
+		t.Errorf("%s holds %q, want %q", name, got, content)
+	}
+
+	if caps.FunctionTools.IsSupported() {
+		// The first Executor retired with its Router.
+		native, _ := done.Metadata[proto.DoneMetaAgentSessionID].(string)
+		if native == "" {
+			t.Fatal("the first Turn reported no native session to resume")
+		}
+		s.configuration.AgentSessionID = native
+		done, calls := s.turn(t, "resumed-function", k.prompt("Call the lookup_ticket function"), k)
+		if resumed, _ := done.Metadata[proto.DoneMetaAgentSessionID].(string); resumed != native {
+			t.Errorf("the resumed Turn reported the native session %q, want %q", resumed, native)
+		}
+		k.check(t, done, calls)
+	}
+	if caps.ToolSearch.IsSupported() {
+		deferred := lookupTicket
+		deferred.DeferLoading = true
+		configuration.ToolSearch, configuration.FunctionTools = true, []proto.FunctionTool{deferred}
+		search := sb.session(h, cfg, env, configuration)
+		done, calls := search.turn(t, "tool-search", k.prompt("Search your tools for the function that looks up support tickets"), k)
+		k.check(t, done, calls)
+	}
+}
+
+// lookupTicket is the function the function Turns call.
+var lookupTicket = proto.FunctionTool{Name: "lookup_ticket", Description: "Looks up a support ticket by its number.",
+	Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"type":"string","description":"The ticket number"}},"required":["ticket"],"additionalProperties":false}`)}
+
+// ticket is lookup_ticket's result for number: a text with first, an image,
+// and a text with second. An answer that holds both codes shows that the
+// Harness gave its model the whole result.
+type ticket struct{ number, first, second, image string }
+
+func newTicket(t *testing.T) ticket {
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, image.NewGray(image.Rect(0, 0, 8, 8))); err != nil {
+		t.Fatal(err)
+	}
+	number, _ := rand.Int(rand.Reader, big.NewInt(9000))
+	return ticket{number: fmt.Sprint(number.Int64() + 1000), first: strings.ToLower(rand.Text()[:8]), second: strings.ToLower(rand.Text()[:8]),
+		image: "data:image/png;base64," + base64.StdEncoding.EncodeToString(encoded.Bytes())}
+}
+
+func (k ticket) result() []proto.InputContent {
+	first, second := "Ticket "+k.number+": the first code is "+k.first+".", "The second code is "+k.second+"."
+	return []proto.InputContent{{Type: "input_text", Text: &first}, {Type: "input_image", ImageURL: &k.image}, {Type: "input_text", Text: &second}}
+}
+
+// prompt asks for one call of the function that find finds.
+func (k ticket) prompt(find string) string {
+	return find + ", and call it once with ticket \"" + k.number + "\".\nAnswer with exactly one line: FIRST=<the first code> SECOND=<the second code>"
+}
+
+// check checks that the Turn called lookup_ticket for the ticket and
+// answered with both codes.
+func (k ticket) check(t *testing.T, done proto.DonePayload, calls []proto.FunctionCallPayload) {
+	t.Helper()
+	if len(calls) == 0 || calls[0].Name != lookupTicket.Name || !strings.Contains(string(calls[0].Arguments), k.number) {
+		t.Errorf("the Turn made %d function calls, want the first to call %s for ticket %s", len(calls), lookupTicket.Name, k.number)
+	}
+	if !strings.Contains(done.Content, "FIRST="+k.first) || !strings.Contains(done.Content, "SECOND="+k.second) {
+		t.Errorf("the answer %q does not report FIRST=%s SECOND=%s", done.Content, k.first, k.second)
+	}
+}
+
+// session is a Session bound to the sandbox. Each Turn runs in a new
+// Executor through a new dispatch Router.
+type session struct {
+	h             *agenthost.Host
+	cfg           agenthost.Config
+	binding       agenthost.Binding
+	env           agenthost.Environment
+	id            string
+	configuration proto.PromptRequestPayload
+}
+
+func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, env agenthost.Environment, configuration proto.PromptRequestPayload) *session {
+	s := &session{h: h, cfg: cfg, binding: sb.binding(), env: env, id: uuid.NewString(), configuration: configuration}
+	s.configuration.AgentStateKey = "agents-api-" + s.id
+	sb.grant(s.binding, cfg.RuntimeID)
+	return s
+}
+
+// turn prepares an Executor of the Session, runs prompt as its Turn run,
+// answers each function call with k's result, and retires the Executor with
+// the Router's Shutdown. It returns the Turn's Done and its function calls.
+func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePayload, []proto.FunctionCallPayload) {
+	t.Helper()
 	out := make(sender, 256)
-	router, err := dispatch.New(dispatch.Config{Sender: out, SessionEnvironments: true, Log: cfg.Log,
-		Registry: h.Registry(func(proto.PromptRequestPayload) (agenthost.Binding, agenthost.Environment, error) { return b, env, nil })})
+	router, err := dispatch.New(dispatch.Config{Sender: out, SessionEnvironments: true, Log: s.cfg.Log,
+		Registry: s.h.Registry(func(proto.PromptRequestPayload) (agenthost.Binding, agenthost.Environment, error) {
+			return s.binding, s.env, nil
+		})})
 	if err != nil {
 		t.Fatal(err)
 	}
-	session := uuid.NewString()
-	handle(t, router, proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{
-		AgentKind: kind, AgentStateKey: "agents-api-" + session, StrictResume: true, DisableSubagents: true,
-		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"}}})
-	ready := out.status(t, "prepare")
+	prepare := "prepare-" + run
+	handle(t, router, proto.TypeExecutionPrepare, prepare, proto.ExecutionPreparePayload{SessionID: s.id, Configuration: s.configuration})
+	ready := out.status(t, prepare)
 	if ready.State != "ready" {
 		t.Fatalf("the preparation is %s (%s), want ready; the log above says why", ready.State, ready.ErrorCode)
 	}
-	handle(t, router, proto.TypeExecutionStart, "prepare", proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID,
-		RunID: "qualify", Input: proto.TextInput(prompt)})
-	answer := out.collect(t, "qualify")
+	handle(t, router, proto.TypeExecutionStart, prepare, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID,
+		RunID: run, Input: proto.TextInput(prompt)})
+	done, calls := out.collect(t, router, run, k)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	if err := router.Shutdown(ctx); err != nil {
 		t.Errorf("Shutdown: %v", err)
 	}
-
-	if !strings.Contains(answer, "VALUE="+value) || !strings.Contains(answer, fmt.Sprintf("EXIT=%d", exit)) {
-		t.Errorf("the answer %q does not report VALUE=%s EXIT=%d", answer, value, exit)
-	}
-	if got := sb.read(t, cfg, workspace+"/"+name); strings.TrimRight(got, "\n") != content {
-		t.Errorf("%s holds %q, want %q", name, got, content)
-	}
+	return done, calls
 }
 
 func handle(t *testing.T, router *dispatch.Router, typ, id string, payload any) {
@@ -214,21 +315,36 @@ func (s sender) status(t *testing.T, id string) proto.PreparationStatusPayload {
 	}
 }
 
-// collect reads the Turn's envelopes until its Done and returns its content.
-func (s sender) collect(t *testing.T, run string) string {
+// collect reads the Turn's envelopes until its Done. It answers each function
+// call with k's result through router and checks that dispatch applied it.
+func (s sender) collect(t *testing.T, router *dispatch.Router, run string, k ticket) (proto.DonePayload, []proto.FunctionCallPayload) {
 	t.Helper()
 	deadline := time.After(turnLimit)
+	var calls []proto.FunctionCallPayload
 	for {
 		switch e := s.next(t, run, deadline); e.Type {
 		case proto.TypeError:
 			t.Errorf("Turn error: %s", e.Payload)
+		case proto.TypeFunctionCall:
+			var call proto.FunctionCallPayload
+			if err := e.DecodePayload(&call); err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("function call: %s %s", call.Name, call.Arguments)
+			calls = append(calls, call)
+			handle(t, router, proto.TypeFunctionResult, run, proto.FunctionResultPayload{DeliveryID: "result-" + call.CallID, CallID: call.CallID, Success: true, Content: k.result()})
+		case proto.TypeInteractionDecisionAck:
+			var ack proto.InteractionDecisionAckPayload
+			if err := e.DecodePayload(&ack); err != nil || !ack.Applied {
+				t.Errorf("a function result was not applied: %s", e.Payload)
+			}
 		case proto.TypeDone:
 			var d proto.DonePayload
-			if err := json.Unmarshal(e.Payload, &d); err != nil {
+			if err := e.DecodePayload(&d); err != nil {
 				t.Fatal(err)
 			}
 			t.Logf("answer: %s", d.Content)
-			return d.Content
+			return d, calls
 		}
 	}
 }
