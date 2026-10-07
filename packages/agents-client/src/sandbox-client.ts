@@ -8,12 +8,10 @@ export type SandboxDiagnostic = "" | "node_unavailable" | "resource_missing" | "
 /** Checked against Core's shared node-diagnostics.json fixture. */
 export const sandboxNodeDiagnostics = [
   "provider_unavailable",
-  "docker_unavailable",
-  "docker_limits_unsupported",
+  "host_unsupported",
+  "artifacts_unavailable",
   "runtime_download_failed",
   "runtime_image_unavailable",
-  "kvm_unavailable",
-  "microsandbox_artifacts_unavailable",
   "capacity_insufficient",
 ] as const;
 /** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. The client reads an unknown future value as provider_unavailable. */

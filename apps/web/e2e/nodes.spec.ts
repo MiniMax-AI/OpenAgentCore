@@ -91,9 +91,9 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(problem).toContainText("Not connected yet");
   await expect(problem).toContainText("sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
-  // Connected, it reports why Docker isn't ready; once ready, the node is connected.
-  await setNode(request, { id: "node-new", online: true, diagnostic: "docker_limits_unsupported" });
-  await expect(problem).toContainText("Docker limits unsupported");
+  // Connected, it reports why its provider isn't ready; once ready, the node is connected.
+  await setNode(request, { id: "node-new", online: true, diagnostic: "host_unsupported" });
+  await expect(problem).toContainText("Host unsupported");
   await expect(progress).toContainText("Waiting for Docker");
   await setNode(request, { id: "node-new", provider_ready: true, diagnostic: "" });
   await expect(progress).toHaveText("edge-04 · Connected");

@@ -18,7 +18,7 @@ func TestNodeDiagnosticContract(t *testing.T) {
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
 	}
-	codes := []string{NodeProviderUnavailable}
+	var codes []string
 	for _, diagnostic := range nodeDiagnostics {
 		codes = append(codes, diagnostic.code)
 		if got := NodeDiagnostic(fmt.Errorf("private probe detail: %w", diagnostic.err)); got != diagnostic.code {

@@ -369,7 +369,7 @@ func (m *GenerationManager) probeLoop() {
 			if err != nil {
 				g.state = "failed"
 				g.diagnostic = sandbox.NodeDiagnostic(err)
-				if errors.Is(err, sandbox.ErrRuntimeImageUnavailable) || errors.Is(err, sandbox.ErrMicrosandboxArtifactsUnavailable) {
+				if errors.Is(err, sandbox.ErrRuntimeImageUnavailable) || errors.Is(err, sandbox.ErrArtifactsUnavailable) {
 					g.repairing = true
 				}
 			}

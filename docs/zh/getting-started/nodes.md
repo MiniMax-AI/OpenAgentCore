@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: f5bec50bf81ebf1d08faaa54432da6a9c6e3ddbf88d93e33244276546c74aaab
+source_hash: 24b505c131f398dc8340d4f32616152a7964a783cd4fc06cfdeb3ccd422448db
 ---
 
 节点是一台 Linux 主机，在沙箱后端为 Docker 或 microsandbox 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -159,20 +159,18 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 - **使用 Web 命令添加的节点**：当前沙箱配置检查失败时，在目标状态显示 **Preparation failed**，帮助提示中给出原因（`GET /core/v1/sandbox/nodes` 的 `rollout.diagnostic`）。**Provider not ready** 旁的提示仅显示 *Sandbox provider unavailable*。
 - **手动注册的节点**：在 **Provider not ready** 旁的帮助提示展示原因（`diagnostic`）。
 
-节点日志包含状态码背后的本地错误。
+每个状态码都是与 Provider 无关的类别；其背后的本地错误留在节点上。手动注册的节点会把它写入日志。对于使用 Web 命令添加的节点，请在主机上重新运行该命令：安装程序会先检查主机要求，并指出需要修复的问题（[安装程序消息](#installer-messages)）。
 
 节点按如下顺序仅报告首个失败检查：Docker 守护进程或 KVM、Docker 限制支持、主机容量、已安装的 Runtime 文件。因此无法访问 Docker 守护进程时，会隐藏镜像缺失问题。修复后约十秒的下一次心跳会清除或替换状态码。离线节点保留最后状态码，Web 在节点重连前隐藏它。
 
 | 状态码 | 帮助提示 | 原因 | 解决方法 |
 | --- | --- | --- | --- |
-| `docker_unavailable` | Docker unavailable | Docker 套接字不可达、无权访问，或 Docker info/镜像请求失败 | 启动 Docker 并赋予节点用户访问 `/var/run/docker.sock` 的权限 |
-| `docker_limits_unsupported` | Docker limits unsupported | Docker 报告不支持 CPU 配额或内存限制 | 使用 cgroups 强制执行 CPU 与内存限制的主机（cgroup v2） |
+| `provider_unavailable` | Sandbox provider unavailable | 提供商的服务不可达或请求失败（例如 Docker 守护进程已停止），或失败没有类别 | 重新运行节点的命令，或阅读手动注册节点的日志 |
+| `host_unsupported` | Host unsupported | 主机缺少提供商所需的能力，例如 Docker 的 CPU 与内存限制（cgroup v2）或对 `/dev/kvm` 的读写权限 | 重新运行节点的命令，或阅读手动注册节点的日志 |
 | `capacity_insufficient` | Host too small | 主机 CPU 或内存不足以运行一个沙箱 | 使用更大主机或修改沙箱规格 |
-| `runtime_image_unavailable` | Runtime image missing | Docker 中没有固定版本的 Runtime 镜像 | Web 命令添加的节点自动重新下载；其他节点加载匹配发行版镜像 |
-| `kvm_unavailable` | KVM unavailable | 节点无法读写 `/dev/kvm` | 启用硬件虚拟化，通过 `kvm` 组赋予节点用户 KVM 访问权限 |
-| `microsandbox_artifacts_unavailable` | microsandbox components missing | Runtime 或固件缺失、SHA-256 检查失败，或辅助程序缺失 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
+| `runtime_image_unavailable` | Runtime image missing | 提供商中没有固定版本的 Runtime 镜像 | Web 命令添加的节点自动重新下载；其他节点加载匹配发行版镜像 |
+| `artifacts_unavailable` | Provider files missing | 固定版本的提供商文件（例如 microsandbox 的 Runtime、固件或辅助程序）缺失或 SHA-256 检查失败 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
 | `runtime_download_failed` | Runtime download failed | 准备新配置时无法下载或验证 Runtime 文件 | 检查节点到控制台和发行下载地址的 HTTPS 访问。节点以递增间隔重试，最长间隔 30 分钟 |
-| `provider_unavailable` | Sandbox provider unavailable | 其他失败 | 阅读节点日志 |
 
 新用户组成员关系仅对新进程生效。重启节点服务：`sudo systemctl restart oac-node-<installation-id>.service`。已注册但从未连接的节点通常无法通过公开 URL 访问 Core，或 `/api/v1` WebSocket 无法通过反向代理。
 

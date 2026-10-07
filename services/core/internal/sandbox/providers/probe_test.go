@@ -120,9 +120,9 @@ func TestMicrosandboxProbeDiagnostics(t *testing.T) {
 		want      string
 	}{
 		// KVM is reported before capacity and missing artifacts.
-		{name: "kvm", resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}, want: "kvm_unavailable"},
+		{name: "kvm", resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}, want: "host_unsupported"},
 		{name: "capacity", kvm: true, resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}, want: "capacity_insufficient"},
-		{name: "artifacts", kvm: true, resources: smallSandbox, want: "microsandbox_artifacts_unavailable"},
+		{name: "artifacts", kvm: true, resources: smallSandbox, want: "artifacts_unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			useKVM(t, tc.kvm)
@@ -143,13 +143,13 @@ func TestDockerProbeDiagnostics(t *testing.T) {
 		want                   string
 		unreachable, infoFails bool
 	}{
-		{name: "unreachable", unreachable: true, want: "docker_unavailable"},
-		{name: "info", infoFails: true, want: "docker_unavailable"},
+		{name: "unreachable", unreachable: true, want: "provider_unavailable"},
+		{name: "info", infoFails: true, want: "provider_unavailable"},
 		// The pinned image is also missing below; earlier checks take precedence.
-		{name: "limits", cpus: 8, imageStatus: 404, want: "docker_limits_unsupported"},
+		{name: "limits", cpus: 8, imageStatus: 404, want: "host_unsupported"},
 		{name: "capacity", limits: true, cpus: 1, imageStatus: 404, want: "capacity_insufficient"},
 		{name: "image", limits: true, cpus: 8, imageStatus: 404, want: "runtime_image_unavailable"},
-		{name: "image_inspect_fails", limits: true, cpus: 8, imageStatus: 500, want: "docker_unavailable"},
+		{name: "image_inspect_fails", limits: true, cpus: 8, imageStatus: 500, want: "provider_unavailable"},
 		{name: "ready", limits: true, cpus: 8, imageStatus: 200},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -201,7 +201,7 @@ func TestMicrosandboxProbeRecoversRepairedArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	probe := microsandboxProbe(Microsandbox{HelperPath: artifact, RuntimePath: artifact, FirmwarePath: artifact, RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:]), RuntimeHome: home}, smallSandbox)
-	if got := sandbox.NodeDiagnostic(probe(t.Context())); got != "microsandbox_artifacts_unavailable" {
+	if got := sandbox.NodeDiagnostic(probe(t.Context())); got != "artifacts_unavailable" {
 		t.Fatalf("missing artifact diagnostic = %q", got)
 	}
 	if err := os.WriteFile(artifact, content, 0700); err != nil {

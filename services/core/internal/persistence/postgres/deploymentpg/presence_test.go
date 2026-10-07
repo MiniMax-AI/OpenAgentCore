@@ -270,13 +270,13 @@ func TestNodeDiagnosticReachesListAndDetail(t *testing.T) {
 		reported, want string
 		ready          bool
 	}{
-		{reported: "docker_unavailable", want: "docker_unavailable"},
+		{reported: "host_unsupported", want: "host_unsupported"},
 		{reported: "capacity_insufficient", want: "capacity_insufficient"},
 		// Older nodes send provider_unavailable or nothing; unknown text is never stored.
 		{reported: "provider_unavailable", want: "provider_unavailable"},
 		{reported: "", want: ""},
 		{reported: "dial unix /var/run/docker.sock: permission denied", want: "provider_unavailable"},
-		{reported: "kvm_unavailable", want: "", ready: true},
+		{reported: "artifacts_unavailable", want: "", ready: true},
 	} {
 		if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: tc.ready, Diagnostic: tc.reported}); err != nil {
 			t.Fatal(tc.reported, err)

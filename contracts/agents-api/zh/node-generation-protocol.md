@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 1ee43dfcdd0eec0806ea3bc8a4c1227e10bd8ac5e69486505cb113a98e3f548a
+source_hash: b7f9a3a2835f65b477b53fcc62b474250eb77c3111f5e4692b561911c0ff067b
 ---
 
 沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
@@ -19,7 +19,7 @@ source_hash: 1ee43dfcdd0eec0806ea3bc8a4c1227e10bd8ac5e69486505cb113a98e3f548a
 
 只要节点在当前所有者 epoch 下保持连接，并且最近一次心跳距今不足 45 秒，Core 就会将该节点计为在线。心跳会确立 Provider 的就绪状态和最近的主机测量值，但绝不表示 Session 活动。
 
-健康报告包含 `provider_ready`、可选的固定 `diagnostic`、`observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。未启用代次管理的节点每次报告时都会探测其 Provider；未就绪的 Provider 会报告一个固定诊断代码，该代码根据类型化探测错误进行分类；探测文本和主机路径保留在节点上。Core 会将未知代码存储为 `provider_unavailable`。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些代码及其原因。支持代次管理的节点则按下文所述按代次报告就绪状态。
+健康报告包含 `provider_ready`、可选的固定 `diagnostic`、`observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。未启用代次管理的节点每次报告时都会探测其 Provider；未就绪的 Provider 会报告其首个失败检查所属的、与 Provider 无关的就绪类别，该类别取自探测所包装的类别错误；探测文本、厂商细节和主机路径保留在节点上。节点或代次健康状态中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。支持代次管理的节点则按下文所述按代次报告就绪状态。
 
 ## Provider 请求 {#provider-requests}
 
@@ -121,6 +121,6 @@ Runtime 字节缺失时，绝不将固定的放置实例迁移到当前 Runtime�
 
 下载中断后，只会修复原始路径中缺失的字节。如果在任何导入尝试之前执行回收，准备日志会证明该代次没有已导入的原生镜像。如果某代次的原生可执行文件缺失，且导入可能已经开始，该代次仍会保留：文件缺失永远不能证明原生制品不存在，而空的原生清单也永远不能抹除回执或存储历史。
 
-诊断代码编写于 `services/core/internal/sandbox/node_diagnostic.go`。共享的 `services/core/internal/sandbox/testdata/node-diagnostics.json` 测试夹具检查 Go 映射、OpenAPI 源注释和生成的枚举，以及 TypeScript 客户端声明。Web 使用客户端规范化器，并检查每个已声明代码的本地化消息。代码变更时要同步更新这些投影；未知代码会规范化为 `provider_unavailable`。
+就绪类别编写于 `services/core/internal/sandbox/node_diagnostic.go`，每个类别对应一个导出错误和一个代码。共享的 `services/core/internal/sandbox/testdata/node-diagnostics.json` 测试夹具检查 Go 映射、OpenAPI 源注释和生成的枚举，以及 TypeScript 客户端声明。Web 使用客户端规范化器，并检查每个已声明代码的本地化消息。代码变更时要同步更新这些投影；客户端将未知代码读作 `provider_unavailable`。
 
 准备诊断使用固定的类型化原因。只有制品传输、校验和或版本来源验证失败才会报告 `runtime_download_failed`；私有准备器通过退出类别指示这一类失败，Core 和节点都不解析 stderr。Provider 故障、所有权故障、取消和未分类故障保留其类型化代码，或使用 `provider_unavailable`。协议中不会传输任何 Provider 原始文本。
