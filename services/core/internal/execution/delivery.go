@@ -79,7 +79,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			result.ErrorCode, status = "event_persistence_failed", sessions.TurnFailed
 		}
 		if err := journal.flush(finishCtx); err != nil {
-			result.ErrorCode, status = "event_persistence_failed", sessions.TurnFailed
+			result.ErrorCode, status = journalFailure(err), sessions.TurnFailed
 		}
 		if subscription.Err() != nil {
 			result.ErrorCode, status = "event_stream_incomplete", sessions.TurnFailed
@@ -166,15 +166,15 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 		case <-flushTicker.C:
-			if journal.flush(ctx) != nil {
-				result.ErrorCode = "event_persistence_failed"
+			if err := journal.flush(ctx); err != nil {
+				result.ErrorCode = journalFailure(err)
 				return
 			}
 		case reply := <-cancelReply:
 			drainErr := journal.drain(upstream, &result)
 			receiptErr := recordCancellation(ctx, journal, reply, &result)
-			if drainErr != nil || receiptErr != nil {
-				result.ErrorCode = "event_persistence_failed"
+			if err := errors.Join(drainErr, receiptErr); err != nil {
+				result.ErrorCode = journalFailure(err)
 				return
 			}
 			if reply.err == nil && reply.ack.Applied {
@@ -206,7 +206,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 			if writeErr != nil {
-				result.ErrorCode = "event_persistence_failed"
+				result.ErrorCode = journalFailure(writeErr)
 				return
 			}
 			switch env.Type {
@@ -222,7 +222,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				done, upstream = true, nil
 			case proto.TypeFunctionCall:
 				if err := journal.flush(ctx); err != nil {
-					result.ErrorCode = "event_persistence_failed"
+					result.ErrorCode = journalFailure(err)
 					return
 				}
 				if err := functions.record(ctx, env); err != nil {

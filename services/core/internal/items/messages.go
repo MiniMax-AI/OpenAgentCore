@@ -3,6 +3,7 @@ package items
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -29,7 +30,18 @@ func message(turn, key, role, text, status string) v1.Item {
 		Content: []v1.ItemContent{{Type: contentType, Text: &text}}}
 }
 
-func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, error) {
+// ErrInvalidObservation marks an execution observation that projects to no
+// valid Item: the Runtime sent it, so it is never a storage failure.
+var ErrInvalidObservation = errors.New("invalid execution observation")
+
+// Project returns the Item updates an observation of kind makes. Every error
+// wraps ErrInvalidObservation.
+func Project(turn, kind string, sequence int64, raw json.RawMessage) (updates []Update, err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("%w: %w", ErrInvalidObservation, err)
+		}
+	}()
 	switch kind {
 	case "message":
 		return inputMessages(turn, sequence, raw), nil
