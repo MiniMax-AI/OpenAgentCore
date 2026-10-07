@@ -87,12 +87,12 @@ func newView(binary string, codeModeHost bool) agent.View {
 		ForwardEnv: slices.Clone(viewForwardEnv),
 		Proxy:      agent.ViewProxyEnv,
 		Capabilities: agent.ViewCapabilities{
-			EnvironmentNone:      proto.CapabilityUnsupported,
+			EnvironmentNone:      proto.CapabilitySupported,
 			Skills:               proto.CapabilityUnsupported,
 			FunctionTools:        proto.CapabilitySupported,
 			FunctionResultImages: proto.CapabilitySupported,
 			ToolSearch:           proto.CapabilityUnsupported,
-			StdioMCP:             proto.CapabilityUnsupported,
+			StdioMCP:             proto.CapabilitySupported,
 		},
 		Executor: func(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
 			cfg := defaultSessionConfig()
@@ -129,26 +129,27 @@ func staticELF(name string) bool {
 }
 
 // prepareViewPlan builds the plan for codex in the view: the Environment's
-// workspace as cwd, CODEX_HOME and TMPDIR in the Session home, MCP only from
-// the Session, and a closed environment.
+// workspace as cwd, or the work directory with environment none, CODEX_HOME
+// and TMPDIR in the Session home, MCP only from the Session, and a closed
+// environment.
 func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, error) {
 	view := cfg.view
-	local := req.LocalEnvironment
-	if local == nil || req.DisableExecutionEnvironment || !path.IsAbs(local.WorkspaceRoot) {
-		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace", agent.ErrUnsupportedOperation)
-	}
 	if !filepath.IsAbs(view.Home.Host) || !path.IsAbs(view.Home.View) {
 		return SessionPlan{}, errors.New("codex: view home must be absolute")
+	}
+	cwd := path.Join(view.Home.View, agent.ViewWorkName)
+	if local := req.LocalEnvironment; local != nil {
+		cwd = local.WorkspaceRoot
+	}
+	if (req.LocalEnvironment == nil) != req.DisableExecutionEnvironment || !path.IsAbs(cwd) {
+		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace or with environment none", agent.ErrUnsupportedOperation)
 	}
 	if _, err := runtimePermissionProfile(req); err != nil {
 		return SessionPlan{}, err
 	}
-	for _, binding := range view.MCP {
-		if binding.Transport != "http" || binding.Stdio != nil {
-			return SessionPlan{}, fmt.Errorf("%w: codex: stdio MCP %q in a view", agent.ErrUnsupportedOperation, binding.ServerLabel)
-		}
-	}
-	servers, _, err := mcpServersFromBindings(view.MCP)
+	// The Harness runs each stdio alias without arguments, which the native
+	// configuration reports as an empty list.
+	servers, _, err := mcpServersFromBindings(view.MCP, func(stdio proto.EnvironmentMCP) (string, []string) { return stdio.Server.Command, []string{} })
 	if err != nil {
 		return SessionPlan{}, err
 	}
@@ -161,7 +162,7 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 		return SessionPlan{}, err
 	}
 	disableProgrammaticTools(&plan, req.ExecutionControls)
-	plan.Cwd = local.WorkspaceRoot
+	plan.Cwd = cwd
 	plan.Sandbox = SandboxDangerFullAcces
 	plan.Permissions = ""
 	plan.ApprovalPolicy = AskForApproval{String: "never"}

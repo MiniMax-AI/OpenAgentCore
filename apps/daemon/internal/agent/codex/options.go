@@ -19,8 +19,9 @@ import (
 // the daemon's PromptRequestPayload.
 type SessionPlan struct {
 	// Cwd is the working directory passed to codex and the spawned
-	// app-server: the bound workspace root for an Environment request and
-	// the Session's private CODEX_HOME for environment:none.
+	// app-server: the bound workspace root for an Environment request and,
+	// for environment:none, the Session's private CODEX_HOME or a view's work
+	// directory.
 	Cwd string
 
 	// Env is the environment slice (KEY=value) the plan adds. A local
@@ -122,6 +123,9 @@ func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.Vi
 	}
 	plan.home = home
 	plan.Env = []string{"DISABLE_TELEMETRY=1", "CODEX_HOME=" + home.View}
+	if req.DisableExecutionEnvironment {
+		plan.Env = append(plan.Env, "CODEX_EXEC_SERVER_URL=none")
+	}
 	if prepared.Provider != nil {
 		if err := writeCodexProviderConfig(home.Host, nativeProvider(*prepared.Provider)); err != nil {
 			return plan, err
