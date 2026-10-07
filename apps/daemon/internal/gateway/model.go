@@ -23,7 +23,7 @@ type modelRelay struct {
 }
 
 func newModelRelay(p modelprovider.Provider, t http.RoundTripper) (*modelRelay, error) {
-	if err := p.Validate(); err != nil {
+	if err := p.Validate(false); err != nil {
 		return nil, err
 	}
 	credential, err := modelprovider.UpstreamCredential(p.Protocol)

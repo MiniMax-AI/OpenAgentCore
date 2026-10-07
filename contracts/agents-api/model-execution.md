@@ -2,7 +2,7 @@
 title: "Model execution"
 ---
 
-Each Session runs one Harness with one model provider. Core selects them through three Core extensions that the pinned upstream protocol does not define: `x_agents_core.harness` chooses the Harness, `x_agents_core.model_provider` supplies the endpoint and key, and `x_agents_core.harness_config` carries native model parameters. Core has no provider catalog, model alias resolution or product permission model; besides Session and saved-Agent bundles, the only stored bundle is one [deployment default](#deployment-defaults) per Harness. This document is the Harness–model provider protocol: [`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) validates the frozen provider connection and declares what the [credential gateway](#credential-gateway) relays, and each Harness declares its protocols and native parameters through [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go).
+Each Session runs one Harness with one model provider. Core selects them through three Core extensions that the pinned upstream protocol does not define: `x_agents_core.harness` chooses the Harness, `x_agents_core.model_provider` supplies the endpoint and key, and `x_agents_core.harness_config` carries native model parameters. Core has no provider catalog, model alias resolution or product permission model; besides Session and saved-Agent bundles, the only stored bundle is one [deployment default](#deployment-defaults) per Harness. This document is the Harness–model provider protocol: [`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) defines the [provider rule](#session-override) that Core and the Runtime both apply and declares what the [credential gateway](#credential-gateway) relays, and each Harness declares its protocols and native parameters through [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go).
 
 ## Harness selection
 
@@ -72,7 +72,7 @@ Every creation request records caller intent before resolving saved Agents, temp
 ```
 
 - `protocol` names the upstream API (`anthropic`, `responses` or `chat_completions`), not an engine. The selected Harness must support it natively.
-- `base_url` uses HTTPS with a valid host, without credentials, query or fragment. A loopback host means the agent host's network namespace, for every Environment type. For `anthropic` it excludes the version path, because the Harness appends `/v1/messages`, so a value ending in `/v1` or `/v1/` is rejected.
+- `base_url` uses HTTPS with a valid host, without credentials, query or fragment. A loopback host means the agent host's network namespace, for every Environment type. Core rejects plain `http`; the Runtime accepts it only to a loopback IP address, for the credential gateway's listener that it hands the Harness. For `anthropic` it excludes the version path, because the Harness appends `/v1/messages`, so a value ending in `/v1` or `/v1/` is rejected.
 - `api_key` is nonempty, at most 16 KiB and contains no NUL, CR or LF.
 - `context_window` and `max_output_tokens` are optional nonnegative integers, with output no larger than context; both must be positive for MiniMax Code. Use the real model's limits.
 - `agent.model` is the exact provider model ID; a supplied value always replaces the deployment model.

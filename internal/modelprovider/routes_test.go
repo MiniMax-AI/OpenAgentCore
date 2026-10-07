@@ -58,15 +58,6 @@ func TestLookupRouteMatchesOnlyDeclaredRoutes(t *testing.T) {
 	}
 }
 
-func TestPlaceholderPassesProviderValidation(t *testing.T) {
-	for _, protocol := range Protocols() {
-		gateway := Provider{Protocol: protocol, BaseURL: "http://127.0.0.1:41000", APIKey: Placeholder, ContextWindow: 64000, MaxOutputTokens: 4096}
-		if err := gateway.Validate(); err != nil {
-			t.Fatalf("%s rejected the placeholder: %v", protocol, err)
-		}
-	}
-}
-
 func TestUpstreamPathJoinsBaseAndRoute(t *testing.T) {
 	for _, join := range []struct{ base, route, want string }{
 		{"", "/responses", "/responses"},

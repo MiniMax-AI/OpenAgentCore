@@ -15,7 +15,7 @@ func TestRegistryOwnsDeclarations(t *testing.T) {
 	if again.Validate("responses", 0, 0) == nil {
 		t.Fatal("lookup mutated the registered declaration")
 	}
-	if _, ok := registry.Lookup("unknown"); ok || registry.SupportsProtocol("changed") || !registry.SupportsProtocol("responses") {
+	if _, ok := registry.Lookup("unknown"); ok {
 		t.Fatal("unknown declarations were inferred")
 	}
 }

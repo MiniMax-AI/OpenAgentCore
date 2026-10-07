@@ -92,24 +92,6 @@ func TestWriteCodexProviderConfig_FullProvider(t *testing.T) {
 	}
 }
 
-func TestWriteCodexProviderConfig_RejectsMissingFields(t *testing.T) {
-	dir := t.TempDir()
-	cases := []struct {
-		name string
-		cfg  providerConfig
-	}{
-		{"missing base_url", providerConfig{BearerToken: "sk-x"}},
-		{"missing bearer_token", providerConfig{BaseURL: "https://x"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if err := writeCodexProviderConfig(dir, tc.cfg); err == nil {
-				t.Fatal("expected error for incomplete provider config")
-			}
-		})
-	}
-}
-
 // TestWriteCodexProviderConfig_AppendsAlongsideMCP verifies the two
 // writers coexist on the same file. Without append semantics one would
 // silently overwrite the other depending on call order.

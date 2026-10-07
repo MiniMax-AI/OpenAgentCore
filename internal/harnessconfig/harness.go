@@ -40,8 +40,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-// Provider is deliberately limited to configuration compatibility. Core owns
-// credential admission and endpoint security; native launch options stay private.
+// Provider is deliberately limited to configuration compatibility.
+// internal/modelprovider owns the credential and endpoint rule; native launch
+// options stay private.
 type Provider struct {
 	Protocol            string
 	RequiresTokenLimits bool
@@ -91,7 +92,8 @@ func (c Configuration) Prepare(req proto.PromptRequestPayload) (PreparedConfigur
 		return PreparedConfiguration{}, ErrModelProvider
 	}
 	provider := *req.ModelProvider
-	if err := provider.Validate(); err != nil {
+	// A view hands its Harness the credential gateway's loopback http listener.
+	if err := provider.Validate(true); err != nil {
 		return PreparedConfiguration{}, err
 	}
 	if err := c.Validate(string(provider.Protocol), provider.ContextWindow, provider.MaxOutputTokens); err != nil {
@@ -179,13 +181,4 @@ func (r Registry) ValidateProtocol(kind, protocol string) error {
 func (r Registry) Validate(kind, protocol string, contextWindow, maxOutputTokens int32) error {
 	configuration, _ := r.Lookup(kind)
 	return configuration.Validate(protocol, contextWindow, maxOutputTokens)
-}
-
-func (r Registry) SupportsProtocol(protocol string) bool {
-	for _, configuration := range r.configurations {
-		if _, ok := configuration.Provider(protocol); ok {
-			return true
-		}
-	}
-	return false
 }

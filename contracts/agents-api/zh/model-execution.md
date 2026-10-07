@@ -1,10 +1,10 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: a169c29bd481bd32ae392a45c76ac8822df176e113b128a05d55dfe10250fe08
+source_hash: e0d23ec03ffdfa296dcfb02fb595164ed4170183a89f1c6c209bdc8928e5c595
 ---
 
-每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
+每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 定义 Core 和 Runtime 共同应用的[提供商规则](#session-override)，并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
 
 ## Harness 选择 {#harness-selection}
 
@@ -74,7 +74,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 ```
 
 - `protocol` 指定上游 API（`anthropic`、`responses` 或 `chat_completions`），而不是引擎。所选 Harness 必须原生支持它。
-- `base_url` 使用 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。回环主机指 agent host 的网络命名空间，对每种 Environment 类型都是如此。`anthropic` 的 `base_url` 不包含版本路径，因为 Harness 会自行追加 `/v1/messages`，所以以 `/v1` 或 `/v1/` 结尾的值会被拒绝。
+- `base_url` 使用 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。回环主机指 agent host 的网络命名空间，对每种 Environment 类型都是如此。Core 拒绝普通 `http`；Runtime 仅接受指向回环 IP 地址的 `http`，用于它交给 Harness 的凭据网关监听地址。`anthropic` 的 `base_url` 不包含版本路径，因为 Harness 会自行追加 `/v1/messages`，所以以 `/v1` 或 `/v1/` 结尾的值会被拒绝。
 - `api_key` 不得为空，最长为 16 KiB，并且不得包含 NUL、CR 或 LF。
 - `context_window` 和 `max_output_tokens` 是可选的非负整数，输出限制不得大于上下文限制；对于 MiniMax Code，两者都必须为正数。请使用真实模型的限制。
 - `agent.model` 是准确的提供商模型 ID；只要提供该值，就始终会替换部署模型。

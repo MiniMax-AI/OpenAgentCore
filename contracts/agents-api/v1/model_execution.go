@@ -2,10 +2,8 @@ package v1
 
 import (
 	"encoding/json"
-	"net/url"
-	"strings"
+	"errors"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -18,6 +16,22 @@ type ModelProviderError struct {
 }
 
 func (e *ModelProviderError) Error() string { return e.message }
+
+// modelProviderErrorCodes maps each modelprovider.FieldError field to its code.
+var modelProviderErrorCodes = map[string]string{
+	"base_url":          "model_provider_base_url_invalid",
+	"protocol":          "model_provider_protocol_unsupported",
+	"api_key":           "model_provider_api_key_invalid",
+	"context_window":    "model_provider_token_limits_invalid",
+	"max_output_tokens": "model_provider_token_limits_invalid",
+}
+
+// Model provider sources, as recorded in a Session's execution configuration.
+const (
+	ModelProviderSourceSession    = "session"
+	ModelProviderSourceAgent      = "agent"
+	ModelProviderSourceDeployment = "deployment"
+)
 
 // SessionExecutionInput is a write-only execution extension, not a provider resource.
 type SessionExecutionInput struct {
@@ -35,47 +49,33 @@ type ModelProviderInput struct {
 	MaxOutputTokens int32  `json:"max_output_tokens,omitempty"`
 }
 
+// Provider is the bundle as the Harness–Model provider protocol carries it.
+func (p *ModelProviderInput) Provider() modelprovider.Provider {
+	return modelprovider.Provider{Protocol: modelprovider.Protocol(p.Protocol), BaseURL: p.BaseURL, APIKey: p.APIKey,
+		ContextWindow: p.ContextWindow, MaxOutputTokens: p.MaxOutputTokens}
+}
+
+// Validate applies modelprovider's rule, without loopback http, and reports
+// the rejected field with its public code.
 func (p *ModelProviderInput) Validate() error {
-	return p.validate(builtin.Registry())
-}
-
-func (p *ModelProviderInput) validate(registry harnessconfig.Registry) error {
 	if p == nil {
-		return &ModelProviderError{Code: "invalid_model_provider", Param: "", message: "model_provider is required"}
+		return &ModelProviderError{Code: "invalid_model_provider", message: "model_provider is required"}
 	}
-	if !validModelProviderBaseURL(p.BaseURL) {
-		return &ModelProviderError{Code: "model_provider_base_url_invalid", Param: "base_url", message: "model provider requires an HTTPS base_url without credentials, query or fragment"}
-	}
-	if base, _ := url.Parse(p.BaseURL); !modelprovider.Protocol(p.Protocol).ValidBasePath(base.Path) {
-		return &ModelProviderError{Code: "model_provider_base_url_invalid", Param: "base_url", message: "an anthropic base_url excludes the /v1 version path"}
-	}
-	if !registry.SupportsProtocol(p.Protocol) {
-		return &ModelProviderError{Code: "model_provider_protocol_unsupported", Param: "protocol", message: "unsupported model provider protocol"}
-	}
-	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
-		return &ModelProviderError{Code: "model_provider_api_key_invalid", Param: "api_key", message: "invalid model provider API key"}
-	}
-	if p.ContextWindow < 0 || p.MaxOutputTokens < 0 || (p.MaxOutputTokens > p.ContextWindow) {
-		param := "max_output_tokens"
-		if p.ContextWindow < 0 {
-			param = "context_window"
-		}
-		return &ModelProviderError{Code: "model_provider_token_limits_invalid", Param: param, message: "invalid model token limits"}
-	}
-	return nil
-}
-
-func (p *ModelProviderInput) ValidateHarness(harness string) error {
-	return p.ValidateHarnessWithRegistry(harness, builtin.Registry())
-}
-
-// ValidateHarnessWithRegistry validates provider input against adapter-owned rules.
-// It does not enable an execution engine or placement.
-func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registry harnessconfig.Registry) error {
-	if err := p.validate(registry); err != nil {
+	err := p.Provider().Validate(false)
+	var field *modelprovider.FieldError
+	if !errors.As(err, &field) {
 		return err
 	}
-	configuration, _ := registry.Lookup(harness)
+	return &ModelProviderError{Code: modelProviderErrorCodes[field.Field], Param: field.Field, message: field.Error()}
+}
+
+// ValidateHarness also validates provider input against adapter-owned rules.
+// It does not enable an execution engine or placement.
+func (p *ModelProviderInput) ValidateHarness(harness string) error {
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	configuration, _ := builtin.Registry().Lookup(harness)
 	if err := configuration.ValidateProtocol(p.Protocol); err != nil {
 		return &ModelProviderError{Code: "model_provider_protocol_unsupported", Param: "protocol", message: err.Error()}
 	}

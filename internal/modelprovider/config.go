@@ -8,7 +8,10 @@ import (
 	"net"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
+
+	"golang.org/x/net/idna"
 )
 
 type Protocol string
@@ -31,39 +34,87 @@ type Provider struct {
 
 var ErrConfiguration = errors.New("invalid model provider configuration")
 
+// MaxAPIKeyLength is the longest API key accepted, in bytes.
+const MaxAPIKeyLength = 16384
+
+// FieldError rejects one Provider field, named as in JSON. Its message never
+// contains the submitted value.
+type FieldError struct {
+	Field   string
+	message string
+}
+
+func (e *FieldError) Error() string { return e.message }
+
 // Protocols is the single vocabulary of supported upstream protocol formats.
 // The Harness catalog generator projects it to the TypeScript client.
 func Protocols() []Protocol { return []Protocol{Anthropic, Responses, ChatCompletions} }
 
 func (p Protocol) Valid() bool { return slices.Contains(Protocols(), p) }
 
-// ValidBasePath reports whether a base URL's path suits the protocol. The
-// anthropic routes begin with the version path, so an anthropic base URL
-// excludes it: a path ending in "/v1", or "/v1/", would reach "/v1/v1/messages".
-func (p Protocol) ValidBasePath(path string) bool {
-	return p != Anthropic || !strings.HasSuffix(strings.TrimRight(path, "/"), "/v1")
-}
-
-func (p Provider) Validate() error {
-	if !p.Protocol.Valid() {
-		return ErrConfiguration
-	}
+// Validate is the only provider rule, for Core and the Runtime alike. The base
+// URL is https; loopbackHTTP also admits http to a loopback IP address, which
+// only the credential gateway's listener that a view hands its Harness uses.
+// The first rejected field is reported in the order base URL, protocol, API
+// key, token limits.
+func (p Provider) Validate(loopbackHTTP bool) error {
 	u, err := url.Parse(p.BaseURL)
-	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") || !p.Protocol.ValidBasePath(u.Path) {
-		return ErrConfiguration
+	if err != nil || !(u.Scheme == "https" || loopbackHTTP && u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) ||
+		!validHost(u) || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") {
+		return &FieldError{"base_url", "model provider requires an HTTPS base_url without credentials, query or fragment"}
 	}
-	// Providers require HTTPS. Loopback HTTP exists only for the gateway
-	// listener a view hands its Harness; Core admits only HTTPS providers.
-	if u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
-		return ErrConfiguration
+	// The anthropic routes begin with the version path, so a base path ending
+	// in "/v1" or "/v1/" would reach "/v1/v1/messages".
+	if p.Protocol == Anthropic && strings.HasSuffix(strings.TrimRight(u.Path, "/"), "/v1") {
+		return &FieldError{"base_url", "an anthropic base_url excludes the /v1 version path"}
 	}
-	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
-		return ErrConfiguration
+	if !p.Protocol.Valid() {
+		return &FieldError{"protocol", "unsupported model provider protocol"}
 	}
-	if p.ContextWindow < 0 || p.MaxOutputTokens < 0 || p.MaxOutputTokens > p.ContextWindow {
-		return ErrConfiguration
+	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > MaxAPIKeyLength || strings.ContainsAny(p.APIKey, "\x00\r\n") {
+		return &FieldError{"api_key", "invalid model provider API key"}
+	}
+	if p.ContextWindow < 0 {
+		return &FieldError{"context_window", "invalid model token limits"}
+	}
+	if p.MaxOutputTokens < 0 || p.MaxOutputTokens > p.ContextWindow {
+		return &FieldError{"max_output_tokens", "invalid model token limits"}
 	}
 	return nil
+}
+
+// hostProfile converts a domain as URL host parsing does (UTS #46 without
+// hyphen or STD3 restrictions), rejecting invalid labels such as bad punycode.
+var hostProfile = idna.New(idna.MapForLookup(), idna.BidiRule(), idna.StrictDomainName(false), idna.CheckHyphens(false))
+
+// validHost requires a usable host: an IP address, or a domain whose labels
+// are nonempty letters, digits, hyphens and underscores and whose final label
+// is not numeric. Any port must be in 1-65535.
+func validHost(u *url.URL) bool {
+	if port := u.Port(); port != "" {
+		if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+			return false
+		}
+	}
+	if net.ParseIP(u.Hostname()) != nil {
+		return true
+	}
+	ascii, err := hostProfile.ToASCII(u.Hostname())
+	if err != nil {
+		return false
+	}
+	labels := strings.Split(strings.TrimSuffix(ascii, "."), ".")
+	for _, label := range labels {
+		if label == "" || len(label) > 63 || label == "xn--" || strings.IndexFunc(label, invalidHostRune) >= 0 {
+			return false
+		}
+	}
+	// A numeric final label makes the host an IPv4 address, which ParseIP rejected.
+	return strings.Trim(labels[len(labels)-1], "0123456789") != ""
+}
+
+func invalidHostRune(r rune) bool {
+	return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_')
 }
 
 // Placeholder is the credential a Harness receives instead of the upstream key.

@@ -6,6 +6,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
 
@@ -54,7 +55,7 @@ func writeCoreModelProviderError(w http.ResponseWriter, err error, harness strin
 	}
 	details := CoreErrorDetails{}
 	if field.Code == "model_provider_api_key_invalid" {
-		details["max_length"] = CoreErrorNumber(16384)
+		details["max_length"] = CoreErrorNumber(modelprovider.MaxAPIKeyLength)
 	}
 	if field.Code == "model_provider_protocol_unsupported" {
 		// Only adapter-owned catalog values may enter details, never a submitted
