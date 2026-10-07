@@ -11,7 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -261,38 +260,21 @@ func testProviderPaths(t *testing.T, helper, state string) sandbox.ProcessPaths 
 func TestManagedObservationSourceKeepsSelectionAcrossReconfiguration(t *testing.T) {
 	value := deployment.Setup{InstallationID: "installation", Generation: 1}
 	setup := &managedSetup{registry: providers.Builtin(), deployment: &fakeDeploymentSetups{t: t, setup: committedSetup(&value)}, installationID: "installation"}
-	if source, err := setup.ResolveObservationSource(t.Context()); source != nil || !errors.Is(err, runtimeobs.ErrUnavailable) {
+	if source, kind, err := setup.observationSource(t.Context()); source != nil || kind != "" || !errors.Is(err, runtimeobs.ErrUnavailable) {
 		t.Fatal("unconfigured setup did not return typed unavailability", source, err)
 	}
 	first := &docker.Provider{}
 	value.Provider, value.Mode, value.Generation = "docker", "nodes", 2
-	setup.publish(&execution.RuntimeProvider{Generation: 2, Provider: first})
-	source, err := setup.ResolveObservationSource(t.Context())
-	if err != nil || source != first {
-		t.Fatal(source, err)
+	setup.publish(&execution.RuntimeProvider{Generation: 2, ProviderKind: "docker", Provider: first})
+	source, kind, err := setup.observationSource(t.Context())
+	if err != nil || source != first || kind != "docker" {
+		t.Fatal(source, kind, err)
 	}
 	next := &microsandbox.Provider{}
 	value.Provider, value.Mode, value.Generation = "microsandbox", "nodes", 3
-	setup.publish(&execution.RuntimeProvider{Generation: 3, Provider: next})
-	if source.ObservationProviderType() != "docker" {
-		t.Fatal("in-flight identity changed")
-	}
-	selected, err := setup.ResolveObservationSource(t.Context())
-	if err != nil || selected != next || selected.ObservationProviderType() != "microsandbox" {
-		t.Fatal(selected, err)
-	}
-}
-
-func TestObservationGenerationIdentityMustMatchRoutedAllocation(t *testing.T) {
-	hub := node.NewHub(node.HubOptions{})
-	defer hub.Close()
-	routed := func(context.Context, sandbox.Reference) (deployment.Setup, error) {
-		return deployment.Setup{Provider: "docker", Mode: "nodes"}, nil
-	}
-	setup := &managedSetup{registry: providers.Builtin(), hub: hub, deployment: &fakeDeploymentSetups{t: t, allocationSetup: routed}, allocations: &fakeGenerationAllocations{t: t}}
-	source := &observedGenerationRouter{&generationRouter{setup: setup, providerType: "e2b"}}
-	_, err := source.Observe(t.Context(), runtimeobs.Target{TenantID: "tenant", EnvironmentID: "environment", Instance: runtimeobs.Instance{AllocationID: "allocation"}})
-	if !errors.Is(err, providercontract.ErrContract) {
-		t.Fatal("routed allocation was attributed to another provider", err)
+	setup.publish(&execution.RuntimeProvider{Generation: 3, ProviderKind: "microsandbox", Provider: next})
+	selected, kind, err := setup.observationSource(t.Context())
+	if err != nil || selected != next || kind != "microsandbox" {
+		t.Fatal(selected, kind, err)
 	}
 }

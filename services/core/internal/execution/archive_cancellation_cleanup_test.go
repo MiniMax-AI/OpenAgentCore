@@ -49,7 +49,7 @@ func (waitingCleanupCheckpoint) ProviderOperations() providercontract.Operations
 }
 
 type waitingCleanupCheckpoint struct {
-	sandbox.CheckpointProvider
+	sandbox.SandboxProvider
 	beforeKill func()
 }
 

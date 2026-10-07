@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"testing"
@@ -38,21 +37,12 @@ func (s *fixedSource) Observe(context.Context, Target) (Sample, error) {
 	return s.sample, s.err
 }
 
-type typedSource struct {
-	*fixedSource
-	providerType string
-}
-
-func (s typedSource) ObservationProviderType() string { return s.providerType }
-
 type blockingSource struct{}
 
 func (blockingSource) Observe(ctx context.Context, _ Target) (Sample, error) {
 	<-ctx.Done()
 	return Sample{}, ctx.Err()
 }
-
-func (blockingSource) ObservationProviderType() string { return "docker" }
 
 type channelExporter struct {
 	records chan ExportRecord
@@ -125,7 +115,7 @@ func TestServiceDoesNotCallSourcesForUnsupportedModes(t *testing.T) {
 		if mode == ModeSelfHosted {
 			target.EnvironmentID = "environment"
 		}
-		service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
+		service, err := NewService(fixedResolver{target: target}, sourceOf(source))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +141,7 @@ func TestServicePreservesUnavailableAndObservedZero(t *testing.T) {
 	zeroMemory := uint64(0)
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
 	source := &fixedSource{sample: Sample{ObservedAt: now, CPUUsageSecondsTotal: &zeroCPU, MemoryUsageBytes: &zeroMemory}}
-	service, err = NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
+	service, err = NewService(fixedResolver{target: target}, sourceOf(source))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,13 +166,13 @@ func TestServiceExportsOnlySanitizedValidatedRecords(t *testing.T) {
 			ProviderState: json.RawMessage(`{"native_id":"must-not-export"}`),
 		},
 	}
-	source := typedSource{fixedSource: &fixedSource{sample: Sample{
+	source := &fixedSource{sample: Sample{
 		ObservedAt: now, StartedAt: &startedAt,
 		CPUUsageSecondsTotal: &cpuSeconds, CPUCapacityCores: &cpuCapacity,
 		MemoryUsageBytes: &memoryUsage, MemoryLimitBytes: &memoryLimit,
-	}}, providerType: "docker"}
+	}}
 	records := make(chan ExportRecord, 1)
-	service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source}, WithExporter(channelExporter{records: records}, ExportOptions{QueueCapacity: 1, Timeout: time.Second}))
+	service, err := NewService(fixedResolver{target: target}, sourceOf(source), WithExporter(channelExporter{records: records}, ExportOptions{QueueCapacity: 1, Timeout: time.Second}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +214,7 @@ func TestServiceMarksPeriodicHistoryCollection(t *testing.T) {
 	records := make(chan ExportRecord, 1)
 	service, err := NewService(
 		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": &fixedSource{sample: Sample{ObservedAt: now, StartedAt: &startedAt}}},
+		sourceOf(&fixedSource{sample: Sample{ObservedAt: now, StartedAt: &startedAt}}),
 		WithExporter(channelExporter{records: records}, ExportOptions{}),
 	)
 	if err != nil {
@@ -257,7 +247,7 @@ func TestServiceDoesNotExportPeriodicSampleAfterOwnershipLoss(t *testing.T) {
 	records := make(chan ExportRecord, 1)
 	service, err := NewService(
 		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": &fixedSource{sample: Sample{ObservedAt: now, StartedAt: &startedAt}}},
+		sourceOf(&fixedSource{sample: Sample{ObservedAt: now, StartedAt: &startedAt}}),
 		WithExporter(channelExporter{records: records}, ExportOptions{}),
 	)
 	if err != nil {
@@ -278,40 +268,13 @@ func TestServiceDoesNotExportPeriodicSampleAfterOwnershipLoss(t *testing.T) {
 	}
 }
 
-func TestServiceRejectsUnsafeProviderTypeBeforeSamplingOrExport(t *testing.T) {
-	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
-	source := typedSource{fixedSource: &fixedSource{sample: Sample{ObservedAt: now}}, providerType: "docker native_id=secret"}
-	records := make(chan ExportRecord, 1)
-	service, err := NewService(
-		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": source},
-		WithExporter(channelExporter{records: records}, ExportOptions{}),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	service.now = func() time.Time { return now }
-	if _, err := service.ObserveSession(t.Context(), "tenant", "session"); err == nil || source.calls != 0 {
-		t.Fatalf("unsafe provider type reached sampling: err=%v calls=%d", err, source.calls)
-	}
-	if err := service.Close(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case record := <-records:
-		t.Fatalf("unsafe provider type reached exporter: %+v", record)
-	default:
-	}
-}
-
 func TestServiceExportQueueNeverBlocksOrChangesObservation(t *testing.T) {
 	now := time.Date(2026, 9, 22, 1, 0, 0, 0, time.UTC)
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	exporter := &gatedExporter{started: make(chan struct{}, 1), release: make(chan struct{})}
 	service, err := NewService(
 		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": &fixedSource{sample: Sample{ObservedAt: now}}},
+		sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),
 		WithExporter(exporter, ExportOptions{QueueCapacity: 1, Timeout: time.Second}),
 	)
 	if err != nil {
@@ -370,7 +333,7 @@ func TestServiceIgnoresExporterFailureAndValidatesOptions(t *testing.T) {
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(
 		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": &fixedSource{sample: Sample{ObservedAt: now}}},
+		sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),
 		WithExporter(channelExporter{records: records, err: errors.New("backend unavailable")}, ExportOptions{}),
 	)
 	if err != nil {
@@ -392,7 +355,7 @@ func TestServiceCloseHonorsItsDeadlineWhenExporterDoesNot(t *testing.T) {
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(
 		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": &fixedSource{sample: Sample{ObservedAt: now}}},
+		sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),
 		WithExporter(exporter, ExportOptions{QueueCapacity: 1, Timeout: time.Millisecond}),
 	)
 	if err != nil {
@@ -422,7 +385,7 @@ func TestServiceIsolatesExporterPanics(t *testing.T) {
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
 	service, err := NewService(
 		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": &fixedSource{sample: Sample{ObservedAt: now}}},
+		sourceOf(&fixedSource{sample: Sample{ObservedAt: now}}),
 		WithExporter(exporter, ExportOptions{}),
 	)
 	if err != nil {
@@ -455,9 +418,7 @@ func TestServiceMapsOnlyDeclaredUnavailability(t *testing.T) {
 		{err: context.DeadlineExceeded, wantReason: "sample_timeout"},
 		{err: errors.New("Docker permission denied"), wantError: true},
 	} {
-		service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{
-			"provider": typedSource{fixedSource: &fixedSource{err: tc.err}, providerType: "docker"},
-		})
+		service, err := NewService(fixedResolver{target: target}, sourceOf(&fixedSource{err: tc.err}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -476,7 +437,7 @@ func TestServiceMapsAnActualSourceDeadlineWithoutLeakingIt(t *testing.T) {
 		EnvironmentID: "environment", Mode: ModeManaged,
 		Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"},
 	}
-	service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": blockingSource{}})
+	service, err := NewService(fixedResolver{target: target}, sourceOf(blockingSource{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -496,7 +457,7 @@ func TestServiceExportsPeriodicSourceTimeoutAfterFinalOwnershipFence(t *testing.
 	records := make(chan ExportRecord, 1)
 	service, err := NewService(
 		fixedResolver{target: target},
-		map[string]SourceResolver{"provider": blockingSource{}},
+		sourceOf(blockingSource{}),
 		WithExporter(channelExporter{records: records}, ExportOptions{}),
 	)
 	if err != nil {
@@ -537,7 +498,7 @@ func TestServiceClassifiesResolverAndTerminalAllocationUnavailability(t *testing
 
 	source := &fixedSource{}
 	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "creating"}}
-	service, err = NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
+	service, err = NewService(fixedResolver{target: target}, sourceOf(source))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,7 +508,7 @@ func TestServiceClassifiesResolverAndTerminalAllocationUnavailability(t *testing
 	}
 
 	target = Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "released"}}
-	service, err = NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": &fixedSource{}})
+	service, err = NewService(fixedResolver{target: target}, sourceOf(&fixedSource{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +521,7 @@ func TestServiceClassifiesResolverAndTerminalAllocationUnavailability(t *testing
 	target = Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{
 		AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running", AllocationCreatedAt: time.Now().Add(time.Hour),
 	}}
-	service, err = NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
+	service, err = NewService(fixedResolver{target: target}, sourceOf(source))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -584,7 +545,7 @@ func TestServiceRejectsUnsafeProviderSamples(t *testing.T) {
 		{ObservedAt: now, MemoryUsageBytes: &tooLarge},
 		{ObservedAt: now, MemoryLimitBytes: &tooLarge},
 	} {
-		service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": &fixedSource{sample: sample}})
+		service, err := NewService(fixedResolver{target: target}, sourceOf(&fixedSource{sample: sample}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -613,67 +574,6 @@ func TestServiceRejectsMismatchedResolvedOwnership(t *testing.T) {
 }
 
 func float64Pointer(value float64) *float64 { return &value }
-
-type batchSource struct {
-	mu      sync.Mutex
-	batches []int
-	sample  Sample
-}
-
-func (s *batchSource) Observe(context.Context, Target) (Sample, error) {
-	return Sample{}, errors.New("per-target read used for a batch source")
-}
-
-func (s *batchSource) ObserveBatch(ctx context.Context, targets []Target) ([]BatchResult, error) {
-	time.Sleep(time.Millisecond)
-	s.mu.Lock()
-	s.batches = append(s.batches, len(targets))
-	s.mu.Unlock()
-	results := make([]BatchResult, len(targets))
-	for index, target := range targets {
-		results[index].Sample = s.sample
-		if target.SessionID == "stopped" {
-			results[index].Err = ErrNotRunning
-		}
-	}
-	return results, nil
-}
-
-func TestServiceBatchesPageReadsWithinProviderLimit(t *testing.T) {
-	now := time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)
-	ratio := 0.25
-	source := &batchSource{sample: Sample{ObservedAt: now, CPUUtilizationRatio: &ratio}}
-	target := Target{EnvironmentID: "environment", Mode: ModeManaged, Instance: Instance{AllocationID: "allocation", ProviderKey: "provider", AllocationState: "running"}}
-	service, err := NewService(fixedResolver{target: target}, map[string]SourceResolver{"provider": source})
-	if err != nil {
-		t.Fatal(err)
-	}
-	service.now = func() time.Time { return now }
-	sessions := make([]SessionIdentity, 150)
-	for index := range sessions {
-		sessions[index] = SessionIdentity{TenantID: "tenant", SessionID: fmt.Sprint(index)}
-	}
-	sessions[120].SessionID = "stopped"
-	observations, errs := service.ObserveSessions(t.Context(), sessions, PageOptions{Concurrency: 8, SourceTimeout: time.Second})
-	if len(source.batches) != 2 || source.batches[0] != MaxBatchTargets || source.batches[1] != 50 {
-		t.Fatalf("page was not read in provider-sized batches: %v", source.batches)
-	}
-	for index, observation := range observations {
-		if errs[index] != nil || observation.Target.SessionID != sessions[index].SessionID {
-			t.Fatalf("batch result %d was not aligned: %+v %v", index, observation, errs[index])
-		}
-	}
-	if observations[120].Status != StatusUnavailable || observations[120].Reason != "runtime_not_running" ||
-		observations[0].Status != StatusObserved || *observations[0].Sample.CPUUtilizationRatio != .25 {
-		t.Fatalf("batch results were not classified: %+v %+v", observations[0], observations[120])
-	}
-	// Each provider read reports its duration once, on the first row of its batch.
-	for index, observation := range observations {
-		if (observation.SourceDuration > 0) != (index == 0 || index == MaxBatchTargets) {
-			t.Fatalf("row %d source duration = %v", index, observation.SourceDuration)
-		}
-	}
-}
 
 func TestSampleWithoutNewerFieldsKeepsItsNodeWireForm(t *testing.T) {
 	observedAt := time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)

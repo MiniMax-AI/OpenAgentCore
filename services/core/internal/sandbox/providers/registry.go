@@ -21,7 +21,7 @@ type Adapter struct {
 	Policy                        sandbox.DeploymentPolicy
 	Configuration                 sandbox.ConfigurationAdapter
 	BuildLocal                    func(Config, LocalOptions, *Built) (func(), error)
-	BuildDirect                   func(DirectConfig) (sandbox.SandboxProvider, error)
+	BuildDirect                   func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
 	Mode                          string
 	Operations                    func() providercontract.Operations
 	IdleSeconds, RetentionSeconds int64
@@ -56,7 +56,7 @@ func Builtin() *Registry {
 			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
 		},
 		"e2b": {
-			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: buildE2B,
+			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: "direct", BuildDirect: e2b.BuildDirect,
 			Configuration:         e2b.ConfigurationAdapter{},
 			ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
 		},
@@ -73,6 +73,25 @@ func (r *Registry) Lookup(kind string) (Adapter, error) {
 		return Adapter{}, err
 	}
 	return a, nil
+}
+
+// BuildDirect builds a direct-mode Provider and validates its binding.
+func (r *Registry) BuildDirect(c sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
+	a, e := r.Lookup(c.Selection.Provider)
+	if e != nil {
+		return nil, e
+	}
+	if a.BuildDirect == nil {
+		return nil, sandbox.ErrInvalid
+	}
+	p, err := a.BuildDirect(c)
+	if err != nil {
+		return nil, err
+	}
+	if err := ValidateBinding(a, p); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 // SupportsCheckpoint reports whether the provider declares checkpoint suspension.

@@ -64,6 +64,8 @@ type Built struct {
 	Provider                           sandbox.SandboxProvider
 	InstallationID, BackendFingerprint string
 	Probe                              func(context.Context) error
+	// Quiescent is nil when no helper can outlive its caller.
+	Quiescent func() bool
 }
 
 // LocalOptions supplies process-local context without changing persisted configuration.

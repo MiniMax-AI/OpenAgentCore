@@ -5,7 +5,6 @@ package providercontract
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"regexp"
 )
 
@@ -63,33 +62,4 @@ func Require(p Declared, operation string) error {
 		return ErrContract
 	}
 	return p.ProviderOperations()[operation].Check(operation)
-}
-
-// Validate checks the existing small interfaces, including methods declared
-// unsupported. Every adapter must explicitly implement those rejections.
-// A new method cannot be silently covered by an old declaration or stub.
-func Validate(p Declared, contracts ...reflect.Type) error {
-	if p == nil {
-		return ErrContract
-	}
-	value := reflect.ValueOf(p)
-	if value.Kind() == reflect.Pointer && value.IsNil() {
-		return ErrContract
-	}
-	operations := p.ProviderOperations()
-	for _, contract := range contracts {
-		if !value.Type().Implements(contract) {
-			return fmt.Errorf("%w: missing %s implementation", ErrContract, contract.Name())
-		}
-		for i := 0; i < contract.NumMethod(); i++ {
-			name := contract.Method(i).Name
-			if name == "ProviderOperations" {
-				continue
-			}
-			if err := operations[name].Check(name); err != nil && !errors.Is(err, ErrUnsupported) {
-				return err
-			}
-		}
-	}
-	return nil
 }
