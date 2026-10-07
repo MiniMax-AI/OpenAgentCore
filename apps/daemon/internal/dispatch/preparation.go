@@ -83,7 +83,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		r.mu.Unlock()
 		return r.rejectPreparation(env, code)
 	}
-	if r.runtimePreparation != nil {
+	if u := r.runtimePreparation; u != nil && u.envelope.Assignment.SessionID == input.SessionID {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "resource_unavailable")
 	}

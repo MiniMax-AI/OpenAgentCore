@@ -45,7 +45,8 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		return ErrRouterClosed
 	}
 	if request.Step == "begin" {
-		if r.workspaceExport != nil || r.runtimePreparation != nil {
+		if r.workspaceExport != nil && r.workspaceExport.request.Assignment.SessionID == request.SessionID ||
+			r.runtimePreparation != nil && r.runtimePreparation.envelope.Assignment.SessionID == request.SessionID {
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 		}
@@ -66,21 +67,10 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("write_unsupported"))
 		}
-		if len(r.sessions) != 0 || len(r.workspaceReads) != 0 {
+		if owner := r.executors[request.SessionID]; r.sessionWorkLocked(request.SessionID) ||
+			owner != nil && (owner.preparing || owner.admission != nil || owner.run != nil || owner.invalid) {
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
-		}
-		for _, owner := range r.executors {
-			if owner.preparing || owner.admission != nil || owner.run != nil || owner.invalid {
-				r.mu.Unlock()
-				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
-			}
-		}
-		for _, p := range r.preparations {
-			if p.owns {
-				r.mu.Unlock()
-				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
-			}
 		}
 		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{})}
 		r.workspaceWrite = u

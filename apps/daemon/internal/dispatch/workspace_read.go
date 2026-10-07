@@ -41,9 +41,9 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead(code))
 	}
 	if r.workspaceReads == nil {
-		r.workspaceReads = make(map[string]struct{})
+		r.workspaceReads = make(map[string]string)
 	}
-	r.workspaceReads[env.ID] = struct{}{}
+	r.workspaceReads[env.ID] = env.Assignment.SessionID
 	done := r.trackWorkLocked(env.Assignment)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()

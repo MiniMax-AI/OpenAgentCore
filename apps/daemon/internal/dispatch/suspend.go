@@ -18,7 +18,7 @@ type AssignmentError string
 func (e AssignmentError) Error() string { return "dispatch: " + string(e) }
 
 // Quiesce serializes against admission, then drains every admitted output and
-// receipt before acknowledging suspension. Busy rejection leaves admission open;
+// receipt and the Environment's owners before acknowledging suspension. Busy rejection leaves admission open;
 // a drain timeout keeps it closed until the caller shuts the connection down.
 // ref must admit work in the suspended Environment.
 func (r *Router) Quiesce(ctx context.Context, ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload) error {
@@ -72,11 +72,13 @@ func (r *Router) Quiesce(ctx context.Context, ref proto.AssignmentRef, request p
 	}
 	r.mu.Unlock()
 	err := r.shutdownWG.waitContext(ctx)
+	if err == nil {
+		err = r.closeEnvironments(ctx, request.EnvironmentID)
+	}
 	r.mu.Lock()
 	if r.closed {
 		err = ErrRouterClosed
 	}
-
 	r.mu.Unlock()
 	return err
 }

@@ -69,7 +69,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("runtime_preparation_unsupported"))
 		}
-		if r.runtimePreparationResourcesBusyLocked() {
+		if r.runtimePreparationResourcesBusyLocked(request.SessionID) {
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("resource_unavailable"))
 		}
@@ -122,12 +122,44 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 	return nil
 }
 
-func (r *Router) runtimePreparationResourcesBusyLocked() bool {
-	if r.workspaceWrite != nil || r.workspaceExport != nil || len(r.workspaceReads) != 0 || len(r.sessions) != 0 || len(r.executors) != 0 {
+// runtimePreparationResourcesBusyLocked reports whether the Session has a
+// transfer, a read, a Run, an Executor or an owned preparation. Router.mu must
+// be held.
+func (r *Router) runtimePreparationResourcesBusyLocked(sessionID string) bool {
+	if r.environmentTransferLocked(sessionID) || r.executors[sessionID] != nil || r.sessionWorkLocked(sessionID) {
 		return true
 	}
 	for _, p := range r.preparations {
-		if p.owns || p.busy {
+		if p.busy && p.request.Assignment.SessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
+// environmentTransferLocked reports whether the Session has a workspace write,
+// a workspace export or a Runtime preparation. Router.mu must be held.
+func (r *Router) environmentTransferLocked(sessionID string) bool {
+	return r.workspaceWrite != nil && r.workspaceWrite.envelope.Assignment.SessionID == sessionID ||
+		r.workspaceExport != nil && r.workspaceExport.request.Assignment.SessionID == sessionID ||
+		r.runtimePreparation != nil && r.runtimePreparation.envelope.Assignment.SessionID == sessionID
+}
+
+// sessionWorkLocked reports whether the Session has a Run, a workspace read or
+// an owned preparation. Router.mu must be held.
+func (r *Router) sessionWorkLocked(sessionID string) bool {
+	for _, state := range r.sessions {
+		if state.assignment.SessionID == sessionID {
+			return true
+		}
+	}
+	for _, session := range r.workspaceReads {
+		if session == sessionID {
+			return true
+		}
+	}
+	for _, p := range r.preparations {
+		if p.owns && p.request.Assignment.SessionID == sessionID {
 			return true
 		}
 	}

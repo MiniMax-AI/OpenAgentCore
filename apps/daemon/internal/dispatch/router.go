@@ -51,7 +51,7 @@ type Router struct {
 	runtimePreparation  *runtimePreparationTransfer
 	workspaceWrite      *workspaceUpload
 	workspaceExport     *workspaceExport
-	workspaceReads      map[string]struct{}
+	workspaceReads      map[string]string // read ID → SessionID
 	environments        func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
 	sessionEnvironments bool
 	removeHome          func(sessionID string) error
@@ -92,9 +92,9 @@ type Config struct {
 	IdleTimeout        time.Duration
 	PreparationTimeout time.Duration
 	// Environments resolves the Environment owner of a Session's first bind on
-	// this Router, under the Router's lock. A nil owner rejects the bind: the
-	// Runtime does not serve that Session. Nil Environments leaves every
-	// Session without an owner.
+	// this Router, under the Router's lock, without I/O. A nil owner rejects
+	// the bind: the Runtime does not serve that Session. Nil Environments
+	// leaves every Session without an owner.
 	Environments func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
 	// SessionEnvironments says that the Executor factory binds a prepared
 	// execution's LocalEnvironment itself, without an owner. It excludes

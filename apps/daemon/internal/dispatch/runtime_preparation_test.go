@@ -171,28 +171,38 @@ func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 }
 
 func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
-	for _, mode := range []string{"write", "export", "read", "run", "executor", "preparation"} {
+	for _, mode := range []string{"write", "export", "read", "run", "executor", "preparation", "other session"} {
 		t.Run(mode, func(t *testing.T) {
 			r, sender, environment, session := capabilitiesTestRouter(t)
+			own := proto.Envelope{Assignment: capabilityRef}
 			switch mode {
 			case "write":
-				r.workspaceWrite = &workspaceUpload{}
+				r.workspaceWrite = &workspaceUpload{envelope: own}
 			case "export":
-				r.workspaceExport = &workspaceExport{}
+				r.workspaceExport = &workspaceExport{request: own}
 			case "read":
-				r.workspaceReads = map[string]struct{}{"read": {}}
+				r.workspaceReads = map[string]string{"read": session}
 			case "run":
-				r.sessions["run"] = &sessionState{}
+				r.sessions["run"] = &sessionState{assignment: capabilityRef}
 			case "executor":
 				r.executors[session] = &executorState{}
 			case "preparation":
-				r.preparations["p"] = &preparationState{owns: true}
+				r.preparations["p"] = &preparationState{owns: true, request: own}
+			case "other session":
+				// Another Session's Executor never blocks this Environment.
+				r.executors[uuid.NewString()] = &executorState{preparing: true}
 			}
 			id := uuid.NewString()
 			if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, session, []byte("abc")))); err != nil {
 				t.Fatal(err)
 			}
-			if got := capabilitiesReceipt(t, sender, id, "rejected"); got.ErrorCode != "resource_unavailable" {
+			if mode == "other session" {
+				capabilitiesReceipt(t, sender, id, "ready")
+				r.mu.Lock()
+				r.finishRuntimePreparationTransferLocked(r.runtimePreparation, false)
+				r.mu.Unlock()
+				capabilitiesReceipt(t, sender, id, "rejected")
+			} else if got := capabilitiesReceipt(t, sender, id, "rejected"); got.ErrorCode != "resource_unavailable" {
 				t.Fatal(got)
 			}
 			if r.runtimePreparation != nil {

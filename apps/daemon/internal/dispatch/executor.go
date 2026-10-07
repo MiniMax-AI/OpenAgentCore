@@ -91,7 +91,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		r.mu.Unlock()
 		return r.rejectPreparation(env, code)
 	}
-	if r.workspaceWrite != nil || r.workspaceExport != nil || r.runtimePreparation != nil {
+	if r.environmentTransferLocked(input.SessionID) {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "resource_unavailable")
 	}

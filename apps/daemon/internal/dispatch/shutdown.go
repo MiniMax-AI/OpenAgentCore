@@ -68,6 +68,9 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 	}
 
 	r.shutdownWG.Wait()
+	if err := r.closeEnvironments(context.Background(), ""); err != nil {
+		attempt.err = errors.Join(attempt.err, err)
+	}
 	r.mu.Lock()
 	if r.runtimePreparation != nil && r.runtimePreparation.uncertain {
 		attempt.err = errors.Join(attempt.err, errors.New("dispatch: capability preparation remains uncertain"))
@@ -93,6 +96,29 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 	}
 	close(attempt.done)
 	r.mu.Unlock()
+}
+
+// closeEnvironments drains the owners of the unreleased assignments in
+// environmentID, or in every Environment when it is empty, once their work
+// has settled. A drained owner serves its Session again on the next bind.
+func (r *Router) closeEnvironments(ctx context.Context, environmentID string) error {
+	r.mu.Lock()
+	var owners []*assignmentState
+	for _, a := range r.assignments {
+		if !a.released && a.environment != nil && (environmentID == "" || a.environmentID == environmentID) {
+			owners = append(owners, a)
+		}
+	}
+	r.mu.Unlock()
+	var errs []error
+	for _, a := range owners {
+		a.cleanup.Lock()
+		if err := a.environment.Close(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("dispatch: Environment of Session %s: %w", a.ref.SessionID, err))
+		}
+		a.cleanup.Unlock()
+	}
+	return errors.Join(errs...)
 }
 
 func (r *Router) finishShutdownAttempt(attempt *shutdownAttempt, err error) {
