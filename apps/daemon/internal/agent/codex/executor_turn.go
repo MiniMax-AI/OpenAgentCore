@@ -44,7 +44,6 @@ func (s *Session) settleExecutorTurn(startErr error) {
 	s.operationMu.Unlock()
 	s.stopSteering()
 	s.stopFunctionCalls()
-	s.stopCodexInteractionTimers()
 	if !s.nativeSettled.Load() || startErr != nil || !s.rpc.Alive() {
 		s.cancelFn()
 		s.settlementErr = errors.Join(s.settlementErr, s.rpc.Close())
@@ -120,7 +119,6 @@ func (s *Session) cancelExecutorTurn(ctx context.Context) error {
 			defer close(s.cancelReady)
 			s.stopFunctionCalls()
 			turnID, active := s.stopSteering()
-			s.stopCodexInteractionTimers()
 			if !s.terminal.Load() && active {
 				if turnID == "" {
 					s.cancelErr = errors.New("codex: cancellation has no native turn identity")
@@ -150,9 +148,7 @@ func (s *Session) cancelExecutorTurn(ctx context.Context) error {
 
 var _ agent.Turn = (*Session)(nil)
 
-// Server callbacks retain their originating Turn. MCP elicitation may be a
-// standalone thread-scoped request in the native protocol; a supplied Turn ID
-// must still match exactly.
+// Server callbacks retain their originating Turn, whose ID must match exactly.
 func (s *Session) onServerRequest(method string, handler ServerRequestHandler) {
 	s.rpc.OnServerRequest(method, func(raw json.RawMessage, id any) (any, error) {
 		if s.executor != nil {
@@ -161,8 +157,7 @@ func (s *Session) onServerRequest(method string, handler ServerRequestHandler) {
 				TurnID   string `json:"turnId"`
 			}
 			if json.Unmarshal(raw, &scope) != nil || !s.isRootThread(scope.ThreadID) || s.terminal.Load() ||
-				(scope.TurnID != "" && !s.isRootTurn(scope.ThreadID, scope.TurnID)) ||
-				(scope.TurnID == "" && method != "mcpServer/elicitation/request") {
+				scope.TurnID == "" || !s.isRootTurn(scope.ThreadID, scope.TurnID) {
 				return nil, errors.New("codex: request does not belong to the active turn")
 			}
 		}

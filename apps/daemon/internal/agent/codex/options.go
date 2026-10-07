@@ -57,11 +57,6 @@ type SessionPlan struct {
 	// ModelReasoningEffort is frozen for launch and every native Turn.
 	ModelReasoningEffort string
 
-	// ApprovalPolicy + Sandbox apply to both new and resumed threads.
-	ApprovalPolicy AskForApproval
-	Sandbox        SandboxMode
-	Permissions    string
-
 	// Cleanup is the deferred housekeeping the session must run after the child exits.
 	Cleanup func()
 }
@@ -76,13 +71,11 @@ type SessionPlan struct {
 //
 // Execution controls select the native web_search and model_verbosity settings.
 // The codex binary itself is resolved via PATH only.
-//
-// Daemon-managed Codex sessions bypass approvals and the engine sandbox.
 func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
 	plan := SessionPlan{
-		ApprovalPolicy: AskForApproval{String: "never"},
-		Sandbox:        SandboxDangerFullAcces,
-		Cleanup:        func() {},
+		// Harnesses run unattended: Codex never offers its ask-the-user tool.
+		ExtraConfig: [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
+		Cleanup:     func() {},
 	}
 
 	nativeConfig, err := harnessconfiguration.Configuration().PrepareHarnessConfig(opts)
@@ -128,7 +121,7 @@ func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto
 
 	plan.Env = env
 	if controls != nil {
-		plan.ExtraConfig = [][2]string{{"web_search", strconv(controls.WebSearch)}, {"model_verbosity", strconv(controls.TextVerbosity)}}
+		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"web_search", strconv(controls.WebSearch)}, [2]string{"model_verbosity", strconv(controls.TextVerbosity)})
 	}
 	if effort, ok := nativeConfig["model_reasoning_effort"].(string); ok {
 		plan.ModelReasoningEffort = effort

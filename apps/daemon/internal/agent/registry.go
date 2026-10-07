@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -9,16 +8,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
-
-// ErrUnknownPermission is returned by PermissionResponder.SubmitPermission when
-// the permID doesn't match any outstanding request. The router uses
-// this to distinguish a benign race from a real forwarding failure.
-var ErrUnknownPermission = errors.New("agent: unknown permission id")
-
-// ErrUnknownAsk is returned by UserChoiceResponder.SubmitPromptForUserChoice when
-// the askID doesn't match any outstanding ask. Same race semantics as
-// ErrUnknownPermission.
-var ErrUnknownAsk = errors.New("agent: unknown ask id")
 
 // Registry keeps the daemon-advertised capability descriptor and execution
 // factories for each agent_kind. Safe for concurrent use.

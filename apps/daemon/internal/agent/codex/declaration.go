@@ -16,7 +16,6 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:           proto.CapabilitySupported,
 		Streaming:                      proto.CapabilitySupported,
-		Permissions:                    proto.CapabilitySupported,
 		Usage:                          proto.CapabilitySupported,
 		Resume:                         proto.CapabilitySupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,

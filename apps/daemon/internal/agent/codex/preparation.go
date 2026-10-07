@@ -78,7 +78,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		cleanup:                   sync.OnceFunc(plan.Cleanup),
 		bufs:                      NewItemBuffers(),
 		resolvedModel:             plan.Model,
-		interactions:              newPendingCodexInteractions(),
 	}
 	plan.Cleanup = s.cleanup
 	p := &Prepared{

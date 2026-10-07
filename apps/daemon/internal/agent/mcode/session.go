@@ -3,7 +3,6 @@ package mcode
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -39,8 +38,6 @@ type Session struct {
 	nativeModel          string
 	outputContext        context.Context
 	outcome              proto.DonePayload
-	permissions          map[string]pendingPermission
-	questions            map[string]pendingQuestion
 	steeringReady        bool
 	steeringTurn         string
 	sequence             uint64
@@ -68,7 +65,7 @@ func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOpti
 }
 
 func newTurnSession(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, c *connection, out chan<- proto.Envelope) *Session {
-	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), permissions: map[string]pendingPermission{}, questions: map[string]pendingQuestion{}, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
+	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
 }
 
 func (s *Session) prepareNative() error {
@@ -81,7 +78,7 @@ func (s *Session) prepareNative() error {
 			} `json:"oac/subagents"`
 		} `json:"_meta"`
 	}
-	if err := s.call("initialize", map[string]any{"protocolVersion": 1, "clientInfo": map[string]string{"name": "oac", "version": "1"}, "clientCapabilities": map[string]any{"elicitation": map[string]any{"form": map[string]any{}}}}, &initialized, false); err != nil {
+	if err := s.call("initialize", map[string]any{"protocolVersion": 1, "clientInfo": map[string]string{"name": "oac", "version": "1"}}, &initialized, false); err != nil {
 		return err
 	}
 	if initialized.ProtocolVersion != 1 {
@@ -259,29 +256,4 @@ func (s *Session) emit(kind string, payload any) {
 	case s.out <- env:
 	case <-s.outputContext.Done():
 	}
-}
-
-func (s *Session) SubmitPermission(_ context.Context, id string, decision proto.PermissionDecisionPayload) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	pending, ok := s.permissions[id]
-	if !ok {
-		return agent.ErrUnknownPermission
-	}
-	choice := pending.Deny
-	if decision.Approved {
-		choice = pending.Allow
-	}
-	if choice == "" {
-		return errors.New("mcode: ACP permission option is unavailable")
-	}
-	if len(decision.UpdatedInput) > 0 {
-		return errors.New("mcode: edited permission input is not supported")
-	}
-	raw, _ := json.Marshal(map[string]any{"outcome": map[string]string{"outcome": "selected", "optionId": choice}})
-	if err := s.write(rpcFrame{JSONRPC: "2.0", ID: pending.RPCID, Result: raw}); err != nil {
-		return err
-	}
-	delete(s.permissions, id)
-	return nil
 }

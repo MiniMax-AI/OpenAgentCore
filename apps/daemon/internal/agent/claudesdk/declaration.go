@@ -22,7 +22,6 @@ const claudeSDKNodeEnv = "OAC_RUNTIME_CLAUDE_SDK_NODE"
 var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: proto.AgentKindCapabilities{
 	SubagentObservations:           proto.CapabilityUnsupported,
 	Streaming:                      proto.CapabilitySupported,
-	Permissions:                    proto.CapabilityUnsupported,
 	Usage:                          proto.CapabilitySupported,
 	Resume:                         proto.CapabilitySupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,

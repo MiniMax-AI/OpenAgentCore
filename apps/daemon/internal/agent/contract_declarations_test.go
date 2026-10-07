@@ -22,8 +22,6 @@ func TestPublicHarnessContractDeclarations(t *testing.T) {
 		"DurableSteerer":           {"session"},
 		"Steerer":                  {"session"},
 		"FunctionResultSubmitter":  {"session"},
-		"PermissionResponder":      {"session"},
-		"UserChoiceResponder":      {"session"},
 		"WorkspaceReader":          {"executor", "prepared", "session"},
 		"WorkspaceDirectoryLister": {"executor", "prepared", "session"},
 		"WorkspaceWriter":          {"executor", "prepared", "session"},
