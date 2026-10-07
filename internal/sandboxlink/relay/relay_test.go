@@ -51,12 +51,12 @@ func put[T any](ch chan T, v T) {
 	}
 }
 
-// hooked runs a test's hook after the Authority decides a serve Hello or a
-// renewal, so a test can hold the decision.
+// hooked runs a test's hook after the Authority decides a serve Hello, an
+// Open or a renewal, so a test can hold the decision.
 type hooked struct {
 	*sandboxlinktest.Authority
-	mu               sync.Mutex
-	onServe, onRenew func()
+	mu                       sync.Mutex
+	onServe, onOpen, onRenew func()
 }
 
 func (h *hooked) hook(f *func()) {
@@ -78,6 +78,12 @@ func (h *hooked) AuthenticateServe(ctx context.Context, hello sandboxlink.ServeH
 	peer, err := h.Authority.AuthenticateServe(ctx, hello)
 	h.hook(&h.onServe)
 	return peer, err
+}
+
+func (h *hooked) AuthorizeOpen(ctx context.Context, peer sandboxlink.AttachPeer, o sandboxlink.Open) (sandboxlink.Authorization, error) {
+	auth, err := h.Authority.AuthorizeOpen(ctx, peer, o)
+	h.hook(&h.onOpen)
+	return auth, err
 }
 
 func (h *hooked) Renew(ctx context.Context, peer sandboxlink.AttachPeer, r sandboxlink.RenewAttachment) (sandboxlink.Authorization, error) {
@@ -192,6 +198,29 @@ func (f *fixture) startServe(generation uint64) *servePeer {
 		<-p.done
 	})
 	return p
+}
+
+// serveHello sends a serve Hello for ref with an unknown credential over a new
+// link and returns the relay's answer.
+func (f *fixture) serveHello(ref sandboxlink.ResourceRef) error {
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	conn, err := sandboxlink.DialWebSocket(ctx, f.srv.URL, f.srv.TLS)
+	if err != nil {
+		return err
+	}
+	sess, _ := sandboxlink.ClientSession(conn)
+	defer sess.Close()
+	ctl, err := sess.OpenStream(ctx)
+	if err == nil {
+		ctl.SetDeadline(time.Now().Add(wait))
+		err = sandboxlink.WriteMessage(ctl, 1, sandboxlink.ServeHello{Version: sandboxlink.Version, Credential: []byte("unknown"), Resource: ref,
+			ServerInstanceID: sandboxwire.NewID(), Services: []sandboxlink.ServiceVersion{{Service: sandboxlink.ServiceFile, Version: 1}}})
+	}
+	if err == nil {
+		_, err = sandboxlink.ReadReply(ctl, sandboxlink.OpHello, 1)
+	}
+	return err
 }
 
 // grant authorizes the fixture's Runtime for the resource's generation.
@@ -448,30 +477,11 @@ func TestServesAreBounded(t *testing.T) {
 	relay.SetLimits(f.srv.Relay, 1, 16, 16)
 	other := resource(1)
 	other.ID = sandboxwire.NewID()
-	hello := func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), wait)
-		defer cancel()
-		conn, err := sandboxlink.DialWebSocket(ctx, f.srv.URL, f.srv.TLS)
-		if err != nil {
-			return err
-		}
-		sess, _ := sandboxlink.ClientSession(conn)
-		defer sess.Close()
-		ctl, err := sess.OpenStream(ctx)
-		if err == nil {
-			err = sandboxlink.WriteMessage(ctl, 1, sandboxlink.ServeHello{Version: sandboxlink.Version, Credential: []byte("unknown"), Resource: other,
-				ServerInstanceID: sandboxwire.NewID(), Services: []sandboxlink.ServiceVersion{{Service: sandboxlink.ServiceFile, Version: 1}}})
-		}
-		if err == nil {
-			_, err = sandboxlink.ReadReply(ctl, sandboxlink.OpHello, 1)
-		}
-		return err
-	}
-	if err := hello(); !errors.Is(err, sandboxlink.AuthenticationFailed) {
+	if err := f.serveHello(other); !errors.Is(err, sandboxlink.AuthenticationFailed) {
 		t.Fatalf("serve Hello with an unknown credential: %v, want AuthenticationFailed", err)
 	}
 	p := f.serve(1)
-	if err := hello(); !errors.Is(err, sandboxlink.LimitExceeded) {
+	if err := f.serveHello(other); !errors.Is(err, sandboxlink.LimitExceeded) {
 		t.Fatalf("serve Hello beyond capacity: %v, want LimitExceeded", err)
 	}
 	if resources, _, _ := relay.Held(f.srv.Relay); resources != 1 {
@@ -479,6 +489,143 @@ func TestServesAreBounded(t *testing.T) {
 	}
 	recv(t, p.conns).Close()
 	recv(t, p.connected)
+}
+
+// Each Hello for a resource takes one of its MaxServeHellos while it is
+// decided: past them, a Hello for a held resource gets LimitExceeded without
+// reaching the Authority.
+func TestServeHellosAreBounded(t *testing.T) {
+	f := newFixture(t)
+	f.serve(1)
+	entered, release := make(chan struct{}, relay.MaxServeHellos+1), make(chan struct{})
+	f.auth.set(&f.auth.onServe, func() {
+		entered <- struct{}{}
+		<-release
+	})
+	errs := make(chan error, relay.MaxServeHellos)
+	for range relay.MaxServeHellos {
+		go func() { errs <- f.serveHello(resource(1)) }()
+		recv(t, entered)
+	}
+	if err := f.serveHello(resource(1)); !errors.Is(err, sandboxlink.LimitExceeded) {
+		t.Fatalf("serve Hello beyond the bound: %v, want LimitExceeded", err)
+	}
+	close(release)
+	for range relay.MaxServeHellos {
+		if err := recv(t, errs); !errors.Is(err, sandboxlink.AuthenticationFailed) {
+			t.Fatalf("serve Hello within the bound: %v, want AuthenticationFailed", err)
+		}
+	}
+	if len(entered) != 0 {
+		t.Fatal("a serve Hello beyond the bound reached the Authority")
+	}
+}
+
+// An Open takes one of its link's MaxStreams before the Authority decides and
+// keeps it until the decision ends, even once the peer has reset the stream.
+func TestOpenDecisionsAreBounded(t *testing.T) {
+	f := newFixture(t)
+	f.serve(1)
+	attachment := sandboxwire.NewID()
+	f.mustOpen(sandboxlink.ServiceFile, attachment, 1) // its stream takes one
+	grant := f.grant(1)
+	pending := relay.MaxStreams - 1
+	entered, release := make(chan struct{}, pending+1), make(chan struct{})
+	f.auth.set(&f.auth.onOpen, func() {
+		entered <- struct{}{}
+		<-release
+	})
+	reset := make(chan error)
+	for range pending {
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			_, _, err := f.link.OpenService(ctx, sandboxlink.Open{Service: sandboxlink.ServiceFile, Version: 1, Resource: resource(1),
+				AttachmentID: attachment, SessionID: sessionID, AssignmentID: assignmentID, AssignmentEpoch: 1, AttachGrant: grant})
+			reset <- err
+		}()
+		recv(t, entered)
+		cancel() // OpenService resets the stream
+		recv(t, reset)
+	}
+	if _, _, err := f.open(sandboxlink.ServiceFile, attachment, 1, grant); !errors.Is(err, sandboxlink.LimitExceeded) {
+		t.Fatalf("open beyond the stream bound: %v, want LimitExceeded", err)
+	}
+	if len(entered) != 0 {
+		t.Fatal("an Open beyond the bound reached the Authority")
+	}
+	f.auth.set(&f.auth.onOpen, nil)
+	close(release)
+	// The slots return as the decisions end; until then an Open is refused
+	// with LimitExceeded, which is retryable.
+	for {
+		_, _, err := f.open(sandboxlink.ServiceFile, attachment, 1, grant)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, sandboxlink.LimitExceeded) {
+			t.Fatalf("open after the decisions ended: %v", err)
+		}
+	}
+}
+
+// An Open that finds an attachment fails with LeaseExpired when that
+// attachment closes while the Open is decided, even if another Open has
+// created a new attachment under the same ID since, and leaves the new
+// attachment's lease alone.
+func TestOpenOfAReplacedAttachment(t *testing.T) {
+	f := newFixture(t)
+	p := f.serve(1)
+	calls := make(chan chan struct{})
+	f.auth.set(&f.auth.onOpen, func() {
+		release := make(chan struct{})
+		calls <- release
+		<-release
+	})
+	attachment := sandboxwire.NewID()
+	open := func(grant []byte) <-chan error {
+		errs := make(chan error, 1)
+		go func() {
+			_, _, err := f.open(sandboxlink.ServiceFile, attachment, 1, grant)
+			errs <- err
+		}()
+		return errs
+	}
+	grant := f.grant(1)
+	longer := []byte("longer grant")
+	f.auth.AddGrant(longer, sandboxlinktest.Grant{RuntimeID: f.runtime, Resource: resource(1), SessionID: sessionID,
+		AssignmentID: assignmentID, AssignmentEpoch: 1, Services: []sandboxlink.Service{sandboxlink.ServiceFile}, Lease: 2 * f.lease})
+
+	// Two Opens arrive while the relay holds no attachment; the first creates A.
+	first := open(grant)
+	releaseFirst := recv(t, calls)
+	second := open(grant)
+	releaseSecond := recv(t, calls)
+	close(releaseFirst)
+	if err := recv(t, first); err != nil {
+		t.Fatal(err)
+	}
+	// A third Open finds A, which closes while it is decided.
+	third := open(longer)
+	releaseThird := recv(t, calls)
+	if err := f.link.CloseAttachment(context.Background(), attachment); err != nil {
+		t.Fatal(err)
+	}
+	recv(t, p.closed)
+	// The second Open creates B under the same ID. The serve peer, which saw
+	// A close, refuses to bind it, but the relay holds B.
+	close(releaseSecond)
+	recv(t, second)
+	lease := relay.Lease(f.srv.Relay, attachment)
+	if lease.IsZero() {
+		t.Fatal("the second Open created no attachment")
+	}
+	close(releaseThird)
+	if err := recv(t, third); !errors.Is(err, sandboxlink.LeaseExpired) {
+		t.Fatalf("open of a replaced attachment: %v, want LeaseExpired", err)
+	}
+	if got := relay.Lease(f.srv.Relay, attachment); !got.Equal(lease) {
+		t.Fatalf("the new attachment's lease moved from %s to %s", lease, got)
+	}
 }
 
 // An Open of an attachment the relay does not hold takes a slot before the

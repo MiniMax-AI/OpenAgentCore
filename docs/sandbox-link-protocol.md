@@ -43,11 +43,13 @@ An attachment outlives its link. After reconnecting, the Runtime opens a stream 
 
 `relay.New` takes an `Authority` and returns a `*relay.Relay`, which is an `http.Handler`. The relay endpoint is served behind the installation's HTTPS ingress, which terminates TLS, so the handler accepts the upgrade on the ingress's plain HTTP hop; peers enforce TLS when they dial.
 
-Each link carries at most 256 concurrent service streams. The relay also holds at most 4096 resources, 16384 attachments and 4096 attach links. Each takes a slot when the relay admits it. A Hello or an Open that needs a slot when none is free is refused with `LimitExceeded` before the Authority is consulted, and leaves nothing behind:
+Each link carries at most 256 concurrent service streams, and each resource has at most 2 serve Hellos being decided. The relay also holds at most 4096 resources, 16384 attachments and 4096 attach links. A Hello or an Open takes the slots it needs before the Authority is consulted. When one is not free, it is refused with `LimitExceeded` and leaves nothing behind:
 
-- A resource takes a slot at the serve Hello that first names it and keeps it while the relay holds anything for it: its serve peer, a Hello being decided, an attachment or an unwritten `AttachmentClosed` event. A reconnect of a held resource needs no new slot. A resource has at most one serve link, so this also bounds serve links.
+- A serve Hello takes one of its resource's Hello slots until it is decided.
+- A resource takes a slot at the serve Hello that first names it and keeps it while the relay holds anything for it: its serve peer, a Hello being decided, an attachment or an unwritten `AttachmentClosed` event. A reconnect of a held resource needs no new resource slot. A resource has at most one serve link, so the resource limit also bounds serve links and, with the Hello slots, the serve Hellos being decided.
+- An Open takes a stream slot of its attach link. An opened stream keeps it until the stream ends; a refused Open gives it back once it is decided, even when the peer reset the stream first.
 - An attachment takes a slot at the Open that creates it and keeps it until it is closed and its `AttachmentClosed` events are written or discarded.
-- An attach link takes a slot at its Hello and keeps it until it ends.
+- An attach link takes a slot at its Hello and keeps it until it ends and every stream and renewal it carried has finished.
 
 The owner of the relay implements `Authority` from its durable records, and the relay consults it for every Hello, Open and renewal. To revoke, withdraw the authority first, then call `RevokeAttachment` or `RevokeResource` so the relay closes what it holds.
 
@@ -212,9 +214,9 @@ The relay and the serve peer bound each handshake step, the WebSocket upgrade, t
 
 The attach peer opens a stream and sends `Open`. The relay then:
 
-1. Takes an attachment [slot](#run-a-relay) when it holds no attachment under the Open's `AttachmentID`, or answers `LimitExceeded` when none is free.
+1. Takes a stream [slot](#run-a-relay) of the link, and an attachment slot when it holds no attachment under the Open's `AttachmentID`, or answers `LimitExceeded` when one is not free.
 2. Calls `Authority.AuthorizeOpen`. The Authority checks the grant, the Runtime, the current assignment and its epoch, the resource generation, the permitted service and access, and that the resource's serve authority is current. It returns the binding identity, the service, the lease, the exports for `ServiceFile` and the egress rules for `ServiceNetwork`. When a revocation lands while the Authority decides, the relay asks again.
-3. Checks, in order: each link's stream limit (`LimitExceeded`); that the newest generation the relay holds for the resource is not newer than the Open's (`StaleGeneration`); that a serve peer of the Open's generation is connected and offers the service (`ServiceUnavailable`) at the Open's version (`VersionMismatch`); that a nonzero `ExpectedServerInstanceID` equals the serve peer's (`InstanceChanged`); that the lease lies in the future and that an attachment the relay held when the Open arrived has not closed since (`LeaseExpired`); and that an attachment the relay already holds under this `AttachmentID` has the identical identity and Runtime (`AttachmentConflict`).
+3. Checks, in order: the serve link's stream limit (`LimitExceeded`); that the newest generation the relay holds for the resource is not newer than the Open's (`StaleGeneration`); that a serve peer of the Open's generation is connected and offers the service (`ServiceUnavailable`) at the Open's version (`VersionMismatch`); that a nonzero `ExpectedServerInstanceID` equals the serve peer's (`InstanceChanged`); that the lease lies in the future and that an attachment the relay held when the Open arrived has not closed since (`LeaseExpired`); and that an attachment the relay already holds under this `AttachmentID` has the identical identity and Runtime (`AttachmentConflict`).
 4. Opens a stream to the serve peer and sends `Bind`. The serve peer answers `Bound`, or a failure: `ServiceUnavailable` for a service it does not serve, `VersionMismatch`, `InstanceChanged` when `ExpectedServerInstanceID` is not its own, `LeaseExpired` for a recently closed attachment, or `ProtocolViolation`. The relay passes a failure on to the attach peer. When the `Bind` began to be sent but no answer arrives, the relay answers `ServiceUnavailable` with `EffectPossible`.
 5. Answers `Opened` and splices the two streams.
 
@@ -276,7 +278,7 @@ The relay copies each direction through a 32 KiB buffer and holds at most one 25
 | 8 | `InstanceChanged` | The serve peer's `ServerInstanceID` is not `ExpectedServerInstanceID` |
 | 9 | `LeaseExpired` | The lease has passed, or the relay no longer holds the attachment |
 | 10 | `AttachmentConflict` | The `AttachmentID` is held with another identity or Runtime, or was closed during the Open |
-| 11 | `LimitExceeded` | No resource, attachment or attach link slot is free, or a link's stream limit or its limit of renewals being decided is reached |
+| 11 | `LimitExceeded` | A Hello or an Open needs a [slot](#run-a-relay) that is not free, a serve link has its limit of streams, or an attach link has its limit of renewals being decided |
 | 12 | `ProtocolViolation` | A message is malformed, not allowed where it arrived, or carries a request ID that does not increase |
 
 `ServiceUnavailable` and `LimitExceeded` are transient: the same request may succeed later, and `Code.Retryable` reports them. Every other code is final: repeating the request with the same credential, attachment and generation fails again.

@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	// maxStreams bounds the concurrent service streams of each link.
+	// maxStreams bounds the concurrent service streams of each link. An attach
+	// link's stream counts from its Open, through the Authority's decision.
 	maxStreams = 256
 	// spliceBuffer bounds the bytes a splice holds per direction, on top of
 	// one yamux window per stream.
@@ -41,6 +42,9 @@ const (
 	// maxResources bounds the resources held, and with them serve links,
 	// one per resource. It leaves room for idle sandboxes beside busy ones.
 	maxResources = 4096
+	// maxServeHellos bounds the serve Hellos being decided for one resource,
+	// so a redial or a newer generation's peer can arrive while one is.
+	maxServeHellos = 2
 	// maxAttachments bounds attachments, open or with AttachmentClosed events
 	// to write: four per resource.
 	maxAttachments = 16384
@@ -78,8 +82,9 @@ type resource struct {
 	serve      *serveLink // nil while the serve peer is away
 	// closures holds the AttachmentClosed events not yet written to the serve
 	// peer of generation, connected or not.
-	closures closures
-	refs     int // serve Hellos being decided and open attachments
+	closures    closures
+	hellos      int // serve Hellos being decided, at most maxServeHellos
+	attachments int // open attachments
 }
 
 // closures is a set of AttachmentClosed events to write, by attachment ID.
@@ -290,7 +295,7 @@ func (rl *Relay) unrefLocked(a *attachment) {
 
 // releaseLocked forgets r, freeing its slot, once it holds nothing.
 func (rl *Relay) releaseLocked(key resourceKey, r *resource) {
-	if r.serve == nil && r.refs == 0 && len(r.closures) == 0 {
+	if r.serve == nil && r.hellos == 0 && r.attachments == 0 && len(r.closures) == 0 {
 		delete(rl.resources, key)
 	}
 }
@@ -445,27 +450,28 @@ func (rl *Relay) serve(l *link, id uint64, hello sandboxlink.ServeHello) {
 	sl.closures = nil
 }
 
-// admitServe authenticates a serve Hello and installs the link. A Hello for a
-// resource the relay does not hold takes a resource slot first. A revocation
-// that lands while the Authority decides forces a fresh decision, so a
-// withdrawn credential never installs a peer.
+// admitServe authenticates a serve Hello and installs the link. Until it is
+// decided, the Hello takes one of its resource's maxServeHellos, and a
+// resource slot when the relay does not hold the resource. A revocation that
+// lands while the Authority decides forces a fresh decision, so a withdrawn
+// credential never installs a peer.
 func (rl *Relay) admitServe(l *link, id uint64, hello sandboxlink.ServeHello) (*serveLink, error) {
 	key := keyOf(hello.Resource)
 	rl.mu.Lock()
 	r := rl.resources[key]
+	if r == nil && len(rl.resources) >= rl.maxResources || r != nil && r.hellos >= maxServeHellos {
+		rl.mu.Unlock()
+		return nil, sandboxlink.Fail(sandboxlink.LimitExceeded)
+	}
 	if r == nil {
-		if len(rl.resources) >= rl.maxResources {
-			rl.mu.Unlock()
-			return nil, sandboxlink.Fail(sandboxlink.LimitExceeded)
-		}
 		r = &resource{closures: closures{}}
 		rl.resources[key] = r
 	}
-	r.refs++
+	r.hellos++
 	rl.mu.Unlock()
 	defer func() {
 		rl.mu.Lock()
-		r.refs--
+		r.hellos--
 		rl.releaseLocked(key, r)
 		rl.mu.Unlock()
 	}()
@@ -527,8 +533,10 @@ func (rl *Relay) installServeLocked(r *resource, l *link, id uint64, hello sandb
 }
 
 // attach serves an attach peer's control requests and service streams until
-// the link ends. The link takes an attach link slot first. Its attachments
-// stay open until their leases expire.
+// the link ends. The link takes an attach link slot first and keeps it until
+// every stream and renewal it carried has finished, so the decisions of a
+// dropped link stay bounded. Its attachments stay open until their leases
+// expire.
 func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
 	rl.mu.Lock()
 	full := rl.attachLinks >= rl.maxAttachLinks
@@ -541,8 +549,10 @@ func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
 		l.fail(id, sandboxlink.OpHello, sandboxlink.LimitExceeded)
 		return
 	}
+	var serving sync.WaitGroup
 	defer func() {
 		<-l.sess.CloseChan()
+		serving.Wait()
 		rl.mu.Lock()
 		rl.attachLinks--
 		rl.dropLocked(l.closures)
@@ -563,15 +573,15 @@ func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
 	var seq sandboxwire.RequestSequence
 	seq.Admit(id) // the Hello takes the first ID
 	al.send(id, sandboxlink.HelloAccepted{})
-	go func() {
+	serving.Go(func() {
 		for {
 			st, err := l.sess.AcceptStream()
 			if err != nil {
 				return
 			}
-			go rl.open(al, st)
+			serving.Go(func() { rl.open(al, st) })
 		}
-	}()
+	})
 	for {
 		id, m, err := sandboxlink.ReadMessage(l.ctl)
 		if err != nil {
@@ -590,10 +600,10 @@ func (rl *Relay) attach(l *link, id uint64, hello sandboxlink.AttachHello) {
 				al.send(id, sandboxlink.FailureFor(sandboxlink.OpRenewAttachment, sandboxlink.Fail(sandboxlink.LimitExceeded)))
 				continue
 			}
-			go func() {
+			serving.Go(func() {
 				defer al.inflight.Add(-1)
 				rl.renew(al, id, r)
-			}()
+			})
 		case sandboxlink.CloseAttachment:
 			if !admitted {
 				l.fail(id, sandboxlink.OpCloseAttachment, sandboxlink.ProtocolViolation)
@@ -695,7 +705,7 @@ func (rl *Relay) closeLocked(a *attachment, reason sandboxlink.CloseReason) {
 			r.serve.wakeWriter()
 		}
 	}
-	r.refs--
+	r.attachments--
 	rl.releaseLocked(key, r)
 	rl.unrefLocked(a)
 }
@@ -783,33 +793,41 @@ func (rl *Relay) open(al *attachLink, st *yamux.Stream) {
 	rl.splice(sp)
 }
 
-// admit authorizes o and registers its splice. An Open of an attachment the
-// relay does not hold takes an attachment slot first. A revocation that lands
-// while the Authority decides forces a fresh decision.
-func (rl *Relay) admit(al *attachLink, st *yamux.Stream, o sandboxlink.Open) (*splice, sandboxlink.Authorization, error) {
+// admit authorizes o and registers its splice. Before the Authority decides,
+// the Open takes a stream slot of its link, which an admitted stream keeps
+// until finish and a refused one gives back once it is decided, whether or
+// not the peer reset it. An Open of an attachment the relay does not hold
+// also takes an attachment slot. A revocation that lands while the Authority
+// decides forces a fresh decision.
+func (rl *Relay) admit(al *attachLink, st *yamux.Stream, o sandboxlink.Open) (sp *splice, auth sandboxlink.Authorization, err error) {
 	rl.mu.Lock()
-	reserved := rl.attachments[o.AttachmentID] == nil
-	if reserved && rl.held >= rl.maxAttachments {
+	prior := rl.attachments[o.AttachmentID]
+	reserved := prior == nil
+	if al.streams >= maxStreams || reserved && rl.held >= rl.maxAttachments {
 		rl.mu.Unlock()
-		return nil, sandboxlink.Authorization{}, sandboxlink.Fail(sandboxlink.LimitExceeded)
+		return nil, auth, sandboxlink.Fail(sandboxlink.LimitExceeded)
 	}
+	al.streams++
 	if reserved {
 		rl.held++
 	}
 	rl.mu.Unlock()
 	defer func() {
-		if reserved {
-			rl.mu.Lock()
-			rl.held--
-			rl.mu.Unlock()
+		rl.mu.Lock()
+		if sp == nil {
+			al.streams--
 		}
+		if reserved {
+			rl.held--
+		}
+		rl.mu.Unlock()
 	}()
 	for range authorizeAttempts {
 		rl.mu.Lock()
 		epoch := rl.epoch
 		rl.mu.Unlock()
 		ctx, cancel := rl.authorityContext()
-		auth, err := rl.auth.AuthorizeOpen(ctx, al.peer, o)
+		auth, err = rl.auth.AuthorizeOpen(ctx, al.peer, o)
 		cancel()
 		if err != nil {
 			return nil, auth, err
@@ -822,7 +840,7 @@ func (rl *Relay) admit(al *attachLink, st *yamux.Stream, o sandboxlink.Open) (*s
 			rl.mu.Unlock()
 			continue
 		}
-		sp, err := rl.admitLocked(al, st, o, auth, &reserved)
+		sp, err = rl.admitLocked(al, st, o, auth, prior, &reserved)
 		rl.mu.Unlock()
 		return sp, auth, err
 	}
@@ -830,9 +848,11 @@ func (rl *Relay) admit(al *attachLink, st *yamux.Stream, o sandboxlink.Open) (*s
 }
 
 // admitLocked checks o against what the relay holds and registers its
-// splice. A new attachment takes the slot reserved for it, and an attachment
-// that closed since the Open arrived is not opened again.
-func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Open, auth sandboxlink.Authorization, reserved *bool) (*splice, error) {
+// splice. A new attachment takes the slot reserved for it. The attachment
+// prior, which the relay held when the Open arrived, must still be the one
+// under its ID: once it closed, the Open fails even if another attachment
+// took the ID since.
+func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Open, auth sandboxlink.Authorization, prior *attachment, reserved *bool) (*splice, error) {
 	key, generation := keyOf(o.Resource), o.Resource.Generation
 	r := rl.resources[key]
 	var sl *serveLink
@@ -850,7 +870,7 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 	a := rl.attachments[o.AttachmentID]
 	var code sandboxlink.Code
 	switch {
-	case al.streams >= maxStreams || (sl != nil && sl.streams >= maxStreams):
+	case sl != nil && sl.streams >= maxStreams:
 		code = sandboxlink.LimitExceeded
 	case r != nil && r.generation > generation:
 		code = sandboxlink.StaleGeneration
@@ -860,7 +880,7 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 		code = sandboxlink.VersionMismatch
 	case !o.ExpectedServerInstanceID.IsZero() && o.ExpectedServerInstanceID != sl.hello.ServerInstanceID:
 		code = sandboxlink.InstanceChanged
-	case !auth.LeaseExpiresAt.After(time.Now()) || (a == nil && !*reserved):
+	case !auth.LeaseExpiresAt.After(time.Now()) || prior != nil && a != prior:
 		code = sandboxlink.LeaseExpired
 	case a != nil && (a.identity != o.Identity() || a.runtime != al.peer.RuntimeID):
 		code = sandboxlink.AttachmentConflict
@@ -871,7 +891,7 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 	if a == nil {
 		a = &attachment{identity: o.Identity(), runtime: al.peer.RuntimeID, splices: map[*splice]struct{}{}, refs: 1}
 		rl.attachments[o.AttachmentID] = a
-		r.refs++
+		r.attachments++
 		*reserved = false
 	}
 	a.owner = al
@@ -879,7 +899,6 @@ func (rl *Relay) admitLocked(al *attachLink, st *yamux.Stream, o sandboxlink.Ope
 	rl.setLeaseLocked(a, auth.LeaseExpiresAt)
 	sp := &splice{att: a, serve: sl, al: al, attach: st}
 	a.splices[sp] = struct{}{}
-	al.streams++
 	sl.streams++
 	return sp, nil
 }
