@@ -31,8 +31,8 @@ func (r *Router) Shutdown(ctx context.Context) error {
 	victims := r.sessionCancellationsLocked()
 	if !r.closed {
 		r.closed = true
-		if r.runtimePreparation != nil {
-			r.runtimePreparation.cancel()
+		for _, u := range r.runtimePreparations {
+			u.cancel()
 		}
 		// Prepared release claims exist before this signal can interrupt output.
 		close(r.shutdownCh)
@@ -72,11 +72,15 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 		attempt.err = errors.Join(attempt.err, err)
 	}
 	r.mu.Lock()
-	if r.runtimePreparation != nil && r.runtimePreparation.uncertain {
-		attempt.err = errors.Join(attempt.err, errors.New("dispatch: capability preparation remains uncertain"))
+	for session, u := range r.runtimePreparations {
+		if u.uncertain {
+			attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: capability preparation of Session %s remains uncertain", session))
+		}
 	}
-	if r.workspaceWrite != nil && r.workspaceWrite.uncertain {
-		attempt.err = errors.Join(attempt.err, errors.New("dispatch: local workspace write remains uncertain"))
+	for session, u := range r.workspaceWrites {
+		if u.uncertain {
+			attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: local workspace write of Session %s remains uncertain", session))
+		}
 	}
 	for _, p := range r.preparations {
 		if p.owns {

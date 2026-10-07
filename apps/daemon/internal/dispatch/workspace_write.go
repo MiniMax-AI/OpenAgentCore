@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Router.mu protects this single bounded transfer to an Environment owner.
+// Router.mu protects a Session's bounded transfer to its Environment owner.
 type workspaceUpload struct {
 	envelope  proto.Envelope
 	request   proto.WorkspaceWritePayload
@@ -32,7 +32,8 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		// A malformed frame on an already admitted operation cannot claim that
 		// its earlier commit did not execute.
 		r.mu.Lock()
-		pending := r.workspaceWrite != nil && r.workspaceWrite.envelope.ID == env.ID
+		u := r.workspaceWrites[env.Assignment.SessionID]
+		pending := u != nil && u.envelope.ID == env.ID
 		r.mu.Unlock()
 		if pending {
 			return errors.New("dispatch: malformed pending write frame")
@@ -44,14 +45,14 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
+	u := r.workspaceWrites[env.Assignment.SessionID]
 	if request.Step == "begin" {
-		if r.workspaceExport != nil && r.workspaceExport.request.Assignment.SessionID == request.SessionID ||
-			r.runtimePreparation != nil && r.runtimePreparation.envelope.Assignment.SessionID == request.SessionID {
+		if r.workspaceExports[request.SessionID] != nil || r.runtimePreparations[request.SessionID] != nil {
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 		}
-		if r.workspaceWrite != nil {
-			duplicate := r.workspaceWrite.envelope.ID == env.ID
+		if u != nil || r.transferBytes > transferMemory-request.SizeBytes {
+			duplicate := u != nil && u.envelope.ID == env.ID
 			r.mu.Unlock()
 			if duplicate {
 				return errors.New("dispatch: workspace write already admitted")
@@ -73,14 +74,14 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 		}
 		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{})}
-		r.workspaceWrite = u
+		r.workspaceWrites[request.SessionID] = u
+		r.transferBytes += request.SizeBytes
 		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
 		go r.runWorkspaceUpload(context.WithoutCancel(ctx), u, environment, done)
 		return r.sendWorkspaceWrite(ctx, env, proto.WorkspaceWriteResultPayload{Outcome: "ready"})
 	}
-	u := r.workspaceWrite
 	if u == nil || u.envelope.ID != env.ID || u.envelope.Assignment != env.Assignment {
 		r.mu.Unlock()
 		return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
@@ -132,9 +133,10 @@ func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload, env
 		result = workspaceWriteResult(write, err, u.request.SizeBytes)
 	}
 	r.mu.Lock()
+	r.transferBytes -= u.request.SizeBytes
 	u.uncertain = result.Outcome == "unknown"
 	if !u.uncertain {
-		r.workspaceWrite = nil
+		delete(r.workspaceWrites, u.request.SessionID)
 	}
 	r.mu.Unlock()
 	_ = r.sendWorkspaceWrite(ctx, u.envelope, result)

@@ -30,8 +30,12 @@ func (r *Router) handlePromptCancel(ctx context.Context, env proto.Envelope) err
 	handoff := state.preparedHandoff
 	release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
 	if request.DeliveryID != "" {
+		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
-		go r.sendPreparedCancellation(state, handoff, release, attempt, env, request.DeliveryID)
+		go func() {
+			defer done()
+			r.sendPreparedCancellation(state, handoff, release, attempt, env, request.DeliveryID)
+		}()
 	}
 	r.mu.Unlock()
 	return nil

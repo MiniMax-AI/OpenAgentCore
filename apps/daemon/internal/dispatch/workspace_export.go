@@ -26,7 +26,7 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
-	u := r.workspaceExport
+	u := r.workspaceExports[env.Assignment.SessionID]
 	if request.Step != "begin" {
 		if u == nil || u.request.ID != env.ID || u.request.Assignment != env.Assignment {
 			r.mu.Unlock()
@@ -49,7 +49,7 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 	}
 	environment, code := r.workspaceResourceLocked(env.Assignment, proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
 	p := r.preparations[request.Handle]
-	if code == "" && (u != nil || r.workspaceWrite != nil && r.workspaceWrite.envelope.Assignment.SessionID == env.Assignment.SessionID || p.executor != nil) {
+	if code == "" && (u != nil || r.workspaceWrites[env.Assignment.SessionID] != nil || p.executor != nil) {
 		code = "resource_unavailable"
 	}
 	if code != "" {
@@ -60,7 +60,7 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 	owner, cancel := context.WithTimeout(owner, 180*time.Second)
 	u = &workspaceExport{request: env, requests: make(chan proto.WorkspaceExportPayload, 1), cancel: func() { cancel(); stop() }}
 	u.requests <- request
-	r.workspaceExport = u
+	r.workspaceExports[env.Assignment.SessionID] = u
 	done := r.trackWorkLocked(env.Assignment)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
@@ -90,8 +90,8 @@ func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, env
 		_ = reader.Close()
 		<-exported
 		r.mu.Lock()
-		if r.workspaceExport == u {
-			r.workspaceExport = nil
+		if r.workspaceExports[u.request.Assignment.SessionID] == u {
+			delete(r.workspaceExports, u.request.Assignment.SessionID)
 		}
 		r.mu.Unlock()
 		select {
@@ -129,8 +129,8 @@ func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, env
 			// The next owner may start immediately after receiving completion.
 			<-exported
 			r.mu.Lock()
-			if r.workspaceExport == u {
-				r.workspaceExport = nil
+			if r.workspaceExports[u.request.Assignment.SessionID] == u {
+				delete(r.workspaceExports, u.request.Assignment.SessionID)
 			}
 			r.mu.Unlock()
 		}

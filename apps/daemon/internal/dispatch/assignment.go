@@ -22,12 +22,16 @@ type assignmentState struct {
 	// environment is the owner resolved from the bind, or nil.
 	environment Environment
 	released    bool
-	// work counts the Session's admitted reads, writes, exports and Runtime
-	// preparations until each has sent its terminal result. A release waits
-	// for it, and the released assignment admits no more.
-	work sync.WaitGroup
-	// cleanup serializes release cleanups, so a retried release never closes
-	// the owner while an earlier Close runs.
+	// superseding is the bind that superseded the assignment at ref, held
+	// released until the earlier epoch's work and owner have settled.
+	superseding *proto.AssignmentBindPayload
+	// work counts the Session's admitted reads, writes, exports, Runtime
+	// preparations, Run terminals and cancellation receipts until each has
+	// sent its terminal result. A release, a superseding bind and a quiesce
+	// wait for it, and a released assignment admits no more.
+	work dispatchWork
+	// cleanup serializes release and supersede cleanups, so a retry never
+	// closes the owner while an earlier Close runs.
 	cleanup sync.Mutex
 }
 
@@ -83,32 +87,114 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 	var input proto.AssignmentBindPayload
 	ref, code := env.Assignment, ""
 	if env.ID == "" || env.DecodeRequest(&input) != nil || input.Validate() != nil || !ref.Valid() {
-		code = "invalid_request"
-	} else {
+		return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus(proto.AssignmentBound, "invalid_request"))
+	}
+	var resource sandboxbootstrap.Resource
+	if input.Resource != nil {
+		resource = *input.Resource
+	}
+	r.mu.Lock()
+	if r.suspensions[input.EnvironmentID] != nil {
+		r.mu.Unlock()
+		return ErrRouterQuiesced
+	}
+	a := r.assignments[ref.SessionID]
+	switch {
+	case a == nil:
+		var environment Environment
+		if r.environments != nil {
+			if environment = r.environments(ref, input); environment == nil {
+				code = proto.AssignmentConflict
+				break
+			}
+		}
+		r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID, resource: resource, grant: input.AttachGrant, environment: environment}
+	case a.ref.AssignmentID != ref.AssignmentID:
+		code = proto.AssignmentConflict
+	case ref.Epoch > a.ref.Epoch && (!a.released || a.superseding != nil):
+		// The bind supersedes the earlier epoch, or a pending supersede.
+		preparations := r.fenceSessionWorkLocked(ref.SessionID)
+		a.ref, a.released, a.superseding = ref, true, &input
+		r.shutdownWG.Add(1)
+		r.mu.Unlock()
+		go r.supersede(ctx, env, a, preparations)
+		return nil
+	case ref.Epoch == a.ref.Epoch && a.superseding != nil:
+		if !sameBind(*a.superseding, input) {
+			code = proto.AssignmentConflict
+			break
+		}
+		// A retry repeats the pending supersede.
+		r.shutdownWG.Add(1)
+		r.mu.Unlock()
+		go r.supersede(ctx, env, a, nil)
+		return nil
+	case ref.Epoch < a.ref.Epoch || ref.Epoch == a.ref.Epoch && a.released:
+		code = proto.AssignmentStale
+	case a.ref != ref || a.environmentID != input.EnvironmentID || a.resource != resource || !bytes.Equal(a.grant, input.AttachGrant):
+		code = proto.AssignmentConflict
+	}
+	r.mu.Unlock()
+	return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus(proto.AssignmentBound, code))
+}
+
+// supersede settles the earlier epoch's work, closes the Session's Executor
+// and owner, and then binds the pending supersede at env's assignment. It
+// replies assignment_stale when a release or a later bind took over meanwhile.
+// A failed cleanup keeps the supersede pending, so a retry repeats it.
+func (r *Router) supersede(ctx context.Context, env proto.Envelope, a *assignmentState, preparations []*preparationState) {
+	defer r.shutdownWG.Done()
+	ref := env.Assignment
+	cleanupCtx, stop := r.shutdownContext(context.WithoutCancel(ctx))
+	defer stop()
+	for _, p := range preparations {
+		r.releasePreparation(p, "failed", proto.AssignmentStale, true)
+	}
+	a.work.Wait()
+	a.cleanup.Lock()
+	defer a.cleanup.Unlock()
+	r.mu.Lock()
+	pending, environment := a.ref == ref && a.superseding != nil, a.environment
+	r.mu.Unlock()
+	var err error
+	if pending {
+		err = r.closeSessionExecutor(ref.SessionID)
+	}
+	if pending && err == nil && environment != nil {
+		err = environment.Close(cleanupCtx)
+	}
+	code := ""
+	r.mu.Lock()
+	switch {
+	case a.ref != ref || a.released && a.superseding == nil:
+		code = proto.AssignmentStale
+	case a.superseding == nil:
+		// An earlier attempt bound it.
+	case err != nil:
+		r.log.Warn("assignment supersede cleanup unconfirmed", "session_id", ref.SessionID, "err", err)
+		code = proto.CleanupUnconfirmed
+	default:
+		input := *a.superseding
+		var owner Environment
+		if r.environments != nil {
+			if owner = r.environments(ref, input); owner == nil {
+				code = proto.AssignmentConflict
+				break
+			}
+		}
 		var resource sandboxbootstrap.Resource
 		if input.Resource != nil {
 			resource = *input.Resource
 		}
-		r.mu.Lock()
-		a := r.assignments[ref.SessionID]
-		switch {
-		case a == nil:
-			var environment Environment
-			if r.environments != nil {
-				if environment = r.environments(ref, input); environment == nil {
-					code = proto.AssignmentConflict
-					break
-				}
-			}
-			r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID, resource: resource, grant: input.AttachGrant, environment: environment}
-		case a.ref.AssignmentID == ref.AssignmentID && (ref.Epoch < a.ref.Epoch || ref.Epoch == a.ref.Epoch && a.released):
-			code = proto.AssignmentStale
-		case a.ref != ref || a.environmentID != input.EnvironmentID || a.resource != resource || !bytes.Equal(a.grant, input.AttachGrant):
-			code = proto.AssignmentConflict
-		}
-		r.mu.Unlock()
+		a.environmentID, a.resource, a.grant, a.environment = input.EnvironmentID, resource, input.AttachGrant, owner
+		a.released, a.superseding = false, nil
 	}
-	return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus(proto.AssignmentBound, code))
+	r.mu.Unlock()
+	_ = r.reply(cleanupCtx, env, proto.TypeAssignmentStatus, assignmentStatus(proto.AssignmentBound, code))
+}
+
+func sameBind(a, b proto.AssignmentBindPayload) bool {
+	return a.EnvironmentID == b.EnvironmentID && (a.Resource == nil) == (b.Resource == nil) && (a.Resource == nil || *a.Resource == *b.Resource) && bytes.Equal(a.AttachGrant, b.AttachGrant)
 }
 
 // handleAssignmentRelease fences the assignment, then settles the Session's
@@ -135,7 +221,7 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 	case ref.Epoch < a.ref.Epoch:
 		code = proto.AssignmentStale
 	default:
-		a.ref, a.released = ref, true
+		a.ref, a.released, a.superseding = ref, true, nil
 	}
 	if code != "" {
 		r.mu.Unlock()
@@ -179,11 +265,11 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 // the release releases, which also cancels their exports. Router.mu must be
 // held.
 func (r *Router) fenceSessionWorkLocked(sessionID string) []*preparationState {
-	if u := r.workspaceWrite; u != nil && u.envelope.Assignment.SessionID == sessionID && !u.finished {
+	if u := r.workspaceWrites[sessionID]; u != nil && !u.finished {
 		u.finished = true
 		close(u.ready)
 	}
-	if u := r.runtimePreparation; u != nil && u.envelope.Assignment.SessionID == sessionID && !u.finished {
+	if u := r.runtimePreparations[sessionID]; u != nil && !u.finished {
 		r.finishRuntimePreparationTransferLocked(u, false)
 	}
 	var preparations []*preparationState

@@ -83,7 +83,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	requestFingerprint := sha256.Sum256(encoded)
 	req.Assignment = env.Assignment
 	r.mu.Lock()
-	if r.closed || r.suspension != nil {
+	if r.closed {
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
@@ -208,7 +208,7 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	owner.native, owner.preparing = native, false
 	close(owner.prepared)
 	r.log.Info("executor native_prepare", "executor_id", owner.id, "session_id", owner.sessionID, "duration_ms", time.Since(started).Milliseconds(), "success", err == nil && native != nil)
-	ready := native != nil && err == nil && !owner.invalid && !r.closed && r.suspension == nil && p.status.State == "preparing" && p.ctx.Err() == nil
+	ready := native != nil && err == nil && !owner.invalid && !r.closed && p.status.State == "preparing" && p.ctx.Err() == nil
 	p.busy = false
 	if ready {
 		p.status.State, p.status.Revision = "ready", p.status.Revision+1

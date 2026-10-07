@@ -37,9 +37,10 @@ func TestLocalUploadUnknownRetainsOwner(t *testing.T) {
 	if got.Outcome != "unknown" {
 		t.Fatal(got)
 	}
-	r.workspaceWrite = &workspaceUpload{envelope: proto.Envelope{ID: uuid.NewString()}, finished: true, uncertain: true}
 	request := proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Path: "file", SizeBytes: 0, SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+	r.workspaceWrites[request.SessionID] = &workspaceUpload{envelope: proto.Envelope{ID: uuid.NewString()}, finished: true, uncertain: true}
 	env, _ := proto.NewEnvelope(proto.TypeWorkspaceWrite, uuid.NewString(), request)
+	env.Assignment.SessionID = request.SessionID
 	if err = r.Handle(t.Context(), env); err != nil {
 		t.Fatal(err)
 	}

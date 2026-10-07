@@ -262,3 +262,60 @@ func TestReleaseRetryAndShutdownCloseOwnersOnce(t *testing.T) {
 		t.Fatalf("released owner closes = %d (overlapped %t), unreleased owner closes = %d", released.closes.Load(), released.overlapped.Load(), unreleased.closes.Load())
 	}
 }
+
+func TestSupersedingBindFencesTheEarlierEpoch(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+	startRun(t, h.router, h.sender, "fake_alpha", "s")
+	sess := <-h.gotSess
+	bind := func(id string, epoch uint64, payload proto.AssignmentBindPayload) proto.AssignmentStatusPayload {
+		env := scoped(t, "s", proto.TypeAssignmentBind, id, payload)
+		env.Assignment.Epoch = epoch
+		if err := h.router.Handle(t.Context(), env); err != nil {
+			t.Fatal(err)
+		}
+		return waitAssignmentStatus(t, h.sender, id)
+	}
+	if got := bind("supersede", 2, proto.AssignmentBindPayload{}); got.State != proto.AssignmentBound || got.ErrorCode != "" {
+		t.Fatalf("superseding bind = %+v", got)
+	}
+	// The earlier epoch's Run ended before the bind replied.
+	terminal, bound := -1, -1
+	for i, frame := range h.sender.snapshot() {
+		switch {
+		case frame.ID == "s" && (frame.Type == proto.TypeDone || frame.Type == proto.TypeError):
+			terminal = i
+		case frame.ID == "supersede":
+			bound = i
+		}
+	}
+	if terminal < 0 || terminal > bound || sess.cancels() != 1 {
+		t.Fatalf("Run terminal at %d, bind reply at %d, cancels = %d", terminal, bound, sess.cancels())
+	}
+	for id, test := range map[string]struct {
+		epoch   uint64
+		payload proto.AssignmentBindPayload
+		code    string
+	}{
+		"lower":    {1, proto.AssignmentBindPayload{}, proto.AssignmentStale},
+		"changed":  {2, proto.AssignmentBindPayload{EnvironmentID: uuid.NewString()}, proto.AssignmentConflict},
+		"repeated": {2, proto.AssignmentBindPayload{}, ""},
+	} {
+		if got := bind(id, test.epoch, test.payload); got.ErrorCode != test.code {
+			t.Fatalf("%s bind = %+v", id, got)
+		}
+	}
+	stale := scoped(t, "s", proto.TypeExecutionPrepare, "stale", noEnvironmentPreparation("s", proto.PromptRequestPayload{AgentKind: "fake_alpha"}))
+	if err := h.router.Handle(t.Context(), stale); err == nil {
+		t.Fatal("the superseded epoch admitted a preparation")
+	}
+	if got := waitPreparationStatus(t, h.sender, "stale", "rejected", ""); got.ErrorCode != proto.AssignmentStale {
+		t.Fatalf("superseded preparation = %+v", got)
+	}
+	current := stale
+	current.ID, current.Assignment.Epoch = "current", 2
+	if err := h.router.Handle(t.Context(), current); err != nil {
+		t.Fatal(err)
+	}
+	waitPreparationStatus(t, h.sender, "current", "ready", "")
+}
