@@ -28,26 +28,9 @@ const (
 	// before the call, "after" runs after.
 	TypeToolCall = "tool_call"
 
-	// TypePermissionRequest carries an agent's request for human
-	// approval. Envelope.ID is the RunID; payload.request_id identifies the decision.
-	TypePermissionRequest = "permission_request"
-
-	// TypePermissionCancel signals the agent withdrew an earlier
-	// permission request (e.g. its internal timeout fired). Used by
-	// the gateway to unblock pending SubmitPermission calls.
-	TypePermissionCancel = "permission_cancel"
-
-	// TypePromptForUserChoice asks the human to pick one (or more)
-	// answers from a closed list before the agent can continue. Used
-	// to intercept Claude Code's built-in AskUserQuestion tool so the
-	// daemon doesn't deadlock waiting for a tool_result no one will
-	// send. Envelope.ID is the RunID; payload.ask_id identifies the decision.
-	TypePromptForUserChoice = "prompt_for_user_choice"
-
 	// TypeInteractionDecisionAck confirms that the daemon-side agent
-	// accepted (or definitively rejected) a permission/user-input decision or cancellation.
-	// The server must not mark the durable interaction terminal before this
-	// frame arrives.
+	// accepted (or definitively rejected) a function result or cancellation.
+	// The server must not mark the delivery terminal before this frame arrives.
 	TypeInteractionDecisionAck = "interaction_decision_ack"
 
 	// TypeUsage reports a cumulative usage snapshot for the current execution.
@@ -100,18 +83,6 @@ type ToolCallPayload struct {
 	Result      map[string]any   `json:"result,omitempty"`
 }
 
-// PermissionRequestPayload carries an agent's request for human
-// approval. RequestID is the daemon-minted handle used to route a later
-// decision. It lives in the payload because Envelope.ID is the run ID used
-// by the server gateway to deliver the request to the active run subscriber.
-type PermissionRequestPayload struct {
-	RequestID string         `json:"request_id"`
-	Tool      string         `json:"tool"`
-	Title     string         `json:"title"`
-	Detail    string         `json:"detail,omitempty"`
-	Payload   map[string]any `json:"payload,omitempty"`
-}
-
 // InteractionDecisionAckPayload is the daemon's application-level receipt
 // for a server decision. DeliveryID correlates one resolve attempt without
 // relying on the request id, which may outlive a reconnect or timeout race.
@@ -122,44 +93,6 @@ type InteractionDecisionAckPayload struct {
 	Error      string `json:"error,omitempty"`
 	// Outcome preserves native continuity when cancellation does not emit Done.
 	Outcome *DonePayload `json:"outcome,omitempty"`
-}
-
-// PromptForUserChoiceOption is one button / checkbox the user can
-// pick when answering a PromptForUserChoice. Label is the human-
-// readable choice; Description is optional inline help.
-type PromptForUserChoiceOption struct {
-	Label       string `json:"label"`
-	Description string `json:"description,omitempty"`
-}
-
-// PromptForUserChoiceQuestion is one question in a (possibly multi-
-// question) AskUserQuestion call. Mirrors the Claude Code built-in
-// schema verbatim so the daemon doesn't translate the shape twice.
-type PromptForUserChoiceQuestion struct {
-	ID          string                      `json:"id"`
-	Header      string                      `json:"header,omitempty"`
-	Question    string                      `json:"question"`
-	MultiSelect bool                        `json:"multi_select,omitempty"`
-	IsOther     bool                        `json:"is_other,omitempty"`
-	IsSecret    bool                        `json:"is_secret,omitempty"`
-	Options     []PromptForUserChoiceOption `json:"options"`
-}
-
-// PromptForUserChoicePayload carries the AskUserQuestion interception.
-//
-// AskID is the daemon-minted "ask_<8hex>" handle the server uses to
-// route SubmitPromptForUserChoice back to the right session. It rides
-// on the payload (not Envelope.ID) because Envelope.ID is reserved for
-// the run id — that's the field server-side session.dispatch fans on
-// to deliver the frame to the run's subscriber channel. ToolUseID is
-// the originating Claude Code tool_use id; empty when the call came
-// through the control_request channel (CCRequestID then identifies the
-// daemon-side waiter instead but it doesn't ride on the wire).
-type PromptForUserChoicePayload struct {
-	AskID            string                        `json:"ask_id"`
-	Questions        []PromptForUserChoiceQuestion `json:"questions"`
-	ToolUseID        string                        `json:"tool_use_id,omitempty"`
-	AutoResolutionMs *uint64                       `json:"auto_resolution_ms,omitempty"`
 }
 
 // TokenUsage is a complete cumulative measurement for the current execution.
@@ -222,7 +155,6 @@ const (
 type AgentKindCapabilities struct {
 	SubagentObservations  CapabilitySupport `json:"subagent_observations"`
 	Streaming             CapabilitySupport `json:"streaming"`
-	Permissions           CapabilitySupport `json:"permissions"`
 	Usage                 CapabilitySupport `json:"usage"`
 	Resume                CapabilitySupport `json:"resume"`
 	NativeSessionRecovery CapabilitySupport `json:"native_session_recovery"`

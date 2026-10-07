@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // Nil concrete receivers prove Unsupported needs no native owner, transport,
@@ -25,9 +24,6 @@ func TestUnsupportedExtensionsHaveNoNativeEffects(t *testing.T) {
 			t.Fatal("unsupported error disclosed input")
 		}
 	}
-	var turn *session
-	check(turn.SubmitPermission(ctx, secret, proto.PermissionDecisionPayload{}))
-	check(turn.SubmitPromptForUserChoice(ctx, secret, proto.PromptForUserChoiceDecisionPayload{}))
 	for _, owner := range []agent.WorkspaceWriter{(*executor)(nil), (*session)(nil), (*prepared)(nil)} {
 		result, err := owner.WriteWorkspaceFile(ctx, secret, []byte(secret))
 		check(err)

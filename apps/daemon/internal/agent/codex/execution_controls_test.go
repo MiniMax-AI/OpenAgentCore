@@ -16,7 +16,7 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			plan.Cleanup()
-			want := [][2]string{{"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}}
+			want := [][2]string{{"tools.experimental_request_user_input.enabled", "false"}, {"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}}
 			if !reflect.DeepEqual(plan.ExtraConfig, want) {
 				t.Fatalf("config = %v, want %v", plan.ExtraConfig, want)
 			}

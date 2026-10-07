@@ -250,9 +250,6 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 						return
 					}
 				}
-			case proto.TypePermissionRequest, proto.TypePromptForUserChoice:
-				result.ErrorCode = "interaction_not_supported"
-				return
 			}
 		case <-ticker.C:
 			select {

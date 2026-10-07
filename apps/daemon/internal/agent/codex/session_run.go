@@ -11,7 +11,6 @@ import (
 
 func (s *Session) run(plan SessionPlan, req proto.PromptRequestPayload) {
 	defer close(s.waitDone)
-	defer s.stopCodexInteractionTimers()
 	defer s.stopFunctionCalls()
 	defer s.cleanup()
 	defer s.closeRunOutput()

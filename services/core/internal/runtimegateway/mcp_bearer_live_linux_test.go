@@ -60,26 +60,35 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	mcpBearerStartDaemon(t, root, daemon, native, provider, fixture.caFile, server.URL, id, runner, capture)
 	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Minute)
 	defer cancel()
-	peer, err := registry.WaitForDevice(ctx, id, 30*time.Second)
-	if err != nil {
-		t.Fatal("built daemon did not connect through the real gateway")
-	}
-	t.Cleanup(func() { peer.Close("owned MCP acceptance finished") })
-	ready := time.Now().Add(30 * time.Second)
-	for {
-		info, found, known := peer.AgentKindStatus("codex")
-		if known && found && info.Available {
-			if !info.Capabilities.MCPHTTPTools || !info.Capabilities.MCPHTTPBearerAuth || !info.Capabilities.ToolObservations || !info.Capabilities.DurableTurns || !info.Capabilities.EnvironmentNone {
-				t.Fatal("built daemon did not advertise the required private execution capabilities")
+	var peer *Session
+	t.Cleanup(func() {
+		if peer != nil {
+			peer.Close("owned MCP acceptance finished")
+		}
+	})
+	connect := func() {
+		t.Helper()
+		var err error
+		if peer, err = registry.WaitForDevice(ctx, id, 30*time.Second); err != nil {
+			t.Fatal("built daemon did not connect through the real gateway")
+		}
+		ready := time.Now().Add(30 * time.Second)
+		for {
+			info, found, known := peer.AgentKindStatus("codex")
+			if known && found && info.Available {
+				if !info.Capabilities.MCPHTTPTools || !info.Capabilities.MCPHTTPBearerAuth || !info.Capabilities.ToolObservations || !info.Capabilities.DurableTurns || !info.Capabilities.EnvironmentNone {
+					t.Fatal("built daemon did not advertise the required private execution capabilities")
+				}
+				proof["codex_descriptor"] = info
+				return
 			}
-			proof["codex_descriptor"] = info
-			break
+			if time.Now().After(ready) {
+				t.Fatal("pinned Codex capability discovery did not complete")
+			}
+			time.Sleep(50 * time.Millisecond)
 		}
-		if time.Now().After(ready) {
-			t.Fatal("pinned Codex capability discovery did not complete")
-		}
-		time.Sleep(50 * time.Millisecond)
 	}
+	connect()
 	allowed, anonymousTools := []string{"remember", "fail"}, []string{"ping"}
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "private_mcp", ServerURL: fixture.private.URL, AllowedTools: &allowed, BearerToken: &token}, {ConnectionOrigin: "service", ServerLabel: "anonymous_mcp", ServerURL: fixture.anonymous.URL, AllowedTools: &anonymousTools}}
 	run := func(prompt, resume string, expected map[string]string) *mcpBearerTurn {
@@ -119,8 +128,10 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		defer peer.Unsubscribe(runID)
 		send(proto.TypeExecutionStart, prepareID, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: runID, Input: proto.TextInput(prompt)})
 		mcpBearerCollectTurn(t, ctx, sub, runID, turn, expected, token, provider)
-		// The Executor stays warm after Done; closing it makes the next Turn a cold continuation.
-		send(proto.TypeDeviceShutdown, "", proto.DeviceShutdownPayload{Reason: "cold continuation"})
+		// The Executor stays warm after Done. Reconnecting gives the daemon a fresh
+		// Router and closes the Executor, so the next Turn is a cold continuation.
+		peer.Close("cold continuation")
+		connect()
 		turn.NativeLaunches = mcpBearerReleased(t, root)
 		turn.BearerEnvironmentReference = mcpBearerConfigReference(t, root, token)
 		return turn
@@ -170,8 +181,8 @@ func mcpBearerCollectTurn(t *testing.T, ctx context.Context, sub *Subscription, 
 		}
 		turn.Events = append(turn.Events, event)
 		switch event.Type {
-		case proto.TypeError, proto.TypePermissionRequest, proto.TypePromptForUserChoice:
-			t.Fatal("unexpected execution failure or interaction during private MCP acceptance")
+		case proto.TypeError:
+			t.Fatal("unexpected execution failure during private MCP acceptance")
 		case proto.TypeToolCall:
 			var call proto.ToolCallPayload
 			if event.DecodePayload(&call) != nil || call.Observation == nil {

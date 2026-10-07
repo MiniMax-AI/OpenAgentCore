@@ -109,8 +109,8 @@ type Executor interface {
 type Turn interface {
 	Session
 	DurableSteerer
-	// Success confirms closed output and settled native input, function,
-	// interaction and child-work obligations. Errors cannot prove cancellation.
+	// Success confirms closed output and settled native input, function and
+	// child-work obligations. Errors cannot prove cancellation.
 	AwaitSettlement(context.Context) (TurnSettlement, error)
 }
 
@@ -156,20 +156,6 @@ type Steerer interface {
 // A successful return requires its native application receipt.
 type FunctionResultSubmitter interface {
 	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
-}
-
-// PermissionResponder accepts decisions for qualified permission requests.
-// An adapter that never supports these interactions returns ErrUnsupportedOperation.
-// Unknown or expired requests return ErrUnknownPermission.
-type PermissionResponder interface {
-	SubmitPermission(context.Context, string, proto.PermissionDecisionPayload) error
-}
-
-// UserChoiceResponder accepts answers for qualified user-choice requests.
-// An adapter that never supports these interactions returns ErrUnsupportedOperation.
-// Unknown or expired requests return ErrUnknownAsk.
-type UserChoiceResponder interface {
-	SubmitPromptForUserChoice(context.Context, string, proto.PromptForUserChoiceDecisionPayload) error
 }
 
 // Workspace extensions, implemented by each owner explicitly. The common

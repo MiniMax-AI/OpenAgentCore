@@ -161,8 +161,6 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	p := &controlledPreparation{closed: make(chan struct{})}
 	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session.out = out
-		out <- mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "publication-permission"})
-		out <- mustEnv(t, proto.TypePromptForUserChoice, "run", proto.PromptForUserChoicePayload{AskID: "publication-choice"})
 		return session, nil
 	}
 	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
@@ -172,21 +170,11 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	case <-time.After(2 * time.Second):
 		t.Fatal("started status did not reach publication boundary")
 	}
-	waitFor(t, func() bool {
-		return hasFrame(sender.recSender, proto.TypePermissionRequest, "run") && hasFrame(sender.recSender, proto.TypePromptForUserChoice, "run")
-	}, "pre-publication interaction routes")
-	for _, mutation := range []proto.Envelope{
-		mustEnv(t, proto.TypeFunctionResult, "run", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: "publication-function"}),
-		mustEnv(t, proto.TypePermissionDecision, "publication-permission", proto.PermissionDecisionPayload{DeliveryID: "publication-permission", Approved: true}),
-		mustEnv(t, proto.TypePromptForUserChoiceDecision, "publication-choice", proto.PromptForUserChoiceDecisionPayload{DeliveryID: "publication-choice", QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "q0", Answers: []string{"yes"}}}}),
-	} {
-		if err := r.Handle(t.Context(), mutation); err != nil {
-			t.Fatal(err)
-		}
+	result := mustEnv(t, proto.TypeFunctionResult, "run", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: "publication-function"})
+	if err := r.Handle(t.Context(), result); err != nil {
+		t.Fatal(err)
 	}
 	assertDecisionAck(t, sender.recSender, "publication-function", false, "not_ready")
-	assertDecisionAck(t, sender.recSender, "publication-permission", false, "not_ready")
-	assertDecisionAck(t, sender.recSender, "publication-choice", false, "not_ready")
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "publication-steering", Input: proto.TextInput("continue")})); err != nil {
 		t.Fatal(err)
 	}
@@ -202,10 +190,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	if len(frames) == 0 || frames[len(frames)-1].Type != proto.TypeWorkspaceReadResult || frames[len(frames)-1].DecodePayload(&readResult) != nil || readResult.ErrorCode != "resource_unavailable" {
 		t.Fatalf("pre-publication workspace read = %+v", frames)
 	}
-	session.askMu.Lock()
-	askCalls := len(session.askCalls)
-	session.askMu.Unlock()
-	if session.functions.Load() != 0 || session.steers.Load() != 0 || session.reads.Load() != 0 || len(session.submissions()) != 0 || askCalls != 0 {
+	if session.functions.Load() != 0 || session.steers.Load() != 0 || session.reads.Load() != 0 {
 		t.Fatal("private Session accepted work before started publication")
 	}
 	duplicate := mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: "run", Input: proto.TextInput("input")})

@@ -14,8 +14,6 @@
 // Envelope.ID correlation:
 //   - prompt_cancel: ID = RunID.
 //   - delta / tool_call / usage / error / done: ID = originating RunID.
-//   - permission_request: ID = RunID; payload.request_id is the interaction ID.
-//   - permission_decision / permission_cancel: ID = interaction ID.
 //   - execution_prepare / execution_start / execution_release and
 //     preparation_status: ID = preparation request ID, never RunID.
 //   - runtime_prepare / runtime_prepare_result: ID = connection-local transfer ID.
@@ -81,8 +79,7 @@ func NewEnvelopeWithTrace(typ string, id string, payload any, traceparent string
 }
 
 // DecodePayload unpacks Envelope.Payload into out. An empty Payload is
-// a non-error so bodyless types (prompt_cancel, permission_cancel)
-// decode cleanly.
+// a non-error so a bodyless prompt_cancel decodes cleanly.
 func (e Envelope) DecodePayload(out any) error {
 	if len(e.Payload) == 0 {
 		return nil

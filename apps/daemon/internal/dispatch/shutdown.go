@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 type shutdownAttempt struct {
@@ -116,33 +114,8 @@ func waitShutdown(ctx context.Context, attempt *shutdownAttempt) error {
 	}
 }
 
-func (r *Router) handleDeviceShutdown(ctx context.Context, env proto.Envelope) error {
-	var payload proto.DeviceShutdownPayload
-	_ = env.DecodePayload(&payload) // body optional
-	r.log.InfoContext(ctx, "device_shutdown received, cancelling runs", "reason", payload.Reason, "active_runs", r.ActiveRuns())
-	r.mu.Lock()
-	if r.closed {
-		r.mu.Unlock()
-		return ErrRouterClosed
-	}
-	if r.runtimePreparation != nil {
-		r.runtimePreparation.cancel()
-	}
-	victims := r.sessionCancellationsLocked()
-	preparations := r.closePendingPreparationsLocked()
-	executors := r.closeIdleExecutorsLocked()
-	r.mu.Unlock()
-	r.closeIdleExecutors(executors)
-	for _, p := range preparations {
-		go func() { defer r.shutdownWG.Done(); r.closePreparationResource(p) }()
-	}
-	r.cancelSessions(ctx, victims)
-	return nil
-}
-
 type sessionCancellation struct {
 	runID   string
-	handoff *preparedHandoff
 	release *preparedRelease
 	attempt *preparedReleaseAttempt
 }
@@ -153,15 +126,7 @@ func (r *Router) sessionCancellationsLocked() []sessionCancellation {
 	victims := make([]sessionCancellation, 0, len(r.sessions))
 	for _, state := range r.sessions {
 		release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
-		victims = append(victims, sessionCancellation{runID: state.runID, handoff: state.preparedHandoff, release: release, attempt: attempt})
+		victims = append(victims, sessionCancellation{runID: state.runID, release: release, attempt: attempt})
 	}
 	return victims
-}
-
-func (r *Router) cancelSessions(ctx context.Context, sessions []sessionCancellation) {
-	for _, session := range sessions {
-		if err := r.awaitPreparedRelease(ctx, session.handoff, session.release, session.attempt); err != nil {
-			r.log.Warn("prepared session release failed", "run_id", session.runID, "err", err)
-		}
-	}
 }

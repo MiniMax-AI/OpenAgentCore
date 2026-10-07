@@ -104,7 +104,6 @@ func (r *Router) claimPreparedReleaseLocked(state *sessionState, abort bool, fai
 		handoff.release = release
 		state.steeringClosed = true
 		state.session = nil
-		r.clearInteractionRoutesLocked(state)
 	}
 	if abort && !release.aborted() {
 		close(release.abort)
@@ -328,10 +327,6 @@ func (r *Router) forwardPreparedOutput(state *sessionState) {
 			if drainOnly {
 				continue
 			}
-			switch env.Type {
-			case proto.TypePermissionRequest, proto.TypePermissionCancel, proto.TypePromptForUserChoice:
-				r.indexPermissionFrame(state, env)
-			}
 			if err := r.sendSessionOutput(pumpCtx, state, env); err != nil {
 				r.mu.Lock()
 				if r.closed {
@@ -405,16 +400,6 @@ func (r *Router) forwardPreparedTerminal(state *sessionState, failure string, te
 		return err
 	}
 	return r.sendSessionOutput(pumpCtx, state, done)
-}
-
-func (r *Router) awaitPreparedRelease(ctx context.Context, handoff *preparedHandoff, release *preparedRelease, attempt *preparedReleaseAttempt) error {
-	if err := r.awaitPreparedNativeRelease(ctx, release, attempt); err != nil {
-		return err
-	}
-	r.mu.Lock()
-	err := handoff.outputErr
-	r.mu.Unlock()
-	return err
 }
 
 func (r *Router) awaitPreparedNativeRelease(ctx context.Context, release *preparedRelease, attempt *preparedReleaseAttempt) error {

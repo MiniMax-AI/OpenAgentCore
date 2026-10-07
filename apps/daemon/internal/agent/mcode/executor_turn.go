@@ -38,7 +38,7 @@ func (s *Session) runExecutorTurn(prompt string) {
 	s.mu.Lock()
 	// ACP and native history cancellation do not prove detached tool cleanup.
 	// Retire the owner and settle its workers before acknowledging cancellation.
-	if s.cancelled || s.inputUncertain || len(s.permissions) != 0 || len(s.questions) != 0 {
+	if s.cancelled || s.inputUncertain {
 		reusable = false
 	}
 	if s.inputUncertain && err == nil {
@@ -47,7 +47,6 @@ func (s *Session) runExecutorTurn(prompt string) {
 	metadata := map[string]any{proto.DoneMetaAgentSessionType: "mcode", proto.DoneMetaAgentSessionID: s.sessionID}
 	s.outcome = proto.DonePayload{Content: s.content.String(), Metadata: metadata, SourceCompletedAtMS: s.rootCompletedAtMS}
 	outcome := s.outcome
-	s.permissions, s.questions = map[string]pendingPermission{}, map[string]pendingQuestion{}
 	s.mu.Unlock()
 	if !reusable {
 		// Unknown quiescence invalidates this owner. A successful settlement

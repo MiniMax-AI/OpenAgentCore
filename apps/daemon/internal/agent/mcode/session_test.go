@@ -4,14 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -129,39 +127,20 @@ func TestSessionStreamsCurrentTurnAndResumes(t *testing.T) {
 	}
 }
 
-func TestSessionInteractionRoundTrip(t *testing.T) {
-	for _, approved := range []bool{true, false} {
-		t.Run(map[bool]string{true: "allow", false: "deny"}[approved], func(t *testing.T) {
-			session, out := helperSession(t, "interaction", false)
-			permissions, questions := 0, 0
-			for event := range out {
-				switch event.Type {
-				case proto.TypeError:
-					t.Fatalf("error: %s", event.Payload)
-				case proto.TypePermissionRequest:
-					permissions++
-					var p proto.PermissionRequestPayload
-					_ = json.Unmarshal(event.Payload, &p)
-					if err := session.SubmitPermission(context.Background(), p.RequestID, proto.PermissionDecisionPayload{Approved: approved}); err != nil {
-						t.Fatal(err)
-					}
-					if err := session.SubmitPermission(context.Background(), p.RequestID, proto.PermissionDecisionPayload{Approved: true}); !errors.Is(err, agent.ErrUnknownPermission) {
-						t.Fatalf("duplicate approval: %v", err)
-					}
-				case proto.TypePromptForUserChoice:
-					questions++
-					var p proto.PromptForUserChoicePayload
-					_ = json.Unmarshal(event.Payload, &p)
-					decision := proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "region", Answers: []string{"Europe"}}}}
-					if err := session.SubmitPromptForUserChoice(context.Background(), p.AskID, decision); err != nil {
-						t.Fatal(err)
-					}
-				}
-			}
-			if permissions != 1 || questions != 1 {
-				t.Fatalf("permissions=%d questions=%d", permissions, questions)
-			}
-		})
+// Harnesses run unattended: native asks are declined in the adapter and the turn completes.
+func TestSessionDeclinesNativeAsks(t *testing.T) {
+	_, out := helperSession(t, "unattended", false)
+	done := 0
+	for event := range out {
+		switch event.Type {
+		case proto.TypeError:
+			t.Fatalf("error: %s", event.Payload)
+		case proto.TypeDone:
+			done++
+		}
+	}
+	if done != 1 {
+		t.Fatalf("done=%d", done)
 	}
 }
 
@@ -272,6 +251,9 @@ func TestMCodeProcess(t *testing.T) {
 		result := any(map[string]any{})
 		switch frame.Method {
 		case "initialize":
+			if scenario == "unattended" && strings.Contains(string(frame.Params), "elicitation") {
+				os.Exit(7)
+			}
 			result = map[string]int{"protocolVersion": 1}
 		case "session/new", "session/load":
 			if scenario == "prepared-mcp-cancel" {
@@ -356,9 +338,9 @@ func TestMCodeProcess(t *testing.T) {
 				send(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Error: &rpcError{Code: -32603, Message: "Fixture provider unavailable"}})
 				continue
 			}
-			if scenario == "interaction" {
+			if scenario == "unattended" {
 				promptID = frame.ID
-				send(map[string]any{"jsonrpc": "2.0", "id": "permission-1", "method": "session/request_permission", "params": map[string]any{"sessionId": "native-1", "toolCall": map[string]any{"toolCallId": "tool-1", "name": "Bash", "title": "Run fixture", "rawInput": map[string]any{"command": "echo fixture"}}, "options": []map[string]string{{"optionId": "once", "kind": "allow_once"}, {"optionId": "always", "kind": "allow_always"}, {"optionId": "deny", "kind": "reject_once"}}}})
+				send(map[string]any{"jsonrpc": "2.0", "id": "permission-1", "method": "session/request_permission", "params": map[string]any{"sessionId": "native-1", "toolCall": map[string]any{"toolCallId": "tool-1", "name": "Bash", "title": "Run fixture", "rawInput": map[string]any{"command": "echo fixture"}}, "options": []map[string]string{{"optionId": "once", "kind": "allow_once"}, {"optionId": "deny", "kind": "reject_once"}}}})
 				continue
 			}
 			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "Hello "}})
@@ -397,21 +379,15 @@ func TestMCodeProcess(t *testing.T) {
 			if string(frame.ID) == `"permission-1"` {
 				var reply struct {
 					Outcome struct {
-						Option string `json:"optionId"`
+						Outcome string `json:"outcome"`
 					} `json:"outcome"`
 				}
-				_ = json.Unmarshal(frame.Result, &reply)
-				if reply.Outcome.Option != "once" && reply.Outcome.Option != "deny" {
+				if json.Unmarshal(frame.Result, &reply) != nil || reply.Outcome.Outcome != "cancelled" {
 					os.Exit(5)
 				}
-				send(map[string]any{"jsonrpc": "2.0", "id": "question-1", "method": "elicitation/create", "params": map[string]any{"sessionId": "native-1", "mode": "form", "requestedSchema": map[string]any{"type": "object", "required": []string{"region"}, "properties": map[string]any{"region": map[string]any{"type": "string", "title": "Region?", "oneOf": []map[string]string{{"const": "eu", "title": "Europe"}, {"const": "us", "title": "America"}}}}}}})
+				send(map[string]any{"jsonrpc": "2.0", "id": "question-1", "method": "elicitation/create", "params": map[string]any{"sessionId": "native-1", "mode": "form", "requestedSchema": map[string]any{"type": "object", "properties": map[string]any{"region": map[string]any{"type": "string"}}}}})
 			} else {
-				var reply struct {
-					Action  string            `json:"action"`
-					Content map[string]string `json:"content"`
-				}
-				_ = json.Unmarshal(frame.Result, &reply)
-				if reply.Action != "accept" || reply.Content["region"] != "eu" {
+				if frame.Error == nil || frame.Error.Code != -32601 {
 					os.Exit(6)
 				}
 				raw, _ := json.Marshal(map[string]string{"stopReason": "end_turn"})

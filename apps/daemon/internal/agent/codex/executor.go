@@ -72,7 +72,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 		functions: functions, observeMessages: base.observeMessages, observeSubagentIdentities: base.observeSubagentIdentities,
 		cfg: base.cfg, rpc: base.rpc, cancelCtx: turnCtx, cancelFn: cancel,
 		waitDone: make(chan struct{}), outputDone: make(chan struct{}), cleanup: func() {},
-		bufs: NewItemBuffers(), resolvedModel: base.resolvedModel, interactions: newPendingCodexInteractions(), runID: runID, out: out}
+		bufs: NewItemBuffers(), resolvedModel: base.resolvedModel, runID: runID, out: out}
 	if previous != nil {
 		s.threadID = previous.currentThreadID()
 		s.retiredTurns = make(map[string]bool, len(previous.retiredTurns)+1)
