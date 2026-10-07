@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 )
 
 // EnvironmentKey names one Environment of a tenant.
@@ -20,11 +21,13 @@ type EnvironmentConnection struct {
 }
 
 // AssignmentRelease is a released assignment whose Runtime has not
-// acknowledged the release.
+// acknowledged the release. Resource is the Link resource of the Session's
+// Environment, live or not; its Kind is empty when there is none.
 type AssignmentRelease struct {
 	RuntimeID  string
 	Assignment proto.AssignmentRef
 	RemoveHome bool
+	Resource   sandboxbootstrap.Resource
 }
 
 // EnvironmentExecution is the lease-bound storage of the Environment

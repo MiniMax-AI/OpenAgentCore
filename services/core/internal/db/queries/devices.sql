@@ -80,9 +80,16 @@ SET desired_state = 'released', epoch = b.epoch + 1, remove_home = b.remove_home
 WHERE b.session_id = sqlc.arg(session_id) AND (b.desired_state = 'bound' OR (sqlc.arg(remove_home)::boolean AND NOT b.remove_home));
 
 -- name: ListPendingAssignmentReleases :many
-SELECT session_id, runtime_id, assignment_id, epoch, remove_home FROM session_runtime_assignments
-WHERE desired_state = 'released' AND applied_epoch < epoch AND runtime_id = ANY(sqlc.arg(runtime_ids)::uuid[])
-ORDER BY runtime_id, session_id;
+-- Each release carries its Session's Link resource, live or not, which the
+-- release revokes before it is sent.
+SELECT b.session_id, b.runtime_id, b.assignment_id, b.epoch, b.remove_home,
+    r.tenant_id AS resource_tenant_id, r.environment_id AS resource_environment_id, r.kind AS resource_kind,
+    r.id AS resource_id, r.generation AS resource_generation
+FROM session_runtime_assignments b
+LEFT JOIN environments e ON e.session_id = b.session_id
+LEFT JOIN sandbox_resources r ON r.environment_id = e.id
+WHERE b.desired_state = 'released' AND b.applied_epoch < b.epoch AND b.runtime_id = ANY(sqlc.arg(runtime_ids)::uuid[])
+ORDER BY b.runtime_id, b.session_id;
 
 -- name: AcknowledgeAssignmentRelease :execrows
 UPDATE session_runtime_assignments SET applied_epoch = epoch

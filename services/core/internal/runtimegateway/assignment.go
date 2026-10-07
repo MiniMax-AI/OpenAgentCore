@@ -13,7 +13,9 @@ import (
 
 // Bind binds the Session's assignment to this connection's Runtime: it sends
 // assignment_bind and waits for bound, once per connection and reference.
-// Every Session operation on the connection follows its Bind.
+// Every Session operation on the connection follows its Bind. A bind of an
+// Environment with a live Link resource to an agent host carries the
+// resource and its attach grant.
 func (s *Session) Bind(ctx context.Context, ref proto.AssignmentRef, environmentID string) error {
 	s.assignmentMu.Lock()
 	bound := s.assignments[ref.SessionID] == ref
@@ -23,7 +25,14 @@ func (s *Session) Bind(ctx context.Context, ref proto.AssignmentRef, environment
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	status, err := s.exchangeAssignment(ctx, proto.TypeAssignmentBind, ref, proto.AssignmentBindPayload{EnvironmentID: environmentID})
+	payload := proto.AssignmentBindPayload{EnvironmentID: environmentID}
+	if s.links != nil {
+		var err error
+		if payload.Resource, payload.AttachGrant, err = s.links.bindLink(ctx, s.DeviceID, ref, environmentID); err != nil {
+			return err
+		}
+	}
+	status, err := s.exchangeAssignment(ctx, proto.TypeAssignmentBind, ref, payload)
 	if err != nil {
 		return err
 	}

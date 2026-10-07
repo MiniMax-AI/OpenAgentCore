@@ -87,6 +87,8 @@ type Session struct {
 	// archivedCancellations reads the receipt an archived Session's
 	// cancellation owes this connection's delivery.
 	archivedCancellations ArchivedCancellationStore
+	// links supplies the Link fields of this connection's binds.
+	links *LinkAuthority
 
 	hbMu       sync.Mutex
 	lastSeenAt time.Time

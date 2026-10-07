@@ -248,11 +248,17 @@ func (q *Queries) RevokeExecutorCredential(ctx context.Context, arg RevokeExecut
 }
 
 const rotateExecutorCredential = `-- name: RotateExecutorCredential :one
-UPDATE environment_executor_credentials
-SET token_sha256 = $1, issued_at = clock_timestamp(), revoked_at = NULL
-WHERE key_id = $2 AND tenant_id = $3
-    AND subject_kind = $4 AND subject_id = $5
-RETURNING key_id, environment_id
+WITH rotated AS (
+    UPDATE environment_executor_credentials
+    SET token_sha256 = $1, issued_at = clock_timestamp(), revoked_at = NULL
+    WHERE key_id = $2 AND tenant_id = $3
+        AND subject_kind = $4 AND subject_id = $5
+    RETURNING key_id, environment_id
+), advanced AS (
+    UPDATE sandbox_enrollments n SET generation = n.generation + 1
+    FROM rotated r WHERE n.executor_key_id = r.key_id
+)
+SELECT key_id, environment_id FROM rotated
 `
 
 type RotateExecutorCredentialParams struct {
@@ -268,6 +274,8 @@ type RotateExecutorCredentialRow struct {
 	EnvironmentID pgtype.UUID `json:"environment_id"`
 }
 
+// Rotation advances the generation of the key's enrollments, so the Link
+// authority refuses what the old secret served.
 func (q *Queries) RotateExecutorCredential(ctx context.Context, arg RotateExecutorCredentialParams) (RotateExecutorCredentialRow, error) {
 	row := q.db.QueryRow(ctx, rotateExecutorCredential,
 		arg.TokenSha256,

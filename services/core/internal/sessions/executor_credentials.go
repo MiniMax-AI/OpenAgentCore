@@ -127,8 +127,8 @@ type ExecutorCredentialTx interface {
 	IssueExecutorCredential(ctx context.Context, grant ExecutorCredentialGrant) (IssuedExecutorCredential, error)
 	// RotateExecutorCredential replaces the secret of the subject's key with
 	// the one whose SHA-256 digest is given, restores the key if it was
-	// revoked, and returns its key and restriction. An unknown key is
-	// ErrNotFound.
+	// revoked, advances the generation of the key's Link enrollments, and
+	// returns its key and restriction. An unknown key is ErrNotFound.
 	RotateExecutorCredential(ctx context.Context, subject identity.Subject, key, digest string) (IssuedExecutorCredential, error)
 	// RevokeExecutorCredential revokes the subject's key; revoking it again
 	// changes nothing. An unknown key is ErrNotFound.

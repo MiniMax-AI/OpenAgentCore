@@ -10,6 +10,7 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -49,6 +50,10 @@ type Dispatcher struct {
 	Sessions *sessions.Service
 	// SessionsReader serves the plain Session reads. It is required.
 	SessionsReader sessions.Reader
+	// Links is the Link relay. The Worker revokes a resource there after its
+	// durable Serve authority or an assignment's attach authority ends, and
+	// before it destroys the resource or sends the release. It is required.
+	Links *relay.Relay
 	// ManagedRuntimes is optional internal provisioning; it does not admit hosted API requests.
 	ManagedRuntimes *RuntimeProvider
 	// MaxConcurrentExecutions bounds work admitted by this Core execution owner.

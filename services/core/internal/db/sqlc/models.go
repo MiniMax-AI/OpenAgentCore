@@ -81,6 +81,8 @@ type Device struct {
 	EnvironmentID       pgtype.UUID        `json:"environment_id"`
 	ExecutorKeyID       pgtype.UUID        `json:"executor_key_id"`
 	ArchiveCancelTurnID pgtype.UUID        `json:"archive_cancel_turn_id"`
+	AgentHost           bool               `json:"agent_host"`
+	CredentialRevision  int64              `json:"credential_revision"`
 }
 
 type Environment struct {
@@ -250,6 +252,8 @@ type RuntimeAllocation struct {
 	ObservationError      string             `json:"observation_error"`
 	ComputePhaseChangedAt pgtype.Timestamptz `json:"compute_phase_changed_at"`
 	DeploymentGeneration  pgtype.Int8        `json:"deployment_generation"`
+	ServeCredentialHash   pgtype.Text        `json:"serve_credential_hash"`
+	ServeGeneration       int64              `json:"serve_generation"`
 }
 
 type RuntimeDeployment struct {
@@ -364,6 +368,23 @@ type RuntimePlacement struct {
 	ReservedAt           pgtype.Timestamptz `json:"reserved_at"`
 	ReleasedAt           pgtype.Timestamptz `json:"released_at"`
 	DeploymentGeneration pgtype.Int8        `json:"deployment_generation"`
+}
+
+type SandboxEnrollment struct {
+	ID            pgtype.UUID `json:"id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	ExecutorKeyID pgtype.UUID `json:"executor_key_id"`
+	Generation    int64       `json:"generation"`
+}
+
+type SandboxResource struct {
+	TenantID       pgtype.UUID `json:"tenant_id"`
+	EnvironmentID  pgtype.UUID `json:"environment_id"`
+	Kind           string      `json:"kind"`
+	ID             pgtype.UUID `json:"id"`
+	Generation     int64       `json:"generation"`
+	CredentialHash pgtype.Text `json:"credential_hash"`
+	Live           pgtype.Bool `json:"live"`
 }
 
 type Session struct {

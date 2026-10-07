@@ -24,7 +24,7 @@ func allocation(row sqlc.RuntimeAllocation, session, tenant pgtype.UUID, deleted
 		ComputePhase: row.ComputePhase, ComputeRevision: row.ComputeRevision, ComputeState: row.ComputeState,
 		ComputeActivityAt: row.ComputeActivityAt.Time, ComputeWakeRequested: row.ComputeWakeRequested, ComputeRetainedUntil: timestamp(row.ComputeRetainedUntil),
 		ID: uuidString(row.ID), EnvironmentID: uuidString(row.EnvironmentID), SessionID: uuidString(session), TenantID: uuidString(tenant),
-		DeviceID: uuidString(row.DeviceID), ProviderKey: uuidString(row.ProviderKey), State: row.State, CreateSettled: row.CreateSettled,
+		DeviceID: uuidString(row.DeviceID), ProviderKey: uuidString(row.ProviderKey), ServeGeneration: uint64(row.ServeGeneration), State: row.State, CreateSettled: row.CreateSettled,
 		SessionDeleted: deleted.Valid, Expired: expired, CreatedAt: row.CreatedAt.Time, KeptAt: row.KeptAt.Time,
 	}
 }

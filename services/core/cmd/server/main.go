@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
@@ -273,6 +274,7 @@ func run() error {
 	}
 	var daemonHandler http.Handler
 	var registry *runtimegateway.Registry
+	var linkRelay *relay.Relay
 	var executorURL string
 	var nativeInstaller *api.NativeInstaller
 	if public != "" {
@@ -280,11 +282,14 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, sessionStore, executorURL)
+		links := runtimegateway.NewLinkAuthority(sessionStore)
+		daemonHandler, registry, err = runtime.NewGateway(sessionStore, sessionService, sessionStore, links, executorURL)
 		if err != nil {
 			return err
 		}
 		defer runtime.CloseConnections(registry)
+		linkRelay = relay.New(links)
+		defer linkRelay.Close()
 		var catalog *nativeinstaller.Catalog
 		if directory := os.Getenv("OAC_NATIVE_INSTALLER_DIR"); directory != "" {
 			catalog, err = nativeinstaller.Load(directory, buildRevision)
@@ -302,6 +307,7 @@ func run() error {
 			Credentials: vaultService, Observer: modelConfigurationStore, Deployment: deploymentService, DeploymentReader: deploymentStore,
 			Sessions:        sessionService,
 			SessionsReader:  sessionStore,
+			Links:           linkRelay,
 			ManagedRuntimes: managed, MaxConcurrentExecutions: concurrency}
 		lease, err := pgunit.AcquireLease(ctx, pool)
 		if err != nil {

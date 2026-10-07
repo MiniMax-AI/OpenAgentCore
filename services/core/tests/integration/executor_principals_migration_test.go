@@ -125,6 +125,9 @@ func TestExecutorPrincipalMigrationRetiresUnknownAuthority(t *testing.T) {
 	if _, err := provider.DownTo(ctx, 25); err == nil || !strings.Contains(err.Error(), "Cannot remove durable executor principal identities") {
 		t.Fatal("downgrade lost principal keys", err)
 	}
+	if _, err := provider.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := credentials.RotateExecutorCredential(ctx, p, key.KeyID); err != nil {
 		t.Fatal("failed downgrade damaged identity", err)
 	}

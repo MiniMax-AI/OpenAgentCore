@@ -74,9 +74,12 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if owner.Deployment == nil {
 		return nil, errors.New("execution worker requires the deployment execution operations")
 	}
+	if dispatcher.Links == nil {
+		return nil, errors.New("execution worker requires the Link relay")
+	}
 	owned.notifications = &executionNotifications{}
 	worker := &Worker{concurrency: dispatcher.MaxConcurrentExecutions, dispatcher: owned, lease: owner.Lease, directoryReads: make(chan directoryReadRequest), fileWrites: make(chan fileWriteRequest), stopped: make(chan struct{}), scheduleWake: make(chan struct{}, 1), enrolledConnections: make(map[string]*runtimeConnection)}
-	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.ManagedRuntimes)
+	worker.runtimes, err = newRuntimeManager(owner, owned.Deployment, owned.DeploymentReader, owned.SessionsReader, owned.Registry, owned.Links, owned.ManagedRuntimes)
 	if err != nil {
 		return nil, err
 	}

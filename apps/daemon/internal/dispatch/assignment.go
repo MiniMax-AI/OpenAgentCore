@@ -1,11 +1,13 @@
 package dispatch
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 )
 
 // assignmentState is the Router's record of one Session's assignment. Router.mu
@@ -13,7 +15,11 @@ import (
 type assignmentState struct {
 	ref           proto.AssignmentRef
 	environmentID string
-	released      bool
+	// resource and grant are the bind's Link resource and attach grant; the
+	// resource's Kind is empty when the bind carried none.
+	resource sandboxbootstrap.Resource
+	grant    []byte
+	released bool
 	// work counts the Session's admitted reads, writes, exports and Runtime
 	// preparations until each has sent its terminal result. A release waits
 	// for it, and the released assignment admits no more.
@@ -55,17 +61,21 @@ func (r *Router) admitRunLocked(ref proto.AssignmentRef, state *sessionState) st
 func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) error {
 	var input proto.AssignmentBindPayload
 	ref, code := env.Assignment, ""
-	if env.ID == "" || env.DecodeRequest(&input) != nil || !ref.Valid() {
+	if env.ID == "" || env.DecodeRequest(&input) != nil || input.Validate() != nil || !ref.Valid() {
 		code = "invalid_request"
 	} else {
+		var resource sandboxbootstrap.Resource
+		if input.Resource != nil {
+			resource = *input.Resource
+		}
 		r.mu.Lock()
 		a := r.assignments[ref.SessionID]
 		switch {
 		case a == nil:
-			r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID}
+			r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID, resource: resource, grant: input.AttachGrant}
 		case a.ref.AssignmentID == ref.AssignmentID && (ref.Epoch < a.ref.Epoch || ref.Epoch == a.ref.Epoch && a.released):
 			code = proto.AssignmentStale
-		case a.ref != ref || a.environmentID != input.EnvironmentID:
+		case a.ref != ref || a.environmentID != input.EnvironmentID || a.resource != resource || !bytes.Equal(a.grant, input.AttachGrant):
 			code = proto.AssignmentConflict
 		}
 		r.mu.Unlock()

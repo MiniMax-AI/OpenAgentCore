@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -74,7 +75,7 @@ func TestSandboxResetSnapshotFitsPageBudget(t *testing.T) {
 		}
 		return &RuntimeProvider{InstallationID: id, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}, nil
 	})
-	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), configuration)
+	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), relay.New(nil), configuration)
 	if err != nil {
 		t.Fatal(err)
 	}

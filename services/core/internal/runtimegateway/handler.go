@@ -40,6 +40,10 @@ type HandlerConfig struct {
 	// cancellation still owes a connection's delivery. nil drains nothing.
 	ArchivedCancellations ArchivedCancellationStore
 
+	// Links gives an agent host's binds their Link resource and attach grant.
+	// nil sends binds without them.
+	Links *LinkAuthority
+
 	// PublicWSURL is the wss://... URL returned in the bootstrap
 	// response so deployments behind a TLS terminator can advertise
 	// the externally-reachable URL.
@@ -130,6 +134,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 	sess := NewSession(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log)
 	sess.heartbeat = h.cfg.Heartbeat
 	sess.archivedCancellations = h.cfg.ArchivedCancellations
+	sess.links = h.cfg.Links
 	sess.credentialHash = runtimedevice.HashCredential(token)
 	h.cfg.Log("agentdaemon gateway: ws upgrade ok, registering device_id=%s waiters=%d",
 		auth.DeviceID, len(h.cfg.Registry.PendingWaiters(auth.DeviceID)))

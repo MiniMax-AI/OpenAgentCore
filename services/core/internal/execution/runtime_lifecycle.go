@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/relay"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -50,6 +52,7 @@ type runtimeLifecycle struct {
 	reader          deployment.Reader
 	lease           Ownership
 	registry        *runtimegateway.Registry
+	links           *relay.Relay
 	config          RuntimeProvider
 	nodeID          string
 	gate            chan struct{}
@@ -63,7 +66,7 @@ type runtimeLifecycle struct {
 	wakeHints       chan struct{}
 }
 
-func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
+func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, links *relay.Relay, config *RuntimeProvider) (*runtimeManager, error) {
 	if config == nil {
 		return nil, nil
 	}
@@ -81,7 +84,7 @@ func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentR
 		}
 	}
 	ctx, stop := context.WithCancel(context.Background())
-	return &runtimeManager{sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
+	return &runtimeManager{sessions: sessionReader, sessionExecution: owner.Sessions, deployment: owner.Deployment, deploymentService: deployments, deploymentReader: deploymentReader, lease: owner.Lease, registry: registry, links: links, config: copied, setupInstallationID: config.InstallationID, loadDeployment: config.loadDeployment, prepareDeployment: config.prepareDeployment, publishUnconfigured: config.PublishUnconfigured, setupGate: make(chan struct{}, 1), mutationGate: make(chan struct{}, 1), ctx: ctx, cancel: stop, nodes: make(map[string]*runtimeNode), failed: make(chan error, 1), inventory: make(chan struct{}, 1)}, nil
 }
 
 func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.Registry) (RuntimeProvider, error) {
@@ -251,7 +254,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 		// Explicit invalid/foreign bootstrap cannot become an authorized Runtime.
 		// Other failures may hide a successful Create; retain recovery for those.
 		if errors.Is(err, sandbox.ErrInvalid) || errors.Is(err, sandbox.ErrOwnership) {
-			if _, cleanupErr := r.deployment.RequestCleanup(ctx, owner); cleanupErr != nil {
+			if _, cleanupErr := r.requestCleanup(ctx, owner); cleanupErr != nil {
 				return owner, cleanupErr
 			}
 		}
@@ -320,7 +323,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	}
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
 		var err error
-		owner, err = r.deployment.RequestCleanup(ctx, owner)
+		owner, err = r.requestCleanup(ctx, owner)
 		if err != nil {
 			return err
 		}
@@ -371,7 +374,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 		}
 	}
 	if owner.SessionDeleted || owner.Expired || owner.State == "cleanup_pending" {
-		owner, err = r.deployment.RequestCleanup(ctx, owner)
+		owner, err = r.requestCleanup(ctx, owner)
 		if err != nil {
 			return err
 		}
@@ -421,6 +424,19 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	}
 	_, err = r.deployment.KeepAllocation(ctx, owner)
 	return err
+}
+
+// requestCleanup records the allocation's cleanup, which withdraws its Serve
+// authority, then revokes its Link resource at the relay. The caller destroys
+// the compute afterwards.
+func (r *runtimeLifecycle) requestCleanup(ctx context.Context, owner deployment.Allocation) (deployment.Allocation, error) {
+	pending, err := r.deployment.RequestCleanup(ctx, owner)
+	if err != nil {
+		return pending, err
+	}
+	r.links.RevokeResource(sandboxbootstrap.Resource{TenantID: pending.TenantID, EnvironmentID: pending.EnvironmentID,
+		Kind: "allocation", ID: pending.ID, Generation: pending.ServeGeneration}.Ref())
+	return pending, nil
 }
 
 // Environment identity owns connectivity; preparation has an independent owner.

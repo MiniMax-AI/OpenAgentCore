@@ -48,7 +48,7 @@ func (in Input) Validate() error {
 	if in.Version != Version || sandboxlink.CheckRelayURL(in.LinkURL) != nil ||
 		in.Credential == "" || len(in.Credential) > sandboxlink.MaxCredentialBytes ||
 		strings.ContainsFunc(in.Credential, func(r rune) bool { return r == 0 || unicode.IsSpace(r) }) ||
-		in.Resource.validate() != nil {
+		in.Resource.Validate() != nil {
 		return ErrInvalid
 	}
 	raw, err := json.Marshal(in)
@@ -58,7 +58,8 @@ func (in Input) Validate() error {
 	return nil
 }
 
-func (r Resource) validate() error {
+// Validate checks that the resource names one Link resource.
+func (r Resource) Validate() error {
 	for _, id := range []string{r.TenantID, r.EnvironmentID, r.ID} {
 		if u, err := uuid.Parse(id); err != nil || u == uuid.Nil || u.String() != id {
 			return ErrInvalid
