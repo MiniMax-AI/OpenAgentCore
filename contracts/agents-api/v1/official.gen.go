@@ -273,10 +273,10 @@ type FunctionCallAction struct {
 // FunctionToolInput projects AgentToolConfigParamFunction.
 type FunctionToolInput struct {
 	Type         string          `json:"type" binding:"required" enums:"function"`
-	Name         *string         `json:"name" binding:"required"`
-	Description  *string         `json:"description" binding:"required"`
+	Name         string          `json:"name" binding:"required"`
+	Description  string          `json:"description" binding:"required"`
 	Parameters   json.RawMessage `json:"parameters" binding:"required" swaggertype:"object"`
-	DeferLoading json.RawMessage `json:"defer_loading,omitempty" swaggertype:"object"`
+	DeferLoading *bool           `json:"defer_loading,omitempty"`
 }
 
 // InlineAgent projects SessionAgentConfigParam.
@@ -377,14 +377,14 @@ type MCPTool struct {
 
 // MCPToolInput projects AgentToolConfigParamMcp.
 type MCPToolInput struct {
-	Type             string          `json:"type" binding:"required" enums:"mcp"`
-	ServerLabel      *string         `json:"server_label" binding:"required"`
-	Transport        json.RawMessage `json:"transport" binding:"required" swaggertype:"object"`
-	AllowedTools     json.RawMessage `json:"allowed_tools" extensions:"x-nullable" swaggertype:"object"`
-	ConnectionOrigin *string         `json:"connection_origin" extensions:"x-nullable" enums:"service,environment"`
-	CredentialID     *string         `json:"credential_id" extensions:"x-nullable"`
-	RequestMetadata  json.RawMessage `json:"request_metadata" extensions:"x-nullable" swaggertype:"object"`
-	Required         json.RawMessage `json:"required" swaggertype:"object"`
+	Type             string                     `json:"type" binding:"required" enums:"mcp"`
+	ServerLabel      string                     `json:"server_label" binding:"required"`
+	CredentialID     *string                    `json:"credential_id,omitempty" extensions:"x-nullable"`
+	Transport        json.RawMessage            `json:"transport" binding:"required" swaggertype:"object"`
+	RequestMetadata  map[string]json.RawMessage `json:"request_metadata,omitempty" extensions:"x-nullable" swaggertype:"object"`
+	AllowedTools     []string                   `json:"allowed_tools,omitempty" extensions:"x-nullable"`
+	Required         *bool                      `json:"required,omitempty"`
+	ConnectionOrigin *string                    `json:"connection_origin,omitempty" extensions:"x-nullable" enums:"service,environment"`
 }
 
 // MultiAgentConfig projects MultiAgentConfigResource.
