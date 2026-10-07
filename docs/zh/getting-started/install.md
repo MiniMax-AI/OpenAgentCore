@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: b588dc9d68ba909fe9fadc440ee3f6fda9b79ebe0f14f6011d8bab603e17c710
+source_hash: d034ab565564ae9447c6e8b31b3d13d8868cae738f623a7471ba56ba517d67c8
 ---
 
 一条命令即可在 Linux 主机上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -46,7 +46,13 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 安装程序不保存沙箱后端，不添加节点，不创建 Project 或密钥，也不发起模型请求。完成后输出控制台地址和 Core 密钥。
 
-如果服务进入健康状态之前安装失败，安装程序会删除它创建的目录。修复报告的问题后，重新运行同一命令。服务已经启动之后，后续失败会保留安装和数据。新发布版使用新目录；见[版本策略](operations.md#installation-version-policy)。
+安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据，并显示服务日志。修复报错后，重新执行同一命令，或指定安装目录即可继续：
+
+```bash
+curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
+```
+
+如果使用了其他目录，请替换路径。重新执行时沿用已保存的 Compose 文件和设置；安装参数只对新目录生效。已有镜像和容器直接复用，缺失镜像会重新下载。修改设置请编辑 `.env` 并运行 `oac apply`。新发布版使用新目录；见[版本策略](operations.md#installation-version-policy)。
 
 空间或配额不足时，请释放错误信息所指文件系统的空间。加载镜像失败还可能需要释放 Docker 存储空间，该存储可能位于另一个文件系统。
 
