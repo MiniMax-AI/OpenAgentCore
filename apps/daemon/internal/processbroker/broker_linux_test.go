@@ -9,10 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -258,6 +260,37 @@ func TestEnvironmentIsDeclaredOnly(t *testing.T) {
 	want := "HOME=/home/sandbox\nKEEP=kept\nLANG=C.UTF-8\nPATH=/usr/bin:/bin\nTOOL=1\n"
 	if string(out) != want || bytes.Contains(out, []byte("/.oac")) {
 		t.Fatalf("remote environment %q, want %q", out, want)
+	}
+}
+
+// An alias runs its frozen command whatever the shim's argv, working
+// directory and environment say.
+func TestAliasRunsItsFrozenCommand(t *testing.T) {
+	b := &Broker{log: slog.Default(), cfg: Config{
+		Executables: Executables{Aliases: map[string]Command{"oac-mcp-0": {Executable: "server", Args: []string{"--stdio"}, Dir: "/pkg"}}},
+		Environment: Environment{Pass: []string{"KEEP"}, Sandbox: map[string]string{"PATH": "/bin"}},
+		Scope:       sp.ScopePOSIXSession,
+	}}
+	inv := b.newInvocation(processshim.Open{ID: 1, Request: processshim.Request{
+		ExecPath: []byte("/.oac/bin/oac-mcp-0"),
+		Argv:     [][]byte{[]byte("other"), []byte("--extra")},
+		Env:      [][]byte{[]byte("KEEP=1")},
+		Cwd:      []byte("/elsewhere"),
+	}})
+	if r := inv.prepare(); r != nil {
+		t.Fatalf("prepare refused: %d %s", r.Code, r.Message)
+	}
+	got := inv.spec
+	want := sp.ProcessSpec{
+		Executable: []byte("server"),
+		Argv:       [][]byte{[]byte("server"), []byte("--stdio")},
+		Env:        []sp.EnvVar{{Name: []byte("PATH"), Value: []byte("/bin")}},
+		Cwd:        []byte("/pkg"),
+		IOMode:     sp.IOPipes,
+		Scope:      sp.ScopePOSIXSession,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("spec %+v, want %+v", got, want)
 	}
 }
 
