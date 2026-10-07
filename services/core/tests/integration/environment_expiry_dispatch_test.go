@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -24,7 +23,7 @@ func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 	var active []sessions.Session
 	for _, key := range []string{"one", "two", "three", "four"} {
 		session := publicSession(t, h, key)
-		if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, key, []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"remain active"}`)}}); err != nil {
+		if _, err := worker.SubmitInputs(t.Context(), h.tenant, session.ID, key, []sessions.Input{messageInput("remain active")}); err != nil {
 			t.Fatal(err)
 		}
 		requests = append(requests, h.read(testExecutionRequest))
@@ -66,7 +65,7 @@ func TestWorkerEnvironmentExpirySkipsBusySessionAndAllowsDispatch(t *testing.T) 
 	}
 	worker, stop := startEnvironmentExpiryWorker(t, h.s, h.d)
 	h.session = publicSession(t, h, "unrelated")
-	receipt, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "work", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"make normal progress"}`)}})
+	receipt, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "work", []sessions.Input{messageInput("make normal progress")})
 	if err != nil {
 		t.Fatal(err)
 	}

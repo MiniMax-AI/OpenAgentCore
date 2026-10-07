@@ -308,7 +308,7 @@ func TestEnvironmentInputPromotionRollsBackHistoryAndSettlement(t *testing.T) {
 			ctx := t.Context()
 			pending := reserve(t, service, tenant, session, "pending")
 			name := "reservation_failure_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-			table, expression := "turn_inputs", "session_id <> '"+text(session)+"'::uuid OR payload->>'text' <> 'second'"
+			table, expression := "turn_inputs", "session_id <> '"+text(session)+"'::uuid OR payload#>>'{input,0,content,0,text}' <> 'second'"
 			switch phase {
 			case "settlement":
 				table, expression = "environment_input_reservations", "id <> '"+pending.ID+"'::uuid OR state <> 'admitted'"

@@ -365,9 +365,6 @@ func (w *Worker) runClaim(ctx context.Context, item sessions.ExecutionWork) erro
 	var rejection *preparationRejection
 	capacityRejected := errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare && rejection.code == "preparation_capacity"
 	outcome := json.RawMessage(`{"error_code":"execution_unavailable"}`)
-	if errors.Is(err, ErrModelProviderRequired) {
-		outcome = json.RawMessage(`{"error_code":"model_provider_required"}`)
-	}
 	finish, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	turn, err := w.dispatcher.SessionsReader.GetTurn(finish, item.TenantID, item.SessionID, item.TurnID)

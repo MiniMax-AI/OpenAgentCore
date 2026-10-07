@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -16,9 +17,15 @@ import (
 
 var messagePayload = json.RawMessage(`{"input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}]}`)
 
+// messageText is a public message event with one text part, as the events
+// route stores it.
+func messageText(text string) json.RawMessage {
+	payload, _ := json.Marshal(v1.SessionInput{Type: "agent.session.input.message", Input: []v1.InputMessage{{Role: "user", Content: []v1.InputContent{{Type: "input_text", Text: &text}}}}})
+	return payload
+}
+
 func messageInput(text string) sessions.Input {
-	payload, _ := json.Marshal(map[string]string{"text": text})
-	return sessions.Input{Kind: "message", Payload: payload}
+	return sessions.Input{Kind: "message", Payload: messageText(text)}
 }
 
 func newTurnSession(t *testing.T, s *Store) (string, sessions.Session) {

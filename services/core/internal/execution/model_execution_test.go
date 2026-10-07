@@ -21,13 +21,6 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("missing Session credentials fell back", err)
 	}
-	// Hosted and self-hosted Runtimes have no model configuration of their own.
-	for _, environment := range []string{"openai_hosted", "self_hosted"} {
-		snapshot := Snapshot{Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
-			t.Fatal("provider-free Session dispatched", environment, err)
-		}
-	}
 	// A none device without a frozen provider uses its own provider environment:
 	// Core sends only the Agent's model and instructions.
 	instructions := "Keep this instruction."

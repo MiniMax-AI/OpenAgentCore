@@ -144,7 +144,7 @@ func TestWorkerRestartReconcilesClaimedButPreservesQueuedWork(t *testing.T) {
 	}
 	checkMeasurement(false)
 	queued := publicSession(t, h, "queued")
-	if _, err := sendMessage(ctx, h.s, h.tenant, queued.ID, "first", json.RawMessage(`{"text":"Not sent"}`)); err != nil {
+	if _, err := sendMessage(ctx, h.s, h.tenant, queued.ID, "first", messageText("Not sent")); err != nil {
 		t.Fatal(err)
 	}
 	worker := startOwnedWorker(t, ctx, h.s, h.d, h.owner())

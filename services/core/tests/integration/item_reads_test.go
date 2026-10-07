@@ -22,7 +22,7 @@ func TestItemsRecoverSnapshotsPartialResultsPaginationAndIsolation(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "first", json.RawMessage(`{"text":"question"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "first", messageText("question"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
 	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
-	input, err := sendMessage(ctx, s, tenant, session.ID, "input", json.RawMessage(`{"text":"test"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "input", messageText("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 	tenant := uuid.NewString()
 	for _, receiptOnly := range []bool{true, false} {
 		session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString()})
-		input, err := sendMessage(ctx, s, tenant, session.ID, "first", json.RawMessage(`{"text":"test"}`))
+		input, err := sendMessage(ctx, s, tenant, session.ID, "first", messageText("test"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "first", json.RawMessage(`{"text":"question"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "first", messageText("question"))
 	if err != nil {
 		t.Fatal(err)
 	}

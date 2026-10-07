@@ -39,7 +39,7 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Later re
 - **Cancellation.** A queued Turn is cancelled without a live Runtime. A running Turn is cancelled when the Runtime confirms it; completion can win that race. The Turn has stopped when it reads `cancelled`, not when the request returns. A cancellation on an idle Session with no pending input is accepted and has no effect; while an input reservation is pending, it returns 409.
 - **Function results.** `turn_id`, `call_id` and `success` are required; `output` and `error` are optional and nullable ([content rules](./message-content.md#function-results)). An identical repeated result returns 202 without another application or event. The result Item appears when the harness applies the result; a result that cancellation prevents from being applied stays stored but produces no Item.
 - **Queueing.** A queued Turn starts when a Runtime that supports the Session's harness and configuration is connected and one of Core's [`core.execution_concurrency`](../../docs/configuration.md#settings) work slots is free. A Session stays bound to the Runtime that first ran it.
-- **Execution availability.** A service without execution returns 503 `execution_unavailable`, and a Worker that loses execution ownership returns 503. A Session created without a model provider rejects new messages with 400 `model_provider_required` ([model execution](./model-execution.md)).
+- **Execution availability.** A service without execution returns 503 `execution_unavailable`, and a Worker that loses execution ownership returns 503.
 
 ### Sessions with an Environment
 
