@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 08ee1b2be4491895db74bacb99fe25beb693c6e967f8c4c8418833c58ed27a92
+source_hash: 0890cc82a6ab41096a81aebfee6024b22d8c298e82104b34f7ab194a54b05a55
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -105,7 +105,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 
 初始、已准备和活动输入使用同一[有序 MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go)。Adapter 保留消息与内容顺序，并明确拒绝不支持的内容；仅文本 transport 拒绝图像内容而不丢弃它。[消息输入契约](../../contracts/agents-api/zh/message-content.md)负责公开图像 profile、空白规则和各 Harness 的原生转换。
 
-助手文本只以带身份的消息到达。一条消息以状态为 `in_progress`、带其 ID 的 `output_message` 开始，该 frame 可以指明 `phase`；每个文本片段是一个 `delta`，其 `item_id` 指向该消息；状态为 `completed` 的 `output_message` 携带消息的完整文本，并替换其片段。共享校验器拒绝没有 `item_id` 的 `delta`，`done` 不携带回答文本。Run 被取消或失败时仍未结束的消息以 `incomplete` 结束。
+助手文本只以带身份的消息到达。一条消息以状态为 `in_progress`、带其 ID 的 `output_message` 开始，该 frame 可以指明 `phase`；每个文本片段是一个 `delta`，其 `item_id` 指向该消息；状态为 `completed` 的 `output_message` 携带消息的完整文本，并替换其片段。共享校验器拒绝没有 `item_id` 的 `delta`，`done` 不携带回答文本。Turn 结束时仍未结束的消息标记为 `incomplete`。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 

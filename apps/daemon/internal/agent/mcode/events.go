@@ -46,6 +46,10 @@ func (s *Session) handle(frame rpcFrame) error {
 			return fmt.Errorf("mcode: ACP message chunk has no message identity")
 		}
 		if event.Update.MessageID != s.message {
+			// Core keeps a completed message, so a resumed one would lose its text.
+			if s.completedMessages[event.Update.MessageID] {
+				return fmt.Errorf("mcode: ACP message resumed after it ended")
+			}
 			s.completeMessage()
 			s.message = event.Update.MessageID
 			s.emit(proto.TypeOutputMessage, proto.OutputMessagePayload{ID: s.message, Status: "in_progress"})
@@ -71,6 +75,7 @@ func (s *Session) completeMessage() {
 	}
 	text := s.messageText.String()
 	s.emit(proto.TypeOutputMessage, proto.OutputMessagePayload{ID: s.message, Status: "completed", Text: &text})
+	s.completedMessages[s.message] = true
 	s.message = ""
 	s.messageText.Reset()
 }

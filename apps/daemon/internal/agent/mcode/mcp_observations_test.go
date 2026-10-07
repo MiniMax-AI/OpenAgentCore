@@ -18,7 +18,7 @@ func mcpObservationSession(t *testing.T) (*Session, chan proto.Envelope) {
 	s := &Session{ctx: context.Background(), outputContext: context.Background(), opts: launchOptions{DataDir: t.TempDir()},
 		req: proto.PromptRequestPayload{RunID: "run",
 			LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
-		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, active: true, sessionID: "native-session"}
+		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, completedMessages: map[string]bool{}, active: true, sessionID: "native-session"}
 	resolveTestBindings(s)
 	if err := writeMCPRegistry(s.opts.DataDir, mcpRegistryEntry("proof.server", "proof_server_2", "read.status", "read_status_2")); err != nil {
 		t.Fatal(err)
@@ -208,4 +208,15 @@ func usePublicMCP(s *Session) {
 // resolveTestBindings records the request's bindings as preparation does.
 func resolveTestBindings(s *Session) {
 	s.opts.bindings, _ = agent.ResolveMCPBindings(s.req)
+}
+
+func TestResumedMessageFailsTheTurn(t *testing.T) {
+	s, _ := mcpObservationSession(t)
+	for i, id := range []string{"a", "b", "a"} {
+		raw := `{"sessionId":"native-session","update":{"sessionUpdate":"agent_message_chunk","messageId":"` + id + `","content":{"type":"text","text":"x"}}}`
+		err := s.handle(rpcFrame{Method: "session/update", Params: json.RawMessage(raw)})
+		if (i == 2) != (err != nil) {
+			t.Fatalf("chunk %d of message %s: %v", i, id, err)
+		}
+	}
 }

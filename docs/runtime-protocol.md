@@ -103,7 +103,7 @@ The linked source files define the required fields, validators, limits and finit
 
 Initial, prepared and active input use the same [ordered MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
 
-Assistant text arrives only as identified messages. A message opens with an `output_message` of status `in_progress` and its ID, which may name its `phase`; each text fragment is a `delta` whose `item_id` names that message; an `output_message` of status `completed` carries the message's full text, which replaces its fragments. The shared validator rejects a `delta` without `item_id`, and `done` carries no answer text. A message still open when the Run is cancelled or fails ends `incomplete`.
+Assistant text arrives only as identified messages. A message opens with an `output_message` of status `in_progress` and its ID, which may name its `phase`; each text fragment is a `delta` whose `item_id` names that message; an `output_message` of status `completed` carries the message's full text, which replaces its fragments. The shared validator rejects a `delta` without `item_id`, and `done` carries no answer text. A message still open when its Turn ends is marked `incomplete`.
 
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 

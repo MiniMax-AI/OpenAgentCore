@@ -86,9 +86,6 @@ func Merge(update Update, previous v1.Item) (v1.Item, error) {
 		item.Output = previous.Output
 	}
 	if update.AppendText {
-		if previous.Status != "in_progress" {
-			return previous, nil
-		}
 		text := *previous.Content[0].Text + *item.Content[0].Text
 		item.Content = slices.Clone(item.Content)
 		item.Content[0].Text = &text
