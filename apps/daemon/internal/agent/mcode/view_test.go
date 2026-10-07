@@ -14,8 +14,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -121,8 +123,9 @@ func TestViewLaunchesNodeWithGatewayOnly(t *testing.T) {
 }
 
 // With environment none the CLI runs in the work directory without the
-// workspace tools, and it runs each stdio binding's alias without arguments.
-func TestViewRunsEnvironmentNoneAndStdioAliases(t *testing.T) {
+// workspace tools. In the workspace it runs each stdio binding's alias
+// without arguments and loads each installed Skill from its sandbox path.
+func TestViewRunsEnvironmentNoneStdioAliasesAndSkills(t *testing.T) {
 	install, _, req := viewFixture(t)
 	session := agent.ViewSession{Home: agent.ViewDir{Host: t.TempDir(), View: path.Join(agent.ViewPrivateRoot, agent.ViewHomeName)}}
 	none := req
@@ -134,11 +137,23 @@ func TestViewRunsEnvironmentNoneAndStdioAliases(t *testing.T) {
 
 	session.MCP = []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
+	req.LocalEnvironment.CapabilityRoot, req.LocalEnvironment.Skills = agentcapabilities.Directory, []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory,
+		Metadata: agentskill.Metadata{Type: "inline", Name: "review", Description: "Review."}, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
 	if opts, err = install.prepare(req, session); err != nil || len(opts.MCP) != 2 || opts.MCP[0]["name"] != "oac_workspace" || opts.MCP[1]["command"] != agent.ViewAlias(0) {
 		t.Fatalf("stdio MCP = %v: %v", opts.MCP, err)
 	}
 	if args, ok := opts.MCP[1]["args"].([]string); !ok || args == nil || len(args) != 0 {
 		t.Fatalf("the stdio alias runs with arguments %#v", opts.MCP[1]["args"])
+	}
+	if target, err := os.Readlink(filepath.Join(session.Home.Host, viewDataName, "skills", "review")); err != nil || target != agentcapabilities.Directory+"/skills/review" {
+		t.Fatalf("the native Skill links to %q: %v", target, err)
+	}
+	var config struct {
+		Agents map[string]struct{ Skills, Tools []string }
+	}
+	raw, err := os.ReadFile(filepath.Join(session.Home.Host, viewDataName, "config.yaml"))
+	if err != nil || json.Unmarshal(raw, &config) != nil || !slices.Equal(config.Agents["default"].Skills, []string{"review"}) || !slices.Contains(config.Agents["default"].Tools, "skill") {
+		t.Fatalf("native configuration %s: %v", raw, err)
 	}
 }
 

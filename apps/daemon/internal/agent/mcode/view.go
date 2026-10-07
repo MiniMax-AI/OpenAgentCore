@@ -193,7 +193,7 @@ func (i viewInstall) prepare(req proto.PromptRequestPayload, session agent.ViewS
 	var tools *workspaceTools
 	opts.MCP = []map[string]any{}
 	if local != nil {
-		tools = &workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": dir, "scratch": tempDir, "network": "enabled"}}
+		tools = &workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": dir, "scratch": tempDir, "network": "enabled"}, skills: local.Skills}
 		opts.MCP = append(opts.MCP, tools.server(dataDir))
 	}
 	if err := writeNativeConfig(private, prepared, data, dataDir, tools); err != nil {

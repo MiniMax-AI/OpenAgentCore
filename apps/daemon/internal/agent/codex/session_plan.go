@@ -9,24 +9,24 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, []string, error) {
+func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, error) {
 	if err := validateNativeTransportEnvironment(); err != nil {
-		return SessionPlan{}, nil, err
+		return SessionPlan{}, err
 	}
 	if err := validatePermissionProfile(req); err != nil {
-		return SessionPlan{}, nil, err
+		return SessionPlan{}, err
 	}
 	mcpServers, mcpEnv, err := runtimeMCPServers(req)
 	if err != nil {
-		return SessionPlan{}, nil, err
+		return SessionPlan{}, err
 	}
 	plan, err := BuildSessionPlan(req)
 	if err != nil {
-		return SessionPlan{}, nil, fmt.Errorf("codex: build session plan: %w", err)
+		return SessionPlan{}, fmt.Errorf("codex: build session plan: %w", err)
 	}
 	if err := configureSubagentObservations(&plan, req); err != nil {
 		plan.Cleanup()
-		return SessionPlan{}, nil, err
+		return SessionPlan{}, err
 	}
 	disableProgrammaticTools(&plan, req.ExecutionControls)
 	if req.LocalEnvironment != nil {
@@ -40,7 +40,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		values, err := localworkspace.ReadOptionalToolEnvironment()
 		if err != nil {
 			plan.Cleanup()
-			return SessionPlan{}, nil, err
+			return SessionPlan{}, err
 		}
 		for key, value := range values {
 			if strings.EqualFold(key, "CODEX_HOME") || strings.EqualFold(key, "HOME") || strings.EqualFold(key, "USERPROFILE") {
@@ -56,29 +56,18 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if mcpServers != nil {
 		if err := configureMCP(&plan, mcpServers); err != nil {
 			plan.Cleanup()
-			return SessionPlan{}, nil, err
+			return SessionPlan{}, err
 		}
 	}
 
 	if req.ExecutionControls != nil {
 		if err := prepareModelVerbosity(ctx, cfg.codexBinary, &plan); err != nil {
 			plan.Cleanup()
-			return SessionPlan{}, nil, err
-		}
-	}
-
-	var skillRoots []string
-	if req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) > 0 {
-		if err := verifyHostedSkills(req.LocalEnvironment.Skills); err != nil {
-			plan.Cleanup()
-			return SessionPlan{}, nil, err
-		}
-		for _, skill := range req.LocalEnvironment.Skills {
-			skillRoots = append(skillRoots, localworkspace.SkillPath(skill))
+			return SessionPlan{}, err
 		}
 	}
 
 	plan.Env = append(plan.Env, mcpEnv...)
 
-	return plan, skillRoots, nil
+	return plan, nil
 }

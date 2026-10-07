@@ -35,11 +35,10 @@ func newExecutor(parent context.Context, req proto.PromptRequestPayload, cfg ses
 		return nil, err
 	}
 	var plan SessionPlan
-	var skillRoots []string
 	if cfg.view != nil {
 		plan, err = prepareViewPlan(parent, req, cfg)
 	} else {
-		plan, skillRoots, err = prepareSessionPlan(parent, req, cfg)
+		plan, err = prepareSessionPlan(parent, req, cfg)
 	}
 	if err != nil {
 		return nil, err
@@ -106,9 +105,9 @@ func newExecutor(parent context.Context, req proto.PromptRequestPayload, cfg ses
 			return e.preparationFailed(err)
 		}
 	}
-	if len(skillRoots) > 0 {
-		if err := setSkillExtraRoots(cancelCtx, rpc, skillRoots); err != nil {
-			return e.preparationFailed(fmt.Errorf("codex: register skill root: %w", err))
+	if local := req.LocalEnvironment; local != nil && len(local.Skills) > 0 {
+		if err := registerSkills(cancelCtx, rpc, plan.Cwd, local.Skills); err != nil {
+			return e.preparationFailed(err)
 		}
 	}
 

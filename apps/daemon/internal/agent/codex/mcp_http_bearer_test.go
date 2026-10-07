@@ -22,7 +22,7 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 	req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "retained-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
 	seen := map[string]bool{}
 	for range 2 {
-		plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
+		plan, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestMCPHTTPBearerRejectsInvalidTokensWithoutPersistence(t *testing.T) {
 	for _, token := range []string{"", "=", " has-space", "has-space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
 		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), AgentStateKey: "invalid-bearer", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
-		if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
+		if _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig()); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer value accepted or unsafe error returned")
 		}
 	}
@@ -84,7 +84,7 @@ func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
 		Model: "fixture-model", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
-	plan, _, err := prepareSessionPlan(t.Context(), req, cfg)
+	plan, err := prepareSessionPlan(t.Context(), req, cfg)
 	if err != nil {
 		t.Fatal("catalog probe inherited bearer or failed", err)
 	}

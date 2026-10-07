@@ -6,12 +6,15 @@
 package agenthostqualify
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -130,9 +133,10 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 // search runs a Turn in a new Executor without native history that finds the
 // function, deferred, with tool search. A view that declares environment none
 // answers a Turn in a Session without an Environment, and its native state
-// names the work directory. Every view calls a tool of a stdio MCP server
-// that runs in the sandbox. Each Executor after the first reopens the
-// Environment that runtime_prepare prepared.
+// names the work directory. In a Session whose Environment installs a
+// plugin, every view uses the plugin's Skill in one Turn and calls a tool of
+// its stdio MCP server, which runs in the sandbox, in another. Each Executor
+// after the first reopens the Environment that runtime_prepare prepared.
 func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, caps proto.AgentKindCapabilities, model proto.PromptRequestPayload) {
 	name := "qualify-" + kind + ".txt"
 	value, content := strings.ToLower(rand.Text()), "qualified "+strings.ToLower(rand.Text()[:12])
@@ -156,7 +160,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 	sb.reset(t, cfg)
 	s := sb.session(h, cfg, configuration)
 	setup := "setup-" + kind + ".txt"
-	s.prepare(t,
+	s.prepare(t, nil,
 		proto.RuntimeInitialization{Action: "configure", Env: map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)}},
 		proto.RuntimeInitialization{Action: "setup", Command: `printf '%s' "$QUALIFY_VALUE" > ` + setup})
 	if got := sb.read(t, cfg, workspace+"/"+setup); got != value {
@@ -202,16 +206,52 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		s.checkCwd(t, agent.ViewPrivateRoot+"/"+agent.ViewHomeName+"/"+agent.ViewWorkName)
 	}
 	{
-		code := strings.ToLower(rand.Text()[:12])
-		stdio := configuration
-		stdio.FunctionTools, stdio.ToolSearch = nil, false
-		s := s.with(stdio)
-		s.mcp = []proto.EnvironmentMCP{{InstallationRoot: workspace, Server: agentplugin.MCPServer{Name: "qualify", Type: "stdio", Command: "python3", Args: []string{"-c", mcpServer, code}}}}
-		_, answer, _ := s.turn(t, "stdio-mcp", "Call the reveal_code tool of the qualify MCP server once.\nAnswer with exactly one line: CODE=<the code it returns>", k)
+		// Claude does not combine Skills with tool search.
+		word, code := strings.ToLower(rand.Text()[:12]), strings.ToLower(rand.Text()[:12])
+		installed, local := configuration, *configuration.LocalEnvironment
+		installed.FunctionTools, installed.ToolSearch = nil, false
+		local.Capabilities, local.CapabilitySources = true, &agentcapabilities.Input{Plugins: []agentplugin.Metadata{qualifyPlugin}}
+		installed.LocalEnvironment = &local
+		sb.reset(t, cfg)
+		s := sb.session(h, cfg, installed)
+		s.prepare(t, pluginArchive(t, word, code))
+		_, answer, _ := s.turn(t, "skill", "Use the qualify-word skill.\nAnswer with exactly one line: WORD=<the qualification word it tells>", k)
+		if !strings.Contains(answer, "WORD="+word) {
+			t.Errorf("the answer %q does not report WORD=%s", answer, word)
+		}
+		_, answer, _ = s.turn(t, "stdio-mcp", "Call the reveal_code tool of the qualify MCP server once.\nAnswer with exactly one line: CODE=<the code it returns>", k)
 		if !strings.Contains(answer, "CODE="+code) {
 			t.Errorf("the answer %q does not report CODE=%s", answer, code)
 		}
 	}
+}
+
+var qualifyPlugin = agentplugin.Metadata{Type: "inline", Name: "qualify", Description: "Qualification plugin."}
+
+// pluginArchive is qualifyPlugin's archive. Its Skill tells word, and its
+// stdio MCP server runs mcpServer from the package with code.
+func pluginArchive(t *testing.T, word, code string) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	w := zip.NewWriter(&b)
+	for name, body := range map[string]string{
+		".codex-plugin/plugin.json":    `{"name":"qualify","description":"Qualification plugin.","skills":"./skills/"}`,
+		".mcp.json":                    `{"mcpServers":{"qualify":{"command":"python3","args":["server.py","` + code + `"]}}}`,
+		"server.py":                    mcpServer,
+		"skills/qualify-word/SKILL.md": "---\nname: qualify-word\ndescription: Tells the qualification word.\n---\nThe qualification word is " + word + ".\n",
+	} {
+		f, err := w.Create("qualify/" + name)
+		if err == nil {
+			_, err = f.Write([]byte(body))
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }
 
 // mcpServer is a stdio MCP server whose one tool returns the code in its
@@ -287,9 +327,6 @@ type session struct {
 	binding       agenthost.Binding
 	id            string
 	configuration proto.PromptRequestPayload
-	// mcp is the installed MCP that the Environment's preparation resolves
-	// into each request; the wire does not carry it.
-	mcp []proto.EnvironmentMCP
 }
 
 func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, configuration proto.PromptRequestPayload) *session {
@@ -303,7 +340,7 @@ func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, configuratio
 // with is the Session with configuration for its next Executors.
 func (s *session) with(configuration proto.PromptRequestPayload) *session {
 	next := *s
-	next.configuration, next.mcp = configuration, nil
+	next.configuration = configuration
 	next.configuration.AgentStateKey = s.configuration.AgentStateKey
 	return &next
 }
@@ -312,11 +349,7 @@ func (s *session) with(configuration proto.PromptRequestPayload) *session {
 // Session bound to it.
 func (s *session) router(t *testing.T, out sender, id string) (*dispatch.Router, proto.AssignmentRef) {
 	t.Helper()
-	reg := s.h.Registry()
-	if s.mcp != nil {
-		reg = withMCP(t, reg, s.mcp)
-	}
-	router, err := dispatch.New(dispatch.Config{Sender: out, Environments: s.h.Environments, Log: s.cfg.Log, Registry: reg})
+	router, err := dispatch.New(dispatch.Config{Sender: out, Environments: s.h.Environments, Log: s.cfg.Log, Registry: s.h.Registry()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,30 +370,47 @@ func (s *session) router(t *testing.T, out sender, id string) (*dispatch.Router,
 }
 
 // prepare applies each step to the Session's Environment with
-// runtime_prepare, then the empty selection's finalize.
-func (s *session) prepare(t *testing.T, steps ...proto.RuntimeInitialization) {
+// runtime_prepare, installs plugin, the archive of the selection's one plugin,
+// unless it is nil, and finalizes the selection.
+func (s *session) prepare(t *testing.T, plugin []byte, steps ...proto.RuntimeInitialization) {
 	t.Helper()
 	out := make(sender, 64)
 	router, ref := s.router(t, out, uuid.NewString())
 	defer router.Shutdown(context.Background())
-	transfer := func(p proto.RuntimePreparePayload) {
+	transfer := func(p proto.RuntimePreparePayload, data []byte) {
 		p.Step, p.EnvironmentID, p.SessionID = "begin", s.configuration.EnvironmentID(), s.id
+		frames := []proto.RuntimePreparePayload{p}
+		if data != nil {
+			digest := sha256.Sum256(data)
+			frames[0].SizeBytes, frames[0].SHA256 = len(data), hex.EncodeToString(digest[:])
+			frames = append(frames, proto.RuntimePreparePayload{Step: "chunk", Data: data})
+		}
 		id := uuid.NewString()
-		for i, step := range []proto.RuntimePreparePayload{p, {Step: "commit"}} {
+		for i, step := range append(frames, proto.RuntimePreparePayload{Step: "commit"}) {
 			handle(t, router, ref, proto.TypeRuntimePrepare, id, step)
 			var result proto.RuntimePrepareResultPayload
 			if err := out.next(t, id, time.After(turnLimit)).DecodePayload(&result); err != nil {
 				t.Fatal(err)
 			}
-			if want := []string{"ready", "completed"}[i]; result.Outcome != want {
+			want := "received"
+			if i == 0 {
+				want = "ready"
+			} else if i == len(frames) {
+				want = "completed"
+			}
+			if result.Outcome != want {
 				t.Fatalf("runtime_prepare %s %s: %+v, want %s", p.Action, step.Step, result, want)
 			}
 		}
 	}
 	for _, step := range steps {
-		transfer(proto.RuntimePreparePayload{Action: "initialize", Initialization: &step})
+		transfer(proto.RuntimePreparePayload{Action: "initialize", Initialization: &step}, nil)
 	}
-	transfer(proto.RuntimePreparePayload{Action: "finalize", Sources: s.configuration.LocalEnvironment.CapabilitySources})
+	sources := s.configuration.LocalEnvironment.CapabilitySources
+	if plugin != nil {
+		transfer(proto.RuntimePreparePayload{Action: "plugin", Plugin: &sources.Plugins[0]}, plugin)
+	}
+	transfer(proto.RuntimePreparePayload{Action: "finalize", Sources: sources}, nil)
 }
 
 // turn binds the Session's assignment, prepares an Executor of the Session,
@@ -386,26 +436,6 @@ func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePa
 		t.Errorf("Shutdown: %v", err)
 	}
 	return done, answer, calls
-}
-
-// withMCP wraps reg so that each request's Environment carries mcp.
-func withMCP(t *testing.T, reg *agent.Registry, mcp []proto.EnvironmentMCP) *agent.Registry {
-	wrapped := agent.NewRegistry()
-	for _, info := range reg.SupportedAgentKinds() {
-		configuration, err := reg.Configuration(info.Kind)
-		factory, factoryErr := reg.ResolveExecutor(info.Kind)
-		if err := errors.Join(err, factoryErr); err != nil {
-			t.Fatal(err)
-		}
-		wrapped.RegisterKind(info, configuration)
-		wrapped.RegisterExecutor(info.Kind, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-			local := *req.LocalEnvironment
-			local.MCP = mcp
-			req.LocalEnvironment = &local
-			return factory(ctx, req)
-		})
-	}
-	return wrapped
 }
 
 // checkCwd checks that the Harness's native state in the Session home names

@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
@@ -59,16 +60,14 @@ func prepareWorkspaceOptions(c WorkspaceConfig, req proto.PromptRequestPayload) 
 	if err != nil {
 		return launchOptions{}, err
 	}
-	tools := workspaceTools{node: c.Node, bridge: c.Bridge, profile: map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": c.Directory, "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(req.LocalEnvironment.Skills) > 0}}
+	tools := workspaceTools{node: c.Node, bridge: c.Bridge, profile: map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": c.Directory, "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(req.LocalEnvironment.Skills) > 0},
+		skills: req.LocalEnvironment.Skills}
 	file, err := localworkspace.ToolEnvironmentFile()
 	if err != nil {
 		return launchOptions{}, err
 	}
 	if file != "" {
 		tools.profile["toolEnvFile"] = file
-	}
-	for _, skill := range req.LocalEnvironment.Skills {
-		tools.skills = append(tools.skills, skill.Metadata.Name)
 	}
 	// Reuse public option validation and private Session state provisioning.
 	// The native process, ACP Session and workspace tools share the declared cwd.
@@ -82,34 +81,15 @@ func prepareWorkspaceOptions(c WorkspaceConfig, req proto.PromptRequestPayload) 
 	}
 	opts.Dir, opts.bindings = c.Directory, bindings
 	opts.MCP = append([]map[string]any{tools.server(opts.DataDir)}, servers...)
-	if len(req.LocalEnvironment.Skills) > 0 {
-		root := filepath.Join(opts.DataDir, "skills")
-		if err := os.MkdirAll(root, 0700); err != nil {
-			return opts, err
-		}
-		for _, skill := range req.LocalEnvironment.Skills {
-			link, target := filepath.Join(root, skill.Metadata.Name), localworkspace.SkillPath(skill)
-			actual, err := os.Readlink(link)
-			if err == nil {
-				if actual != target {
-					return opts, fmt.Errorf("mcode: unexpected native Skill root")
-				}
-			} else if !os.IsNotExist(err) {
-				return opts, err
-			} else if err := os.Symlink(target, link); err != nil {
-				return opts, err
-			}
-		}
-	}
 	return opts, nil
 }
 
 // workspaceTools is the workspace bridge as the native process runs it, the
-// bridge's profile and the Skills it presents.
+// bridge's profile and the installed Skills it presents.
 type workspaceTools struct {
 	node, bridge string
 	profile      map[string]any
-	skills       []string
+	skills       []agentcapabilities.InstalledSkill
 }
 
 // server is the bridge's ACP MCP server, with its profile in dataDir as the

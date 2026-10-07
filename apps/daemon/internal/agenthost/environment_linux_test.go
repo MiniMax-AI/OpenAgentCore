@@ -60,8 +60,7 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
 	sb.ready(t, cfg)
 	h := &Host{cfg: cfg, owners: owners{d: deps{dial: relayDial(cfg)}}}
-	// The factory records what the owner prepared: admission does not run
-	// Skills in views yet.
+	// The factory records what the owner prepared.
 	prepared := make(chan preparedExecutor, 4)
 	reg := registry(harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 		_, env, err := h.executor(ctx, req)

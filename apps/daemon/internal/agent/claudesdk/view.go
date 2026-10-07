@@ -144,6 +144,7 @@ func prepareView(layout viewLayout, req proto.PromptRequestPayload, view agent.V
 		return start, env, nil
 	}
 	profile.NetworkAccess, profile.MCP = environment.NetworkAccess, servers
+	profile.Skills, profile.CapabilityRoot = environment.Skills, environment.CapabilityRoot
 	start.Workspace, start.Cwd = profile, environment.WorkspaceRoot
 	return start, env, nil
 }

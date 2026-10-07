@@ -93,6 +93,24 @@ type SkillsExtraRootsSetParams struct {
 	ExtraRoots []string `json:"extraRoots"`
 }
 
+type SkillsListParams struct {
+	Cwds        []string `json:"cwds"`
+	ForceReload bool     `json:"forceReload"`
+}
+
+// SkillsListResponse holds the fields of skills/list that the adapter checks.
+type SkillsListResponse struct {
+	Data []struct {
+		Skills []struct {
+			Path         string `json:"path"`
+			Dependencies any    `json:"dependencies"`
+		} `json:"skills"`
+		Errors []struct {
+			Path string `json:"path"`
+		} `json:"errors"`
+	} `json:"data"`
+}
+
 // ---------------------------------------------------------------------------
 // thread/start, thread/resume, thread/list
 // ---------------------------------------------------------------------------
