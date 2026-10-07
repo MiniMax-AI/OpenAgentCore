@@ -228,13 +228,18 @@ def existing_file(path):
 
 
 def write_once(path, value):
-    if existing_file(path):
-        if path.read_text() != value:
-            raise InstallError("Existing node configuration differs; preserve its state and use the upgrade guide")
-        return
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as stream:
-        stream.write(value)
+    # Callers hold the installation lock through comparison and publication.
+    with distribution.temporary_file(path) as temporary:
+        if existing_file(path):
+            if path.read_text() != value:
+                raise InstallError("Existing node configuration differs; preserve its state and use the upgrade guide")
+            return
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
 
 
 def json_text(value):

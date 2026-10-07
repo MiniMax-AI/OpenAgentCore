@@ -29,6 +29,8 @@ The node installer runs as root and prepares the host for one node per installat
 
 The generated command uses `~/.oac/node-bootstrap` in the invoking account's home. Under `download.lock`, it discards an unfinished `download.partial`, downloads and verifies the bootstrap, then publishes `<sha256>.pyz`. The lock is released before invoking sudo; verified files stay available to running installers. Node file writes share `distribution.temporary_file`: under the caller's installation lock, remove the previous temporary file, write privately, and publish atomically. The same lifecycle covers payloads, extraction, helpers, settings and enrollment tokens. Registration tokens are removed even when a rerun finds the node already registered.
 
+Configuration files are published only after their complete contents are written; a retry preserves an existing matching file and refuses conflicting contents. Generation leases are durable locks, not disposable temporary files: interruption between creating a lease and recording its inode identity requires operator inspection. A retry refuses that unrecorded lease instead of replacing an inode that a Runtime helper could still hold.
+
 The distribution manifest is the one download contract for nodes: flat versioned file names, and the compressed and unpacked size and SHA-256 of the Runtime.
 
 - A Compose installation keeps only the node metadata from its release archive; Core's image never acquires execution-only payloads.
