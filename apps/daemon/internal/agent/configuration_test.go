@@ -22,36 +22,21 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		calls++
 		return nil, expected
 	})
-	registry.RegisterPreparation("fixture", true, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
-		calls++
-		return nil, expected
-	})
 	configuration.Providers[0].Protocol = "anthropic"
 	executor, _ := registry.ResolveExecutor("fixture")
-	preparation, _ := registry.ResolvePreparation("fixture")
-	entries := []func(proto.PromptRequestPayload) error{
-		func(req proto.PromptRequestPayload) error { _, err := executor(t.Context(), req); return err },
-		func(req proto.PromptRequestPayload) error { _, err := preparation(t.Context(), req); return err },
-	}
-	for _, entry := range entries {
-		for _, options := range []map[string]any{
-			{"model": nil},
-			{"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
-			{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
-			{"harness_config": map[string]any{"unknown": "private-sentinel"}},
-		} {
-			before := calls
-			err := entry(proto.PromptRequestPayload{AgentOptions: options})
-			if err == nil || errors.Is(err, expected) || calls != before || strings.Contains(err.Error(), "private-sentinel") {
-				t.Fatal("invalid configuration reached native entry or leaked values")
-			}
-		}
-		if err := entry(proto.PromptRequestPayload{AgentOptions: map[string]any{"model": "fixture", "model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}}}); !errors.Is(err, expected) {
-			t.Fatal("bound declaration was lost or mutated", err)
+	for _, options := range []map[string]any{
+		{"model": nil},
+		{"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
+		{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
+		{"harness_config": map[string]any{"unknown": "private-sentinel"}},
+	} {
+		_, err := executor(t.Context(), proto.PromptRequestPayload{AgentOptions: options})
+		if err == nil || errors.Is(err, expected) || calls != 0 || strings.Contains(err.Error(), "private-sentinel") {
+			t.Fatal("invalid configuration reached native entry or leaked values")
 		}
 	}
-	if calls != 2 {
-		t.Fatal("unexpected native calls", calls)
+	if _, err := executor(t.Context(), proto.PromptRequestPayload{AgentOptions: map[string]any{"model": "fixture", "model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}}}); !errors.Is(err, expected) || calls != 1 {
+		t.Fatal("bound declaration was lost or mutated", err)
 	}
 }
 

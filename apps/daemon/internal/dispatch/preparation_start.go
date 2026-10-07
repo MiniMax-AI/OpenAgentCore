@@ -61,7 +61,7 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 	}
 	if !time.Now().Before(p.deadline) {
 		r.mu.Unlock()
-		r.releasePreparation(p, "expired", "", true, true)
+		r.releasePreparation(p, "expired", "", true)
 		return nil
 	}
 	if r.sessions[input.RunID] != nil {

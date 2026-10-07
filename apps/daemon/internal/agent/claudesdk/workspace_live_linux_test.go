@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -21,14 +20,6 @@ import (
 // Run only inside a separately qualified outer placement, with its pinned native
 // dependencies. This fixture does not create isolation or public admission.
 func TestLiveClaudeWorkspaceFactory(t *testing.T) {
-	testLiveClaudeWorkspace(t, false)
-}
-
-func TestLiveClaudePreparedWorkspace(t *testing.T) {
-	testLiveClaudeWorkspace(t, true)
-}
-
-func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 	configFile := os.Getenv("OAC_TEST_CLAUDE_WORKSPACE_LIVE_CONFIG")
 	if configFile == "" {
 		t.Skip("requires explicit qualified placement and real provider configuration")
@@ -72,20 +63,16 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 	heartbeat := filepath.Join(config.Workspace.Directory, "heartbeat.txt")
 	artifact := filepath.Join(config.Workspace.Directory, "value.txt")
 	type evidence struct {
-		Reads                 []liveWorkspaceRead `json:"reads,omitempty"`
-		RunID                 string              `json:"run_id"`
-		Events                []proto.Envelope    `json:"events"`
-		Done                  proto.DonePayload   `json:"done"`
-		Failure               string              `json:"failure,omitempty"`
-		Cancelled             bool                `json:"cancelled"`
-		CancelMS              int64               `json:"cancel_ms,omitempty"`
-		BridgePID             int                 `json:"bridge_pid"`
-		Terminals             int                 `json:"terminals"`
-		Heartbeats            []string            `json:"heartbeats,omitempty"`
-		PreparedPID           int                 `json:"prepared_pid,omitempty"`
-		NativeBefore          string              `json:"native_before,omitempty"`
-		NativeAfter           string              `json:"native_after,omitempty"`
-		StartContextCancelled bool                `json:"start_context_cancelled,omitempty"`
+		Reads      []liveWorkspaceRead `json:"reads,omitempty"`
+		RunID      string              `json:"run_id"`
+		Events     []proto.Envelope    `json:"events"`
+		Done       proto.DonePayload   `json:"done"`
+		Failure    string              `json:"failure,omitempty"`
+		Cancelled  bool                `json:"cancelled"`
+		CancelMS   int64               `json:"cancel_ms,omitempty"`
+		BridgePID  int                 `json:"bridge_pid"`
+		Terminals  int                 `json:"terminals"`
+		Heartbeats []string            `json:"heartbeats,omitempty"`
 	}
 	writeEvidence := func(name string, proof evidence) {
 		t.Helper()
@@ -107,39 +94,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 		req.ObserveMessages = true
 		req.AgentOptions = map[string]any{"model": "MiniMax-M3", "system_prompt": "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."}
 		proof := evidence{RunID: req.RunID}
-		var running agent.Session
-		var owner agent.PreparedCancellation
-		if explicitPreparation {
-			preparation := req
-			preparation.RunID, preparation.Input = "", nil
-			var resource agent.Prepared
-			resource, err = NewPreparationFactory(config)(ctx, preparation)
-			if err == nil {
-				defer resource.Close()
-				owner = resource.(agent.PreparedCancellation)
-				proof.PreparedPID = resource.(*prepared).session.process.Cmd.Process.Pid
-				proof.NativeBefore = liveWorkspaceNativeIdentity(t, proof.PreparedPID)
-				before, _ := os.ReadFile(artifact)
-				time.Sleep(500 * time.Millisecond)
-				after, _ := os.ReadFile(artifact)
-				if !bytes.Equal(before, after) || liveWorkspaceNativeIdentity(t, proof.PreparedPID) != proof.NativeBefore || len(out) != 0 {
-					t.Fatal("prepared resource changed before initial input")
-				}
-				proof.Reads = append(proof.Reads, liveWorkspaceReads(t, ctx, resource.(agent.WorkspaceReader), config.Workspace.Directory, "prepared", "read-binary.bin", "read-empty.bin", "read-large.bin")...)
-				operation, stopOperation := context.WithCancel(ctx)
-				running, err = resource.Start(operation, req.RunID, req.Input, out)
-				stopOperation()
-				proof.StartContextCancelled = true
-				if err == nil {
-					proof.NativeAfter = liveWorkspaceNativeIdentity(t, proof.PreparedPID)
-					if proof.NativeBefore != proof.NativeAfter || resource.Close() != nil {
-						t.Fatal("Start replaced the native process or Close affected its transfer")
-					}
-				}
-			}
-		} else {
-			running, err = startSingleTurn(ctx, config, req, out)
-		}
+		running, err := startSingleTurn(ctx, config, req, out)
 		if err != nil {
 			if name == "missing-history" && running == nil && strings.Contains(err.Error(), "history_unavailable") {
 				proof.Failure = err.Error()
@@ -152,13 +107,6 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 		defer s.Cancel(context.Background())
 		proof.BridgePID = s.process.Cmd.Process.Pid
 		proof.Reads = append(proof.Reads, liveWorkspaceReads(t, ctx, s, config.Workspace.Directory, "active", "read-binary.bin", "read-empty.bin", "read-large.bin")...)
-		if explicitPreparation && proof.BridgePID != proof.PreparedPID {
-			t.Fatal("Start replaced the prepared bridge")
-		}
-		cancelOwned, outcome := s.Cancel, s.CancellationOutcome
-		if owner != nil {
-			cancelOwned, outcome = owner.Cancel, owner.CancellationOutcome
-		}
 		ticker := time.NewTicker(80 * time.Millisecond)
 		defer ticker.Stop()
 		for out != nil {
@@ -170,7 +118,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 				if cancelOnEffect && !proof.Cancelled && len(value) > 0 && string(value) != "0" && string(value) != "1" {
 					proof.Reads = append(proof.Reads, liveWorkspaceReads(t, ctx, s, config.Workspace.Directory, "effect", "value.txt")...)
 					started := time.Now()
-					if err := cancelOwned(ctx); err != nil {
+					if err := s.Cancel(ctx); err != nil {
 						t.Fatal("factory cancellation failed", err)
 					}
 					proof.CancelMS = time.Since(started).Milliseconds()
@@ -201,7 +149,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 			if len(a) == 0 || !bytes.Equal(a, b) {
 				t.Fatal("native command effects continued after Cancel")
 			}
-			settled, _ := json.Marshal(outcome())
+			settled, _ := json.Marshal(s.CancellationOutcome())
 			done, _ := json.Marshal(proof.Done)
 			if !bytes.Equal(settled, done) {
 				t.Fatal("cancellation outcome differs from terminal Done")
@@ -277,19 +225,4 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 	if err := os.RemoveAll(scratch); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func liveWorkspaceNativeIdentity(t *testing.T, bridgePID int) string {
-	t.Helper()
-	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/task/%d/children", bridgePID, bridgePID))
-	children := strings.Fields(string(raw))
-	if err != nil || len(children) != 1 {
-		t.Fatal("expected exactly one retained native child", err)
-	}
-	status, err := os.ReadFile("/proc/" + children[0] + "/stat")
-	fields := strings.Fields(string(status)[strings.LastIndex(string(status), ")")+1:])
-	if err != nil || len(fields) < 20 {
-		t.Fatal("native process identity unavailable", err)
-	}
-	return children[0] + ":" + fields[19]
 }

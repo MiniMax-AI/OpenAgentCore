@@ -24,7 +24,7 @@ func TestUnsupportedExtensionsHaveNoNativeEffects(t *testing.T) {
 			t.Fatal("unsupported error disclosed input")
 		}
 	}
-	for _, owner := range []agent.WorkspaceWriter{(*executor)(nil), (*session)(nil), (*prepared)(nil)} {
+	for _, owner := range []agent.WorkspaceWriter{(*executor)(nil), (*session)(nil)} {
 		result, err := owner.WriteWorkspaceFile(ctx, secret, []byte(secret))
 		check(err)
 		if result.SizeBytes != 0 {

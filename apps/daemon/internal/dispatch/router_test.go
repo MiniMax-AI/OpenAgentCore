@@ -127,7 +127,7 @@ func newHarness(t *testing.T) *harness {
 
 // sessionExecutor runs each Turn through start on a disposable Executor.
 func sessionExecutor(start func(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error)) agent.ExecutorFactory {
-	return preparationExecutorFixture(func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
+	return preparationExecutorFixture(func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
 		return &controlledPreparation{start: start}, nil
 	})
 }

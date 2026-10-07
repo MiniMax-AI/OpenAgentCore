@@ -160,26 +160,20 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 				req.DisableExecutionEnvironment = false
 				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}, WorkspaceRoot: cwd}
 			}
-			p, err := newPreparation(t.Context(), req, cfg)
+			e, err := testExecutor(t, "complete", req, cfg)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer p.Close()
-			if p.plan.Cwd != cwd {
-				t.Fatalf("cwd = %q, want %q", p.plan.Cwd, cwd)
+			if e.prepared.plan.Cwd != cwd {
+				t.Fatalf("cwd = %q, want %q", e.prepared.plan.Cwd, cwd)
 			}
 			assertPreparationOnly(t, root)
 			out := make(chan proto.Envelope, 16)
-			session, err := p.Start(t.Context(), "recovery-run", proto.TextInput("continue"), out)
-			if err != nil {
-				t.Fatal(err)
+			turn, err := e.StartTurn(t.Context(), "recovery-run", proto.TextInput("continue"), out)
+			if err == nil {
+				t.Fatal("missing history started a Turn")
 			}
-			defer session.Cancel(context.Background())
-			select {
-			case <-p.session.waitDone:
-			case <-time.After(4 * time.Second):
-				t.Fatal("recovery did not terminate")
-			}
+			settledFrames(t, turn, out)
 			found := false
 			for _, frame := range preparationFrames(t, root) {
 				if frame.Method == "thread/list" {

@@ -36,7 +36,7 @@ func TestPreparedHandoffDrainsBurstBeforeStartReturns(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	startCancellationPreparation(t, r, sender)
 	select {
 	case <-sent:
@@ -118,7 +118,7 @@ func TestPreparedHandoffAbortBeforeStartAdmissionSkipsNativeStart(t *testing.T) 
 		return nil, errors.New("unexpected Start")
 	}
 	p.cancel = func(context.Context) error { return p.Close() }
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	ready := startCancellationPreparation(t, r, sender.recSender)
 	select {
 	case <-sender.entered:
@@ -163,7 +163,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 		session.out = out
 		return session, nil
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	ready := startCancellationPreparation(t, r, sender.recSender)
 	select {
 	case <-sender.entered:
@@ -214,7 +214,7 @@ func TestPreparedHandoffUnsupportedFunctionReleasesOperationBarrier(t *testing.T
 		session.out = out
 		return session, nil
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	startCancellationPreparation(t, r, sender)
 	waitPreparationStatus(t, sender, "request", "started", "")
 	result := mustEnv(t, proto.TypeFunctionResult, "run", proto.FunctionResultPayload{CallID: "unsupported", Success: true, Content: functionResultContent("answer"), DeliveryID: "unsupported"})
@@ -241,7 +241,7 @@ func TestPreparedHandoffEarlyDoneStillAllowsExplicitAbort(t *testing.T) {
 		return nil, context.Canceled
 	}
 	p.cancel = func(context.Context) error { unblock(); return nil }
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	defer unblock()
 	startCancellationPreparation(t, r, sender)
 	waitFor(t, func() bool { return r.SteeringClosedForTest("run") }, "early Done release claim")
@@ -265,7 +265,7 @@ func TestPreparedHandoffExpiresDuringStartedPublication(t *testing.T) {
 		session.out = out
 		return session, nil
 	}
-	r := preparationRouter(t, sender, 100*time.Millisecond, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, 100*time.Millisecond, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	startCancellationPreparation(t, r, sender.recSender)
 	<-sender.entered
 	time.Sleep(250 * time.Millisecond)
@@ -305,7 +305,7 @@ func TestPreparedHandoffEarlyDoneDetachesPublishedPreparation(t *testing.T) {
 		}
 		return session.Cancel(ctx)
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	ready := startCancellationPreparation(t, r, sender)
 	waitFor(t, func() bool { return r.SteeringClosedForTest("run") }, "early Done claim")
 	unblock()

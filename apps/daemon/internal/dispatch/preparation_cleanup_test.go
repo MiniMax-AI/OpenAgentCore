@@ -43,7 +43,7 @@ func TestPreparedCancellationDoesNotAcknowledgeFailedCleanup(t *testing.T) {
 		return nil, context.Canceled
 	}
 	sender := &recSender{}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	ready := startCancellationPreparation(t, r, sender)
 	<-entered
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypePromptCancel, "run", proto.PromptCancelPayload{DeliveryID: "cancel"}))
@@ -74,7 +74,7 @@ func TestShutdownRetriesFailedPreparedCancellationOnSameTarget(t *testing.T) {
 		}
 		return session.Cancel(ctx)
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	startCancellationPreparation(t, r, sender)
 	waitPreparationStatus(t, sender, "request", "started", "")
 	if err := r.Shutdown(t.Context()); !errors.Is(err, want) {
@@ -105,7 +105,7 @@ func TestShutdownRetriesFailedPreparationCleanup(t *testing.T) {
 		return nil
 	}}
 	sender := &recSender{}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", preparationRequest()))
 	waitPreparationStatus(t, sender, "request", "ready", "")
 	if err := r.Shutdown(t.Context()); !errors.Is(err, want) {
@@ -126,7 +126,7 @@ func TestShutdownTimeoutAndConcurrentRetryWaitForCleanup(t *testing.T) {
 	unblock := func() { once.Do(func() { close(release) }) }
 	p := &retryablePreparation{close: func(int32) error { close(entered); <-release; return nil }}
 	sender := &recSender{}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	t.Cleanup(unblock)
 	_ = r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", preparationRequest()))
 	waitPreparationStatus(t, sender, "request", "ready", "")
@@ -176,7 +176,7 @@ func TestPublishedPreparedRunRetainsRetryAfterHandleRetirement(t *testing.T) {
 		return session.Cancel(ctx)
 	}
 	var factories atomic.Int32
-	r := preparationRouter(t, sender, 200*time.Millisecond, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
+	r := preparationRouter(t, sender, 200*time.Millisecond, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) {
 		if factories.Add(1) == 1 {
 			return p, nil
 		}

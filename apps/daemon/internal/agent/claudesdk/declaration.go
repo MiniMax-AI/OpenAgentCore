@@ -116,8 +116,8 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		}
 		caps := &out.Info.Capabilities
 		caps.EnvironmentNone, caps.FunctionTools = proto.CapabilityUnsupported, proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
-		caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
-		caps.WorkspaceReadPreparation, caps.NativeSessionRecovery = proto.CapabilitySupported, proto.CapabilitySupported
+		caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
+		caps.NativeSessionRecovery = proto.CapabilitySupported
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK
 	out.Info.Capabilities.MessageImages = proto.CapabilityFromBool(info.SupportsMessageImages())
@@ -139,10 +139,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityUnsupported
 	}
 	out.Executor = NewExecutorFactory(config)
-	if out.Info.Capabilities.LocalEnvironment.IsSupported() {
-		out.Preparation = NewPreparationFactory(config)
-		out.WorkspaceReadPreparation = true
-	}
 
 	fmt.Fprintf(options.Stdout, "Claude SDK preflight ok (SDK %s, %s)\n", info.SDK, info.Native)
 	return out

@@ -116,7 +116,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 				}
 				continue
 			}
-			if calls != 1 || runtime.Info.Available != ready || (runtime.Executor != nil) != ready || runtime.Preparation != nil {
+			if calls != 1 || runtime.Info.Available != ready || (runtime.Executor != nil) != ready || runtime.Info.Capabilities.WorkspaceReadPreparation.IsSupported() {
 				t.Fatalf("runtime: %+v", runtime)
 			}
 			registry := agent.NewRegistry()

@@ -89,7 +89,7 @@ func TestPreparedHandoffReleaseWaitsForMutationReceipt(t *testing.T) {
 				session.out = out
 				return session, nil
 			}
-			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 			startCancellationPreparation(t, r, sender.recSender)
 			waitPreparationStatus(t, sender.recSender, "request", "started", "")
 
@@ -203,7 +203,7 @@ func TestPreparedHandoffRouterShutdownWaitsForReceiptAttempt(t *testing.T) {
 				session.out = out
 				return session, nil
 			}
-			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+			r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 			startCancellationPreparation(t, r, sender.recSender)
 			waitPreparationStatus(t, sender.recSender, "request", "started", "")
 
@@ -253,7 +253,7 @@ func TestPreparedHandoffEarlyDonePublishesAfterStarted(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	}
-	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return p, nil })
+	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })
 	startCancellationPreparation(t, r, sender)
 	<-emitted
 	if hasFrame(sender, proto.TypeDone, "run") || session.cancels() != 0 {

@@ -71,7 +71,6 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 
 	caps := &runtime.Info.Capabilities
 	caps.EnvironmentNone = proto.CapabilityUnsupported
-	caps.Preparation, caps.LocalEnvironment = proto.CapabilitySupported, proto.CapabilitySupported
-	caps.WorkspaceReadPreparation = proto.CapabilitySupported
+	caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
 	return &c
 }
