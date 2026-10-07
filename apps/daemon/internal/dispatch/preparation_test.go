@@ -103,7 +103,7 @@ func localPreparationHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	var err error
-	h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, LocalWorkspace: preparationWorkspace(t)})
+	h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: dispatch.LocalEnvironments(preparationWorkspace(t))})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,9 +121,9 @@ func preparationRequest() proto.ExecutionPreparePayload {
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory preparationFactory) *dispatch.Router {
 	t.Helper()
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration())
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 	reg.RegisterExecutor("prepared", preparationExecutorFixture(factory))
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout, LocalWorkspace: preparationWorkspace(t)})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout, Environments: dispatch.LocalEnvironments(preparationWorkspace(t))})
 	if err != nil {
 		t.Fatal(err)
 	}

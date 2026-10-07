@@ -50,12 +50,6 @@ func TestBindingRejectsScopeOverrides(t *testing.T) {
 			}
 		})
 	}
-	if _, err := (*Binding)(nil).Configure(valid); err == nil {
-		t.Fatal("unbound Runtime accepted a local Environment")
-	}
-	if _, err := (*Binding)(nil).Configure(proto.PromptRequestPayload{}); err != nil {
-		t.Fatal("ordinary unbound behavior changed", err)
-	}
 }
 
 func TestDirectoryValidatesRelativePaths(t *testing.T) {

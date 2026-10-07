@@ -65,7 +65,12 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation(code))
 		}
-		if r.localWorkspace == nil || !r.localWorkspace.Matches(request.EnvironmentID, request.SessionID) || r.runtimePreparationResourcesBusyLocked() {
+		environment := r.assignments[request.SessionID].environment
+		if environment == nil {
+			r.mu.Unlock()
+			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("runtime_preparation_unsupported"))
+		}
+		if r.runtimePreparationResourcesBusyLocked() {
 			r.mu.Unlock()
 			return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("resource_unavailable"))
 		}
@@ -78,7 +83,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
-		go r.runRuntimePreparationTransfer(owner, u, r.localWorkspace.ApplyRuntimePreparation, done)
+		go r.runRuntimePreparationTransfer(owner, u, environment.ApplyRuntimePreparation, done)
 		if err := r.sendRuntimePrepareResult(ctx, env, proto.RuntimePrepareResultPayload{Outcome: "ready"}); err != nil {
 			cancel()
 			return err

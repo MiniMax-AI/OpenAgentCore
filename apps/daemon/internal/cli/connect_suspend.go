@@ -44,7 +44,7 @@ func newSuspendedRouter(conn *transport.Conn, registry *agent.Registry) (*suspen
 		return nil, err
 	}
 	sender := &reconnectSender{conn: conn}
-	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Log: obslog.Bg(), LocalWorkspace: local})
+	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Log: obslog.Bg(), Environments: localEnvironments(local)})
 	if err != nil {
 		return nil, err
 	}
@@ -152,12 +152,7 @@ func (s *suspendedRouter) reconnectSuspension(ctx context.Context, dial transpor
 
 func (s *suspendedRouter) heartbeats(ctx context.Context, conn *transport.Conn, boot *transport.BootstrapResponse, discovery agentCLIDiscovery) {
 	conn.StartHeartbeats(ctx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
-		kinds := s.registry.SupportedAgentKinds()
-		for i := range kinds {
-			caps := &kinds[i].Capabilities
-			caps.WorkspaceOutputExport = proto.CapabilityFromBool(s.local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
-		}
-		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: kinds, HomeRemoval: proto.CapabilityUnsupported}
+		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: localEnvironmentKinds(s.registry, s.local), HomeRemoval: proto.CapabilityUnsupported}
 	}, obslog.Bg())
 }
 

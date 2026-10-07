@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
@@ -53,7 +52,7 @@ type Router struct {
 	workspaceWrite      *workspaceUpload
 	workspaceExport     *workspaceExport
 	workspaceReads      map[string]struct{}
-	localWorkspace      *localworkspace.Binding
+	environments        func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
 	sessionEnvironments bool
 	removeHome          func(sessionID string) error
 }
@@ -92,10 +91,14 @@ type Config struct {
 	Log                *slog.Logger
 	IdleTimeout        time.Duration
 	PreparationTimeout time.Duration
-	LocalWorkspace     *localworkspace.Binding
-	// SessionEnvironments says that a prepared execution's LocalEnvironment
-	// is its Session's Environment, which the Executor factory binds, and not
-	// a local workspace of this daemon. It excludes LocalWorkspace.
+	// Environments resolves the Environment owner of a Session's first bind on
+	// this Router, under the Router's lock. A nil owner rejects the bind: the
+	// Runtime does not serve that Session. Nil Environments leaves every
+	// Session without an owner.
+	Environments func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
+	// SessionEnvironments says that the Executor factory binds a prepared
+	// execution's LocalEnvironment itself, without an owner. It excludes
+	// Environments.
 	SessionEnvironments bool
 	// RemoveHome removes the Session's native home once its Executors have
 	// closed. Nil declares that assignment_release does not accept RemoveHome.
@@ -112,8 +115,8 @@ func New(cfg Config) (*Router, error) {
 	if cfg.Sender == nil {
 		return nil, errors.New("dispatch.New: Sender is required")
 	}
-	if cfg.SessionEnvironments && cfg.LocalWorkspace != nil {
-		return nil, errors.New("dispatch.New: SessionEnvironments excludes LocalWorkspace")
+	if cfg.SessionEnvironments && cfg.Environments != nil {
+		return nil, errors.New("dispatch.New: SessionEnvironments excludes Environments")
 	}
 	log := cfg.Log
 	if log == nil {
@@ -141,7 +144,7 @@ func New(cfg Config) (*Router, error) {
 		preparations:        make(map[string]*preparationState),
 		preparationRequests: make(map[string]*preparationState),
 		preparationTimeout:  preparationTimeout,
-		localWorkspace:      cfg.LocalWorkspace,
+		environments:        cfg.Environments,
 		sessionEnvironments: cfg.SessionEnvironments,
 		removeHome:          cfg.RemoveHome,
 	}, nil

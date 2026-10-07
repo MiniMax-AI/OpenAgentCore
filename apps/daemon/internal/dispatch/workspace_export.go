@@ -47,9 +47,9 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 			return errors.New("dispatch: workspace export request already pending")
 		}
 	}
-	_, code := r.workspaceResourceLocked(env.Assignment, proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
+	environment, code := r.workspaceResourceLocked(env.Assignment, proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
 	p := r.preparations[request.Handle]
-	if code == "" && (u != nil || r.workspaceWrite != nil || !r.localWorkspace.CanExport() || p == nil || p.executor != nil) {
+	if code == "" && (u != nil || r.workspaceWrite != nil || p.executor != nil) {
 		code = "resource_unavailable"
 	}
 	if code != "" {
@@ -64,13 +64,13 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 	done := r.trackWorkLocked(env.Assignment)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
-	go r.runWorkspaceExport(owner, u, done)
+	go r.runWorkspaceExport(owner, u, environment, done)
 	return nil
 }
 
 // runWorkspaceExport answers each request it admitted, even once the export is
 // canceled, and runs done after its last result is sent.
-func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, done func()) {
+func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, environment Environment, done func()) {
 	defer r.shutdownWG.Done()
 	defer done()
 	// A result has its own send budget, independent of the export's cancellation.
@@ -81,7 +81,7 @@ func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, don
 	exported := make(chan struct{})
 	go func() {
 		defer close(exported)
-		err := r.localWorkspace.ExportOutputs(ctx, writer)
+		err := environment.ExportOutputs(ctx, writer)
 		_ = writer.CloseWithError(err)
 	}()
 	var offset int64

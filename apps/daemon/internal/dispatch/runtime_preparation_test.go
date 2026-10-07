@@ -41,7 +41,7 @@ func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, str
 		t.Fatal(err)
 	}
 	sender := &capabilitiesTestSender{frames: make(chan proto.Envelope, 64)}
-	router, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, LocalWorkspace: binding})
+	router, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: LocalEnvironments(binding)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func stringsOfZeroDigest() string { return hex.EncodeToString(make([]byte, sha25
 func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 	r, sender, environment, session := capabilitiesTestRouter(t)
 	defer shutdownCapabilitiesRouter(t, r)
-	for _, mode := range []string{"environment", "session", "size", "nil-binding"} {
+	for _, mode := range []string{"environment", "session", "size", "no-owner"} {
 		request := capabilityBegin(environment, session, []byte("abc"))
 		switch mode {
 		case "environment":
@@ -159,8 +159,10 @@ func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 			request.SessionID = uuid.NewString()
 		case "size":
 			request.SizeBytes = proto.RuntimePrepareMaxBytes + 1
-		case "nil-binding":
-			r.localWorkspace = nil
+		case "no-owner":
+			r.mu.Lock()
+			r.assignments[session].environment = nil
+			r.mu.Unlock()
 		}
 		id := uuid.NewString()
 		if err := r.Handle(t.Context(), capabilityEnvelope(t, id, request)); err != nil {

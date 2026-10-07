@@ -23,13 +23,12 @@ type session struct {
 	cancelOutput   chan struct{}
 	nativeEnded    bool
 
-	directories workspaceDirectoryState
-	process     *clirunner.Process
-	writeMu     *sync.Mutex
-	functions   functionState
-	steering    steeringState
-	settled     chan struct{}
-	outcome     proto.DonePayload
+	process   *clirunner.Process
+	writeMu   *sync.Mutex
+	functions functionState
+	steering  steeringState
+	settled   chan struct{}
+	outcome   proto.DonePayload
 }
 
 type bridgeEvent struct {

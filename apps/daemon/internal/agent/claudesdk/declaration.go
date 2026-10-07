@@ -116,7 +116,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		}
 		caps := &out.Info.Capabilities
 		caps.EnvironmentNone, caps.FunctionTools = proto.CapabilityUnsupported, proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
-		caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
+		caps.LocalEnvironment = proto.CapabilitySupported
 		caps.NativeSessionRecovery = proto.CapabilitySupported
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK

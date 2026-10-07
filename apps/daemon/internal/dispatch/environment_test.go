@@ -2,6 +2,8 @@ package dispatch_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/google/uuid"
 )
 
 // assertPreparationOutcome waits for the terminal admission status of id. An
@@ -90,5 +93,70 @@ func TestLocalEnvironmentRequiresAvailableCapability(t *testing.T) {
 				t.Fatalf("unexpected factory call for %s", mode)
 			}
 		})
+	}
+}
+
+// A Session whose assignment resolves no Environment owner declares no
+// Environment operation: each gets its typed rejection before any effect.
+func TestSessionWithoutOwnerRejectsEnvironmentOperations(t *testing.T) {
+	h := newHarness(t)
+	defer h.router.Shutdown(context.Background())
+	var called atomic.Bool
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "local", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		called.Store(true)
+		return nil, errors.New("controlled factory stop")
+	})
+	assign(t, h.router, preparationSessionID, preparationEnvironmentID)
+	execution := proto.PromptRequestPayload{AgentKind: "local", AgentStateKey: stateKey(preparationSessionID), LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID}}
+	read := execution
+	read.WorkspaceReadOnly = true
+	for id, test := range map[string]struct {
+		request proto.PromptRequestPayload
+		code    string
+	}{"read": {read, "unsupported_read_preparation"}, "execution": {execution, "invalid_configuration"}} {
+		_ = h.router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, id, proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: test.request}))
+		if status := waitPreparationStatus(t, h.sender, id, "rejected", ""); status.ErrorCode != test.code {
+			t.Fatalf("%s preparation = %+v", id, status)
+		}
+	}
+	empty := sha256.Sum256(nil)
+	for _, test := range []struct {
+		request, result string
+		payload         any
+		code            string
+	}{
+		{proto.TypeRuntimePrepare, proto.TypeRuntimePrepareResult, proto.RuntimePreparePayload{Step: "begin", Action: "file", EnvironmentID: preparationEnvironmentID, SessionID: preparationSessionID, File: &proto.RuntimeInitialFile{Path: "/workspace/input"}, SHA256: hex.EncodeToString(empty[:])}, "runtime_preparation_unsupported"},
+		{proto.TypeWorkspaceWrite, proto.TypeWorkspaceWriteResult, proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: preparationEnvironmentID, SessionID: preparationSessionID, Path: "file", SHA256: hex.EncodeToString(empty[:])}, "write_unsupported"},
+		{proto.TypeWorkspaceRead, proto.TypeWorkspaceReadResult, proto.WorkspaceReadPayload{Handle: "handle", EnvironmentID: preparationEnvironmentID, MaxEntries: 1}, "read_unsupported"},
+		{proto.TypeWorkspaceExport, proto.TypeWorkspaceExportResult, proto.WorkspaceExportPayload{Step: "begin", Handle: "handle", EnvironmentID: preparationEnvironmentID}, "read_unsupported"},
+	} {
+		id := uuid.NewString()
+		if err := h.router.Handle(t.Context(), mustEnv(t, test.request, id, test.payload)); err != nil {
+			t.Fatal(test.request, err)
+		}
+		waitFor(t, func() bool { return hasFrame(h.sender, test.result, id) }, test.result)
+		frame, _ := frameFor(h.sender, test.result, id)
+		var result struct {
+			Outcome   string `json:"outcome"`
+			ErrorCode string `json:"error_code"`
+		}
+		if err := frame.DecodePayload(&result); err != nil || result.Outcome != "rejected" || result.ErrorCode != test.code {
+			t.Fatalf("%s = %+v, %v", test.request, result, err)
+		}
+	}
+	if called.Load() {
+		t.Fatal("an operation reached the Executor factory")
+	}
+}
+
+func TestOwnedRuntimeRejectsForeignSessionBind(t *testing.T) {
+	h := localPreparationHarness(t)
+	defer h.router.Shutdown(context.Background())
+	const foreign = "33333333-3333-4333-8333-333333333333"
+	if err := h.router.Handle(t.Context(), scoped(t, foreign, proto.TypeAssignmentBind, "bind-foreign", proto.AssignmentBindPayload{EnvironmentID: preparationEnvironmentID})); err != nil {
+		t.Fatal(err)
+	}
+	if status := waitAssignmentStatus(t, h.sender, "bind-foreign"); status.ErrorCode != proto.AssignmentConflict {
+		t.Fatalf("foreign bind = %+v", status)
 	}
 }

@@ -90,11 +90,6 @@
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "apps/daemon/internal/localworkspace/write.go",
-    "regex": "\"agents-api-(?:session)?\"",
-    "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
-  },
-  {
     "path": "services/core/internal/execution/directory_preparation.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."

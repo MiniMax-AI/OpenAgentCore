@@ -21,7 +21,7 @@ func TestMCodeExecutionFollowsAvailability(t *testing.T) {
 			rc := agent.DiscoveryOptions{Stdout: io.Discard, Stderr: io.Discard}
 			runtime := discoverWithCheck(t.Context(), rc, Declaration.Info, func(context.Context, string) (string, error) { return tc.version, tc.check })
 			info, available := runtime.Info, tc.check == nil
-			if (runtime.Executor != nil) != available || info.Capabilities.WorkspaceReadPreparation.IsSupported() {
+			if (runtime.Executor != nil) != available {
 				t.Fatalf("factories: %+v", runtime)
 			}
 			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.DurableInputReceipts.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {

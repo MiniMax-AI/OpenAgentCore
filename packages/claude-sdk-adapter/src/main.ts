@@ -1,5 +1,4 @@
 import { ExecutorTurns } from "./executor_protocol.js";
-import { WorkspaceDirectories } from "./workspace_directories.js";
 import { Inputs } from "./inputs.js";
 import { FunctionBridge } from "./function_bridge.js";
 import { createInterface } from "node:readline";
@@ -27,7 +26,6 @@ try {
     await emit(invalid && (event.type === "error" || event.type === "result") ? { type: "error", code: "invalid_request" } : event);
   };
   const functions = new FunctionBridge(output);
-  const directories = new WorkspaceDirectories(output, abort);
   const prompts = new Inputs(immediateInput(request));
   const turns=request.type==="executor_prepare" ? new ExecutorTurns(emit,abort) : undefined;
   const incoming = (async () => {
@@ -35,9 +33,7 @@ try {
       for await (const line of { [Symbol.asyncIterator]: () => input }) {
         if (Buffer.byteLength(line) > 1024 * 1024) throw new Error("Invalid input.");
         const value: unknown = JSON.parse(line);
-        if (value && typeof value === "object" && "type" in value && value.type === "workspace_directory") {
-          directories.submit(value as Record<string, unknown>);
-        } else if(turns) {
+        if(turns) {
           if(!value || typeof value!=="object" || Array.isArray(value)) throw new Error("invalid_request");
           const control=value as Record<string,unknown>;
           if(control.type==="turn_start") await turns.start(control);
@@ -54,7 +50,7 @@ try {
     }
     catch { invalid = request.type === "prepare"; abort.abort(); }
   })();
-  try { await execute(request, output, abort, functions, prompts, directories, turns); }
+  try { await execute(request, output, abort, functions, prompts, turns); }
   catch { await output({ type: "error", code: "execution_failed" }); }
   finally {
     prompts.close();

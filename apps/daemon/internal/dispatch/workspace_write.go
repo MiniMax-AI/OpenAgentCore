@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// Router.mu protects this single bounded transfer for the dedicated Environment.
+// Router.mu protects this single bounded transfer to an Environment owner.
 type workspaceUpload struct {
 	envelope  proto.Envelope
 	request   proto.WorkspaceWritePayload
@@ -62,7 +62,12 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite(code))
 		}
-		if !r.localWorkspace.AcceptsFileWrite(request.EnvironmentID, request.SessionID) || len(r.sessions) != 0 || len(r.workspaceReads) != 0 {
+		environment := r.assignments[request.SessionID].environment
+		if environment == nil {
+			r.mu.Unlock()
+			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("write_unsupported"))
+		}
+		if len(r.sessions) != 0 || len(r.workspaceReads) != 0 {
 			r.mu.Unlock()
 			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 		}
@@ -83,7 +88,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
-		go r.runWorkspaceUpload(context.WithoutCancel(ctx), u, done)
+		go r.runWorkspaceUpload(context.WithoutCancel(ctx), u, environment, done)
 		return r.sendWorkspaceWrite(ctx, env, proto.WorkspaceWriteResultPayload{Outcome: "ready"})
 	}
 	u := r.workspaceWrite
@@ -111,7 +116,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 	return nil
 }
 
-func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload, done func()) {
+func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload, environment Environment, done func()) {
 	defer r.shutdownWG.Done()
 	defer done()
 	timer := time.NewTimer(120 * time.Second)
@@ -134,7 +139,7 @@ func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload, don
 		result = rejectedWorkspaceWrite(fenced)
 	}
 	if apply {
-		write, err := r.localWorkspace.WriteWorkspaceFile(ctx, u.request.Path, data)
+		write, err := environment.WriteWorkspaceFile(ctx, u.request.Path, data)
 		result = workspaceWriteResult(write, err, u.request.SizeBytes)
 	}
 	r.mu.Lock()
@@ -169,7 +174,6 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceWriteUnsupported, "write_unsupported"},
 		{agent.ErrWorkspaceWriteUnavailable, "resource_unavailable"},
 		{agent.ErrWorkspaceWriteBusy, "write_capacity"},
 		{agent.ErrWorkspaceWriteInvalid, "invalid_request"},

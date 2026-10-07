@@ -3,15 +3,12 @@ package localworkspace
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"io"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func (b *Binding) CanExport() bool { return b != nil && b.workspace != "" }
 func (b *Binding) ExportOutputs(ctx context.Context, output io.Writer) error {
-	if !b.CanExport() || output == nil {
-		return errors.New("workspace export unavailable")
-	}
 	return b.exportNativeOutputs(ctx, &exportWriter{output: output})
 }
 

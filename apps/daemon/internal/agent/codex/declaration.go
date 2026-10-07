@@ -61,7 +61,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	caps := &runtime.Info.Capabilities
 	caps.NativeSessionRecovery = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	caps.LocalEnvironment = proto.CapabilityFromBool(SupportsLocalEnvironment(version))
-	caps.WorkspaceReadPreparation = caps.LocalEnvironment
 	caps.MCPHTTPRequired = proto.CapabilityFromBool(SupportsNativeSessionRecovery(version))
 	runtime.Executor = NewExecutorFactory()
 	runtime.View = discoverView(version)

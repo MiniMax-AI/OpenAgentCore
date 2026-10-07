@@ -10,7 +10,6 @@ type WorkspaceWriteResult struct {
 }
 
 var (
-	ErrWorkspaceWriteUnsupported = fmt.Errorf("%w: workspace write", ErrUnsupportedOperation)
 	ErrWorkspaceWriteUnavailable = errors.New("workspace write unavailable")
 	ErrWorkspaceWriteBusy        = errors.New("workspace write busy")
 	ErrWorkspaceWriteInvalid     = errors.New("workspace write invalid")

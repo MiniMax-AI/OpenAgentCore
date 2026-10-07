@@ -19,7 +19,9 @@ type assignmentState struct {
 	// resource's Kind is empty when the bind carried none.
 	resource sandboxbootstrap.Resource
 	grant    []byte
-	released bool
+	// environment is the owner resolved from the bind, or nil.
+	environment Environment
+	released    bool
 	// work counts the Session's admitted reads, writes, exports and Runtime
 	// preparations until each has sent its terminal result. A release waits
 	// for it, and the released assignment admits no more.
@@ -49,6 +51,22 @@ func (r *Router) trackWorkLocked(ref proto.AssignmentRef) func() {
 	return work.Done
 }
 
+// admittedEnvironment admits ref for the Session and returns the owner that
+// its assignment resolved, or nil, or the assignment rejection code. A
+// Session's assignment, and so its owner, never changes on a Router.
+func (r *Router) admittedEnvironment(ref proto.AssignmentRef, sessionID string) (Environment, string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	a := r.assignments[ref.SessionID]
+	if a == nil {
+		return nil, proto.AssignmentConflict
+	}
+	if code := r.admitLocked(ref, sessionID, a.environmentID); code != "" {
+		return nil, code
+	}
+	return a.environment, ""
+}
+
 // admitRunLocked admits a frame for the run, which ref must have started.
 // Router.mu must be held.
 func (r *Router) admitRunLocked(ref proto.AssignmentRef, state *sessionState) string {
@@ -72,7 +90,14 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 		a := r.assignments[ref.SessionID]
 		switch {
 		case a == nil:
-			r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID, resource: resource, grant: input.AttachGrant}
+			var environment Environment
+			if r.environments != nil {
+				if environment = r.environments(ref, input); environment == nil {
+					code = proto.AssignmentConflict
+					break
+				}
+			}
+			r.assignments[ref.SessionID] = &assignmentState{ref: ref, environmentID: input.EnvironmentID, resource: resource, grant: input.AttachGrant, environment: environment}
 		case a.ref.AssignmentID == ref.AssignmentID && (ref.Epoch < a.ref.Epoch || ref.Epoch == a.ref.Epoch && a.released):
 			code = proto.AssignmentStale
 		case a.ref != ref || a.environmentID != input.EnvironmentID || a.resource != resource || !bytes.Equal(a.grant, input.AttachGrant):
@@ -84,8 +109,8 @@ func (r *Router) handleAssignmentBind(ctx context.Context, env proto.Envelope) e
 }
 
 // handleAssignmentRelease fences the assignment, then settles the Session's
-// work and Executor and removes its home before it replies. A retry at the
-// same epoch repeats the cleanup.
+// work and Executor, closes its Environment owner and removes its home before
+// it replies. A retry at the same epoch repeats the cleanup.
 func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope) error {
 	var input proto.AssignmentReleasePayload
 	ref, code := env.Assignment, ""
@@ -114,17 +139,22 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 		return r.reply(ctx, env, proto.TypeAssignmentStatus, assignmentStatus("", code))
 	}
 	preparations := r.fenceSessionWorkLocked(ref.SessionID)
-	work := &r.assignments[ref.SessionID].work
+	work, environment := &r.assignments[ref.SessionID].work, r.assignments[ref.SessionID].environment
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go func() {
 		defer r.shutdownWG.Done()
+		cleanupCtx, stop := r.shutdownContext(context.WithoutCancel(ctx))
+		defer stop()
 		for _, p := range preparations {
 			r.releasePreparation(p, "failed", proto.AssignmentStale, true)
 		}
 		work.Wait()
 		state, code := proto.AssignmentReleased, ""
 		err := r.closeSessionExecutor(ref.SessionID)
+		if err == nil && environment != nil {
+			err = environment.Close(cleanupCtx)
+		}
 		if err == nil && input.RemoveHome {
 			state, err = proto.AssignmentHomeRemoved, r.removeHome(ref.SessionID)
 		}
@@ -132,9 +162,7 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 			r.log.Warn("assignment release cleanup unconfirmed", "session_id", ref.SessionID, "err", err)
 			code = proto.CleanupUnconfirmed
 		}
-		sendCtx, stop := r.shutdownContext(context.WithoutCancel(ctx))
-		defer stop()
-		_ = r.reply(sendCtx, env, proto.TypeAssignmentStatus, assignmentStatus(state, code))
+		_ = r.reply(cleanupCtx, env, proto.TypeAssignmentStatus, assignmentStatus(state, code))
 	}()
 	return nil
 }
