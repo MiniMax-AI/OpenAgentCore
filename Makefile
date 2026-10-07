@@ -32,21 +32,28 @@ sqlc-generate:
 
 SWAG ?= go run github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION)
 
-.PHONY: openapi
+.PHONY: openapi check-openapi
+OPENAPI_FLAGS ?=
+check-openapi:
+	$(MAKE) openapi OPENAPI_FLAGS=--check
+	python3 scripts/generate-public-api.test.py
+
 openapi:
 	@set -e; root="$${OAC_DEV_HOME:-$$HOME/.oac}/build"; mkdir -p "$$root"; \
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
+	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --swag-roots "$$output/roots.go"; \
 	$(SWAG) init \
-	    -g cmd/server/main.go --dir ./services/core,./contracts/agents-api/v1 \
+	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,$$output" \
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \
-	go run ./scripts/openapi-split "$$output/swagger.yaml" contracts/agents-api/openapi.yaml contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml
+	go run ./scripts/openapi-split $(OPENAPI_FLAGS) "$$output/swagger.yaml" "$$output/extensions.json" contracts/agents-api/core.openapi.yaml contracts/agents-api/runtime.openapi.yaml; \
+	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --extensions "$$output/extensions.json"
 
 check-sqlc:
 	python3 scripts/check-sqlc.py
 
-check-go:
+check-go: check-openapi
 	go test ./apps/daemon/... ./apps/sandboxio/... ./internal/... ./contracts/agents-api/... ./scripts/openapi-split -count=1
 
 .PHONY: check-runtime-contract

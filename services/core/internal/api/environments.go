@@ -31,16 +31,6 @@ type Environments interface {
 	RevokeProjectExecutorCredential(context.Context, identity.Principal, string, string) error
 }
 
-// @Summary Retrieve an execution Environment
-// @Description Returns durable connection status and safe installed metadata for supported self_hosted and basic openai_hosted profiles. Initial files expose frozen safe metadata without content; Plugin/Skill entries expose only safe configured installation metadata. Capability-directory discoveries are not added to those arrays. Unsupported installation configurations remain implementation gaps. This read does not prepare execution, start compute or require an enabled execution worker. Session deletion removes the associated Environment from public reads; project-shared read authorization is unchanged. Connection status does not prove native readiness or process quiescence.
-// @Tags Environments
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param environment_id path string true "Environment ID"
-// @Success 200 {object} v1.EnvironmentInfo
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /agents/environments/{environment_id} [get]
 func (h *Handler) getEnvironment(w http.ResponseWriter, r *http.Request) {
 	environment, err := h.EnvironmentsReader.GetEnvironment(r.Context(), tenantID(r), chi.URLParam(r, "environment_id"))
 	if err != nil {

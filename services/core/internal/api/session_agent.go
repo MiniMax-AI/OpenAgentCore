@@ -84,11 +84,9 @@ func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {
 	if cfg.ServiceTier != "auto" {
 		return v1.Agent{}, errors.New("Execution currently supports service_tier=auto only.")
 	}
-	text, err := resolveText(&v1.TextConfigInput{Verbosity: &cfg.Text.Verbosity})
-	if err != nil {
+	if err := validateTextVerbosity(cfg.Text.Verbosity); err != nil {
 		return v1.Agent{}, err
 	}
-	text.Format = v1.TextFormat{Type: cfg.Text.Format.Type, Schema: cfg.Text.Format.Schema}
 	tools, err := resolveSessionTools(cfg.Tools)
 	if err != nil {
 		return v1.Agent{}, err
@@ -99,5 +97,5 @@ func admitSessionAgent(cfg v1.SavedAgentConfiguration) (v1.Agent, error) {
 	}
 	return v1.Agent{XAgentsCore: extension, Model: cfg.Model, Name: cfg.Name, Instructions: cfg.Instructions,
 		MultiAgent: cfg.MultiAgent, Reasoning: cfg.Reasoning, ServiceTier: cfg.ServiceTier,
-		Text: text, Tools: tools}, nil
+		Text: cfg.Text, Tools: tools}, nil
 }

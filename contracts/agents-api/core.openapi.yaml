@@ -1458,6 +1458,10 @@ definitions:
       service_tier:
         enum:
           - auto
+          - default
+          - flex
+          - priority
+          - fast
         type: string
       text:
         $ref: '#/definitions/v1.TextConfig'
@@ -1466,13 +1470,13 @@ definitions:
           type: object
         type: array
       x_agents_core:
-        allOf:
-          - $ref: '#/definitions/v1.AgentsCore'
-        x-nullable: true
+        $ref: '#/definitions/v1.AgentsCore'
     required:
       - id
+      - instructions
       - model
       - multi_agent
+      - name
       - reasoning
       - service_tier
       - text
@@ -1481,8 +1485,6 @@ definitions:
   v1.AgentDeleted:
     properties:
       deleted:
-        enum:
-          - true
         type: boolean
       id:
         type: string
@@ -1546,8 +1548,8 @@ definitions:
         x-nullable: true
       type:
         enum:
-          - static_bearer
           - mcp_oauth
+          - static_bearer
         type: string
     required:
       - mcp_server_url
@@ -1588,7 +1590,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.EnvironmentInstallation:
@@ -1684,6 +1688,7 @@ definitions:
       - created_at
       - files
       - id
+      - name
       - network
       - object
       - packages
@@ -1726,7 +1731,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.ExecutionHarnessConfigSelection:
@@ -1794,7 +1801,9 @@ definitions:
   v1.Item:
     properties:
       action:
-        $ref: '#/definitions/v1.WebSearchAction'
+        allOf:
+          - $ref: '#/definitions/v1.WebSearchAction'
+        x-nullable: true
       agent_id:
         type: string
       arguments: {}
@@ -1808,18 +1817,25 @@ definitions:
         type: array
       cwd:
         type: string
+        x-nullable: true
       duration_ms:
         type: integer
-      error: {}
+        x-nullable: true
+      error:
+        x-nullable: true
       exit_code:
         type: integer
+        x-nullable: true
       id:
         type: string
+        x-nullable: true
       model:
         type: string
+        x-nullable: true
       name:
         type: string
-      output: {}
+      output:
+        x-nullable: true
       phase:
         enum:
           - commentary
@@ -1828,6 +1844,7 @@ definitions:
         x-nullable: true
       reasoning_effort:
         type: string
+        x-nullable: true
       recipient_agent_id:
         type: string
       recipient_agent_ids:
@@ -1847,9 +1864,10 @@ definitions:
         enum:
           - in_progress
           - completed
-          - failed
           - incomplete
+          - failed
         type: string
+        x-nullable: true
       summary:
         items:
           $ref: '#/definitions/v1.SummaryText'
@@ -1859,13 +1877,13 @@ definitions:
       type:
         enum:
           - message
-          - command_execution
-          - mcp_call
+          - reasoning
           - function_call
           - function_call_output
-          - web_search_call
-          - reasoning
           - agent_message
+          - mcp_call
+          - web_search_call
+          - command_execution
           - create_subagent_call
           - send_subagent_input_call
           - resume_subagent_call
@@ -1889,8 +1907,8 @@ definitions:
       type:
         enum:
           - input_text
-          - output_text
           - input_image
+          - output_text
           - encrypted_content
         type: string
     required:
@@ -1916,7 +1934,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.ModelConfigurationInput:
@@ -1997,6 +2017,7 @@ definitions:
         x-nullable: true
     required:
       - enabled
+      - max_concurrent_subagents
     type: object
   v1.OAuthCredentialRefresh:
     properties:
@@ -2014,6 +2035,8 @@ definitions:
         $ref: '#/definitions/v1.OAuthEndpointAuth'
     required:
       - client_id
+      - resource
+      - scope
       - token_endpoint
       - token_endpoint_auth
     type: object
@@ -2038,9 +2061,21 @@ definitions:
   v1.Reasoning:
     properties:
       effort:
+        enum:
+          - none
+          - minimal
+          - low
+          - medium
+          - high
+          - xhigh
+          - max
         type: string
         x-nullable: true
       summary:
+        enum:
+          - concise
+          - detailed
+          - auto
         type: string
         x-nullable: true
     type: object
@@ -2552,7 +2587,7 @@ definitions:
           - fast
         type: string
       text:
-        $ref: '#/definitions/v1.SavedAgentText'
+        $ref: '#/definitions/v1.TextConfig'
       tools:
         items:
           type: object
@@ -2560,15 +2595,15 @@ definitions:
       updated_at:
         type: integer
       x_agents_core:
-        allOf:
-          - $ref: '#/definitions/v1.SavedAgentCore'
-        x-nullable: true
+        $ref: '#/definitions/v1.SavedAgentCore'
     required:
       - created_at
       - id
+      - instructions
       - metadata
       - model
       - multi_agent
+      - name
       - object
       - reasoning
       - service_tier
@@ -2609,34 +2644,10 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
-    type: object
-  v1.SavedAgentText:
-    properties:
-      format:
-        $ref: '#/definitions/v1.SavedAgentTextFormat'
-      verbosity:
-        enum:
-          - low
-          - medium
-          - high
-        type: string
-    required:
-      - format
-      - verbosity
-    type: object
-  v1.SavedAgentTextFormat:
-    properties:
-      schema:
-        type: object
-      type:
-        enum:
-          - text
-          - json_schema
-        type: string
-    required:
-      - type
     type: object
   v1.Session:
     properties:
@@ -2686,12 +2697,14 @@ definitions:
       - agent
       - created_at
       - environment
+      - error
       - id
       - last_active_at
       - metadata
       - object
       - required_actions
       - status
+      - usage
       - vault_ids
     type: object
   v1.SessionArtifact:
@@ -2759,7 +2772,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SessionCore:
@@ -2811,8 +2826,8 @@ definitions:
       type:
         enum:
           - none
-          - self_hosted
           - openai_hosted
+          - self_hosted
         type: string
       workspace_directory:
         type: string
@@ -2868,7 +2883,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.Skill:
@@ -2933,7 +2950,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SkillVersion:
@@ -3001,19 +3020,19 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SourceFile:
     properties:
       bytes:
-        minimum: 0
         type: integer
       created_at:
         type: integer
       expires_at:
         type: integer
-        x-nullable: true
       filename:
         type: string
       id:
@@ -3024,15 +3043,23 @@ definitions:
         type: string
       purpose:
         enum:
+          - assistants
+          - assistants_output
+          - batch
+          - batch_output
+          - fine-tune
+          - fine-tune-results
+          - vision
           - user_data
         type: string
       status:
         enum:
+          - uploaded
           - processed
+          - error
         type: string
       status_details:
         type: string
-        x-nullable: true
     required:
       - bytes
       - created_at
@@ -3065,19 +3092,17 @@ definitions:
         type: array
       first_id:
         type: string
-        x-nullable: true
       has_more:
         type: boolean
       last_id:
         type: string
-        x-nullable: true
       object:
-        enum:
-          - list
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.SummaryText:
@@ -3179,11 +3204,16 @@ definitions:
         x-nullable: true
     required:
       - agent_id
+      - completed_at
       - created_at
+      - error
       - id
       - object
       - session_id
+      - started_at
       - status
+      - subagent_id
+      - usage
     type: object
   v1.TurnError:
     properties:
@@ -3232,7 +3262,9 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.Vault:
@@ -3256,6 +3288,7 @@ definitions:
       - created_at
       - id
       - metadata
+      - name
       - object
     type: object
   v1.VaultDeleted:
@@ -3293,19 +3326,24 @@ definitions:
         type: string
     required:
       - data
+      - first_id
       - has_more
+      - last_id
       - object
     type: object
   v1.WebSearchAction:
     properties:
       pattern:
         type: string
+        x-nullable: true
       queries:
         items:
           type: string
         type: array
+        x-nullable: true
       query:
         type: string
+        x-nullable: true
       type:
         enum:
           - search
@@ -3315,6 +3353,7 @@ definitions:
         type: string
       url:
         type: string
+        x-nullable: true
     required:
       - type
     type: object

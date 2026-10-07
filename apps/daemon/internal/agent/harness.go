@@ -14,8 +14,8 @@
 // Registration: each adapter exports one Declaration. The Runtime discovers the
 // static declaration list and installs each resulting Runtime through Register.
 // Availability and factory selection belong to the adapter. RegisterKind resets
-// the factories, so Register installs it first. Preparation capabilities are
-// derived from the declared factories.
+// the factories, so Register installs it first. RegisterExecutor derives the
+// Preparation capability; the adapter declares WorkspaceReadPreparation.
 //
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising

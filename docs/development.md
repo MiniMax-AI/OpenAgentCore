@@ -101,7 +101,7 @@ Choose focused checks for the current diff and its directly affected behavior us
 | --- | --- |
 | Core handlers, persistence or clients | `make check-core` |
 | SQL queries | `make sqlc-generate`, inspect generated files, then `make check-sqlc` |
-| Handler annotations or API contract | `make openapi`, inspect all three namespace schemas |
+| Public schema, Core extensions or internal handler annotations | `make openapi`, `make check-openapi`; inspect generated types and all three namespace schemas |
 | Shared Runtime protocol | `make check-runtime-contract` |
 | Provider integration | `make check-sandbox-provider-contract` and the provider's native checks |
 | Claude SDK bridge and artifact | `make check-claude-sdk` |
