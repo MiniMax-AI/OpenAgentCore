@@ -205,7 +205,8 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		t.Fatal("a changed default reached an existing Session")
 	}
 
-	// Every Environment type accepts every source and freezes it.
+	// Every Environment type accepts every source and freezes it, except that
+	// a self_hosted guest never receives the deployment key.
 	agentID := text(call("POST", "/v1/agents", projectKey, `{"model":"agent-model","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://agent.example/v1","api_key":"agent-canary"}}}`, 201)["id"])
 	for name, environment := range environments {
 		for _, tc := range []struct{ source, body, key string }{
@@ -213,6 +214,13 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 			{"agent", `{"agent_id":"` + agentID + `",` + environment + `}`, "agent-canary"},
 			{"deployment", `{"agent":{"model":"m"},` + environment + `}`, "changed-canary"},
 		} {
+			if name == "self_hosted" && tc.source == "deployment" {
+				failure := call("POST", "/v1/agents/sessions", projectKey, tc.body, 400)
+				if !strings.Contains(string(failure["error"]), `"code":"model_provider_required","param":"x_agents_core.model_provider"`) {
+					t.Fatalf("self_hosted accepted the deployment default: %s", failure["error"])
+				}
+				continue
+			}
 			id := text(call("POST", "/v1/agents/sessions", projectKey, tc.body, 201)["id"])
 			projection, err := sessionAdapter(st).GetSessionExecutionConfiguration(t.Context(), tenant, id)
 			if providerOf(id) != tc.key || err != nil || projection.ModelProvider.Source != tc.source {
