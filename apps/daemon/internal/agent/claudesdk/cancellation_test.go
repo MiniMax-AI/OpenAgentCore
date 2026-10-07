@@ -27,7 +27,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	defer cancel()
 	// A stopped consumer must not prevent native output draining or cancellation.
 	out := make(chan proto.Envelope)
-	running, err := NewFactory(config)(ctx, cancellationRequest(), out)
+	running, err := startSingleTurn(ctx, config, cancellationRequest(), out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestFailureKeepsOnlyVerifiedNativeIdentity(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 8)
-			running, err := NewFactory(cancellationConfig(root, mode))(ctx, cancellationRequest(), out)
+			running, err := startSingleTurn(ctx, cancellationConfig(root, mode), cancellationRequest(), out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -125,7 +125,7 @@ func TestCancellationDrainsIntoReadyConsumer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 16)
-	running, err := NewFactory(config)(ctx, cancellationRequest(), out)
+	running, err := startSingleTurn(ctx, config, cancellationRequest(), out)
 	if err != nil {
 		t.Fatal(err)
 	}

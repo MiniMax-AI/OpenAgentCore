@@ -9,14 +9,6 @@ import (
 
 func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	plan.Cleanup()
-	if len(plan.ExtraConfig) != 0 {
-		t.Fatal("native settings without ExecutionControls", plan.ExtraConfig)
-	}
 	for _, search := range []string{"disabled", "cached", "live"} {
 		for _, verbosity := range []string{"low", "medium", "high"} {
 			plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state", ExecutionControls: &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity}})
@@ -24,7 +16,7 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			plan.Cleanup()
-			want := [][2]string{{"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}}
+			want := [][2]string{{"tools.experimental_request_user_input.enabled", "false"}, {"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}}
 			if !reflect.DeepEqual(plan.ExtraConfig, want) {
 				t.Fatalf("config = %v, want %v", plan.ExtraConfig, want)
 			}

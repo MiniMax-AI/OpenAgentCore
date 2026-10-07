@@ -94,7 +94,7 @@ func TestLiveClaudeWorkspaceFactory(t *testing.T) {
 		req.ObserveMessages = true
 		req.Model, req.SystemPrompt = "MiniMax-M3", "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."
 		proof := evidence{RunID: req.RunID}
-		running, err := NewFactory(config)(ctx, req, out)
+		running, err := startSingleTurn(ctx, config, req, out)
 		if err != nil {
 			if name == "missing-history" && running == nil && strings.Contains(err.Error(), "history_unavailable") {
 				proof.Failure = err.Error()

@@ -20,7 +20,7 @@ A Runtime connects in this order:
 
 The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
 
-Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core closes the previous connection and evicts its Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core closes the previous connection and evicts its Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
 
 ## Capability declarations
 
@@ -51,7 +51,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
-`permissions` gates permission decisions inside the Runtime. Core has no admission rule for `usage` and `resume`.
+Core has no admission rule for `usage` and `resume`.
 
 The `execution_prepare` configuration carries the Session's model configuration and the opt-ins Core sets for each Run:
 
@@ -82,13 +82,10 @@ Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgen
 | Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
 | Admission handle | Runtime-generated reservation, valid only on the connection that accepted it |
 | Run ID | One execution attempt; `Envelope.id` for output, cancellation, active input and functions |
-| Interaction ID | `permission_request.payload.request_id` or `prompt_for_user_choice.payload.ask_id`; these request envelopes still carry the Run ID |
 | Delivery ID / input ID / call ID | Resolve attempt, active-input receipt and native function identity; never interchangeable |
 | Transfer ID / suspension ID | Connection-local transfer correlation / persisted suspension-attempt fencing |
 
-Decision and permission-cancel envelopes use the interaction ID. Cancellation and function-result acknowledgements use the Run ID. Every application decision receipt also matches the delivery ID. A reply without the required correlation cannot establish acceptance.
-
-User-choice decisions carry `question_answers`: an explicit `question_id` and an `answers` array for each provided answer. The IDs must belong to the emitted questions and cannot repeat. Question order and display headers do not identify answers; an omitted question stays unanswered, and an empty array is an explicit non-answer. Cancellation carries `cancelled: true` without answers. Shared validation rejects other shapes before native submission.
+Cancellation and function-result acknowledgements use the Run ID and match the delivery ID. A reply without the required correlation cannot establish acceptance.
 
 ## Message families
 
@@ -98,8 +95,7 @@ The linked source files define the required fields, validators, limits and finit
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
-| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go), [write](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go), [export](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
@@ -158,7 +154,7 @@ No generic receipt exists for every envelope. A successful send does not prove t
 
 ## Failures, retries and cleanup
 
-Transport and execution outcomes are separate. Core's only Run subscription entry point is `SubscribeDurable`; inspect `Subscription.Err()` when its event channel closes. Disconnection and subscriber overflow close it with an explicit observation error and fabricate no `error` or `done`. Core keeps the durable truth and reconciles from confirmed facts. The Runtime keeps cleanup ownership until native work, input receipts, interactions and child work have settled.
+Transport and execution outcomes are separate. Core's only Run subscription entry point is `SubscribeDurable`; inspect `Subscription.Err()` when its event channel closes. Disconnection and subscriber overflow close it with an explicit observation error and fabricate no `error` or `done`. Core keeps the durable truth and reconciles from confirmed facts. The Runtime keeps cleanup ownership until native work, input receipts, function results and child work have settled.
 
 The public Turn status is a separate projection. [`execution/delivery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/delivery.go) records an unsuccessful orchestration attempt as `failed`, including `delivery_unknown` after an unconfirmed send and `event_stream_incomplete` after a subscription failure; a closed subscription can replace the send reason with `event_stream_incomplete`. Both mean the native effect is unknown: a public `failed` status does not prove that the Harness failed, that no side effect occurred or that cleanup completed. Keep the observation reason and any native evidence distinct.
 

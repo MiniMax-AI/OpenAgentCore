@@ -50,7 +50,7 @@ func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ExecutionControls: &controls, Model: "native-model"}
-			_, err := NewFactory(config)(t.Context(), request, make(chan proto.Envelope, 1))
+			_, err := startSingleTurn(t.Context(), config, request, make(chan proto.Envelope, 1))
 			if err == nil || !strings.Contains(err.Error(), "execution controls require") {
 				t.Fatal("unsupported controls did not fail at admission", err)
 			}
@@ -67,7 +67,7 @@ func TestMCPWithoutEnvironmentNoneRejectedBeforeSetup(t *testing.T) {
 	config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Input"), MCPHTTPServers: &servers}
-	_, err := NewFactory(config)(t.Context(), request, make(chan proto.Envelope, 1))
+	_, err := startSingleTurn(t.Context(), config, request, make(chan proto.Envelope, 1))
 	if err == nil || !strings.Contains(err.Error(), "service-origin MCP requires a service execution host") {
 		t.Fatal("MCP reached an unsupported environment", err)
 	}

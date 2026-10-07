@@ -24,7 +24,7 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 	info := Declaration.Info
 	info.Available = true
 	registry := agent.NewRegistry()
-	registry.Register(Declaration, agent.Runtime{Info: info, Session: Factory, View: &declared})
+	registry.Register(Declaration, agent.Runtime{Info: info, View: &declared})
 	view, err := registry.ResolveView("codex")
 	if err != nil {
 		t.Fatal(err)

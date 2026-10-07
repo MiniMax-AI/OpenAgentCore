@@ -12,16 +12,6 @@ const (
 	// RunID. Idempotent — cancelling an unknown / already-finished
 	// run is a no-op on the daemon side.
 	TypePromptCancel = "prompt_cancel"
-
-	// TypePermissionDecision delivers a human verdict back to the
-	// daemon. Envelope.ID = the perm_<8hex> id the daemon minted in
-	// the matching permission_request.
-	TypePermissionDecision = "permission_decision"
-
-	// TypePromptForUserChoiceDecision delivers the human's answer back
-	// to the daemon. Envelope.ID = the ask_<8hex> id the daemon minted
-	// in the matching prompt_for_user_choice frame.
-	TypePromptForUserChoiceDecision = "prompt_for_user_choice_decision"
 )
 
 // PromptRequestPayload is the execution configuration that execution_prepare
@@ -74,33 +64,6 @@ type PromptRequestPayload struct {
 // PromptCancelPayload optionally requests an application receipt; identity is on Envelope.ID.
 type PromptCancelPayload struct {
 	DeliveryID string `json:"delivery_id,omitempty"`
-}
-
-// PermissionDecisionPayload carries the human verdict. UpdatedInput
-// lets the approver edit the tool input before letting the call
-// proceed (Claude Code's allow-with-changes path).
-type PermissionDecisionPayload struct {
-	DeliveryID   string         `json:"delivery_id"`
-	Approved     bool           `json:"approved"`
-	Message      string         `json:"message,omitempty"`
-	UpdatedInput map[string]any `json:"updated_input,omitempty"`
-}
-
-// PromptForUserChoiceQuestionAnswer binds answer values to one emitted question ID.
-// Headers and array positions never identify a question.
-type PromptForUserChoiceQuestionAnswer struct {
-	QuestionID string   `json:"question_id"`
-	Answers    []string `json:"answers"`
-}
-
-// PromptForUserChoiceDecisionPayload carries either explicitly identified answers
-// or cancellation. Omitted questions remain unanswered; adapters never reassign
-// answers by position or display text. Native choice validation stays in the adapter.
-type PromptForUserChoiceDecisionPayload struct {
-	DeliveryID      string                              `json:"delivery_id"`
-	QuestionAnswers []PromptForUserChoiceQuestionAnswer `json:"question_answers,omitempty"`
-	Cancelled       bool                                `json:"cancelled,omitempty"`
-	Reason          string                              `json:"reason,omitempty"`
 }
 
 // ExecutionControls requires both values when supplied; omitting the block keeps native defaults.

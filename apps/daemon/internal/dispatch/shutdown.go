@@ -116,7 +116,6 @@ func waitShutdown(ctx context.Context, attempt *shutdownAttempt) error {
 
 type sessionCancellation struct {
 	runID   string
-	handoff *preparedHandoff
 	release *preparedRelease
 	attempt *preparedReleaseAttempt
 }
@@ -127,7 +126,7 @@ func (r *Router) sessionCancellationsLocked() []sessionCancellation {
 	victims := make([]sessionCancellation, 0, len(r.sessions))
 	for _, state := range r.sessions {
 		release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
-		victims = append(victims, sessionCancellation{runID: state.runID, handoff: state.preparedHandoff, release: release, attempt: attempt})
+		victims = append(victims, sessionCancellation{runID: state.runID, release: release, attempt: attempt})
 	}
 	return victims
 }

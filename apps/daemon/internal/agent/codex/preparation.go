@@ -11,20 +11,6 @@ import (
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
-func newSession(parent context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope, cfg sessionConfig) (*Session, error) {
-	if out == nil {
-		return nil, errors.New("codex: nil out channel")
-	}
-	runID, prompt := req.RunID, req.Input
-	req.RunID, req.Input = "", nil
-	prepared, err := newPreparation(parent, req, cfg)
-	if err != nil {
-		return nil, err
-	}
-	defer prepared.Close()
-	return prepared.start(parent, runID, prompt, out)
-}
-
 func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		return nil, errors.New("codex: structured output is not qualified")
@@ -92,7 +78,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		cleanup:                   sync.OnceFunc(plan.Cleanup),
 		bufs:                      NewItemBuffers(),
 		resolvedModel:             plan.Model,
-		interactions:              newPendingCodexInteractions(),
 	}
 	plan.Cleanup = s.cleanup
 	p := &Prepared{

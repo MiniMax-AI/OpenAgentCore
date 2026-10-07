@@ -3,7 +3,6 @@ package mcode
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -21,65 +20,39 @@ type Session struct {
 	req  proto.PromptRequestPayload
 	opts launchOptions
 	*connection
-	executor                *executor
-	settlement              agent.TurnSettlement
-	settlementErr           error
-	settled                 chan struct{}
-	inputDone               chan struct{}
-	outputCancel            context.CancelFunc
-	operations              sync.WaitGroup
-	closing                 bool
-	cancelled               bool
-	inputUncertain          bool
-	out                     chan<- proto.Envelope
-	frames                  chan rpcFrame
-	finished                chan struct{}
-	mu                      sync.Mutex
-	sessionID               string
-	nativeModel             string
-	outputContext           context.Context
-	outcome                 proto.DonePayload
-	permissions             map[string]pendingPermission
-	questions               map[string]pendingQuestion
-	steeringReady           bool
-	steeringTurn            string
-	sequence                uint64
-	active                  bool
-	content                 strings.Builder
-	tools                   map[string]toolUpdate
-	completedTools          map[string]bool
-	previousNativeTurns     map[string]bool
-	subagentSettlementError error
-	rootCompletedAtMS       *int64
-	subagentHistoryReady    bool
+	executor             *executor
+	settlement           agent.TurnSettlement
+	settlementErr        error
+	settled              chan struct{}
+	inputDone            chan struct{}
+	outputCancel         context.CancelFunc
+	operations           sync.WaitGroup
+	closing              bool
+	cancelled            bool
+	inputUncertain       bool
+	out                  chan<- proto.Envelope
+	frames               chan rpcFrame
+	finished             chan struct{}
+	mu                   sync.Mutex
+	sessionID            string
+	nativeModel          string
+	outputContext        context.Context
+	outcome              proto.DonePayload
+	steeringReady        bool
+	steeringTurn         string
+	sequence             uint64
+	active               bool
+	content              strings.Builder
+	tools                map[string]toolUpdate
+	completedTools       map[string]bool
+	previousNativeTurns  map[string]bool
+	rootCompletedAtMS    *int64
+	subagentHistoryReady bool
 }
 
 var _ agent.Session = (*Session)(nil)
 
-func Factory(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-	return newSession(ctx, req, out, defaultBinary())
-}
-
-func newSession(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope, binary string) (*Session, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if out == nil {
-		return nil, fmt.Errorf("mcode: output channel is required")
-	}
-	opts, err := prepareOptions(req)
-	if err != nil {
-		return nil, err
-	}
-	s, err := launch(ctx, req, opts, binary, out)
-	if err != nil {
-		return nil, err
-	}
-	go s.run()
-	return s, nil
-}
-
-func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string, out chan<- proto.Envelope) (*Session, error) {
+func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*Session, error) {
 	start, args := opts.start, []string{"acp"}
 	if start == nil {
 		start = clirunner.Start
@@ -92,77 +65,14 @@ func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOpti
 		return nil, err
 	}
 	c := &connection{process: process, exited: make(chan struct{}), responses: map[string]chan rpcFrame{}}
-	s := newTurnSession(ctx, req, opts, c, out)
+	s := newTurnSession(ctx, req, opts, c, nil)
 	c.current = s
 	go c.read()
 	return s, nil
 }
 
 func newTurnSession(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, c *connection, out chan<- proto.Envelope) *Session {
-	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), permissions: map[string]pendingPermission{}, questions: map[string]pendingQuestion{}, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
-}
-
-func (s *Session) run() {
-	defer func() {
-		if s.out != nil {
-			close(s.out)
-		}
-	}()
-	defer close(s.finished)
-	err := s.prepareNative()
-	if err == nil {
-		if !s.req.DisableSubagents {
-			var snapshot nativeSubagentSnapshot
-			snapshot, err = s.readSubagents(s.ctx)
-			s.subagentHistoryReady = err == nil
-			s.previousNativeTurns = map[string]bool{}
-			for _, session := range snapshot.Sessions {
-				if session.ID == s.sessionID {
-					for _, turn := range session.Turns {
-						s.previousNativeTurns[turn.ID] = true
-					}
-				}
-			}
-		}
-	}
-	if err == nil {
-		err = s.executePrompt()
-	}
-	if !s.req.DisableSubagents && s.subagentHistoryReady && s.out != nil {
-		observationErr := s.settleSubagents()
-		s.mu.Lock()
-		s.subagentSettlementError = observationErr
-		s.mu.Unlock()
-		if observationErr != nil {
-			err = observationErr
-		}
-	}
-	if err != nil {
-		s.process.Cancel()
-		<-s.exited
-	}
-	s.finishEnvironmentMCP()
-	if s.out == nil {
-		return
-	}
-	s.mu.Lock()
-	s.steeringReady = false
-	s.mu.Unlock()
-	if err != nil {
-		s.process.Cancel()
-		s.emit(proto.TypeError, proto.ErrorPayload{Error: err.Error()})
-	}
-	s.mu.Lock()
-	sessionID := s.sessionID
-	s.permissions = map[string]pendingPermission{}
-	s.questions = map[string]pendingQuestion{}
-	s.mu.Unlock()
-	metadata := map[string]any{proto.DoneMetaAgentSessionType: "mcode"}
-	if sessionID != "" {
-		metadata[proto.DoneMetaAgentSessionID] = sessionID
-	}
-	// ACP context usage is not per-turn token usage; do not record it as spend.
-	s.emit(proto.TypeDone, proto.DonePayload{Content: s.content.String(), Metadata: metadata, SourceCompletedAtMS: s.rootCompletedAtMS})
+	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
 }
 
 func (s *Session) prepareNative() error {
@@ -175,7 +85,7 @@ func (s *Session) prepareNative() error {
 			} `json:"oac/subagents"`
 		} `json:"_meta"`
 	}
-	if err := s.call("initialize", map[string]any{"protocolVersion": 1, "clientInfo": map[string]string{"name": "oac", "version": "1"}, "clientCapabilities": map[string]any{"elicitation": map[string]any{"form": map[string]any{}}}}, &initialized, false); err != nil {
+	if err := s.call("initialize", map[string]any{"protocolVersion": 1, "clientInfo": map[string]string{"name": "oac", "version": "1"}}, &initialized, false); err != nil {
 		return err
 	}
 	if initialized.ProtocolVersion != 1 {
@@ -219,16 +129,12 @@ func (s *Session) prepareNative() error {
 	return nil
 }
 
-func (s *Session) executePrompt() error {
-	prompt, err := s.req.Input.TextOnly()
-	if err != nil {
-		return err
-	}
+func (s *Session) executePrompt(prompt string) error {
 	s.active = true
 	var result struct {
 		StopReason string `json:"stopReason"`
 	}
-	err = s.call("session/prompt", map[string]any{"sessionId": s.sessionID, "prompt": promptContent(prompt)}, &result, true)
+	err := s.call("session/prompt", map[string]any{"sessionId": s.sessionID, "prompt": promptContent(prompt)}, &result, true)
 	s.active = false
 	s.mu.Lock()
 	s.steeringReady = false
@@ -282,7 +188,7 @@ func (s *Session) call(method string, params any, result any, prompt bool) error
 	if err != nil {
 		return err
 	}
-	if prompt && s.executor != nil {
+	if prompt {
 		// Serialize the admission check with the wire, but release the owner
 		// mutex before a pipe write so cancellation and Close can stop it.
 		s.connection.writeMu.Lock()
@@ -344,10 +250,6 @@ func (s *Session) call(method string, params any, result any, prompt bool) error
 }
 
 func (s *Session) emit(kind string, payload any) {
-	ctx := s.ctx
-	if s.outputContext != nil {
-		ctx = s.outputContext
-	}
 	env, err := proto.NewEnvelope(kind, s.req.RunID, payload)
 	if err != nil {
 		return
@@ -359,55 +261,6 @@ func (s *Session) emit(kind string, payload any) {
 	}
 	select {
 	case s.out <- env:
-	case <-ctx.Done():
+	case <-s.outputContext.Done():
 	}
-}
-
-func (s *Session) Cancel(ctx context.Context) error {
-	if s.executor != nil {
-		return s.cancelTurn(ctx)
-	}
-	if !s.req.DisableSubagents {
-		if err := s.cancelSubagents(ctx); err != nil {
-			s.process.Cancel()
-			return err
-		}
-	}
-	s.process.Cancel()
-	select {
-	case <-s.exited:
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	select {
-	case <-s.finished:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (s *Session) SubmitPermission(_ context.Context, id string, decision proto.PermissionDecisionPayload) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	pending, ok := s.permissions[id]
-	if !ok {
-		return agent.ErrUnknownPermission
-	}
-	choice := pending.Deny
-	if decision.Approved {
-		choice = pending.Allow
-	}
-	if choice == "" {
-		return errors.New("mcode: ACP permission option is unavailable")
-	}
-	if len(decision.UpdatedInput) > 0 {
-		return errors.New("mcode: edited permission input is not supported")
-	}
-	raw, _ := json.Marshal(map[string]any{"outcome": map[string]string{"outcome": "selected", "optionId": choice}})
-	if err := s.write(rpcFrame{JSONRPC: "2.0", ID: pending.RPCID, Result: raw}); err != nil {
-		return err
-	}
-	delete(s.permissions, id)
-	return nil
 }

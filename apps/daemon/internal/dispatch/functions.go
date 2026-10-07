@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -29,9 +31,15 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 	}
 	fingerprint := sha256.Sum256(encoded)
 	// Scope receipt replay to both identities, even when native call IDs repeat across Runs.
-	kind := proto.TypeFunctionResult + "\x00" + result.CallID
-	if handled, err := r.replayAppliedInteractionDecision(ctx, env.ID, result.DeliveryID, kind, fingerprint); handled {
-		return err
+	key := env.ID + "\x00" + result.CallID
+	r.mu.Lock()
+	applied, replay := r.applied[key]
+	r.mu.Unlock()
+	if replay {
+		if applied.fingerprint != fingerprint {
+			return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "decision_conflict", "request was already applied with a different decision")
+		}
+		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, true, "", "")
 	}
 	r.mu.Lock()
 	state := r.sessions[env.ID]
@@ -69,6 +77,43 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 		}
 		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, code, "function result was not applied")
 	}
-	r.rememberAppliedInteractionDecision(env.ID, kind, fingerprint)
+	r.rememberAppliedFunctionResult(key, fingerprint)
 	return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, true, "", "")
+}
+
+func (r *Router) rememberAppliedFunctionResult(key string, fingerprint [32]byte) {
+	now := time.Now().UTC()
+	r.mu.Lock()
+	if len(r.applied) >= 1024 {
+		cutoff := now.Add(-time.Hour)
+		for id, entry := range r.applied {
+			if entry.recordedAt.Before(cutoff) {
+				delete(r.applied, id)
+			}
+		}
+	}
+	if len(r.applied) >= 1024 {
+		for id := range r.applied {
+			delete(r.applied, id)
+			break
+		}
+	}
+	r.applied[key] = appliedFunctionResult{fingerprint: fingerprint, recordedAt: now}
+	r.mu.Unlock()
+}
+
+func (r *Router) sendInteractionDecisionAck(ctx context.Context, requestID, deliveryID string, applied bool, errorCode, message string) error {
+	env, err := proto.NewEnvelope(proto.TypeInteractionDecisionAck, requestID, proto.InteractionDecisionAckPayload{
+		DeliveryID: deliveryID,
+		Applied:    applied,
+		ErrorCode:  errorCode,
+		Error:      message,
+	})
+	if err != nil {
+		return fmt.Errorf("dispatch: build interaction decision ack: %w", err)
+	}
+	if err := r.sender.Send(ctx, env); err != nil {
+		return fmt.Errorf("dispatch: send interaction decision ack: %w", err)
+	}
+	return nil
 }

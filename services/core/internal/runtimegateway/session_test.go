@@ -162,20 +162,16 @@ func TestRegistry_RegisterReplacesAndEvictsRuns(t *testing.T) {
 	old := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	reg.Register(old)
 	reg.AttachRun("run-1", old)
-	reg.AttachPermission("perm-1", old)
 
 	new := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	prev := reg.Register(new)
 	if prev != old {
 		t.Fatalf("expected old session as displaced previous, got %p", prev)
 	}
-	// Old session's run/perm indexes must be cleared so a stale
+	// Old session's run index must be cleared so a stale
 	// Cancel can't be routed to the wrong session.
 	if got := reg.LookupRun("run-1"); got != nil {
 		t.Fatalf("expected run-1 mapping cleared, got %p", got)
-	}
-	if _, err := reg.LookupPermission("perm-1"); !errors.Is(err, ErrPermissionNotRegistered) {
-		t.Fatalf("expected perm-1 cleared, got %v", err)
 	}
 }
 
@@ -254,48 +250,6 @@ func TestSession_DoneFrameAutoUnsubscribes(t *testing.T) {
 		case <-deadline:
 			t.Fatal("subscriber channel never closed after done")
 		}
-	}
-}
-
-func TestSession_PermissionRequestIndexedInRegistry(t *testing.T) {
-	reg := NewRegistry()
-	conn := newFakeConn()
-	sess := NewSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
-	sess.Start()
-	defer sess.Close("test done")
-
-	sub, err := sess.SubscribeDurable("run-1")
-	ch := sub.Events
-	if err != nil {
-		t.Fatalf("subscribe: %v", err)
-	}
-	env, _ := proto.NewEnvelope(proto.TypePermissionRequest, "run-1", proto.PermissionRequestPayload{
-		RequestID: "perm-abc",
-		Tool:      "Bash",
-		Title:     "rm -rf /tmp/scratch",
-	})
-	raw, _ := jsonMarshal(env)
-	conn.Feed(raw)
-
-	// Poll because the read loop is async.
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if got, err := reg.LookupPermission("perm-abc"); err == nil && got == sess {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("perm-abc never indexed in registry")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	select {
-	case got := <-ch:
-		if got.ID != "run-1" || got.Type != proto.TypePermissionRequest {
-			t.Fatalf("subscriber received %+v", got)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("run subscriber never received permission request")
 	}
 }
 
@@ -390,10 +344,9 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 				Available: true,
 				Version:   "1.2.3",
 				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-					Streaming:   proto.CapabilitySupported,
-					Permissions: proto.CapabilitySupported,
-					Usage:       proto.CapabilitySupported,
-					Resume:      proto.CapabilitySupported,
+					Streaming: proto.CapabilitySupported,
+					Usage:     proto.CapabilitySupported,
+					Resume:    proto.CapabilitySupported,
 				}),
 			},
 			{
@@ -418,7 +371,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 		byKind[info.Kind] = info
 	}
 	claude := byKind["fake_alpha"]
-	if !claude.Available || claude.Version != "1.2.3" || !claude.Capabilities.Permissions || !claude.Capabilities.Usage || !claude.Capabilities.Resume {
+	if !claude.Available || claude.Version != "1.2.3" || !claude.Capabilities.Streaming || !claude.Capabilities.Usage || !claude.Capabilities.Resume {
 		t.Fatalf("fake_alpha descriptor not converted: %#v", claude)
 	}
 	fake_beta := byKind["fake_beta"]
@@ -450,32 +403,6 @@ func TestSession_HeartbeatDoesNotInferCapabilities(t *testing.T) {
 	got := heartbeat.waitDaemonHeartbeat(t)
 	if len(got.SupportedAgentKinds) != 0 {
 		t.Fatalf("undeclared capabilities inferred: %#v", got.SupportedAgentKinds)
-	}
-}
-
-func TestSession_PermissionRequiresPayloadIdentity(t *testing.T) {
-	reg := NewRegistry()
-	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, reg, nil)
-	defer sess.Close("test done")
-	sub, err := sess.SubscribeDurable("run")
-	if err != nil {
-		t.Fatal(err)
-	}
-	env, _ := proto.NewEnvelope(proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{Tool: "test"})
-	sess.dispatch(env)
-	if _, err := reg.LookupPermission("run"); !errors.Is(err, ErrPermissionNotRegistered) {
-		t.Fatal("run ID was treated as an interaction ID")
-	}
-	if len(sub.Events) != 0 {
-		t.Fatal("invalid permission request was forwarded")
-	}
-	env, _ = proto.NewEnvelope(proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "permission", Tool: "test"})
-	sess.dispatch(env)
-	if got, err := reg.LookupPermission("permission"); err != nil || got != sess {
-		t.Fatalf("declared interaction identity was not registered: %v", err)
-	}
-	if got := <-sub.Events; got.ID != "run" {
-		t.Fatal("run correlation lost")
 	}
 }
 

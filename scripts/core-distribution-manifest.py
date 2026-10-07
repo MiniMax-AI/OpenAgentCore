@@ -70,26 +70,26 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def verify_image(image):
+def verify_image(image, architecture="amd64"):
     if not DIGEST.fullmatch(image):
         raise ValueError("Distribution image inputs must be immutable sha256 image IDs")
     details = json.loads(subprocess.check_output(["docker", "image", "inspect", image], text=True))[0]
-    if details["Id"] != image or details["Os"] != "linux" or details["Architecture"] != "amd64":
-        raise ValueError("Distribution images must be the selected Linux amd64 image")
+    if details["Id"] != image or details["Os"] != "linux" or details["Architecture"] != architecture:
+        raise ValueError("Distribution images must match the selected Linux architecture")
     return details
 
 
-def built_image(metadata_file):
+def built_image(metadata_file, architecture="amd64"):
     """Print the local store ID of the image one BuildKit build just produced."""
     metadata = json.loads(pathlib.Path(metadata_file).read_text())
     # The classic store names an image by its config digest, the containerd store
     # by its manifest digest; the other value never resolves to itself there.
     config = metadata.get("containerimage.config.digest")
     manifest = metadata.get("containerimage.digest", config)
-    print(resolve_image(config, manifest))
+    print(resolve_image(config, manifest, architecture))
 
 
-def resolve_image(config, manifest):
+def resolve_image(config, manifest, architecture="amd64"):
     """Resolve the archive identities in either supported Docker image store."""
     if not all(isinstance(value, str) and DIGEST.fullmatch(value) for value in (config, manifest)):
         raise ValueError("Build metadata lacks valid image digests")
@@ -101,11 +101,11 @@ def resolve_image(config, manifest):
             resolved.append(candidate)
     if len(resolved) != 1:
         raise ValueError("The local image store does not identify the built image by exactly one of its digests")
-    verify_image(resolved[0])
+    verify_image(resolved[0], architecture)
     return resolved[0]
 
 
-def image_identities(archive, build_id):
+def image_identities(archive, build_id, architecture="amd64"):
     """Bind both Docker store identities to one exported Linux amd64 image."""
     if not DIGEST.fullmatch(build_id):
         raise ValueError("Missing immutable distribution image identity")
@@ -161,13 +161,28 @@ def image_identities(archive, build_id):
         config_descriptor = image.get("config", {})
         config = blob(config_descriptor, parse=True)
         config_digest = config_descriptor["digest"]
-        if config.get("os") != "linux" or config.get("architecture") != "amd64":
+        if config.get("os") != "linux" or config.get("architecture") != architecture:
             raise ValueError("Image archive contains an unexpected platform")
         for layer in image.get("layers", []):
             blob(layer)
         if build_id not in (config_digest, manifest_digest):
             raise ValueError("Image archive does not match the selected build image")
         return config_digest, manifest_digest
+
+
+def control_archive(bundle, stage, revision, architecture):
+    bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
+    manifest = {"source_commit": revision, "platform": "linux/" + architecture,
+                "images": {}, "image_manifest_digests": {}}
+    for name in ("core", "web", "ingress"):
+        config, digest = image_identities(bundle / "images" / (name + ".tar"),
+                                         (stage / (name + ".id")).read_text().strip(), architecture)
+        manifest["images"][name], manifest["image_manifest_digests"][name] = config, digest
+    (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    target = bundle.with_name(bundle.name + ".tar.gz")
+    with tarfile.open(target, "w:gz") as output:
+        output.add(bundle, arcname=bundle.name)
+    target.with_name(target.name + ".sha256").write_text(sha256(target) + "  " + target.name + "\n")
 
 
 def verify_runtime(image, daemon, source):
@@ -583,7 +598,7 @@ def check_docs(bundle, names=BUNDLED_DOCS, files=BUNDLED_FILES):
 
 
 if __name__ == "__main__":
-    commands = {"extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
+    commands = {"control-archive": control_archive, "extract-runtime": extract_runtime, "verify-runtime": verify_runtime, "verify-image": verify_image,
                 "built-image": built_image, "node-payload": node_payload, "manifest": manifest, "archive": archive, "bootstraps": bootstraps,
                 "release-base": release_base, "docs": docs, "native-catalog": native_catalog, "native-offline": native_offline}
     try:

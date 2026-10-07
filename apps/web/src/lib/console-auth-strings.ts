@@ -4,8 +4,8 @@ export const consoleAuthChinese = {
   "Core key": "Core Key",
   "The Core key is an administration credential: it cannot call the /v1 Agents API, and the console never keeps it in your browser.":
     "Core Key 是管理凭据：不能调用 /v1 Agents API，控制台也不会把它保存在你的浏览器里。",
-  "The installer saved the key in {{file}} inside the installation directory. On the Core host, read the default location with:":
-    "安装器将 key 保存在安装目录下的 {{file}} 中。在 Core 主机上运行以下命令可读取默认位置：",
+  "On the Core host, run this command to read the Core key:":
+    "在 Core 主机上运行以下命令，读取 Core Key：",
   "Copy key read command": "复制 key 读取命令",
   "For a custom installation directory, replace the path in this command.": "如果使用了自定义安装目录，请替换命令中的路径。",
   "Sign in": "登录",

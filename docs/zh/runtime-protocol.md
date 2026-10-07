@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: a532d5a07e641d43e61f1a6edd56fce22700f5441e8e82f8b9621e6e47d1eabf
+source_hash: 4b8458bb4cc903095dc0cc9ad5d540cebd8f3433fce934d90d06e1b3a66033f7
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -22,7 +22,7 @@ Runtime 按以下顺序连接：
 
 wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go)，独立于 heartbeat 报告的 Runtime 构建版本。Core 仅接受精确匹配，包括 patch 部分。不匹配时，在任何 dispatch 前返回 HTTP 426 `incompatible_version`；daemon 将其视为永久错误并停止重连。应一起部署版本匹配的两端。
 
-每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 关闭旧连接并移除其 Run 和 interaction 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
+每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 关闭旧连接并移除其 Run 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
 
 ## 能力声明 {#capability-declarations}
 
@@ -53,7 +53,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
-`permissions` 控制 Runtime 内部权限决定。Core 对 `usage` 和 `resume` 没有准入规则。
+Core 对 `usage` 和 `resume` 没有准入规则。
 
 `execution_prepare` 的配置携带 Session 的模型配置和 Core 为各 Run 设置的显式启用项：
 
@@ -84,13 +84,10 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | Preparation request ID | prepare、start、release 和 status 的 `Envelope.id`；与 Run 不同 |
 | Admission handle | Runtime 生成的预约，仅在接受它的连接上有效 |
 | Run ID | 一次执行尝试；输出、取消、活动输入和 function 的 `Envelope.id` |
-| Interaction ID | `permission_request.payload.request_id` 或 `prompt_for_user_choice.payload.ask_id`；这些请求 envelope 仍携带 Run ID |
 | Delivery ID / input ID / call ID | 分别标识 resolve 尝试、活动输入回执与原生 function；不能互换 |
 | Transfer ID / suspension ID | 连接本地传输关联 / 持久化 suspension 尝试的 fencing |
 
-Decision 和 permission-cancel envelope 使用 interaction ID。取消和 function-result 确认使用 Run ID。每个应用 decision 回执还要匹配 delivery ID。缺少必需关联的回复不能证明已接受。
-
-User-choice decision 携带 `question_answers`：每个已提供回答都有明确的 `question_id` 和 `answers` 数组。ID 必须属于已发出的问题且不能重复。问题顺序和显示 header 不标识回答；省略的问题仍未回答，空数组表示明确未作答。取消携带 `cancelled: true`，不包含回答。共享验证在原生提交前拒绝其他形式。
+取消和 function-result 确认使用 Run ID，并匹配 delivery ID。缺少必需关联的回复不能证明已接受。
 
 ## 消息族 {#message-families}
 
@@ -100,8 +97,7 @@ User-choice decision 携带 `question_answers`：每个已提供回答都有明�
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [初始化与能力传输](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
-| `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[交互](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | 对应的 `*_result` | [读取](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go)、[写入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go)、[导出](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
@@ -160,7 +156,7 @@ Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`�
 
 ## 故障、重试与清理 {#failures-retries-and-cleanup}
 
-transport 与 execution 结果分开。Core 唯一 Run 订阅入口是 `SubscribeDurable`；事件 channel 关闭时检查 `Subscription.Err()`。断连与 subscriber overflow 以明确 observation error 关闭订阅，不虚构 `error` 或 `done`。Core 保留持久事实，并依据已确认事实协调。Runtime 保留清理所有权，直到原生工作、输入回执、交互和子任务工作都结算完成。
+transport 与 execution 结果分开。Core 唯一 Run 订阅入口是 `SubscribeDurable`；事件 channel 关闭时检查 `Subscription.Err()`。断连与 subscriber overflow 以明确 observation error 关闭订阅，不虚构 `error` 或 `done`。Core 保留持久事实，并依据已确认事实协调。Runtime 保留清理所有权，直到原生工作、输入回执、function 结果和子任务工作都结算完成。
 
 公开 Turn 状态是独立投影。[`execution/delivery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/delivery.go) 将不成功的编排尝试记录为 `failed`，包括未确认发送后的 `delivery_unknown` 和订阅失败后的 `event_stream_incomplete`；关闭的订阅可以用 `event_stream_incomplete` 替换发送原因。两者都表示原生效果未知：公开 `failed` 状态不证明 Harness 失败、没有产生副作用或清理已完成。应区分观测原因与原生证据。
 

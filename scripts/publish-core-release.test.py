@@ -29,7 +29,7 @@ class PublicationTests(unittest.TestCase):
         self.assets = pathlib.Path(self.temp.name)
         self.revision = "a" * 40
         self.stem = "oac-" + self.revision + "-linux-amd64"
-        for name in (self.stem + ".tar.gz", self.stem + "-offline.tar.gz", "install.sh"):
+        for name in (self.stem + ".tar.gz", self.stem + "-offline.tar.gz", "install.sh", "install.ps1", "oac-" + self.revision + "-linux-arm64.tar.gz", "oac-linux-amd64", "oac-linux-arm64", "oac-darwin-amd64", "oac-darwin-arm64", "oac-windows-amd64.exe"):
             (self.assets / name).write_bytes(b"archive fixture")
             (self.assets / (name + ".sha256")).write_text(
                 hashlib.sha256(b"archive fixture").hexdigest() + "  " + name + "\n")
@@ -68,7 +68,7 @@ class PublicationTests(unittest.TestCase):
         self.publish(tag="build-" + self.revision, mode="draft")
         self.images.assert_called_once()
         self.assertTrue(self.release["draft"])
-        self.assertEqual(len(self.release["assets"]), 14)
+        self.assertEqual(len(self.release["assets"]), 28)
 
     def test_missing_native_asset_refuses_release_creation(self):
         (self.assets / f"oac-native-{self.revision}-windows-amd64.tar.gz").unlink()
@@ -142,7 +142,7 @@ class PublicationTests(unittest.TestCase):
                 return result
             if endpoint == "releases/7":
                 self.assertEqual(active, 0)
-                self.assertIn(len(self.release["assets"]), (12, 14))
+                self.assertIn(len(self.release["assets"]), (26, 28))
             return self.response(repo, endpoint, *args)
         self.api.side_effect = response
         self.publish()
@@ -153,7 +153,7 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertFalse(self.release["draft"])
         self.assertFalse(self.release["prerelease"])
-        self.assertEqual(len(self.release["assets"]), 14)
+        self.assertEqual(len(self.release["assets"]), 28)
         self.assertEqual({a["name"] for a in self.release["assets"] if a["name"].endswith(".yaml")}, {"compose.yaml"})
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
@@ -343,142 +343,112 @@ class RegistryTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.assets = pathlib.Path(self.temp.name)
-        self.revision = "a" * 40
-        self.config = "sha256:" + "b" * 64
-        self.digest = "sha256:" + "c" * 64
-        runtime = self.assets / "runtime.tar.gz"
-        runtime.write_bytes(gzip.compress(b"runtime"))
-        self.manifest = {
-            "source_commit": self.revision, "platform": "linux/amd64",
-            "images": dict.fromkeys(publisher.IMAGE_NAMES, self.config),
-            "image_manifest_digests": dict.fromkeys(publisher.IMAGE_NAMES, self.digest),
-            "artifacts": {"images/runtime.tar.gz": {
-                "filename": runtime.name, "sha256": publisher.distribution.sha256(runtime)}}}
-        with tarfile.open(self.assets / ("oac-" + self.revision + "-linux-amd64.tar.gz"), "w:gz") as archive:
-            for name, data in [("manifest.json", json.dumps(self.manifest).encode())] + [
-                    ("images/" + name + ".tar", b"image") for name in ("core", "web", "ingress")]:
-                member = tarfile.TarInfo("oac-" + self.revision + "-linux-amd64/" + name)
-                member.size = len(data)
-                archive.addfile(member, io.BytesIO(data))
-        stack = contextlib.ExitStack()
-        self.addCleanup(stack.close)
-        self.identities = stack.enter_context(mock.patch.object(publisher.distribution, "image_identities", return_value=(self.config, self.digest)))
-        stack.enter_context(mock.patch.object(publisher.distribution, "resolve_image", return_value=self.digest))
-        self.run = stack.enter_context(mock.patch.object(publisher.subprocess, "run"))
-        stack.enter_context(mock.patch.object(publisher.subprocess, "check_output", return_value=json.dumps({"Descriptor": {"digest": self.digest}})))
-        self.remote = stack.enter_context(mock.patch.object(publisher, "registry_manifest", return_value={"config": {"digest": self.config}}))
+        self.revision = 'a' * 40
+        self.configs = {'amd64': 'sha256:' + '1' * 64, 'arm64': 'sha256:' + '2' * 64}
+        self.digests = {'amd64': 'sha256:' + '3' * 64, 'arm64': 'sha256:' + '4' * 64}
+        self.index_digest = 'sha256:' + '5' * 64
+        self.remote_images = {}
+        for arch in ('amd64', 'arm64'):
+            names = publisher.IMAGE_NAMES if arch == 'amd64' else ('core', 'web', 'ingress')
+            manifest = {'source_commit': self.revision, 'platform': 'linux/' + arch,
+                        'images': dict.fromkeys(names, self.configs[arch]),
+                        'image_manifest_digests': dict.fromkeys(names, self.digests[arch])}
+            if arch == 'amd64':
+                runtime = self.assets / 'runtime.tar.gz'
+                runtime.write_bytes(gzip.compress(b'runtime'))
+                manifest['artifacts'] = {'images/runtime.tar.gz': {'filename': runtime.name, 'sha256': publisher.distribution.sha256(runtime)}}
+            stem = 'oac-' + self.revision + '-linux-' + arch
+            with tarfile.open(self.assets / (stem + '.tar.gz'), 'w:gz') as archive:
+                for name, raw in [('manifest.json', json.dumps(manifest).encode())] + [('images/' + n + '.tar', b'image') for n in names if n != 'runtime']:
+                    member = tarfile.TarInfo(stem + '/' + name); member.size = len(raw)
+                    archive.addfile(member, io.BytesIO(raw))
+        stack = contextlib.ExitStack(); self.addCleanup(stack.close)
+        self.identities = stack.enter_context(mock.patch.object(publisher.distribution, 'image_identities', side_effect=lambda path, config, arch: (self.configs[arch], self.digests[arch])))
+        stack.enter_context(mock.patch.object(publisher.distribution, 'resolve_image', side_effect=lambda config, digest, arch: digest))
+        self.run = stack.enter_context(mock.patch.object(publisher.subprocess, 'run', side_effect=self.execute))
+        stack.enter_context(mock.patch.object(publisher.subprocess, 'check_output', side_effect=self.output))
+        self.remote = stack.enter_context(mock.patch.object(publisher, 'registry_manifest', side_effect=self.lookup))
 
-    def publish(self, tag="v1.2.3"):
-        return publisher.publish_images(self.assets, "MiniMax-AI/OpenAgentCore", self.revision, tag)
+    def lookup(self, reference):
+        if '@' in reference:
+            for arch, digest in self.digests.items():
+                if reference.endswith(digest): return {'config': {'digest': self.configs[arch]}}
+        return self.remote_images.get(reference)
+
+    def execute(self, command, **kwargs):
+        if command[1] == 'push':
+            ref = command[-1]; arch = ref.rsplit('-', 1)[1]
+            self.remote_images[ref] = {'config': {'digest': self.configs[arch]}}
+        if command[1:4] == ['buildx', 'imagetools', 'create']:
+            ref = command[5]; name = ref.rsplit('/', 1)[1].split(':')[0]
+            arches = ('amd64',) if name == 'runtime' else ('amd64', 'arm64')
+            self.remote_images[ref] = {'manifests': [{'platform': {'os': 'linux', 'architecture': arch}, 'digest': self.digests[arch]} for arch in arches]}
+
+    def output(self, command, **kwargs):
+        if command[1] == 'buildx': return self.index_digest
+        ref = command[-1]
+        arch = 'arm64' if ref.endswith('arm64') else 'amd64'
+        return json.dumps({'Descriptor': {'digest': self.digests[arch]}})
+
+    def publish(self, **kwargs):
+        return publisher.publish_images(self.assets, 'MiniMax-AI/OpenAgentCore', self.revision, 'v1.2.3', **kwargs)
 
     def pushes(self):
-        return [c.args[0] for c in self.run.call_args_list if c.args[0][1] == "push"]
+        return [call.args[0] for call in self.run.call_args_list if call.args[0][1] == 'push']
 
-    def test_matching_tags_are_reused_and_receipts_use_registry_digest(self):
+    def test_publishes_and_reuses_verified_multiarch_indexes(self):
         result = self.publish()
-        self.assertEqual(self.pushes(), [])
-        self.assertEqual(result["core"]["digest"], "ghcr.io/minimax-ai/openagentcore/core@" + self.digest)
+        self.assertEqual(len(self.pushes()), 7)
+        self.assertEqual(result['ingress']['digest'], 'ghcr.io/minimax-ai/openagentcore/ingress@' + self.index_digest)
+        self.assertEqual(len(self.remote_images['ghcr.io/minimax-ai/openagentcore/core:v1.2.3']['manifests']), 2)
+        self.run.reset_mock(); self.publish(); self.assertEqual(self.pushes(), [])
 
-    def test_stable_release_moves_latest_after_the_version_tags(self):
-        seen = {}
-        def remote(reference):
-            seen[reference] = seen.get(reference, 0) + 1
-            if seen[reference] == 1:
-                return None
-            return {"config": {"digest": self.config}}
-        self.remote.side_effect = remote
-        publisher.publish_images(self.assets, "MiniMax-AI/OpenAgentCore", self.revision, "v1.2.3", floating_latest=True)
-        pushed = [command[-1].rsplit("/", 1)[-1] for command in self.pushes()]
-        self.assertEqual(sorted(name for name in pushed if name.endswith(":v1.2.3")),
-                         sorted(name + ":v1.2.3" for name in publisher.IMAGE_NAMES))
-        self.assertEqual(sorted(name for name in pushed if name.endswith(":latest")),
-                         sorted(name + ":latest" for name in publisher.IMAGE_NAMES))
+    def test_latest_updates_after_all_version_indexes(self):
+        self.publish(floating_latest=True)
+        creates = [c.args[0][5] for c in self.run.call_args_list if c.args[0][1:4] == ['buildx', 'imagetools', 'create']]
+        self.assertTrue(all(ref.endswith(':v1.2.3') for ref in creates[:4]))
+        self.assertTrue(all(ref.endswith(':latest') for ref in creates[4:]))
 
-    def test_matching_latest_tag_is_reused(self):
-        publisher.publish_images(self.assets, "MiniMax-AI/OpenAgentCore", self.revision, "v1.2.3", floating_latest=True)
+    def test_conflicting_platform_prevents_every_push(self):
+        self.remote_images['ghcr.io/minimax-ai/openagentcore/web:v1.2.3-arm64'] = {'config': {'digest': 'different'}}
+        with self.assertRaisesRegex(ValueError, 'different image'): self.publish()
         self.assertEqual(self.pushes(), [])
 
-    def test_new_images_use_resolved_store_identity_and_version_only(self):
-        self.remote.side_effect = [None] * 4 + [{"config": {"digest": self.config}}] * 4
-        result = self.publish("v1.2.3-rc.1+build.2")
-        self.assertEqual(len(self.pushes()), 4)
-        self.assertTrue(all(c[-1].endswith(":v1.2.3-rc.1_build.2") for c in self.pushes()))
-        tags = [c.args[0] for c in self.run.call_args_list if c.args[0][1] == "tag"]
-        self.assertTrue(all(c[2] == self.digest for c in tags))
-        self.assertEqual(len(result), 4)
-
-    def test_single_platform_indexes_are_verified_by_child_config(self):
-        index = {"manifests": [{"digest": self.digest}]}
-        image = {"config": {"digest": self.config}}
-        self.remote.side_effect = lambda reference: image if "@" in reference else index
-        result = self.publish()
-        self.assertEqual(self.pushes(), [])
-        self.assertEqual(result["core"]["digest"], "ghcr.io/minimax-ai/openagentcore/core@" + self.digest)
-        self.assertTrue(any("@" in call.args[0] for call in self.remote.call_args_list))
-
-    def test_multi_image_index_is_rejected(self):
-        self.remote.return_value = {"manifests": [{"digest": self.digest}] * 2}
-        with self.assertRaisesRegex(ValueError, "Expected one"):
-            self.publish()
+    def test_conflicting_index_prevents_every_push(self):
+        self.remote_images['ghcr.io/minimax-ai/openagentcore/core:v1.2.3'] = {'manifests': []}
+        with self.assertRaisesRegex(ValueError, 'unexpected platforms'): self.publish()
         self.assertEqual(self.pushes(), [])
 
-    def test_conflicting_tag_prevents_all_pushes(self):
-        self.remote.side_effect = [None, {"config": {"digest": "different"}}]
-        with self.assertRaisesRegex(ValueError, "different image"):
-            self.publish()
-        self.assertEqual(self.pushes(), [])
+    def test_missing_arm_archive_prevents_loading(self):
+        (self.assets / ('oac-' + self.revision + '-linux-arm64.tar.gz')).unlink()
+        with self.assertRaises(FileNotFoundError): self.publish()
+        self.run.assert_not_called()
 
     def test_corrupt_runtime_prevents_loading(self):
-        (self.assets / "runtime.tar.gz").write_bytes(b"corrupt")
-        with self.assertRaisesRegex(ValueError, "checksum"):
-            self.publish()
+        (self.assets / 'runtime.tar.gz').write_bytes(b'corrupt')
+        with self.assertRaisesRegex(ValueError, 'checksum'): self.publish()
         self.run.assert_not_called()
 
-    def test_archive_identity_mismatch_prevents_loading(self):
-        self.identities.return_value = (self.config, "different")
-        with self.assertRaisesRegex(ValueError, "identity mismatch"):
-            self.publish()
+    def test_wrong_archive_identity_prevents_loading(self):
+        self.identities.side_effect = None; self.identities.return_value = ('wrong', 'wrong')
+        with self.assertRaisesRegex(ValueError, 'identity mismatch'): self.publish()
         self.run.assert_not_called()
 
-    def test_failed_push_stops_publication(self):
-        self.remote.return_value = None
-        def run(command, **kwargs):
-            if command[1] == "push":
-                raise subprocess.CalledProcessError(1, command)
-        self.run.side_effect = run
-        with self.assertRaises(subprocess.CalledProcessError):
-            self.publish()
-        self.assertGreaterEqual(len(self.pushes()), 1)
-        self.assertEqual(len({command[-1] for command in self.pushes()}), len(self.pushes()))
-
-    def test_registry_pushes_overlap_after_all_preflight_checks(self):
-        barrier = threading.Barrier(4, timeout=5)
-        pushed = set()
-        lock = threading.Lock()
-        def remote(reference):
-            with lock:
-                return {"config": {"digest": self.config}} if reference in pushed else None
-        def run(command, **kwargs):
-            if command[1] == "push":
-                self.assertEqual(sum(c.args[0][1] == "load" for c in self.run.call_args_list), 4)
-                barrier.wait()
-                with lock:
-                    pushed.add(command[-1])
-        self.remote.side_effect = remote
-        self.run.side_effect = run
-        self.assertEqual(len(self.publish()), 4)
-        self.assertEqual(len(pushed), 4)
+    def test_push_failure_stops_index_publication(self):
+        def fail(command, **kwargs):
+            if command[1] == 'push': raise subprocess.CalledProcessError(1, command)
+        self.run.side_effect = fail
+        with self.assertRaises(subprocess.CalledProcessError): self.publish()
+        self.assertFalse(any(c.args[0][1] == 'buildx' for c in self.run.call_args_list))
 
     def test_registry_auth_failure_is_not_missing_image(self):
-        # Test the actual inspection function separately from the publication fixture.
-        with mock.patch.object(publisher.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "unauthorized")):
-            with self.assertRaisesRegex(RuntimeError, "Cannot inspect"):
-                REAL_REGISTRY_MANIFEST("ghcr.io/example/core:v1")
+        with mock.patch.object(publisher.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'unauthorized')):
+            with self.assertRaisesRegex(RuntimeError, 'Cannot inspect'): REAL_REGISTRY_MANIFEST('ghcr.io/example/core:v1')
 
     def test_registry_missing_manifest(self):
-        with mock.patch.object(publisher.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "manifest unknown")):
-            self.assertIsNone(REAL_REGISTRY_MANIFEST("ghcr.io/example/core:v1"))
+        with mock.patch.object(publisher.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1, '', 'manifest unknown')):
+            self.assertIsNone(REAL_REGISTRY_MANIFEST('ghcr.io/example/core:v1'))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()
