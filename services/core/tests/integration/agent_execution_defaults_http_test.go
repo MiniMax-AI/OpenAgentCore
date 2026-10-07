@@ -168,3 +168,50 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	}
 
 }
+
+// An Agent whose saved provider an earlier release accepted but validation
+// now rejects still reads, and a Session that inherits the provider is
+// refused with the validation error rather than an internal one.
+func TestAgentExecutionDefaultsRejectInvalidSavedProvider(t *testing.T) {
+	_, pool := testStore(t)
+	cipher, _ := credentialcrypto.New(bytes.Repeat([]byte{19}, 32))
+	st := NewWithCredentialCipher(pool, cipher)
+	tenant, token := uuid.NewString(), uuid.NewString()
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "invalid-saved-provider", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
+	handler, err := publicHandler(t, st, auth, "claude_sdk", withHarnesses([]string{"claude_sdk"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+token)
+		r.Header.Set("OpenAI-Beta", "agents=v1")
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Idempotency-Key", uuid.NewString())
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		return w
+	}
+	w := call("POST", "/v1/agents", `{"model":"fixture","x_agents_core":{"harness":"claude_sdk","model_provider":{"protocol":"anthropic","base_url":"https://saved.example/anthropic","api_key":"saved-canary"}}}`)
+	var agent struct {
+		ID string `json:"id"`
+	}
+	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &agent) != nil {
+		t.Fatalf("create Agent: %d %s", w.Code, w.Body)
+	}
+	stale, _ := json.Marshal(v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://saved.example/anthropic/v1", APIKey: "saved-canary"})
+	sealed, err := cipher.SealAgentModelExecution(stale, tenant, agent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(t.Context(), "UPDATE agent_model_execution SET encrypted_config = $1 WHERE agent_id = $2", sealed, agent.ID); err != nil {
+		t.Fatal(err)
+	}
+	if w := call("GET", "/v1/agents/"+agent.ID, ""); w.Code != 200 {
+		t.Fatalf("read Agent: %d %s", w.Code, w.Body)
+	}
+	const rejection = `{"error":{"message":"an anthropic base_url excludes the /v1 version path","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
+	if w := call("POST", "/v1/agents/sessions", `{"agent_id":"`+agent.ID+`","environment":{"type":"openai_hosted"}}`); w.Code != 400 || w.Body.String() != rejection {
+		t.Fatalf("inherited Session: %d %s", w.Code, w.Body)
+	}
+}

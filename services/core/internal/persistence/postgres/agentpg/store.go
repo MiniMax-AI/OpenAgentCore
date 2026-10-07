@@ -255,8 +255,13 @@ func (s *Store) GetAgentWithModelProvider(ctx context.Context, tenantID, agentID
 		return agents.Agent{}, nil, errors.New("agent model provider decryption failed")
 	}
 	var provider v1.ModelProviderInput
-	if json.Unmarshal(raw, &provider) != nil || provider.Validate() != nil {
+	if json.Unmarshal(raw, &provider) != nil {
 		return agents.Agent{}, nil, errors.New("invalid stored agent model provider")
+	}
+	// A bundle saved before a validation rule tightened opens but no longer
+	// validates. Its typed error refuses execution; the row stays intact.
+	if err := provider.Validate(); err != nil {
+		return agents.Agent{}, nil, err
 	}
 	return agent, &provider, nil
 }
