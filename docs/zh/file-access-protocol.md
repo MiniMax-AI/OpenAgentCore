@@ -1,7 +1,7 @@
 ---
 title: "文件访问协议"
 source: docs/file-access-protocol.md
-source_hash: 22bdd862811f809be206adbeed3be174d688d6f051d0a5a98faeea3205c30b6f
+source_hash: 848d891def538f4a4dc78448089348f470c45a7e55ab07eb96f07a9f727e6fb4
 ---
 
 文件访问协议定义 Runtime 如何读取和修改沙箱中的文件。沙箱内的 Sandbox I/O 服务提供该协议，Runtime 是其客户端。它是一个 node 与 handle 协议，形态仿照 FUSE 低层操作：lookup 获取 node 引用，open 在客户端选择的 ID 下创建 handle，读写携带偏移量，目录读取从 cookie 处继续，锁与沙箱自身的进程协同生效。第 1 阶段仅提供 [Uncached](#uncached-profile) profile，没有变更 stream。
@@ -215,7 +215,7 @@ Lock          Mode enum (LockRead = 1, LockWrite = 2, LockUnlock = 3), Start u64
 
 `Attach` 按 `ExportID` 选择一个 export；它从不接受 server 路径。该 export 必须是 attachment 的 Link 绑定在 `Attachment.Exports` 中授予的 export（参见[沙箱 Link 协议](./sandbox-link-protocol.md)），只读授权仅允许 `ReadOnly` attach；否则 `Attach` 以 `Unauthorized` 失败。已授予但服务未声明的 export 以 `InvalidArgument` 失败，`Detach` 之前的第二次 `Attach` 也是如此。只读 attachment 上每个修改文件的请求都以 `Errno` `ReadOnlyFilesystem` 失败：`SetAttr`、`Create`、`Write`、`Mkdir`、`Unlink`、`Rmdir`、`Rename`、`Link`、`Symlink`，以及用于写入或带 `OpenTruncate` 的 `Open`。
 
-协议定义了一个 export ID：`world`（`sandboxfs.WorldExport`），即沙箱世界的 export，也就是沙箱中的进程从其 `/` 看到的文件系统。
+协议定义了一个 export ID：`world`（`sandboxfs.WorldExport`），即沙箱世界的 export，也就是沙箱中的进程从其 `/` 看到的文件系统；agent host 为其视图的 FUSE world（`worldfs`）attach 该 export。
 
 ### 名称与路径 {#names-and-paths}
 

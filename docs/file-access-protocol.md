@@ -213,7 +213,7 @@ A writable service, one without `ReadOnly`, declares `AtomicAppend`, `AtomicRena
 
 `Attach` selects one export by `ExportID`; it never takes a server path. The export must be one that the attachment's Link binding grants in `Attachment.Exports` (see the [Sandbox link protocol](./sandbox-link-protocol.md)), and a read-only grant allows only `ReadOnly` attaches; otherwise `Attach` fails with `Unauthorized`. A granted export the service does not declare fails with `InvalidArgument`, as does a second `Attach` before `Detach`. Every request that changes files on a read-only attachment fails with `Errno` `ReadOnlyFilesystem`: `SetAttr`, `Create`, `Write`, `Mkdir`, `Unlink`, `Rmdir`, `Rename`, `Link`, `Symlink`, and `Open` for writing or with `OpenTruncate`.
 
-The protocol defines one export ID, `world` (`sandboxfs.WorldExport`): the export of the sandbox's world, the file system its processes see from their `/`.
+The protocol defines one export ID, `world` (`sandboxfs.WorldExport`): the export of the sandbox's world, the file system its processes see from their `/`, which the agent host attaches for its view's FUSE world (`worldfs`).
 
 ### Names and paths
 
