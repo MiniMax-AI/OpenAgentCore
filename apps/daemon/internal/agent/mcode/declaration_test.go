@@ -24,7 +24,7 @@ func TestMCodeExecutionFollowsAvailability(t *testing.T) {
 			if (runtime.Executor != nil) != available {
 				t.Fatalf("factories: %+v", runtime)
 			}
-			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.DurableInputReceipts.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {
+			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {
 				t.Fatalf("capabilities=%+v", info.Capabilities)
 			}
 			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.LocalEnvironment.IsSupported() || info.Capabilities.FunctionTools.IsSupported() {
@@ -34,18 +34,12 @@ func TestMCodeExecutionFollowsAvailability(t *testing.T) {
 	}
 }
 
-// The declaration must retain the complete baseline capability descriptor.
+// The static declaration supports nothing until discovery finds the CLI.
 func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"Streaming": true, "Resume": true}
 	value := reflect.ValueOf(Declaration.Info.Capabilities)
 	for i := 0; i < value.NumField(); i++ {
-		name := value.Type().Field(i).Name
-		want := proto.CapabilityUnsupported
-		if expected[name] {
-			want = proto.CapabilitySupported
-		}
-		if got := value.Field(i).Interface(); got != want {
-			t.Errorf("%s = %v, want %v", name, got, want)
+		if got := value.Field(i).Interface(); got != proto.CapabilityUnsupported {
+			t.Errorf("%s = %v, want unsupported", value.Type().Field(i).Name, got)
 		}
 	}
 	if err := Declaration.Info.ValidateDeclaration(); err != nil {

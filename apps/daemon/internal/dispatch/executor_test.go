@@ -86,7 +86,7 @@ func executorRouter(t *testing.T, owner *reusableExecutor, idle time.Duration) (
 	t.Helper()
 	calls := &atomic.Int32{}
 	reg := agent.NewRegistry()
-	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 		calls.Add(1)
 		return owner, nil
 	})
@@ -228,7 +228,7 @@ func TestExecutorPreInputFailureConfirmsCloseBeforeRetrySignal(t *testing.T) {
 func poolRouter(t *testing.T, factory agent.ExecutorFactory) (*dispatch.Router, *recSender) {
 	t.Helper()
 	registry := agent.NewRegistry()
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration())
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 	registry.RegisterExecutor("reusable", factory)
 	sender := &recSender{}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, IdleTimeout: time.Minute})

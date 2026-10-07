@@ -204,7 +204,7 @@ func TestRegistryDescribesTheViewPath(t *testing.T) {
 	for _, info := range (&Host{cfg: f.cfg}).Registry(nil).SupportedAgentKinds() {
 		kinds = append(kinds, info.Kind)
 		c, declared := info.Capabilities, info.Kind == "supporting"
-		if !c.Preparation.IsSupported() || !c.LocalEnvironment.IsSupported() || !c.MCPHTTPTools.IsSupported() || c.EnvironmentNone.IsSupported() != declared ||
+		if !c.LocalEnvironment.IsSupported() || !c.MCPHTTPTools.IsSupported() || c.EnvironmentNone.IsSupported() != declared ||
 			c.FunctionTools.IsSupported() != declared || c.FunctionResultImages.IsSupported() != declared || c.ToolSearch.IsSupported() != declared ||
 			c.WorkspaceOutputExport.IsSupported() || c.WorkspaceReadPreparation.IsSupported() {
 			t.Errorf("%s: capabilities %+v do not describe the view path", info.Kind, c)

@@ -15,29 +15,20 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 	Kind: "codex",
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:           proto.CapabilitySupported,
-		Streaming:                      proto.CapabilitySupported,
-		Usage:                          proto.CapabilitySupported,
-		Resume:                         proto.CapabilitySupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		Steering:                       proto.CapabilitySupported,
 		MessageItems:                   proto.CapabilitySupported,
-		ToolObservations:               proto.CapabilitySupported,
 		EnvironmentNone:                proto.CapabilitySupported,
 		LocalEnvironment:               proto.CapabilityUnsupported,
-		Preparation:                    proto.CapabilityUnsupported,
 		WorkspaceReadPreparation:       proto.CapabilityUnsupported,
 		WorkspaceOutputExport:          proto.CapabilityUnsupported,
 		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
 		WebSearchControl:               proto.CapabilitySupported,
-		ExecutionControls:              proto.CapabilityFromBool(SupportsTextVerbosity),
 		TextVerbosity:                  proto.CapabilityFromBool(SupportsTextVerbosity),
 		StructuredOutput:               proto.CapabilityUnsupported,
 		ToolSearch:                     proto.CapabilityUnsupported,
 		MessageImages:                  proto.CapabilitySupported,
 		FunctionResultImages:           proto.CapabilitySupported,
 		SubagentControl:                proto.CapabilitySupported,
-		DurableInputReceipts:           proto.CapabilitySupported,
-		DurableTurns:                   proto.CapabilitySupported,
 		FunctionTools:                  proto.CapabilitySupported,
 		MCPHTTPTools:                   proto.CapabilitySupported,
 		MCPHTTPRequired:                proto.CapabilityUnsupported,
@@ -50,6 +41,11 @@ func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.Su
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
 	runtime := &agent.Runtime{Info: info}
+	if !SupportsTextVerbosity {
+		// Every execution carries a text verbosity, which needs the bounded catalog probe.
+		fmt.Fprintln(options.Stderr, "oac-daemon: codex unavailable: text verbosity requires Unix process-group cancellation support")
+		return runtime
+	}
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	version, err := check(ctx, "")

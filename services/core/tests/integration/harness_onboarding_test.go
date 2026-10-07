@@ -122,11 +122,11 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.cancel"}]}`, 202)
 	waitTurn(t, h, next.RunID, sessions.TurnCancelled)
-	// A missing mandatory receipt capability must prevent claiming queued work.
+	// A missing required capability must prevent claiming queued work.
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	// Mutate the actual wire declaration, not its lossy persisted boolean projection.
 	changed := declaration
-	changed.Capabilities.DurableInputReceipts = proto.CapabilityUnsupported
+	changed.Capabilities.SubagentControl = proto.CapabilityUnsupported
 	// A separate unbound Session is used, without changing public handler behavior.
 	update, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{changed}})
 	if err := write(update); err != nil {
@@ -134,7 +134,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	for deadline := time.Now().Add(3 * time.Second); ; {
 		current, _, _ := peer.AgentKindStatus("mcode")
-		if !current.Capabilities.DurableInputReceipts {
+		if !current.Capabilities.SubagentControl.IsSupported() {
 			break
 		}
 		if time.Now().After(deadline) {

@@ -80,7 +80,7 @@ func requireMessageImages(peer *runtimegateway.Session, kind string, input proto
 		return nil
 	}
 	info, found, known := peer.AgentKindStatus(kind)
-	if !found || !known || !info.Available || !info.Capabilities.MessageImages {
+	if !found || !known || !info.Available || !info.Capabilities.MessageImages.IsSupported() {
 		return errors.New("Runtime does not support message images")
 	}
 	return nil

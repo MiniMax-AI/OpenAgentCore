@@ -70,7 +70,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	for {
 		info, found, known := peer.AgentKindStatus("codex")
 		if known && found && info.Available {
-			if !info.Capabilities.MCPHTTPTools || !info.Capabilities.MCPHTTPBearerAuth || !info.Capabilities.ToolObservations || !info.Capabilities.DurableTurns || !info.Capabilities.EnvironmentNone {
+			if !info.Capabilities.MCPHTTPTools.IsSupported() || !info.Capabilities.MCPHTTPBearerAuth.IsSupported() || !info.Capabilities.EnvironmentNone.IsSupported() {
 				t.Fatal("built daemon did not advertise the required private execution capabilities")
 			}
 			proof["codex_descriptor"] = info

@@ -14,9 +14,8 @@
 // Registration: each adapter exports one Declaration. The Runtime discovers the
 // static declaration list and installs each resulting Runtime through Register.
 // Availability and factory selection belong to the adapter. RegisterKind resets
-// the factories, so Register installs it first. RegisterExecutor derives the
-// Preparation capability. The Runtime's Environment owner, not the adapter,
-// serves and declares workspace operations.
+// the factories, so Register installs it first. The Runtime's Environment
+// owner, not the adapter, serves and declares workspace operations.
 //
 // Runtime registration and Core service qualification remain separate. A public
 // Harness also needs a profile in services/core/internal/engine; advertising
@@ -627,16 +626,15 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	r.configurations[kind] = configuration
 	delete(r.executors, kind)
 	delete(r.views, kind)
-	info.Capabilities.Preparation = proto.CapabilityUnsupported
 	r.kinds[kind] = info
 }
 
-// RegisterExecutor installs the shared lifecycle after RegisterKind and derives
-// the Preparation capability. It does not enable other public operations.
+// RegisterExecutor installs the shared lifecycle after RegisterKind. It does
+// not enable other public operations.
 func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	info, exists := r.kinds[kind]
+	_, exists := r.kinds[kind]
 	if !exists || factory == nil {
 		panic("agent.Registry.RegisterExecutor: registered kind and factory required")
 	}
@@ -650,6 +648,4 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		}
 		return factory(ctx, req)
 	}
-	info.Capabilities.Preparation = proto.CapabilitySupported
-	r.kinds[kind] = info
 }

@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 19506e4bab34b802e5c3c8a1818bcb5c8397aa91fdf9ace512b5aaeb99341b3a
+source_hash: 6f39aff3240eec960d278d7b21665b105ce14337517eb8961424ec141bfcfbe5
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -16,7 +16,7 @@ Session 的模型提供商与其他 Session 一样解析，因此当 Session 及
 | --- | --- | --- | --- |
 | Linux amd64 | 支持 | 支持 | 支持 |
 | macOS arm64 | 支持 | 支持 | 支持 |
-| Windows amd64 | 支持 | 支持 | 不支持 |
+| Windows amd64 | 不支持 | 支持 | 不支持 |
 
 安装程序自带固定版本的 Node.js 和 Harness（列于 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
 

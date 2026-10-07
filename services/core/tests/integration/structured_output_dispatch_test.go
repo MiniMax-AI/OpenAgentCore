@@ -30,12 +30,12 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	if err = bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported})
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture_harness", Available: true, Capabilities: caps}}})
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	for deadline := time.Now().Add(3 * time.Second); ; {
 		info, found, known := peer.AgentKindStatus("fixture_harness")
-		if known && found && info.Capabilities.StructuredOutput {
+		if known && found && info.Capabilities.StructuredOutput.IsSupported() {
 			break
 		}
 		if time.Now().After(deadline) {

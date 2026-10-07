@@ -25,14 +25,14 @@ func directoryWorker(t *testing.T) (*dispatchHarness, *execution.Worker, session
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}}})
 	peer, err := h.registry.LookupDevice(h.device.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "read preparation capability", func() bool {
 		info, _, _ := peer.AgentKindStatus("codex")
-		return info.Capabilities.WorkspaceReadPreparation
+		return info.Capabilities.WorkspaceReadPreparation.IsSupported()
 	})
 	w := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())

@@ -92,7 +92,7 @@ func startNativeDispatchDaemon(t *testing.T, h *dispatchHarness, home, binary st
 	for {
 		peer, e := h.registry.LookupDevice(h.device.ID)
 		if e == nil && peer != oldPeer {
-			if info, found, known := peer.AgentKindStatus("codex"); known && found && info.Available && info.Capabilities.EnvironmentNone {
+			if info, found, known := peer.AgentKindStatus("codex"); known && found && info.Available && info.Capabilities.EnvironmentNone.IsSupported() {
 				break
 			}
 		}

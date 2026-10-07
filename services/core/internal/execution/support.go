@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -78,68 +77,59 @@ func (p Policy) validateEngineInputs(engine string, configuration json.RawMessag
 
 // engineCapabilities is shared by device selection and the final preclaim check.
 // Capability bits describe the adapter; supported values still depend on its profile.
-func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, snapshot Snapshot) (runtimedevice.KindCapabilities, error) {
-	fail := func(message string) (runtimedevice.KindCapabilities, error) {
-		return runtimedevice.KindCapabilities{}, errors.New(message)
+func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, snapshot Snapshot) (proto.AgentKindCapabilities, error) {
+	fail := func(message string) (proto.AgentKindCapabilities, error) {
+		return proto.AgentKindCapabilities{}, errors.New(message)
 	}
 	profile, ok := p.Engines.Lookup(engine)
 	if !ok || (snapshot.Environment != nil && !profile.Accepts(snapshot.Environment.Type)) {
 		return fail("execution engine placement is not supported")
 	}
 	if err := validateProfileConfiguration(profile, snapshot); err != nil {
-		return runtimedevice.KindCapabilities{}, err
+		return proto.AgentKindCapabilities{}, err
 	}
 	info, found, known := peer.AgentKindStatus(engine)
 	caps := info.Capabilities
-	if !known || !found || !info.Available || !caps.Streaming || !caps.Steering || !caps.DurableTurns || !caps.DurableInputReceipts {
-		return fail("device must advertise streaming, steering and durable turns for this engine")
+	if !known || !found || !info.Available {
+		return fail("device must advertise this engine as available")
 	}
-	if !caps.Preparation {
-		return fail("device must advertise executor preparation")
-	}
-	if !caps.ExecutionControls {
-		return fail("device must advertise execution_controls")
-	}
-	if profile.WebSearchControl.IsSupported() && !caps.WebSearchControl {
+	if profile.WebSearchControl.IsSupported() && !caps.WebSearchControl.IsSupported() {
 		return fail("device must advertise web_search_control")
 	}
-	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput || !caps.MessageItems) {
+	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput.IsSupported() || !caps.MessageItems.IsSupported()) {
 		return fail("device must support structured output and message observations")
 	}
-	if profile.TextVerbosity.IsSupported() && !caps.TextVerbosity {
+	if profile.TextVerbosity.IsSupported() && !caps.TextVerbosity.IsSupported() {
 		return fail("device must advertise text_verbosity")
 	}
-	if !caps.ToolObservations {
-		return fail("device must advertise tool_observations")
-	}
-	if snapshot.Agent.MultiAgent.Enabled && !caps.SubagentObservations {
+	if snapshot.Agent.MultiAgent.Enabled && !caps.SubagentObservations.IsSupported() {
 		return fail("device must support durable subagent observations")
 	}
-	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl {
+	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl.IsSupported() {
 		return fail("device must advertise subagent_control")
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return fail("invalid execution tool configuration")
 	}
-	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
+	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch.IsSupported()); err != nil {
 		return fail(err.Error())
 	}
-	if tools.DisableProgrammatic && !caps.ProgrammaticToolCallingDisable {
+	if tools.DisableProgrammatic && !caps.ProgrammaticToolCallingDisable.IsSupported() {
 		return fail("device must support disabling programmatic tool calling")
 	}
-	if len(tools.Functions) > 0 && !caps.FunctionTools {
+	if len(tools.Functions) > 0 && !caps.FunctionTools.IsSupported() {
 		return fail("device must advertise function_tools")
 	}
 	if _, err := p.mcpExecutionCredentials(engine, snapshot, tools.MCP, caps); err != nil {
-		return runtimedevice.KindCapabilities{}, err
+		return proto.AgentKindCapabilities{}, err
 	}
 	if snapshot.Environment != nil && (snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted") {
-		if !caps.Preparation || !caps.LocalEnvironment || !caps.WorkspaceReadPreparation || !caps.WorkspaceOutputExport {
+		if !caps.LocalEnvironment.IsSupported() || !caps.WorkspaceReadPreparation.IsSupported() || !caps.WorkspaceOutputExport.IsSupported() {
 			return fail("device must advertise local preparation, workspace reads and output export")
 		}
 	}
-	if environmentNone(snapshot) && !caps.EnvironmentNone {
+	if environmentNone(snapshot) && !caps.EnvironmentNone.IsSupported() {
 		return fail("device must advertise environment_none")
 	}
 	return caps, nil

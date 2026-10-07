@@ -30,13 +30,12 @@ On the wire each field is a JSON boolean, and every field is present, including 
 
 Each admitted Executor and Turn keeps the declaration it was admitted with. A later heartbeat cannot add operations to an existing owner. Optional operations check this snapshot before any native call; the presence of a Go interface never grants support. A declared operation that returns `agent.ErrUnsupportedOperation` is a contract violation, distinct from unavailability, a failed native call or an uncertain write. Uncertain operations keep their receipts and ownership and are never replayed automatically. A Runtime declares `workspace_read_preparation` and `workspace_output_export` from its [Environment owner](#session-assignments), never from a Harness adapter.
 
-A new field requires an explicit decision in every production declaration. Contract tests enumerate every field for registration, wire round trips and the persisted boolean projection; the shared test fixture lists fields individually and supplies no defaults for future ones. [Harness onboarding](../contracts/agents-api/harness-onboarding.md) owns the adapter side of each declaration.
+A new field requires an explicit decision in every production declaration. Contract tests enumerate every field for registration and wire round trips; the shared test fixture lists fields individually and supplies no defaults for future ones. [Harness onboarding](../contracts/agents-api/harness-onboarding.md) owns the adapter side of each declaration.
 
-A declaration describes what the Runtime can do. Core admits a public feature only when the Harness's engine profile also qualifies it, and checks the declaration of the selected device during device selection and again at the final check before it claims a Turn:
+A declaration describes what the Runtime can do. Core admits a public feature only when the Harness's engine profile also qualifies it. During device selection and again at the final check before it claims a Turn, Core requires the selected device to report the Harness `available` and checks its declaration:
 
 | Capability | Core requires it when |
 | --- | --- |
-| `streaming`, `steering`, `durable_turns`, `durable_input_receipts`, `preparation`, `execution_controls`, `tool_observations` | Always, for every execution on that Harness (with `available` true) |
 | `environment_none` | The Environment type is `none` |
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | The Environment type is `openai_hosted` or `self_hosted` |
 | `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
@@ -51,7 +50,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
-Core has no admission rule for `usage` and `resume`.
+Streaming, steering with durable input receipts, durable Turns, preparation, execution controls and tool observations are not declared: every available Harness implements them, and [Harness onboarding](../contracts/agents-api/harness-onboarding.md#register-the-adapter) owns that obligation.
 
 The `execution_prepare` configuration carries the Session's model configuration and the opt-ins Core sets for each Run:
 

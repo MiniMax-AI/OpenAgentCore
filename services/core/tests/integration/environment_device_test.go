@@ -10,7 +10,7 @@ import (
 )
 
 func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T) {
-	for _, missing := range []string{"preparation", "local_environment", "durable_input_receipts"} {
+	for _, missing := range []string{"local_environment", "workspace_read_preparation"} {
 		t.Run(missing, func(t *testing.T) {
 			h := newDispatchHarness(t)
 			_, pool := testStore(t)
@@ -19,9 +19,8 @@ func TestWorkerEnvironmentSelectsCapableDeviceWithoutMovingBinding(t *testing.T)
 			bound := workerEnvironmentReservation(t, h)
 			originalRuntime := h.environments[bound.SessionID]
 			caps := workerEnvironmentCapabilities()
-			caps.Preparation = proto.CapabilityFromBool(missing != "preparation")
 			caps.LocalEnvironment = proto.CapabilityFromBool(missing != "local_environment")
-			caps.DurableInputReceipts = proto.CapabilityFromBool(missing != "durable_input_receipts")
+			caps.WorkspaceReadPreparation = proto.CapabilityFromBool(missing != "workspace_read_preparation")
 			awaitFixtureCapabilities(t, originalRuntime, caps)
 			generalFrames := workerFrames(t, h)
 			boundFrames := workerFrames(t, originalRuntime)

@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
@@ -22,7 +21,7 @@ func (p Policy) mcpCredentialBindings(engine string, snapshot Snapshot) (map[str
 
 // Selection, final preclaim and request construction use the same combination
 // checks. This function never reads plaintext credentials or native configuration.
-func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, servers []proto.MCPHTTPServer, caps runtimedevice.KindCapabilities) (map[string]vaults.MCPCredentialBinding, error) {
+func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, servers []proto.MCPHTTPServer, caps proto.AgentKindCapabilities) (map[string]vaults.MCPCredentialBinding, error) {
 	fail := func(message string) (map[string]vaults.MCPCredentialBinding, error) {
 		return nil, errors.New(message)
 	}
@@ -30,7 +29,7 @@ func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, server
 	if err := profile.ValidateMCPOrigins(snapshot.Environment, servers); err != nil {
 		return nil, err
 	}
-	if len(servers) > 0 && !caps.MCPHTTPTools {
+	if len(servers) > 0 && !caps.MCPHTTPTools.IsSupported() {
 		return fail("device must advertise mcp_http_tools")
 	}
 	selected, err := p.mcpCredentialBindings(engine, snapshot)
@@ -38,14 +37,14 @@ func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, server
 		return nil, err
 	}
 	for _, server := range servers {
-		if server.Required && !caps.MCPHTTPRequired {
+		if server.Required && !caps.MCPHTTPRequired.IsSupported() {
 			return fail("device must advertise mcp_http_required")
 		}
 	}
-	if len(selected) > 0 && !caps.MCPHTTPBearerAuth {
+	if len(selected) > 0 && !caps.MCPHTTPBearerAuth.IsSupported() {
 		return fail("device must advertise mcp_http_bearer_auth")
 	}
-	if len(servers) > 0 && snapshot.Environment.Type == "none" && !caps.EnvironmentNone {
+	if len(servers) > 0 && snapshot.Environment.Type == "none" && !caps.EnvironmentNone.IsSupported() {
 		return fail("device must advertise environment_none")
 	}
 	return selected, nil

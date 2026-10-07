@@ -55,7 +55,7 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 		Available: false,
 		Version:   "missing",
 		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-			Streaming: proto.CapabilitySupported,
+			MessageItems: proto.CapabilitySupported,
 		}),
 	}, harnessconfig.Configuration{})
 	reg.RegisterKind(proto.SupportedAgentKind{
@@ -63,9 +63,8 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 		Available: true,
 		Version:   "1.2.3",
 		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-			Streaming: proto.CapabilitySupported,
-			Usage:     proto.CapabilitySupported,
-			Resume:    proto.CapabilitySupported,
+			MessageItems:    proto.CapabilitySupported,
+			EnvironmentNone: proto.CapabilitySupported,
 		}),
 	}, harnessconfig.Configuration{})
 
@@ -76,10 +75,10 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 	if got[0].Kind != "fake_alpha" || got[1].Kind != "fake_beta" {
 		t.Fatalf("SupportedAgentKinds sort = %#v, want fake_alpha then fake_beta", got)
 	}
-	if !got[0].Available || got[0].Version != "1.2.3" || !got[0].Capabilities.Usage.IsSupported() || !got[0].Capabilities.Resume.IsSupported() {
+	if !got[0].Available || got[0].Version != "1.2.3" || !got[0].Capabilities.MessageItems.IsSupported() || !got[0].Capabilities.EnvironmentNone.IsSupported() {
 		t.Fatalf("fake_alpha descriptor not preserved: %#v", got[0])
 	}
-	if got[1].Available || got[1].Version != "missing" || !got[1].Capabilities.Streaming.IsSupported() {
+	if got[1].Available || got[1].Version != "missing" || !got[1].Capabilities.MessageItems.IsSupported() {
 		t.Fatalf("fake_beta descriptor not preserved: %#v", got[1])
 	}
 }
@@ -113,7 +112,6 @@ func TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement(t *testing.T) {
 			original := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: valid}
 			registry.RegisterKind(original, harnessconfig.Configuration{})
 			registry.RegisterExecutor("fixture", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, nil })
-			original.Capabilities.Preparation = proto.CapabilitySupported
 			missing := valid
 			reflect.ValueOf(&missing).Elem().Field(i).Set(reflect.ValueOf(proto.CapabilityUnspecified))
 			func() {
