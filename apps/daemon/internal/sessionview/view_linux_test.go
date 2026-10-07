@@ -170,6 +170,27 @@ func TestRelayLossIsReported(t *testing.T) {
 	}
 }
 
+// TestRelayStaysOpenUntilClose checks that the broker's end of the relay stays open once the view has ended, with its connection shut down, and that Close closes it.
+func TestRelayStaysOpenUntilClose(t *testing.T) {
+	v, _ := startStalled(t)
+	if err := v.Signal(syscall.SIGTERM); err != nil {
+		t.Fatalf("Signal: %v", err)
+	}
+	v.Wait()
+	c, err := net.FileConn(v.Relay())
+	if err != nil {
+		t.Fatalf("the relay once the view has ended: %v", err)
+	}
+	defer c.Close()
+	if n, err := c.Read(make([]byte, 1)); n != 0 || err != io.EOF {
+		t.Errorf("reading the relay once the view has ended = %d, %v; want EOF", n, err)
+	}
+	v.Close()
+	if _, err := v.Relay().Stat(); !errors.Is(err, os.ErrClosed) {
+		t.Errorf("the relay after Close: %v, want it closed", err)
+	}
+}
+
 // TestViewDescendantsKeepTheGrace checks that helpers still cleaning up when their parent exits, the Harness or a spawned process, get TERM and finish within the grace.
 func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	requireView(t)
@@ -1159,7 +1180,7 @@ func identity() (map[string]string, error) {
 		}
 	}
 	for _, ns := range []string{"mnt", "net", "pid", "ipc", "uts", "user", "cgroup"} {
-		if id["ns "+ns], err = os.Readlink("/proc/self/ns/" + ns); err != nil {
+		if id["ns "+ns], err = os.Readlink("/proc/thread-self/ns/" + ns); err != nil {
 			return nil, err
 		}
 	}

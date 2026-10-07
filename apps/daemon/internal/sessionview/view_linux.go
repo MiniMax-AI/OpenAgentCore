@@ -307,7 +307,7 @@ func (v *View) abort(err error) error {
 		_ = v.cmd.Process.Kill()
 	}
 	_, _ = v.teardown()
-	closeFiles(v.pipes[:])
+	closeFiles(append(v.pipes[:], v.relay))
 	if v.cleanupErr != nil {
 		return errors.Join(err, v.cleanupErr)
 	}
@@ -357,9 +357,6 @@ func (v *View) teardown() (werr, err error) {
 	if len(cleanup) > 0 {
 		v.cleanupErr = errors.Join(cleanup...)
 		errs = append(errs, v.cleanupErr)
-	}
-	if v.relay != nil {
-		v.relay.Close()
 	}
 	if v.ctl != nil {
 		v.ctl.close()
@@ -653,7 +650,7 @@ func (s *Spawned) Close() error {
 	return nil
 }
 
-// Close kills the view, waits for its teardown and closes the pipes it created. It returns ErrCleanup when the teardown did not finish within its bound, and nil otherwise.
+// Close kills the view, waits for its teardown and closes the pipes it created and [View.Relay]. It returns ErrCleanup when the teardown did not finish within its bound, and nil otherwise.
 func (v *View) Close() error {
 	v.closeOnce.Do(func() {
 		v.closing.Store(true)
@@ -661,7 +658,7 @@ func (v *View) Close() error {
 		// A spawn blocked on the world keeps the killed launcher, and its end, open until the teardown stops the world.
 		v.ctl.interrupt()
 		<-v.done
-		closeFiles(v.pipes[:])
+		closeFiles(append(v.pipes[:], v.relay))
 	})
 	return v.cleanupErr
 }
@@ -669,7 +666,7 @@ func (v *View) Close() error {
 // RelayLost closes when the relay ends before the launcher, which the view's own end never causes: the relay crashed, was killed or lost its broker. It closes before Wait returns.
 func (v *View) RelayLost() <-chan struct{} { return v.relayLost }
 
-// Relay is the broker's end of the relay's connection, or nil when the spec declares no shim. processbroker.Start takes a duplicate of it. The view shuts the connection down as it ends, so a broker still running then sees the relay lost.
+// Relay is the broker's end of the relay's connection, or nil when the spec declares no shim. The view owns it and closes it in Close, so it stays open until then, even after the view has ended; processbroker.Start takes a duplicate of it. The view shuts the connection down as it ends, so a broker still running then sees the relay lost.
 func (v *View) Relay() *os.File { return v.relay }
 
 // Stdin is the write end of the process's stdin pipe, or nil when the spec gave a file.
