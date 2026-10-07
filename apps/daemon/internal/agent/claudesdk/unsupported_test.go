@@ -28,7 +28,7 @@ func TestUnsupportedExtensionsHaveNoNativeEffects(t *testing.T) {
 	var turn *session
 	check(turn.SubmitPermission(ctx, secret, proto.PermissionDecisionPayload{}))
 	check(turn.SubmitPromptForUserChoice(ctx, secret, proto.PromptForUserChoiceDecisionPayload{}))
-	for _, owner := range []agent.WorkspaceWriter{(*executor)(nil), (*session)(nil), (*prepared)(nil)} {
+	for _, owner := range []agent.WorkspaceWriter{(*executor)(nil), (*session)(nil)} {
 		result, err := owner.WriteWorkspaceFile(ctx, secret, []byte(secret))
 		check(err)
 		if result.SizeBytes != 0 {

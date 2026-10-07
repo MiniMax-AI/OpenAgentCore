@@ -71,7 +71,7 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 // register declares kind with view, or without one when view is nil.
 func register(reg *agent.Registry, kind string, view *agent.View) {
 	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})}
+		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})}
 	declaration := agent.Declaration{Info: info,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}}}
 	reg.Register(declaration, agent.Runtime{Info: info, View: view,

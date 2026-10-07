@@ -35,12 +35,11 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 			copy(req.FunctionTools[0].Parameters, strings.ReplaceAll(string(req.FunctionTools[0].Parameters), "integer", "boolean"))
 			out := make(chan proto.Envelope, 8)
 			startCtx, stopStart := context.WithCancel(t.Context())
-			started, err := p.Start(startCtx, "actual-run", proto.TextInput("actual prompt"), out)
+			session, err := p.start(startCtx, "actual-run", proto.TextInput("actual prompt"), out)
 			stopStart()
 			if err != nil {
 				t.Fatal(err)
 			}
-			session := started.(*Session)
 			defer session.Cancel(context.Background())
 			if session.rpc != p.session.rpc || session.rpc.process.Cmd.Process.Pid != pid {
 				t.Fatal("start replaced the prepared native resource")
@@ -48,7 +47,7 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 			if err := p.Close(); err != nil || !session.rpc.Alive() {
 				t.Fatal("close cancelled transferred resource", err)
 			}
-			if again, err := p.Start(t.Context(), "second", proto.TextInput("second prompt"), out); err == nil || again != nil {
+			if again, err := p.start(t.Context(), "second", proto.TextInput("second prompt"), out); err == nil || again != nil {
 				t.Fatal("preparation started twice", err)
 			}
 			frames := waitPreparationMethod(t, root, "turn/start")
@@ -133,7 +132,7 @@ func TestPreparedSessionAbandonmentAndFailedStart(t *testing.T) {
 				waitPreparedRelease(t, p, root)
 			}
 			out := make(chan proto.Envelope, 8)
-			if started, err := p.Start(startCtx, "late-run", proto.TextInput("must not start"), out); err == nil || started != nil {
+			if started, err := p.start(startCtx, "late-run", proto.TextInput("must not start"), out); err == nil || started != nil {
 				t.Fatal("abandoned preparation started", err)
 			}
 			waitPreparedRelease(t, p, root)

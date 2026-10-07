@@ -70,8 +70,7 @@ For example, the Codex adapter keeps its app-server and thread, the Claude adapt
 | `Steerer` | Explicit implementation or Unsupported | Additional non-durable active-Turn input |
 | `FunctionResultSubmitter` | Explicit implementation or Unsupported | Match native call and result identity and acknowledge application |
 | `PermissionResponder`, `UserChoiceResponder` | Explicit implementation or Unsupported | Respond to exact emitted identities; unknown or expired interactions stay distinct from Unsupported |
-| `WorkspaceReader`, `WorkspaceDirectoryLister`, `WorkspaceWriter` | Explicit on Turn, Executor and Prepared owners | Use the authorized workspace, confirm access, commit or close, or return the operation's Unsupported error |
-| `Prepared`, `PreparedCancellation` | Real implementation for an executable preparation | Keep resource and output ownership across Start, cancellation and unused cleanup |
+| `WorkspaceReader`, `WorkspaceDirectoryLister`, `WorkspaceWriter` | Explicit on Turn and Executor owners | Use the authorized workspace, confirm access, commit or close, or return the operation's Unsupported error |
 | Neutral messages, images, MCP, structured output and Subagent observations | Explicit capability decisions | Keep each operation's protocol semantics; reject unsupported input before submission |
 
 Each adapter's `contracts.go` holds an individual compile-time assertion for each small interface. Do not embed a default implementation that makes future interfaces appear implemented. Adding a contract also requires a classification in the common completeness check and an explicit assertion in every public adapter; the check follows the authored Harness catalog.
@@ -116,8 +115,8 @@ A Session owns one reusable Executor in its connected Runtime; a Turn owns one i
 - An error means settlement is unconfirmed and frees neither ownership nor capacity. Caller deadlines stop the wait, not the tracked cleanup. Retry the same cleanup target serially; a failed cleanup blocks replacement and keeps its resource slot.
 - `Executor.Close` confirms resource retirement independently of the Turn outcome: an immutable Turn error must not prevent closing the native transport once its work and output have stopped.
 - Include owned background work in settlement and keep the exact native cleanup target after a failure. Native termination belongs to the adapter; a bulk cleanup acknowledgement alone does not establish quiescence.
-- Every `Session`, including a direct-call factory result, declares `CancellationOutcome`. `Turn` and `PreparedCancellation` inherit it. The snapshot keeps observed native identity, Usage and output and remains readable after cancellation. Missing evidence stays unset; an empty `DonePayload` means nothing has been observed, not that cancellation succeeded or is unsupported. Reading the snapshot does not wait for settlement.
-- Direct-call `Session.Cancel` requests cancellation; output closure signals teardown. Executable `PreparedCancellation.Cancel` waits for local cleanup and output writes to stop. Turn settlement still requires `AwaitSettlement` and any required `Executor.Close`; neither a successful cancellation request nor its snapshot replaces those waits.
+- Every `Session`, including a direct-call factory result, declares `CancellationOutcome`. `Turn` inherits it. The snapshot keeps observed native identity, Usage and output and remains readable after cancellation. Missing evidence stays unset; an empty `DonePayload` means nothing has been observed, not that cancellation succeeded or is unsupported. Reading the snapshot does not wait for settlement.
+- Direct-call `Session.Cancel` requests cancellation; output closure signals teardown. Turn settlement still requires `AwaitSettlement` and any required `Executor.Close`; neither a successful cancellation request nor its snapshot replaces those waits.
 
 **What the Runtime does around a Turn.** One output consumer starts before native Start, drains the bounded 64-frame channel and keeps the terminal observation until Start publication, Turn settlement and admitted operation receipts finish. Natural completion never calls Cancel. Input, function and interaction admission close before settlement; operations already admitted hold their barrier through native receipts and outbound acknowledgement. The Runtime sends cancellation to the Turn before waiting on that barrier, because a written input may need a native interrupt to produce its receipt. It joins native settlement, any required confirmed Executor close, output drain and all admitted operations before an applied acknowledgement or reuse, and only then forwards Done or an applied cancellation receipt. A failed Close can report failure while keeping the same Run and outstanding operations for retry; a closed caller wait cannot manufacture an applied input receipt. The Runtime commits native continuity and releases the old Run's admission before publishing Done, since the receiver may start another Turn at once; a late terminal-send failure belongs to the old Run and cannot invalidate a successor that already owns the Executor. Connection shutdown owns transport-loss cleanup. The settlement wait is ten seconds and the receipt send budget five seconds; a timeout is not proof of quiescence.
 
@@ -149,7 +148,7 @@ A Harness that supports the Subagent reads implements the [neutral observation c
 
 ## Register the adapter
 
-Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
+Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
 
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) iterates the discovered runtimes and calls `Registry.Register` from `agent/harness.go`. It verifies that discovery retained the declared kind and installs factories in this order:
 
@@ -157,8 +156,7 @@ Registration is static and requires a build. Export one `agent.Declaration` from
 | --- | --- | --- |
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration, agent.Factory)` | Kind, availability, version, `AgentKindCapabilities`, the model configuration declaration and the direct-call factory. It resets the other registrations, so call it first. |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | The Executor and Turn lifecycle used for execution; derives the `Preparation` capability |
-| 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | Optional: separate read-only workspace preparation for qualified workspace operations |
-| 4 | `RegisterView(kind, agent.View)` | Optional: the agent-host view declaration from `Runtime.View`. It panics with `ErrInvalidView` when `View.Validate` fails. Its Executor factory validates the model configuration like `RegisterExecutor` and enforces the [gateway rule](#endpoints-and-proxy). |
+| 3 | `RegisterView(kind, agent.View)` | Optional: the agent-host view declaration from `Runtime.View`. It panics with `ErrInvalidView` when `View.Validate` fails. Its Executor factory validates the model configuration like `RegisterExecutor` and enforces the [gateway rule](#endpoints-and-proxy). |
 
 The direct-call `agent.Factory` delegates to the same Executor implementation.
 
@@ -203,7 +201,7 @@ Run the `engine` and `execution` tests for omission, policy, combination and err
 
 ## Native model configuration
 
-[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) owns the shared configuration declaration and pure preparation contract. Each adapter supplies one `Configuration`, in `internal/harnessconfig/<kind>`, to Core's composition and to the Runtime's `RegisterKind`. The direct factory, preparation and Executor paths all validate through that declaration before native side effects, and Registry wrappers keep the declaration with the factory. The wire object is `proto.HarnessConfig`. [Model execution](./model-execution.md#native-model-parameters) lists each Harness's accepted fields.
+[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) owns the shared configuration declaration and pure preparation contract. Each adapter supplies one `Configuration`, in `internal/harnessconfig/<kind>`, to Core's composition and to the Runtime's `RegisterKind`. The direct factory and Executor paths both validate through that declaration before native side effects, and Registry wrappers keep the declaration with the factory. The wire object is `proto.HarnessConfig`. [Model execution](./model-execution.md#native-model-parameters) lists each Harness's accepted fields.
 
 A supplied `model` must be a nonempty string, and an explicit `model_provider` requires it. The native-owned connection path may omit both; explicit null is invalid. An explicitly empty declaration accepts no provider or nonempty native parameters and advertises no provider support. Unknown protocol formats and duplicate protocol declarations fail at registration.
 
@@ -235,7 +233,7 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 
 | Boundary | Tests |
 | --- | --- |
-| Codex reuse, cancellation and unconfirmed cleanup | `codex/executor_test.go`, `terminal_cleanup_test.go`, `prepared_cancel_test.go` |
+| Codex reuse, cancellation and unconfirmed cleanup | `codex/executor_test.go`, `terminal_cleanup_test.go` |
 | Codex input receipts and strict recovery | `codex/function_write_receipt_test.go`, `function_receipt_test.go`, `resume_test.go`, `recovery_test.go` |
 | Claude input ownership, cancellation and preparation cleanup | `claudesdk/executor_test.go`, `cancellation_test.go`, `preparation_test.go` |
 | MiniMax cancellation retirement, failed Start and cleanup retry | `mcode/executor_test.go`, `executor_backpressure_test.go` |

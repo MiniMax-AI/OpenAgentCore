@@ -39,22 +39,7 @@ type workspaceDirectoryEvent struct {
 	Error     string                     `json:"error"`
 }
 
-var _ agent.WorkspaceDirectoryLister = (*prepared)(nil)
 var _ agent.WorkspaceDirectoryLister = (*session)(nil)
-
-func (p *prepared) ListWorkspaceDirectory(ctx context.Context, path string, maxEntries int) (agent.WorkspaceDirectoryResult, error) {
-	p.mu.Lock()
-	if p.closed || p.binding != nil {
-		p.mu.Unlock()
-		return agent.WorkspaceDirectoryResult{}, agent.ErrWorkspaceReadUnavailable
-	}
-	read, err := p.session.admitWorkspaceDirectory(ctx, path, maxEntries)
-	p.mu.Unlock()
-	if err != nil {
-		return agent.WorkspaceDirectoryResult{}, err
-	}
-	return p.session.awaitWorkspaceDirectory(ctx, read)
-}
 
 func (s *session) ListWorkspaceDirectory(ctx context.Context, path string, maxEntries int) (agent.WorkspaceDirectoryResult, error) {
 	if s.owner != nil {

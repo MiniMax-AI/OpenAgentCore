@@ -13,6 +13,26 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload, string) {
+	t.Helper()
+	r := executionRequest(t)
+	r.RunID, r.Input, r.ConversationID = "", nil, ""
+	r.DisableExecutionEnvironment = false
+	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}
+	record := filepath.Join(t.TempDir(), "calls")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(t.TempDir(), "native")
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
+	script := "#!/bin/sh\nexport OAC_TEST_MCODE_HELPER=prepared\nexport OAC_TEST_MCODE_RECORD=" + quote(record) + "\nexec " + quote(exe) + " -test.run=^TestMCodeProcess$ -- \"$@\"\n"
+	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.LocalEnvironment.WorkspaceRoot, Network: "enabled", Scratch: t.TempDir()}, r, record
+}
+
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {
 	t.Helper()
 	config, req, record := workspaceFixture(t)

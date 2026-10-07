@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
@@ -27,7 +26,6 @@ func (offlineWorkspaceStatusSender) Send(context.Context, proto.Envelope) error 
 }
 
 type unsettledWorkspacePreparation struct {
-	agent.Prepared
 	calls   atomic.Int32
 	settled atomic.Bool
 }
@@ -94,7 +92,6 @@ func TestReadPreparationRetryCannotPublishStaleRelease(t *testing.T) {
 // Local read-only preparation uses no native factory. Keep the shared close
 // settlement regression at its owner boundary instead of a retired remote fixture.
 type blockingWorkspacePreparation struct {
-	agent.Prepared
 	entered, release chan struct{}
 }
 

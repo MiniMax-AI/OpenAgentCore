@@ -1,20 +1,7 @@
 package dispatch
 
-import (
-	"context"
-
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-)
-
+// localDirectoryPreparation is a ready read-only preparation. The bound local
+// workspace serves its reads, so it holds no native resource.
 type localDirectoryPreparation struct{}
-
-func prepareLocalDirectory(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) {
-	return localDirectoryPreparation{}, nil
-}
-
-func (localDirectoryPreparation) Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (agent.Session, error) {
-	return nil, agent.ErrWorkspaceReadUnsupported
-}
 
 func (localDirectoryPreparation) Close() error { return nil }

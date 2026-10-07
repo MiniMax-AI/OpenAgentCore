@@ -64,11 +64,9 @@ type DiscoveryOptions struct {
 
 // Runtime binds one discovered descriptor to its native factories.
 type Runtime struct {
-	Info                     proto.SupportedAgentKind
-	Session                  Factory
-	Preparation              PreparationFactory
-	Executor                 ExecutorFactory
-	WorkspaceReadPreparation bool
+	Info     proto.SupportedAgentKind
+	Session  Factory
+	Executor ExecutorFactory
 	// View declares how the Harness runs in an agent-host Session view.
 	// A nil View means the agent host rejects the kind with ErrUnsupportedOperation.
 	View *View
@@ -82,9 +80,6 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 	r.RegisterKind(runtime.Info, declaration.Configuration, runtime.Session)
 	if runtime.Executor != nil {
 		r.RegisterExecutor(runtime.Info.Kind, runtime.Executor)
-	}
-	if runtime.Preparation != nil {
-		r.RegisterPreparation(runtime.Info.Kind, runtime.WorkspaceReadPreparation, runtime.Preparation)
 	}
 	if runtime.View != nil {
 		r.RegisterView(runtime.Info.Kind, *runtime.View)
@@ -525,7 +520,7 @@ func (r *Registry) ResolveView(kind string) (View, error) {
 
 // Model configuration has one shared contract, authored in
 // internal/harnessconfig/harness.go. RegisterKind requires that declaration;
-// RegisterExecutor and RegisterPreparation inherit it. Every registered entry
+// RegisterExecutor inherits it. Every registered entry
 // validates model, provider and native parameters before calling native code.
 // The declaration belongs to the adapter and is also consumed by Core. Keep
 // adapter field rules and rendering private. That shared contract owns frozen
@@ -650,34 +645,6 @@ type WorkspaceWriter interface {
 	WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error)
 }
 
-// Separate preparation for qualified workspace access and direct-call paths.
-
-// Prepared owns native resources until Start returns a non-nil Session. The
-// preparation owner context spans the eventual Session; Start's context is local
-// to that operation. A nil Session leaves preparation cleanup with the caller.
-type Prepared interface {
-	// Start transfers output ownership only when it returns a non-nil Session.
-	// A nil Session leaves the caller as the sole owner of closing out, and the
-	// implementation must not retain or write to it after Start returns.
-	Start(context.Context, string, proto.MessageInput, chan<- proto.Envelope) (Session, error)
-	// Close retains unused ownership on error; callers may retry settlement.
-	Close() error
-}
-
-// PreparedCancellation is required for executable preparations and follows the
-// same native resource across Start. Read-only preparations need only Prepared.
-type PreparedCancellation interface {
-	Prepared
-	Session
-	// Cancel returns after local cleanup and all output writes have stopped.
-	// An error retains ownership so callers can retry this exact object serially.
-	Cancel(context.Context) error
-}
-
-// A factory may return both a resource and an error when construction failed but
-// cleanup remains unconfirmed. The caller must retain and close that resource.
-type PreparationFactory func(context.Context, proto.PromptRequestPayload) (Prepared, error)
-
 // Direct-call factory and registration. These use the existing Registry behavior.
 
 // Factory builds a Session for one prompt_request. out is the upstream
@@ -712,11 +679,9 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 		}
 		return f(ctx, req, out)
 	}
-	delete(r.preparers, kind)
 	delete(r.executors, kind)
 	delete(r.views, kind)
 	info.Capabilities.Preparation = proto.CapabilityUnsupported
-	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityUnsupported
 	r.kinds[kind] = info
 }
 
@@ -740,28 +705,5 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		return factory(ctx, req)
 	}
 	info.Capabilities.Preparation = proto.CapabilitySupported
-	r.kinds[kind] = info
-}
-
-// RegisterPreparation installs a separate execution-only path.
-func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare PreparationFactory) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	info, exists := r.kinds[kind]
-	if !exists || prepare == nil {
-		panic("agent.Registry.RegisterPreparation: registered kind and factory required")
-	}
-	configuration, declared := r.configurations[kind]
-	if !declared {
-		panic("agent.Registry.RegisterPreparation: configuration required")
-	}
-	r.preparers[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Prepared, error) {
-		if _, err := configuration.Prepare(req); err != nil {
-			return nil, err
-		}
-		return prepare(ctx, req)
-	}
-	info.Capabilities.Preparation = proto.CapabilitySupported
-	info.Capabilities.WorkspaceReadPreparation = proto.CapabilityFromBool(workspaceRead)
 	r.kinds[kind] = info
 }
