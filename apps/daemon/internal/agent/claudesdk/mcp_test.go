@@ -16,7 +16,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
-			req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, Model: "fixture"}
+			req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, MCPHTTPServers: &servers, Model: "fixture"}
 			tools := []string{"echo"}
 			switch mode {
 			case "selected":
@@ -46,7 +46,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 			case "environment":
 				req.DisableExecutionEnvironment = false
 			}
-			start, _, err := prepare(config, req)
+			start, _, err := prepareConfiguration(config, req)
 			valid := mode == "unrestricted" || mode == "selected" || mode == "empty" || mode == "nil-slice" || mode == "auth" || mode == "required"
 			if (err == nil) != valid {
 				t.Fatalf("unexpected admission: %v", err)

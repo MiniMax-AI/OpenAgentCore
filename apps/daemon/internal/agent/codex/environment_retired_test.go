@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +11,9 @@ import (
 )
 
 func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
-	req, cfg, root := preparationFixture(t)
+	req, _, root := preparationFixture(t)
 	req.WorkspaceReadOnly = true
-	prepared, err := newPreparation(t.Context(), req, cfg)
+	prepared, err := PrepareExecutor(t.Context(), req)
 	if err == nil || prepared != nil {
 		t.Fatal("read-only request admitted", err)
 	}
@@ -34,8 +35,8 @@ func TestRetiredNativeTransportEnvironmentRejectedBeforeState(t *testing.T) {
 					req.LocalEnvironment = &proto.LocalEnvironment{ID: "local"}
 				}
 				t.Setenv(key, "retired-private-value")
-				p, err := newPreparation(t.Context(), req, cfg)
-				if p != nil || err == nil || !strings.Contains(err.Error(), "retired executor transport") || strings.Contains(err.Error(), "retired-private-value") {
+				e, err := newExecutor(t.Context(), req, cfg)
+				if e != nil || err == nil || !strings.Contains(err.Error(), "retired executor transport") || strings.Contains(err.Error(), "retired-private-value") {
 					t.Fatal("transport override admitted or disclosed", err)
 				}
 				if len(preparationFrames(t, root)) != 0 {
@@ -52,11 +53,11 @@ func TestRetiredNativeTransportEnvironmentRejectedBeforeState(t *testing.T) {
 func TestNativeNoneSelectorRemainsSupported(t *testing.T) {
 	req, cfg, root := preparationFixture(t)
 	t.Setenv("CODEX_EXEC_SERVER_URL", "none")
-	p, err := newPreparation(t.Context(), req, cfg)
+	e, err := newExecutor(t.Context(), req, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer p.Close()
+	defer e.Close(context.Background())
 	assertPreparationOnly(t, root)
 	statuses := 0
 	for _, frame := range preparationFrames(t, root) {

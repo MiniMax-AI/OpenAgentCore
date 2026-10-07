@@ -16,7 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestTextFactoryCompletionAndFailures(t *testing.T) {
+func TestTextTurnCompletionAndFailures(t *testing.T) {
 	for _, mode := range []string{"success", "wrong-resume", "missing", "malformed", "process-failed", "after-result", "bridge-error"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
@@ -73,7 +73,7 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 	}
 }
 
-func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
+func TestUnsupportedRequestRejectedBeforeLaunch(t *testing.T) {
 	for _, kind := range []string{"execution-controls", "tool", "outside"} {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
@@ -129,7 +129,7 @@ func runSDKHelper() {
 	if json.Unmarshal(scanner.Bytes(), &request) != nil || request.Type != "executor_prepare" || request.Model != "fake-model" || request.SystemPrompt != "instructions" {
 		os.Exit(3)
 	}
-	encode, finish := helperTurn(scanner, &request)
+	encode, finish := helperTurn(scanner)
 	defer finish()
 	mode := os.Getenv("SDK_HELPER_MODE")
 	if strings.HasPrefix(mode, "cancellation-") {

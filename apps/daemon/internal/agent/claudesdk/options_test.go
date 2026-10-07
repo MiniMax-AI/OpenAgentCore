@@ -29,8 +29,7 @@ func TestModelAndProviderAreRequired(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
-			tc.req.RunID, tc.req.Input = "run", proto.TextInput("hello")
-			start, _, err := prepare(config, tc.req)
+			start, _, err := prepareConfiguration(config, tc.req)
 			if !errors.Is(err, tc.err) || (err == nil) != (tc.err == nil) || start.SystemPrompt != tc.want {
 				t.Fatalf("system prompt %q, error %v", start.SystemPrompt, err)
 			}

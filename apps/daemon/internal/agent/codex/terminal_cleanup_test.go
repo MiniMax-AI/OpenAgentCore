@@ -39,7 +39,7 @@ func TestExecutorCancellationRequiresNativeTerminalCleanup(t *testing.T) {
 			}
 			for range out {
 			}
-			if !e.prepared.session.rpc.Alive() {
+			if !e.base.rpc.Alive() {
 				t.Fatal("native owner lost before cleanup/reuse")
 			}
 			frames := preparationFrames(t, root)
@@ -65,7 +65,7 @@ func TestExecutorCancellationRequiresNativeTerminalCleanup(t *testing.T) {
 					t.Fatal("confirmed cleanup prevented reuse", err)
 				}
 			} else {
-				if err := e.Close(ctx); err == nil || !e.prepared.session.rpc.Alive() {
+				if err := e.Close(ctx); err == nil || !e.base.rpc.Alive() {
 					t.Fatal("failed cleanup released the owned native process", err)
 				}
 				allow()
@@ -107,7 +107,7 @@ func TestExecutorCloseCleansNativeTerminalsAfterNormalCompletion(t *testing.T) {
 			terminated = true
 		}
 	}
-	if !terminated || e.prepared.session.rpc.Alive() {
+	if !terminated || e.base.rpc.Alive() {
 		t.Fatal("Executor Close left native terminals or owner alive")
 	}
 }

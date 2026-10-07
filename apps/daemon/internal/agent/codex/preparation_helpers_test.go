@@ -112,10 +112,10 @@ func preparedCatalogs(t *testing.T, root string) []string {
 	return files
 }
 
-func waitPreparedRelease(t *testing.T, p *Prepared, root string) {
+func waitExecutorRelease(t *testing.T, e *Executor, root string) {
 	t.Helper()
 	select {
-	case <-p.session.rpc.Done():
+	case <-e.base.rpc.Done():
 	case <-time.After(4 * time.Second):
 		t.Fatal("prepared child was not released")
 	}

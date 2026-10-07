@@ -60,7 +60,7 @@ func TestPreparationWaitsForReceiptAndRetainsConfiguration(t *testing.T) {
 	if err := json.Unmarshal(raw, &frozen); err != nil {
 		t.Fatal(err)
 	}
-	if frozen.Model != "fixture" || frozen.Resume != "native-session" || frozen.Workspace == nil || len(frozen.Input) != 0 {
+	if frozen.Model != "fixture" || frozen.Resume != "native-session" || frozen.Workspace == nil {
 		t.Fatal("configuration-only request was not retained")
 	}
 	config.Env[0] = "HTTPS_PROXY=http://changed.example"
