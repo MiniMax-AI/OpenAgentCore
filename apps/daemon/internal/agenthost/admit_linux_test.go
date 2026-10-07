@@ -9,12 +9,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processbroker"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
@@ -26,9 +28,9 @@ var errFactory = errors.New("factory reached")
 
 // viewFixture registers "viewed", whose factory records what it receives and
 // whose view supports no capability, "supporting", whose view supports every
-// capability but environment none and stdio MCP, "masked", whose view masks an
-// /etc file the agent host writes, "shimmed", whose view runs a shim name on
-// the sandbox PATH, and "plain", which declares no view.
+// capability, "masked", whose view masks an /etc file the agent host writes,
+// "shimmed", whose view runs a shim name on the sandbox PATH, and "plain",
+// which declares no view.
 type viewFixture struct {
 	cfg     Config
 	req     proto.PromptRequestPayload
@@ -56,7 +58,6 @@ func newViewFixture(t *testing.T) *viewFixture {
 	register(reg, "viewed", &view)
 	supporting := view
 	supporting.Capabilities = declared(proto.CapabilitySupported)
-	supporting.Capabilities.EnvironmentNone, supporting.Capabilities.StdioMCP = proto.CapabilityUnsupported, proto.CapabilityUnsupported
 	register(reg, "supporting", &supporting)
 	masked := view
 	masked.Masks = []agent.ViewMask{{Path: "/etc/passwd"}}
@@ -91,6 +92,12 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"credentialed stdio MCP": {"supporting", func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools", EnvVars: []string{"TOKEN"}}}}
 		}, []error{ErrUnsupported, agent.ErrViewHandoff}},
+		"stdio MCP without an absolute directory": {"supporting", func(r *proto.PromptRequestPayload) {
+			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/tools"}}}
+		}, []error{ErrInvalidSession}},
+		"stdio MCP name without PATH": {"supporting", func(r *proto.PromptRequestPayload) {
+			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{InstallationRoot: "/capabilities", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
+		}, []error{ErrInvalidSession}},
 	} {
 		req := request(c.kind, "/workspace", "https://model.test", "sk-test")
 		c.change(&req)
@@ -138,7 +145,7 @@ func TestAdmissionFollowsDeclarations(t *testing.T) {
 		use                func(*proto.PromptRequestPayload)
 		viewed, supporting bool
 	}{
-		"environment none": {func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment, r.LocalEnvironment = true, nil }, false, false},
+		"environment none": {func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment, r.LocalEnvironment = true, nil }, false, true},
 		"Skills": {func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.Capabilities, r.LocalEnvironment.CapabilityRoot = true, "/capabilities"
 			r.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{RelativeRoot: "skills/review"}}
@@ -146,8 +153,8 @@ func TestAdmissionFollowsDeclarations(t *testing.T) {
 		"function tools": {func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "lookup"}} }, false, true},
 		"tool search":    {func(r *proto.PromptRequestPayload) { r.ToolSearch = true }, false, true},
 		"stdio MCP": {func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools"}}}
-		}, false, false},
+			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{InstallationRoot: "/capabilities", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "/bin/tools"}}}
+		}, false, true},
 		// An installation with only HTTP MCP needs no Skill support.
 		"installed HTTP MCP": {func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.Capabilities, r.LocalEnvironment.CapabilityRoot = true, "/capabilities"
@@ -164,13 +171,41 @@ func TestAdmissionFollowsDeclarations(t *testing.T) {
 	}
 }
 
+// The binding at index i runs under alias i, which the process broker maps to
+// the frozen command; only HTTP bindings reach the gateway.
+func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
+	f := newViewFixture(t)
+	roots, err := checkConfig(f.cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := request("supporting", "/workspace", "https://model.test", "sk-test")
+	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{
+		{Server: agentplugin.MCPServer{Name: "docs", Type: "http", URL: "https://mcp.test/docs"}},
+		{InstallationRoot: "/capabilities", PackageRoot: "pkg", Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "bin/tools", Args: []string{"--stdio"}, CWD: "run"}},
+	}
+	network := func(context.Context) (sandboxlink.Stream, error) { return nil, errors.New("not dialled") }
+	p, err := admit(f.cfg, roots, req, Environment{}, network)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: agent.ViewAlias(1)}}
+	if len(p.mcp) != 2 || p.mcp[1].Stdio == nil || !reflect.DeepEqual(*p.mcp[1].Stdio, alias) || len(p.gateway.MCP) != 1 || p.gateway.MCP[0].ServerLabel != "docs" {
+		t.Errorf("ViewSession.MCP %+v and gateway MCP %+v; want the stdio binding under its alias and only HTTP at the gateway", p.mcp, p.gateway.MCP)
+	}
+	want := map[string]processbroker.Command{"oac-mcp-1": {Executable: "bin/tools", Args: []string{"--stdio"}, Dir: "/capabilities/pkg/run"}}
+	if !reflect.DeepEqual(p.executables.Aliases, want) {
+		t.Errorf("aliases %+v, want %+v", p.executables.Aliases, want)
+	}
+}
+
 func TestRegistryDescribesTheViewPath(t *testing.T) {
 	f := newViewFixture(t)
 	var kinds []string
 	for _, info := range (&Host{cfg: f.cfg}).Registry(nil).SupportedAgentKinds() {
 		kinds = append(kinds, info.Kind)
 		c, declared := info.Capabilities, info.Kind == "supporting"
-		if !c.Preparation.IsSupported() || !c.LocalEnvironment.IsSupported() || !c.MCPHTTPTools.IsSupported() || c.EnvironmentNone.IsSupported() ||
+		if !c.Preparation.IsSupported() || !c.LocalEnvironment.IsSupported() || !c.MCPHTTPTools.IsSupported() || c.EnvironmentNone.IsSupported() != declared ||
 			c.FunctionTools.IsSupported() != declared || c.FunctionResultImages.IsSupported() != declared || c.ToolSearch.IsSupported() != declared ||
 			c.WorkspaceOutputExport.IsSupported() || c.WorkspaceReadPreparation.IsSupported() {
 			t.Errorf("%s: capabilities %+v do not describe the view path", info.Kind, c)

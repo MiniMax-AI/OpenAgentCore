@@ -85,11 +85,12 @@ func (d sessionDir) entry(name ...string) string {
 }
 
 // openSessionDir prepares the Session directory for an Executor running as
-// uid: it creates the directory and its home unless an earlier Executor left
-// them, and the transient entries.
+// uid: it creates the directory and its home, with the work directory that
+// an empty-root view runs in, unless an earlier Executor left them, and the
+// transient entries.
 func openSessionDir(stateDir string, id sandboxwire.ID, uid uint32) (sessionDir, error) {
 	d := sessionDir(filepath.Join(sessionsDir(stateDir), id.String()))
-	if err := os.MkdirAll(d.entry(homeEntry), 0o700); err != nil {
+	if err := os.MkdirAll(d.entry(homeEntry, agent.ViewWorkName), 0o700); err != nil {
 		return "", fmt.Errorf("%w: session directory: %w", ErrInvalidConfig, err)
 	}
 	if err := d.populate(uid); err != nil {
