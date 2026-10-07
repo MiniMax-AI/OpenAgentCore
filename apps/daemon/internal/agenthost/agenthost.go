@@ -65,8 +65,8 @@ type Binding struct {
 // Environment is the remote environment policy of processes forwarded to the
 // sandbox.
 type Environment struct {
-	// Sandbox holds the Environment's fixed values, such as HOME, PATH,
-	// TMPDIR and LANG in the sandbox.
+	// Sandbox holds the Environment's fixed values in the sandbox: HOME,
+	// PATH and LANG.
 	Sandbox map[string]string
 	// Tool is the Environment's tool environment.
 	Tool map[string]string

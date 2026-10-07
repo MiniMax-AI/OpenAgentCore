@@ -273,13 +273,12 @@ func (o *environment) Close(ctx context.Context) error {
 	return o.drain()
 }
 
-// Configure checks the request against the owner's Session and Environment
-// and returns it with the sandbox workspace as its root.
+// Configure checks the request against the owner's Environment, which
+// dispatch resolved from the Session's assignment, and returns it with the
+// sandbox workspace as its root.
 func (o *environment) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
 	local := r.LocalEnvironment
 	switch {
-	case r.AgentStateKey != "agents-api-"+o.session:
-		return r, errors.New("the request is not the Session's")
 	case o.id == "":
 		if local != nil || !r.DisableExecutionEnvironment {
 			return r, errors.New("the Session has no Environment")
@@ -312,7 +311,7 @@ func (o *environment) Prepare(ctx context.Context, r proto.PromptRequestPayload)
 		return r, nil
 	}
 	if o.id == "" || r.LocalEnvironment == nil || r.LocalEnvironment.ID != o.id || r.LocalEnvironment.CapabilitySources == nil ||
-		r.LocalEnvironment.WorkspaceRoot != sandboxWorkspace || r.AgentStateKey != "agents-api-"+o.session {
+		r.LocalEnvironment.WorkspaceRoot != sandboxWorkspace {
 		return r, agentcapabilities.ErrInvalid
 	}
 	if err := o.acquire(ctx); err != nil {
