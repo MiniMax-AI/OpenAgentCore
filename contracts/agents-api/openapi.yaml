@@ -3059,8 +3059,7 @@ paths:
         Vault credentials or deployment defaults resolve, so a same-intent retry returns
         the committed Session independently of later changes to those resources. Provider
         keys enter retry hashes only as fingerprints keyed by the credential key.
-        Unknown historical creators reject retries; known creators without recorded
-        intent retain resolved-snapshot retry rules. These conflict policies are local
+        Unknown historical creators reject retries. These conflict policies are local
         and not verified hosted parity. A same-key stream=true retry of an existing
         creation returns 201 with no events and closes at once; retry with stream=false
         or use the GET events stream to recover. Claude SDK on none, Core-managed

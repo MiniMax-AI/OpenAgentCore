@@ -223,7 +223,7 @@ Send an `Idempotency-Key` of 1–128 bytes that is not only whitespace; a longer
 | Same key, different request | 409 `idempotency_conflict` |
 | Same key after the Session was deleted | 409 `idempotency_conflict` |
 
-Keys are scoped to the Project; any key of the Project, including one issued after a rotation, can retry. Every creation request is compared as sent, before any saved Agent, template, Credential or deployment default is read: a matching retry returns the original Session even after those change or are deleted, and a retry that differs, even only by spelling out a default, conflicts. Model provider keys enter the comparison only as fingerprints.
+Keys are scoped to the Project; any key of the Project, including one issued after a rotation, can retry. Every creation request is compared as sent, before any saved Agent, template, Credential or deployment default is read: a matching retry returns the original Session even after those change or are deleted. Streaming and an empty or null `metadata` are outside the comparison; a spelled-out Agent default such as `text.verbosity` is not, so such a retry conflicts. Model provider keys enter the comparison only as fingerprints.
 
 ### Update and list
 
