@@ -149,6 +149,7 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 		{"initial input", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid, 503},
 		{"stream unavailable", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"stream":true,"agent":`, 1), 503},
 		{"unknown saved agent", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 404},
+		{"saved agent without its model provider bundle", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"agent":`, `"agent_id":"saved","agent":`, 1), 500},
 		{"unknown agent option", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", strings.Replace(valid, `"model":`, `"tools":[{}],"model":`, 1), 400},
 		{"multiple objects", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", valid + `{}`, 400},
 		{"null body as empty object", "Bearer test-api-key", "agents=v1", "/v1/agents/sessions", `null`, 400},
@@ -158,9 +159,14 @@ func TestHTTPRejectsUntrustedOrUnsupportedRequests(t *testing.T) {
 			unavailable := 0
 			h, s, _ := testHandler(t, func(_ *Dependencies, f *testFakes) {
 				f.metrics.recordUnavailable = func() { unavailable++ }
-				if test.name == "unknown saved agent" {
+				switch test.name {
+				case "unknown saved agent":
 					f.agentsReader.getAgentWithModelProvider = func(context.Context, string, string) (agents.Agent, *v1.ModelProviderInput, error) {
 						return agents.Agent{}, nil, agents.ErrNotFound
+					}
+				case "saved agent without its model provider bundle":
+					f.agentsReader.getAgentWithModelProvider = func(context.Context, string, string) (agents.Agent, *v1.ModelProviderInput, error) {
+						return agents.Agent{ID: "saved", Configuration: json.RawMessage(`{"model":"example","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://model.invalid"}}}`)}, nil, nil
 					}
 				}
 			})
