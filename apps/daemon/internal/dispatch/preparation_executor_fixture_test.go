@@ -134,9 +134,3 @@ func (t *preparationTurn) SubmitPromptForUserChoice(ctx context.Context, id stri
 	}
 	return agent.ErrUnknownAsk
 }
-func (t *preparationTurn) ReadWorkspaceFile(ctx context.Context, path string, limit int) (agent.WorkspaceReadResult, error) {
-	if target, ok := t.Session.(agent.WorkspaceReader); ok {
-		return target.ReadWorkspaceFile(ctx, path, limit)
-	}
-	return agent.WorkspaceReadResult{}, agent.ErrWorkspaceReadUnsupported
-}

@@ -193,7 +193,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	if ack := lastSteeringAck(t, sender.recSender, "run", "publication-steering"); ack.ErrorCode != "not_ready" {
 		t.Fatalf("pre-publication steering = %+v", ack)
 	}
-	read := proto.WorkspaceReadPayload{RunID: "run", EnvironmentID: preparationEnvironmentID, Path: "file", MaxBytes: 1}
+	read := proto.WorkspaceReadPayload{RunID: "run", EnvironmentID: preparationEnvironmentID, MaxEntries: 1}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, "publication-read", read)); err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	session.askMu.Lock()
 	askCalls := len(session.askCalls)
 	session.askMu.Unlock()
-	if session.functions.Load() != 0 || session.steers.Load() != 0 || session.reads.Load() != 0 || len(session.submissions()) != 0 || askCalls != 0 {
+	if session.functions.Load() != 0 || session.steers.Load() != 0 || len(session.submissions()) != 0 || askCalls != 0 {
 		t.Fatal("private Session accepted work before started publication")
 	}
 	duplicate := mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: "run", Input: proto.TextInput("input")})

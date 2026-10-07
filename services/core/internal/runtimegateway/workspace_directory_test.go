@@ -9,7 +9,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
+func TestWorkspaceDirectoryCorrelatesOneBoundedResult(t *testing.T) {
 	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")
 	request := proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: proto.WorkspaceDirectoryMaxEntries}
@@ -20,7 +20,7 @@ func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
 	}()
 	message := <-s.sendCh
 	var sent proto.WorkspaceReadPayload
-	if message.Type != proto.TypeWorkspaceRead || message.DecodePayload(&sent) != nil || sent.Operation != "directory" || sent.MaxBytes != 0 || sent.MaxEntries != request.MaxEntries {
+	if message.Type != proto.TypeWorkspaceRead || message.DecodePayload(&sent) != nil || sent != request {
 		t.Fatal("directory request changed")
 	}
 	directory := &proto.WorkspaceDirectoryResult{Entries: make([]proto.WorkspaceDirectoryEntry, request.MaxEntries), Truncated: true}
@@ -28,6 +28,8 @@ func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
 		directory.Entries[i] = proto.WorkspaceDirectoryEntry{Name: strings.Repeat("\x01", 250) + fmt.Sprintf("%04d", i), Kind: "directory"}
 	}
 	result := proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, Directory: directory}
+	foreign, _ := proto.NewEnvelope(proto.TypeWorkspaceReadResult, "other-operation", result)
+	s.dispatch(foreign)
 	reply, _ := message.Reply(proto.TypeWorkspaceReadResult, result)
 	encoded, err := json.Marshal(reply)
 	if err != nil || int64(len(encoded)) >= ReadLimit {
@@ -37,10 +39,12 @@ func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
+	if s.reg.LookupRun(message.ID) != nil {
+		t.Fatal("read registered a synthetic Run")
+	}
 }
 
 func TestWorkspaceDirectoryRejectsContradictoryAndUnboundedMetadata(t *testing.T) {
-	request := proto.WorkspaceReadPayload{Operation: "directory", MaxEntries: 2}
 	size := int64(0)
 	valid := proto.WorkspaceDirectoryEntry{Name: "file", Kind: "file", SizeBytes: &size}
 	for _, entries := range [][]proto.WorkspaceDirectoryEntry{
@@ -49,17 +53,13 @@ func TestWorkspaceDirectoryRejectsContradictoryAndUnboundedMetadata(t *testing.T
 		{{Name: strings.Repeat("x", 256), Kind: "directory"}},
 	} {
 		result := proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, Directory: &proto.WorkspaceDirectoryResult{Entries: entries}}
-		if validWorkspaceOperationResult(result, request) {
+		if validWorkspaceReadResult(result, 2) {
 			t.Fatal("invalid directory metadata accepted")
 		}
 	}
 	result := proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{valid}}}
-	if !validWorkspaceOperationResult(result, request) || validWorkspaceReadResult(result, 1024) {
-		t.Fatal("byte and directory result contracts mixed")
-	}
-	result.Data = []byte("unexpected bytes")
-	if validWorkspaceOperationResult(result, request) {
-		t.Fatal("contradictory result accepted")
+	if !validWorkspaceReadResult(result, 2) {
+		t.Fatal("valid directory metadata rejected")
 	}
 }
 

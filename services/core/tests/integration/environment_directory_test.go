@@ -80,7 +80,7 @@ func prepareDirectoryRead(t *testing.T, h *dispatchHarness, environment sessions
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 2, State: "ready"})
 	read := h.read(proto.TypeWorkspaceRead)
 	var input proto.WorkspaceReadPayload
-	if read.DecodePayload(&input) != nil || input.Handle != handle || input.RunID != "" || input.EnvironmentID != environment.ID || input.Path != "reports" || input.Operation != "directory" {
+	if read.DecodePayload(&input) != nil || input.Handle != handle || input.RunID != "" || input.EnvironmentID != environment.ID || input.Path != "reports" {
 		t.Fatal("directory request changed binding or path")
 	}
 	return frame.ID, read.ID

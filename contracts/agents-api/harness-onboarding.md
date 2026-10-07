@@ -70,7 +70,7 @@ For example, the Codex adapter keeps its app-server and thread, the Claude adapt
 | `Steerer` | Explicit implementation or Unsupported | Additional non-durable active-Turn input |
 | `FunctionResultSubmitter` | Explicit implementation or Unsupported | Match native call and result identity and acknowledge application |
 | `PermissionResponder`, `UserChoiceResponder` | Explicit implementation or Unsupported | Respond to exact emitted identities; unknown or expired interactions stay distinct from Unsupported |
-| `WorkspaceReader`, `WorkspaceDirectoryLister`, `WorkspaceWriter` | Explicit on Turn and Executor owners | Use the authorized workspace, confirm access, commit or close, or return the operation's Unsupported error |
+| `WorkspaceDirectoryLister`, `WorkspaceWriter` | Explicit on Turn and Executor owners | Use the authorized workspace, confirm access, commit or close, or return the operation's Unsupported error |
 | Neutral messages, images, MCP, structured output and Subagent observations | Explicit capability decisions | Keep each operation's protocol semantics; reject unsupported input before submission |
 
 Each adapter's `contracts.go` holds an individual compile-time assertion for each small interface. Do not embed a default implementation that makes future interfaces appear implemented. Adding a contract also requires a classification in the common completeness check and an explicit assertion in every public adapter; the check follows the authored Harness catalog.

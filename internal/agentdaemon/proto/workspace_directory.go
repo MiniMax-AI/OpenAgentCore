@@ -36,17 +36,8 @@ func (result *WorkspaceDirectoryResult) UnmarshalJSON(data []byte) error {
 }
 
 func ValidWorkspaceReadRequest(request WorkspaceReadPayload) bool {
-	if (request.Handle == "") == (request.RunID == "") || request.EnvironmentID == "" {
-		return false
-	}
-	switch request.Operation {
-	case "":
-		return request.MaxBytes >= 1 && request.MaxBytes <= WorkspaceReadMaxBytes && request.MaxEntries == 0
-	case "directory":
-		return request.MaxBytes == 0 && request.MaxEntries >= 1 && request.MaxEntries <= WorkspaceDirectoryMaxEntries
-	default:
-		return false
-	}
+	return (request.Handle == "") != (request.RunID == "") && request.EnvironmentID != "" &&
+		request.MaxEntries >= 1 && request.MaxEntries <= WorkspaceDirectoryMaxEntries
 }
 
 func ValidWorkspaceDirectory(result *WorkspaceDirectoryResult, limit int) bool {

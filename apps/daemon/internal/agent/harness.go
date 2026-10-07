@@ -621,11 +621,6 @@ type UserChoiceResponder interface {
 // A resource without native access returns the corresponding Unsupported error;
 // this does not disable capabilities provided by the common workspace owner.
 
-// WorkspaceReader returns success only after acknowledged native close on an existing owner.
-type WorkspaceReader interface {
-	ReadWorkspaceFile(context.Context, string, int) (WorkspaceReadResult, error)
-}
-
 // WorkspaceDirectoryLister reads one directory through an existing workspace owner.
 // An empty directory selects the root; other paths contain only relative components.
 // Entry names are single components. Kind is file, directory, symlink or other;

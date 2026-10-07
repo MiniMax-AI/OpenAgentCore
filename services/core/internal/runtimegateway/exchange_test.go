@@ -16,7 +16,7 @@ func TestFramesMustNameTheRequestAssignment(t *testing.T) {
 			defer s.Close("test")
 			read := make(chan error, 1)
 			go func() {
-				_, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
+				_, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, workspaceReadRequest())
 				read <- err
 			}()
 			request := <-s.sendCh

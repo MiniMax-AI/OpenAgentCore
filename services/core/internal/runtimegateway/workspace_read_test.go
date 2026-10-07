@@ -1,9 +1,7 @@
 package runtimegateway
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -13,96 +11,35 @@ import (
 )
 
 func workspaceReadRequest() proto.WorkspaceReadPayload {
-	return proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", Path: "file", MaxBytes: proto.WorkspaceReadMaxBytes}
+	return proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", Path: "directory", MaxEntries: 2}
 }
 
-func TestWorkspaceReadCorrelatesOneBoundedResult(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
-	defer s.Close("test")
-	done := make(chan error, 1)
-	data := bytes.Repeat([]byte{0, 127, 255, 3}, proto.WorkspaceReadMaxBytes/4)
-	go func() {
-		result, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
-		if err == nil && (!bytes.Equal(result.Data, data) || !result.Truncated || !result.CloseAcknowledged) {
-			err = errors.New("read data or acknowledgment differs")
-		}
-		done <- err
-	}()
-	request := <-s.sendCh
-	result := proto.WorkspaceReadResultPayload{Outcome: "completed", Data: data, Truncated: true, CloseAcknowledged: true}
-	foreign, _ := proto.NewEnvelope(proto.TypeWorkspaceReadResult, "other-operation", result)
-	s.dispatch(foreign)
-	reply, _ := request.Reply(proto.TypeWorkspaceReadResult, result)
-	encoded, err := json.Marshal(reply)
-	if err != nil || int64(len(encoded)) >= ReadLimit {
-		t.Fatal("result exceeds existing transport frame", err, len(encoded))
-	}
-	s.dispatch(reply)
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	if s.reg.LookupRun(request.ID) != nil {
-		t.Fatal("read registered a synthetic Run")
-	}
-}
-
-func TestWorkspaceReadRejectsIncompleteOrContradictoryReplies(t *testing.T) {
-	for _, result := range []proto.WorkspaceReadResultPayload{
-		{Outcome: "completed", Data: []byte("x")},
-		{Outcome: "completed", CloseAcknowledged: true, Truncated: true},
-		{Outcome: "completed", CloseAcknowledged: true, ErrorCode: "not_found"},
-		{Outcome: "unknown", ErrorCode: "read_unconfirmed", Data: []byte("partial")},
-		{Outcome: "rejected", ErrorCode: "native-private-secret"},
-	} {
-		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
-		done := make(chan error, 1)
-		go func() {
-			_, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
-			done <- err
-		}()
-		request := <-s.sendCh
-		reply, _ := request.Reply(proto.TypeWorkspaceReadResult, result)
-		s.dispatch(reply)
-		if err := <-done; err == nil {
-			t.Fatal("invalid result accepted", result.Outcome)
-		}
-		s.Close("test")
-	}
-}
-
-func TestWorkspaceDirectoryAcceptsNotDirectoryOnlyForDirectoryReads(t *testing.T) {
-	directory := proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", Path: "missing", MaxEntries: 2}
+func TestWorkspaceReadValidatesRejections(t *testing.T) {
 	for _, test := range []struct {
-		directory bool
-		result    proto.WorkspaceReadResultPayload
-		accepted  bool
+		result   proto.WorkspaceReadResultPayload
+		accepted bool
 	}{
-		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory}, true},
-		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: "not_found"}, true},
-		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory, CloseAcknowledged: true}, false},
-		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}, false},
-		{true, proto.WorkspaceReadResultPayload{Outcome: "unknown", ErrorCode: proto.WorkspaceReadNotDirectory}, false},
-		{true, proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, ErrorCode: proto.WorkspaceReadNotDirectory, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}, false},
-		{false, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory}, false},
-		{false, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.AssignmentStale}, true},
-		{true, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.AssignmentConflict}, true},
+		{proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory}, true},
+		{proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: "not_found"}, true},
+		{proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.AssignmentStale}, true},
+		{proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.AssignmentConflict}, true},
+		{proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: "native-private-secret"}, false},
+		{proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory, CloseAcknowledged: true}, false},
+		{proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}, false},
+		{proto.WorkspaceReadResultPayload{Outcome: "unknown", ErrorCode: proto.WorkspaceReadNotDirectory}, false},
+		{proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, ErrorCode: proto.WorkspaceReadNotDirectory, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}, false},
 	} {
 		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
-			var err error
-			if test.directory {
-				_, err = s.ListWorkspaceDirectory(t.Context(), testAssignment, directory)
-			} else {
-				_, err = s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
-			}
+			_, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, workspaceReadRequest())
 			done <- err
 		}()
 		request := <-s.sendCh
 		reply, _ := request.Reply(proto.TypeWorkspaceReadResult, test.result)
 		s.dispatch(reply)
 		if err := <-done; (err == nil) != test.accepted {
-			t.Fatal("directory result validation changed", test.directory, test.result, err)
+			t.Fatal("directory result validation changed", test.result, err)
 		}
 		s.Close("test")
 	}
@@ -113,7 +50,7 @@ func TestWorkspaceReadObserverCancellationDoesNotSendCancelOrRetry(t *testing.T)
 	defer s.Close("test")
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	go func() { _, err := s.ReadWorkspaceFile(ctx, testAssignment, workspaceReadRequest()); done <- err }()
+	go func() { _, err := s.ListWorkspaceDirectory(ctx, testAssignment, workspaceReadRequest()); done <- err }()
 	request := <-s.sendCh
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
@@ -139,7 +76,7 @@ func TestWorkspaceReadCapacityAndConnectionLoss(t *testing.T) {
 	done := make(chan error, 4)
 	for i := 0; i < 4; i++ {
 		go func() {
-			_, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
+			_, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, workspaceReadRequest())
 			done <- err
 		}()
 		select {
@@ -148,7 +85,7 @@ func TestWorkspaceReadCapacityAndConnectionLoss(t *testing.T) {
 			t.Fatal("read not sent")
 		}
 	}
-	if _, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest()); err == nil {
+	if _, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, workspaceReadRequest()); err == nil {
 		t.Fatal("capacity bypassed")
 	}
 	s.Close("connection lost")
@@ -178,7 +115,7 @@ func TestWorkspaceReadRejectsOversizedRequestsBeforeQueueing(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
-			if _, err := s.ReadWorkspaceFile(ctx, testAssignment, request); err == nil || errors.Is(err, context.DeadlineExceeded) {
+			if _, err := s.ListWorkspaceDirectory(ctx, testAssignment, request); err == nil || errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("oversized request not rejected before send", err)
 			}
 			select {

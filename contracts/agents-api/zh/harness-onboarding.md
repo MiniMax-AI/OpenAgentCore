@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: d0b84eef91e766fb74e2acf8a767d1767f6a3f270adb1b72790b7c616ee63d05
+source_hash: 6a046c227cb9d0b3074a21c9257a408c126234fd127ad08f359d89891ee0f20b
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -72,7 +72,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 | `Steerer` | 明确实现或 Unsupported | 额外的非持久化活动 Turn 输入 |
 | `FunctionResultSubmitter` | 明确实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
 | `PermissionResponder`、`UserChoiceResponder` | 明确实现或 Unsupported | 响应精确发出的身份；未知或已过期的交互与 Unsupported 保持区分 |
-| `WorkspaceReader`、`WorkspaceDirectoryLister`、`WorkspaceWriter` | 在 Turn 和 Executor 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
+| `WorkspaceDirectoryLister`、`WorkspaceWriter` | 在 Turn 和 Executor 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
 | 中立消息、图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
 
 每个适配器的 `contracts.go` 都包含针对每个小型接口的单项编译时断言。不要嵌入会让未来接口看起来已经实现的默认实现。添加契约时，还必须在通用完整性检查中进行分类，并在每个公共适配器中添加明确断言；该检查遵循已编写的 Harness 目录。
