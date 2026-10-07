@@ -13,7 +13,7 @@ func TestExistingSessionRecoveryRequiresVerifiedCapability(t *testing.T) {
 			for _, nativeID := range []string{"", "native"} {
 				for _, capable := range []bool{false, true} {
 					wantRecovery := started && nativeID == ""
-					req, err := (&Dispatcher{SessionsReader: frozenProvider{engine: engine}}).executionRequest(t.Context(), sessions.Session{ID: "session", Engine: engine}, Snapshot{ModelProviderConfigured: true}, proto.Declaration{Capabilities: proto.AgentKindCapabilities{NativeSessionRecovery: proto.CapabilityFromBool(capable)}}, sessions.ExecutionBinding{HasStartedTurn: started, NativeSessionID: nativeID})
+					req, err := (&Dispatcher{SessionsReader: frozenProvider{engine: engine}}).executionRequest(t.Context(), sessions.Session{ID: "session", Engine: engine}, Snapshot{}, proto.Declaration{Capabilities: proto.AgentKindCapabilities{NativeSessionRecovery: proto.CapabilityFromBool(capable)}}, sessions.ExecutionBinding{HasStartedTurn: started, NativeSessionID: nativeID})
 					if wantRecovery && !capable {
 						if err == nil {
 							t.Fatal("unverified recovery admitted", engine)

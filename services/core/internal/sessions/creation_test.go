@@ -202,7 +202,7 @@ func TestPrepareCreation(t *testing.T) {
 	}
 	deployed := prepare(t, withProvider("none", "deployment-key", v1.ModelProviderSourceDeployment), unavailable)
 	plain := prepare(t, func(input *CreateSession) { input.Configuration = creationInput("none").Configuration }, unavailable)
-	if !strings.Contains(string(deployed.Configuration), `"model_provider_configured":true`) || deployed.RequestHash != plain.RequestHash {
+	if deployed.RequestHash != plain.RequestHash {
 		t.Fatalf("the deployment default joined the identity: %s", deployed.Configuration)
 	}
 	if intent := prepare(t, func(input *CreateSession) { input.CreationRequest = json.RawMessage(`{"agent_id":"a"}`) }, fingerprints).IntentHash; intent == nil {

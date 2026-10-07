@@ -13,7 +13,7 @@ import (
 func TestStructuredOutputRequestKeepsFrozenSchemaAndInstructions(t *testing.T) {
 	schema := json.RawMessage(`{"type":"object","properties":{"number":{"const":9007199254740992}}}`)
 	instructions := "Keep these original instructions."
-	snapshot := Snapshot{ModelProviderConfigured: true, Agent: v1.Agent{Model: "model", Instructions: &instructions, Text: v1.TextConfig{Format: v1.TextFormat{Type: "json_schema", Schema: schema}}}}
+	snapshot := Snapshot{Agent: v1.Agent{Model: "model", Instructions: &instructions, Text: v1.TextConfig{Format: v1.TextFormat{Type: "json_schema", Schema: schema}}}}
 	request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: "claude_sdk"}}).executionRequest(context.Background(), sessions.Session{Engine: "claude_sdk"}, snapshot, proto.Declaration{}, sessions.ExecutionBinding{})
 	if err != nil || request.ExecutionControls.OutputFormat == nil {
 		t.Fatal(err)

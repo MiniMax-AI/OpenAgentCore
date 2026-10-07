@@ -392,7 +392,7 @@ func TestCreationFreezesResourcesOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := created.Session.ID
-	if bytes.Contains(created.Session.Configuration, []byte(canary)) || !bytes.Contains(created.Session.Configuration, []byte(`"model_provider_configured":true`)) {
+	if bytes.Contains(created.Session.Configuration, []byte(canary)) {
 		t.Fatal("Session configuration", string(created.Session.Configuration))
 	}
 	sealed := `FROM (SELECT encrypted_config AS b FROM session_model_execution WHERE session_id=$1

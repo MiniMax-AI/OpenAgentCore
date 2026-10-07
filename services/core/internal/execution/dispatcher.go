@@ -20,11 +20,10 @@ import (
 
 // Snapshot is the Session configuration frozen at creation.
 type Snapshot struct {
-	ModelProviderConfigured bool                          `json:"model_provider_configured,omitempty"`
-	Agent                   v1.Agent                      `json:"agent"`
-	Environment             *v1.Environment               `json:"environment"`
-	VaultIDs                []string                      `json:"vault_ids,omitempty"`
-	MCPCredentials          []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
+	Agent          v1.Agent                      `json:"agent"`
+	Environment    *v1.Environment               `json:"environment"`
+	VaultIDs       []string                      `json:"vault_ids,omitempty"`
+	MCPCredentials []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
 
 type Dispatcher struct {

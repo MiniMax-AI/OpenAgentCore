@@ -28,7 +28,7 @@ func mcpSupportFixture(t *testing.T) Snapshot {
 	t.Helper()
 	vault, credential := uuid.NewString(), uuid.NewString()
 	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example/tools"}}`)
-	snapshot := Snapshot{ModelProviderConfigured: true, Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{tool}}, Environment: &v1.Environment{Type: "none"}, VaultIDs: []string{vault},
+	snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{tool}}, Environment: &v1.Environment{Type: "none"}, VaultIDs: []string{vault},
 		MCPCredentials: []vaults.MCPCredentialBinding{{ServerLabel: "tickets", ServerURL: "https://mcp.example/tools", VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}}}
 	return snapshot
 }

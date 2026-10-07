@@ -20,7 +20,7 @@ func TestDisabledToolsAreCommonControls(t *testing.T) {
 
 func TestDisabledToolRequestPreservesIntentOnResume(t *testing.T) {
 	for _, disabled := range []bool{false, true} {
-		snapshot := Snapshot{ModelProviderConfigured: true, Agent: v1.Agent{Model: "model"}}
+		snapshot := Snapshot{Agent: v1.Agent{Model: "model"}}
 		if disabled {
 			snapshot.Agent.Tools = []json.RawMessage{json.RawMessage(`{"type":"programmatic_tool_calling","enabled":false}`)}
 		}
