@@ -209,19 +209,31 @@ func (q *Queries) GetSessionExecutionBinding(ctx context.Context, arg GetSession
 }
 
 const listPendingAssignmentReleases = `-- name: ListPendingAssignmentReleases :many
-SELECT session_id, runtime_id, assignment_id, epoch, remove_home FROM session_runtime_assignments
-WHERE desired_state = 'released' AND applied_epoch < epoch AND runtime_id = ANY($1::uuid[])
-ORDER BY runtime_id, session_id
+SELECT b.session_id, b.runtime_id, b.assignment_id, b.epoch, b.remove_home,
+    r.tenant_id AS resource_tenant_id, r.environment_id AS resource_environment_id, r.kind AS resource_kind,
+    r.id AS resource_id, r.generation AS resource_generation
+FROM session_runtime_assignments b
+LEFT JOIN environments e ON e.session_id = b.session_id
+LEFT JOIN sandbox_resources r ON r.environment_id = e.id
+WHERE b.desired_state = 'released' AND b.applied_epoch < b.epoch AND b.runtime_id = ANY($1::uuid[])
+ORDER BY b.runtime_id, b.session_id
 `
 
 type ListPendingAssignmentReleasesRow struct {
-	SessionID    pgtype.UUID `json:"session_id"`
-	RuntimeID    pgtype.UUID `json:"runtime_id"`
-	AssignmentID pgtype.UUID `json:"assignment_id"`
-	Epoch        int64       `json:"epoch"`
-	RemoveHome   bool        `json:"remove_home"`
+	SessionID             pgtype.UUID `json:"session_id"`
+	RuntimeID             pgtype.UUID `json:"runtime_id"`
+	AssignmentID          pgtype.UUID `json:"assignment_id"`
+	Epoch                 int64       `json:"epoch"`
+	RemoveHome            bool        `json:"remove_home"`
+	ResourceTenantID      pgtype.UUID `json:"resource_tenant_id"`
+	ResourceEnvironmentID pgtype.UUID `json:"resource_environment_id"`
+	ResourceKind          pgtype.Text `json:"resource_kind"`
+	ResourceID            pgtype.UUID `json:"resource_id"`
+	ResourceGeneration    pgtype.Int8 `json:"resource_generation"`
 }
 
+// Each release carries its Session's Link resource, live or not, which the
+// release revokes before it is sent.
 func (q *Queries) ListPendingAssignmentReleases(ctx context.Context, runtimeIds []pgtype.UUID) ([]ListPendingAssignmentReleasesRow, error) {
 	rows, err := q.db.Query(ctx, listPendingAssignmentReleases, runtimeIds)
 	if err != nil {
@@ -237,6 +249,11 @@ func (q *Queries) ListPendingAssignmentReleases(ctx context.Context, runtimeIds 
 			&i.AssignmentID,
 			&i.Epoch,
 			&i.RemoveHome,
+			&i.ResourceTenantID,
+			&i.ResourceEnvironmentID,
+			&i.ResourceKind,
+			&i.ResourceID,
+			&i.ResourceGeneration,
 		); err != nil {
 			return nil, err
 		}

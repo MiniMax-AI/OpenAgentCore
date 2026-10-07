@@ -22,6 +22,8 @@ type Allocation struct {
 	ID, EnvironmentID    string
 	SessionID, TenantID  string
 	DeviceID             string
+	// ServeGeneration is the generation of the allocation's Link resource.
+	ServeGeneration uint64
 	// ProviderKey is the installation the allocation was provisioned for.
 	ProviderKey string
 	State       string
