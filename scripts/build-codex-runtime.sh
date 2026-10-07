@@ -3,9 +3,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${OAC_DEV_HOME:-$HOME/.oac}"
-output_dir="${AGENTS_RUNTIME_BUILD_DIR:-$runtime_root/build/agents-runtime}"
+output_dir="${AGENTS_RUNTIME_BUILD_DIR:-$runtime_root/build/codex-runtime}"
 # Extract the official @openai/codex@0.153.4-linux-x64 npm package here.
-package_dir="${AGENTS_RUNTIME_CODEX_PACKAGE:?Set AGENTS_RUNTIME_CODEX_PACKAGE to the extracted pinned platform package}"
+package_dir="${CODEX_CLI_DIR:?Set CODEX_CLI_DIR to the extracted pinned platform package}"
 for directory in "$runtime_root" "$output_dir" "$package_dir"; do
   if [[ "$directory" != /* ]]; then
     printf 'Runtime build directories must be absolute: %s\n' "$directory" >&2
@@ -23,7 +23,7 @@ for executable in "$native_dir/bin/codex"; do
 done
 test -d "$native_dir/codex-resources"
 mkdir -p "$runtime_root/cache/oac-runtime-builds"
-context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/bundle.XXXXXX")"
+context="$(mktemp -d "$runtime_root/cache/oac-runtime-builds/codex.XXXXXX")"
 trap 'rm -rf "$context"' EXIT
 (
   cd "$repo_root"
@@ -36,5 +36,5 @@ cp "$repo_root/services/core/deploy/codex/Dockerfile" "$context/Dockerfile"
 # Preserve the previous bundle if compilation or validation failed.
 mkdir -p "$output_dir"
 cp -R "$context/." "$output_dir/"
-printf 'Runtime image context: %s\n' "$output_dir"
-printf 'Build with: docker build --platform linux/amd64 -t agents-runtime:local %q\n' "$output_dir"
+printf 'Codex Runtime image context: %s\n' "$output_dir"
+printf 'Build with: docker build --platform linux/amd64 -t oac-runtime:codex %q\n' "$output_dir"

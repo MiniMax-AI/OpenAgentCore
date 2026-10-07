@@ -370,9 +370,10 @@ func TestMissingKeyIsUnavailable(t *testing.T) {
 	}
 }
 
-// Stored package metadata naming the removed system manager is rejected on
-// every read instead of being silently dropped.
-func TestStoredSystemPackagesRejected(t *testing.T) {
+// Stored package metadata naming the removed system manager no longer decodes,
+// so every read fails with an internal error instead of dropping it. Packages
+// that decode but fail current validation are an invalid Template.
+func TestStoredPackagesRejected(t *testing.T) {
 	f := newFixture(t, pgtest.Open(t))
 	ctx := t.Context()
 	tenant := uuid.NewString()
@@ -383,17 +384,22 @@ func TestStoredSystemPackagesRejected(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	internal := func(err error) bool { return err != nil && !errors.Is(err, environmenttemplates.ErrInvalidInput) }
 	for _, value := range []string{`null`, `[]`, `["jq"]`} {
 		store(`{"npm":[],"python":[],"system":` + value + `}`)
-		if _, err := f.keyless.Get(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
-			t.Fatal("get silently ignored removed system packages", value, err)
+		if _, err := f.keyless.Get(ctx, tenant, template.ID); !internal(err) {
+			t.Fatal("get did not fail internally on removed system packages", value, err)
 		}
-		if _, err := f.keyless.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 1}); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
-			t.Fatal("list silently ignored removed system packages", value, err)
+		if _, err := f.keyless.List(ctx, tenant, environmenttemplates.ListQuery{Limit: 1}); !internal(err) {
+			t.Fatal("list did not fail internally on removed system packages", value, err)
 		}
-		if _, err := f.keyed.Resolve(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
-			t.Fatal("resolve silently ignored removed system packages", value, err)
+		if _, err := f.keyed.Resolve(ctx, tenant, template.ID); !internal(err) {
+			t.Fatal("resolve did not fail internally on removed system packages", value, err)
 		}
+	}
+	store(`{"npm":["-x"],"python":[]}`)
+	if _, err := f.keyed.Resolve(ctx, tenant, template.ID); !errors.Is(err, environmenttemplates.ErrInvalidInput) {
+		t.Fatal("resolve accepted packages that fail validation", err)
 	}
 	store(`{"npm":["semver"],"python":["packaging"]}`)
 	if got, err := f.keyless.Get(ctx, tenant, template.ID); err != nil || !reflect.DeepEqual(got.Packages, v1.EnvironmentPackages{NPM: []string{"semver"}, Python: []string{"packaging"}}) {

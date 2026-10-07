@@ -16,7 +16,7 @@ import (
 )
 
 func (s *Store) GetSessionDevice(ctx context.Context, tenant, session string) (sessions.ExecutionDevice, error) {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
@@ -27,7 +27,7 @@ func (s *Store) GetSessionDevice(ctx context.Context, tenant, session string) (s
 }
 
 func (s *Store) GetSessionExecutionBinding(ctx context.Context, tenant, session string) (sessions.ExecutionBinding, error) {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return sessions.ExecutionBinding{}, err
 	}
@@ -77,7 +77,7 @@ func (s *Store) ListExecutionDevices(ctx context.Context, tenant string) ([]sess
 }
 
 func (s *Store) GetSessionRuntimeDevice(ctx context.Context, tenant, session string) (sessions.ExecutionDevice, error) {
-	lookup, err := DeviceLookup(tenant, session)
+	lookup, err := ResourceLookup(tenant, session)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err
 	}
@@ -176,7 +176,7 @@ func (s *Store) CreateDevice(ctx context.Context, tenant string, registration se
 }
 
 func (s *Store) RevokeDevice(ctx context.Context, tenant, device string) error {
-	lookup, err := DeviceLookup(tenant, device)
+	lookup, err := ResourceLookup(tenant, device)
 	if err != nil {
 		return err
 	}
@@ -217,7 +217,7 @@ func (s *Store) WithEnrollment(ctx context.Context, environment, credentialHash 
 	if err != nil {
 		return err
 	}
-	lookup, err := DeviceLookup(tenant, current.ID)
+	lookup, err := ResourceLookup(tenant, current.ID)
 	if err != nil {
 		return err
 	}

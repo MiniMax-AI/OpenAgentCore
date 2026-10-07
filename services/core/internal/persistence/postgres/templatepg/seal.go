@@ -2,6 +2,7 @@ package templatepg
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -87,7 +88,7 @@ func (s *Store) openSetup(tenant, id pgtype.UUID, field string, ciphertext []byt
 		return err
 	}
 	if environmentconfig.Decode(plaintext, output) != nil {
-		return environmenttemplates.ErrInvalidInput
+		return errors.New("invalid stored environment template " + field)
 	}
 	return nil
 }

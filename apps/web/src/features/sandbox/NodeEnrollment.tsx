@@ -21,7 +21,7 @@ import { enrolledNode, enrollmentProgress, formatCountdown, progressSteps, type 
 import { sandboxConsoleConfigQuery } from "./sandbox-queries";
 
 /** The host requirements open by default until this browser has shown them once. */
-const REQUIREMENTS_SEEN = "agents-core-web.node-requirements-seen";
+const REQUIREMENTS_SEEN = "oac-web.node-requirements-seen";
 function requirementsSeen(): boolean {
   try { return window.localStorage.getItem(REQUIREMENTS_SEEN) === "1"; } catch { return false; }
 }
