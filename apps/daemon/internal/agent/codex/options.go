@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
@@ -74,8 +73,6 @@ type SessionPlan struct {
 //	system_prompt   string  forwarded as developerInstructions
 //	model_provider  object  frozen upstream protocol, endpoint, credential and token limits
 //	harness_config  object  native parameters accepted by harnessconfig/codex
-//	env             object  extra env vars (KEY=string-value); the Runtime's
-//	                        authoring bridge supplies it
 //
 // Execution controls select the native web_search and model_verbosity settings.
 // The codex binary itself is resolved via PATH only.
@@ -109,11 +106,6 @@ func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto
 	plan.Model = stringOpt(opts, "model")
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
 
-	env, err := buildSessionEnv(opts)
-	if err != nil {
-		return plan, err
-	}
-
 	codexHome, err := allocCodexHome(agentStateKey)
 	if err != nil {
 		return plan, err
@@ -121,7 +113,7 @@ func BuildSessionPlan(agentStateKey string, opts map[string]any, controls *proto
 	if err := resetGeneratedConfig(codexHome); err != nil {
 		return plan, err
 	}
-	env = append(env, "CODEX_HOME="+codexHome)
+	env := []string{"DISABLE_TELEMETRY=1", "CODEX_HOME=" + codexHome}
 
 	provider, hasProvider, err := normaliseProviderConfig(opts["model_provider"])
 	if err != nil {
@@ -201,33 +193,6 @@ func resetGeneratedConfig(codexHome string) error {
 		return fmt.Errorf("codex: remove generated config %s: %w", path, err)
 	}
 	return nil
-}
-
-func buildSessionEnv(opts map[string]any) ([]string, error) {
-	env := []string{
-		"DISABLE_TELEMETRY=1",
-	}
-	raw, ok := opts["env"]
-	if !ok || raw == nil {
-		return env, nil
-	}
-	envMap, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("codex.BuildSessionPlan: env must be object, got %T", raw)
-	}
-	keys := make([]string, 0, len(envMap))
-	for k := range envMap {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		s, ok := envMap[k].(string)
-		if !ok {
-			return nil, fmt.Errorf("codex.BuildSessionPlan: env[%q] must be string, got %T", k, envMap[k])
-		}
-		env = append(env, k+"="+s)
-	}
-	return env, nil
 }
 
 // normaliseProviderConfig validates and renders the frozen native provider.

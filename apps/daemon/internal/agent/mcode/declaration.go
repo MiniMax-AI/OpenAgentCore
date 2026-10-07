@@ -18,7 +18,6 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode"
 	Usage:                          proto.CapabilityUnsupported,
 	Resume:                         proto.CapabilitySupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	WorkspaceAuthoring:             proto.CapabilitySupported,
 	Steering:                       proto.CapabilityUnsupported,
 	MessageItems:                   proto.CapabilityUnsupported,
 	ToolObservations:               proto.CapabilityUnsupported,
@@ -78,7 +77,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 		runtime.Executor = NewExecutorFactory(workspace)
 	}
 	if workspace != nil {
-		runtime.Info.Capabilities.WorkspaceAuthoring = proto.CapabilityUnsupported
 		runtime.Preparation = NewPreparationFactory(*workspace)
 		runtime.WorkspaceReadPreparation = true
 	}

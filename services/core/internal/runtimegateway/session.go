@@ -533,7 +533,6 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.Supporte
 				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools.IsSupported(),
 				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired.IsSupported(),
 				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
-				WorkspaceAuthoring:             info.Capabilities.WorkspaceAuthoring.IsSupported(),
 			},
 		})
 	}

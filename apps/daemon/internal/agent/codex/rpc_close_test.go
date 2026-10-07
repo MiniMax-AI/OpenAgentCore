@@ -15,7 +15,7 @@ import (
 )
 
 func TestJSONRPCClientCloseCanRetryUnreapedChild(t *testing.T) {
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: t.Context(), Binary: os.Args[0], Args: []string{"-test.run=^TestJSONRPCClientFakeCodexProcess$", "--"}, Env: append(os.Environ(), "CODEX_RPC_FAKE_PROCESS=1", "GORACE=atexit_sleep_ms=0"), NeedStdin: true, OwnProcessGroup: true})
+	process, err := clirunner.Start(clirunner.StartOptions{Parent: t.Context(), Binary: os.Args[0], Args: []string{"-test.run=^TestJSONRPCClientFakeCodexProcess$", "--"}, Env: append(os.Environ(), "CODEX_RPC_FAKE_PROCESS=1", "GORACE=atexit_sleep_ms=0"), NeedStdin: true})
 	if err != nil {
 		t.Fatal(err)
 	}

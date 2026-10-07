@@ -19,8 +19,8 @@ func TestExecutionNegotiatesAndPersistsToolObservations(t *testing.T) {
 	env := h.read(testExecutionRequest)
 	var request proto.PromptRequestPayload
 	_ = env.DecodePayload(&request)
-	if !request.ObserveToolObservations || request.ObserveMessages {
-		t.Fatal("advertised capability was not requested")
+	if request.ObserveMessages {
+		t.Fatal("unadvertised message items were requested")
 	}
 	start := json.RawMessage(`{"kind":"mcp","server":"reference","name":"lookup","arguments":{"key":"value"},"status":"in_progress","output":null,"error":null}`)
 	complete := json.RawMessage(`{"kind":"mcp","server":"reference","name":"lookup","arguments":{"key":"value"},"status":"completed","output":{"content":[{"type":"text","text":"answer"}],"structuredContent":{"version":9007199254740993}},"error":null}`)

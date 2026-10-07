@@ -91,9 +91,6 @@ func validateExecutorFeatures(info RuntimeInfo, start startRequest) error {
 	if start.Subagents != nil && !info.SupportsSubagents() {
 		return errors.New("claudesdk: subagent resources are unavailable")
 	}
-	if start.Workspace != nil && start.observeFunctions && !info.supportsWorkspaceCommands() {
-		return errors.New("claudesdk: packaged runtime does not support workspace command observations")
-	}
 	if start.Workspace != nil && len(start.Functions) > 0 && !info.SupportsWorkspaceFunctions() {
 		return errors.New("claudesdk: workspace functions are unavailable")
 	}

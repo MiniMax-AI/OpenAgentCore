@@ -63,7 +63,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if req, err = r.localWorkspace.Configure(req); err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.WorkspaceAuthoring || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.StrictResume || !req.ReleaseOnCompletion {
+	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.ReleaseOnCompletion {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported()) {

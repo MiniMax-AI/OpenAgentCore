@@ -27,6 +27,9 @@ func TestExecutorNativeConfirmationSurvivesCleanup(t *testing.T) {
 				t.Fatal("initial output missing")
 			}
 			if mode == "pending_function" || mode == "pending_function_unconfirmed" {
+				if event := <-out; event.Type != proto.TypeToolCall {
+					t.Fatal("function observation missing")
+				}
 				if event := <-out; event.Type != proto.TypeFunctionCall {
 					t.Fatal("function obligation missing")
 				}

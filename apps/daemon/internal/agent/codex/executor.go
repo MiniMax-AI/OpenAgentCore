@@ -69,8 +69,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 	functions := &functionCalls{definitions: base.functions.definitions, names: base.functions.names, pending: map[string]*pendingFunction{}}
 	turnCtx, cancel := context.WithCancel(base.cancelCtx)
 	s := &Session{executor: e, nativeHome: base.nativeHome,
-		functions: functions, observeMessages: base.observeMessages,
-		observeToolObservations: base.observeToolObservations, observeSubagentIdentities: base.observeSubagentIdentities,
+		functions: functions, observeMessages: base.observeMessages, observeSubagentIdentities: base.observeSubagentIdentities,
 		cfg: base.cfg, rpc: base.rpc, cancelCtx: turnCtx, cancelFn: cancel,
 		waitDone: make(chan struct{}), outputDone: make(chan struct{}), cleanup: func() {},
 		bufs: NewItemBuffers(), resolvedModel: base.resolvedModel, interactions: newPendingCodexInteractions(), runID: runID, out: out}
@@ -94,7 +93,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 	}
 	s.registerHandlers()
 	e.mu.Unlock()
-	req := proto.PromptRequestPayload{RunID: runID, Input: input, AgentSessionID: e.prepared.resumeID, StrictResume: e.prepared.strictResume, RequireExistingNativeSession: e.prepared.requireExistingNativeSession}
+	req := proto.PromptRequestPayload{RunID: runID, Input: input, AgentSessionID: e.prepared.resumeID, RequireExistingNativeSession: e.prepared.requireExistingNativeSession}
 	// Ownership precedes any native submission. Even an uncertain start returns the
 	// exact Turn so its caller can await settlement without replaying the input.
 	err := s.startNative(ctx, e.prepared.plan, req)

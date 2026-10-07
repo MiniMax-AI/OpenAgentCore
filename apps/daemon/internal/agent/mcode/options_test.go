@@ -11,8 +11,8 @@ import (
 )
 
 func TestOptionsRefreshManagedState(t *testing.T) {
+	t.Setenv("MINIMAX_DATA_DIR", "/wrong")
 	req := testRequest(t)
-	req.AgentOptions["env"] = map[string]any{"MINIMAX_DATA_DIR": "/wrong", "FIXTURE": "yes"}
 	opts, err := prepareOptions(req)
 	if err != nil {
 		t.Fatal(err)
@@ -20,7 +20,13 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if !strings.HasPrefix(opts.Dir, os.Getenv("OAC_RUNTIME_HOME")+string(os.PathSeparator)) {
 		t.Fatalf("workdir escaped managed state: %s", opts.Dir)
 	}
-	if opts.Env[len(opts.Env)-1] != "MINIMAX_DATA_DIR="+opts.DataDir {
+	dataDir := ""
+	for _, entry := range opts.Env {
+		if value, ok := strings.CutPrefix(entry, "MINIMAX_DATA_DIR="); ok {
+			dataDir = value
+		}
+	}
+	if dataDir != opts.DataDir {
 		t.Fatal("state override did not win")
 	}
 	req.AgentOptions["system_prompt"] = ""
