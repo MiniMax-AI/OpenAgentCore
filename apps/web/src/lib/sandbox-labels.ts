@@ -42,7 +42,7 @@ export function sandboxWriteUncertain(error: unknown): boolean {
 
 /**
  * Core's own reason when it rejects a deployment configuration it cannot serve,
- * such as E2B with a loopback public_url; null for any other failure. Nothing
+ * such as a loopback public_url; null for any other failure. Nothing
  * was saved, so the administrator corrects the cause and saves again.
  */
 export function sandboxConfigurationRejection(error: unknown, locale: Locale = "en"): string | null {

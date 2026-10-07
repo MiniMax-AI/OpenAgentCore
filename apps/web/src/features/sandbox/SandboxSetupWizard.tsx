@@ -146,7 +146,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const [dockerConfirmed, setDockerConfirmed] = useState(current?.provider === "docker");
   const [confirmingDocker, setConfirmingDocker] = useState(false);
   const keepMicrosandbox = useRef<HTMLButtonElement>(null);
-  // Core's reason for rejecting the saved configuration, such as E2B with a loopback public_url.
+  // Core's reason for rejecting the saved configuration, such as a loopback public_url.
   const [rejection, setRejection] = useState<string | null>(null);
   const [fieldRejection, setFieldRejection] = useState<unknown>(null);
   const fieldError = (param: string) => coreFieldError(fieldRejection, param, tCommon);
