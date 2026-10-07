@@ -67,5 +67,5 @@ class ShardTests(unittest.TestCase):
 
     def test_full_core_gate_ignores_shard_override(self):
         root = Path(__file__).resolve().parents[1]
-        result = subprocess.check_output(["make", "-n", "check-core", "OAC_CORE_STORE_SHARD=2/3"], cwd=root, text=True)
+        result = subprocess.check_output(["make", "-n", "check-core", "OAC_CORE_INTEGRATION_SHARD=2/3"], cwd=root, text=True)
         self.assertRegex(result, r"go-test-shard.py \S+ 1/1 ")

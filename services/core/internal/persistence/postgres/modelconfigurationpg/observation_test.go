@@ -90,10 +90,11 @@ func TestObservationExcludesOtherSourcesAndHistoricalSessions(t *testing.T) {
 			}
 		}
 		projection.ModelProvider = v1.ExecutionProviderSelection{Source: source, Status: "available", Configuration: input.ModelProvider.SafeView()}
-		session, err := o.sessions.CreateSession(t.Context(), o.tenant, input)
+		created, err := o.sessions.CreateSession(t.Context(), o.tenant, input)
 		if err != nil {
 			t.Fatal(source, err)
 		}
+		session := created.Session
 		var revision pgtype.UUID
 		if err = o.pool.QueryRow(t.Context(), "SELECT deployment_provider_revision FROM session_execution_configuration WHERE session_id=$1", session.ID).Scan(&revision); err != nil || revision.Valid {
 			t.Fatal("non-deployment or historical revision persisted", source, err)

@@ -44,7 +44,7 @@ Core uses its own PostgreSQL database and account and shares no tables with an a
 
 ## Tests
 
-`make check-core` builds Core and runs the Go tests of `services/core` and `packages/agents-client`. Point `OAC_TEST_DATABASE_URL` at a dedicated database named `oac_*_tests` that holds no other tables; the tests apply only Core's migrations and use fresh tenants without truncating anything. Without it, database tests skip locally; CI provides its own PostgreSQL. Set `OAC_TEST_OFFICIAL_SDK_PYTHON` to the interpreter with the pinned SDK for the store's client fixtures. [Validate a change](../../docs/development.md#validate-a-change) lists the focused checks for other areas.
+`make check-core` builds Core and runs the Go tests of `services/core` and `packages/agents-client`. Point `OAC_TEST_DATABASE_URL` at a dedicated database named `oac_*_tests` that holds no other tables; the tests apply only Core's migrations and use fresh tenants without truncating anything. Without it, database tests skip locally; CI provides its own PostgreSQL. Set `OAC_TEST_OFFICIAL_SDK_PYTHON` to the interpreter with the pinned SDK for the official-client tests in `tests/integration`. [Validate a change](../../docs/development.md#validate-a-change) lists the focused checks for other areas.
 
 ### Official client verification
 

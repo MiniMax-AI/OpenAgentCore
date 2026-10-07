@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: aa5ee32e9ae72b923addad7b049d586a32ec18319e6454c52cc21a96e0f69614
+source_hash: b448a3dd208f7ddf5e15a202b794d9e774f034ff3a2ee099e386abc2ebf1b471
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -201,7 +201,7 @@ profile 是纯逻辑：它使用现有的公共类型和协议类型，声明受
 
 `engine.NewCatalog` 会在发布不可变快照之前验证每个条目，并对无效静态注册触发 `engine.ErrInvalidDeclaration` panic。Kind 必须非空且前后不得包含空白字符。放置方式必须显式列出至少一个受支持的放置方式；MCP 来源必须是非 nil 列表（空列表表示不认定任何来源合格）。未知或重复选项、没有对应放置方式的来源，以及没有 MCP 来源的 bearer 支持均会被拒绝。错误应标识已编写的字段，但不回显声明值。未来 profile 字段必须由完整性验证器分类，并由每个 profile 显式决定；不存在生产用默认填充构造函数。
 
-运行 `engine` 和 `execution` 测试以覆盖遗漏、策略、组合和错误优先级，并运行公共接入测试和存储测试以覆盖准入和 Runtime 调度。测试夹具使用 `engine/enginetest`，其穷尽式字面量在添加字段时也要求作出决定；它不是生产 profile。
+运行 `engine` 和 `execution` 测试以覆盖遗漏、策略、组合和错误优先级，并运行 `services/core/tests/integration` 中的公共接入测试以覆盖准入和 Runtime 调度。测试夹具使用 `engine/enginetest`，其穷尽式字面量在添加字段时也要求作出决定；它不是生产 profile。
 
 `execution.Policy` 向 HTTP 准入、Worker 设备选择和最终调度提供不可变服务资格认定。自定义组合将同一个 Policy 提供给 `api.Dependencies.Policy` 和 Core 调度器的 `Policy`。零值使用内置 profile；显式空目录不授权任何内容。不存在可变全局注册。
 
@@ -223,7 +223,7 @@ profile 是纯逻辑：它使用现有的公共类型和协议类型，声明受
 4. **回归。** 现有 Harness 必须继续正常工作。先运行定向测试，然后运行 `make check`；API 更改后运行 `make openapi`，查询更改后运行 `make sqlc-generate`。
 5. **审查。** 遵循 [blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
 
-| 操作 | `services/core/internal/store` 中的测试 | 选项文件变量；测试采用 Harness 变量时也列出该变量 |
+| 操作 | `services/core/tests/integration` 中的测试 | 选项文件变量；测试采用 Harness 变量时也列出该变量 |
 | --- | --- | --- |
 | 模型 Provider 协议 | `TestNativeModelProtocolPublicExecution` | [Model execution](model-execution.md#acceptance) |
 | MiniMax Code 文本 | `TestNativeMCodePublicExecution` | `OAC_TEST_MCODE_REAL_OPTIONS` |

@@ -21,40 +21,36 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // The execution lease is database-scoped, so these manager tests own a database.
-// They receive the pooled Store, the Owner of its execution lease, which the
-// test closes when it ends, and the pooled deployment service and reader the
-// Worker receives beside it.
-func resetManagerStore(t *testing.T) (*store.Store, Owner, *deployment.Service, deployment.Reader) {
+// They receive the Owner of its execution lease, which the test closes when it
+// ends, and the pooled deployment service and reader the Worker receives
+// beside it.
+func resetManager(t *testing.T) (Owner, *deployment.Service, deployment.Reader) {
 	t.Helper()
-	return resetManagerStoreConfig(t, nil)
+	return resetManagerConfig(t, nil)
 }
 
-func resetManagerStoreConfig(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *deployment.Service, deployment.Reader) {
+func resetManagerConfig(t *testing.T, configure func(*pgxpool.Config)) (Owner, *deployment.Service, deployment.Reader) {
 	t.Helper()
-	s, owner, deployments, reader, _ := resetManagerStoreDB(t, configure)
-	return s, owner, deployments, reader
+	owner, deployments, reader, _ := resetManagerDB(t, configure)
+	return owner, deployments, reader
 }
 
-// resetManagerStoreDB also returns the test database, for tests that build
+// resetManagerDB also returns the test database, for tests that build
 // adapters on it.
-func resetManagerStoreDB(t *testing.T, configure func(*pgxpool.Config)) (*store.Store, Owner, *deployment.Service, deployment.Reader, *pgxpool.Pool) {
+func resetManagerDB(t *testing.T, configure func(*pgxpool.Config)) (Owner, *deployment.Service, deployment.Reader, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.OpenIsolated(t, configure)
-	cipher := testCredentialCipher(t)
-	s := store.NewWithCredentialCipher(pool, cipher)
-	s.SetPlacement(fixtureRules(t))
-	owner, deployments, reader := testOwner(t, pool, cipher, s)
-	return s, owner, deployments, reader, pool
+	owner, deployments, reader := testOwner(t, pool, testCredentialCipher(t))
+	return owner, deployments, reader, pool
 }
 
-// testCredentialCipher is the credential key of the Store resetManagerStoreDB
-// builds, for adapters built beside it.
+// testCredentialCipher is the credential key of the adapters these tests
+// build on one database.
 func testCredentialCipher(t *testing.T) *credentialcrypto.Cipher {
 	t.Helper()
 	cipher, err := credentialcrypto.New(bytes.Repeat([]byte{8}, 32))
@@ -64,11 +60,10 @@ func testCredentialCipher(t *testing.T) *credentialcrypto.Cipher {
 	return cipher
 }
 
-// testOwner acquires the execution lease on pool and builds s's execution
-// writer and the deployment and Session execution operations on it, and the pooled
-// deployment service and reader, as cmd/server does. The lease closes when the
-// test ends.
-func testOwner(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher, s *store.Store) (Owner, *deployment.Service, deployment.Reader) {
+// testOwner acquires the execution lease on pool and builds the deployment and
+// Session execution operations on it, and the pooled deployment service and
+// reader, as cmd/server does. The lease closes when the test ends.
+func testOwner(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher) (Owner, *deployment.Service, deployment.Reader) {
 	t.Helper()
 	lease, err := pgunit.AcquireLease(t.Context(), pool)
 	if err != nil {
@@ -76,7 +71,7 @@ func testOwner(t *testing.T, pool *pgxpool.Pool, cipher *credentialcrypto.Cipher
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
 	deployments, reader, operations := testDeployment(t, pool, cipher, lease)
-	return Owner{Lease: lease, Store: store.NewExecution(s, lease), Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader
+	return Owner{Lease: lease, Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader
 }
 
 // sessionExecution builds the Session execution operations on lease, as
@@ -91,7 +86,7 @@ func sessionExecution(t *testing.T, lease *pgunit.Lease) *sessions.ExecutionOper
 }
 
 func TestSandboxResetPageTimeoutRecoversCommittedOwner(t *testing.T) {
-	_, owner, deployments, reader := resetManagerStore(t)
+	owner, deployments, reader := resetManager(t)
 	id := initializeE2BDeployment(t, owner)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
@@ -196,7 +191,7 @@ func initializeE2BDeployment(t *testing.T, owner Owner) string {
 }
 
 func TestSandboxResetPublishesCommittedGenerationWithoutReading(t *testing.T) {
-	_, owner, pooled, _, pool := resetManagerStoreDB(t, nil)
+	owner, pooled, _, pool := resetManagerDB(t, nil)
 	id := initializeE2BDeployment(t, owner)
 	// The manager reads the deployment through a reader that fails every read
 	// of the committed reset, so publication cannot depend on one.
@@ -283,7 +278,7 @@ func TestCommittedResetViewStopsOwnerWithoutLease(t *testing.T) {
 }
 
 func TestSandboxResetChangesReturnViewReadAfterCommit(t *testing.T) {
-	_, owner, deployments, reader := resetManagerStore(t)
+	owner, deployments, reader := resetManager(t)
 	id := initializeE2BDeployment(t, owner)
 	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
 	if err != nil {

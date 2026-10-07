@@ -44,9 +44,9 @@ func (s *recordingStore) FindSessionCreation(context.Context, string, string, js
 	return sessions.Creation{}, sessions.ErrNotFound
 }
 
-func (s *recordingStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
+func (s *recordingStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	s.tenant, s.input = tenant, input
-	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, nil
+	return sessions.Creation{Session: sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration, CreatedAt: time.Unix(1700000000, 0)}, Created: true}, nil
 }
 
 // record answers Session creation, reads and listing from s.

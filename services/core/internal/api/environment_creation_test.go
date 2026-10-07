@@ -27,7 +27,7 @@ func (f *environmentCreationFixture) FindSessionCreation(context.Context, string
 	return sessions.Creation{}, sessions.ErrNotFound
 }
 
-func (f *environmentCreationFixture) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
+func (f *environmentCreationFixture) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.input = input
@@ -36,17 +36,12 @@ func (f *environmentCreationFixture) CreateSession(_ context.Context, tenant str
 		Environment json.RawMessage `json:"environment"`
 	}
 	if err := json.Unmarshal(input.Configuration, &snapshot); err != nil {
-		return sessions.Session{}, err
+		return sessions.Creation{}, err
 	}
 	f.session.Environment = &sessions.Environment{
 		ID: uuid.NewString(), SessionID: f.session.ID, TenantID: tenant, Status: "pending", Configuration: snapshot.Environment,
 	}
-	return f.session, nil
-}
-
-func (f *environmentCreationFixture) CreateSessionStream(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
-	session, err := f.CreateSession(ctx, tenant, input)
-	return sessions.Creation{Session: session, Created: true}, err
+	return sessions.Creation{Session: f.session, Created: true}, nil
 }
 
 // environmentCreationHandler serves Session creation and reads from a fresh
@@ -63,7 +58,7 @@ func environmentCreationHandler(t *testing.T, engine string, configure ...func(*
 		TokenSHA256: runtimedevice.HashCredential("key"), TenantID: uuid.NewString(),
 	}).ResolveAPIKey
 	fixture.serve(fakes)
-	fakes.sessionCreation.findSessionCreation, fakes.sessionCreation.createSession, fakes.sessionCreation.createSessionStream = fixture.FindSessionCreation, fixture.CreateSession, fixture.CreateSessionStream
+	fakes.sessionCreation.findSessionCreation, fakes.sessionCreation.createSession = fixture.FindSessionCreation, fixture.CreateSession
 	fakes.modelProviders.resolve = fixtureDeploymentProvider
 	for _, c := range configure {
 		c(&deps, fakes)

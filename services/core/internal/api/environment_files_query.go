@@ -36,7 +36,7 @@ func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environmen
 	// Malformed query encoding remains a local rejection; no official sample exists.
 	q, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
+		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return options, false
 	}
 	for _, key := range environmentFileQueryKeys {

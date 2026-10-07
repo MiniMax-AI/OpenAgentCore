@@ -10,7 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 )
 
 // runtimeManager owns node membership, not provider operations. Each registered
@@ -18,7 +17,6 @@ import (
 var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", ErrExecutionUnavailable)
 
 type runtimeManager struct {
-	store               *store.Store
 	sessions            sessions.Reader
 	sessionExecution    *sessions.ExecutionOperations
 	deployment          *deployment.ExecutionOperations
@@ -89,7 +87,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 	if n == nil {
 		ctx, stop := context.WithCancel(m.ctx)
 		n = &runtimeNode{lifecycle: &runtimeLifecycle{
-			store: m.store, sessions: m.sessions, sessionExecution: m.sessionExecution,
+			sessions: m.sessions, sessionExecution: m.sessionExecution,
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
@@ -188,7 +186,7 @@ func (m *runtimeManager) applyInventory(previous map[string]*runtimeNode, ids []
 	}
 	m.mu.Unlock()
 	// Inventory includes offline nodes. Only explicit removal retires a lane;
-	// the Store requires all retained resources to be cleaned before removal.
+	// deployment removes only a node that retains no resources.
 	if err := m.cancelLifecycles(retired); err != nil {
 		// No cancellation was authorized. Keep each retiring identity and gate;
 		// acquiring its gate later cannot substitute for successful cancellation.

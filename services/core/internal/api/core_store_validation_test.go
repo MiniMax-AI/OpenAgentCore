@@ -40,7 +40,7 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 		publicMessage, publicCode string
 		write                     func(http.ResponseWriter, *http.Request, error)
 	}{
-		{&sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}, "invalid_sandbox_configuration", "resources", nil, "E2B template build resources are outside the supported sandbox limits; select another build", "invalid_sandbox_configuration", nil},
+		{&sandbox.ValidationError{Param: "resources", Message: "E2B template build resources are outside the supported sandbox limits; select another build"}, "invalid_sandbox_configuration", "resources", nil, "E2B template build resources are outside the supported sandbox limits; select another build", "invalid_sandbox_configuration", writeOperationError},
 		{&projects.NameError{MaxLength: projects.ProjectNameMaxLength}, "invalid_name", "name", map[string]any{"max_length": float64(128)}, "Invalid resource identifier or request limits.", "invalid_request", writeProjectsError},
 		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
 		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
@@ -50,12 +50,8 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 		if tc.err == nil {
 			t.Fatal("missing validator error")
 		}
-		write := tc.write
-		if write == nil {
-			write = func(w http.ResponseWriter, r *http.Request, err error) { writeStoreError(w, r, err) }
-		}
 		for _, core := range []bool{false, true} {
-			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { write(w, r, fmt.Errorf("wrapped: %w", tc.err)) }))
+			handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { tc.write(w, r, fmt.Errorf("wrapped: %w", tc.err)) }))
 			if core {
 				handler = coreErrorResponses(handler)
 			}

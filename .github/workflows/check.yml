@@ -52,7 +52,7 @@ jobs:
       - name: Verify names, documentation and CI selection invariants
         run: make check-names check-docs check-ci
 
-  # Parts run in parallel; the serial store integration package is split into deterministic shards.
+  # Parts run in parallel; the serial integration package is split into deterministic shards.
   backend:
     needs: plan
     if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'backend')
@@ -62,11 +62,11 @@ jobs:
         include:
           - part: runtime
           - part: core
-          - part: store
+          - part: integration
             shard: 1/3
-          - part: store
+          - part: integration
             shard: 2/3
-          - part: store
+          - part: integration
             shard: 3/3
     name: backend (${{ matrix.part }}${{ matrix.shard && format(' {0}', matrix.shard) || '' }})
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
@@ -138,9 +138,9 @@ jobs:
       - name: Build standalone Core and test services and clients
         if: matrix.part == 'core'
         run: make build-core check-core-packages
-      - name: Test Core persistence shard ${{ matrix.shard }}
-        if: matrix.part == 'store'
-        run: make check-core-store OAC_CORE_STORE_SHARD=${{ matrix.shard }}
+      - name: Test Core integration shard ${{ matrix.shard }}
+        if: matrix.part == 'integration'
+        run: make check-core-integration OAC_CORE_INTEGRATION_SHARD=${{ matrix.shard }}
 
   distribution:
     needs: plan

@@ -52,7 +52,7 @@ func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 			log.Ctx(r.Context()).Warn("Runtime history query unavailable")
 			writeError(w, http.StatusServiceUnavailable, "runtime_history_unavailable", "Durable Runtime history is temporarily unavailable.")
 		default:
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 		}
 		return
 	}

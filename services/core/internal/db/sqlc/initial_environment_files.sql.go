@@ -79,34 +79,9 @@ func (q *Queries) GetSessionInitializationReady(ctx context.Context, arg GetSess
 	return ready, err
 }
 
-const lockInitialSourceFile = `-- name: LockInitialSourceFile :one
-SELECT id, tenant_id, filename, purpose, body_oid, size_bytes, sha256, created_at FROM source_files WHERE tenant_id = $1 AND id = $2 FOR SHARE
-`
-
-type LockInitialSourceFileParams struct {
-	TenantID pgtype.UUID `json:"tenant_id"`
-	ID       pgtype.UUID `json:"id"`
-}
-
-func (q *Queries) LockInitialSourceFile(ctx context.Context, arg LockInitialSourceFileParams) (SourceFile, error) {
-	row := q.db.QueryRow(ctx, lockInitialSourceFile, arg.TenantID, arg.ID)
-	var i SourceFile
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Filename,
-		&i.Purpose,
-		&i.BodyOid,
-		&i.SizeBytes,
-		&i.Sha256,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const setSessionInitialFileMetadata = `-- name: SetSessionInitialFileMetadata :one
+const setSessionInitialFileMetadata = `-- name: SetSessionInitialFileMetadata :exec
 UPDATE sessions SET configuration = jsonb_set(configuration, '{environment,files}', $2::jsonb)
-WHERE id = $1 RETURNING id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id
+WHERE id = $1
 `
 
 type SetSessionInitialFileMetadataParams struct {
@@ -114,23 +89,7 @@ type SetSessionInitialFileMetadataParams struct {
 	Column2 []byte      `json:"column_2"`
 }
 
-func (q *Queries) SetSessionInitialFileMetadata(ctx context.Context, arg SetSessionInitialFileMetadataParams) (Session, error) {
-	row := q.db.QueryRow(ctx, setSessionInitialFileMetadata, arg.ID, arg.Column2)
-	var i Session
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Engine,
-		&i.Metadata,
-		&i.IdempotencyKey,
-		&i.RequestHash,
-		&i.CreatedAt,
-		&i.Configuration,
-		&i.EventSequence,
-		&i.CreationRequestHash,
-		&i.DeletedAt,
-		&i.CreatorKind,
-		&i.CreatorID,
-	)
-	return i, err
+func (q *Queries) SetSessionInitialFileMetadata(ctx context.Context, arg SetSessionInitialFileMetadataParams) error {
+	_, err := q.db.Exec(ctx, setSessionInitialFileMetadata, arg.ID, arg.Column2)
+	return err
 }

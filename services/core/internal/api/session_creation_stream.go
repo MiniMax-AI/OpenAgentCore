@@ -2,35 +2,12 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
-
-func (h *Handler) createSessionStream(w http.ResponseWriter, r *http.Request, input sessions.CreateSession) {
-	var config configuration
-	if err := json.Unmarshal(input.Configuration, &config); err != nil {
-		writeStoreError(w, r, sessions.ErrInvalidInput)
-		return
-	}
-	create := h.SessionCreation.CreateSessionStream
-	if len(input.InitialInputs) > 0 || config.Environment.Type == "openai_hosted" {
-		if h.Execution == nil {
-			writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution input is not enabled on this service.")
-			return
-		}
-		create = h.Execution.SessionAdmission.CreateSessionStream
-	}
-	result, err := create(r.Context(), tenantID(r), input)
-	if err != nil {
-		writeStoreError(w, r, err)
-		return
-	}
-	h.respondSessionCreationStream(w, r, result)
-}
 
 // respondSessionCreationStream renders result.Session, the committed Session
 // projection read after result.Cursor, which is also the JSON 201 body. A fresh
@@ -47,12 +24,12 @@ func (h *Handler) respondSessionCreationStream(w http.ResponseWriter, r *http.Re
 	}
 	response, err := sessionResponse(result.Session, h.executorURL())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	created := v1.SessionEvent{Type: "agent.session.created", EventID: uuid.NewString(), Session: &response}
 	if err := h.addSessionInstallation(w, r, &response); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if session := result.Session; sessionSettled(session, response) && session.LastTurn == nil && session.EnvironmentInputActivity == nil {

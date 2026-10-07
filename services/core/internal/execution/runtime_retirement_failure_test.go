@@ -31,7 +31,7 @@ func TestFailedInventoryRetirementClosesAdmissionAndRetainsGate(t *testing.T) {
 			defer unblockRead()
 			owner, _, _, pool := delayedReadWriter(t, &armed, reading, releaseRead)
 			m := testRuntimeManager(t)
-			m.store, m.lease = owner.Store, owner.Lease
+			m.lease = owner.Lease
 			m.loadDeployment = func(context.Context) (*RuntimeProvider, error) { return nil, nil }
 			m.mutationGate = make(chan struct{}, 1)
 			// This fixture models an already loaded node deployment; its provider is

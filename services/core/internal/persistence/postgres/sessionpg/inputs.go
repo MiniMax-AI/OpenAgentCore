@@ -144,9 +144,9 @@ func (t *SessionTx) reservationFromRow(ctx context.Context, row sqlc.Environment
 	return result, nil
 }
 
-func (t *SessionTx) CreateInputReservation(ctx context.Context, key string, batch json.RawMessage) (sessions.EnvironmentInputReservation, error) {
+func (t *SessionTx) CreateInputReservation(ctx context.Context, key string, batch json.RawMessage, initial bool) (sessions.EnvironmentInputReservation, error) {
 	row, err := t.q.CreateEnvironmentInputReservation(ctx, sqlc.CreateEnvironmentInputReservationParams{
-		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: t.session, IdempotencyKey: key, Batch: batch,
+		ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: t.session, IdempotencyKey: key, Batch: batch, IsInitial: initial,
 	})
 	if err != nil {
 		return sessions.EnvironmentInputReservation{}, storable(err)

@@ -65,7 +65,7 @@
     "reason": "These exact authenticated encryption domain/AAD strings must remain stable to decrypt existing stored credentials and assets."
   },
   {
-    "path": "services/core/internal/store/session_creation_identity.go",
+    "path": "services/core/internal/persistence/postgres/sessionpg/creation.go",
     "regex": "parsar\\.agents-api\\.model-provider-api-key\\.v1",
     "reason": "This persisted model-provider key fingerprint purpose remains stable across upgrade and request replay."
   },
@@ -120,27 +120,27 @@
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/dispatch_test.go",
+    "path": "services/core/tests/integration/dispatch_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/environment_directory_test.go",
+    "path": "services/core/tests/integration/environment_directory_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/environment_worker_helpers_test.go",
+    "path": "services/core/tests/integration/environment_worker_helpers_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/environment_worker_test.go",
+    "path": "services/core/tests/integration/environment_worker_test.go",
     "regex": "\"agents-api-(?:session)?\"",
     "reason": "AgentStateKey is a persisted daemon/native-session resume identity carried on the existing machine wire contract; changing it would select another session."
   },
   {
-    "path": "services/core/internal/store/oac_runtime_names_migration_test.go",
+    "path": "services/core/tests/integration/oac_runtime_names_migration_test.go",
     "regex": "parsar-core-runtime@sha256:|parsar_worker /home/runtime/\\.parsar",
     "reason": "Migration input and historical Session content assertions prove only the Runtime reference changes, never stored conversation data."
   },
