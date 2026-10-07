@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: fc26ed25f073ae837be8992d4f7f3ad2719da93251745e9cc0004889a978d05e
+source_hash: 8eeef9a9742c5fd8a0bf27a5a31870a77dec59a436518dbe9d34770527c021a2
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置。共有两类：
@@ -135,17 +135,17 @@ Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 
-Core 只读取其环境。Compose 把 `.env` 插值进服务环境。如果你自行运行 Core，请设置这些变量；见[服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md)。
+Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密文件挂载到下表中的容器路径。直接运行 Core 时，将文件变量设为 Core 进程可读取的绝对路径；见[服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md)。
 
 | 变量 | 设置来源 |
 | --- | --- |
 | `OAC_PUBLIC_URL` | `public_url`，或 Core 的回环源地址。Core 从中派生守护进程 WebSocket URL、自托管 `remote_url`、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生。未设置时，Core 不运行 Runtime 网关，也不执行任何 Session |
 | `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091` |
 | `OAC_DATABASE_URL` | 该安装不含密码的 PostgreSQL URL，并将 `core.database_pool` 作为 `pool_*` 查询参数附加到其中 |
-| `OAC_DATABASE_PASSWORD_FILE` | `data/secrets/database/password`。此时 URL 不得包含密码 |
-| `OAC_CREDENTIAL_KEY_FILE` | `data/secrets/core/credential.key` |
-| `OAC_CORE_KEY_DIGESTS_FILE` | `data/secrets/core/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
-| `OAC_INSTALLATION_ID_FILE` | `data/secrets/core/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL` 和 `OAC_CORE_KEY_DIGESTS_FILE`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它，因此必须将两者一同保留 |
+| `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`。此时 URL 不得包含密码 |
+| `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
+| `OAC_CORE_KEY_DIGESTS_FILE` | `/run/oac/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
+| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL` 和 `OAC_CORE_KEY_DIGESTS_FILE`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它，因此必须将两者一同保留 |
 | `OAC_EXECUTION_CONCURRENCY`、`OAC_DEFAULT_HARNESS`、`OAC_HARNESSES`、`OAC_WRITE_AUDIT_RETENTION`、`OAC_OAUTH_TRUSTED_ORIGINS` | 对应的[进程设置](#settings)。`oac-core check-config` 会在不启动 Core 的情况下校验它们 |
 | `OAC_HISTORY_SETTINGS_FILE` | 可选的 Runtime 历史文件。敏感；安装报告只说明它是否已设置 |
 | `OAC_LOG_LEVEL`、`OAC_LOG_FORMAT`、`OAC_LOG_ADD_SOURCE` | `log.*`；Web 也读取这三个设置 |
@@ -159,7 +159,7 @@ Core 会记录所加载文件的路径，但绝不记录环境变量的值或文
 
 ## 附录：没有安装程序时的 Web 环境 {#appendix-web-environment-without-the-installer}
 
-Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时才自行设置。该安装的机密信息中，Web 只收到 `data/secrets/web/core.key`。
+Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时才自行设置。Compose 把数据卷的 `secrets/web/` 挂载到 `/run/oac`，并设置 `OAC_WEB_CORE_KEY_FILE=/run/oac/core.key`。
 
 | 变量 | 默认值 | 含义 |
 | --- | --- | --- |

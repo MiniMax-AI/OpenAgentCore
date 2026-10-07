@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: fd22b6b8ddbcb462183267aeb7192c50112681271e61fcb4b660f4ee00363e72
+source_hash: 0865682fa439d9a1d5b80562f4ec66763e4d1489b163be01d0ad8ad890f329c0
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -162,7 +162,7 @@ cd && rm -rf ~/.oac/core
 
 中断的安装可以[沿用已保存配置继续](install.md#install)。与本安装无关的非空目录会被拒绝。
 
-安装程序和修改状态的 `oac` 命令持有 `.oac.lock`。安装程序准备目录时还持有同级的 `<install-dir>.install.lock`。其他命令持有锁时，等待其结束后重试。不要删除锁文件来绕过忙碌安装。
+安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)。其他命令正在运行时，等待其结束后重试。
 
 ## 问题排查 {#troubleshooting}
 

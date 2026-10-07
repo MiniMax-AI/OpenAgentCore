@@ -159,7 +159,7 @@ To move to a new release, install it into a new, empty directory, with its own d
 
 An interrupted installation can [resume with its saved configuration](./install.md#install). An unrelated nonempty directory is refused.
 
-The installer and mutating `oac` commands hold `.oac.lock`. The installer also holds a sibling `<install-dir>.install.lock` while preparing the directory. If another command holds either lock, retry after it finishes. Never delete a lock file to get past a busy installation.
+Installation and mutating `oac` commands share the [installation lock](../configuration.md#installation-directory). If another command is running, wait for it to finish before retrying.
 
 ## Troubleshooting
 

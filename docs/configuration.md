@@ -131,17 +131,17 @@ The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `da
 
 ## Appendix: Core environment without the installer
 
-Core reads only its environment. Compose interpolates `.env` into the service environment. If you run Core yourself, set these variables; see the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md).
+Core reads its process environment. Compose interpolates `.env` into it and mounts secrets at the container paths below. When running Core directly, set the file variables to absolute paths readable by the Core process; see the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md).
 
 | Variable | Set from |
 | --- | --- |
 | `OAC_PUBLIC_URL` | The public origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
 | `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | PostgreSQL without a password |
-| `OAC_DATABASE_PASSWORD_FILE` | `data/secrets/database/password`. The URL must then carry no password |
-| `OAC_CREDENTIAL_KEY_FILE` | `data/secrets/core/credential.key` |
-| `OAC_CORE_KEY_DIGESTS_FILE` | `data/secrets/core/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
-| `OAC_INSTALLATION_ID_FILE` | `data/secrets/core/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL` and `OAC_CORE_KEY_DIGESTS_FILE`. Core refuses an ID other than the one its database recorded |
+| `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`. The URL must then carry no password |
+| `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
+| `OAC_CORE_KEY_DIGESTS_FILE` | `/run/oac/core-key-digests.json`: a JSON array with the SHA-256 of the Core key |
+| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`: the installation ID, a canonical UUID. It enables the sandbox deployment and node routes and requires `OAC_PUBLIC_URL` and `OAC_CORE_KEY_DIGESTS_FILE`. Core refuses an ID other than the one its database recorded |
 | `OAC_EXECUTION_CONCURRENCY`, `OAC_DEFAULT_HARNESS`, `OAC_HARNESSES`, `OAC_WRITE_AUDIT_RETENTION`, `OAC_OAUTH_TRUSTED_ORIGINS` | The matching [process settings](#settings). `oac-core check-config` validates them without starting Core |
 | `OAC_HISTORY_SETTINGS_FILE` | Optional Runtime history file. Sensitive; the installation report says only whether it is set |
 | `OAC_LOG_LEVEL`, `OAC_LOG_FORMAT`, `OAC_LOG_ADD_SOURCE` | Logging; Web reads the same three |
@@ -155,7 +155,7 @@ Invalid explicit OAuth trusted origins stop Core at startup. Entries must be HTT
 
 ## Appendix: Web environment without the installer
 
-Compose sets these for Web. Set them yourself only when you run the console without Compose. Of the installation's secrets, Web receives only `data/secrets/web/core.key`.
+Compose sets these for Web. Set them yourself only when you run the console without Compose. Compose mounts the data volume's `secrets/web/` at `/run/oac` and sets `OAC_WEB_CORE_KEY_FILE=/run/oac/core.key`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
