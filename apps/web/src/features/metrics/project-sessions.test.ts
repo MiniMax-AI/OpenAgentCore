@@ -9,7 +9,7 @@ describe("readSessions", () => {
   it("walks pages newest first until the list ends", async () => {
     const lister = sessionLister(many(250));
     const read = await readSessions(lister, { maxSessions: 1_000 });
-    expect(read).toMatchObject({ complete: true, unrecognized: 0 });
+    expect(read.complete).toBe(true);
     expect(read.sessions).toHaveLength(250);
     expect(lister.calls).toEqual(["first", "s99", "s199"]);
   });
@@ -22,21 +22,13 @@ describe("readSessions", () => {
     expect(capped.complete).toBe(false);
     expect(capped.sessions).toHaveLength(150);
   });
-
-  it("counts unrecognized entries without keeping them", async () => {
-    const read = await readSessions({
-      listSessionsTolerant: async () => ({ object: "list", data: [session("a")], unrecognized: [{ index: 1, id: null }], has_more: false, first_id: "a", last_id: "a" }),
-    }, { maxSessions: 100 });
-    expect(read).toMatchObject({ unrecognized: 1, complete: true });
-    expect(read.sessions).toHaveLength(1);
-  });
 });
 
 describe("readProjectsSessions", () => {
   it("reads projects in parallel and reports a failing project by name", async () => {
     const { reads, failures } = await readProjectsSessions(
       [project("ok"), project("down")],
-      (target) => (target.id === "ok" ? sessionLister(many(3)) : { listSessionsTolerant: async () => { throw new Error("HTTP 503"); } }),
+      (target) => (target.id === "ok" ? sessionLister(many(3)) : { listSessions: async () => { throw new Error("HTTP 503"); } }),
       () => ({ maxSessions: 100 }),
     );
     expect(reads.map((read) => [read.project.id, read.sessions.length])).toEqual([["ok", 3]]);

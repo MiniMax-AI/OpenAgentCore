@@ -181,12 +181,12 @@ Both routes accept only the parameters listed; an unknown, repeated or empty par
 
 ```json
 {"data":[
-  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null},"source":"api_key","admin_audit_id":null},
-  {"resource_id":"id2","api_key":null,"source":null,"admin_audit_id":null}
+  {"resource_id":"id1","api_key":{"id":"key-uuid","name":"SDK","prefix":"pc_example","kind":"issued","revoked_at":null}},
+  {"resource_id":"id2","api_key":null}
 ]}
 ```
 
-`api_key` and `source` are null when Core has no creation record, including for resources in another Project. `source: "admin_copy"` with an `admin_audit_id` marks a resource recorded by a `copy` entry in the audit log; no current route writes one.
+`api_key` is null when Core has no creation record, including for resources in another Project.
 
 `GET /projects/{project_id}/write-operations` lists writes newest first by `(created_at, id)`. Filters: `key_id`, `resource_type`, `resource_id`, inclusive `created_after` and exclusive `created_before` (RFC 3339). `limit` is 1–100, default 50. Pass the previous `next_cursor` as `after` with unchanged filters. The response is `{data, has_more, next_cursor}`; each entry has `id`, `created_at`, `api_key`, `action`, `resource_type`, `resource_id`, `parent_id` (empty when absent), `request_id` and `trace_id`.
 
@@ -217,7 +217,7 @@ The [Runtime telemetry API](./runtime-observability-api.md) owns current observa
 
 `GET /audit-log` lists administrator writes newest first. Filters: `project_id`, `resource_type`, `resource_id`, `action`, inclusive `created_after` and exclusive `created_before` (RFC 3339). `limit` is 1–100, default 50, with the opaque `after` cursor. The response is `{data, has_more, next_cursor}`.
 
-Each entry has `id`, `created_at`, `admin_credential_id` (the first 8 hex characters of the Core key digest), `actor_label`, `action`, `project_id`, `resource_type`, `resource_id`, `result_ids`, `request_id` and `trace_id`. `result_ids` is an empty array except on `copy` entries. Deployment-wide entries have `project_id: null`, and a `project_id` filter excludes them.
+Each entry has `id`, `created_at`, `admin_credential_id` (the first 8 hex characters of the Core key digest), `actor_label`, `action`, `project_id`, `resource_type`, `resource_id`, `request_id` and `trace_id`. Deployment-wide entries have `project_id: null`, and a `project_id` filter excludes them.
 
 | `resource_type` | `action` | `resource_id` |
 | --- | --- | --- |

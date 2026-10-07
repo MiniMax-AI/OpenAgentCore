@@ -69,7 +69,7 @@ In an archived project the section hides **Issue credential** and **Rotate** beh
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| Resource owners | `GET /core/v1/projects/{project_id}/resource-owners` | The Creator column of every resource list and the creator fact of detail pages, in batches of up to 100 IDs: the creating key's name, **Admin copy** for an owner with source `admin_copy`, or **Unknown** when Core has no record |
+| Resource owners | `GET /core/v1/projects/{project_id}/resource-owners` | The Creator column of every resource list and the creator fact of detail pages, in batches of up to 100 IDs: the creating key's name, or **Unknown** when Core has no record |
 | Write operations | `GET /core/v1/projects/{project_id}/write-operations` | A project's write history, newest first, filtered by key and resource type, 50 per page |
 | Summary | `GET /core/v1/summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
 | Installation | `GET /core/v1/installation` | System's Installation facts (`public_url`, `api_base_url`, `installation_id`, `source_commit`) and read-only Startup settings (`configuration.settings`; a sensitive setting shows only whether it is `configured`); `api_base_url` in the call samples; `public_url` as the download origin and `--source-url` of the node install and uninstall commands (and the install command's `--core-url`). A sensitive setting with a value, or an unknown member, fails the read |

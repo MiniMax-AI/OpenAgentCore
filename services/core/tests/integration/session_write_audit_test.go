@@ -15,9 +15,8 @@ import (
 
 func sessionAuditContext(t *testing.T, tenant, key string) context.Context {
 	t.Helper()
-	digest := strings.Repeat(key, 64)
-	return writeaudit.WithSource(t.Context(), writeaudit.Source{TenantID: tenant, KeyID: "static:" + digest,
-		Name: "safe key", Prefix: digest[:8], Kind: "static", RequestID: uuid.NewString(), TraceID: "shared-trace"})
+	return writeaudit.WithSource(t.Context(), writeaudit.Source{TenantID: tenant, KeyID: strings.ReplaceAll("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "x", key),
+		Name: "safe key", Prefix: "pc_" + strings.Repeat(key, 8), Kind: "issued", RequestID: uuid.NewString(), TraceID: "shared-trace"})
 }
 
 func sessionAuditCount(t *testing.T, s *Store, tenant string, want int) {
@@ -66,7 +65,7 @@ func TestSessionWriteAuditCreationReplayNoopAndDeletion(t *testing.T) {
 	sessionAuditCount(t, s, tenant, 2)
 	for _, resource := range []string{created.ID, env.ID} {
 		var key string
-		if err := s.pool.QueryRow(t.Context(), `SELECT o.key_id FROM write_audit_owners a JOIN write_audit_operations o ON o.id=a.operation_id WHERE a.tenant_id=$1 AND a.resource_id=$2`, tenant, resource).Scan(&key); err != nil || key != "static:"+strings.Repeat("a", 64) {
+		if err := s.pool.QueryRow(t.Context(), `SELECT o.key_id FROM write_audit_owners a JOIN write_audit_operations o ON o.id=a.operation_id WHERE a.tenant_id=$1 AND a.resource_id=$2`, tenant, resource).Scan(&key); err != nil || key != "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" {
 			t.Fatal("retry replaced creator", key, err)
 		}
 	}

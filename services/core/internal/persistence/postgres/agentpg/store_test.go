@@ -511,8 +511,8 @@ func TestAgentModelExecutionConcurrentSnapshots(t *testing.T) {
 
 func auditContext(ctx context.Context, tenant, request, key string) context.Context {
 	return writeaudit.WithSource(ctx, writeaudit.Source{
-		KeyID: "static:" + strings.Repeat(key, 64), Name: "agent audit fixture", Prefix: strings.Repeat(key, 8),
-		Kind: "static", TenantID: tenant, RequestID: request, TraceID: "agent-audit-trace",
+		KeyID: strings.ReplaceAll("xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "x", key), Name: "agent audit fixture", Prefix: "pc_" + strings.Repeat(key, 8),
+		Kind: "issued", TenantID: tenant, RequestID: request, TraceID: "agent-audit-trace",
 	})
 }
 
@@ -688,7 +688,7 @@ func TestAgentWriteRejectsInvalidAuditSource(t *testing.T) {
 	pool := pgtest.Open(t)
 	_, service := open(t, pool, nil)
 	tenant := uuid.NewString()
-	ctx := writeaudit.WithSource(t.Context(), writeaudit.Source{KeyID: "static:" + strings.Repeat("a", 64), Prefix: "aaaaaaaa", Kind: "static", TenantID: tenant, RequestID: uuid.NewString()})
+	ctx := writeaudit.WithSource(t.Context(), writeaudit.Source{KeyID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", Prefix: "pc_aaaaaaaa", Kind: "issued", TenantID: tenant, RequestID: uuid.NewString()})
 	if _, err := service.Create(ctx, agents.CreateCommand{TenantID: tenant, Configuration: []byte(`{"model":"x"}`)}); !errors.Is(err, writeaudit.ErrInvalidSource) {
 		t.Fatalf("invalid source accepted: %v", err)
 	}

@@ -10,23 +10,48 @@ import (
 	"testing"
 )
 
+// activeRelease publishes an empty node payload release under root the way
+// `oac init` does and returns the release directory.
+func activeRelease(t *testing.T, root string, manifest map[string]any) string {
+	t.Helper()
+	revision := strings.Repeat("a", 40)
+	release := filepath.Join(root, "releases", revision)
+	if err := os.MkdirAll(release, 0700); err != nil {
+		t.Fatal(err)
+	}
+	manifest["source_commit"] = revision
+	raw, _ := json.Marshal(manifest)
+	if os.WriteFile(filepath.Join(release, "manifest.json"), raw, 0600) != nil ||
+		os.WriteFile(filepath.Join(root, "active.json"), []byte(`{"source_commit":"`+revision+`"}`), 0600) != nil {
+		t.Fatal("cannot publish the node payload")
+	}
+	return release
+}
+
+func TestConsoleRequiresPublishedNodePayload(t *testing.T) {
+	payload := t.TempDir()
+	if err := os.WriteFile(filepath.Join(payload, "node-install.pyz"), []byte("bootstrap"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	upstream, _ := url.Parse("http://127.0.0.1:1")
+	if _, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: t.TempDir(), coreKey: testCoreKey, nodePayloadDir: payload}); err == nil {
+		t.Fatal("console started from a node payload without active.json")
+	}
+}
+
 func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 	dist, payload := t.TempDir(), t.TempDir()
-	for _, item := range []struct{ root, name, body string }{{dist, "index.html", "console"}, {payload, "node-install.pyz", "bootstrap"}} {
+	release := activeRelease(t, payload, map[string]any{"artifacts": map[string]any{"native/bin/oac-node": map[string]string{"filename": "matched-node"}, "private/key": map[string]string{"filename": "private-key"}, "native/bin/oac-selfhost": map[string]string{"filename": "retired-launcher"}}})
+	for _, item := range []struct{ root, name, body string }{{dist, "index.html", "console"}, {release, "node-install.pyz", "bootstrap"}} {
 		if err := os.WriteFile(filepath.Join(item.root, item.name), []byte(item.body), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.Mkdir(filepath.Join(payload, "artifacts"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	manifest := map[string]any{"artifacts": map[string]any{"native/bin/oac-node": map[string]string{"filename": "matched-node"}, "private/key": map[string]string{"filename": "private-key"}, "native/bin/oac-selfhost": map[string]string{"filename": "retired-launcher"}}}
-	raw, _ := json.Marshal(manifest)
-	if err := os.WriteFile(filepath.Join(payload, "manifest.json"), raw, 0600); err != nil {
+	if err := os.Mkdir(filepath.Join(release, "artifacts"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"matched-node", "private-key", "undeclared", "retired-launcher"} {
-		if err := os.WriteFile(filepath.Join(payload, "artifacts", name), []byte("payload"), 0600); err != nil {
+		if err := os.WriteFile(filepath.Join(release, "artifacts", name), []byte("payload"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -65,16 +90,16 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(dist, "index.html"), "console")
-	write(filepath.Join(payload, "node-install.pyz"), "bootstrap")
 	artifacts := map[string]any{}
-	for logical := range map[string]bool{"native/bin/oac-node": true, "images/runtime.tar.gz": true, "native/microsandbox/msb": true, "runtime/seccomp.json": true} {
-		name := strings.ReplaceAll(logical, "/", "-")
-		artifacts[logical] = map[string]any{"filename": name, "size": len("runtime-bytes")}
-		write(filepath.Join(payload, "artifacts", name), "runtime-bytes")
+	for _, logical := range []string{"native/bin/oac-node", "images/runtime.tar.gz", "native/microsandbox/msb", "runtime/seccomp.json"} {
+		artifacts[logical] = map[string]any{"filename": strings.ReplaceAll(logical, "/", "-"), "size": len("runtime-bytes")}
 	}
-	raw, _ := json.Marshal(map[string]any{"artifacts": artifacts})
-	write(filepath.Join(payload, "manifest.json"), string(raw))
+	release := activeRelease(t, payload, map[string]any{"artifacts": artifacts})
+	write(filepath.Join(dist, "index.html"), "console")
+	write(filepath.Join(release, "node-install.pyz"), "bootstrap")
+	for logical := range artifacts {
+		write(filepath.Join(release, "artifacts", strings.ReplaceAll(logical, "/", "-")), "runtime-bytes")
+	}
 	upstream, _ := url.Parse("http://127.0.0.1:1")
 	h, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: dist, coreKey: testCoreKey, nodePayloadDir: payload})
 	if err != nil {
@@ -90,7 +115,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	if response, body := responseBody(t, server, request); response.StatusCode != 206 || body != "bytes" {
 		t.Fatal("artifact download cannot resume", response.StatusCode, body)
 	}
-	if err := os.RemoveAll(filepath.Join(payload, "artifacts")); err != nil {
+	if err := os.RemoveAll(filepath.Join(release, "artifacts")); err != nil {
 		t.Fatal(err)
 	}
 	if _, body := responseBody(t, server, consoleRequest(t, server, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":[]`) {

@@ -80,8 +80,7 @@ func RecordAdminMutation(ctx context.Context, q *sqlc.Queries, tenant, action, r
 	if err != nil {
 		return adminaudit.ErrInvalidSource
 	}
-	// result_ids is retained for historical copy mappings; current writes record none.
-	_, err = q.InsertAdminAudit(ctx, sqlc.InsertAdminAuditParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenantID, AdminCredentialID: source.CredentialID, ActorLabel: source.ActorLabel, Action: action, ProjectID: projectID, ResourceType: resourceType, ResourceID: resourceID, ResultIds: []byte(`[]`), RequestID: source.RequestID, TraceID: source.TraceID})
+	_, err = q.InsertAdminAudit(ctx, sqlc.InsertAdminAuditParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, TenantID: tenantID, AdminCredentialID: source.CredentialID, ActorLabel: source.ActorLabel, Action: action, ProjectID: projectID, ResourceType: resourceType, ResourceID: resourceID, RequestID: source.RequestID, TraceID: source.TraceID})
 	return err
 }
 
@@ -96,6 +95,6 @@ func RecordDeploymentMutation(ctx context.Context, q *sqlc.Queries, action, reso
 	if err := source.ValidateDeploymentMutation(action, resourceType, resourceID); err != nil {
 		return err
 	}
-	_, err := q.InsertAdminAudit(ctx, sqlc.InsertAdminAuditParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, AdminCredentialID: source.CredentialID, ActorLabel: source.ActorLabel, Action: action, ResourceType: resourceType, ResourceID: resourceID, ResultIds: []byte(`[]`), RequestID: source.RequestID, TraceID: source.TraceID})
+	_, err := q.InsertAdminAudit(ctx, sqlc.InsertAdminAuditParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, AdminCredentialID: source.CredentialID, ActorLabel: source.ActorLabel, Action: action, ResourceType: resourceType, ResourceID: resourceID, RequestID: source.RequestID, TraceID: source.TraceID})
 	return err
 }

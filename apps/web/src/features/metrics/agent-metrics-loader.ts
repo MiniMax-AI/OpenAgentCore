@@ -1,5 +1,6 @@
-import type { AgentSession, AgentTurn, ListPage, CoreProjectReader, PageOptions, SessionItem } from "@oac/agents-client";
+import type { AgentSession, AgentTurn, ListPage, PageOptions, SessionItem } from "@oac/agents-client";
 
+import type { ProjectClient } from "../../lib/projects";
 import type { MetricsCoverage, MetricsWindow, SessionActivity } from "./agent-metrics";
 import { readProjectsSessions, type InProject, type ProjectReadFailure, type SessionLister } from "./project-sessions";
 import { type Project, type ProjectSummary } from "../../lib/admin-view";
@@ -200,7 +201,7 @@ export async function loadAgentMetricsActivity(
 /** Most Sessions listed per project when looking for Sessions active in the range. */
 export const PROJECT_SESSION_LIST_CAP = 2_000;
 
-type ProjectReader = SessionLister & Pick<CoreProjectReader, "listTurns" | "listItems">;
+type ProjectReader = SessionLister & Pick<ProjectClient, "listTurns" | "listItems">;
 
 /** Routes each Session's Turn and Item reads to the admin scope of its project. */
 export function projectMetricsSource(sessions: readonly InProject<AgentSession>[], clientFor: (project: Project) => AgentMetricsSource): AgentMetricsSource {
@@ -230,8 +231,6 @@ export interface ProjectAgentMetricsLoad extends AgentMetricsLoad {
   /** Projects whose Session list was longer than the list cap. */
   truncatedLists: Project[];
   listFailures: ProjectReadFailure[];
-  /** Listed Sessions the client could not recognize; their Turns are not counted. */
-  unrecognizedSessions: number;
 }
 
 /**
@@ -258,6 +257,5 @@ export async function loadProjectAgentMetrics(
     coverage: load.coverage,
     truncatedLists: reads.filter((read) => !read.complete).map((read) => read.project),
     listFailures: failures,
-    unrecognizedSessions: reads.reduce((sum, read) => sum + read.unrecognized, 0),
   };
 }

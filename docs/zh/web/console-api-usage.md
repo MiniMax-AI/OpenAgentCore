@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 3b54852843f5afccd6ce47a532a9c82f6a4a0dbffdac9b96892c5026f5f78c20
+source_hash: 50edc63c79976e9aad9590604a0e361aae178144bc8a6009989b2da5d031408d
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -71,7 +71,7 @@ source_hash: 3b54852843f5afccd6ce47a532a9c82f6a4a0dbffdac9b96892c5026f5f78c20
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 资源所有者 | `GET /core/v1/projects/{project_id}/resource-owners` | 每个资源列表的 Creator 列和详情页的创建者信息，每批最多处理 100 个 ID：创建密钥的名称；来源为 `admin_copy` 的所有者显示 **Admin copy**；Core 无记录时显示 **Unknown** |
+| 资源所有者 | `GET /core/v1/projects/{project_id}/resource-owners` | 每个资源列表的 Creator 列和详情页的创建者信息，每批最多处理 100 个 ID：创建密钥的名称；Core 无记录时显示 **Unknown** |
 | 写入操作 | `GET /core/v1/projects/{project_id}/write-operations` | 项目的写入历史，按最新优先，可按密钥和资源类型筛选，每页 50 条 |
 | 汇总 | `GET /core/v1/summary` | Overview（按项目）、Agents 列表（`group_by=agent`）、项目页面（按项目并使用 `group_by=key`）、Agent 指标（跳过空闲项目，并统计从范围开始以来按创建密钥划分的使用量）、Projects 列表（最近活动） |
 | 安装 | `GET /core/v1/installation` | System 的 Installation 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 Startup 设置（`configuration.settings`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）。如果敏感设置包含值，或存在未知成员，读取会失败 |

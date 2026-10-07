@@ -11,7 +11,3 @@ ORDER BY created_at DESC,id DESC LIMIT sqlc.arg(page_limit);
 
 -- name: AdminAuditCursor :one
 SELECT created_at FROM admin_audit_log WHERE id=$1;
-
--- name: GetAdminResourceOwners :many
-SELECT resource_id,audit_id FROM admin_resource_owners
-WHERE tenant_id=$1 AND resource_type=$2 AND resource_id=ANY($3::text[]);
