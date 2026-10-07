@@ -262,6 +262,11 @@ func (r *Router) runPreparedRelease(state *sessionState, handoff *preparedHandof
 	}
 	if !owner.invalid {
 		r.scheduleExecutorIdleLocked(owner)
+	} else if owner.closeDone == nil {
+		// Shutdown invalidated this owner after the reuse decision above and
+		// left its close to this Run, which held it.
+		r.shutdownWG.Add(1)
+		go func() { defer r.shutdownWG.Done(); _ = r.closeExecutor(owner) }()
 	}
 	r.mu.Unlock()
 
