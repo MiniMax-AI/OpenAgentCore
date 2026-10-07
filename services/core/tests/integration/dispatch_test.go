@@ -435,7 +435,8 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 	} {
 		missing := tc.missing
 		t.Run(missing, func(t *testing.T) {
-			h := newDispatchHarness(t)
+			// Only an explicit non-medium verbosity needs text_verbosity.
+			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction.","text":{"verbosity":"high"}},"environment":{"type":"none"}}`), false)
 			caps := prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilityFromBool(missing != "web_search_control"), TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), SubagentControl: proto.CapabilityFromBool(missing != "subagent_control"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 			deadline := time.Now().Add(3 * time.Second)

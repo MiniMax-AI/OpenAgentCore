@@ -25,6 +25,12 @@ func prepareModelVerbosity(ctx context.Context, binary string, plan *SessionPlan
 }
 
 func verifyModelVerbosity(ctx context.Context, probe catalogProbe, plan *SessionPlan) error {
+	// Protocol medium is the default text amount: a model with verbosity support
+	// applies the override and Codex ignores it for any other, so no catalog
+	// decision depends on it.
+	if slices.Contains(plan.ExtraConfig, [2]string{"model_verbosity", `"medium"`}) {
+		return nil
+	}
 	args := []string{}
 	for _, kv := range plan.ExtraConfig {
 		args = append(args, "-c", kv[0]+"="+kv[1])

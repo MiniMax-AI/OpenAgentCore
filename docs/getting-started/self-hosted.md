@@ -14,7 +14,7 @@ The Session's model provider resolves as for any other Session, so the installat
 | --- | --- | --- | --- |
 | Linux amd64 | Supported | Supported | Supported |
 | macOS arm64 | Supported | Supported | Supported |
-| Windows amd64 | Not supported | Supported | Not supported |
+| Windows amd64 | Supported | Supported | Not supported |
 
 The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
