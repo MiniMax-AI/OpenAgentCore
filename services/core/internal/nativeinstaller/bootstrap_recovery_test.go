@@ -212,7 +212,10 @@ func TestWindowsBootstrapChecksArchiveToolBeforeDownload(t *testing.T) {
 	defer server.Close()
 	home := filepath.Join(t.TempDir(), "runtime")
 	command := bootstrapCommand(t, server.URL, home)
-	command.Env = append(command.Env, "SystemRoot="+t.TempDir())
+	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "''") + "'" }
+	// Keep the real SystemRoot while PowerShell itself loads.
+	command.Args = []string{command.Path, "-NoProfile", "-NonInteractive", "-Command",
+		"$env:SystemRoot = " + quote(t.TempDir()) + "; & './assets/bootstrap.ps1' -Base " + quote(server.URL) + " -Authorization 'fixture-grant'"}
 	output, err := command.CombinedOutput()
 	if err == nil || !bytes.Contains(output, []byte("tar.exe is required")) || requests.Load() != 0 {
 		t.Fatalf("%v: %s", err, output)

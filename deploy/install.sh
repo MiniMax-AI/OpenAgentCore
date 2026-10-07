@@ -40,7 +40,7 @@ if [[ "$(uname -s)" != Linux || "$(uname -m)" != x86_64 ]]; then
   exit 1
 fi
 fail() { printf '%s\n' "$*" >&2; exit 1; }
-for tool in docker curl sha256sum flock od sed awk grep; do
+for tool in docker curl sha256sum flock readlink od sed awk grep; do
   command -v "$tool" >/dev/null || fail "Required command missing: $tool. Install it and rerun this command. Docker needs Compose 2.26 or newer."
 done
 compose_version="$(docker compose version --short 2>/dev/null | sed 's/^v//' || true)"
@@ -72,11 +72,11 @@ flock -n 9 || fail "Another installation is using this directory. Wait for it to
 stage="$install_dir.staging"
 [[ ! -L "$stage" && ( ! -e "$stage" || ( -d "$stage" && -O "$stage" ) ) ]] || fail "Invalid installation staging directory: $stage"
 if [[ -d "$stage" && -n "$(ls -A "$stage")" ]]; then
-  [[ -f "$stage/.oac-installer" && ! -L "$stage/.oac-installer" && "$(cat "$stage/.oac-installer")" == "OpenAgentCore staging for $install_dir" ]] || fail "Unrecognized staging directory; preserve it and choose another --install-dir: $stage"
+  [[ -L "$stage/.oac-installer" && "$(readlink "$stage/.oac-installer")" == "$install_dir" ]] || fail "Unrecognized staging directory; preserve it and choose another --install-dir: $stage"
 fi
 rm -rf "$stage"
 mkdir "$stage"
-printf 'OpenAgentCore staging for %s\n' "$install_dir" >"$stage/.oac-installer"
+ln -s "$install_dir" "$stage/.oac-installer"
 log="$stage/install.log"
 : >"$log"
 cleanup() {
@@ -174,23 +174,32 @@ log="$install_dir/install.log"
 : >"$log"
 step "Verifying saved configuration" sha256sum --check --quiet compose-sha256sums.txt
 step "Checking Compose configuration" docker compose config --quiet
-if [[ "$resume" == 0 ]]; then
-  step "Pulling images" docker compose pull
-else
+if [[ "$resume" == 1 ]]; then
   printf 'Using saved settings from .env; installation flags only apply to new directories. Existing data is preserved.\n'
-  public_url="$(docker compose config --environment | sed -n 's/^OAC_PUBLIC_URL=//p')"
-  local_only=0
-  [[ "$public_url" != http://localhost:* && "$public_url" != http://127.0.0.1:* ]] || local_only=1
 fi
+public_url="$(docker compose config --environment | sed -n 's/^OAC_PUBLIC_URL=//p')"
+local_only=0
+[[ "$public_url" != http://localhost:* && "$public_url" != http://127.0.0.1:* ]] || local_only=1
+pull_images() {
+  local images image
+  images="$(docker compose config --images)" || return
+  while IFS= read -r image; do
+    [[ -n "$image" ]] || continue
+    if [[ "$resume" == 0 ]] || ! docker image inspect "$image" >/dev/null 2>&1; then
+      docker pull --platform linux/amd64 "$image" || return
+    fi
+  done <<<"$images"
+}
+step "Checking and downloading images" pull_images
 copy_cli() (
   [[ ! -L ./oac.download ]] || fail "Temporary oac command must not be a symbolic link."
   trap 'rm -f ./oac.download' EXIT
-  docker compose create core &&
+  docker compose create --pull never --no-recreate core &&
     docker compose cp core:/usr/local/bin/oac ./oac.download &&
     mv ./oac.download ./oac
 )
 if [[ ! -x ./oac ]]; then step "Installing the oac command" copy_cli; fi
-step "Starting services" docker compose up -d --wait --wait-timeout 180
+step "Starting services" docker compose up -d --wait --wait-timeout 180 --pull never --no-recreate
 if ! key="$(./oac core-key --show)"; then
   fail "Services started, but the Core key could not be read. Inspect Web's logs and retry; data is preserved."
 fi

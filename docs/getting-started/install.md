@@ -50,7 +50,7 @@ Downloads and configuration checks happen before the installation directory is p
 curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
 ```
 
-Use your chosen directory if it differs. A rerun uses the saved Compose file and settings; installation flags only apply to new directories. To change settings, edit `.env` and run `oac apply`. A new release needs a new directory; see [version policy](./operations.md#installation-version-policy).
+Use your chosen directory if it differs. A rerun uses the saved Compose file and settings; installation flags only apply to new directories. Existing images and containers are reused; missing images are downloaded. To change settings, edit `.env` and run `oac apply`. A new release needs a new directory; see [version policy](./operations.md#installation-version-policy).
 
 For insufficient space or quota, free space on the filesystem named by the error. Image-loading failures can also require space in Docker's storage, which may be on a different filesystem.
 
