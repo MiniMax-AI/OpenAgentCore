@@ -141,10 +141,16 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 		{"explicit empty inline parameters", `{"agent":{"x_agents_core":{"harness_config":{}}},"environment":{"type":"openai_hosted"}}`, "model-replacement", "deployment", "deployment", "deployment-canary"},
 		{"explicit empty Session parameters", `{"agent":{},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, "model-replacement", "deployment", "deployment", "deployment-canary"},
 	} {
-		// self_hosted resolves deployment defaults exactly as openai_hosted does.
+		// self_hosted resolves native defaults exactly as openai_hosted does,
+		// but its guest never receives the deployment key.
 		for _, environment := range []string{`{"type":"openai_hosted"}`, `{"type":"self_hosted","workspace_directory":"/workspace"}`} {
 			t.Run(tc.name+" "+environment, func(t *testing.T) {
-				id := create(strings.Replace(tc.body, `{"type":"openai_hosted"}`, environment, 1), uuid.NewString())
+				body := strings.Replace(tc.body, `{"type":"openai_hosted"}`, environment, 1)
+				if strings.Contains(environment, "self_hosted") && tc.providerSource == "deployment" {
+					call("POST", "/v1/agents/sessions", token, body, uuid.NewString(), 400)
+					return
+				}
+				id := create(body, uuid.NewString())
 				assertSession(id, tc.model, `{}`, tc.modelSource, "session", tc.providerSource, tc.key)
 			})
 		}
