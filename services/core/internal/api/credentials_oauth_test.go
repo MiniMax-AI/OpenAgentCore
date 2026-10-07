@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
@@ -149,7 +148,7 @@ func TestOAuthCredentialStoreFailuresUseSafeExistingErrors(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
 		code int
-	}{{vaults.ErrNotFound, 404}, {vaults.ErrInvalidInput, 400}, {credentialcrypto.ErrUnavailable, 503}, {errors.New("access-canary"), 500}} {
+	}{{vaults.ErrNotFound, 404}, {vaults.ErrInvalidInput, 400}, {errors.New("access-canary"), 500}} {
 		for _, update := range []bool{false, true} {
 			h, f, _ := credentialHandler(t)
 			f.err = tc.err

@@ -11,7 +11,6 @@ export const system = {
     apiBaseUrlHelp: "Applications use it as OPENAI_BASE_URL, with a Project API key as OPENAI_API_KEY.",
     copyApiBaseUrl: "Copy API base URL",
     localOnly: "Only reachable on the Core machine",
-    notSet: "Not set",
     id: "Installation ID",
     sourceCommit: "Source commit",
     unknown: "Unknown",
@@ -87,7 +86,6 @@ export const system = {
       save: "Save",
       saving: "Saving…",
       uncertain: "Core did not confirm the change. The default model configurations were read again; check them before trying again.",
-      noCredentialKey: "Core has no credential encryption key configured, so it can't store keys. Installer-based installs configure this automatically; for manual deployments, set OAC_CREDENTIAL_KEY_FILE for Core.",
     },
     clearDialog: {
       title: "Clear default model configuration",

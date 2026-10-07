@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 95519fc0cac3ac31f2cd08cdfadf20be92a03d998093a651411240c95d29176d
+source_hash: d4c7fc0fddf79b32ee628cc641df148d873380ecf62c59bb6b6a323750d0a41b
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -47,7 +47,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_PUBLIC_URL` | `http://localhost:8080`，由 `compose.yaml` 设置。未设置时启动的 Core 不运行 Runtime 网关，也不执行任何 Session | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[更改公共 URL](#changing-the-public-url) |
+| `OAC_PUBLIC_URL` | 必填；`compose.yaml` 设为 `http://localhost:8080` | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[更改公共 URL](#changing-the-public-url) |
 | `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。安装器设置为 `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -154,13 +154,13 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 
 | 变量 | 设置来源 |
 | --- | --- |
-| `OAC_PUBLIC_URL` | [公共 URL](#settings)。Core 只校验一次，并从中派生 Agents API 基地址、守护进程 WebSocket URL、自托管 `remote_url`、安装程序下载地址、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生 |
+| `OAC_PUBLIC_URL` | 必填。[公共 URL](#settings)。Core 只校验一次，并从中派生 Agents API 基地址、守护进程 WebSocket URL、自托管 `remote_url`、安装程序下载地址、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生 |
 | `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091` |
 | `OAC_DATABASE_URL` | 必填。不含密码的 PostgreSQL URL |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`。此时 URL 不得包含密码 |
-| `OAC_CREDENTIAL_KEY_FILE` | `/run/oac/credential.key` |
+| `OAC_CREDENTIAL_KEY_FILE` | 必填。`/run/oac/credential.key`：Base64 编码的 32 字节随机密钥。Core 用它加密存储的凭据 |
 | `OAC_CORE_KEY_DIGESTS_FILE` | 必填。`/run/oac/core-key-digests.json`：一个包含 Core 密钥 SHA-256 的 JSON 数组 |
-| `OAC_INSTALLATION_ID_FILE` | `/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。它会启用沙箱部署和节点路由，并要求设置 `OAC_PUBLIC_URL`。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它 |
+| `OAC_INSTALLATION_ID_FILE` | 必填。`/run/oac/installation.id`：安装 ID，采用规范 UUID 格式。如果 ID 与数据库记录的 ID 不一致，Core 会拒绝它 |
 | `OAC_EXECUTION_CONCURRENCY`、`OAC_DEFAULT_HARNESS`、`OAC_HARNESSES`、`OAC_WRITE_AUDIT_RETENTION`、`OAC_OAUTH_TRUSTED_ORIGINS`、`OAC_HISTORY_SETTINGS_FILE`、`OAC_LOG_LEVEL`、`OAC_LOG_FORMAT`、`OAC_LOG_ADD_SOURCE` | 对应的[进程设置](#settings)。Web 也读取三个日志设置 |
 | `OAC_PROVIDER_ROOT` | 适配器构件的绝对根目录。Core 镜像设置为 `/opt/oac`。每个适配器都拥有此根目录下的辅助路径。当其中的 `native-installers/` 目录包含 `catalog.json` 时，Core 在核对该目录清单与自身发行版后提供自托管守护进程安装程序。适配器状态位于 `/state`，即数据卷的 [`state/`](#compose-installations) |
 

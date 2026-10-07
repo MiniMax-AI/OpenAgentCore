@@ -303,9 +303,6 @@ func (t *deploymentTx) SaveSelection(selection deployment.SelectionRecord) error
 	}
 	params := sqlc.InitializeSandboxDeploymentParams{ProviderKind: selection.Provider, BackendFingerprint: selection.BackendFingerprint, Generation: int64(selection.Generation), Mode: selection.Mode, ProviderConfig: selection.Configuration.Public, ProviderMetadata: selection.Configuration.Metadata, Specification: selection.Specification}
 	if len(selection.Configuration.Secret) > 0 {
-		if t.cipher == nil {
-			return credentialcrypto.ErrUnavailable
-		}
 		sealed, err := t.cipher.SealSandboxDeployment(selection.Configuration.Secret, selection.InstallationID, selection.Generation)
 		if err != nil {
 			return errors.New("sandbox deployment credential encryption failed")

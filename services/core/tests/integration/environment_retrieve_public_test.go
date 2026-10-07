@@ -21,7 +21,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	principal := FixtureExecutorPrincipal(t, s, tenant)
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
@@ -47,7 +47,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 			}
 		}
 	}()
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://private-registry.example"))
+	handler, err := publicHandler(t, s, auth, "codex", executorURL("https://private-registry.example"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestEnvironmentRetrievalOfficialClient(t *testing.T) {
 	revoked = true
 	server.Close()
 	s.pool.Close()
-	reopened, _ := NewModelTestStore(t)
+	reopened, _ := testStore(t)
 	handler, err = publicHandler(t, reopened, auth, "codex")
 	if err != nil {
 		t.Fatal(err)

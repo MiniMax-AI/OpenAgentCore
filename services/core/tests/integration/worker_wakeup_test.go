@@ -45,7 +45,7 @@ func TestWorkerSchedulerCommittedAdmissionWakesBeforeMaintenance(t *testing.T) {
 			defer instrumented.Close()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker := startWorker(t, ctx, NewWithCredentialCipher(instrumented, fixtureCipher), h.d)
+			worker := startWorker(t, ctx, New(t, instrumented), h.d)
 			done := make(chan error, 1)
 			started := false
 			defer func() {

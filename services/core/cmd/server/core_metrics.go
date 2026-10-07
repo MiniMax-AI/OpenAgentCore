@@ -26,16 +26,11 @@ type coreMetricsSource struct {
 func metricPtr[T any](value T) *T { return &value }
 func (s *coreMetricsSource) Live() coremetrics.Live {
 	stat := s.pool.Stat()
-	live := coremetrics.Live{Pool: coremetrics.Pool{InUse: metricPtr(int64(stat.AcquiredConns())), Idle: metricPtr(int64(stat.IdleConns())), Max: metricPtr(int64(stat.MaxConns()))}, Scheduler: coremetrics.Job{ID: "scheduler", Status: "stopped"}, ExecutionOwner: metricPtr(false), SlotsTotal: metricPtr(int64(0)), SlotsInUse: metricPtr(int64(0))}
-	if s.registry != nil {
-		live.ConnectedDaemons = metricPtr(int64(len(s.registry.Devices())))
-	}
-	if s.worker != nil {
-		w := s.worker.MetricsSnapshot()
-		live.SlotsInUse, live.SlotsTotal, live.ExecutionOwner = w.SlotsInUse, w.SlotsTotal, w.ExecutionOwner
-		live.Scheduler = coremetrics.Job{ID: "scheduler", Status: w.Scheduler.Status, LastRunAt: w.Scheduler.LastRunAt, Processed: w.Scheduler.Processed, Failed: w.Scheduler.Failed}
-	}
-	return live
+	w := s.worker.MetricsSnapshot()
+	return coremetrics.Live{Pool: coremetrics.Pool{InUse: metricPtr(int64(stat.AcquiredConns())), Idle: metricPtr(int64(stat.IdleConns())), Max: metricPtr(int64(stat.MaxConns()))},
+		Scheduler:      coremetrics.Job{ID: "scheduler", Status: w.Scheduler.Status, LastRunAt: w.Scheduler.LastRunAt, Processed: w.Scheduler.Processed, Failed: w.Scheduler.Failed},
+		ExecutionOwner: w.ExecutionOwner, SlotsTotal: w.SlotsTotal, SlotsInUse: w.SlotsInUse,
+		ConnectedDaemons: metricPtr(int64(len(s.registry.Devices())))}
 }
 func (s *coreMetricsSource) Sample(ctx context.Context) coremetrics.Sample {
 	sample := coremetrics.Sample{Healthy: true, PoolInUse: metricPtr(int64(s.pool.Stat().AcquiredConns()))}
@@ -48,19 +43,12 @@ func (s *coreMetricsSource) Sample(ctx context.Context) coremetrics.Sample {
 	} else {
 		sample.Healthy = false
 	}
-	devices := []string{}
-	if s.registry != nil {
-		devices = s.registry.Devices()
-	}
-	counts, err := s.store.ReadExecutionSnapshot(ctx, time.Now(), devices)
+	counts, err := s.store.ReadExecutionSnapshot(ctx, time.Now(), s.registry.Devices())
 	if err != nil {
 		sample.Healthy = false
 	} else {
 		sample.Queued, sample.InProgress = metricPtr(counts.QueuedTurns), metricPtr(counts.InProgressTurns)
-		sample.OldestQueuedSeconds = counts.OldestQueuedSeconds
-		if s.registry != nil {
-			sample.WaitingForDaemon = metricPtr(counts.WaitingForDaemon)
-		}
+		sample.OldestQueuedSeconds, sample.WaitingForDaemon = counts.OldestQueuedSeconds, metricPtr(counts.WaitingForDaemon)
 	}
 	size, err := s.store.ReadDatabaseSize(ctx)
 	if err != nil {

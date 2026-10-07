@@ -61,7 +61,6 @@ func (s *validationStore) UpdateEnvironmentTemplate(_ context.Context, command e
 // serve takes every write from the handler, and the Worker admits Sessions
 // with initial input into s. Session reads are unexpected.
 func (s *validationStore) serve(d *Dependencies, f *testFakes) {
-	d.Execution = f.execution()
 	f.sessionAdmission.createSession = s.CreateSession
 	f.agents.create, f.agents.update = s.CreateAgent, s.UpdateAgent
 	f.vaults.createVault = s.CreateVault

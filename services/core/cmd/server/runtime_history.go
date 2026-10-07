@@ -25,15 +25,10 @@ type runtimeHistoryExporter interface {
 	Close(context.Context) error
 }
 
-func runtimeHistory(ctx context.Context, units *pgunit.Pool, config processconfig.RuntimeHistory, executionEnabled bool) (runtimeHistorySetup, error) {
+func runtimeHistory(ctx context.Context, units *pgunit.Pool, config processconfig.RuntimeHistory) (runtimeHistorySetup, error) {
 	interval := config.SampleInterval
-	mode := runtimehistory.CollectionPeriodic
-	if !executionEnabled {
-		interval = 0
-		mode = runtimehistory.CollectionOnRead
-	}
 	capabilities := runtimehistory.Capabilities{
-		CollectionMode: mode, SampleInterval: interval, Retention: 7 * 24 * time.Hour,
+		CollectionMode: runtimehistory.CollectionPeriodic, SampleInterval: interval, Retention: 7 * 24 * time.Hour,
 		MinimumStep: max(30*time.Second, interval), MaximumRange: 24 * time.Hour,
 		MaximumPoints: 1000, MaximumSeries: 64, MaximumTotalPoints: 10000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory, runtimehistory.MetricTokens},

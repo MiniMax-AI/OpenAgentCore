@@ -194,11 +194,11 @@ export interface CoreInstallationConfiguration {
 /** `GET /core/v1/installation`: available before any sandbox deployment exists. */
 export interface CoreInstallation {
   object: "core.installation";
-  installation_id: string | null;
-  /** The origin applications, nodes, sandboxes and self-hosted executors use; null when Core runs without one. */
-  public_url: string | null;
+  installation_id: string;
+  /** The origin applications, nodes, sandboxes and self-hosted executors use. */
+  public_url: string;
   /** `public_url` followed by `/v1`; the base URL for application API keys. */
-  api_base_url: string | null;
+  api_base_url: string;
   /** True when `public_url` is a loopback origin that only the Core host reaches. */
   local_only: boolean;
   /** Full source commit Core was built from; null for development builds. */

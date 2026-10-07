@@ -23,10 +23,15 @@ func required(t *testing.T) func(name, content string) string {
 		}
 		return path
 	}
+	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
 	t.Setenv("OAC_DATABASE_URL", "postgres://core@database/core")
+	t.Setenv("OAC_INSTALLATION_ID_FILE", write("installation.id", testInstallationID+"\n"))
+	t.Setenv("OAC_CREDENTIAL_KEY_FILE", write("credential.key", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x91}, 32))+"\n"))
 	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", write("digests.json", `["`+strings.Repeat("ab", 32)+`"]`))
 	return write
 }
+
+const testInstallationID = "8c5f4f5e-2c55-4c43-9a49-7f2f3f2d1d10"
 
 // rejects asserts that Load fails, names variable and does not echo secret.
 func rejects(t *testing.T, variable, secret string) {
@@ -43,7 +48,7 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Addr != "127.0.0.1:8091" || c.PublicOrigin != nil || c.InstallationID != "" || c.CredentialKey != nil || c.CoreKeys == nil ||
+	if c.Addr != "127.0.0.1:8091" || c.PublicOrigin.String() != "https://core.example" || c.InstallationID != testInstallationID || c.CredentialKey == nil || c.CoreKeys == nil ||
 		c.ExecutionConcurrency != 4 || c.DefaultHarness != "codex" || strings.Join(c.Harnesses, ",") != "claude_sdk,codex,mcode" ||
 		c.WriteAuditRetention != 90*24*time.Hour || c.OAuthTrustedOrigins != nil || c.NativeInstallers != "" || c.ProviderPaths.StateRoot != "/state" {
 		t.Fatalf("%+v", c)
@@ -59,11 +64,12 @@ func TestLoadAppliesDefaults(t *testing.T) {
 
 func TestLoadRejectsInvalidValuesWithoutEchoingThem(t *testing.T) {
 	write := required(t)
-	t.Setenv("OAC_DATABASE_URL", "")
-	rejects(t, "OAC_DATABASE_URL", "")
-	required(t)
-	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", "")
-	rejects(t, "OAC_CORE_KEY_DIGESTS_FILE", "")
+	for _, variable := range []string{"OAC_PUBLIC_URL", "OAC_DATABASE_URL", "OAC_INSTALLATION_ID_FILE", "OAC_CREDENTIAL_KEY_FILE", "OAC_CORE_KEY_DIGESTS_FILE"} {
+		t.Run(variable+" missing", func(t *testing.T) {
+			t.Setenv(variable, "")
+			rejects(t, variable, "")
+		})
+	}
 	t.Setenv("OAC_CORE_KEY_DIGESTS_FILE", write("bad-digests.json", `["synthetic-secret"]`))
 	rejects(t, "OAC_CORE_KEY_DIGESTS_FILE", "synthetic-secret")
 	required(t)
@@ -75,20 +81,14 @@ func TestLoadRejectsInvalidValuesWithoutEchoingThem(t *testing.T) {
 		"OAC_WRITE_AUDIT_RETENTION": "synthetic-secret",
 		"OAC_OAUTH_TRUSTED_ORIGINS": "https://synthetic-secret.example/token",
 		"OAC_LOG_LEVEL":             "verbose",
-		"OAC_INSTALLATION_ID_FILE":  write("installation.id", "synthetic-secret"),
-		"OAC_CREDENTIAL_KEY_FILE":   write("credential.key", "synthetic-secret"),
+		"OAC_INSTALLATION_ID_FILE":  write("bad.id", "synthetic-secret"),
+		"OAC_CREDENTIAL_KEY_FILE":   write("bad.key", "synthetic-secret"),
 		"OAC_HISTORY_SETTINGS_FILE": write("history.json", `{"secret":"synthetic-secret"}`),
 	} {
 		t.Run(variable, func(t *testing.T) {
 			t.Setenv(variable, value)
 			rejects(t, variable, "synthetic-secret")
 		})
-	}
-	t.Setenv("OAC_INSTALLATION_ID_FILE", write("valid.id", "8c5f4f5e-2c55-4c43-9a49-7f2f3f2d1d10\n"))
-	rejects(t, "OAC_PUBLIC_URL", "")
-	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
-	if c, err := Load(); err != nil || c.InstallationID != "8c5f4f5e-2c55-4c43-9a49-7f2f3f2d1d10" {
-		t.Fatal(c.InstallationID, err)
 	}
 }
 
@@ -151,13 +151,6 @@ func TestOAuthTrustedOrigins(t *testing.T) {
 
 func TestCredentialKey(t *testing.T) {
 	write := required(t)
-	t.Setenv("OAC_CREDENTIAL_KEY_FILE", filepath.Join(t.TempDir(), "missing.key"))
-	rejects(t, "OAC_CREDENTIAL_KEY_FILE", "")
-	for _, content := range []string{"", base64.StdEncoding.EncodeToString(make([]byte, 31))} {
-		t.Setenv("OAC_CREDENTIAL_KEY_FILE", write("short.key", content))
-		rejects(t, "OAC_CREDENTIAL_KEY_FILE", "")
-	}
-	t.Setenv("OAC_CREDENTIAL_KEY_FILE", write("credential.key", base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0x91}, 32))+"\n"))
 	first, err := Load()
 	if err != nil {
 		t.Fatal(err)
@@ -173,6 +166,12 @@ func TestCredentialKey(t *testing.T) {
 	}
 	if got, err := reopened.CredentialKey.Open(sealed, binding); err != nil || string(got) != "opaque storage test" {
 		t.Fatal("persisted key did not recover ciphertext", err)
+	}
+	t.Setenv("OAC_CREDENTIAL_KEY_FILE", filepath.Join(t.TempDir(), "missing.key"))
+	rejects(t, "OAC_CREDENTIAL_KEY_FILE", "")
+	for _, content := range []string{"", base64.StdEncoding.EncodeToString(make([]byte, 31))} {
+		t.Setenv("OAC_CREDENTIAL_KEY_FILE", write("short.key", content))
+		rejects(t, "OAC_CREDENTIAL_KEY_FILE", "")
 	}
 }
 
@@ -207,7 +206,6 @@ func TestRuntimeHistoryFile(t *testing.T) {
 
 func TestSettingsReportEffectiveValuesAndHideHistory(t *testing.T) {
 	write := required(t)
-	t.Setenv("OAC_PUBLIC_URL", "https://core.example")
 	t.Setenv("OAC_EXECUTION_CONCURRENCY", "8")
 	t.Setenv("OAC_LOG_LEVEL", "warn")
 	t.Setenv("OAC_WRITE_AUDIT_RETENTION", "1440m")

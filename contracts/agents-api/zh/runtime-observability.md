@@ -1,7 +1,7 @@
 ---
 title: "运行时可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: d18a476b06248dedfa5630ccf0f8a29dff59677a1e161d1847cc7d05e0c48de8
+source_hash: 31fa597224d654f347c7f438bea78d8e548e7588849d4346c599aac8a8f8054c
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `internal/runtimeobs/otlpexporter`。
@@ -85,7 +85,7 @@ CPU 静默状态、心跳时龄、连接状态和保活时间都不是空闲时�
 
 ### 周期采样 {#periodic-sampling}
 
-周期采集仅随执行工作器运行而执行（Core 需使用 `OAC_PUBLIC_URL` 启动；见 [Core environment](../../../docs/zh/configuration.md#appendix-core-environment-without-the-installer)），并受该工作器的数据库租约保护。未运行该工作器的 Core 不存储历史记录，所有历史读取都返回 503；当前读取在两种情况下均可正常工作。
+周期采集在执行工作器中运行，并受其数据库租约保护。
 
 采样器在启动时扫描一次，此后每次扫描结束后再经过一个采样间隔再次扫描。一次扫描按 Session ID 顺序，对未删除、状态为 `openai_hosted` 且没有已释放分配的 Session 执行 keyset 扫描。它通过与当前读取相同的解析器和源，以 32 个 Session 为一页进行读取，并发数为 8，每个源时限为 2 秒。采样器在每页之前以及扫描期间每 100 ms 检查租约；失去所有权时取消进行中的读取；将每条记录交给导出之前再次检查租约。失败的行不会停止扫描；未完成的扫描会在下一个间隔重复。
 

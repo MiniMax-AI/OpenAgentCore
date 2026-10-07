@@ -14,7 +14,7 @@ import (
 // Official Environment Files wire rows F1–F9 of the environment-files-wire batch.
 
 func TestEnvironmentFilesPageEnvelope(t *testing.T) {
-	h, f := environmentFilesHandler(t, true)
+	h, f := environmentFilesHandler(t)
 	w := requestEnvironmentFiles(h, f.environment.ID, "", "files-key")
 	if w.Code != 200 || strings.TrimSpace(w.Body.String()) != `{"object":"page","data":[],"next":null,"has_more":false}` {
 		t.Fatalf("empty page: %d %s", w.Code, w.Body)
@@ -33,7 +33,7 @@ func TestEnvironmentFilesPageEnvelope(t *testing.T) {
 }
 
 func TestEnvironmentFilesIgnoresUnknownQueryKeys(t *testing.T) {
-	h, f := environmentFilesHandler(t, true)
+	h, f := environmentFilesHandler(t)
 	f.result.Entries = []proto.WorkspaceDirectoryEntry{environmentFileEntry("a", 1)}
 	want := requestEnvironmentFiles(h, f.environment.ID, "", "files-key").Body.String()
 	for _, query := range []string{"?foo=bar", "?after=x&after=y", "?tenant_id=" + uuid.NewString(), "?include=all&foo", "?Path=/workspace/secret"} {
@@ -52,7 +52,7 @@ func TestEnvironmentFilesIgnoresUnknownQueryKeys(t *testing.T) {
 func TestEnvironmentFilesRejectsRepeatedQueryKeys(t *testing.T) {
 	for _, key := range []string{"path", "limit", "order", "page"} {
 		t.Run(key, func(t *testing.T) {
-			h, f := environmentFilesHandler(t, true)
+			h, f := environmentFilesHandler(t)
 			query := "?" + key + "=1&" + key + "=2"
 			w := requestEnvironmentFiles(h, f.environment.ID, query, "files-key")
 			assertListQueryError(t, w, "invalid_request_error", nil, "Failed to deserialize query string: duplicate field `"+key+"`")
@@ -92,7 +92,7 @@ func TestEnvironmentFilesPathErrors(t *testing.T) {
 		"/":                             directory,
 	} {
 		t.Run(path[:min(len(path), 40)], func(t *testing.T) {
-			h, f := environmentFilesHandler(t, true)
+			h, f := environmentFilesHandler(t)
 			w := requestEnvironmentFiles(h, f.environment.ID, "?"+url.Values{"path": {path}}.Encode(), "files-key")
 			assertListQueryError(t, w, "invalid_request_error", nil, message)
 			if f.reads != 0 {
@@ -101,7 +101,7 @@ func TestEnvironmentFilesPathErrors(t *testing.T) {
 		})
 	}
 	for path, relative := range map[string]string{"/workspace": "", "/workspace/a": "a", "/workspace/a/b c": "a/b c"} {
-		h, f := environmentFilesHandler(t, true)
+		h, f := environmentFilesHandler(t)
 		decodeEnvironmentFiles(t, requestEnvironmentFiles(h, f.environment.ID, "?"+url.Values{"path": {path}}.Encode(), "files-key"))
 		if f.directory != relative {
 			t.Fatal("canonical path changed", path, f.directory)
@@ -110,7 +110,7 @@ func TestEnvironmentFilesPathErrors(t *testing.T) {
 }
 
 func TestEnvironmentFilesPageTokenErrors(t *testing.T) {
-	h, f := environmentFilesHandler(t, true)
+	h, f := environmentFilesHandler(t)
 	f.result.Entries = []proto.WorkspaceDirectoryEntry{environmentFileEntry("a", 1), environmentFileEntry("b", 2)}
 	page := decodeEnvironmentFiles(t, requestEnvironmentFiles(h, f.environment.ID, "?limit=1", "files-key"))
 	for name, query := range map[string]url.Values{

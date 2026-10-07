@@ -15,7 +15,6 @@ import (
 	"github.com/google/uuid"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
@@ -29,7 +28,6 @@ import (
 type CreationStorage interface {
 	// FingerprintProviderKey returns the keyed fingerprint of a model
 	// provider key, so retry identities tell keys apart without hashing a key.
-	// Without a credential key it is credentialcrypto.ErrUnavailable.
 	FingerprintProviderKey(secret string) (string, error)
 	// WithCreation runs apply in one pooled transaction and commits only when
 	// apply returns nil. A malformed tenant is ErrInvalidInput.
@@ -534,12 +532,6 @@ func (s *Service) FindSessionCreation(ctx context.Context, tenant, key string, r
 		return Creation{}, ErrInvalidInput
 	}
 	hash, err := intentHash(request, s.storage.FingerprintProviderKey)
-	if errors.Is(err, credentialcrypto.ErrUnavailable) {
-		// Without the credential key no Session with a provider bundle can
-		// have been committed or can be created; creation reports the missing
-		// key after request validation.
-		return Creation{}, ErrNotFound
-	}
 	if err != nil {
 		return Creation{}, err
 	}

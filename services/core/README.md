@@ -22,19 +22,23 @@ Core uses its own PostgreSQL database and account and shares no tables with an a
 
 1. Create a development database. Core applies the migrations when it starts.
 
-2. Create a Core key of at least 32 characters and a digest file holding its SHA-256, which Core uses to authenticate `/core/v1`:
+2. Create a Core key of at least 32 characters and a digest file holding its SHA-256, which Core uses to authenticate `/core/v1`, the credential key that seals stored credentials, and the installation ID. Keep the credential key and the ID with the database:
 
    ```sh
    umask 077; mkdir -p ~/.oac/dev
    openssl rand -hex 32 > ~/.oac/dev/core.key
    printf '["%s"]\n' "$(tr -d '\n' < ~/.oac/dev/core.key | sha256sum | cut -d' ' -f1)" > ~/.oac/dev/core-key-digests.json
+   openssl rand -base64 32 > ~/.oac/dev/credential.key
+   uuidgen | tr '[:upper:]' '[:lower:]' > ~/.oac/dev/installation.id
    ```
 
-3. Start Core. `OAC_PUBLIC_URL` enables the Runtime gateway and the Worker; without it Core executes nothing. The [Core environment table](../../docs/configuration.md#appendix-core-environment-without-the-installer) lists every variable.
+3. Start Core. The [Core environment table](../../docs/configuration.md#appendix-core-environment-without-the-installer) lists every variable.
 
    ```sh
    OAC_DATABASE_URL='postgres://oac:…@127.0.0.1:5432/oac_dev' \
    OAC_CORE_KEY_DIGESTS_FILE="$HOME/.oac/dev/core-key-digests.json" \
+   OAC_CREDENTIAL_KEY_FILE="$HOME/.oac/dev/credential.key" \
+   OAC_INSTALLATION_ID_FILE="$HOME/.oac/dev/installation.id" \
    OAC_PUBLIC_URL=http://127.0.0.1:8091 \
    go run ./services/core/cmd/server
    ```

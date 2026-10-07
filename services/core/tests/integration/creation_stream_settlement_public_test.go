@@ -113,10 +113,10 @@ func (s sseLines) open(t *testing.T) {
 // creation stream whose initial reservation is cancelled without a Session event
 // ends through the committed projection, while GET stays open.
 func TestCreationStreamPublicLifetimes(t *testing.T) {
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), executorURL("https://offline-executor.example"))
+	handler, err := publicHandler(t, s, auth, "codex", executorURL("https://offline-executor.example"))
 	if err != nil {
 		t.Fatal(err)
 	}

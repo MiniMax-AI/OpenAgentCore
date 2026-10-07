@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,8 +15,8 @@ import (
 // FixtureEnvironmentDevice provisions the dedicated Runtime device of the
 // tenant's hosted Environment on pool through the procedure the managed
 // Runtime allocation runs, without the allocation.
-func FixtureEnvironmentDevice(ctx context.Context, pool *pgxpool.Pool, tenant, environment, name, credentialHash string) (sessions.ExecutionDevice, error) {
-	s := New(pool)
+func FixtureEnvironmentDevice(t testing.TB, ctx context.Context, pool *pgxpool.Pool, tenant, environment, name, credentialHash string) (sessions.ExecutionDevice, error) {
+	s := New(t, pool)
 	current, err := sessionAdapter(s).GetEnvironment(ctx, tenant, environment)
 	if err != nil {
 		return sessions.ExecutionDevice{}, err

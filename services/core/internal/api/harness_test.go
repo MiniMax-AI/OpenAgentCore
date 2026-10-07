@@ -26,18 +26,13 @@ func TestSessionHarnessAdmission(t *testing.T) {
 		{"empty", `,"x_agents_core":{}`, "", `{"type":"none"}`, "", true, 400},
 		{"unknown nested", `,"x_agents_core":{"harness":"codex","model":"wrong"}`, "", `{"type":"none"}`, "", true, 400},
 		{"claude verbosity", `,"x_agents_core":{"harness":"claude_sdk"}`, `,"text":{"verbosity":"high"}`, `{"type":"none"}`, "", true, 400},
-		{"mcode self-hosted requires executor configuration", `,"x_agents_core":{"harness":"mcode"}`, "", `{"type":"self_hosted","workspace_directory":"/workspace"},` + fixtureAnthropicSessionProvider, "", true, 503},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, s, _ := testHandler(t, func(d *Dependencies, f *testFakes) {
 				if tc.enabled {
 					d.Harnesses = []string{"claude_sdk", "mcode"}
 				}
-				// Self-hosted execution needs an executor, which this Core lacks.
-				if !strings.Contains(tc.environment, "self_hosted") {
-					admitSessions(d, f)
-				}
-				f.metrics.recordUnavailable = func() {}
+				admitSessions(d, f)
 			})
 			r := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"fixture"`+tc.extension+tc.extra+`},"environment":`+tc.environment+`,"input":"Run on the selected harness."}`))
 			r.Header.Set("Authorization", "Bearer test-api-key")

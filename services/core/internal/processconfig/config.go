@@ -44,17 +44,15 @@ const (
 type Config struct {
 	// Addr is OAC_ADDR, the listener address.
 	Addr string
-	// PublicOrigin is OAC_PUBLIC_URL. Nil disables the Runtime gateway and
-	// the execution Worker.
-	PublicOrigin *deployment.PublicOrigin
+	// PublicOrigin is OAC_PUBLIC_URL.
+	PublicOrigin deployment.PublicOrigin
 	// DatabaseURL is OAC_DATABASE_URL with the password from
 	// OAC_DATABASE_PASSWORD_FILE.
 	DatabaseURL string
-	// InstallationID comes from OAC_INSTALLATION_ID_FILE. Empty leaves the
-	// sandbox deployment and node routes off.
+	// InstallationID comes from OAC_INSTALLATION_ID_FILE.
 	InstallationID string
-	// CredentialKey seals stored credentials. Nil when
-	// OAC_CREDENTIAL_KEY_FILE is unset.
+	// CredentialKey seals stored credentials; it comes from
+	// OAC_CREDENTIAL_KEY_FILE.
 	CredentialKey *credentialcrypto.Cipher
 	// CoreKeys authenticates the Core key from OAC_CORE_KEY_DIGESTS_FILE.
 	CoreKeys             *api.DeploymentAuthenticator
@@ -101,7 +99,7 @@ type runtimeHistoryFile struct {
 }
 
 // Load reads and validates the process environment. An unset or empty
-// variable selects its default.
+// optional variable selects its default.
 func Load() (Config, error) {
 	var c Config
 	var err error
@@ -109,12 +107,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	c.Addr = cmp.Or(os.Getenv("OAC_ADDR"), defaultAddr)
-	if value := os.Getenv("OAC_PUBLIC_URL"); value != "" {
-		origin, err := deployment.NewPublicOrigin(value)
-		if err != nil {
-			return Config{}, configError("OAC_PUBLIC_URL must be a canonical http or https origin without path, credentials, query or fragment, such as https://core.example")
-		}
-		c.PublicOrigin = &origin
+	value := os.Getenv("OAC_PUBLIC_URL")
+	if value == "" {
+		return Config{}, configError("OAC_PUBLIC_URL is required; applications, nodes and sandboxes reach Core at this origin")
+	}
+	if c.PublicOrigin, err = deployment.NewPublicOrigin(value); err != nil {
+		return Config{}, configError("OAC_PUBLIC_URL must be a canonical http or https origin without path, credentials, query or fragment, such as https://core.example")
 	}
 	if c.DatabaseURL, err = databaseurl.FromEnvironment(); err != nil {
 		return Config{}, err
@@ -124,9 +122,6 @@ func Load() (Config, error) {
 	}
 	if c.InstallationID, err = installationID(); err != nil {
 		return Config{}, err
-	}
-	if c.InstallationID != "" && c.PublicOrigin == nil {
-		return Config{}, configError("OAC_INSTALLATION_ID_FILE requires OAC_PUBLIC_URL, the origin nodes and sandboxes use to reach Core")
 	}
 	if c.CredentialKey, err = credentialKey(); err != nil {
 		return Config{}, err
@@ -163,10 +158,6 @@ func Load() (Config, error) {
 // Settings projects the configuration that GET /core/v1/installation
 // reports. Sensitive file settings report only whether they are configured.
 func (c Config) Settings() []api.InstallationSetting {
-	var public any
-	if c.PublicOrigin != nil {
-		public = c.PublicOrigin.String()
-	}
 	format := c.Log.Format
 	if format == "" {
 		format = "auto"
@@ -176,7 +167,7 @@ func (c Config) Settings() []api.InstallationSetting {
 		origins = []string{}
 	}
 	return []api.InstallationSetting{
-		setting("public_url", public, nil, []string{"core", "web"}),
+		setting("public_url", c.PublicOrigin.String(), nil, []string{"core", "web"}),
 		setting("log.level", strings.ToLower(c.Log.Level.String()), "info", []string{"core", "web"}),
 		setting("log.format", format, "auto", []string{"core", "web"}),
 		setting("log.add_source", c.Log.AddSource, false, []string{"core", "web"}),
@@ -213,7 +204,7 @@ func sensitive(key string, configured bool, restarts []string) api.InstallationS
 func installationID() (string, error) {
 	path := os.Getenv("OAC_INSTALLATION_ID_FILE")
 	if path == "" {
-		return "", nil
+		return "", configError("OAC_INSTALLATION_ID_FILE is required; it names the file that holds this installation's ID")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -229,7 +220,7 @@ func installationID() (string, error) {
 func credentialKey() (*credentialcrypto.Cipher, error) {
 	path := os.Getenv("OAC_CREDENTIAL_KEY_FILE")
 	if path == "" {
-		return nil, nil
+		return nil, configError("OAC_CREDENTIAL_KEY_FILE is required; Core seals stored credentials with this key")
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {

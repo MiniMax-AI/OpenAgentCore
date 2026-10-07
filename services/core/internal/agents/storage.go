@@ -12,8 +12,7 @@ import (
 // Agent.
 type Storage interface {
 	// CreateAgent assigns the Agent's ID and saves it with its sealed model
-	// provider bundle. Sealing without a credential key is
-	// credentialcrypto.ErrUnavailable.
+	// provider bundle.
 	CreateAgent(context.Context, NewAgent) (Agent, error)
 	// WithAgentUpdate locks the tenant's Agent and runs update; the revision
 	// it applies commits only when update returns nil.
@@ -56,8 +55,7 @@ type Reader interface {
 	GetAgent(ctx context.Context, tenantID, agentID string) (Agent, error)
 	ListAgents(context.Context, ListQuery) (Page, error)
 	// GetAgentWithModelProvider reads the Agent and its opened model provider
-	// bundle from one snapshot. The bundle is nil when the Agent has none.
-	// Opening one without a credential key is credentialcrypto.ErrUnavailable;
-	// a bundle that fails to open is an internal error.
+	// bundle from one snapshot. The bundle is nil when the Agent has none; a
+	// bundle that fails to open is an internal error.
 	GetAgentWithModelProvider(ctx context.Context, tenantID, agentID string) (Agent, *v1.ModelProviderInput, error)
 }

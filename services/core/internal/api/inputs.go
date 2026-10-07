@@ -57,10 +57,6 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
-	if h.Execution == nil {
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution is not enabled on this service.")
-		return
-	}
 	inputs, err := executionInputs(request.Events)
 	if err != nil {
 		writeSessionsError(w, r, err)

@@ -269,8 +269,8 @@ function projectInstallationSetting(value: unknown): CoreInstallationSetting {
 export function projectInstallation(value: unknown): CoreInstallation {
   const installation = record(value, ["object", "installation_id", "public_url", "api_base_url", "local_only", "source_commit", "configuration", "address_bindings"]);
   const origin = installation.public_url;
-  if (installation.object !== "core.installation" || (installation.installation_id !== null && canonicalUuid(installation.installation_id) === null) ||
-    (origin !== null && typeof origin !== "string") || installation.api_base_url !== (typeof origin === "string" ? `${origin}/v1` : null) ||
+  if (installation.object !== "core.installation" || canonicalUuid(installation.installation_id) === null ||
+    typeof origin !== "string" || installation.api_base_url !== `${origin}/v1` ||
     typeof installation.local_only !== "boolean" ||
     (installation.source_commit !== null && (typeof installation.source_commit !== "string" || !/^[0-9a-f]{40}$/.test(installation.source_commit)))) return invalidAdminResponse();
   const bindings = record(installation.address_bindings, ["nodes", "nodes_on_other_address", "hosted_sandboxes", "self_hosted_executors"]);

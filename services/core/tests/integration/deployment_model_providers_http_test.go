@@ -36,7 +36,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), managedSandboxes(t, st), withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
+	handler, err := publicHandler(t, st, auth, "codex", withCoreKeys(admin), withHarnesses([]string{"codex", "mcode"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,8 +170,8 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	incompatible := call("POST", "/v1/agents/sessions", projectKey, hosted, 400)
-	if !strings.Contains(string(incompatible["error"]), "does not support this model provider protocol") || strings.Contains(string(incompatible["error"]), "credential_storage_unavailable") {
-		t.Fatal("unsupported stored protocol was reported as a credential failure")
+	if !strings.Contains(string(incompatible["error"]), "does not support this model provider protocol") {
+		t.Fatal("unsupported stored protocol was not reported as such")
 	}
 	if text(providerView(call("GET", path, coreKey, "", 200))["protocol"]) != "anthropic" {
 		t.Fatal("unsupported default was rewritten")
@@ -229,13 +229,13 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 // recorded first: a same-key retry returns the committed Session after the
 // default was replaced or removed.
 func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
-	st, _ := NewModelTestStore(t)
+	st, _ := testStore(t)
 	if _, err := st.pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
 		t.Fatal(err)
 	}
 	tenant, token := uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "none-retry", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}})
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st))
+	handler, err := publicHandler(t, st, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +321,7 @@ func TestDeploymentProviderResolutionPairsRevisionDuringReplacement(t *testing.T
 		_, err = defaults.Replace(admin, modelconfiguration.Replacement{Harness: harness, Configuration: v1.ModelConfigurationInput{ModelProvider: replacement, Model: "fixture"}})
 		return snapshot, err
 	}
-	handler, err := publicHandler(t, st, auth, "codex", storeExecution(t, st), modelProviderDefaults(resolver))
+	handler, err := publicHandler(t, st, auth, "codex", modelProviderDefaults(resolver))
 	if err != nil {
 		t.Fatal(err)
 	}

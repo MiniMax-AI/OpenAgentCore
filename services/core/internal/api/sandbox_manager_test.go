@@ -18,7 +18,6 @@ func sandboxFakes(t testing.TB) (Dependencies, *testFakes) {
 	deps, fakes := testDependencies(t)
 	fakes.projectsReader.resolveAPIKey = projectKeys(t, callerBinding()).ResolveAPIKey
 	deps.CoreKeys = coreKeys(t, "administrator")
-	deps.Execution, deps.Sandboxes = fakes.execution(), fakes.sandboxes()
 	return deps, fakes
 }
 

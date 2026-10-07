@@ -51,7 +51,7 @@ type Rules struct {
 }
 
 // NewRules returns the rules for the provider declarations and the
-// installation public URL, which is empty when the installation has none.
+// installation public URL.
 func NewRules(declarations Declarations, publicURL string) (*Rules, error) {
 	if declarations == nil {
 		return nil, errors.New("placement rules require provider declarations")

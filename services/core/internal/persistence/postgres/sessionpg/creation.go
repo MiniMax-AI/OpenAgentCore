@@ -33,9 +33,6 @@ const modelProviderKeyPurpose = "parsar.agents-api.model-provider-api-key.v1"
 var _ sessions.CreationTx = (*creationTx)(nil)
 
 func (s *Store) FingerprintProviderKey(secret string) (string, error) {
-	if s.cipher == nil {
-		return "", credentialcrypto.ErrUnavailable
-	}
 	return s.cipher.Fingerprint(modelProviderKeyPurpose, secret)
 }
 
@@ -133,9 +130,6 @@ func skillError(err error) error {
 }
 
 func (t *creationTx) SaveModelExecution(ctx context.Context, provider v1.ModelProviderInput) error {
-	if t.cipher == nil {
-		return credentialcrypto.ErrUnavailable
-	}
 	raw, err := json.Marshal(provider)
 	if err != nil {
 		return err
@@ -160,9 +154,6 @@ func (t *creationTx) SaveExecutionConfiguration(ctx context.Context, projection 
 }
 
 func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environmentconfig.InitialFile) error {
-	if t.cipher == nil {
-		return credentialcrypto.ErrUnavailable
-	}
 	metadata := environmentconfig.InitialFilesMetadata(initial)
 	for i, f := range initial {
 		body := f.Data
@@ -200,9 +191,6 @@ func (t *creationTx) SaveInitialFiles(ctx context.Context, initial []environment
 }
 
 func (t *creationTx) SaveSetup(ctx context.Context, setup environmentconfig.Setup) error {
-	if t.cipher == nil {
-		return credentialcrypto.ErrUnavailable
-	}
 	plaintext, err := json.Marshal(setup)
 	if err != nil {
 		return err

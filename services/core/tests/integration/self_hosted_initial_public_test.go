@@ -30,7 +30,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	if python == "" {
 		t.Skip("pinned official Python SDK required")
 	}
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	tenant, foreignTenant := uuid.NewString(), uuid.NewString()
 	token, peer, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{
@@ -47,7 +47,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 		} else {
 			// Without a Worker, Core keeps its executor URL but admits nothing.
 			enabled = append(enabled, func(d *api.Dependencies) {
-				d.Execution = &api.Execution{
+				d.Execution = api.Execution{
 					ExecutorURL:      origin,
 					SessionAdmission: unavailableAdmission{},
 					InputAdmission:   unavailableAdmission{},
@@ -155,7 +155,7 @@ func TestSelfHostedInitialCreationOfficialClient(t *testing.T) {
 	awaitRelease()
 	server.Close()
 	s.pool.Close()
-	reopened, _ := NewModelTestStore(t)
+	reopened, _ := testStore(t)
 	worker, stop = publicInitialWorker(t, reopened)
 	server = serve(reopened, worker)
 	settings["base"], settings["accepted"] = server.URL, accepted

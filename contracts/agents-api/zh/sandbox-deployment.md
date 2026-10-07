@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 2a6b114b7b4f324b2a68ee1f5bde5e9f229a2d44c06aa7c0dd4560bb4ed60166
+source_hash: f4ecc42b24dd85d2bfe3e054358aa2087331aa3110ba031bbc824cece58a54c3
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择 Sandbox Provider、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness；部署可以保持未配置状态，既无节点，也不接受托管准入。
@@ -219,7 +219,6 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 | 409 | `sandbox_deployment_conflict` | 更改无法应用于另一种状态 |
 | 409 | `runtime_node_in_use` | 节点仍持有资源时移除节点 |
 | 503 | `execution_unavailable` | 无法准备提供商 |
-| 503 | `credential_storage_unavailable` | Core 没有凭据加密密钥 |
 
 存储和凭据故障始终作为错误处理：读取为空或读取失败绝不能证明清理完成。[机器连接 API](machine-api.md#node-route-errors)列出了节点路由的错误。
 

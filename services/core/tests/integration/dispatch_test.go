@@ -50,7 +50,7 @@ func newDispatchHarness(t *testing.T) *dispatchHarness {
 
 func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool) *dispatchHarness {
 	t.Helper()
-	s, _ := NewModelTestStore(t)
+	s, _ := testStore(t)
 	h := &dispatchHarness{t: t, s: s, tenant: uuid.NewString(), environments: map[string]*dispatchHarness{}}
 	ctx := context.Background()
 	var err error
@@ -74,7 +74,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		if getErr != nil {
 			t.Fatal(getErr)
 		}
-		h.device, err = FixtureEnvironmentDevice(ctx, s.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
+		h.device, err = FixtureEnvironmentDevice(t, ctx, s.pool, h.tenant, environment.ID, "local runtime", runtimedevice.HashCredential(secret))
 	} else {
 		h.device, err = sessionService(t, s).CreateDevice(ctx, h.tenant, "isolated executor", runtimedevice.HashCredential(secret))
 	}

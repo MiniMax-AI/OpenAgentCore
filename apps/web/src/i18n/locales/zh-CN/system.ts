@@ -13,7 +13,6 @@ export const system: TranslationShape<typeof english> = {
     apiBaseUrlHelp: "应用把它设为 OPENAI_BASE_URL，并把项目 API key 设为 OPENAI_API_KEY。",
     copyApiBaseUrl: "复制 API 基础地址",
     localOnly: "只能在 Core 所在的机器上访问",
-    notSet: "未设置",
     id: "安装 ID",
     sourceCommit: "源码提交",
     unknown: "未知",
@@ -89,7 +88,6 @@ export const system: TranslationShape<typeof english> = {
       save: "保存",
       saving: "正在保存…",
       uncertain: "Core 没有确认这次修改。已重新读取默认模型配置，请先核对再重试。",
-      noCredentialKey: "Core 没有配置凭据加密密钥，因此无法保存 key。用安装器安装的会自动配置；手动部署时，请为 Core 设置 OAC_CREDENTIAL_KEY_FILE。",
     },
     clearDialog: {
       title: "清除默认模型配置",

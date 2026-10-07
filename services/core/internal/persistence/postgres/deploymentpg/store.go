@@ -25,8 +25,8 @@ type Store struct {
 	cipher *credentialcrypto.Cipher
 }
 
-// New returns the deployment store. cipher is nil when Core has no credential
-// key; a stored credential then reads as credentialcrypto.ErrUnavailable.
+// New returns the deployment store, which seals the provider credential with
+// cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }

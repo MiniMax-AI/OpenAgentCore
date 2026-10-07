@@ -241,14 +241,6 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	if input.Environment.Type == "self_hosted" && h.Execution == nil {
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Self-hosted execution is not configured on this service.")
-		return
-	}
-	if input.Environment.Type == "openai_hosted" && h.Sandboxes == nil {
-		writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Hosted execution is not configured on this service.")
-		return
-	}
 	executionConfiguration := sessionExecutionProjection(input, saved, inheritedProvider, provider, selectedEngine, configuration)
 	createInput := sessions.CreateSession{
 		ExecutionConfiguration:     &executionConfiguration,
@@ -260,10 +252,6 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	create := h.SessionCreation.CreateSession
 	if len(initialInputs) > 0 || input.Environment.Type == "openai_hosted" {
-		if h.Execution == nil {
-			writeError(w, http.StatusServiceUnavailable, "execution_unavailable", "Execution input is not enabled on this service.")
-			return
-		}
 		create = h.Execution.SessionAdmission.CreateSession
 	}
 	result, err := create(r.Context(), tenantID(r), createInput)
@@ -292,7 +280,7 @@ func (h *Handler) respondSession(w http.ResponseWriter, r *http.Request, session
 }
 
 func (h *Handler) respondSessionStatus(w http.ResponseWriter, r *http.Request, session sessions.Session, status int) {
-	response, err := sessionResponse(session, h.executorURL())
+	response, err := sessionResponse(session, h.Execution.ExecutorURL)
 	if err != nil {
 		writeSessionsError(w, r, err)
 		return
@@ -320,7 +308,7 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	response := v1.SessionList{Data: make([]v1.Session, 0, len(page.Sessions)), HasMore: page.NextCursor != ""}
 	for _, session := range page.Sessions {
-		item, err := sessionResponse(session, h.executorURL())
+		item, err := sessionResponse(session, h.Execution.ExecutorURL)
 		if err != nil {
 			writeSessionsError(w, r, err)
 			return

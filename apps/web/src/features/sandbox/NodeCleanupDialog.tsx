@@ -41,10 +41,8 @@ export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCle
       {installation.isError
         ? <p role="alert">{join(stays, t("The installation couldn't be read, so no command can be issued."))} <button className="text-action" type="button" disabled={installation.isFetching} onClick={() => void installation.refetch()}>{t("Try again")}</button></p>
         : <p role="status">{t("Checking this installation's public URL…")}</p>}
-    </div> : cleanup && !sourceUrl ? <div className="sandbox-add-node form-stack">
-      <p>{join(stays, installation.data?.local_only && installation.data.public_url
-        ? t("Other machines can't reach this installation's public URL, {{url}}, so no uninstall command can be given.", { url: installation.data.public_url })
-        : t("An uninstall command needs a public URL that other machines can reach, and this installation has none."))}</p>
+    </div> : cleanup && installation.data && !sourceUrl ? <div className="sandbox-add-node form-stack">
+      <p>{join(stays, t("Other machines can't reach this installation's public URL, {{url}}, so no uninstall command can be given.", { url: installation.data.public_url }))}</p>
     </div> : cleanup ? <div className="sandbox-add-node form-stack">
       <p>{t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
       <CommandBlock key={command()} value={command()} label={t("Uninstall command")} autoFocus />

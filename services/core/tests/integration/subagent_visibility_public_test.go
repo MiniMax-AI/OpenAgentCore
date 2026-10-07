@@ -76,7 +76,7 @@ func TestSubagentVisibilityPublic(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: tenant, SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "foreign", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	handler, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	handler, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

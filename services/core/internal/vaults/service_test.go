@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 )
 
@@ -163,6 +162,9 @@ func (f refreshFunc) Refresh(ctx context.Context, request oauthrefresh.Request) 
 	return f(ctx, request)
 }
 
+// errStorage is a storage failure the Service returns unchanged.
+var errStorage = errors.New("storage failed")
+
 func unexpectedRefresh(t testing.TB) refreshFunc {
 	return func(context.Context, oauthrefresh.Request) (oauthrefresh.Token, error) {
 		t.Fatal("unexpected call to Refresh")
@@ -236,9 +238,9 @@ func TestCredentialCreationValidationOrder(t *testing.T) {
 			if credential.VaultID != "not-a-vault" {
 				t.Fatalf("%s creation changed the Vault ID %q", kind, credential.VaultID)
 			}
-			return Credential{}, credentialcrypto.ErrUnavailable
+			return Credential{}, errStorage
 		}}, unexpectedRefresh(t))
-		if err := run(service, "valid", "not-a-vault"); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+		if err := run(service, "valid", "not-a-vault"); !errors.Is(err, errStorage) {
 			t.Fatalf("%s creation: got %v", kind, err)
 		}
 	}
@@ -295,9 +297,9 @@ func TestUpdateStaticCredential(t *testing.T) {
 		if replacement != (StaticTokenReplacement{CredentialKey: CredentialKey{tenant, vault, id}, MCPServerURL: url, Token: "replacement"}) {
 			t.Fatalf("unexpected replacement %+v", replacement)
 		}
-		return Credential{}, credentialcrypto.ErrUnavailable
+		return Credential{}, errStorage
 	}}, unexpectedRefresh(t))
-	if _, err := service.UpdateStaticCredential(t.Context(), command); !errors.Is(err, credentialcrypto.ErrUnavailable) {
+	if _, err := service.UpdateStaticCredential(t.Context(), command); !errors.Is(err, errStorage) {
 		t.Fatal("the storage result was not returned", err)
 	}
 }
@@ -348,8 +350,8 @@ func TestStaticBearerToken(t *testing.T) {
 	if token, err := testService(t, &fakeStorage{staticToken: lookup("private-token", nil)}, unexpectedRefresh(t)).MCPBearerToken(t.Context(), command); err != nil || token != "private-token" {
 		t.Fatal("static token was not returned", err)
 	}
-	if token, err := testService(t, &fakeStorage{staticToken: lookup("", credentialcrypto.ErrUnavailable)}, unexpectedRefresh(t)).MCPBearerToken(t.Context(), command); !errors.Is(err, credentialcrypto.ErrUnavailable) || token != "" {
-		t.Fatal("a keyless lookup returned a token", err)
+	if token, err := testService(t, &fakeStorage{staticToken: lookup("", errStorage)}, unexpectedRefresh(t)).MCPBearerToken(t.Context(), command); !errors.Is(err, errStorage) || token != "" {
+		t.Fatal("a failed lookup returned a token", err)
 	}
 	unscoped := command
 	unscoped.Binding.CredentialID = "not-a-credential"
@@ -468,10 +470,10 @@ func TestOAuthBearerTokenFailuresReturnNoToken(t *testing.T) {
 		storage := scenario.service.storage.(*fakeStorage)
 		storage.withOAuthCredential = func(ctx context.Context, _ CredentialKey, apply func(OAuthTx) error) error {
 			return apply(&fakeOAuthTx{t: t, load: func(context.Context, string) (OAuthGrant, error) {
-				return OAuthGrant{}, credentialcrypto.ErrUnavailable
+				return OAuthGrant{}, errStorage
 			}})
 		}
-		if token, err := scenario.service.MCPBearerToken(t.Context(), scenario.command); !errors.Is(err, credentialcrypto.ErrUnavailable) || token != "" {
+		if token, err := scenario.service.MCPBearerToken(t.Context(), scenario.command); !errors.Is(err, errStorage) || token != "" {
 			t.Fatal("a failed load was not returned unchanged", err)
 		}
 	})

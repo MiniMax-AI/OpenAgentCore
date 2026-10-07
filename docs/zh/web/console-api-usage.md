@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 071c5b80262cdc89ed3517cf6a63d1c657ee8d0f98133630bad0850595003a2c
+source_hash: 3f233005176090ef87c13442f439296001950bb835262969a0b48970b51af7f4
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -88,7 +88,7 @@ source_hash: 071c5b80262cdc89ed3517cf6a63d1c657ee8d0f98133630bad0850595003a2c
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
 | 列出 Harnesses | `GET /core/v1/harnesses` | System 的 Default model 卡片：每个 Harness 的只读 `enabled` 和 `default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 Usage details；Overview 的 Getting started（默认 Harness 上的默认模型；如果没有默认模型，则为任意已启用 Harness 上的默认模型） |
-| 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** 或 **Replace**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息，503 `credential_storage_unavailable` 表示 Core 没有凭据加密密钥；随后再次读取列表 |
+| 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** 或 **Replace**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息；随后再次读取列表 |
 | 清除 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**，需确认，随后再次读取列表 |
 
 列表会返回每个 Harness 的配置，因此控制台不会读取 `GET /core/v1/harnesses/{harness}/model-configuration`。

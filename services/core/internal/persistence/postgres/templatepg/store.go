@@ -36,9 +36,8 @@ var (
 	_ environmenttemplates.Reader  = (*Store)(nil)
 )
 
-// New returns a Store. Without a credential key (cipher nil), writes and
-// resolutions that seal or open confidential configuration fail with
-// credentialcrypto.ErrUnavailable; safe metadata stays readable.
+// New returns a Store that seals and opens confidential configuration with
+// cipher.
 func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 	return &Store{pool: pool, cipher: cipher}
 }
@@ -216,9 +215,6 @@ func (s *Store) Resolve(ctx context.Context, tenantID, templateID string) (envir
 			return environmenttemplates.Resolved{}, errors.New("stored environment template files have no contents")
 		}
 		return resolved, nil
-	}
-	if s.cipher == nil {
-		return environmenttemplates.Resolved{}, credentialcrypto.ErrUnavailable
 	}
 	plaintext, err := s.cipher.OpenEnvironmentFile(row.FileContents, fileBinding(tenant, id))
 	if err != nil {

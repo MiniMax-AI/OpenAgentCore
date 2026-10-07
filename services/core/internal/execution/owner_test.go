@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -192,7 +193,7 @@ func TestWorkerRunClosesLeaseAfterDrain(t *testing.T) {
 	lease := &closeCountingLease{t: t, inner: owner.Lease}
 	id := uuid.NewString()
 	// The Worker's first reconciliation scans the Session work.
-	reader, service := testSessions(t, pool, nil)
+	reader, service := testSessions(t, pool, pgtest.CredentialKey(t))
 	dispatcher := &Dispatcher{Registry: runtimegateway.NewRegistry(), Credentials: &recordingCredentials{}, Observer: unusedObserver{t}, Deployment: deployments, DeploymentReader: deploymentReader, Sessions: service, SessionsReader: reader, ManagedRuntimes: NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t))}
 	worker, err := StartWorker(t.Context(), dispatcher, Owner{Lease: lease, Deployment: owner.Deployment, Sessions: owner.Sessions})
 	if err != nil {

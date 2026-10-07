@@ -23,14 +23,14 @@ func TestSessionAgentFilterOfficialClient(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(h)
 	defer server.Close()
-	recoveredStore := New(s.pool)
-	h, err = publicHandler(t, recoveredStore, auth, "codex", storeExecution(t, recoveredStore))
+	recoveredStore := New(t, s.pool)
+	h, err = publicHandler(t, recoveredStore, auth, "codex")
 	if err != nil {
 		t.Fatal(err)
 	}

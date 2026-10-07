@@ -110,7 +110,6 @@ export const keys: TranslationShape<typeof english> = {
     loading: "正在读取 API 地址",
     failed: "无法读取 API 地址。",
     localOnly: "从其他机器调用前，请先把 OAC_PUBLIC_URL 设为它们能访问的地址。",
-    noAddress: "Core 尚未配置公开 API 地址，请设置 OAC_PUBLIC_URL。",
     model: "把 {{model}} 换成模型服务提供的模型名；也可以删掉 model 字段，使用本部署的默认模型配置。运行 Agent 需要模型服务：在每个请求里传入、保存在 Agent 上，或使用部署默认值。自托管 Session 不使用部署默认值。",
     keyPlaceholder: "<项目 API key>",
     projectKey: "把 OPENAI_API_KEY 设为这个项目签发的 API key。key 只在签发时显示一次；丢失后请签发新 key。",
