@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "parallel": {
+      "type": "http",
+      "url": "https://search.parallel.ai/mcp",
+      "http_headers": {
+        "User-Agent": "OpenAgentCore-Parallel-Example/1.0"
+      }
+    }
+  }
+}
