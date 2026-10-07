@@ -183,7 +183,8 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 		}
 	}
 	// No login shell, and no ancestor walk above the workspace over the
-	// mount. No trust entry is written, so the project stays untrusted.
+	// mount. The adapter writes no trust entry; Codex keeps its native
+	// project trust and records its own on thread/start.
 	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"allow_login_shell", "false"}, [2]string{"project_root_markers", "[]"})
 	if req.ExecutionControls != nil {
 		if err := viewModelVerbosity(ctx, cfg.codexBinary, &plan, req.ModelProvider); err != nil {
