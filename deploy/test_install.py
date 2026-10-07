@@ -15,7 +15,7 @@ INSTALL = ROOT / "deploy/install.sh"
 
 
 class InstallScriptTests(unittest.TestCase):
-    def install(self, root, *args, compose_up=0, docker_info=0, key_status=0, download_status=0, kill_download=False, route="1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0"):
+    def install(self, root, *args, compose_up=0, docker_info=0, key_status=0, download_status=0, kill_download=False, kill_start=False, route="1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 0"):
         bin_dir = root / "bin"
         bin_dir.mkdir(exist_ok=True)
         log = root / "docker.log"
@@ -27,7 +27,7 @@ class InstallScriptTests(unittest.TestCase):
             if [ "$1" = compose ] && [ "$2" = config ] && [ "$3" = --environment ]; then sed "s/'//g" .env; fi
             if [ "$1" = compose ] && [ "$2" = version ]; then printf 'v2.29.1\\n'; exit 0; fi
             if [ "$1" = compose ] && [ "$2" = cp ]; then printf '#!/bin/sh\\necho oac_core_fixture\\nexit {key_status}\\n' > ./oac.download; chmod +x ./oac.download; exit 0; fi
-            if [ "$1" = compose ] && [ "$2" = up ]; then exit {compose_up}; fi
+            if [ "$1" = compose ] && [ "$2" = up ]; then {'kill -KILL "$PPID"' if kill_start else ':'}; exit {compose_up}; fi
             exit 0
             """))
         self.write_executable(bin_dir / "curl", textwrap.dedent(f"""\
@@ -151,6 +151,17 @@ class InstallScriptTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertFalse((root / "oac.staging").exists())
             self.assertTrue((root / "oac/oac").exists())
+
+    def test_retry_after_start_sigkill_cleans_published_log(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            killed, _ = self.install(root, kill_start=True)
+            self.assertEqual(killed.returncode, -9, killed.stderr)
+            self.assertTrue((root / "oac/install.log").exists())
+            completed, _ = self.install(root)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertFalse((root / "oac/install.log").exists())
+            self.assertFalse((root / "oac.staging").exists())
 
     def test_retry_clears_staging_from_an_interrupted_process(self):
         with tempfile.TemporaryDirectory() as temporary:

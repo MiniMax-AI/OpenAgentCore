@@ -169,6 +169,9 @@ cd "$install_dir"
 [[ ! -L .oac.lock && ( ! -e .oac.lock || ( -f .oac.lock && -O .oac.lock ) ) ]] || fail "Invalid installation lock: $install_dir/.oac.lock"
 exec 8>>.oac.lock
 flock -n 8 || fail "Another oac command is using this installation. Wait for it to finish and rerun."
+[[ ! -L install.log && ( ! -e install.log || ( -f install.log && -O install.log ) ) ]] || fail "Invalid installation log: $install_dir/install.log"
+log="$install_dir/install.log"
+: >"$log"
 step "Verifying saved configuration" sha256sum --check --quiet compose-sha256sums.txt
 step "Checking Compose configuration" docker compose config --quiet
 if [[ "$resume" == 0 ]]; then
