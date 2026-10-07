@@ -21,8 +21,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/viewloader"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
@@ -105,19 +107,25 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 		t.Fatal("the real key reached the view")
 	}
 
-	// The Harness runs a stdio binding's alias without arguments.
+	// The Harness gets the installed Skill in the sandbox's capability root
+	// and runs a stdio binding's alias without arguments.
 	docs := session.MCP
 	session.MCP = []agent.MCPBinding{{ServerLabel: "local", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
 		Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}}
-	stdio, err := view.Executor(t.Context(), req, session)
+	installed, local := req, *req.LocalEnvironment
+	local.CapabilityRoot, local.Skills = agentcapabilities.Directory, []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory,
+		Metadata: agentskill.Metadata{Type: "inline", Name: "review", Description: "Review."}, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
+	installed.LocalEnvironment = &local
+	stdio, err := view.Executor(t.Context(), installed, session)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer stdio.Close(ctx)
 	var stdioStart startRequest
 	if err := json.Unmarshal(<-requests, &stdioStart); err != nil || stdioStart.Workspace == nil || len(stdioStart.Workspace.MCP) != 1 ||
-		stdioStart.Workspace.MCP[0].Command != agent.ViewAlias(0) || stdioStart.Workspace.MCP[0].Args != nil {
-		t.Fatalf("stdio MCP = %+v, %v", stdioStart.Workspace, err)
+		stdioStart.Workspace.MCP[0].Command != agent.ViewAlias(0) || stdioStart.Workspace.MCP[0].Args != nil ||
+		stdioStart.Workspace.CapabilityRoot != agentcapabilities.Directory || len(stdioStart.Workspace.Skills) != 1 || stdioStart.Workspace.Skills[0].RelativeRoot != "skills/review" {
+		t.Fatalf("installed Skill and stdio MCP = %+v, %v", stdioStart.Workspace, err)
 	}
 
 	// With environment none the bridge runs without a workspace in the work directory.

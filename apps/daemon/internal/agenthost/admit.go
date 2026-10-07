@@ -105,8 +105,6 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 		return nil, invalidSession("workspace %q is not absolute and clean", local.WorkspaceDirectory)
 	case local != nil && local.Capabilities && local.CapabilityRoot == "":
 		return nil, unsupported("installed Capabilities that no preparation resolved")
-	case local != nil && len(local.Skills) > 0:
-		return nil, unsupported("Skills")
 	case local != nil && (local.NetworkAccess != "enabled" || len(local.AllowedDomains) > 0):
 		return nil, unsupported("a restricted workspace network")
 	case !none && len(view.Shims) > 0 && !hasPATH(env):

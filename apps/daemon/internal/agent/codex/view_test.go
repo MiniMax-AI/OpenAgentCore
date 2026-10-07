@@ -1,6 +1,8 @@
 package codex
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
@@ -131,5 +134,55 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 	}
 	if config, err := os.ReadFile(planted); err != nil || !strings.Contains(string(config), "command = \"/.oac/bin/oac-mcp-0\"\n\n") {
 		t.Fatalf("stdio alias config.toml: %v\n%s", err, config)
+	}
+}
+
+// TestViewHandsCodexTheInstalledSkillAndMCP checks that a view registers the
+// installed Skill's root at the sandbox path the owner filled, which Codex
+// lists, and configures the installed stdio MCP server under its alias.
+func TestViewHandsCodexTheInstalledSkillAndMCP(t *testing.T) {
+	_, cfg, root := preparationFixture(t)
+	declared := newView(filepath.Join(t.TempDir(), "codex"), false)
+	home := t.TempDir()
+	session := agent.ViewSession{
+		Home:  agent.ViewDir{Host: home, View: agent.ViewPrivateRoot + "/" + agent.ViewHomeName},
+		Proxy: "http://127.0.0.1:17100",
+		MCP: []agent.MCPBinding{{ServerLabel: "local", ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: "stdio", Stdio: &proto.EnvironmentMCP{
+			Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: agent.ViewAlias(0)}}}},
+		// The fake Codex runs on the host, outside the view.
+		Launch: func(opts clirunner.StartOptions) (*clirunner.Process, error) {
+			opts.Binary, opts.Dir, opts.Env = cfg.codexBinary, "", os.Environ()
+			return clirunner.Start(opts)
+		},
+	}
+	server := map[string]any{"command": agent.ViewAlias(0), "args": []string{}, "environment_id": "local", "enabled": true, "default_tools_approval_mode": "approve"}
+	config := filepath.Join(root, "mcp-config.json")
+	writeMCPHTTPConfigResponse(t, config, map[string]any{"config": map[string]any{"mcp_servers": map[string]any{"local": server},
+		"features": map[string]any{"plugins": false, "apps": false}, "mcp_oauth_credentials_store": "file"}})
+	t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", config)
+	req := proto.PromptRequestPayload{AgentStateKey: "state", Model: "m",
+		ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder},
+		LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled", CapabilityRoot: agentcapabilities.Directory,
+			Skills: []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}}}
+	e, err := declared.Executor(t.Context(), req, session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := e.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	var registered SkillsExtraRootsSetParams
+	for _, frame := range preparationFrames(t, root) {
+		if frame.Method == "skills/extraRoots/set" && json.Unmarshal(frame.Params, &registered) != nil {
+			t.Fatal(frame)
+		}
+	}
+	if want := []string{agentcapabilities.Directory + "/skills/review"}; !slices.Equal(registered.ExtraRoots, want) {
+		t.Errorf("extra roots %v, want %v", registered.ExtraRoots, want)
+	}
+	if body, err := os.ReadFile(filepath.Join(home, viewCodexHome, "config.toml")); err != nil || !strings.Contains(string(body), "command = \""+agent.ViewAlias(0)+"\"\n") {
+		t.Errorf("config.toml: %v\n%s", err, body)
 	}
 }

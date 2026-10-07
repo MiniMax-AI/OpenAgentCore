@@ -82,10 +82,6 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		"restricted network":                 {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, unsupported},
 		"allowed domains only":               {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.AllowedDomains = []string{"example.com"} }, unsupported},
 		"unprepared Capabilities":            {"viewed", func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, unsupported},
-		"Skills": {"viewed", func(r *proto.PromptRequestPayload) {
-			r.LocalEnvironment.Capabilities, r.LocalEnvironment.CapabilityRoot = true, "/capabilities"
-			r.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{RelativeRoot: "skills/review"}}
-		}, unsupported},
 		"credentialed stdio MCP": {"viewed", func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "tools", Type: "stdio", Command: "tools", EnvVars: []string{"TOKEN"}}}}
 		}, []error{ErrUnsupported, agent.ErrViewHandoff}},
@@ -180,6 +176,8 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	bearer := "mcp-secret"
 	req := request("viewed", "/workspace", "https://model.test", "sk-test")
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs?tenant=a", BearerToken: &bearer}}
+	skills := []agentcapabilities.InstalledSkill{{InstallationRoot: agentcapabilities.Directory, RelativeRoot: "skills/review", PackageRoot: "skills/review"}}
+	req.LocalEnvironment.Capabilities, req.LocalEnvironment.CapabilityRoot, req.LocalEnvironment.Skills = true, agentcapabilities.Directory, skills
 	original := *req.ModelProvider
 	var dials atomic.Int32
 	e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
@@ -192,8 +190,9 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	if *req.ModelProvider != original {
 		t.Error("the Session's request changed")
 	}
-	if f.req.MCPHTTPServers != nil || f.req.LocalEnvironment == nil || f.req.LocalEnvironment.MCP != nil || f.req.LocalEnvironment.WorkspaceRoot != "/workspace" {
-		t.Error("the request still carries MCP or does not run in the Environment's workspace")
+	if local := f.req.LocalEnvironment; f.req.MCPHTTPServers != nil || local == nil || local.MCP != nil || local.WorkspaceRoot != "/workspace" ||
+		local.CapabilityRoot != agentcapabilities.Directory || !reflect.DeepEqual(local.Skills, skills) {
+		t.Error("the request still carries MCP, does not run in the Environment's workspace or lost its installed Skills")
 	}
 	mcp := f.session.MCP
 	if len(mcp) != 1 || mcp[0].ServerLabel != "docs" || mcp[0].ServerURL != "http://127.0.0.1:17102/docs" || mcp[0].BearerToken != nil || mcp[0].HTTPHeaders != nil {

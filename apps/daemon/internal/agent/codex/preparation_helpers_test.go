@@ -148,6 +148,7 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 	turnNumber := 0
 	currentTurn := ""
 	executorMode := os.Getenv("OAC_TEST_EXECUTOR_MODE")
+	var skills SkillsExtraRootsSetParams
 	for scanner.Scan() {
 		var frame preparationFrame
 		if json.Unmarshal(scanner.Bytes(), &frame) != nil {
@@ -172,6 +173,17 @@ func TestPreparationFakeCodexProcess(t *testing.T) {
 				status = string(data)
 			}
 			result = map[string]string{"status": status}
+		case "skills/extraRoots/set":
+			if json.Unmarshal(frame.Params, &skills) != nil {
+				os.Exit(7)
+			}
+		case "skills/list":
+			// Each registered root holds one Skill.
+			listed := []map[string]string{}
+			for _, root := range skills.ExtraRoots {
+				listed = append(listed, map[string]string{"name": filepath.Base(root), "path": filepath.Join(root, "SKILL.md")})
+			}
+			result = map[string]any{"data": []any{map[string]any{"skills": listed, "errors": []any{}}}}
 		case "config/read":
 			data, err := os.ReadFile(os.Getenv("OAC_TEST_PREPARATION_MCP_CONFIG"))
 			if err != nil || json.Unmarshal(data, &result) != nil {

@@ -56,8 +56,8 @@
 // any effect: the kind must declare an agent.View, and when the view declares
 // shim names or a stdio MCP server's command is a bare name, both of which
 // run on the sandbox PATH, the Session's Environment must set PATH. A
-// Session with Skills, with a restricted network, or with a stdio MCP server
-// that needs a credential is rejected. The registry declares each kind in a
+// Session with a restricted network, or with a stdio MCP server that needs a
+// credential, is rejected. The registry declares each kind in a
 // local Environment and with environment none, as agent.EnvironmentSupport
 // composes them. The factory then allocates the
 // Executor's uid, skipping each uid that a running thread holds as its real,

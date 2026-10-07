@@ -2,7 +2,9 @@ package mcode
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -120,8 +123,29 @@ func writeNativeConfig(req proto.PromptRequestPayload, prepared harnessconfig.Pr
 		config["permissionMode"] = "bypassPermissions"
 		config["sandbox"] = map[string]bool{"enabled": false}
 		if len(tools.skills) > 0 {
+			// The native catalog loads Skills from its data directory, so each
+			// installed Skill is linked there by name to its root as the native
+			// process sees it.
+			if err := data.MkdirAll("skills", 0o700); err != nil {
+				return err
+			}
+			names := make([]string, 0, len(tools.skills))
+			for _, skill := range tools.skills {
+				link, target := filepath.Join("skills", skill.Metadata.Name), localworkspace.SkillPath(skill)
+				actual, err := data.Readlink(link)
+				switch {
+				case errors.Is(err, fs.ErrNotExist):
+					err = data.Symlink(target, link)
+				case err == nil && actual != target:
+					err = errors.New("mcode: unexpected native Skill root")
+				}
+				if err != nil {
+					return err
+				}
+				names = append(names, skill.Metadata.Name)
+			}
 			selected := config["agents"].(map[string]any)["default"].(map[string]any)
-			selected["skills"] = tools.skills
+			selected["skills"] = names
 			for _, key := range []string{"tools", "builtinTools"} {
 				selected[key] = append(selected[key].([]string), "skill")
 			}
