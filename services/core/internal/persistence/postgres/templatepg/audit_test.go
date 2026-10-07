@@ -48,8 +48,8 @@ func (f fixture) snapshot(t *testing.T) map[string]string {
 
 func writeSource(ctx context.Context, tenant, request string) context.Context {
 	return writeaudit.WithSource(ctx, writeaudit.Source{
-		KeyID: "static:" + strings.Repeat("a", 64), Name: "template audit fixture", Prefix: "aaaaaaaa",
-		Kind: "static", TenantID: tenant, RequestID: request, TraceID: "template-audit-trace",
+		KeyID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", Name: "template audit fixture", Prefix: "pc_aaaaaaaa",
+		Kind: "issued", TenantID: tenant, RequestID: request, TraceID: "template-audit-trace",
 	})
 }
 
@@ -157,11 +157,11 @@ func TestAdminDeleteAuditCommitsWithTheDeletion(t *testing.T) {
 	if err != nil || id != template.ID {
 		t.Fatal(id, err)
 	}
-	var credential, actor, project, trace, action, kind, gotID, mappings, raw string
-	if err := f.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,result_ids::text,to_jsonb(a)::text FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &trace, &action, &kind, &gotID, &mappings, &raw); err != nil {
+	var credential, actor, project, trace, action, kind, gotID, raw string
+	if err := f.pool.QueryRow(t.Context(), `SELECT admin_credential_id,actor_label,project_id,trace_id,action,resource_type,resource_id,to_jsonb(a)::text FROM admin_audit_log a WHERE tenant_id=$1 AND request_id=$2`, tenant, request).Scan(&credential, &actor, &project, &trace, &action, &kind, &gotID, &raw); err != nil {
 		t.Fatal(err)
 	}
-	if credential != "87654321" || actor != "administrator fixture" || project != tenant || trace != "admin-mutation-trace" || action != "delete" || kind != "environment_template" || gotID != id || mappings != "[]" || strings.Contains(raw, "admin-private") {
+	if credential != "87654321" || actor != "administrator fixture" || project != tenant || trace != "admin-mutation-trace" || action != "delete" || kind != "environment_template" || gotID != id || strings.Contains(raw, "admin-private") {
 		t.Fatal("administrator audit identity differs")
 	}
 	var operations, owners int

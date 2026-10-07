@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: a70ea3e004d5b7e2fc48c26296c792a5d888b754a012a7f0c624c3ff597369e7
+source_hash: 514100f17d7d2ab44fd6711104ee49460360ff150652f37566b3f1c00a7bb372
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -273,7 +273,7 @@ session = client.beta.agents.sessions.create(
 - 响应会携带安全元数据，绝不会包含 `env`、`setup_commands` 正文或内联文件数据。
 - 列表操作使用 `after`、`limit`（默认 20；0 按 1 处理，超过 100 的值按 100 处理）和 `order`（默认 `desc`），并按创建时间和 ID 排序。不存在和属于外部 Project 的 Template ID 及游标都会返回相同的 404。
 - 更新时，省略字段会保留原值，提供字段则会替换原值。Null 会清除 `name` 和每个列表，并将 `network` 重置为启用。
-- 封装或解封机密内容（文件、env、设置命令、Skills、Plugins）的写入操作和 Session 解析需要 Core 的 [credential key](../../../docs/zh/configuration.md#installation-directory)；元数据读取则不需要。
+- 封装或解封机密内容（文件、env、设置命令、Skills、Plugins）的写入操作和 Session 解析需要 Core 的 [credential key](../../../docs/zh/configuration.md#compose-installations)；元数据读取则不需要。
 - Session 会在创建时于其 Project 内解析一次 `environment_template_id`，冻结有效配置，并且绝不将 Template ID 传递给 Provider 或 Runtime。更新或删除 Template 绝不会改变现有 Session。创建重试会在读取 Template 之前恢复已记录的调用方意图，即使 Template 已删除也是如此；意图发生变化时会产生冲突。
 
 ### 继承 {#inheritance}

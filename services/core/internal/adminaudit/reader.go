@@ -2,7 +2,6 @@ package adminaudit
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -30,17 +29,16 @@ type Filter struct {
 // Operation is one administrator write. ProjectID is null for
 // deployment-wide writes, such as deployment default model providers.
 type Operation struct {
-	ID                string          `json:"id"`
-	CreatedAt         time.Time       `json:"created_at"`
-	AdminCredentialID string          `json:"admin_credential_id"`
-	ActorLabel        string          `json:"actor_label"`
-	Action            string          `json:"action"`
-	ProjectID         *string         `json:"project_id" extensions:"x-nullable"`
-	ResourceType      string          `json:"resource_type"`
-	ResourceID        string          `json:"resource_id"`
-	ResultIDs         json.RawMessage `json:"result_ids" swaggertype:"array,object"`
-	RequestID         string          `json:"request_id"`
-	TraceID           string          `json:"trace_id"`
+	ID                string    `json:"id"`
+	CreatedAt         time.Time `json:"created_at"`
+	AdminCredentialID string    `json:"admin_credential_id"`
+	ActorLabel        string    `json:"actor_label"`
+	Action            string    `json:"action"`
+	ProjectID         *string   `json:"project_id" extensions:"x-nullable"`
+	ResourceType      string    `json:"resource_type"`
+	ResourceID        string    `json:"resource_id"`
+	RequestID         string    `json:"request_id"`
+	TraceID           string    `json:"trace_id"`
 }
 
 type Page struct {

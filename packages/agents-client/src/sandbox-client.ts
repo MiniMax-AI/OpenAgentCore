@@ -1,5 +1,6 @@
 import { AgentCoreError } from "./client";
 import { CoreRequester, type CoreClientOptions } from "./core-request";
+import { deploymentContract } from "./deployment-contract";
 import { hasOwn, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } from "./response-projection";
 import type { ReadOptions } from "./types";
 
@@ -25,6 +26,9 @@ export function normalizeSandboxNodeDiagnostic(value: string): Exclude<SandboxNo
 }
 
 export type SandboxProvider = "docker" | "microsandbox" | "e2b";
+/** Client-generated, never a Core code: a deployment write whose rejection could echo the key and is withheld. */
+export const sandboxConfigurationUnconfirmed = "sandbox_configuration_unconfirmed";
+const sandboxConfigurationParams = new Set<unknown>(["runtime", ...deploymentContract.resources.map(({ name }) => `resources.${name}`)]);
 /** CPU and MiB limits for each sandbox, not node concurrency. */
 export interface SandboxResources { cpus: number; memory_mib: number; root_disk_mib?: number; environment_disk_mib?: number }
 export interface SandboxRuntimeRelease { source_commit: string; image_id: string; image_manifest_digest: string; microsandbox_ref: string; runtime_sha256: string; firmware_sha256: string }
@@ -389,7 +393,7 @@ export class SandboxAdminClient {
           const fields = error.code === "sandbox_generation_stale" ? ["current_generation"] : error.code === "sandbox_in_use" ? ["allocations", "pending"] : error.code === "invalid_sandbox_configuration" ? ["min", "max"] : [];
           const details = Object.fromEntries(fields.filter(field => isNonnegativeInteger(error.details?.[field])).map(field => [field, Number(error.details![field])]));
           const safeParam = error.status === 400
-            ? error.code === "sandbox_credential_invalid" ? "credential" : error.code === "sandbox_configuration_invalid" ? "configuration" : error.code === "invalid_sandbox_configuration" && ["runtime", "resources.cpus", "resources.memory_mib", "resources.root_disk_mib", "resources.environment_disk_mib"].includes(error.param ?? "") ? error.param : null
+            ? error.code === "sandbox_credential_invalid" ? "credential" : error.code === "sandbox_configuration_invalid" ? "configuration" : error.code === "invalid_sandbox_configuration" && sandboxConfigurationParams.has(error.param) ? error.param : null
             : error.status === 409 && error.code === "sandbox_credential_ownership" ? "credential" : null;
           const param = error.param === safeParam ? safeParam : null;
           throw new AgentCoreError(messages[error.code]!, error.status, error.code, param, undefined, Object.keys(details).length ? details : undefined);
@@ -401,7 +405,7 @@ export class SandboxAdminClient {
         throw new AgentCoreError("E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", 409, "sandbox_configuration_error", null);
       }
       // Any other credential-bearing rejection may reflect the key in any error field.
-      throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, "sandbox_configuration_unconfirmed");
+      throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, sandboxConfigurationUnconfirmed);
     }
   }
   async listNodes(options?: ReadOptions): Promise<{ data: SandboxNode[] }> {

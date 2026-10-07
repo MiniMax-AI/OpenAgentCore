@@ -21,7 +21,7 @@ function cache(provider: SandboxDeployment["provider"]) {
     mode: provider === "e2b" ? "direct" : "nodes", reset: null, resources: { allocations: 0, pending: 0 }, suspension: null,
     rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null },
   };
-  const config: SandboxConsoleConfig = { sandbox_admin: true, node_installer: false, node_installer_sha256: "" };
+  const config: SandboxConsoleConfig = { node_installer: false, node_installer_sha256: "", node_artifacts: [] };
   client.setQueryData(sandboxConsoleConfigQuery.queryKey, () => config);
   client.setQueryData(sandboxDeploymentQuery.queryKey, deployment);
   client.setQueryData(sandboxSnapshotQuery.queryKey, { deployment, nodes: [], allocations: [], nodesError: null, readAt: 0 });

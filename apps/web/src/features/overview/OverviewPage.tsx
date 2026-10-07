@@ -308,7 +308,6 @@ function MetricTile({ label, help, value, sub }: { label: string; help?: ReactNo
 }
 
 function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
-  if (state.status === "unconfigured") return t("fleet.unconfigured");
   if (state.status === "failed") return t("fleet.failed");
   return t("fleet.loading");
 }

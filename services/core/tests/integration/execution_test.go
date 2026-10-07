@@ -276,7 +276,7 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	task := tasks[0]
-	_, err := sendMessage(ctx, s, task.tenant, task.session, "public", json.RawMessage(`{"text":"additional"}`))
+	_, err := sendMessage(ctx, s, task.tenant, task.session, "public", messageText("additional"))
 	close(release)
 	if err != nil {
 		t.Fatal("public admission used owner gate", err)

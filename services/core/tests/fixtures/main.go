@@ -58,7 +58,7 @@ func seed() error {
 		return err
 	}
 	for _, status := range []string{sessions.TurnCompleted, sessions.TurnFailed, sessions.TurnCancelled, sessions.TurnInProgress} {
-		receipts, err := service.SubmitInputs(ctx, f.Tenant, f.Session, uuid.NewString(), []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"recovery fixture"}`)}})
+		receipts, err := service.SubmitInputs(ctx, f.Tenant, f.Session, uuid.NewString(), []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"recovery fixture"}]}]}`)}})
 		if err != nil {
 			return err
 		}

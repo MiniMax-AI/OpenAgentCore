@@ -1,9 +1,4 @@
-import type {
-  AgentDeleted, AgentSession, AgentTurn, EnvironmentTemplateDeleted, EnvironmentTemplateList, EnvironmentTemplateResource, ListPage, PageOptions, ReadOptions,
-  RuntimeHistory, RuntimeHistoryQuery, RuntimeObservation, SavedAgent, SessionDeleted, SessionItem, SessionListOptions, SkillContent, SkillDeleted, SkillList,
-  SkillListOptions, SkillVersionDeleted, SkillVersionList, SourceFileDeleted, SourceFileList, SourceFileListOptions, TolerantSessionList, Vault,
-  VaultCredentialDeleted, VaultCredentialList, VaultDeleted, VaultList, VaultListOptions,
-} from "./types";
+import type { PageOptions } from "./types";
 
 export interface AdminClientOptions {
   /** Prefix that request paths are appended to; defaults to `/core/v1`. */
@@ -76,14 +71,13 @@ export interface AdminKeyProvenance {
   id: string;
   name: string;
   prefix: string;
-  kind: "issued" | "static" | "console";
+  kind: "issued";
   revoked_at: string | null;
 }
+/** `api_key` is null when Core has no creation record. */
 export interface AdminResourceOwner {
   resource_id: string;
   api_key: AdminKeyProvenance | null;
-  source: "api_key" | "admin_copy" | null;
-  admin_audit_id: string | null;
 }
 export interface AdminWriteOperation {
   id: string;
@@ -136,11 +130,6 @@ export interface AdminAuditOptions extends Omit<AdminWriteOperationOptions, "res
   action?: string;
   resource_type?: string;
 }
-export interface AdminAuditResultID {
-  type: "agent" | "skill" | "skill_version" | "environment_template" | "file" | "vault" | "credential";
-  source_id: string;
-  target_id: string;
-}
 export interface AdminAuditEntry {
   id: string;
   created_at: string;
@@ -151,8 +140,6 @@ export interface AdminAuditEntry {
   project_id: string | null;
   resource_type: string;
   resource_id: string;
-  /** Non-empty only on historical `copy` entries from the removed copy operation. */
-  result_ids: AdminAuditResultID[];
   request_id: string;
   trace_id: string;
 }
@@ -200,14 +187,8 @@ export interface CoreInstallationSetting {
   /** Services that restart when the setting changes. */
   restarts: ("core" | "web" | "database")[];
 }
-/** Where process settings change, and their last applied values. */
+/** The process settings Core loaded. */
 export interface CoreInstallationConfiguration {
-  /** Absolute host path of config.json. Empty when Core reports the environment it loaded. */
-  path: string;
-  /** Command that applies config.json changes. Empty when Core reports the environment it loaded. */
-  apply_command: string;
-  /** Null when Core reports the environment it loaded. */
-  applied_at: string | null;
   settings: CoreInstallationSetting[];
 }
 /** `GET /core/v1/installation`: available before any sandbox deployment exists. */
@@ -222,43 +203,7 @@ export interface CoreInstallation {
   local_only: boolean;
   /** Full source commit Core was built from; null for development builds. */
   source_commit: string | null;
-  /** Null when Core was not started. Core reports the process settings it loaded; path and apply_command are empty unless a snapshot was supplied. */
-  configuration: CoreInstallationConfiguration | null;
+  /** The process settings Core loaded. */
+  configuration: CoreInstallationConfiguration;
   address_bindings: CoreAddressBindings;
-}
-
-/**
- * The project-bound reads and deletions the console makes through Core, in
- * the public projections' shapes: each method is a Core client method with
- * its project ID bound.
- */
-export interface CoreProjectReader {
-  listAgents(options?: PageOptions): Promise<ListPage<SavedAgent>>;
-  retrieveAgent(agentId: string): Promise<SavedAgent>;
-  deleteAgent(agentId: string): Promise<AgentDeleted>;
-  listSkills(options?: SkillListOptions): Promise<SkillList>;
-  retrieveSkill(skillId: string, options?: ReadOptions): Promise<Skill>;
-  deleteSkill(skillId: string, options?: ReadOptions): Promise<SkillDeleted>;
-  listSkillVersions(skillId: string, options?: SkillListOptions): Promise<SkillVersionList>;
-  deleteSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillVersionDeleted>;
-  downloadSkill(skillId: string, options?: ReadOptions): Promise<SkillContent>;
-  downloadSkillVersion(skillId: string, version: string, options?: ReadOptions): Promise<SkillContent>;
-  listEnvironmentTemplates(options?: PageOptions): Promise<EnvironmentTemplateList>;
-  retrieveEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateResource>;
-  deleteEnvironmentTemplate(templateId: string, options?: ReadOptions): Promise<EnvironmentTemplateDeleted>;
-  listSourceFiles(options?: SourceFileListOptions): Promise<SourceFileList>;
-  deleteSourceFile(fileId: string, options?: ReadOptions): Promise<SourceFileDeleted>;
-  listVaults(options?: VaultListOptions): Promise<VaultList>;
-  retrieveVault(vaultId: string, options?: ReadOptions): Promise<Vault>;
-  listVaultCredentials(vaultId: string, options?: VaultListOptions): Promise<VaultCredentialList>;
-  deleteVault(vaultId: string): Promise<VaultDeleted>;
-  deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
-  listSessions(options?: SessionListOptions): Promise<ListPage<AgentSession>>;
-  listSessionsTolerant(options?: SessionListOptions): Promise<TolerantSessionList>;
-  retrieveSession(sessionId: string, options?: ReadOptions): Promise<AgentSession>;
-  deleteSession(sessionId: string): Promise<SessionDeleted>;
-  listTurns(sessionId: string, options?: PageOptions): Promise<ListPage<AgentTurn>>;
-  listItems(sessionId: string, options?: PageOptions): Promise<ListPage<SessionItem>>;
-  retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
-  retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory>;
 }

@@ -13,7 +13,7 @@ export const sandboxAdmin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox"
 
 export const sandboxScope = ["sandbox"] as const;
 
-/** Whether this console may administer sandboxes, and its node installer. */
+/** This console's node installer and node files. */
 export const sandboxConsoleConfigQuery = queryOptions({
   queryKey: ["console-config"],
   queryFn: async ({ signal }) => {
@@ -45,13 +45,11 @@ export function sandboxResetPollInterval(deployment: SandboxDeployment | undefin
 
 /**
  * The deployment's sandbox provider from the cached deployment read: "" before
- * setup, null while unknown or when this console has no sandbox administration.
- * Pages that differ for E2B (no machines) and own nodes read it.
+ * setup, null while unknown. Pages that differ for E2B (no machines) and own
+ * nodes read it.
  */
 export function useSandboxProvider(): SandboxProvider | "" | null {
-  const config = useQuery(sandboxConsoleConfigQuery);
-  const deployment = useQuery({ ...sandboxDeploymentQuery, enabled: config.data?.sandbox_admin === true });
-  return deployment.data?.provider ?? null;
+  return useQuery(sandboxDeploymentQuery).data?.provider ?? null;
 }
 
 export interface SandboxSnapshot {

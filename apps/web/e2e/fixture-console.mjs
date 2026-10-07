@@ -40,7 +40,7 @@ const publicUrl = () => (state.installation === "local" ? LOCAL_URL : PUBLIC_URL
 /** Core reports one installation ID, a canonical UUID, in the installation and the deployment. */
 const INSTALLATION_ID = "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f";
 
-/** GET /core/v1/installation: the address, the startup settings from config.json and what is bound to the address. */
+/** GET /core/v1/installation: the address, the startup settings Core loaded and what is bound to the address. */
 function installation() {
   const local = state.installation === "local";
   const setting = (key, value, fallback, restarts, extra = {}) => ({ key, value, default: fallback, changeable: true, sensitive: false, restarts, ...extra });
@@ -51,7 +51,6 @@ function installation() {
     object: "core.installation", installation_id: INSTALLATION_ID, public_url: publicUrl(), api_base_url: `${publicUrl()}/v1`,
     local_only: local, source_commit: release.source_commit,
     configuration: {
-      path: "/opt/oac/config.json", apply_command: "sudo oac apply", applied_at: "2026-09-24T09:30:00Z",
       settings: [
         setting("public_url", publicUrl(), LOCAL_URL, ["core", "web"]),
         setting("listen_address", "127.0.0.1:8091", "127.0.0.1:8091", ["core"]),
@@ -98,7 +97,7 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
   const screenshots = process.env.OAC_WEB_SCREENSHOT_DEMO === "1";
   const now = Math.floor(Date.now() / 1000);
   const base = (screenshots ? buildScreenshotDemo : buildDemo)(now, address === "local" ? LOCAL_URL : PUBLIC_URL);
-  const resources = buildResources(now, base.agents, base.sessions);
+  const resources = buildResources(now);
   const admin = buildAdmin(now, base, resources);
   // A fresh install: no project, Session or Runtime yet; Getting started leads.
   if (fresh) for (const list of [admin.projects, base.sessions, base.observations, base.allocations]) list.splice(0);

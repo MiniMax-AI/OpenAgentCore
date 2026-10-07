@@ -87,7 +87,6 @@ const loadHistory = (snapshot: RuntimeDashboardSnapshot, range: RuntimeDurableRa
 }, snapshot, range, signal);
 
 function fleetMessage(state: FleetState, t: TFunction<"metrics">): string {
-  if (state.status === "unconfigured") return t("sandbox.fleetUnconfigured");
   if (state.status === "failed") return t("sandbox.fleetFailed");
   return t("sandbox.fleetLoading");
 }
@@ -193,7 +192,7 @@ export function SandboxMetricsPage() {
                 action={<button className="button primary" type="button" onClick={() => navigate("system", { id: "sandbox" })}>{t("sandbox.setUp")}</button>}
               />
             )
-          ) : fleetState.status === "checking" || fleetState.status === "loading"
+          ) : fleetState.status === "loading"
             ? <TableSkeleton label={message} rows={3} columns={suspends ? 9 : 8} />
             : <p className="page-status" role={fleetState.status === "failed" ? "alert" : "status"}>{message}</p>}
         </Section>}

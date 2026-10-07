@@ -100,7 +100,7 @@ func TestLiveStreamClosesAfterKeyRevocationOrProjectArchive(t *testing.T) {
 					t.Fatal("revocation affected peer", valid.StatusCode)
 				}
 				// New events remain available to valid callers after the reader has closed.
-				if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), project.TenantID, session.ID, "after-revocation", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"new event"}`)}}); err != nil {
+				if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), project.TenantID, session.ID, "after-revocation", []sessions.Input{messageInput("new event")}); err != nil {
 					t.Fatal(err)
 				}
 			}

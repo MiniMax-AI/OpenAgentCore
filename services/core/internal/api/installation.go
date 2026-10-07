@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 )
@@ -22,22 +21,14 @@ type Installation struct {
 	LocalOnly bool `json:"local_only"`
 	// Full source commit Core was built from; null for development builds.
 	SourceCommit *string `json:"source_commit" extensions:"x-nullable"`
-	// The process settings Core loaded. path and apply_command are empty, and applied_at is null, because Core reports its environment rather than an installer file.
-	Configuration   *InstallationConfiguration `json:"configuration" extensions:"x-nullable"`
+	// The process settings Core loaded.
+	Configuration   InstallationConfiguration  `json:"configuration"`
 	AddressBindings deployment.AddressBindings `json:"address_bindings"`
 }
 
-// InstallationConfiguration is the process settings Core loaded. Path and
-// ApplyCommand are empty, and AppliedAt is null, unless a caller built a
-// snapshot itself.
+// InstallationConfiguration is the process settings Core loaded.
 type InstallationConfiguration struct {
-	// Absolute host path of config.json. Empty when Core reports its own environment.
-	Path string `json:"path"`
-	// Command that applies config.json changes. Empty when Core reports its own environment.
-	ApplyCommand string `json:"apply_command"`
-	// Null when Core reports its own environment.
-	AppliedAt *time.Time            `json:"applied_at" extensions:"x-nullable"`
-	Settings  []InstallationSetting `json:"settings"`
+	Settings []InstallationSetting `json:"settings"`
 }
 
 type InstallationSetting struct {

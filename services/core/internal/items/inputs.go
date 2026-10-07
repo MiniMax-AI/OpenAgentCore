@@ -9,20 +9,16 @@ import (
 
 func inputMessages(turn string, sequence int64, raw json.RawMessage) []Update {
 	var p struct {
-		Text  *string `json:"text"`
 		Input []struct {
 			Role    string           `json:"role"`
 			Content []v1.ItemContent `json:"content"`
 		} `json:"input"`
 	}
-	// Internal admission predates the public schema and accepts arbitrary objects.
+	// Session admission stores any JSON object; only public messages project.
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil
 	}
 	key := "input:" + strconv.FormatInt(sequence, 10)
-	if p.Text != nil {
-		return []Update{{Item: message(turn, key, "user", *p.Text, "completed")}}
-	}
 	var updates []Update
 	for i, input := range p.Input {
 		if input.Role != "user" || len(input.Content) == 0 {

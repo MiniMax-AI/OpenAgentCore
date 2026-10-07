@@ -220,7 +220,7 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 				!last.EnvironmentFailure.FailedAt.Equal(read.EnvironmentFailure.FailedAt) || last.EnvironmentInputActivity != nil || !last.Settled {
 				t.Fatal("failed snapshot", last)
 			}
-			if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
+			if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrHostedEnvironmentFailed) {
 				t.Fatal("failed hosted Environment admitted input", err)
 			}
 			raw, _ := json.Marshal(events)
@@ -249,7 +249,7 @@ func TestHostedInitializationFailureSettlesPendingInitialInput(t *testing.T) {
 	tenant := uuid.NewString()
 	session, environment := hostedFailureSession(t, s, tenant, sessions.CreateSession{
 		Initialization: environmentconfig.Setup{Commands: []environmentconfig.SetupCommand{{Command: "exit 3"}}},
-		InitialInputs:  []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"initial"}`)}},
+		InitialInputs:  []sessions.Input{messageInput("initial")},
 	})
 	p := &hostedFailureProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}, fail: "setup",
 		result: failedInitialization(3)}

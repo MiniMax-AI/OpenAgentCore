@@ -31,7 +31,7 @@ func TestEnvironmentInitialFailureOfficialClient(t *testing.T) {
 	configuration := json.RawMessage(`{"agent":{"id":"agent_initial_failure","model":"fixture","tools":[],"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"}},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`)
 	session, err := s.CreateSession(t.Context(), tenant, sessions.CreateSession{
 		Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "initial", Configuration: configuration,
-		InitialInputs: []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"private-input-marker"}`)}},
+		InitialInputs: []sessions.Input{messageInput("private-input-marker")},
 	})
 	if err != nil {
 		t.Fatal(err)

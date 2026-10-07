@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -62,7 +61,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			receipt, err := sendMessage(ctx, s, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`))
+			receipt, err := sendMessage(ctx, s, tenant, session.ID, "input", messageText("retained"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -139,7 +138,7 @@ func TestSessionDeletionWaitsForSettledTurnAndRejectsAdmission(t *testing.T) {
 			if _, err := createSession(ctx, fresh, tenant, input); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 				t.Fatal(err)
 			}
-			if _, err := sendMessage(ctx, fresh, tenant, session.ID, "input", json.RawMessage(`{"text":"retained"}`)); !errors.Is(err, sessions.ErrNotFound) {
+			if _, err := sendMessage(ctx, fresh, tenant, session.ID, "input", messageText("retained")); !errors.Is(err, sessions.ErrNotFound) {
 				t.Fatal(err)
 			}
 			if _, err := requestCancel(ctx, fresh, tenant, session.ID, "late-cancel"); !errors.Is(err, sessions.ErrNotFound) {

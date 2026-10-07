@@ -63,7 +63,7 @@ export function gettingStartedSteps(input: {
  */
 function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   if (fleet.status !== "ready") {
-    return { state: fleet.status === "failed" || fleet.status === "unconfigured" ? "unknown" : null, action: "nodes", cloud: false };
+    return { state: fleet.status === "failed" ? "unknown" : null, action: "nodes", cloud: false };
   }
   if (fleet.error) return { state: "unknown", action: "nodes", cloud: fleet.snapshot.deployment.provider === "e2b" };
   const { deployment, nodes } = fleet.snapshot;
@@ -142,7 +142,7 @@ const INSTALLATION_KEY = "oac-web.last-installation";
  */
 export function checklistStorageKey(fleet: FleetState): string | null {
   const installation = fleet.status === "ready" ? fleet.snapshot.deployment.installation_id
-    : fleet.status === "failed" || fleet.status === "unconfigured" ? readStored(INSTALLATION_KEY) ?? ""
+    : fleet.status === "failed" ? readStored(INSTALLATION_KEY) ?? ""
     : null;
   if (installation === null) return null;
   return installation ? `${MEMORY_KEY}.${installation}` : MEMORY_KEY;

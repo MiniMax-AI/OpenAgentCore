@@ -25,7 +25,7 @@ func main() {
 		os.Exit(2)
 	}
 	if os.Args[1] == "init" {
-		log.Init(log.ConfigFromEnv())
+		log.Init(log.Config{})
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -80,9 +80,6 @@ func run(ctx context.Context, command string, args []string) error {
 }
 
 func installDir() (string, error) {
-	if dir := os.Getenv("OAC_INSTALL_DIR"); dir != "" {
-		return dir, nil
-	}
 	exe, err := os.Executable()
 	if err != nil {
 		return "", err

@@ -39,7 +39,7 @@ func TestFunctionInputBatchesPersistAndReplayWithoutRetargeting(t *testing.T) {
 	s, pool := testStore(t)
 	tenant, session, turn := functionInputFixture(t, s, functionExecution(t))
 	full := `{"success":false,"output":[{"type":"input_text","text":""},{"type":"input_image","image_url":"data:image/png;base64,AA=="},{"type":"input_text","text":"after"}],"error":"failed"}`
-	batch := []sessions.Input{resultInput(t, turn, "a", full), {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, resultInput(t, turn, "b", `{"success":true,"output":null,"error":null}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
+	batch := []sessions.Input{resultInput(t, turn, "a", full), messageInput("Follow up"), resultInput(t, turn, "b", `{"success":true,"output":null,"error":null}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
 	receipts, err := submitInputs(t.Context(), s, tenant, session.ID, "batch", batch)
 	if err != nil || len(receipts) != 4 {
 		t.Fatal(receipts, err)
@@ -105,7 +105,7 @@ func TestFunctionInputBatchFailureRollsBackEveryWrite(t *testing.T) {
 			s, _ := testStore(t)
 			functions := functionExecution(t)
 			tenant, session, turn := functionInputFixture(t, s, functions)
-			message := sessions.Input{Kind: "message", Payload: json.RawMessage(`{"text":"Must roll back"}`)}
+			message := messageInput("Must roll back")
 			cancel := sessions.Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
 			first := resultInput(t, turn, "a", `{"success":true}`)
 			batch := []sessions.Input{message, first, cancel}
@@ -165,7 +165,7 @@ func TestFunctionInputConcurrentBatchesSelectOneResult(t *testing.T) {
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
 	for i := range 2 {
-		batch := []sessions.Input{{Kind: "message", Payload: json.RawMessage(fmt.Sprintf(`{"text":"message-%d"}`, i))}, resultInput(t, turn, "a", fmt.Sprintf(`{"success":true,"output":"%d"}`, i))}
+		batch := []sessions.Input{{Kind: "message", Payload: messageText(fmt.Sprintf("message-%d", i))}, resultInput(t, turn, "a", fmt.Sprintf(`{"success":true,"output":"%d"}`, i))}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -271,7 +271,7 @@ session = client.beta.agents.sessions.create(
 - Responses carry safe metadata and never `env`, `setup_commands` bodies or inline file data.
 - List uses `after`, `limit` (default 20; 0 is treated as 1 and values above 100 as 100) and `order` (default `desc`), ordered by creation time and ID. Missing and foreign Template IDs and cursors return the same 404.
 - Update: an omitted field keeps its value and a supplied field replaces it. Null clears `name` and every list and resets `network` to enabled.
-- Writes and Session resolution that seal or open confidential content (files, env, setup commands, Skills, Plugins) need Core's [credential key](../../docs/configuration.md#installation-directory); metadata reads do not.
+- Writes and Session resolution that seal or open confidential content (files, env, setup commands, Skills, Plugins) need Core's [credential key](../../docs/configuration.md#compose-installations); metadata reads do not.
 - A Session resolves `environment_template_id` within its Project once, at creation, freezes the effective configuration and never passes the Template ID to the Provider or Runtime. Updating or deleting a Template never changes an existing Session. Creation retries recover the recorded caller intent before reading the Template, even after it is deleted; a changed intent conflicts.
 
 ### Inheritance
