@@ -15,7 +15,10 @@ func TestFramesMustNameTheRequestAssignment(t *testing.T) {
 			s := NewSession(newFakeConn(), "device", "tenant", "test", NewRegistry(), nil)
 			defer s.Close("test")
 			read := make(chan error, 1)
-			go func() { _, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest()); read <- err }()
+			go func() {
+				_, err := s.ReadWorkspaceFile(t.Context(), testAssignment, workspaceReadRequest())
+				read <- err
+			}()
 			request := <-s.sendCh
 			reply, _ := request.Reply(proto.TypeWorkspaceReadResult, proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true})
 			reply.Assignment = ref

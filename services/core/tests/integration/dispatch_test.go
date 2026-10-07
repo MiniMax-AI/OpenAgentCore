@@ -27,7 +27,8 @@ import (
 
 type dispatchHarness struct {
 	writeMu      sync.Mutex
-	assignment   proto.AssignmentRef // the latest assignment Core named; writeMu guards it
+	assignments  map[string]proto.AssignmentRef // by frame and Run ID; writeMu guards it
+	assignment   proto.AssignmentRef            // the latest assignment Core named
 	admissions   map[string]fixtureAdmission
 	t            *testing.T
 	s            *Store
@@ -146,7 +147,9 @@ func (h *dispatchHarness) write(run, kind string, payload any) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	if kind != proto.TypeHeartbeat {
+	if ref, ok := h.assignments[run]; ok {
+		env.Assignment = ref
+	} else if kind != proto.TypeHeartbeat {
 		env.Assignment = h.assignment
 	}
 	if err = h.conn.WriteJSON(env); err != nil {

@@ -168,3 +168,41 @@ func TestLocalUploadReportsDestinationConflictsAndReleasesOwner(t *testing.T) {
 		})
 	}
 }
+
+func TestReleaseFencesUnfinishedWorkspaceWrite(t *testing.T) {
+	r, sender, request, workspace := localWriterRouter(t)
+	id := uuid.NewString()
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, id, request)); err != nil {
+		t.Fatal(err)
+	}
+	waitWorkspaceWrite(t, sender, id, "ready")
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, id, proto.WorkspaceWritePayload{Step: "chunk", Data: []byte("abc")})); err != nil {
+		t.Fatal(err)
+	}
+	waitWorkspaceWrite(t, sender, id, "received")
+	release(t, r, preparationSessionID, "release", 2, false)
+	if got := waitWorkspaceWrite(t, sender, id, "rejected"); got.ErrorCode != proto.AssignmentStale {
+		t.Fatal("release did not fence the write", got)
+	}
+	if got := waitAssignmentStatus(t, sender, "release"); got.State != proto.AssignmentReleased {
+		t.Fatal(got)
+	}
+	// The release replies only after the write's result.
+	for _, frame := range sender.snapshot() {
+		if frame.Type == proto.TypeAssignmentStatus && frame.ID == "release" {
+			t.Fatal("release replied before the write settled")
+		}
+		if frame.Type == proto.TypeWorkspaceWriteResult && frame.ID == id && frame.Assignment == ref(preparationSessionID) {
+			var result proto.WorkspaceWriteResultPayload
+			if frame.DecodePayload(&result) == nil && result.Outcome == "rejected" {
+				break
+			}
+		}
+	}
+	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceWrite, id, proto.WorkspaceWritePayload{Step: "commit"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "file")); !os.IsNotExist(err) {
+		t.Fatal("a released assignment's write applied", err)
+	}
+}
