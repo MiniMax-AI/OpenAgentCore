@@ -44,7 +44,7 @@ func FromHandle(h Handle, opts HandleOptions) (*Process, error) {
 		opts.KillTimeout = DefaultKillTimeout
 	}
 	ctx, cancel := context.WithCancel(opts.Parent)
-	p := &Process{Stdin: opts.Stdin, Stdout: opts.Stdout, Stderr: opts.Stderr, ctx: ctx, cancel: cancel, done: make(chan struct{}), killAfter: opts.KillTimeout}
+	p := &Process{Stdin: opts.Stdin, Stdout: opts.Stdout, Stderr: opts.Stderr, ctx: ctx, cancel: cancel, done: make(chan struct{})}
 	var terminateOnce sync.Once
 	var interrupted atomic.Bool
 	p.cancelProcess = func() error {
@@ -53,7 +53,7 @@ func FromHandle(h Handle, opts HandleOptions) (*Process, error) {
 			interrupted.Store(err == nil)
 			go func() {
 				if err == nil || errors.Is(err, os.ErrProcessDone) {
-					timer := time.NewTimer(p.killAfter)
+					timer := time.NewTimer(opts.KillTimeout)
 					defer timer.Stop()
 					select {
 					case <-p.done:

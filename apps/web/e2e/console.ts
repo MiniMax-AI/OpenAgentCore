@@ -40,7 +40,7 @@ export async function openConsole(page: Page, request: APIRequestContext, hash =
   await resetFixture(request, "authenticated", options);
   await recordV1Requests(page);
   await page.context().addCookies([{ name: "core_console", value: "fixture-session", url: web }]);
-  await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
+  await page.addInitScript(() => window.localStorage.setItem("oac-web.language", "en"));
   await page.goto(`/#${hash}`);
 }
 

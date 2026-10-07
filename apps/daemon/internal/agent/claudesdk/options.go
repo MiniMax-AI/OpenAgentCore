@@ -39,7 +39,6 @@ type startRequest struct {
 	MCPHTTPServers     *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
 	Workspace          *workspaceProfile    `json:"workspace,omitempty"`
 	RequireHistory     bool                 `json:"require_history,omitempty"`
-	observeFunctions   bool
 }
 
 func prepare(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
@@ -111,7 +110,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 // an agent-host view takes from its Session rather than the request.
 func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []string, error) {
 	skills := req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) != 0
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools, observeFunctions: req.ObserveToolObservations}
+	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}

@@ -72,7 +72,6 @@ func configureMCP(plan *SessionPlan, servers map[string]mcpServerConfig) error {
 		return errors.New("codex: cannot write public MCP configuration")
 	}
 	for _, feature := range []string{"plugins", "apps"} {
-		plan.EnableFeatures = slices.DeleteFunc(plan.EnableFeatures, func(value string) bool { return value == feature })
 		if !slices.Contains(plan.DisableFeatures, feature) {
 			plan.DisableFeatures = append(plan.DisableFeatures, feature)
 		}

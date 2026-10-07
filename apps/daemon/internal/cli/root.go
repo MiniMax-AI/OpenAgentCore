@@ -41,7 +41,7 @@ var commands = []command{
 	{name: "runtime-mcp-exec", summary: "Execute an installed MCP server", run: runRuntimeMCP},
 	{name: "placement", summary: "Enroll or retire an explicitly managed local execution placement", run: runPlacement},
 	{name: "connect", summary: "Open the reverse WebSocket and start serving prompts", run: runConnect},
-	{name: "status", summary: "Print the device profile and daemon state", run: runStatus},
+	{name: "status", summary: "Print the credential profile and daemon state", run: runStatus},
 	{name: "stop", summary: "Stop a background `connect -b` daemon", run: runStop},
 	{name: "logs", summary: "Tail the background daemon's log file", run: runLogs},
 	{name: "logout", summary: "Forget the credential for a profile", run: runLogout},

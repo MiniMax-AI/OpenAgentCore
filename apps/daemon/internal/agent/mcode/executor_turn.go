@@ -25,7 +25,7 @@ func (s *Session) runExecutorTurn() {
 	// Written steering requests retain their original receipt owner even after
 	// prompt completion. No successor starts until all callers have settled.
 	s.operations.Wait()
-	if s.req.StrictResume && !s.req.DisableSubagents && s.subagentHistoryReady {
+	if !s.req.DisableSubagents && s.subagentHistoryReady {
 		childErr := s.settleSubagents()
 		s.mu.Lock()
 		s.subagentSettlementError = childErr
@@ -82,7 +82,7 @@ func (s *Session) runExecutorTurn() {
 }
 
 func (s *Session) captureSubagentBaseline() error {
-	if !s.req.StrictResume || s.req.DisableSubagents {
+	if s.req.DisableSubagents {
 		return nil
 	}
 	snapshot, err := s.readSubagents(s.ctx)
@@ -135,7 +135,7 @@ func (s *Session) cancelTurn(ctx context.Context) error {
 		err = s.writeContext(ctx, rpcFrame{JSONRPC: "2.0", Method: "session/cancel", Params: raw})
 	}
 	if first {
-		if err == nil && s.req.StrictResume && !s.req.DisableSubagents {
+		if err == nil && !s.req.DisableSubagents {
 			err = s.stopSubagents(ctx)
 		}
 		if err != nil {

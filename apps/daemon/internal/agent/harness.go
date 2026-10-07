@@ -298,8 +298,8 @@ type ViewSession struct {
 	MCP []MCPBinding
 	// Launch replaces clirunner.Start. Each call builds one view and runs
 	// Binary, which must be a LocalExec path, in it. Dir is a world path, or
-	// the work directory in an empty-root view; OwnProcessGroup is true, and
-	// Env is the complete Harness environment.
+	// the work directory in an empty-root view, and Env is the complete
+	// Harness environment.
 	// Cancel sends TERM to every process in the view and closes the view after
 	// KillTimeout; a Cancel after the Harness exited leaves its exit as it was.
 	// When the Harness exits while other processes remain, the view sends them
@@ -565,8 +565,8 @@ type TurnSettlement struct {
 	Reason   string
 }
 
-// Session is the cancellation and outcome surface shared by direct prompt runs
-// and Turns. Every owner exposes observed state, including direct-call sessions.
+// Session is the cancellation and outcome surface shared by direct-call
+// sessions and Turns. Every owner exposes observed state.
 // For Executor-owned Turns, AwaitSettlement and Executor.Close define settlement
 // and resource retirement; Cancel alone does not transfer resource ownership.
 type Session interface {
@@ -645,11 +645,12 @@ type WorkspaceWriter interface {
 	WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error)
 }
 
-// Direct-call factory and registration. These use the existing Registry behavior.
+// Kind registration and the direct-call factory.
 
-// Factory builds a Session for one prompt_request. out is the upstream
-// channel the agent writes into and closes exactly once after terminal output.
-// ctx is cancelled by the router to wind the session down.
+// Factory builds a Session that runs req.Input as req.RunID without an
+// Executor; the router starts every Run through RegisterExecutor instead. out
+// is the channel the agent writes into and closes exactly once after terminal
+// output. ctx is cancelled to wind the session down.
 type Factory func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (Session, error)
 
 // RegisterKind installs f and the heartbeat descriptor for an

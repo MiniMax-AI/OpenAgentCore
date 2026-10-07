@@ -66,8 +66,7 @@ func TestDecodeRequestRejectsUndeclaredMembers(t *testing.T) {
 		payload string
 		out     any
 	}{
-		"unknown key":                  {TypePromptRequest, `{"agent_kind":"codex","model":"m","unknown":true}`, &PromptRequestPayload{}},
-		"agent_options":                {TypePromptRequest, `{"agent_kind":"codex","agent_options":{"model":"m"}}`, &PromptRequestPayload{}},
+		"unknown key":                  {TypeExecutionPrepare, `{"session_id":"s","configuration":{"agent_kind":"codex","model":"m","unknown":true}}`, &ExecutionPreparePayload{}},
 		"agent_options in preparation": {TypeExecutionPrepare, `{"session_id":"s","configuration":{"agent_kind":"codex","agent_options":{}}}`, &ExecutionPreparePayload{}},
 	} {
 		env := Envelope{Type: c.typ, Payload: json.RawMessage(c.payload)}

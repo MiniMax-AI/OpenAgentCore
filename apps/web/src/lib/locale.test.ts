@@ -1,16 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveLocale } from "./locale";
 import { AgentCoreError } from "@oac/agents-client";
 import { sandboxRequestError, sandboxStateLabel } from "./sandbox-labels";
 import { sandboxDiagnosticMessage } from "./sandbox-diagnostic";
 
 describe("sandbox localization", () => {
-  it("uses saved choices and defaults to the browser's preferred language", () => {
-    expect(resolveLocale(null, ["zh-CN", "en-US"])).toBe("zh");
-    expect(resolveLocale("en", ["zh-TW"])).toBe("en");
-    expect(resolveLocale("zh", ["en-US"])).toBe("zh");
-    expect(resolveLocale("invalid", ["fr"])).toBe("en");
-  });
   it("localizes every persisted allocation and compute state without exposing unknown values", () => {
     for (const state of ["creating", "running", "cleanup_pending", "released", "disabled", "quiescing", "suspending", "suspended", "restoring", "waking"]) {
       expect(sandboxStateLabel(state, "zh")).toMatch(/[\u4e00-\u9fff]/);

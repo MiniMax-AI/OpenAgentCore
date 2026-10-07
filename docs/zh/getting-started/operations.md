@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: 5ac3e57f943b8bb3fadbf9cda0a72399317ad101416ec28ca4037eea07703a82
+source_hash: 8b5ec8893b3e844a2c4173a4122cee17bf08350cd1ea2d5128e9a6c72f590907
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -164,24 +164,19 @@ cd && rm -rf ~/.oac/core
 
 迁移到新版本时，安装到全新的空目录，使用独立数据库、Core 密钥和节点，并从新 Web 添加节点。保留旧安装、数据和节点，直到工作完成。节点运行添加它的控制台所提供的程序，不原地升级；Core 仅接受使用自身节点协议的节点。
 
-`install.sh` 拒绝非空目录。首次启动失败时，它删除自己创建的目录，同一命令可以再运行。已经启动的安装会保留。
+中断的安装可以[沿用已保存配置继续](install.md#install)。与本安装无关的非空目录会被拒绝。
 
-会修改状态的 `oac` 命令持有 `.oac.lock`。其他命令持有锁时，等待其结束后重试。不要删除 `.oac.lock` 来绕过忙碌安装。
+安装程序和修改状态的 `oac` 命令持有 `.oac.lock`。安装程序准备目录时还持有同级的 `<install-dir>.install.lock`。其他命令持有锁时，等待其结束后重试。不要删除锁文件来绕过忙碌安装。
 
 ## 问题排查 {#troubleshooting}
 
 | 症状 | 原因与解决方法 |
 | --- | --- |
-| `Core installation requires Linux amd64 with Docker access` | 使用 Linux amd64 和有 Docker 访问权限的账号；支持 root 和普通用户 |
-| `Installation failed: inspect prerequisites and private deployment files` | 前置条件失败但未单独报告，通常是 Docker：检查此用户能运行 `docker info` 和 `docker compose version` |
-| `Docker Compose 2.26.0 or newer is required …` | 更新 Docker Compose 插件 |
 | `Port N is already in use.` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口 |
-| `Installation directory is not empty` | 使用空的 `--install-dir`，或先[卸载](#uninstall)现有安装 |
+| `Directory is not a complete Core installation` | 保留目录内容，选择另一个 `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
 | `Docker Compose 2.26 or newer is required` | 更新 Docker Compose 插件 |
-| `The services did not start: …` | 新安装首次启动失败，安装程序[删除了所创建内容](install.md#install)。上方输出 Compose 或 Core 错误；修复后执行同一命令 |
-| `Removal did not finish. Left: …` | 首次启动失败后没能删干净。执行输出的命令移除残留，或修复原因后重新执行原命令 |
-| `This installation did not finish installing …` | 安装程序在报告服务运行前停止。重新执行安装命令，[清理残留](install.md#install)后重新安装，或[卸载](#uninstall) |
+| `Installation and data retained at …` | 查看上方服务日志，修复原因，再[继续安装](install.md#install)；不要删除数据 |
 | Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
 | 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |

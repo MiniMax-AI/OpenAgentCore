@@ -26,7 +26,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if slices.Contains(plan.EnableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
+	if !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
 		t.Fatal("native profile was not pinned")
 	}
 	home, err := allocCodexHome(req.AgentStateKey)

@@ -93,7 +93,7 @@ type Session struct {
 
 	// supportedKinds is the latest daemon-advertised agent_kind snapshot,
 	// updated from heartbeat frames and read by the connector before
-	// dispatching prompt_request so unsupported engines fail on the server.
+	// sending execution_prepare so unsupported engines fail on the server.
 	kindsMu        sync.RWMutex
 	kindsSeen      bool
 	supportedKinds []runtimedevice.SupportedAgentKind

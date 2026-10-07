@@ -13,7 +13,7 @@ Build on Linux x86_64 with a glibc compatible with Debian 12, Docker, the Go ver
 ```sh
 bash scripts/prepare-release-runtimes.sh
 inputs="$HOME/.oac/build/release-inputs/inputs.json"
-export AGENTS_RUNTIME_CODEX_PACKAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
+export CODEX_CLI_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codex"])' "$inputs")"
 export MCODE_HARNESS_BUILD_DIR="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["mcode"])' "$inputs")"
 export CORE_DISTRIBUTION_RELEASE_BASE_URL=https://github.com/MiniMax-AI/OpenAgentCore/releases/download/v1.2.3
 make build-core-distribution
@@ -25,7 +25,7 @@ make build-core-distribution
 | --- | --- |
 | `CORE_DISTRIBUTION_RELEASE_BASE_URL` | Versioned HTTPS directory that will serve the generated asset file names (never `latest`). Required unless `CORE_DISTRIBUTION_OFFLINE=1` |
 | `CORE_DISTRIBUTION_OFFLINE` | `1` also builds the offline archive |
-| `AGENTS_RUNTIME_CODEX_PACKAGE`, `MCODE_HARNESS_BUILD_DIR` | Pinned Runtime inputs from `prepare-release-runtimes.sh` |
+| `CODEX_CLI_DIR`, `MCODE_HARNESS_BUILD_DIR` | Pinned Runtime inputs from `prepare-release-runtimes.sh` |
 | `CORE_DISTRIBUTION_CODEX_IMAGE`, `CORE_DISTRIBUTION_CLAUDE_IMAGE`, `CORE_DISTRIBUTION_MCODE_IMAGE` | Use existing Harness images, given as immutable `sha256:` image IDs, instead of building them; set all three or none. Each must contain the daemon built from this commit |
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | Native installer catalog directory; see [Native installers](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | Output directory under `~/.oac`. Default: `~/.oac/build/core-distribution` |
@@ -59,9 +59,9 @@ The catalog records the commit, the Runtime protocol version, each archive's SHA
 **Codex Runtime image.** Extract the official npm package `@openai/codex@0.153.4-linux-x64` under `~/.oac` (for example with `npm pack --ignore-scripts` and `tar -xzf`), then:
 
 ```sh
-export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/package
-make build-agents-runtime
-docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/agents-runtime"
+export CODEX_CLI_DIR=/absolute/path/to/package
+make build-codex-runtime
+docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/.oac}/build/codex-runtime"
 ```
 
 The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified `codex` and `codex-code-mode-host` executables, their resources and `services/core/deploy/codex/Dockerfile`. The Runtime image leaves out `codex-code-mode-host`, which only the agent-host image installs.
@@ -93,7 +93,7 @@ The distribution combines the three Harness images into one Runtime image (`depl
 **Agent-host and sandbox images.** With the inputs of the three Harness images above:
 
 ```sh
-export AGENTS_RUNTIME_CODEX_PACKAGE=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
+export CODEX_CLI_DIR=/absolute/path/to/package MCODE_HARNESS_BUILD_DIR=/absolute/mcode-harness
 bash scripts/build-agent-host-images.sh
 ```
 

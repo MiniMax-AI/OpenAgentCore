@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 )
 
 type shutdownAttempt struct {
@@ -30,32 +28,12 @@ func (r *Router) Shutdown(ctx context.Context) error {
 		}
 	}
 
-	first := !r.closed
-	var victims []sessionCancellation
-	for _, state := range r.sessions {
-		state.retain = false
-		if state.preparedHandoff != nil {
-			release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
-			victims = append(victims, sessionCancellation{runID: state.runID, handoff: state.preparedHandoff, release: release, attempt: attempt})
-		} else if first {
-			victims = append(victims, sessionCancellation{runID: state.runID, ctxCancel: state.ctxCancel, session: state.session})
-		}
-	}
-	if first {
+	victims := r.sessionCancellationsLocked()
+	if !r.closed {
 		r.closed = true
 		if r.runtimePreparation != nil {
 			r.runtimePreparation.cancel()
 		}
-		for _, states := range r.idle {
-			for state := range states {
-				state.retain = false
-				if state.idleTimer != nil {
-					state.idleTimer.Stop()
-				}
-				victims = append(victims, sessionCancellation{runID: state.runID, ctxCancel: state.ctxCancel, session: state.session})
-			}
-		}
-		r.idle = make(map[string]map[*sessionState]struct{})
 		// Prepared release claims exist before this signal can interrupt output.
 		close(r.shutdownCh)
 	}
@@ -78,19 +56,10 @@ func (r *Router) Shutdown(ctx context.Context) error {
 func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionCancellation) {
 	var releaseErr error
 	for _, victim := range victims {
-		if victim.handoff != nil {
-			// The cleanup operation has its own fixed native deadline. The
-			// Shutdown caller's deadline only bounds its wait for this attempt.
-			if err := r.awaitPreparedNativeRelease(context.Background(), victim.release, victim.attempt); err != nil {
-				releaseErr = errors.Join(releaseErr, fmt.Errorf("dispatch: prepared run %s: %w", victim.runID, err))
-			}
-			continue
-		}
-		victim.ctxCancel()
-		if victim.session != nil {
-			if err := victim.session.Cancel(context.Background()); err != nil {
-				r.log.Warn("session.Cancel failed", "run_id", victim.runID, "err", err)
-			}
+		// The cleanup operation has its own fixed native deadline. The
+		// Shutdown caller's deadline only bounds its wait for this attempt.
+		if err := r.awaitPreparedNativeRelease(context.Background(), victim.release, victim.attempt); err != nil {
+			releaseErr = errors.Join(releaseErr, fmt.Errorf("dispatch: prepared run %s: %w", victim.runID, err))
 		}
 	}
 	r.shutdownWG.Done()
@@ -119,7 +88,11 @@ func (r *Router) runShutdownAttempt(attempt *shutdownAttempt, victims []sessionC
 		}
 	}
 	for _, owner := range r.executors {
-		attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: executor %s cleanup unconfirmed: %w", owner.id, owner.closeErr))
+		cause := owner.closeErr
+		if cause == nil {
+			cause = errors.New("cleanup has not settled")
+		}
+		attempt.err = errors.Join(attempt.err, fmt.Errorf("dispatch: executor %s: %w", owner.id, cause))
 	}
 	close(attempt.done)
 	r.mu.Unlock()
@@ -142,10 +115,19 @@ func waitShutdown(ctx context.Context, attempt *shutdownAttempt) error {
 }
 
 type sessionCancellation struct {
-	runID     string
-	ctxCancel context.CancelFunc
-	session   agent.Session
-	handoff   *preparedHandoff
-	release   *preparedRelease
-	attempt   *preparedReleaseAttempt
+	runID   string
+	handoff *preparedHandoff
+	release *preparedRelease
+	attempt *preparedReleaseAttempt
+}
+
+// sessionCancellationsLocked claims release of every active Run, retrying a
+// failed native attempt. Router.mu must be held.
+func (r *Router) sessionCancellationsLocked() []sessionCancellation {
+	victims := make([]sessionCancellation, 0, len(r.sessions))
+	for _, state := range r.sessions {
+		release, attempt := r.claimPreparedReleaseLocked(state, true, "", true)
+		victims = append(victims, sessionCancellation{runID: state.runID, handoff: state.preparedHandoff, release: release, attempt: attempt})
+	}
+	return victims
 }

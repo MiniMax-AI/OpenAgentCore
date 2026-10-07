@@ -145,8 +145,8 @@ func (i viewInstall) view() agent.View {
 }
 
 func (i viewInstall) executor(ctx context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (agent.Executor, error) {
-	return startExecutor(ctx, req, i.node, func(ctx context.Context) (launchOptions, error) {
-		return i.prepare(ctx, req, session)
+	return startExecutor(ctx, req, i.node, func() (launchOptions, error) {
+		return i.prepare(req, session)
 	})
 }
 
@@ -155,9 +155,9 @@ func (i viewInstall) executor(ctx context.Context, req proto.PromptRequestPayloa
 // names and the MCP in session. The request's workspace is the sandbox's, and
 // the workspace tools present it; with environment none the CLI runs in the
 // work directory without them.
-func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, session agent.ViewSession) (launchOptions, error) {
+func (i viewInstall) prepare(req proto.PromptRequestPayload, session agent.ViewSession) (launchOptions, error) {
 	local := req.LocalEnvironment
-	if !req.StrictResume || (local == nil) != req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
+	if (local == nil) != req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("%w: a MiniMax Code view runs Agents API execution in a writable Environment workspace or with environment none", agent.ErrUnsupportedOperation)
 	}
 	dir := path.Join(session.Home.View, agent.ViewWorkName)
@@ -222,6 +222,6 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 	}
 	opts.Env = append(opts.Env, nativeEnvironment(private, dataDir)...)
 	opts.spawn = session.Spawn
-	opts.reader = clirunner.StartOptions{Binary: i.node, Args: []string{path.Join(path.Dir(i.bridge), "subagent-snapshot.mjs"), dataDir}, Dir: dataDir, Env: opts.Env, OwnProcessGroup: true}
+	opts.reader = clirunner.StartOptions{Binary: i.node, Args: []string{path.Join(path.Dir(i.bridge), "subagent-snapshot.mjs"), dataDir}, Dir: dataDir, Env: opts.Env}
 	return opts, nil
 }

@@ -86,7 +86,9 @@ func (w *mcpBearerLog) snapshot() []byte {
 	return bytes.Clone(w.data.Bytes())
 }
 
-func mcpBearerStartDaemon(t *testing.T, root, daemon, native, provider, caFile, base, id, runner string, log *mcpBearerLog) {
+// mcpBearerStartDaemon starts the daemon and returns its idempotent stop,
+// which the test cleanup also runs.
+func mcpBearerStartDaemon(t *testing.T, root, daemon, native, provider, caFile, base, id, runner string, log *mcpBearerLog) (stop func()) {
 	t.Helper()
 	for _, dir := range []string{"home", "tmp", "runtime/daemon/execution"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0700); err != nil {
@@ -134,7 +136,7 @@ exec "$OAC_TEST_MCP_BEARER_NATIVE" -c 'model_provider="minimax_validation"' -c '
 	}
 	stopped := make(chan error, 1)
 	go func() { stopped <- cmd.Wait() }()
-	t.Cleanup(func() {
+	stop = sync.OnceFunc(func() {
 		_ = cmd.Process.Signal(syscall.SIGTERM)
 		select {
 		case <-stopped:
@@ -157,6 +159,8 @@ exec "$OAC_TEST_MCP_BEARER_NATIVE" -c 'model_provider="minimax_validation"' -c '
 			time.Sleep(25 * time.Millisecond)
 		}
 	})
+	t.Cleanup(stop)
+	return stop
 }
 
 func mcpBearerProcesses(root string, kill bool) (launches, active int) {
@@ -197,7 +201,7 @@ func mcpBearerReleased(t *testing.T, root string) int {
 			return launches
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("Done did not release the owned native process")
+			t.Fatal("the owned native process was not released")
 		}
 		time.Sleep(25 * time.Millisecond)
 	}

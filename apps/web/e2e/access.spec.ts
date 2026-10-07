@@ -14,7 +14,7 @@ const browserStorage = (page: Page) => page.evaluate(() => JSON.stringify({ ...w
 test("signs in with the Core key, keeps it out of the browser, and signs out and back in", async ({ page, request }) => {
   await resetFixture(request, "login");
   await recordV1Requests(page);
-  await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
+  await page.addInitScript(() => window.localStorage.setItem("oac-web.language", "en"));
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Sign in to OpenAgentCore" })).toBeVisible();
@@ -47,7 +47,7 @@ test("signs in with the Core key, keeps it out of the browser, and signs out and
 test("opens a fresh install on the Overview's Getting started: a project and its key shown once, then the step is done", async ({ page, request }) => {
   await resetFixture(request, "login", { fresh: true });
   await recordV1Requests(page);
-  await page.addInitScript(() => window.localStorage.setItem("agents-core-web.language", "en"));
+  await page.addInitScript(() => window.localStorage.setItem("oac-web.language", "en"));
   await page.goto("/");
   await signIn(page, FIXTURE_CORE_KEY);
 

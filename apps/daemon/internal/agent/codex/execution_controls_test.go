@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -22,18 +23,10 @@ func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := map[string]string{"web_search": `"` + search + `"`, "model_verbosity": `"` + verbosity + `"`}
-			for _, kv := range plan.ExtraConfig {
-				if v, ok := want[kv[0]]; ok {
-					if kv[1] != v {
-						t.Fatal("native control differs", kv)
-					}
-					delete(want, kv[0])
-				}
-			}
 			plan.Cleanup()
-			if len(want) != 0 {
-				t.Fatal("native settings omitted", want)
+			want := [][2]string{{"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}}
+			if !reflect.DeepEqual(plan.ExtraConfig, want) {
+				t.Fatalf("config = %v, want %v", plan.ExtraConfig, want)
 			}
 		}
 	}

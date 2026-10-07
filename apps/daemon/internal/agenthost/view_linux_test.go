@@ -159,10 +159,10 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		}
 		// The Turn waited for its Harness, so no view runs.
 		s := d.session(b)
-		if _, err := s.spawn(clirunner.StartOptions{Binary: harnessPath, Dir: workspace, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNoLiveView) {
+		if _, err := s.spawn(clirunner.StartOptions{Binary: harnessPath, Dir: workspace}); !errors.Is(err, agent.ErrNoLiveView) {
 			t.Errorf("Spawn after the Harness exited = %v, want ErrNoLiveView", err)
 		}
-		if _, err := s.spawn(clirunner.StartOptions{Binary: "/bin/sh", Dir: workspace, OwnProcessGroup: true}); !errors.Is(err, agent.ErrNotLocalExec) {
+		if _, err := s.spawn(clirunner.StartOptions{Binary: "/bin/sh", Dir: workspace}); !errors.Is(err, agent.ErrNotLocalExec) {
 			t.Errorf("Spawn of a binary outside LocalExec = %v, want ErrNotLocalExec", err)
 		}
 		select {
@@ -266,7 +266,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		until(t, "the Harness to run", beating)
 		// A Subagent runs in the live view.
 		p, err := d.session(waiting).spawn(clirunner.StartOptions{Binary: harnessPath, Args: []string{"touch"}, Dir: workspace,
-			Env: []string{harnessEnv + "=1"}, OwnProcessGroup: true})
+			Env: []string{harnessEnv + "=1"}})
 		if err != nil {
 			t.Fatalf("Spawn in the live view: %v", err)
 		}
@@ -667,7 +667,7 @@ type testExecutor struct {
 func (e *testExecutor) StartTurn(_ context.Context, runID string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Turn, error) {
 	mode := *input[0].Content[0].Text
 	p, err := e.session.Launch(clirunner.StartOptions{Binary: harnessPath, Args: []string{mode}, Dir: e.dir, Env: e.env,
-		OwnProcessGroup: true, KillTimeout: time.Second})
+		KillTimeout: time.Second})
 	if err != nil {
 		return nil, err
 	}

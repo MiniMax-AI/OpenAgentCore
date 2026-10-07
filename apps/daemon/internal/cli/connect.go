@@ -30,9 +30,12 @@ const (
 
 // runConnect dials /agent-daemon/bootstrap, opens /agent-daemon/ws,
 // wires the dispatch router, and routes Envelope traffic both ways
-// until either SIGINT/SIGTERM or a permanent credential rejection. It
-// authenticates with a Runtime bootstrap file, self-hosted Environment
-// enrollment or the profile's operator device profile.
+// until either SIGINT/SIGTERM or a permanent credential rejection.
+//
+// The daemon credential comes from a Provider bootstrap file
+// (--bootstrap-file), self-hosted Environment enrollment
+// (--remote/--environment-id/--credential-file) or the saved profile
+// written by oac-core-device.
 //
 // -b re-execs the binary in the background with stdio redirected to
 // connect.log and the child PID written to connect.pid. The child
@@ -40,7 +43,7 @@ const (
 func runConnect(ctx *runContext, args []string) error {
 	fs := newFlagSet("connect")
 	var (
-		profile        = fs.String("profile", paths.DefaultProfile, "profile name for the device profile and pid/log files")
+		profile        = fs.String("profile", paths.DefaultProfile, "profile name for daemon credentials and pid/log files")
 		background     = fs.Bool("b", false, "fork into the background; writes connect.pid + connect.log")
 		remote         = fs.String("remote", "", "self-hosted Environment remote_url, unchanged")
 		environment    = fs.String("environment-id", "", "self-hosted Environment ID")
@@ -74,7 +77,7 @@ func runConnect(ctx *runContext, args []string) error {
 	}
 	if *remote != "" || *environment != "" || *credentialFile != "" {
 		if fs.NArg() != 0 {
-			return errors.New("connect: Environment enrollment takes no positional arguments")
+			return errors.New("connect: Environment enrollment cannot use positional arguments")
 		}
 		connectCtx, stop := daemonize.NotifyContext(context.Background())
 		defer stop()
@@ -92,11 +95,11 @@ func runConnect(ctx *runContext, args []string) error {
 				return fmt.Errorf("connect: %w", err)
 			}
 		}
-		return spawnBackground(context.Background(), ctx, *profile)
+		return spawnBackground(context.Background(), ctx, *profile, os.Args)
 	}
 
 	// Self-check before loading credentials so a machine with no
-	// supported agent CLI fails before it connects.
+	// supported agent CLI fails fast.
 	agentCLIs, err := preflightAgentCLIs(context.Background(), ctx, *profile)
 	if err != nil {
 		return err
@@ -105,8 +108,11 @@ func runConnect(ctx *runContext, args []string) error {
 	var prof auth.Profile
 	if bootstrapped != nil {
 		prof = *bootstrapped
-	} else if prof, err = auth.Load(*profile); err != nil {
-		return fmt.Errorf("connect: %w", err)
+	} else {
+		prof, err = auth.Load(*profile)
+		if err != nil {
+			return fmt.Errorf("connect: %w", err)
+		}
 	}
 
 	return mainLoop(ctx, *profile, prof, agentCLIs)
@@ -116,7 +122,7 @@ func runConnect(ctx *runContext, args []string) error {
 // returns after printing the child PID; child re-enters runConnect
 // with BackgroundSentinelEnv set so the same mainLoop runs in either
 // mode.
-func spawnBackground(ctx context.Context, rc *runContext, profile string) error {
+func spawnBackground(ctx context.Context, rc *runContext, profile string, argv []string) error {
 	logPath, err := paths.LogFile(profile)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -155,7 +161,10 @@ func spawnBackground(ctx context.Context, rc *runContext, profile string) error 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	pid, err := daemonize.Spawn(os.Args, daemonize.ReExecOptions{LogPath: logPath, PIDPath: pidPath})
+	pid, err := daemonize.Spawn(argv, daemonize.ReExecOptions{
+		LogPath: logPath,
+		PIDPath: pidPath,
+	})
 	if err != nil {
 		return fmt.Errorf("connect: spawn background: %w", err)
 	}
@@ -273,7 +282,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 				return nil
 			}
 			if errors.Is(err, transport.ErrPermanent) {
-				return fmt.Errorf("connect: permanent error (re-pair the daemon): %w", err)
+				return fmt.Errorf("connect: permanent error (reissue the daemon credential): %w", err)
 			}
 			return fmt.Errorf("connect: dial: %w", err)
 		}
@@ -298,7 +307,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 		// Permanent error (e.g. runtime deleted) → exit instead of
 		// reconnecting.
 		if pumpErr != nil && errors.Is(pumpErr, transport.ErrPermanent) {
-			return fmt.Errorf("connect: runtime deleted (re-pair the daemon): %w", pumpErr)
+			return fmt.Errorf("connect: runtime deleted (reissue the daemon credential): %w", pumpErr)
 		}
 		// Small breather before redialing so a flapping server doesn't
 		// get a tight loop of upgrade requests.

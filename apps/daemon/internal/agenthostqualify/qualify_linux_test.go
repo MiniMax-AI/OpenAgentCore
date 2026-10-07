@@ -144,7 +144,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/home/runtime", "LANG": "C.UTF-8"},
 		Tool:    map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)},
 	}
-	configuration := proto.PromptRequestPayload{AgentKind: kind, StrictResume: true, DisableSubagents: true,
+	configuration := proto.PromptRequestPayload{AgentKind: kind, DisableSubagents: true,
 		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
 		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"}}
 	if caps.FunctionTools.IsSupported() {
