@@ -167,7 +167,6 @@ def main():
     signal.signal(signal.SIGTERM, terminate)
     try:
         print('Starting the images with an unset public URL and an empty data directory', flush=True)
-        compose('run', '--rm', '--no-deps', 'init')
         compose('up', '-d', '--wait', '--wait-timeout', '600', timeout=900)
         address = 'http://' + compose('port', 'web', '8080').decode().strip()
         key = compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip()

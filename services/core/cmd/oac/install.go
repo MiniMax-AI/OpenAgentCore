@@ -277,10 +277,6 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		_ = os.Remove(filepath.Join(o.dir, stageMarker(o.dir)))
 	}
 	fmt.Println("Starting services...")
-	// Initialize subdirectories before Compose creates containers mounting them.
-	if _, err := compose("run", "--rm", "--no-deps", "--pull", "never", "init"); err != nil {
-		return fmt.Errorf("initialization failed; data retained, rerun the installer: %w", err)
-	}
 	if _, err := compose("up", "-d", "--wait", "--wait-timeout", "180", "--pull", "never", "--no-recreate"); err != nil {
 		return fmt.Errorf("startup failed; data retained, rerun the installer: %w", err)
 	}

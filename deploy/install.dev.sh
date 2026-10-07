@@ -123,7 +123,6 @@ EOF
 
 (
   cd "$install_dir"
-  docker compose run --rm --no-deps init
   docker compose up -d --wait --wait-timeout 900
   echo
   echo "Open http://localhost:$web_port"
