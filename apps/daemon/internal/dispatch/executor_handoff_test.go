@@ -104,6 +104,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			bindAssignment(r, suspendRef, "")
 			var releaseOnce sync.Once
 			unblock := func() { releaseOnce.Do(func() { close(sender.release) }) }
 			t.Cleanup(func() {
@@ -120,6 +121,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				env.Assignment = suspendRef
 				if err = r.Handle(t.Context(), env); err != nil {
 					t.Fatal(err)
 				}

@@ -251,5 +251,29 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	if _, err := os.Stat(f.session.Home.Host); dials.Load() != 0 || err != nil || len(leftEntries(t, f.cfg)) != 0 {
 		t.Errorf("%d dials, home %v and transient entries %v after the preparation", dials.Load(), err, leftEntries(t, f.cfg))
 	}
+}
 
+// TestReleaseRemovesTheHome checks that the agent host removes a Session's
+// home behind its assignment's release.
+func TestReleaseRemovesTheHome(t *testing.T) {
+	f := newViewFixture(t)
+	var dials atomic.Int32
+	d := newDaemon(t, f.cfg, deps{dial: countingDial(&dials), tasks: noTasks})
+	b := newBinding(newResource())
+	if _, p := d.prepare(t, b, request("viewed", "/workspace", "https://model.test", "sk-test")); p.State != "failed" {
+		t.Fatalf("the preparation is %s, want failed with the factory", p.State)
+	}
+	if _, err := os.Stat(f.session.Home.Host); err != nil {
+		t.Fatalf("the home: %v", err)
+	}
+	released := ref(b)
+	released.Epoch++
+	id := "release"
+	d.handle(t, released, proto.TypeAssignmentRelease, id, proto.AssignmentReleasePayload{RemoveHome: true})
+	if status := d.status(t, id); status.State != proto.AssignmentHomeRemoved {
+		t.Fatalf("the release is %s (%s), want home_removed", status.State, status.ErrorCode)
+	}
+	if _, err := os.Stat(filepath.Dir(f.session.Home.Host)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the Session directory remains: %v", err)
+	}
 }

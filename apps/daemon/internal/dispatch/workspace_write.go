@@ -38,7 +38,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		if pending {
 			return errors.New("dispatch: malformed pending write frame")
 		}
-		return r.sendWorkspaceWrite(ctx, env.ID, rejectedWorkspaceWrite("invalid_request"))
+		return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("invalid_request"))
 	}
 	r.mu.Lock()
 	if r.closed {
@@ -48,7 +48,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 	if request.Step == "begin" {
 		if r.workspaceExport != nil || r.runtimePreparation != nil {
 			r.mu.Unlock()
-			return r.sendWorkspaceWrite(ctx, env.ID, rejectedWorkspaceWrite("resource_unavailable"))
+			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 		}
 		if r.workspaceWrite != nil {
 			duplicate := r.workspaceWrite.envelope.ID == env.ID
@@ -56,35 +56,40 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 			if duplicate {
 				return errors.New("dispatch: workspace write already admitted")
 			}
-			return r.sendWorkspaceWrite(ctx, env.ID, rejectedWorkspaceWrite("write_capacity"))
+			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("write_capacity"))
 		}
-		if !r.localWorkspace.AcceptsFileWrite(request.EnvironmentID, request.SessionID) || len(r.sessions) != 0 || len(r.idle) != 0 || len(r.workspaceReads) != 0 {
+		if code := r.admitLocked(env.Assignment, request.SessionID, request.EnvironmentID); code != "" {
 			r.mu.Unlock()
-			return r.sendWorkspaceWrite(ctx, env.ID, rejectedWorkspaceWrite("resource_unavailable"))
+			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite(code))
+		}
+		if !r.localWorkspace.AcceptsFileWrite(request.EnvironmentID, request.SessionID) || len(r.sessions) != 0 || len(r.workspaceReads) != 0 {
+			r.mu.Unlock()
+			return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 		}
 		for _, owner := range r.executors {
 			if owner.preparing || owner.admission != nil || owner.run != nil || owner.invalid {
 				r.mu.Unlock()
-				return r.sendWorkspaceWrite(ctx, env.ID, rejectedWorkspaceWrite("resource_unavailable"))
+				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 			}
 		}
 		for _, p := range r.preparations {
 			if p.owns {
 				r.mu.Unlock()
-				return r.sendWorkspaceWrite(ctx, env.ID, rejectedWorkspaceWrite("resource_unavailable"))
+				return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 			}
 		}
 		u := &workspaceUpload{envelope: env, request: request, data: make([]byte, 0, request.SizeBytes), ready: make(chan struct{})}
 		r.workspaceWrite = u
+		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
-		go r.runWorkspaceUpload(context.WithoutCancel(ctx), u)
-		return r.sendWorkspaceWrite(ctx, env.ID, proto.WorkspaceWriteResultPayload{Outcome: "ready"})
+		go r.runWorkspaceUpload(context.WithoutCancel(ctx), u, done)
+		return r.sendWorkspaceWrite(ctx, env, proto.WorkspaceWriteResultPayload{Outcome: "ready"})
 	}
 	u := r.workspaceWrite
-	if u == nil || u.envelope.ID != env.ID {
+	if u == nil || u.envelope.ID != env.ID || u.envelope.Assignment != env.Assignment {
 		r.mu.Unlock()
-		return r.sendWorkspaceWrite(ctx, env.ID, rejectedWorkspaceWrite("resource_unavailable"))
+		return r.sendWorkspaceWrite(ctx, env, rejectedWorkspaceWrite("resource_unavailable"))
 	}
 	if u.finished {
 		r.mu.Unlock()
@@ -94,7 +99,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		u.data = append(u.data, request.Data...)
 		offset := len(u.data)
 		r.mu.Unlock()
-		return r.sendWorkspaceWrite(ctx, env.ID, proto.WorkspaceWriteResultPayload{Outcome: "received", Offset: offset})
+		return r.sendWorkspaceWrite(ctx, env, proto.WorkspaceWriteResultPayload{Outcome: "received", Offset: offset})
 	}
 	if request.Step == "commit" && len(u.data) == u.request.SizeBytes {
 		digest := sha256.Sum256(u.data)
@@ -106,8 +111,9 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 	return nil
 }
 
-func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload) {
+func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload, done func()) {
 	defer r.shutdownWG.Done()
+	defer done()
 	timer := time.NewTimer(120 * time.Second)
 	defer timer.Stop()
 	select {
@@ -116,12 +122,17 @@ func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload) {
 	case <-timer.C:
 	}
 	r.mu.Lock()
-	apply := u.apply && !r.closed
+	// A release of the assignment before the write applies fences it.
+	fenced := r.admitLocked(u.envelope.Assignment, u.request.SessionID, u.request.EnvironmentID)
+	apply := u.apply && !r.closed && fenced == ""
 	u.finished = true
 	data := u.data
 	u.data = nil
 	r.mu.Unlock()
 	result := rejectedWorkspaceWrite("invalid_request")
+	if fenced != "" {
+		result = rejectedWorkspaceWrite(fenced)
+	}
 	if apply {
 		write, err := r.localWorkspace.WriteWorkspaceFile(ctx, u.request.Path, data)
 		result = workspaceWriteResult(write, err, u.request.SizeBytes)
@@ -132,7 +143,7 @@ func (r *Router) runWorkspaceUpload(ctx context.Context, u *workspaceUpload) {
 		r.workspaceWrite = nil
 	}
 	r.mu.Unlock()
-	_ = r.sendWorkspaceWrite(ctx, u.envelope.ID, result)
+	_ = r.sendWorkspaceWrite(ctx, u.envelope, result)
 }
 
 func rejectedWorkspaceWrite(code string) proto.WorkspaceWriteResultPayload {
@@ -171,12 +182,6 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 	return proto.WorkspaceWriteResultPayload{Outcome: "unknown", ErrorCode: "write_unconfirmed"}
 }
 
-func (r *Router) sendWorkspaceWrite(ctx context.Context, id string, result proto.WorkspaceWriteResultPayload) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	env, err := proto.NewEnvelope(proto.TypeWorkspaceWriteResult, id, result)
-	if err != nil {
-		return err
-	}
-	return r.sender.Send(ctx, env)
+func (r *Router) sendWorkspaceWrite(ctx context.Context, request proto.Envelope, result proto.WorkspaceWriteResultPayload) error {
+	return r.reply(ctx, request, proto.TypeWorkspaceWriteResult, result)
 }

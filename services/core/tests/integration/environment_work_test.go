@@ -34,7 +34,7 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 			}
 		case "unbound":
 			wanted[pending.ID] = pending.SessionID
-			if _, err := pool.Exec(t.Context(), "DELETE FROM session_devices WHERE session_id=$1", pending.SessionID); err != nil {
+			if _, err := pool.Exec(t.Context(), "DELETE FROM session_runtime_assignments WHERE session_id=$1", pending.SessionID); err != nil {
 				t.Fatal(err)
 			}
 		default:

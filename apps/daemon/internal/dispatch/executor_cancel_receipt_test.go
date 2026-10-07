@@ -133,6 +133,7 @@ func TestExecutorCancellationReachesNativeBeforeDurableReceiptJoin(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
+			assign(t, r, preparationSessionID, "")
 			var receiptOnce, closeOnce sync.Once
 			releaseReceipt := func() { receiptOnce.Do(func() { close(sender.release) }) }
 			releaseClose := func() { closeOnce.Do(func() { close(owner.closeRelease) }) }

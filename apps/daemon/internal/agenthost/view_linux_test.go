@@ -278,7 +278,7 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 			t.Errorf("the other Session's command printed %q and exited %d; stderr %s", r.Stdout, r.Code, r.Stderr)
 		}
 		// Cancelling the waiting Turn ends it with its view.
-		d.handle(t, proto.TypePromptCancel, run, proto.PromptCancelPayload{})
+		d.handle(t, ref(waiting), proto.TypePromptCancel, run, proto.PromptCancelPayload{})
 		d.done(t, run)
 		if err := d.shutdown(); err != nil {
 			t.Fatalf("Shutdown = %v", err)

@@ -264,7 +264,7 @@ func TestCreateEnvironmentDeviceBindsOneDevice(t *testing.T) {
 		})
 	}
 	bound := func(session pgtype.UUID) []uuid.UUID {
-		rows, err := pool.Query(t.Context(), `SELECT device_id FROM session_devices WHERE session_id = $1`, session)
+		rows, err := pool.Query(t.Context(), `SELECT runtime_id FROM session_runtime_assignments WHERE session_id = $1`, session)
 		if err != nil {
 			t.Fatal(err)
 		}

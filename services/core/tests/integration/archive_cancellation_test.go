@@ -108,7 +108,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			h.d = h.bound()
 			capabilities := workerEnvironmentCapabilities()
 			capabilities.FunctionTools = proto.CapabilitySupported
-			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
+			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: capabilities}}})
 			var peer *runtimegateway.Session
 			for deadline := time.Now().Add(3 * time.Second); ; {
 				peer, err = registry.LookupDevice(owner.DeviceID)
@@ -234,7 +234,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if _, err := tx.Exec(t.Context(), "SELECT session_id FROM session_devices WHERE session_id=$1 FOR UPDATE", session.ID); err != nil {
+				if _, err := tx.Exec(t.Context(), "SELECT session_id FROM session_runtime_assignments WHERE session_id=$1 FOR UPDATE", session.ID); err != nil {
 					t.Fatal(err)
 				}
 				unlockCommit = func() {
@@ -252,7 +252,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if scenario == "transport_lost" {
 				h.conn.Close()
 			} else if heartbeat && scenario != "ack_commit_blocked" {
-				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{})
+				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported})
 			}
 			if !closedCase {
 				ack := proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Usage: proto.Usage{InputTokens: 17}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}}}
@@ -270,7 +270,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				// Observe actual SQL lock contention, not an assumed timing delay.
 				for deadline := time.Now().Add(3 * time.Second); ; {
 					var blocked bool
-					if err := s.pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%session_devices%')").Scan(&blocked); err != nil {
+					if err := s.pool.QueryRow(t.Context(), "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query ILIKE '%session_runtime_assignments%')").Scan(&blocked); err != nil {
 						t.Fatal(err)
 					}
 					if blocked {
@@ -281,7 +281,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 					}
 					time.Sleep(time.Millisecond)
 				}
-				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{})
+				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported})
 				draining, err := peer.DrainArchivedCancellation(t.Context())
 				if err != nil || !draining || peer.IsClosed() {
 					t.Fatal("ACK lost drain before terminal commit", draining, err)

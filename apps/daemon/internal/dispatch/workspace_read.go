@@ -36,7 +36,7 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		r.mu.Unlock()
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead("read_capacity"))
 	}
-	resource, code := r.workspaceResourceLocked(request)
+	resource, code := r.workspaceResourceLocked(env.Assignment, request)
 	if code != "" {
 		r.mu.Unlock()
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead(code))
@@ -45,10 +45,12 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		r.workspaceReads = make(map[string]struct{})
 	}
 	r.workspaceReads[env.ID] = struct{}{}
+	done := r.trackWorkLocked(env.Assignment)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go func() {
 		defer r.shutdownWG.Done()
+		defer done()
 		defer func() { r.mu.Lock(); delete(r.workspaceReads, env.ID); r.mu.Unlock() }()
 		// Observer loss does not discard an admitted native wait or replay it.
 		operation, cancel := context.WithTimeout(context.WithoutCancel(ctx), 12*time.Second)
@@ -59,11 +61,16 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 	return nil
 }
 
-func (r *Router) workspaceResourceLocked(request proto.WorkspaceReadPayload) (any, string) {
+// workspaceResourceLocked returns what ref reads: the preparation or the run
+// it admitted.
+func (r *Router) workspaceResourceLocked(ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (any, string) {
+	if code := r.admitLocked(ref, ref.SessionID, request.EnvironmentID); code != "" {
+		return nil, code
+	}
 	var resource any
 	if request.Handle != "" {
 		p := r.preparations[request.Handle]
-		if p == nil || p.environmentID != request.EnvironmentID || p.status.State != "ready" ||
+		if p == nil || p.request.Assignment != ref || p.environmentID != request.EnvironmentID || p.status.State != "ready" ||
 			!p.owns || p.busy || p.ctx.Err() != nil || !time.Now().Before(p.deadline) {
 			return nil, "resource_unavailable"
 		}
@@ -73,7 +80,7 @@ func (r *Router) workspaceResourceLocked(request proto.WorkspaceReadPayload) (an
 		}
 	} else {
 		s := r.sessions[request.RunID]
-		if s == nil || s.environmentID != request.EnvironmentID || s.session == nil ||
+		if s == nil || s.assignment != ref || s.environmentID != request.EnvironmentID || s.session == nil ||
 			!r.interactionRouteOpenLocked(s) {
 			return nil, "resource_unavailable"
 		}
@@ -143,15 +150,8 @@ func workspaceReadResult(read agent.WorkspaceReadResult, err error, limit int) p
 }
 
 func (r *Router) sendWorkspaceRead(ctx context.Context, request proto.Envelope, result proto.WorkspaceReadResultPayload) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	trace := request.Trace
-	if len(trace) > 256 {
-		trace = ""
+	if len(request.Trace) > 256 {
+		request.Trace = ""
 	}
-	env, err := proto.NewEnvelopeWithTrace(proto.TypeWorkspaceReadResult, request.ID, result, trace)
-	if err != nil {
-		return err
-	}
-	return r.sender.Send(ctx, env)
+	return r.reply(ctx, request, proto.TypeWorkspaceReadResult, result)
 }

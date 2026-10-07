@@ -185,7 +185,7 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 	if err != nil {
 		return err
 	}
-	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
+	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
 	if err := conn.WriteJSON(heartbeat); err != nil {
 		conn.Close()
 		return err
@@ -204,6 +204,12 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 			var env proto.Envelope
 			if conn.ReadJSON(&env) != nil {
 				return
+			}
+			if reply, ok := assignmentReply(env); ok {
+				if conn.WriteJSON(reply) != nil {
+					return
+				}
+				continue
 			}
 			if env.Type == proto.TypeRuntimePrepare && p.preparation != nil {
 				reply, err := transfer.receive(env)
@@ -242,7 +248,7 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 			if env.Type == proto.TypeEnvironmentQuiesce {
 				kind = proto.TypeEnvironmentQuiesced
 			}
-			reply, _ := proto.NewEnvelope(kind, env.ID, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: !reject})
+			reply, _ := env.Reply(kind, proto.EnvironmentSuspendResultPayload{EnvironmentID: request.EnvironmentID, SuspendID: request.SuspendID, Accepted: !reject})
 			if conn.WriteJSON(reply) != nil {
 				return
 			}

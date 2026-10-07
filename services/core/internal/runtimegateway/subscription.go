@@ -10,9 +10,11 @@ import (
 
 var ErrSubscriberOverflow = errors.New("execution subscriber buffer overflow")
 
+// Subscription streams one operation's frames, which all name ref.
 type Subscription struct {
 	Events <-chan proto.Envelope
 	ch     chan proto.Envelope
+	ref    proto.AssignmentRef
 	mu     sync.Mutex
 	err    error
 	closed bool
@@ -31,14 +33,31 @@ func (s *Subscription) closeLocked(err error) {
 	}
 }
 
+// deliverLocked queues env. A frame of another assignment or a full buffer
+// ends the subscription with an error.
+func (s *Subscription) deliverLocked(env proto.Envelope) bool {
+	if env.Assignment != s.ref {
+		s.closeLocked(errAssignmentEcho)
+		return false
+	}
+	select {
+	case s.ch <- env:
+		return true
+	default:
+		s.closeLocked(ErrSubscriberOverflow)
+		return false
+	}
+}
+
 // SubscribeDurable reports transport loss and overflow separately from native
-// execution events. Callers must inspect Err after Events closes.
-func (s *Session) SubscribeDurable(runID string) (*Subscription, error) {
+// execution events. Callers must inspect Err after Events closes. ref is the
+// assignment that starts the run.
+func (s *Session) SubscribeDurable(runID string, ref proto.AssignmentRef) (*Subscription, error) {
 	if runID == "" {
 		return nil, fmt.Errorf("agentdaemon gateway: Subscribe requires non-empty runID")
 	}
 	ch := make(chan proto.Envelope, 256)
-	sub := &Subscription{Events: ch, ch: ch}
+	sub := &Subscription{Events: ch, ch: ch, ref: ref}
 	s.subsMu.Lock()
 	defer s.subsMu.Unlock()
 	if s.IsClosed() {
@@ -84,13 +103,8 @@ func (s *Session) dispatchToSubscriber(env proto.Envelope) {
 	}
 	sub.mu.Lock()
 	defer sub.mu.Unlock()
-	select {
-	case sub.ch <- env:
-		if env.Type == proto.TypeDone {
-			sub.closeLocked(nil)
-		}
-	default:
-		sub.closeLocked(ErrSubscriberOverflow)
+	if sub.deliverLocked(env) && env.Type == proto.TypeDone {
+		sub.closeLocked(nil)
 	}
 	if sub.closed {
 		delete(s.subs, env.ID)

@@ -19,10 +19,11 @@ const preparationRecords = 64
 // All mutable fields are protected by Router.mu. owns includes resources whose
 // cancellation is underway; a slow close cannot bypass the capacity bound.
 type preparationState struct {
-	capabilities      proto.AgentKindCapabilities
-	executor          *executorState
-	requestID         string
-	trace             string
+	capabilities proto.AgentKindCapabilities
+	executor     *executorState
+	// request is the execution_prepare's ID, trace and assignment, which
+	// every status echoes.
+	request           proto.Envelope
 	fingerprint       [32]byte
 	startFingerprint  [32]byte
 	status            proto.PreparationStatusPayload
@@ -31,7 +32,6 @@ type preparationState struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	prepared          io.Closer
-	stateKey          string
 	environmentID     string
 	busy              bool
 	owns              bool
@@ -79,7 +79,11 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
-	if r.runtimePreparation != nil || ((r.workspaceWrite != nil || r.workspaceExport != nil) && !req.WorkspaceReadOnly) {
+	if code := r.admitLocked(env.Assignment, input.SessionID, req.EnvironmentID()); code != "" {
+		r.mu.Unlock()
+		return r.rejectPreparation(env, code)
+	}
+	if r.runtimePreparation != nil {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
@@ -105,9 +109,9 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: caps, request: proto.Envelope{ID: env.ID, Trace: env.Trace, Assignment: env.Assignment}, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}
-	r.preparations[p.status.Handle], r.preparationRequests[p.requestID] = p, p
+	r.preparations[p.status.Handle], r.preparationRequests[p.request.ID] = p, p
 	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true, true) })
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
@@ -118,7 +122,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 // prepareExecution readies a read-only preparation without starting a Harness.
 func (r *Router) prepareExecution(p *preparationState) {
 	defer r.shutdownWG.Done()
-	if !r.sendPreparation(p.requestID, p.trace, proto.PreparationStatusPayload{Handle: p.status.Handle, Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}) {
+	if !r.sendPreparation(p.request, proto.PreparationStatusPayload{Handle: p.status.Handle, Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}) {
 		r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
 	}
 	r.mu.Lock()
@@ -141,7 +145,7 @@ func (r *Router) prepareExecution(p *preparationState) {
 		r.closePreparationResource(p)
 		return
 	}
-	if !r.sendPreparation(p.requestID, p.trace, status) {
+	if !r.sendPreparation(p.request, status) {
 		r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
 	}
 }
@@ -153,7 +157,7 @@ func (r *Router) handleExecutionRelease(_ context.Context, env proto.Envelope) e
 	}
 	r.mu.Lock()
 	p := r.preparations[input.Handle]
-	valid := p != nil && p.requestID == env.ID
+	valid := p != nil && p.request.ID == env.ID && p.request.Assignment == env.Assignment
 	r.mu.Unlock()
 	if !valid {
 		return r.rejectPreparation(env, "unknown_preparation")
@@ -227,14 +231,14 @@ func (r *Router) prunePreparationsLocked() {
 		}
 		if time.Now().After(p.deadline) {
 			delete(r.preparations, handle)
-			delete(r.preparationRequests, p.requestID)
+			delete(r.preparationRequests, p.request.ID)
 		} else if oldest == nil || p.deadline.Before(oldest.deadline) {
 			oldest = p
 		}
 	}
 	if len(r.preparations) >= preparationRecords && oldest != nil {
 		delete(r.preparations, oldest.status.Handle)
-		delete(r.preparationRequests, oldest.requestID)
+		delete(r.preparationRequests, oldest.request.ID)
 	}
 }
 
@@ -255,22 +259,22 @@ func (r *Router) publishPreparation(p *preparationState, status proto.Preparatio
 	go func() {
 		defer r.shutdownWG.Done()
 		// A failed terminal notification must not restart incomplete cleanup.
-		if !r.sendPreparation(p.requestID, p.trace, status) && (!p.workspaceReadOnly || status.State == "preparing" || status.State == "ready") {
+		if !r.sendPreparation(p.request, status) && (!p.workspaceReadOnly || status.State == "preparing" || status.State == "ready") {
 			r.releasePreparation(p, "failed", "status_delivery_failed", false, false)
 		}
 	}()
 }
 
-func (r *Router) sendPreparation(requestID, trace string, status proto.PreparationStatusPayload) bool {
-	return r.sendPreparationUntil(requestID, trace, status, time.Now().Add(5*time.Second))
+func (r *Router) sendPreparation(request proto.Envelope, status proto.PreparationStatusPayload) bool {
+	return r.sendPreparationUntil(request, status, time.Now().Add(5*time.Second))
 }
 
-func (r *Router) sendPreparationUntil(requestID, trace string, status proto.PreparationStatusPayload, deadline time.Time) bool {
+func (r *Router) sendPreparationUntil(request proto.Envelope, status proto.PreparationStatusPayload, deadline time.Time) bool {
 	ctx, stop := r.shutdownContext(context.Background())
 	defer stop()
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	env, err := proto.NewEnvelopeWithTrace(proto.TypePreparationStatus, requestID, status, trace)
+	env, err := request.Reply(proto.TypePreparationStatus, status)
 	return err == nil && r.sender.Send(ctx, env) == nil
 }
 
@@ -280,7 +284,7 @@ func (r *Router) rejectPreparation(env proto.Envelope, code string) error {
 		r.shutdownWG.Add(1)
 		go func() {
 			defer r.shutdownWG.Done()
-			r.sendPreparation(env.ID, env.Trace, proto.PreparationStatusPayload{State: "rejected", ErrorCode: code, Operation: env.Type})
+			r.sendPreparation(env, proto.PreparationStatusPayload{State: "rejected", ErrorCode: code, Operation: env.Type})
 		}()
 	}
 	r.mu.Unlock()

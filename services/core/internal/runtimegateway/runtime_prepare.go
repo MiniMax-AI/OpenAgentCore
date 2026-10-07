@@ -14,7 +14,7 @@ import (
 
 // PrepareRuntime sends one typed preparation operation once. An
 // interrupted or unconfirmed transfer reports unknown; callers must not replay it.
-func (s *Session) PrepareRuntime(ctx context.Context, id string, request proto.RuntimePreparePayload, data []byte) (proto.RuntimePrepareResultPayload, error) {
+func (s *Session) PrepareRuntime(ctx context.Context, id string, ref proto.AssignmentRef, request proto.RuntimePreparePayload, data []byte) (proto.RuntimePrepareResultPayload, error) {
 	unknown := proto.RuntimePrepareResultPayload{Outcome: "unknown", ErrorCode: "runtime_preparation_unconfirmed"}
 	parsed, err := uuid.Parse(id)
 	if err != nil || parsed == uuid.Nil || parsed.String() != id || len(data) > proto.RuntimePrepareMaxBytes ||
@@ -57,11 +57,12 @@ func (s *Session) PrepareRuntime(ctx context.Context, id string, request proto.R
 		if err != nil {
 			return unknown, errors.New("agentdaemon gateway: invalid Runtime frame")
 		}
+		env.Assignment = ref
 		encoded, err := json.Marshal(env)
 		if err != nil || len(encoded) > proto.RuntimePrepareMaxFrameBytes {
 			return unknown, errors.New("agentdaemon gateway: invalid Runtime frame")
 		}
-		reply, err := s.exchangeChunkFrame(ctx, env, replies)
+		reply, err := s.exchangeFrame(ctx, env, replies)
 		if err != nil {
 			return unknown, err
 		}

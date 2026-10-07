@@ -29,9 +29,17 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
 	p := r.preparations[input.Handle]
-	if p == nil || p.requestID != env.ID {
+	if p == nil || p.request.ID != env.ID {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "unknown_preparation")
+	}
+	code := proto.AssignmentConflict
+	if p.request.Assignment == env.Assignment {
+		code = r.admitLocked(env.Assignment, env.Assignment.SessionID, p.environmentID)
+	}
+	if code != "" {
+		r.mu.Unlock()
+		return r.rejectPreparation(env, code)
 	}
 	if p.workspaceReadOnly {
 		r.mu.Unlock()
@@ -70,7 +78,7 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 	}
 	p.status.State, p.status.RunID, p.status.Revision = "starting", input.RunID, p.status.Revision+1
 	p.startFingerprint, p.busy = fingerprint, true
-	state := &sessionState{capabilities: p.capabilities, runID: input.RunID, stateKey: p.stateKey, environmentID: p.environmentID, out: make(chan proto.Envelope, 64), ctx: p.ctx, ctxCancel: p.cancel, pendingIDs: make(map[string]struct{}), pendingAsks: make(map[string]struct{}), traceparent: env.Trace}
+	state := &sessionState{assignment: env.Assignment, capabilities: p.capabilities, runID: input.RunID, environmentID: p.environmentID, out: make(chan proto.Envelope, 64), ctx: p.ctx, ctxCancel: p.cancel, pendingIDs: make(map[string]struct{}), pendingAsks: make(map[string]struct{}), traceparent: env.Trace}
 	state.preparedHandoff = newPreparedHandoff(p, owner.native)
 	p.handoff, owner.run = state.preparedHandoff, state
 	r.sessions[input.RunID] = state
@@ -86,7 +94,7 @@ func (r *Router) startPreparedExecution(p *preparationState, state *sessionState
 	handoff := state.preparedHandoff
 	go r.forwardPreparedOutput(state)
 	<-handoff.outputReady
-	delivered := r.sendPreparation(p.requestID, p.trace, starting)
+	delivered := r.sendPreparation(p.request, starting)
 	r.mu.Lock()
 	blocked := !delivered || handoff.release != nil && handoff.release.aborted() || p.ctx.Err() != nil
 	r.mu.Unlock()
@@ -129,7 +137,7 @@ func (r *Router) startPreparedExecution(p *preparationState, state *sessionState
 		}
 		status = proto.PreparationStatusPayload{Handle: p.status.Handle, ExecutorID: p.executor.id, State: "rejected", ErrorCode: code, Operation: proto.TypeExecutionStart}
 		if delivered {
-			r.sendPreparation(p.requestID, p.trace, status)
+			r.sendPreparation(p.request, status)
 		}
 		return
 	}
@@ -139,7 +147,7 @@ func (r *Router) startPreparedExecution(p *preparationState, state *sessionState
 	if aborted {
 		status.State, status.ErrorCode = "failed", "start_cancelled"
 	}
-	delivered = delivered && !aborted && r.sendPreparationUntil(p.requestID, p.trace, status, p.deadline)
+	delivered = delivered && !aborted && r.sendPreparationUntil(p.request, status, p.deadline)
 	r.mu.Lock()
 	if !delivered && !aborted {
 		handoff.outputErr = errors.Join(handoff.outputErr, errPreparedStatusDelivery)

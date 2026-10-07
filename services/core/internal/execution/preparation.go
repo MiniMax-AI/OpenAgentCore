@@ -26,24 +26,25 @@ type preparedStart struct {
 	startObserved bool
 	readyObserved bool
 	peer          *runtimegateway.Session
+	assignment    proto.AssignmentRef
 	requestID     string
 	handle        string
 	executorID    string
 	sub           *runtimegateway.Subscription
 }
 
-func newPreparedStart(peer *runtimegateway.Session) (*preparedStart, error) {
+func newPreparedStart(peer *runtimegateway.Session, ref proto.AssignmentRef) (*preparedStart, error) {
 	id := uuid.NewString()
-	sub, err := peer.SubscribePreparation(id)
+	sub, err := peer.SubscribePreparation(id, ref)
 	if err != nil {
 		return nil, err
 	}
-	return &preparedStart{peer: peer, requestID: id, sub: sub, createdAt: time.Now()}, nil
+	return &preparedStart{peer: peer, assignment: ref, requestID: id, sub: sub, createdAt: time.Now()}, nil
 }
 
 func (p *preparedStart) close() {
 	if p.handle != "" {
-		_ = send(context.Background(), p.peer, proto.TypeExecutionRelease, p.requestID, proto.ExecutionReleasePayload{Handle: p.handle})
+		_ = send(context.Background(), p.peer, p.assignment, proto.TypeExecutionRelease, p.requestID, proto.ExecutionReleasePayload{Handle: p.handle})
 	}
 	p.peer.UnsubscribePreparation(p.requestID)
 }
@@ -130,7 +131,7 @@ func (d *Dispatcher) awaitPreparation(ctx context.Context, tenant, session strin
 
 func (p *preparedStart) start(ctx context.Context, request proto.PromptRequestPayload) error {
 	p.startSentAt = time.Now()
-	return send(ctx, p.peer, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, ExecutorID: p.executorID, RunID: request.RunID, Input: request.Input})
+	return send(ctx, p.peer, p.assignment, proto.TypeExecutionStart, p.requestID, proto.ExecutionStartPayload{Handle: p.handle, ExecutorID: p.executorID, RunID: request.RunID, Input: request.Input})
 }
 
 func (p *preparedStart) started(env proto.Envelope, runID string) (bool, error) {

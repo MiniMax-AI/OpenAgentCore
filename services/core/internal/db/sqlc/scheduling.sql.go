@@ -39,13 +39,13 @@ const listEnvironmentInputWork = `-- name: ListEnvironmentInputWork :many
 SELECT r.id, r.session_id, s.tenant_id
 FROM environment_input_reservations r
 JOIN sessions s ON s.id = r.session_id
-LEFT JOIN session_devices b ON b.session_id = s.id
+LEFT JOIN session_runtime_assignments b ON b.session_id = s.id
 WHERE r.state = 'pending' AND r.deadline > clock_timestamp()
 AND r.id > $1::uuid AND s.deleted_at IS NULL
 AND EXISTS (
     SELECT 1 FROM devices d WHERE d.tenant_id = s.tenant_id AND d.revoked_at IS NULL
         AND d.id = ANY($2::uuid[])
-        AND (b.device_id IS NULL OR d.id = b.device_id)
+        AND (b.runtime_id IS NULL OR d.id = b.runtime_id)
 )
 ORDER BY r.id LIMIT 100
 `

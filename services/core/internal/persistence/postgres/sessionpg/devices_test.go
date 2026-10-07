@@ -65,7 +65,7 @@ func TestBindSessionDeviceTranslatesTheBindingOutcome(t *testing.T) {
 		t.Fatal("rebinding the Session to another device", err)
 	}
 	var bound string
-	if err := pool.QueryRow(t.Context(), `SELECT device_id::text FROM session_devices WHERE session_id = $1`, sessionID).Scan(&bound); err != nil || bound != device {
+	if err := pool.QueryRow(t.Context(), `SELECT runtime_id::text FROM session_runtime_assignments WHERE session_id = $1`, sessionID).Scan(&bound); err != nil || bound != device {
 		t.Fatal("Session bound to", bound, err)
 	}
 }

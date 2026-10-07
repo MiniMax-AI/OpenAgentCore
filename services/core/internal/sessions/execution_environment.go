@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // EnvironmentKey names one Environment of a tenant.
@@ -15,6 +17,14 @@ type EnvironmentKey struct{ TenantID, EnvironmentID string }
 type EnvironmentConnection struct {
 	Generation string
 	Revision   int64
+}
+
+// AssignmentRelease is a released assignment whose Runtime has not
+// acknowledged the release.
+type AssignmentRelease struct {
+	RuntimeID  string
+	Assignment proto.AssignmentRef
+	RemoveHome bool
 }
 
 // EnvironmentExecution is the lease-bound storage of the Environment
@@ -47,6 +57,13 @@ type EnvironmentExecution interface {
 	// Environments of Sessions that were not publicly deleted and that are
 	// connected or have a connection generation.
 	ListEnvironmentConnections(ctx context.Context, after string) ([]EnvironmentKey, error)
+	// ListAssignmentReleases lists the releases the given Runtimes have not
+	// acknowledged.
+	ListAssignmentReleases(ctx context.Context, runtimes []string) ([]AssignmentRelease, error)
+	// AcknowledgeAssignmentRelease records that the Runtime applied the
+	// release of the assignment at its epoch. An assignment Core has since
+	// changed keeps its pending release.
+	AcknowledgeAssignmentRelease(ctx context.Context, assignment proto.AssignmentRef) error
 }
 
 // InitializationTx is the Session transaction the Environment initialization
@@ -340,6 +357,24 @@ func (o *ExecutionOperations) ReconcileEnvironmentConnections(ctx context.Contex
 			after = key.EnvironmentID
 		}
 	}
+}
+
+// ListAssignmentReleases lists the releases the given Runtimes still owe an
+// acknowledgement.
+func (o *ExecutionOperations) ListAssignmentReleases(ctx context.Context, runtimes []string) ([]AssignmentRelease, error) {
+	if len(runtimes) == 0 {
+		return nil, nil
+	}
+	return o.storage.ListAssignmentReleases(ctx, runtimes)
+}
+
+// AcknowledgeAssignmentRelease records the Runtime's acknowledgement of the
+// assignment's release.
+func (o *ExecutionOperations) AcknowledgeAssignmentRelease(ctx context.Context, assignment proto.AssignmentRef) error {
+	if !assignment.Valid() || !validID(assignment.SessionID) || !validID(assignment.AssignmentID) {
+		return ErrInvalidInput
+	}
+	return o.storage.AcknowledgeAssignmentRelease(ctx, assignment)
 }
 
 // BindSessionDevice binds the tenant's device to the Session, including a

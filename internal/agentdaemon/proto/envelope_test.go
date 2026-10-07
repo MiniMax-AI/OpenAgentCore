@@ -18,6 +18,8 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 	if env.ID != "run-123" {
 		t.Fatalf("ID = %q, want %q", env.ID, "run-123")
 	}
+	ref := AssignmentRef{SessionID: "session", AssignmentID: "assignment", Epoch: 2}
+	env.Assignment = ref
 	raw, err := json.Marshal(env)
 	if err != nil {
 		t.Fatalf("Marshal envelope: %v", err)
@@ -32,6 +34,9 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 	}
 	if out.Delta != "hello" || out.Sequence != 42 {
 		t.Fatalf("payload round-trip lost data: %+v", out)
+	}
+	if reply, err := got.Reply(TypeDone, nil); err != nil || got.Assignment != ref || reply.Assignment != ref || reply.ID != "run-123" {
+		t.Fatalf("assignment round trip = %+v, reply = %+v, %v", got.Assignment, reply, err)
 	}
 }
 
@@ -66,8 +71,7 @@ func TestDecodeRequestRejectsUndeclaredMembers(t *testing.T) {
 		payload string
 		out     any
 	}{
-		"unknown key":                  {TypePromptRequest, `{"agent_kind":"codex","model":"m","unknown":true}`, &PromptRequestPayload{}},
-		"agent_options":                {TypePromptRequest, `{"agent_kind":"codex","agent_options":{"model":"m"}}`, &PromptRequestPayload{}},
+		"unknown key":                  {TypeExecutionPrepare, `{"session_id":"s","configuration":{"agent_kind":"codex","model":"m","unknown":true}}`, &ExecutionPreparePayload{}},
 		"agent_options in preparation": {TypeExecutionPrepare, `{"session_id":"s","configuration":{"agent_kind":"codex","agent_options":{}}}`, &ExecutionPreparePayload{}},
 	} {
 		env := Envelope{Type: c.typ, Payload: json.RawMessage(c.payload)}

@@ -19,7 +19,7 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 		return errors.New("function result requires run, call and delivery identities")
 	}
 	if err := result.ValidateContent(); err != nil {
-		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "invalid_result", err.Error())
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "invalid_result", err.Error())
 	}
 	decision := result
 	decision.DeliveryID = ""
@@ -30,11 +30,17 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 	fingerprint := sha256.Sum256(encoded)
 	// Scope receipt replay to both identities, even when native call IDs repeat across Runs.
 	kind := proto.TypeFunctionResult + "\x00" + result.CallID
-	if handled, err := r.replayAppliedInteractionDecision(ctx, env.ID, result.DeliveryID, kind, fingerprint); handled {
+	if handled, err := r.replayAppliedInteractionDecision(ctx, env, result.DeliveryID, kind, fingerprint); handled {
 		return err
 	}
 	r.mu.Lock()
 	state := r.sessions[env.ID]
+	if state != nil {
+		if code := r.admitRunLocked(env.Assignment, state); code != "" {
+			r.mu.Unlock()
+			return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, code, "The run's assignment does not admit this result.")
+		}
+	}
 	session, finishOperation, ready := r.preparedOperationLocked(state)
 	var submitter agent.FunctionResultSubmitter
 	if ready {
@@ -42,7 +48,7 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 	}
 	r.mu.Unlock()
 	if state != nil && !ready {
-		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "not_ready", "function call is waiting for the native session")
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "not_ready", "function call is waiting for the native session")
 	}
 	if finishOperation != nil {
 		defer finishOperation()
@@ -51,13 +57,13 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 		defer stop()
 	}
 	if state != nil && !state.capabilities.FunctionTools.IsSupported() {
-		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "unsupported", "The runtime declaration does not support function results.")
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "unsupported", "The runtime declaration does not support function results.")
 	}
 	if ready && submitter == nil {
-		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "contract_violation", "Declared function capability has no implementation.")
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "contract_violation", "Declared function capability has no implementation.")
 	}
 	if submitter == nil {
-		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "not_pending", "function call is no longer pending")
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "not_pending", "function call is no longer pending")
 	}
 	if err := submitter.SubmitFunctionResult(ctx, result); err != nil {
 		code := "runtime_error"
@@ -67,8 +73,8 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 		if errors.Is(err, agent.ErrUnknownFunctionCall) {
 			code = "not_pending"
 		}
-		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, code, "function result was not applied")
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, code, "function result was not applied")
 	}
-	r.rememberAppliedInteractionDecision(env.ID, kind, fingerprint)
-	return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, true, "", "")
+	r.rememberAppliedInteractionDecision(env, kind, fingerprint)
+	return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, true, "", "")
 }

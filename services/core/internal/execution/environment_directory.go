@@ -109,14 +109,14 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	if err != nil || !environmentDeviceMatches(session, environment, bound) || !w.directoryDeviceReady(check, bound.ID, session.Engine, placement, prepare) {
 		return
 	}
-	peer, err := w.dispatcher.authorizedPeer(check, bound.ID)
+	peer, err := w.dispatcher.assignedPeer(check, bound)
 	if err != nil {
 		return
 	}
 	read := proto.WorkspaceReadPayload{EnvironmentID: environment.ID, Path: request.path, MaxEntries: proto.WorkspaceDirectoryMaxEntries}
 	if !prepare {
 		read.RunID = run
-		result = readEnvironmentDirectory(owner, peer, read)
+		result = readEnvironmentDirectory(owner, peer, bound.Assignment, read)
 		return
 	}
 	result = w.dispatcher.readPreparedDirectory(owner, peer, session, environment, bound, read)
@@ -136,8 +136,8 @@ func (w *Worker) directoryDeviceReady(ctx context.Context, id, engine string, pl
 	return known && found && info.Available && placementReady && (!prepare || (info.Capabilities.Preparation && info.Capabilities.WorkspaceReadPreparation))
 }
 
-func readEnvironmentDirectory(ctx context.Context, peer *runtimegateway.Session, request proto.WorkspaceReadPayload) directoryReadResult {
-	result, err := peer.ListWorkspaceDirectory(ctx, request)
+func readEnvironmentDirectory(ctx context.Context, peer *runtimegateway.Session, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) directoryReadResult {
+	result, err := peer.ListWorkspaceDirectory(ctx, ref, request)
 	if err == nil && result.Outcome == "completed" && result.Directory != nil && !result.Directory.Truncated && proto.ValidWorkspaceDirectory(result.Directory, request.MaxEntries) {
 		return directoryReadResult{directory: *result.Directory}
 	}

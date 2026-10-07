@@ -11,11 +11,11 @@ import (
 func TestDurableSubscriptionOverflowIsExplicitAndIsolated(t *testing.T) {
 	s := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
 	defer s.Close("test finished")
-	sub, err := s.SubscribeDurable("slow")
+	sub, err := s.SubscribeDurable("slow", proto.AssignmentRef{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, _ := s.SubscribeDurable("other")
+	other, _ := s.SubscribeDurable("other", proto.AssignmentRef{})
 	for range 257 {
 		s.dispatchToSubscriber(proto.Envelope{ID: "slow", Type: proto.TypeDelta})
 	}
@@ -36,7 +36,7 @@ func TestDurableSubscriptionOverflowIsExplicitAndIsolated(t *testing.T) {
 func TestSubscriptionCloseAndDispatchAreSerialized(t *testing.T) {
 	for range 100 {
 		s := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
-		sub, _ := s.SubscribeDurable("run")
+		sub, _ := s.SubscribeDurable("run", proto.AssignmentRef{})
 		var wg sync.WaitGroup
 		wg.Add(3)
 		go func() {

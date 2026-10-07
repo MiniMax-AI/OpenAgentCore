@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/color"
 	"image/png"
@@ -36,7 +37,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	reg := agent.NewRegistry()
 	sender := &recSender{}
 	sessions := map[string]*functionSession{}
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(reg, proto.SupportedAgentKind{Kind: "function-test", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, func(ctx context.Context, p proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		s := &functionSession{fakeSession: &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}}
 		sessions[p.RunID] = s
 		return s, nil
@@ -47,14 +48,11 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	}
 	defer router.Shutdown(context.Background())
 	for _, id := range []string{"one", "two"} {
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, id, prototest.WithModel(proto.PromptRequestPayload{AgentKind: "function-test", Input: proto.TextInput("lookup"), FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}}))
-		if err := router.Handle(t.Context(), env); err != nil {
-			t.Fatal(err)
-		}
+		startRun(t, router, sender, "function-test", id)
 	}
 	submit := func(run, call, text, delivery string) proto.InteractionDecisionAckPayload {
 		t.Helper()
-		env, _ := proto.NewEnvelope(proto.TypeFunctionResult, run, proto.FunctionResultPayload{CallID: call, Success: true, Content: functionResultContent(text), DeliveryID: delivery})
+		env := scoped(t, run, proto.TypeFunctionResult, run, proto.FunctionResultPayload{CallID: call, Success: true, Content: functionResultContent(text), DeliveryID: delivery})
 		if err := router.Handle(t.Context(), env); err != nil {
 			t.Fatal(err)
 		}
@@ -73,7 +71,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 		t.Fatal(a)
 	}
 
-	invalid, _ := proto.NewEnvelope(proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", DeliveryID: "invalid", Content: []proto.InputContent{{Type: "input_audio"}}})
+	invalid := scoped(t, "one", proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", DeliveryID: "invalid", Content: []proto.InputContent{{Type: "input_audio"}}})
 	if err := router.Handle(t.Context(), invalid); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +85,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	sender.mu.Lock()
 	sender.failNow = true
 	sender.mu.Unlock()
-	first, _ := proto.NewEnvelope(proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: "lost"})
+	first := scoped(t, "one", proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: "lost"})
 	if err := router.Handle(t.Context(), first); err == nil {
 		t.Fatal("receipt send failure was hidden")
 	}
@@ -96,6 +94,17 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	}
 	if a := submit("one", "call", "changed", "conflict"); a.Applied || a.ErrorCode != "decision_conflict" {
 		t.Fatal(a)
+	}
+	// The cached receipt answers only the assignment that applied the result.
+	foreign := scoped(t, "one", proto.TypeFunctionResult, "one", proto.FunctionResultPayload{CallID: "call", Success: true, Content: functionResultContent("answer"), DeliveryID: "foreign"})
+	foreign.Assignment.AssignmentID = "foreign"
+	if err := router.Handle(t.Context(), foreign); err != nil {
+		t.Fatal(err)
+	}
+	frames = sender.snapshot()
+	var foreignAck proto.InteractionDecisionAckPayload
+	if last := frames[len(frames)-1]; last.DecodePayload(&foreignAck) != nil || foreignAck.Applied || foreignAck.ErrorCode != proto.AssignmentConflict || last.Assignment != foreign.Assignment {
+		t.Fatal(last, foreignAck)
 	}
 
 	for _, mutation := range []string{"image", "order", "success"} {
@@ -109,7 +118,7 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 		case "success":
 			result.Success = false
 		}
-		env, _ := proto.NewEnvelope(proto.TypeFunctionResult, "one", result)
+		env := scoped(t, "one", proto.TypeFunctionResult, "one", result)
 		if err := router.Handle(t.Context(), env); err != nil {
 			t.Fatal(err)
 		}
@@ -133,19 +142,31 @@ func TestFunctionReceiptsScopeRetriesAndConflicts(t *testing.T) {
 	}
 }
 
-func TestFunctionToolsRequireAdvertisedSupport(t *testing.T) {
+// rejectsBeforeFactory reports whether a Router rejects preparing req, whose
+// kind declares caps, before the kind's factory.
+func rejectsBeforeFactory(t *testing.T, caps proto.AgentKindCapabilities, req proto.PromptRequestPayload) bool {
+	t.Helper()
 	reg := agent.NewRegistry()
 	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "unsupported", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		called = true
-		return nil, nil
+	reg.RegisterKind(proto.SupportedAgentKind{Kind: req.AgentKind, Available: true, Capabilities: caps}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		return nil, errors.New("ordinary factory is forbidden")
 	})
-	sender := &recSender{}
-	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
+	reg.RegisterExecutor(req.AgentKind, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
+		called = true
+		return nil, errors.New("controlled factory stop")
+	})
+	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: &recSender{}})
 	defer router.Shutdown(context.Background())
-	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}}))
-	if err := router.Handle(t.Context(), env); err == nil || called {
-		t.Fatal("unsupported engine silently ignored tools", err)
+	assign(t, router, preparationSessionID, "")
+	req.AgentStateKey, req.StrictResume, req.DisableExecutionEnvironment = stateKey(preparationSessionID), true, true
+	err := router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: req}))
+	return err != nil && !called
+}
+
+func TestFunctionToolsRequireAdvertisedSupport(t *testing.T) {
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})
+	if !rejectsBeforeFactory(t, caps, prototest.WithModel(proto.PromptRequestPayload{AgentKind: "unsupported", FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{}`)}}})) {
+		t.Fatal("unsupported engine silently ignored tools")
 	}
 }
 
@@ -162,18 +183,10 @@ func functionResultContent(text string) []proto.InputContent {
 }
 
 func TestDiscoveryCannotReachAnEagerOnlyAdapter(t *testing.T) {
-	reg := agent.NewRegistry()
-	called := false
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "eager-only", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-		called = true
-		return nil, nil
-	})
-	router, _ := dispatch.New(dispatch.Config{Registry: reg, Sender: &recSender{}})
-	defer router.Shutdown(context.Background())
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})
 	for _, search := range []bool{false, true} {
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, "discovery", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}}))
-		if err := router.Handle(t.Context(), env); err == nil || called {
-			t.Fatal("deferred definitions reached an eager-only adapter", err)
+		if !rejectsBeforeFactory(t, caps, prototest.WithModel(proto.PromptRequestPayload{AgentKind: "eager-only", ToolSearch: search, FunctionTools: []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`), DeferLoading: true}}})) {
+			t.Fatal("deferred definitions reached an eager-only adapter")
 		}
 	}
 }

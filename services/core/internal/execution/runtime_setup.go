@@ -78,16 +78,16 @@ func setupOperations(setup environmentconfig.Setup) []runtimeSetupOperation {
 }
 
 type runtimePreparer interface {
-	PrepareRuntime(context.Context, string, proto.RuntimePreparePayload, []byte) (proto.RuntimePrepareResultPayload, error)
+	PrepareRuntime(context.Context, string, proto.AssignmentRef, proto.RuntimePreparePayload, []byte) (proto.RuntimePrepareResultPayload, error)
 }
 
-func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, operation runtimeSetupOperation) error {
+func runRuntimeSetup(ctx context.Context, peer runtimePreparer, ref proto.AssignmentRef, identity agentcapabilities.Identity, operation runtimeSetupOperation) error {
 	if peer == nil {
 		return errors.New("environment initialization request unavailable")
 	}
 	request := operation.Request
 	request.EnvironmentID, request.SessionID = identity.EnvironmentID, identity.SessionID
-	result, err := peer.PrepareRuntime(ctx, uuid.NewString(), request, operation.Data)
+	result, err := peer.PrepareRuntime(ctx, uuid.NewString(), ref, request, operation.Data)
 	if err == nil && result.Outcome == "completed" {
 		return nil
 	}
@@ -97,9 +97,9 @@ func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentca
 	return errors.New("environment initialization operation unconfirmed")
 }
 
-func installInitialFile(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, file environmentconfig.InitialFileMetadata, body []byte) error {
+func installInitialFile(ctx context.Context, peer runtimePreparer, ref proto.AssignmentRef, identity agentcapabilities.Identity, file environmentconfig.InitialFileMetadata, body []byte) error {
 	if file.SizeBytes == nil || *file.SizeBytes != int64(len(body)) || len(body) > environmentconfig.MaxInitialFileBytes {
 		return errors.New("environment initialization request unavailable")
 	}
-	return runRuntimeSetup(ctx, peer, identity, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: file.Path}}, Data: body})
+	return runRuntimeSetup(ctx, peer, ref, identity, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: file.Path}}, Data: body})
 }

@@ -14,12 +14,12 @@ import (
 // Core does not cache native ownership. A replacement requires the Runtime to
 // confirm cleanup and recover the exact Session history before returning ready.
 func (d *Dispatcher) prepareTurnExecutor(ctx context.Context, peer *runtimegateway.Session, tenant, session, turn string, request proto.PromptRequestPayload, expectedStatus string) (*preparedStart, error) {
-	prepared, err := newPreparedStart(peer)
+	prepared, err := newPreparedStart(peer, request.Assignment)
 	if err != nil {
 		return nil, err
 	}
 	request.RunID, request.ConversationID, request.Input = "", "", nil
-	if err = send(ctx, peer, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session, Configuration: request}); err == nil {
+	if err = send(ctx, peer, request.Assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session, Configuration: request}); err == nil {
 		err = d.awaitTurnExecutor(ctx, tenant, session, turn, expectedStatus, prepared)
 	}
 	if err != nil {

@@ -47,9 +47,16 @@ func TestLocalEnvironmentFileWriteOwnsMutationBeforeDispatch(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := startLocalWrite(ctx, w, environment)
+	// Environment work without a Turn binds the Session's assignment first.
+	bind := h.read(proto.TypeAssignmentBind)
+	var binding proto.AssignmentBindPayload
+	if bind.DecodePayload(&binding) != nil || bind.Assignment.SessionID != h.session.ID || bind.Assignment.Epoch != 1 || binding.EnvironmentID != environment.ID {
+		t.Fatal("upload did not bind the Session's assignment")
+	}
+	h.assignmentFrame(bind)
 	begin := h.read(proto.TypeWorkspaceWrite)
 	var request proto.WorkspaceWritePayload
-	if begin.DecodePayload(&request) != nil || request.Step != "begin" || request.EnvironmentID != environment.ID || request.SessionID != h.session.ID || request.Path != "input" || request.SizeBytes != 3 {
+	if begin.Assignment != bind.Assignment || begin.DecodePayload(&request) != nil || request.Step != "begin" || request.EnvironmentID != environment.ID || request.SessionID != h.session.ID || request.Path != "input" || request.SizeBytes != 3 {
 		t.Fatal("upload identity changed")
 	}
 	intent, err := FixtureFileWrite(t.Context(), h.s.pool, h.tenant, environment.ID, begin.ID)

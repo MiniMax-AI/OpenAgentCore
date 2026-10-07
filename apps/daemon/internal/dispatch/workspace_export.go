@@ -9,8 +9,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
+// workspaceExport is one admitted export.
 type workspaceExport struct {
-	id       string
+	request  proto.Envelope
 	requests chan proto.WorkspaceExportPayload
 	cancel   context.CancelFunc
 }
@@ -27,9 +28,9 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 	}
 	u := r.workspaceExport
 	if request.Step != "begin" {
-		if u == nil || u.id != env.ID {
+		if u == nil || u.request.ID != env.ID || u.request.Assignment != env.Assignment {
 			r.mu.Unlock()
-			return r.sendWorkspaceExport(ctx, env.ID, proto.WorkspaceExportResultPayload{Outcome: "rejected", ErrorCode: "resource_unavailable"})
+			return r.sendWorkspaceExport(ctx, env, proto.WorkspaceExportResultPayload{Outcome: "rejected", ErrorCode: "resource_unavailable"})
 		}
 		if request.Step == "cancel" {
 			u.cancel()
@@ -46,52 +47,68 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 			return errors.New("dispatch: workspace export request already pending")
 		}
 	}
-	_, code := r.workspaceResourceLocked(proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
+	_, code := r.workspaceResourceLocked(env.Assignment, proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
 	p := r.preparations[request.Handle]
-	if u != nil || r.workspaceWrite != nil || !r.localWorkspace.CanExport() || code != "" || p == nil || !p.workspaceReadOnly {
+	if code == "" && (u != nil || r.workspaceWrite != nil || !r.localWorkspace.CanExport() || p == nil || !p.workspaceReadOnly) {
+		code = "resource_unavailable"
+	}
+	if code != "" {
 		r.mu.Unlock()
-		return r.sendWorkspaceExport(ctx, env.ID, proto.WorkspaceExportResultPayload{Outcome: "rejected", ErrorCode: "resource_unavailable"})
+		return r.sendWorkspaceExport(ctx, env, proto.WorkspaceExportResultPayload{Outcome: "rejected", ErrorCode: code})
 	}
 	owner, stop := r.shutdownContext(p.ctx)
 	owner, cancel := context.WithTimeout(owner, 180*time.Second)
-	u = &workspaceExport{id: env.ID, requests: make(chan proto.WorkspaceExportPayload, 1), cancel: func() { cancel(); stop() }}
+	u = &workspaceExport{request: env, requests: make(chan proto.WorkspaceExportPayload, 1), cancel: func() { cancel(); stop() }}
 	u.requests <- request
 	r.workspaceExport = u
+	done := r.trackWorkLocked(env.Assignment)
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
-	go r.runWorkspaceExport(owner, u)
+	go r.runWorkspaceExport(owner, u, done)
 	return nil
 }
 
-func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport) {
+// runWorkspaceExport answers each request it admitted, even once the export is
+// canceled, and runs done after its last result is sent.
+func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, done func()) {
 	defer r.shutdownWG.Done()
+	defer done()
+	// A result has its own send budget, independent of the export's cancellation.
+	send := func(result proto.WorkspaceExportResultPayload) error {
+		return r.sendWorkspaceExport(context.WithoutCancel(ctx), u.request, result)
+	}
 	reader, writer := io.Pipe()
-	done := make(chan struct{})
+	exported := make(chan struct{})
 	go func() {
-		defer close(done)
+		defer close(exported)
 		err := r.localWorkspace.ExportOutputs(ctx, writer)
 		_ = writer.CloseWithError(err)
 	}()
+	var offset int64
 	defer func() {
 		u.cancel()
 		_ = reader.Close()
-		<-done
+		<-exported
 		r.mu.Lock()
 		if r.workspaceExport == u {
 			r.workspaceExport = nil
 		}
 		r.mu.Unlock()
+		select {
+		case <-u.requests:
+			_ = send(proto.WorkspaceExportResultPayload{Outcome: "failed", Offset: offset, ErrorCode: "export_failed"})
+		default:
+		}
 	}()
 	// Closing the reader unblocks a pending pipe read on cancellation or shutdown.
 	stopRead := context.AfterFunc(ctx, func() { _ = reader.CloseWithError(ctx.Err()) })
 	defer stopRead()
-	var offset int64
 	buffer := make([]byte, proto.WorkspaceExportChunkBytes)
 	for {
 		select {
 		case request := <-u.requests:
 			if request.Offset != offset {
-				_ = r.sendWorkspaceExport(ctx, u.id, proto.WorkspaceExportResultPayload{Outcome: "failed", Offset: offset, ErrorCode: "invalid_request"})
+				_ = send(proto.WorkspaceExportResultPayload{Outcome: "failed", Offset: offset, ErrorCode: "invalid_request"})
 				return
 			}
 		case <-ctx.Done():
@@ -110,25 +127,19 @@ func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport) {
 		}
 		if result.Outcome == "completed" {
 			// The next owner may start immediately after receiving completion.
-			<-done
+			<-exported
 			r.mu.Lock()
 			if r.workspaceExport == u {
 				r.workspaceExport = nil
 			}
 			r.mu.Unlock()
 		}
-		if r.sendWorkspaceExport(ctx, u.id, result) != nil || result.Outcome != "chunk" {
+		if send(result) != nil || result.Outcome != "chunk" {
 			return
 		}
 	}
 }
 
-func (r *Router) sendWorkspaceExport(ctx context.Context, id string, result proto.WorkspaceExportResultPayload) error {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	env, err := proto.NewEnvelope(proto.TypeWorkspaceExportResult, id, result)
-	if err != nil {
-		return err
-	}
-	return r.sender.Send(ctx, env)
+func (r *Router) sendWorkspaceExport(ctx context.Context, request proto.Envelope, result proto.WorkspaceExportResultPayload) error {
+	return r.reply(ctx, request, proto.TypeWorkspaceExportResult, result)
 }

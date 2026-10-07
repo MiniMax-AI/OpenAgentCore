@@ -15,7 +15,7 @@ func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
 	request := proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: proto.WorkspaceDirectoryMaxEntries}
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.ListWorkspaceDirectory(t.Context(), request)
+		_, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, request)
 		done <- err
 	}()
 	message := <-s.sendCh
@@ -28,7 +28,7 @@ func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
 		directory.Entries[i] = proto.WorkspaceDirectoryEntry{Name: strings.Repeat("\x01", 250) + fmt.Sprintf("%04d", i), Kind: "directory"}
 	}
 	result := proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, Directory: directory}
-	reply, _ := proto.NewEnvelope(proto.TypeWorkspaceReadResult, message.ID, result)
+	reply, _ := message.Reply(proto.TypeWorkspaceReadResult, result)
 	encoded, err := json.Marshal(reply)
 	if err != nil || int64(len(encoded)) >= ReadLimit {
 		t.Fatal("directory result exceeds frame", len(encoded), err)
@@ -79,11 +79,11 @@ func TestWorkspaceDirectoryRequiresExplicitWireTruncation(t *testing.T) {
 			defer s.Close("test")
 			done := make(chan error, 1)
 			go func() {
-				_, err := s.ListWorkspaceDirectory(t.Context(), proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: 1})
+				_, err := s.ListWorkspaceDirectory(t.Context(), testAssignment, proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: 1})
 				done <- err
 			}()
 			request := <-s.sendCh
-			reply := proto.Envelope{Type: proto.TypeWorkspaceReadResult, ID: request.ID,
+			reply := proto.Envelope{Type: proto.TypeWorkspaceReadResult, ID: request.ID, Assignment: request.Assignment,
 				Payload: json.RawMessage(`{"outcome":"completed","close_acknowledged":true,"directory":` + tc.directory + `}`)}
 			s.dispatch(reply)
 			if err := <-done; (err == nil) != tc.valid {

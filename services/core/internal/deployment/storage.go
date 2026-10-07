@@ -132,7 +132,8 @@ type AllocationTx interface {
 type AllocationCleanupTx interface {
 	AllocationTx
 	sessions.EnvironmentTerminationTx
-	// RevokeDevice revokes the allocation's device.
+	// RevokeDevice releases the Session's Runtime assignment without home
+	// removal, then revokes the allocation's device.
 	RevokeDevice(current Allocation) error
 	// RequestCleanup records that the allocation's resources await cleanup.
 	RequestCleanup(current Allocation) (Allocation, error)
@@ -163,8 +164,9 @@ type SessionArchiveTx interface {
 	// FindAllocation returns the Environment's allocation and whether it has
 	// one.
 	FindAllocation(environment string) (Allocation, bool, error)
-	// RequestArchiveCleanup revokes the allocation's device and records that
-	// its resources await cleanup. The device's first revocation records the
+	// RequestArchiveCleanup releases the Session's Runtime assignment without
+	// home removal, revokes the allocation's device and records that its
+	// resources await cleanup. The device's first revocation records the
 	// Session's active Turn whose cancellation was requested, which the
 	// archived cancellation receipt reports.
 	RequestArchiveCleanup(current Allocation) error

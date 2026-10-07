@@ -27,6 +27,8 @@ import (
 
 type dispatchHarness struct {
 	writeMu      sync.Mutex
+	assignments  map[string]proto.AssignmentRef // by frame and Run ID; writeMu guards it
+	assignment   proto.AssignmentRef            // the latest assignment Core named
 	admissions   map[string]fixtureAdmission
 	t            *testing.T
 	s            *Store
@@ -100,7 +102,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		t.Fatal("device connection failed")
 	}
 	t.Cleanup(func() { h.conn.Close() })
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, SubagentObservations: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, SubagentObservations: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		peer, e := h.registry.LookupDevice(h.device.ID)
@@ -145,6 +147,11 @@ func (h *dispatchHarness) write(run, kind string, payload any) {
 	if err != nil {
 		h.t.Fatal(err)
 	}
+	if ref, ok := h.assignments[run]; ok {
+		env.Assignment = ref
+	} else if kind != proto.TypeHeartbeat {
+		env.Assignment = h.assignment
+	}
 	if err = h.conn.WriteJSON(env); err != nil {
 		h.t.Fatal(err)
 	}
@@ -157,6 +164,10 @@ func (h *dispatchHarness) read(kind string) proto.Envelope {
 		var env proto.Envelope
 		if err := h.conn.ReadJSON(&env); err != nil {
 			h.t.Fatal(err)
+		}
+		h.observe(env)
+		if kind != proto.TypeAssignmentBind && h.assignmentFrame(env) {
+			continue
 		}
 		if kind == testExecutionRequest {
 			var keep bool
@@ -430,7 +441,7 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 		missing := tc.missing
 		t.Run(missing, func(t *testing.T) {
 			h := newDispatchHarness(t)
-			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilityFromBool(missing != "durable_turns"), DurableInputReceipts: proto.CapabilityFromBool(missing != "durable_input_receipts"), Preparation: proto.CapabilityFromBool(missing != "preparation"), WebSearchControl: proto.CapabilityFromBool(missing != "web_search_control"), TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), ExecutionControls: proto.CapabilityFromBool(missing != "execution_controls"), SubagentControl: proto.CapabilityFromBool(missing != "subagent_control"), ToolObservations: proto.CapabilityFromBool(missing != "tool_observations"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})}}})
+			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilityFromBool(missing != "durable_turns"), DurableInputReceipts: proto.CapabilityFromBool(missing != "durable_input_receipts"), Preparation: proto.CapabilityFromBool(missing != "preparation"), WebSearchControl: proto.CapabilityFromBool(missing != "web_search_control"), TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), ExecutionControls: proto.CapabilityFromBool(missing != "execution_controls"), SubagentControl: proto.CapabilityFromBool(missing != "subagent_control"), ToolObservations: proto.CapabilityFromBool(missing != "tool_observations"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})}}})
 			deadline := time.Now().Add(3 * time.Second)
 			for {
 				peer, _ := h.registry.LookupDevice(h.device.ID)

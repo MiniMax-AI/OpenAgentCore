@@ -88,7 +88,7 @@ func TestPrepareRejectsDecodedRequestsWithoutModelOrProvider(t *testing.T) {
 		`{"model":null,"model_provider":` + provider + `}`: ErrModel,
 	} {
 		var req proto.PromptRequestPayload
-		if err := (proto.Envelope{Type: proto.TypePromptRequest, Payload: json.RawMessage(payload)}).DecodeRequest(&req); err != nil {
+		if err := (proto.Envelope{Payload: json.RawMessage(payload)}).DecodeRequest(&req); err != nil {
 			t.Fatalf("%s: %v", payload, err)
 		}
 		if _, err := c.Prepare(req); !errors.Is(err, want) {

@@ -11,7 +11,7 @@ import (
 )
 
 // ExportWorkspaceOutputs consumes bounded chunks and requires the exporter completion receipt.
-func (s *Session) ExportWorkspaceOutputs(ctx context.Context, request proto.WorkspaceExportPayload, consume func(io.Reader) error) error {
+func (s *Session) ExportWorkspaceOutputs(ctx context.Context, ref proto.AssignmentRef, request proto.WorkspaceExportPayload, consume func(io.Reader) error) error {
 	request.Step = "begin"
 	if !proto.ValidWorkspaceExportRequest(request) || consume == nil {
 		return errors.New("agentdaemon gateway: invalid workspace export")
@@ -32,12 +32,13 @@ func (s *Session) ExportWorkspaceOutputs(ctx context.Context, request proto.Work
 	defer func() { s.workspaceExportMu.Lock(); delete(s.workspaceExports, id); s.workspaceExportMu.Unlock() }()
 	ctx, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
-	r := &workspaceExportReader{ctx: ctx, peer: s, id: id, replies: replies, request: request}
+	r := &workspaceExportReader{ctx: ctx, peer: s, id: id, ref: ref, replies: replies, request: request}
 	defer func() {
 		if !r.completed {
 			stop, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			env, _ := proto.NewEnvelope(proto.TypeWorkspaceExport, id, proto.WorkspaceExportPayload{Step: "cancel"})
+			env.Assignment = ref
 			_ = s.Send(stop, env)
 		}
 	}()
@@ -53,6 +54,7 @@ type workspaceExportReader struct {
 	ctx       context.Context
 	peer      *Session
 	id        string
+	ref       proto.AssignmentRef
 	replies   <-chan proto.Envelope
 	request   proto.WorkspaceExportPayload
 	data      []byte
@@ -76,34 +78,26 @@ func (r *workspaceExportReader) Read(p []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err = r.peer.Send(r.ctx, env); err != nil {
+	env.Assignment = r.ref
+	reply, err := r.peer.exchangeFrame(r.ctx, env, r.replies)
+	if err != nil {
 		return 0, err
 	}
-	select {
-	case env, ok := <-r.replies:
-		if !ok {
-			return 0, ErrSessionClosed
-		}
-		var result proto.WorkspaceExportResultPayload
-		if len(env.Payload) > proto.WorkspaceExportMaxFrameBytes || env.DecodePayload(&result) != nil || result.Offset != r.offset {
-			return 0, errors.New("agentdaemon gateway: invalid export receipt")
-		}
-		if result.Outcome == "completed" && len(result.Data) == 0 && result.ErrorCode == "" {
-			r.completed = true
-			return 0, io.EOF
-		}
-		if result.Outcome != "chunk" || result.ErrorCode != "" || len(result.Data) == 0 || len(result.Data) > proto.WorkspaceExportChunkBytes || int64(len(result.Data)) > proto.WorkspaceExportMaxBytes-r.offset {
-			return 0, errors.New("agentdaemon gateway: workspace export incomplete")
-		}
-		r.data = result.Data
-		r.offset += int64(len(result.Data))
-		r.request = proto.WorkspaceExportPayload{Step: "next", Offset: r.offset}
-		return r.Read(p)
-	case <-r.ctx.Done():
-		return 0, r.ctx.Err()
-	case <-r.peer.closed:
-		return 0, ErrSessionClosed
+	var result proto.WorkspaceExportResultPayload
+	if len(reply.Payload) > proto.WorkspaceExportMaxFrameBytes || reply.DecodePayload(&result) != nil || result.Offset != r.offset {
+		return 0, errors.New("agentdaemon gateway: invalid export receipt")
 	}
+	if result.Outcome == "completed" && len(result.Data) == 0 && result.ErrorCode == "" {
+		r.completed = true
+		return 0, io.EOF
+	}
+	if result.Outcome != "chunk" || result.ErrorCode != "" || len(result.Data) == 0 || len(result.Data) > proto.WorkspaceExportChunkBytes || int64(len(result.Data)) > proto.WorkspaceExportMaxBytes-r.offset {
+		return 0, errors.New("agentdaemon gateway: workspace export incomplete")
+	}
+	r.data = result.Data
+	r.offset += int64(len(result.Data))
+	r.request = proto.WorkspaceExportPayload{Step: "next", Offset: r.offset}
+	return r.Read(p)
 }
 
 func (s *Session) dispatchWorkspaceExport(env proto.Envelope) {

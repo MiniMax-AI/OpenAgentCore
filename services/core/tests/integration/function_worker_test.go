@@ -48,7 +48,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				}
 				caps := prototest.Capabilities(proto.AgentKindCapabilities{Preparation: proto.CapabilityFromBool(missing != "preparation"), Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(missing != "durable_input_receipts"), EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilityFromBool(missing != "execution_controls"), SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilityFromBool(missing != "tool_observations"), MCPHTTPTools: proto.CapabilityFromBool(missing != "mcp_http_tools"), MCPHTTPRequired: proto.CapabilityFromBool(missing != "mcp_http_required"), MCPHTTPBearerAuth: proto.CapabilityFromBool(missing != "mcp_http_bearer_auth"), FunctionTools: proto.CapabilityFromBool(missing != "function_tools" && !isMCP)})
 				heartbeat := func() {
-					h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
+					h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 				}
 				heartbeat()
 				deadline := time.Now().Add(3 * time.Second)

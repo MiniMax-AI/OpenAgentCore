@@ -15,7 +15,7 @@ func (d *Dispatcher) readPreparedDirectory(ctx context.Context, peer *runtimegat
 	var result directoryReadResult
 	err := d.withPreparedWorkspace(owner, peer, session, environment, bound, func(ctx context.Context, handle string) error {
 		read.Handle = handle
-		result = readEnvironmentDirectory(ctx, peer, read)
+		result = readEnvironmentDirectory(ctx, peer, bound.Assignment, read)
 		return result.err
 	})
 	if err != nil {
@@ -25,11 +25,11 @@ func (d *Dispatcher) readPreparedDirectory(ctx context.Context, peer *runtimegat
 }
 
 func (d *Dispatcher) withPreparedWorkspace(owner context.Context, peer *runtimegateway.Session, session sessions.Session, environment sessions.Environment, bound sessions.ExecutionDevice, consume func(context.Context, string) error) error {
-	req := proto.PromptRequestPayload{AgentKind: session.Engine, AgentStateKey: "agents-api-" + session.ID, StrictResume: true, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
+	req := proto.PromptRequestPayload{Assignment: bound.Assignment, AgentKind: session.Engine, AgentStateKey: "agents-api-" + session.ID, StrictResume: true, ReleaseOnCompletion: true, WorkspaceReadOnly: true}
 	if err := d.configurePreparedEnvironment(session, environment, bound, &req); err != nil {
 		return ErrExecutionUnavailable
 	}
-	prepared, err := newPreparedStart(peer)
+	prepared, err := newPreparedStart(peer, bound.Assignment)
 	if err != nil {
 		return ErrExecutionUnavailable
 	}
@@ -42,7 +42,7 @@ func (d *Dispatcher) withPreparedWorkspace(owner context.Context, peer *runtimeg
 		}
 	}()
 	prepare, stop := context.WithTimeout(owner, 10*time.Second)
-	err = send(prepare, peer, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session.ID, Configuration: req})
+	err = send(prepare, peer, bound.Assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: session.ID, Configuration: req})
 	if err == nil {
 		err = prepared.awaitDirectoryReady(prepare)
 	}
@@ -84,7 +84,7 @@ func (p *preparedStart) awaitDirectoryReady(ctx context.Context) error {
 func (p *preparedStart) releaseDirectory() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if send(ctx, p.peer, proto.TypeExecutionRelease, p.requestID, proto.ExecutionReleasePayload{Handle: p.handle}) != nil {
+	if send(ctx, p.peer, p.assignment, proto.TypeExecutionRelease, p.requestID, proto.ExecutionReleasePayload{Handle: p.handle}) != nil {
 		return ErrExecutionUnavailable
 	}
 	for {

@@ -174,7 +174,10 @@ func run() error {
 		return err
 	}
 	defer router.Shutdown(context.Background())
-	heartbeat, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: registry.SupportedAgentKinds()})
+	heartbeat, err := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: registry.SupportedAgentKinds(), HomeRemoval: proto.CapabilityUnsupported})
+	if err != nil {
+		return err
+	}
 	if err = sink.Send(context.Background(), heartbeat); err != nil {
 		return err
 	}

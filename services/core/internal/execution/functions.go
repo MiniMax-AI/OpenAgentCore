@@ -52,6 +52,7 @@ type functionExchange struct {
 	turns                 sessions.TurnReader
 	sessions              *sessions.ExecutionOperations
 	tenant, session, turn string
+	assignment            proto.AssignmentRef
 	kind                  string
 	tools                 []proto.FunctionTool
 	callID                string
@@ -99,6 +100,7 @@ func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Sessi
 		if err != nil {
 			return err
 		}
+		env.Assignment = f.assignment
 		replies := make(chan functionReply, 1)
 		f.callID, f.reply = call.CallID, replies
 		go func() {

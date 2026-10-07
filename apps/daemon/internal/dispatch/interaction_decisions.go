@@ -28,7 +28,7 @@ func (r *Router) handlePermissionDecision(ctx context.Context, env proto.Envelop
 	if err != nil {
 		return fmt.Errorf("dispatch: fingerprint permission_decision: %w", err)
 	}
-	if handled, err := r.replayAppliedInteractionDecision(ctx, env.ID, payload.DeliveryID, proto.TypePermissionDecision, fingerprint); handled {
+	if handled, err := r.replayAppliedInteractionDecision(ctx, env, payload.DeliveryID, proto.TypePermissionDecision, fingerprint); handled {
 		return err
 	}
 
@@ -39,9 +39,13 @@ func (r *Router) handlePermissionDecision(ctx context.Context, env proto.Envelop
 	var finishOperation func()
 	if known {
 		state = r.sessions[runID]
-		if state != nil {
-			session, finishOperation, _ = r.preparedOperationLocked(state)
+	}
+	if state != nil {
+		if code := r.admitRunLocked(env.Assignment, state); code != "" {
+			r.mu.Unlock()
+			return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, code, "The run's assignment does not admit this decision.")
 		}
+		session, finishOperation, _ = r.preparedOperationLocked(state)
 	}
 	r.mu.Unlock()
 
@@ -49,38 +53,38 @@ func (r *Router) handlePermissionDecision(ctx context.Context, env proto.Envelop
 		// Server's perm timeout / cancel race; common enough that info
 		// is right.
 		r.log.InfoContext(ctx, "permission_decision for unknown perm (run gone)", "perm_id", env.ID)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "not_pending", "permission request is no longer pending")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "not_pending", "permission request is no longer pending")
 	}
 	if session == nil {
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "not_ready", "permission request is waiting for the native session")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "not_ready", "permission request is waiting for the native session")
 	}
 	defer finishOperation()
 	ctx, stop := r.shutdownContext(ctx)
 	defer stop()
 
 	if !state.capabilities.Permissions.IsSupported() {
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "unsupported", "The runtime declaration does not support interaction decisions.")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "unsupported", "The runtime declaration does not support interaction decisions.")
 	}
 	responder, supported := session.(agent.PermissionResponder)
 	if !supported {
 		r.dropPermission(state, env.ID)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared runtime capability does not implement permission responses")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "contract_violation", "Declared runtime capability does not implement permission responses")
 	}
 	if err := responder.SubmitPermission(ctx, env.ID, payload); err != nil {
 		if errors.Is(err, agent.ErrUnsupportedOperation) {
-			return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared permission capability has no implementation.")
+			return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "contract_violation", "Declared permission capability has no implementation.")
 		}
 		if errors.Is(err, agent.ErrUnknownPermission) {
 			r.log.InfoContext(ctx, "agent reports unknown perm (race with cancel)", "perm_id", env.ID, "run_id", runID)
 			r.dropPermission(state, env.ID)
-			return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "not_pending", err.Error())
+			return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "not_pending", err.Error())
 		}
 		r.log.WarnContext(ctx, "agent rejected permission decision", "perm_id", env.ID, "run_id", runID, "err", err)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "runtime_error", err.Error())
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "runtime_error", err.Error())
 	}
 	r.dropPermission(state, env.ID)
-	r.rememberAppliedInteractionDecision(env.ID, proto.TypePermissionDecision, fingerprint)
-	return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, true, "", "")
+	r.rememberAppliedInteractionDecision(env, proto.TypePermissionDecision, fingerprint)
+	return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, true, "", "")
 }
 
 func (r *Router) dropPermission(s *sessionState, permissionID string) {
@@ -117,7 +121,7 @@ func (r *Router) handlePromptForUserChoiceDecision(ctx context.Context, env prot
 	if err != nil {
 		return fmt.Errorf("dispatch: fingerprint prompt_for_user_choice_decision: %w", err)
 	}
-	if handled, err := r.replayAppliedInteractionDecision(ctx, env.ID, payload.DeliveryID, proto.TypePromptForUserChoiceDecision, fingerprint); handled {
+	if handled, err := r.replayAppliedInteractionDecision(ctx, env, payload.DeliveryID, proto.TypePromptForUserChoiceDecision, fingerprint); handled {
 		return err
 	}
 
@@ -128,70 +132,78 @@ func (r *Router) handlePromptForUserChoiceDecision(ctx context.Context, env prot
 	var finishOperation func()
 	if known {
 		state = r.sessions[runID]
-		if state != nil {
-			session, finishOperation, _ = r.preparedOperationLocked(state)
+	}
+	if state != nil {
+		if code := r.admitRunLocked(env.Assignment, state); code != "" {
+			r.mu.Unlock()
+			return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, code, "The run's assignment does not admit this decision.")
 		}
+		session, finishOperation, _ = r.preparedOperationLocked(state)
 	}
 	r.mu.Unlock()
 
 	if !known || state == nil {
 		r.log.InfoContext(ctx, "prompt_for_user_choice_decision for unknown ask (run gone)", "ask_id", env.ID)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "not_pending", "user-input request is no longer pending")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "not_pending", "user-input request is no longer pending")
 	}
 	if session == nil {
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "not_ready", "user-input request is waiting for the native session")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "not_ready", "user-input request is waiting for the native session")
 	}
 	defer finishOperation()
 	ctx, stop := r.shutdownContext(ctx)
 	defer stop()
 
 	if !state.capabilities.Permissions.IsSupported() {
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "unsupported", "The runtime declaration does not support interaction decisions.")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "unsupported", "The runtime declaration does not support interaction decisions.")
 	}
 	responder, supported := session.(agent.UserChoiceResponder)
 	if !supported {
 		r.dropAsk(state, env.ID)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared runtime capability does not implement user-choice responses")
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "contract_violation", "Declared runtime capability does not implement user-choice responses")
 	}
 	err = responder.SubmitPromptForUserChoice(ctx, env.ID, payload)
 	if err != nil {
 		if errors.Is(err, agent.ErrUnsupportedOperation) {
-			return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "contract_violation", "Declared user-choice capability has no implementation.")
+			return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "contract_violation", "Declared user-choice capability has no implementation.")
 		}
 		if errors.Is(err, agent.ErrUnknownAsk) {
 			r.log.InfoContext(ctx, "agent reports unknown ask (race with cancel)", "ask_id", env.ID, "run_id", runID)
 			r.dropAsk(state, env.ID)
-			return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "not_pending", err.Error())
+			return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "not_pending", err.Error())
 		}
 		// Keep the routing entry for transient runtime failures. Codex, for
 		// example, restores its pending request when a JSON-RPC reply write
 		// fails, so dropping the ask here would turn a retryable error into a
 		// permanent not_pending response on the next attempt.
 		r.log.WarnContext(ctx, "agent rejected user-input decision", "ask_id", env.ID, "run_id", runID, "err", err)
-		return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, false, "runtime_error", err.Error())
+		return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, false, "runtime_error", err.Error())
 	}
 	r.dropAsk(state, env.ID)
-	r.rememberAppliedInteractionDecision(env.ID, proto.TypePromptForUserChoiceDecision, fingerprint)
-	return r.sendInteractionDecisionAck(ctx, env.ID, payload.DeliveryID, true, "", "")
+	r.rememberAppliedInteractionDecision(env, proto.TypePromptForUserChoiceDecision, fingerprint)
+	return r.sendInteractionDecisionAck(ctx, env, payload.DeliveryID, true, "", "")
 }
 
-func (r *Router) replayAppliedInteractionDecision(ctx context.Context, requestID, deliveryID, kind string, fingerprint [32]byte) (bool, error) {
-	key := appliedInteractionDecisionKey(requestID, kind)
+func (r *Router) replayAppliedInteractionDecision(ctx context.Context, env proto.Envelope, deliveryID, kind string, fingerprint [32]byte) (bool, error) {
+	key := appliedInteractionDecisionKey(env.ID, kind)
 	r.mu.Lock()
 	applied, ok := r.applied[key]
 	r.mu.Unlock()
 	if !ok {
 		return false, nil
 	}
-	if applied.requestID != requestID || applied.kind != kind || applied.fingerprint != fingerprint {
-		return true, r.sendInteractionDecisionAck(ctx, requestID, deliveryID, false, "decision_conflict", "request was already applied with a different decision")
+	// The receipt answers only the assignment that applied the decision.
+	if applied.assignment != env.Assignment {
+		return true, r.sendInteractionDecisionAck(ctx, env, deliveryID, false, proto.AssignmentConflict, "The decision was applied under another assignment.")
 	}
-	return true, r.sendInteractionDecisionAck(ctx, requestID, deliveryID, true, "", "")
+	if applied.requestID != env.ID || applied.kind != kind || applied.fingerprint != fingerprint {
+		return true, r.sendInteractionDecisionAck(ctx, env, deliveryID, false, "decision_conflict", "request was already applied with a different decision")
+	}
+	return true, r.sendInteractionDecisionAck(ctx, env, deliveryID, true, "", "")
 }
 
-func (r *Router) rememberAppliedInteractionDecision(requestID, kind string, fingerprint [32]byte) {
+func (r *Router) rememberAppliedInteractionDecision(env proto.Envelope, kind string, fingerprint [32]byte) {
 	now := time.Now().UTC()
-	key := appliedInteractionDecisionKey(requestID, kind)
+	key := appliedInteractionDecisionKey(env.ID, kind)
 	r.mu.Lock()
 	if len(r.applied) >= 1024 {
 		cutoff := now.Add(-time.Hour)
@@ -208,7 +220,7 @@ func (r *Router) rememberAppliedInteractionDecision(requestID, kind string, fing
 		}
 	}
 	r.applied[key] = appliedInteractionDecision{
-		requestID: requestID, kind: kind, fingerprint: fingerprint, recordedAt: now,
+		requestID: env.ID, kind: kind, fingerprint: fingerprint, assignment: env.Assignment, recordedAt: now,
 	}
 	r.mu.Unlock()
 }
@@ -241,8 +253,8 @@ func interactionDecisionFingerprint(payload any) ([32]byte, error) {
 	}
 }
 
-func (r *Router) sendInteractionDecisionAck(ctx context.Context, requestID, deliveryID string, applied bool, errorCode, message string) error {
-	env, err := proto.NewEnvelope(proto.TypeInteractionDecisionAck, requestID, proto.InteractionDecisionAckPayload{
+func (r *Router) sendInteractionDecisionAck(ctx context.Context, request proto.Envelope, deliveryID string, applied bool, errorCode, message string) error {
+	env, err := request.Reply(proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{
 		DeliveryID: deliveryID,
 		Applied:    applied,
 		ErrorCode:  errorCode,

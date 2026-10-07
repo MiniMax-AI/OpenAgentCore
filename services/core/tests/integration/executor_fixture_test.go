@@ -16,6 +16,51 @@ type fixtureAdmission struct {
 	executor string
 }
 
+// assignmentReply is the reply of a Runtime that binds every assignment to
+// env, when env is an assignment_bind.
+func assignmentReply(env proto.Envelope) (proto.Envelope, bool) {
+	if env.Type != proto.TypeAssignmentBind {
+		return proto.Envelope{}, false
+	}
+	reply, err := env.Reply(proto.TypeAssignmentStatus, proto.AssignmentStatusPayload{State: proto.AssignmentBound})
+	return reply, err == nil
+}
+
+// observe remembers the assignment env names for its ID and started Run. The
+// fixture Runtime writes its frames under it, as a Runtime echoes its
+// request's assignment.
+func (h *dispatchHarness) observe(env proto.Envelope) {
+	if !env.Assignment.Valid() {
+		return
+	}
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+	if h.assignments == nil {
+		h.assignments = make(map[string]proto.AssignmentRef)
+	}
+	h.assignment, h.assignments[env.ID] = env.Assignment, env.Assignment
+	var start proto.ExecutionStartPayload
+	if env.Type == proto.TypeExecutionStart && env.DecodePayload(&start) == nil && start.RunID != "" {
+		h.assignments[start.RunID] = env.Assignment
+	}
+}
+
+// assignmentFrame observes env, answers an assignment_bind and reports whether
+// env was one.
+func (h *dispatchHarness) assignmentFrame(env proto.Envelope) bool {
+	h.observe(env)
+	reply, ok := assignmentReply(env)
+	if !ok {
+		return false
+	}
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+	if err := h.conn.WriteJSON(reply); err != nil {
+		h.t.Fatal(err)
+	}
+	return true
+}
+
 func (h *dispatchHarness) executionFrame(env proto.Envelope) (proto.Envelope, bool) {
 	if h.admissions == nil {
 		h.admissions = make(map[string]fixtureAdmission)

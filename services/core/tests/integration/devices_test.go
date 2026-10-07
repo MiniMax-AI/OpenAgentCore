@@ -187,7 +187,7 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 	if err := sessionService(t, s).RevokeDevice(ctx, tenant, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := second.WriteJSON(map[string]any{"type": proto.TypeHeartbeat, "payload": map[string]any{"version": "test"}}); err != nil {
+	if err := second.WriteJSON(map[string]any{"type": proto.TypeHeartbeat, "payload": map[string]any{"version": "test", "home_removal": false}}); err != nil {
 		t.Fatal(err)
 	}
 	_ = second.SetReadDeadline(time.Now().Add(2 * time.Second))

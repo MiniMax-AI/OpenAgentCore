@@ -8,12 +8,6 @@ import (
 
 // Type constants for server → daemon frames.
 const (
-	// TypePromptRequest triggers one prompt cycle. Envelope.ID = RunID;
-	// the daemon stamps every resulting upstream frame with the same
-	// ID so the gateway can fan them back to the matching StreamPrompt
-	// subscriber.
-	TypePromptRequest = "prompt_request"
-
 	// TypePromptCancel aborts an in-flight prompt. Envelope.ID =
 	// RunID. Idempotent — cancelling an unknown / already-finished
 	// run is a no-op on the daemon side.
@@ -86,6 +80,12 @@ type PromptRequestPayload struct {
 	ToolSearch                  bool           `json:"tool_search,omitempty"`
 	DisableExecutionEnvironment bool           `json:"disable_execution_environment,omitempty"`
 	DisableSubagents            bool           `json:"disable_subagents,omitempty"`
+
+	// Assignment is the assignment the request runs under: Core sends its
+	// frames under it, and the Runtime records the Envelope.Assignment it
+	// admitted the request under for the Executor factory. It is never
+	// encoded.
+	Assignment AssignmentRef `json:"-"`
 }
 
 // PromptCancelPayload optionally requests an application receipt; identity is on Envelope.ID.

@@ -340,6 +340,7 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 			ActiveRequests:      router.ActiveRuns(),
 			DaemonVersion:       Version,
 			SupportedAgentKinds: kinds,
+			HomeRemoval:         proto.CapabilityUnsupported,
 		}
 	}, obslog.Bg().With("component", "heartbeat"))
 

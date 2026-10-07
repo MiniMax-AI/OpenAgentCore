@@ -46,7 +46,13 @@ func (r *runtimeLifecycle) wakeCompute(ctx context.Context, p sandbox.Checkpoint
 			}
 		}
 	}
-	result, err := peer.SuspendControl(ctx, proto.TypeEnvironmentResume, proto.EnvironmentSuspendPayload{EnvironmentID: owner.EnvironmentID, SuspendID: state.SuspendID, Rollback: state.Rollback})
+	// Resume carries the reference that quiesced the Runtime; a suspended
+	// Runtime admits nothing else, so it is not bound again.
+	bound, err := r.allocationAssignment(ctx, owner)
+	if err != nil {
+		return err
+	}
+	result, err := peer.SuspendControl(ctx, proto.TypeEnvironmentResume, bound.Assignment, proto.EnvironmentSuspendPayload{EnvironmentID: owner.EnvironmentID, SuspendID: state.SuspendID, Rollback: state.Rollback})
 	if err != nil {
 		return err
 	}

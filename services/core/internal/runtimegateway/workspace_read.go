@@ -10,19 +10,19 @@ import (
 )
 
 // ReadWorkspaceFile observes one private operation; cancellation never retries or cancels native work.
-func (s *Session) ReadWorkspaceFile(ctx context.Context, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
+func (s *Session) ReadWorkspaceFile(ctx context.Context, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
 	if request.Operation != "" {
 		return proto.WorkspaceReadResultPayload{}, errors.New("agentdaemon gateway: invalid byte read operation")
 	}
-	return s.readWorkspace(ctx, request)
+	return s.readWorkspace(ctx, ref, request)
 }
 
-func (s *Session) ListWorkspaceDirectory(ctx context.Context, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
+func (s *Session) ListWorkspaceDirectory(ctx context.Context, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
 	request.Operation = "directory"
-	return s.readWorkspace(ctx, request)
+	return s.readWorkspace(ctx, ref, request)
 }
 
-func (s *Session) readWorkspace(ctx context.Context, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
+func (s *Session) readWorkspace(ctx context.Context, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
 	var result proto.WorkspaceReadResultPayload
 	if !proto.ValidWorkspaceReadRequest(request) {
 		return result, errors.New("agentdaemon gateway: invalid workspace read")
@@ -32,6 +32,7 @@ func (s *Session) readWorkspace(ctx context.Context, request proto.WorkspaceRead
 	if err != nil || len(env.Payload) > proto.WorkspaceReadMaxRequestBytes {
 		return result, errors.New("agentdaemon gateway: invalid workspace read")
 	}
+	env.Assignment = ref
 	s.workspaceReadMu.Lock()
 	if s.IsClosed() {
 		s.workspaceReadMu.Unlock()
@@ -50,23 +51,14 @@ func (s *Session) readWorkspace(ctx context.Context, request proto.WorkspaceRead
 	defer func() { s.workspaceReadMu.Lock(); delete(s.workspaceReads, id); s.workspaceReadMu.Unlock() }()
 	ctx, cancel := context.WithTimeout(ctx, 17*time.Second)
 	defer cancel()
-	if err = s.Send(ctx, env); err != nil {
+	reply, err := s.exchangeFrame(ctx, env, replies)
+	if err != nil {
 		return result, err
 	}
-	select {
-	case reply, ok := <-replies:
-		if !ok {
-			return result, ErrSessionClosed
-		}
-		if reply.DecodePayload(&result) != nil || !validWorkspaceOperationResult(result, request) {
-			return proto.WorkspaceReadResultPayload{}, errors.New("agentdaemon gateway: invalid workspace read response")
-		}
-		return result, nil
-	case <-ctx.Done():
-		return result, ctx.Err()
-	case <-s.closed:
-		return result, ErrSessionClosed
+	if reply.DecodePayload(&result) != nil || !validWorkspaceOperationResult(result, request) {
+		return proto.WorkspaceReadResultPayload{}, errors.New("agentdaemon gateway: invalid workspace read response")
 	}
+	return result, nil
 }
 
 func validWorkspaceOperationResult(result proto.WorkspaceReadResultPayload, request proto.WorkspaceReadPayload) bool {
@@ -98,7 +90,7 @@ func validWorkspaceReadResult(result proto.WorkspaceReadResultPayload, limit int
 		return false
 	}
 	switch result.ErrorCode {
-	case "invalid_request", "resource_unavailable", "read_capacity", "read_unsupported", "not_found", "permission_denied":
+	case "invalid_request", "resource_unavailable", "read_capacity", "read_unsupported", "not_found", "permission_denied", proto.AssignmentStale, proto.AssignmentConflict:
 		return true
 	default:
 		return false

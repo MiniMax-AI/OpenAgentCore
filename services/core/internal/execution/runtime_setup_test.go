@@ -21,7 +21,7 @@ type receiptRuntime struct {
 	data    []byte
 }
 
-func (p *receiptRuntime) PrepareRuntime(_ context.Context, _ string, request proto.RuntimePreparePayload, data []byte) (proto.RuntimePrepareResultPayload, error) {
+func (p *receiptRuntime) PrepareRuntime(_ context.Context, _ string, _ proto.AssignmentRef, request proto.RuntimePreparePayload, data []byte) (proto.RuntimePrepareResultPayload, error) {
 	p.request, p.data = request, data
 	return p.result, p.err
 }
@@ -36,7 +36,7 @@ func TestRuntimeSetupReceiptOutcomes(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: test.outcome, ExitCode: test.code}, err: test.err}
-			err := runRuntimeSetup(t.Context(), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: setupCanary}}})
+			err := runRuntimeSetup(t.Context(), peer, proto.AssignmentRef{}, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: setupCanary}}})
 			if test.outcome == "completed" && test.err == nil {
 				if err != nil {
 					t.Fatal(err)
@@ -73,14 +73,14 @@ func TestInitialFileUsesTypedRuntimeBytes(t *testing.T) {
 	size := int64(len(body))
 	owner := agentcapabilities.Identity{EnvironmentID: "environment", SessionID: "session"}
 	peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: "completed"}}
-	if err := installInitialFile(t.Context(), peer, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
+	if err := installInitialFile(t.Context(), peer, proto.AssignmentRef{}, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
 		t.Fatal(err)
 	}
 	if peer.request.Action != "file" || peer.request.File.Path != "/workspace/a" || peer.request.EnvironmentID != owner.EnvironmentID || peer.request.SessionID != owner.SessionID || string(peer.data) != setupCanary {
 		t.Fatal("file transport changed")
 	}
 	size++
-	if err := installInitialFile(t.Context(), peer, owner, environmentconfig.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
+	if err := installInitialFile(t.Context(), peer, proto.AssignmentRef{}, owner, environmentconfig.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
 		t.Fatal("mismatched source size accepted")
 	}
 }

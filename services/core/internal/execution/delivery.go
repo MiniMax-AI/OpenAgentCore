@@ -25,29 +25,32 @@ type cancellationResult struct {
 	err error
 }
 
-func requestCancellation(ctx context.Context, peer *runtimegateway.Session, runID string) <-chan cancellationResult {
+func requestCancellation(ctx context.Context, peer *runtimegateway.Session, ref proto.AssignmentRef, runID string) <-chan cancellationResult {
 	out := make(chan cancellationResult, 1)
 	go func() {
 		id := "cancel:" + runID
 		env, _ := proto.NewEnvelope(proto.TypePromptCancel, runID, proto.PromptCancelPayload{DeliveryID: id})
+		env.Assignment = ref
 		ack, err := peer.SendAndWaitInteractionAck(ctx, env, id)
 		out <- cancellationResult{ack: ack, err: err}
 	}()
 	return out
 }
 
-func send(ctx context.Context, peer *runtimegateway.Session, kind, runID string, payload any) error {
-	env, err := proto.NewEnvelope(kind, runID, payload)
+// send sends one frame of the assignment's Session.
+func send(ctx context.Context, peer *runtimegateway.Session, ref proto.AssignmentRef, kind, id string, payload any) error {
+	env, err := proto.NewEnvelope(kind, id, payload)
 	if err != nil {
 		return err
 	}
+	env.Assignment = ref
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	return peer.Send(ctx, env)
 }
 
-func abort(peer *runtimegateway.Session, runID string) {
-	_ = send(context.Background(), peer, proto.TypePromptCancel, runID, proto.PromptCancelPayload{})
+func abort(peer *runtimegateway.Session, ref proto.AssignmentRef, runID string) {
+	_ = send(context.Background(), peer, ref, proto.TypePromptCancel, runID, proto.PromptCancelPayload{})
 }
 
 func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, peer *runtimegateway.Session, request proto.PromptRequestPayload, first int64, prepared *preparedStart) (result Result, status string) {
@@ -55,7 +58,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	defer unsubscribeChanges()
 	status = sessions.TurnFailed
 	result.AppliedThrough = first
-	subscription, err := peer.SubscribeDurable(request.RunID)
+	subscription, err := peer.SubscribeDurable(request.RunID, request.Assignment)
 	if err != nil {
 		result.ErrorCode = "device_disconnected"
 		return
@@ -64,7 +67,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	defer peer.Unsubscribe(request.RunID)
 	defer func() {
 		if status == sessions.TurnFailed {
-			abort(peer, request.RunID)
+			abort(peer, request.Assignment, request.RunID)
 		}
 	}()
 	journal := &journal{writer: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, next: 1,
@@ -86,13 +89,8 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var executorRetried, nativeObserved bool
 	inputStarted := time.Now()
 	firstTextObserved := false
-	if prepared != nil {
-		preparationEvents = prepared.sub.Events
-		err = prepared.start(ctx, request)
-	} else {
-		err = send(ctx, peer, proto.TypePromptRequest, request.RunID, request)
-	}
-	if err != nil {
+	preparationEvents = prepared.sub.Events
+	if err = prepared.start(ctx, request); err != nil {
 		result.ErrorCode = "delivery_unknown"
 		return
 	}
@@ -105,7 +103,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
+	functions := &functionExchange{assignment: request.Assignment, kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: request.RunID, tools: request.FunctionTools}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -291,7 +289,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 				return
 			}
 			if !turn.CancelRequestedAt.IsZero() {
-				cancelReply = requestCancellation(cancelCtx, peer, request.RunID)
+				cancelReply = requestCancellation(cancelCtx, peer, request.Assignment, request.RunID)
 				cancelSent = time.Now()
 				continue
 			}
@@ -338,7 +336,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					result.ErrorCode = "message_input_unsupported"
 					return
 				}
-				if send(ctx, peer, proto.TypePromptSteer, request.RunID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input, DurableReceipt: true}) != nil {
+				if send(ctx, peer, request.Assignment, proto.TypePromptSteer, request.RunID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input, DurableReceipt: true}) != nil {
 					result.ErrorCode = "input_outcome_unknown"
 					return
 				}

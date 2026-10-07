@@ -93,7 +93,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if err != nil || !environmentDeviceMatches(session, environment, bound) || w.dispatcher.Registry == nil {
 		return unavailable
 	}
-	peer, err := w.dispatcher.authorizedPeer(ctx, bound.ID)
+	peer, err := w.dispatcher.assignedPeer(ctx, bound)
 	if err != nil {
 		return unavailable
 	}
@@ -116,7 +116,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 	if intent.Replayed {
 		return unavailable
 	}
-	result, err := peer.WriteWorkspaceFile(ctx, key.ID, proto.WorkspaceWritePayload{EnvironmentID: environment.ID, SessionID: session.ID, Path: request.path}, request.data)
+	result, err := peer.WriteWorkspaceFile(ctx, key.ID, bound.Assignment, proto.WorkspaceWritePayload{EnvironmentID: environment.ID, SessionID: session.ID, Path: request.path}, request.data)
 	if err != nil || (result.Outcome != "completed" && result.Outcome != "rejected") {
 		return unavailable
 	}

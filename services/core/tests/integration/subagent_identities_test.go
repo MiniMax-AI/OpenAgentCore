@@ -97,7 +97,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err = journal.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{a}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 		t.Fatal("same device/native child reassigned to another Session", err)
 	}
-	if _, err = pool.Exec(ctx, "UPDATE session_devices SET native_session_id='known-root' WHERE session_id=$1", foreign.ID); err != nil {
+	if _, err = pool.Exec(ctx, "UPDATE session_runtime_assignments SET native_session_id='known-root' WHERE session_id=$1", foreign.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = journal.AppendTurnEvents(ctx, tenant, foreign.ID, foreignInput.TurnID, 1, []sessions.ExecutionEvent{subagentIdentityEvent("other-child", "root", 101)}); !errors.Is(err, sessions.ErrIdempotencyConflict) {

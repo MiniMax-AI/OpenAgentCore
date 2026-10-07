@@ -82,22 +82,24 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	}
 	allowed, anonymousTools := []string{"remember", "fail"}, []string{"ping"}
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "private_mcp", ServerURL: fixture.private.URL, AllowedTools: &allowed, BearerToken: &token}, {ConnectionOrigin: "service", ServerLabel: "anonymous_mcp", ServerURL: fixture.anonymous.URL, AllowedTools: &anonymousTools}}
+	assignment := proto.AssignmentRef{SessionID: uuid.NewString(), AssignmentID: uuid.NewString(), Epoch: 1}
+	if err := peer.Bind(ctx, assignment, ""); err != nil {
+		t.Fatal("built daemon did not bind the Session's assignment")
+	}
 	run := func(prompt, resume string, expected map[string]string) *mcpBearerTurn {
 		t.Helper()
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
 		runID := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", ConversationID: "mcp-bearer-acceptance", RunID: runID, Input: proto.TextInput(prompt), AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
-		sub, err := peer.SubscribeDurable(runID)
+		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, ObserveToolObservations: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		sub, err := peer.SubscribeDurable(runID, assignment)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")
 		}
 		defer peer.Unsubscribe(runID)
-		envelope, err := proto.NewEnvelope(proto.TypePromptRequest, runID, request)
-		if err != nil || peer.Send(ctx, envelope) != nil {
-			t.Fatal("cannot dispatch the private MCP request")
-		}
+		control := mcpBearerStart(t, ctx, peer, assignment, request, runID, proto.TextInput(prompt))
 		mcpBearerCollectTurn(t, ctx, sub, runID, turn, expected, token, provider)
+		control.release()
 		turn.NativeLaunches = mcpBearerReleased(t, root)
 		turn.BearerEnvironmentReference = mcpBearerConfigReference(t, root, token)
 		return turn
@@ -120,6 +122,69 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 	if !valid {
 		t.Fatal("HTTPS authorization, per-server separation or expected tool-call counts failed")
 	}
+}
+
+// mcpBearerControl is one prepared Executor admission of the acceptance
+// Session.
+type mcpBearerControl struct {
+	t          *testing.T
+	ctx        context.Context
+	peer       *Session
+	assignment proto.AssignmentRef
+	id         string
+	events     *Subscription
+	status     proto.PreparationStatusPayload
+}
+
+// mcpBearerStart prepares the Session's Executor and starts the Run on it, as
+// Core does.
+func mcpBearerStart(t *testing.T, ctx context.Context, peer *Session, assignment proto.AssignmentRef, request proto.PromptRequestPayload, runID string, input proto.MessageInput) *mcpBearerControl {
+	t.Helper()
+	c := &mcpBearerControl{t: t, ctx: ctx, peer: peer, assignment: assignment, id: uuid.NewString()}
+	events, err := peer.SubscribePreparation(c.id, assignment)
+	if err != nil {
+		t.Fatal("cannot subscribe to the preparation")
+	}
+	c.events = events
+	c.send(proto.TypeExecutionPrepare, proto.ExecutionPreparePayload{SessionID: assignment.SessionID, Configuration: request})
+	c.await("ready")
+	c.send(proto.TypeExecutionStart, proto.ExecutionStartPayload{Handle: c.status.Handle, ExecutorID: c.status.ExecutorID, RunID: runID, Input: input})
+	c.await("started")
+	return c
+}
+
+func (c *mcpBearerControl) send(kind string, payload any) {
+	c.t.Helper()
+	env, err := proto.NewEnvelope(kind, c.id, payload)
+	if err != nil {
+		c.t.Fatal("cannot encode the preparation control")
+	}
+	env.Assignment = c.assignment
+	if c.peer.Send(c.ctx, env) != nil {
+		c.t.Fatal("cannot dispatch the preparation control")
+	}
+}
+
+func (c *mcpBearerControl) await(state string) {
+	c.t.Helper()
+	for c.status.State != state {
+		select {
+		case env, ok := <-c.events.Events:
+			if !ok || env.DecodePayload(&c.status) != nil || c.status.State == "rejected" || c.status.State == "failed" {
+				c.t.Fatal("built daemon did not admit the prepared Run")
+			}
+		case <-c.ctx.Done():
+			c.t.Fatal("prepared Run admission timed out")
+		}
+	}
+}
+
+// release closes the Executor, so the next Run starts a fresh native process.
+func (c *mcpBearerControl) release() {
+	c.t.Helper()
+	defer c.peer.UnsubscribePreparation(c.id)
+	c.send(proto.TypeExecutionRelease, proto.ExecutionReleasePayload{Handle: c.status.Handle})
+	c.await("released")
 }
 
 func mcpBearerCollectTurn(t *testing.T, ctx context.Context, sub *Subscription, runID string, turn *mcpBearerTurn, expected map[string]string, secrets ...string) {

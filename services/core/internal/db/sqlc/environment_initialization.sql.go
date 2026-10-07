@@ -47,9 +47,9 @@ func (q *Queries) FailEnvironmentInitialization(ctx context.Context, id pgtype.U
 }
 
 const listEnvironmentInitializations = `-- name: ListEnvironmentInitializations :many
-SELECT e.id, e.session_id, s.tenant_id, s.engine, e.initialization, b.device_id
+SELECT e.id, e.session_id, s.tenant_id, s.engine, e.initialization, b.runtime_id, b.assignment_id, b.epoch
 FROM environments e JOIN sessions s ON s.id = e.session_id
-LEFT JOIN session_devices b ON b.session_id = s.id
+LEFT JOIN session_runtime_assignments b ON b.session_id = s.id AND b.desired_state = 'bound'
 WHERE e.id > $1 AND s.deleted_at IS NULL AND e.status NOT IN ('failed', 'expired')
  AND e.initialization IN ('pending', 'running')
 ORDER BY e.id LIMIT 32
@@ -61,7 +61,9 @@ type ListEnvironmentInitializationsRow struct {
 	TenantID       pgtype.UUID `json:"tenant_id"`
 	Engine         string      `json:"engine"`
 	Initialization string      `json:"initialization"`
-	DeviceID       pgtype.UUID `json:"device_id"`
+	RuntimeID      pgtype.UUID `json:"runtime_id"`
+	AssignmentID   pgtype.UUID `json:"assignment_id"`
+	Epoch          pgtype.Int8 `json:"epoch"`
 }
 
 func (q *Queries) ListEnvironmentInitializations(ctx context.Context, id pgtype.UUID) ([]ListEnvironmentInitializationsRow, error) {
@@ -79,7 +81,9 @@ func (q *Queries) ListEnvironmentInitializations(ctx context.Context, id pgtype.
 			&i.TenantID,
 			&i.Engine,
 			&i.Initialization,
-			&i.DeviceID,
+			&i.RuntimeID,
+			&i.AssignmentID,
+			&i.Epoch,
 		); err != nil {
 			return nil, err
 		}

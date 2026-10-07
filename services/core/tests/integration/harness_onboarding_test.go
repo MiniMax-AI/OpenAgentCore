@@ -128,7 +128,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	changed := declaration
 	changed.Capabilities.DurableInputReceipts = proto.CapabilityUnsupported
 	// A separate unbound Session is used, without changing public handler behavior.
-	update, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{changed}})
+	update, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{changed}})
 	if err := write(update); err != nil {
 		t.Fatal(err)
 	}

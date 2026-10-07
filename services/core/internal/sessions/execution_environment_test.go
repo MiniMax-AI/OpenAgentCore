@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func (f *fakeTx) LoadSessionDevice(context.Context) (ExecutionDevice, bool, error) {
@@ -109,6 +111,16 @@ func (s *fakeExecutionStorage) ListEnvironmentConnections(_ context.Context, aft
 		page, s.pages = s.pages[0], s.pages[1:]
 	}
 	return page, nil
+}
+
+func (s *fakeExecutionStorage) ListAssignmentReleases(context.Context, []string) ([]AssignmentRelease, error) {
+	s.t.Fatal("unexpected ListAssignmentReleases")
+	return nil, nil
+}
+
+func (s *fakeExecutionStorage) AcknowledgeAssignmentRelease(context.Context, proto.AssignmentRef) error {
+	s.t.Fatal("unexpected AcknowledgeAssignmentRelease")
+	return nil
 }
 
 // loads is a fake method that reads value and reports whether it was found.

@@ -1,7 +1,7 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: b8a00701caa83314115f28c3fa754291e8eaf734e88de8e0012e45d8b1893338
+source_hash: 2ee1d5723194cb689b2540167c093b03f738ffc2f5e766922416dd7b954b31d0
 ---
 
 OpenAgentCore 将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。Sandbox Provider 管理计算资源。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
@@ -46,6 +46,6 @@ flowchart TB
 
 应用通过 Agents API 创建 Session。Core 解析其配置与执行位置。托管 Session 通过选定的 Sandbox Provider 获取计算资源；自托管 Session 等待用户运行安装命令。`environment: none` 的 Session 使用已连接的执行设备，不提供工作区。[应用指南](api/public-agent-api.md#create-a-session) 说明这些选项。
 
-daemon 连接后，Core 检查可用 Harness 和请求的能力。Runtime 准备工作区 Environment 及其能力快照，然后准备或复用 Session Executor。每个 Turn 通过原生 Harness 运行。Core 持久化输出、工具交互和回执，供应用读取和接收事件。完成或取消使 Turn 结算；健康的 Executor 可以在同一 Environment 中执行下一个 Turn。
+daemon 连接后，Core 检查可用 Harness 和请求的能力，并通过受约束的[分配](./runtime-protocol.md#session-assignments)把 Session 绑定到该 Runtime；删除 Session 或释放其 Environment 会释放该分配。Runtime 准备工作区 Environment 及其能力快照，然后准备或复用 Session Executor。每个 Turn 通过原生 Harness 运行。Core 持久化输出、工具交互和回执，供应用读取和接收事件。完成或取消使 Turn 结算；健康的 Executor 可以在同一 Environment 中执行下一个 Turn。
 
 执行与计算资源拥有独立生命周期：关闭 Executor 后，其 allocation 和工作区保留到 Provider 回收为止。准备、连接和执行就绪具有不同状态。[Environment 契约](../../contracts/agents-api/zh/environments.md) 负责准备规则，[Core–Runtime 协议](runtime-protocol.md) 负责顺序、回执和故障处理。

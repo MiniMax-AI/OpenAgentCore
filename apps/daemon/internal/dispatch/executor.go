@@ -26,12 +26,14 @@ type executorState struct {
 	admission                              *preparationState
 	run                                    *sessionState
 	preparing                              bool
-	invalid                                bool
-	closeDone                              chan struct{}
-	closeReason                            string
-	closeErr                               error
-	timer                                  *time.Timer
-	idleLease                              uint64
+	// prepared closes once the native preparation returns.
+	prepared    chan struct{}
+	invalid     bool
+	closeDone   chan struct{}
+	closeReason string
+	closeErr    error
+	timer       *time.Timer
+	idleLease   uint64
 }
 
 func executorFingerprint(req proto.PromptRequestPayload) ([32]byte, error) {
@@ -73,10 +75,15 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	requestFingerprint := sha256.Sum256(encoded)
+	req.Assignment = env.Assignment
 	r.mu.Lock()
 	if r.closed || r.suspension != nil {
 		r.mu.Unlock()
 		return ErrRouterClosed
+	}
+	if code := r.admitLocked(env.Assignment, input.SessionID, req.EnvironmentID()); code != "" {
+		r.mu.Unlock()
+		return r.rejectPreparation(env, code)
 	}
 	if r.workspaceWrite != nil || r.workspaceExport != nil || r.runtimePreparation != nil {
 		r.mu.Unlock()
@@ -142,12 +149,12 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 			return r.rejectPreparation(env, "executor_capacity")
 		}
 		ownerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, nativeID: req.AgentSessionID}
+		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, prepared: make(chan struct{}), nativeID: req.AgentSessionID}
 		r.executors[input.SessionID] = owner
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}
 	operation, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: owner.capabilities, requestID: env.ID, trace: env.Trace, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: owner.capabilities, request: proto.Envelope{ID: env.ID, Trace: env.Trace, Assignment: env.Assignment}, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
 	state := "preparing"
 	if reused {
 		state = "ready"
@@ -176,7 +183,7 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	r.mu.Lock()
 	initial := p.status
 	r.mu.Unlock()
-	if !r.sendPreparation(p.requestID, p.trace, initial) {
+	if !r.sendPreparation(p.request, initial) {
 		r.abandonExecutorAdmission(p, "failed", "status_delivery_failed", false)
 	}
 	var native agent.Executor
@@ -193,6 +200,7 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 	}
 	r.mu.Lock()
 	owner.native, owner.preparing = native, false
+	close(owner.prepared)
 	r.log.Info("executor native_prepare", "executor_id", owner.id, "session_id", owner.sessionID, "duration_ms", time.Since(started).Milliseconds(), "success", err == nil && native != nil)
 	ready := native != nil && err == nil && !owner.invalid && !r.closed && r.suspension == nil && p.status.State == "preparing" && p.ctx.Err() == nil
 	p.busy = false
@@ -218,7 +226,7 @@ func (r *Router) prepareExecutor(p *preparationState, req proto.PromptRequestPay
 		status = p.status
 		r.mu.Unlock()
 	}
-	if !r.sendPreparation(p.requestID, p.trace, status) && ready {
+	if !r.sendPreparation(p.request, status) && ready {
 		r.abandonExecutorAdmission(p, "failed", "status_delivery_failed", false)
 	}
 }

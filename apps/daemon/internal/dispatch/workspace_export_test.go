@@ -18,7 +18,11 @@ import (
 
 type exportSender struct{ replies chan proto.Envelope }
 
+// Send fails with a canceled context, as the connection does.
 func (s exportSender) Send(ctx context.Context, env proto.Envelope) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	select {
 	case s.replies <- env:
 		return nil
@@ -46,7 +50,7 @@ func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.
 		}
 		f.Close()
 	}
-	environment, session := uuid.NewString(), uuid.NewString()
+	environment, session := uuid.NewString(), capabilityRef.SessionID
 	binding, err := localworkspace.New(environment, session, workspace)
 	if err != nil {
 		t.Fatal(err)
@@ -56,8 +60,9 @@ func exporterRouter(t *testing.T, program string) (*Router, exportSender, proto.
 	if err != nil {
 		t.Fatal(err)
 	}
+	bindAssignment(r, capabilityRef, environment)
 	handle := uuid.NewString()
-	r.preparations[handle] = &preparationState{workspaceReadOnly: true, environmentID: environment, owns: true, ctx: context.Background(), deadline: time.Now().Add(time.Hour), status: proto.PreparationStatusPayload{State: "ready"}}
+	r.preparations[handle] = &preparationState{request: proto.Envelope{Assignment: capabilityRef}, workspaceReadOnly: true, environmentID: environment, owns: true, ctx: context.Background(), deadline: time.Now().Add(time.Hour), status: proto.PreparationStatusPayload{State: "ready"}}
 	t.Cleanup(func() {
 		r.mu.Lock()
 		delete(r.preparations, handle)
@@ -77,6 +82,7 @@ func sendExport(t *testing.T, r *Router, id string, p proto.WorkspaceExportPaylo
 	if err != nil {
 		t.Fatal(err)
 	}
+	env.Assignment = capabilityRef
 	if err := r.Handle(t.Context(), env); err != nil {
 		t.Fatal(err)
 	}
@@ -185,4 +191,26 @@ func TestWorkspaceExportCancelUnblocksWriterAndReleasesCapacity(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatal("export cancellation did not release capacity")
+}
+
+func TestCanceledExportAnswersTheRequestCoreAwaits(t *testing.T) {
+	r, s, request := exporterRouter(t, "normal")
+	preparation, release := context.WithCancel(context.Background())
+	r.mu.Lock()
+	r.preparations[request.Handle].ctx = preparation
+	r.mu.Unlock()
+	id := uuid.NewString()
+	sendExport(t, r, id, request)
+	first := readExport(t, s)
+	if first.Outcome != "chunk" {
+		t.Fatal(first)
+	}
+	// Core asks for the next chunk as the preparation that owns the export is released.
+	r.mu.Lock()
+	release()
+	r.workspaceExport.requests <- proto.WorkspaceExportPayload{Step: "next", Offset: int64(len(first.Data))}
+	r.mu.Unlock()
+	if got := readExport(t, s); got.Outcome != "failed" && got.Outcome != "chunk" {
+		t.Fatal("the canceled export answered with", got)
+	}
 }

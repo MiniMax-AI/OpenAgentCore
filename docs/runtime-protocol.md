@@ -15,12 +15,12 @@ A Runtime connects in this order:
 1. Obtain a daemon credential and device ID. The [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists the credential kinds; Project API keys and the Core key are never Runtime credentials.
 2. Call `POST /api/v1/agent-daemon/bootstrap` with the credential as a Bearer header and the device ID. Use the connection URL it returns.
 3. Dial the WebSocket at `/api/v1/agent-daemon/ws` with `device_id` and `version` query parameters and the Bearer header. Never put a credential in a URL, a payload log or a trace.
-4. Send a heartbeat at once, then at the interval bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
+4. Send a heartbeat at once, then at the interval bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations), and whether the Runtime removes a Session's native home on release (`home_removal`, [Session assignments](#session-assignments)). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
 5. Exchange ordered JSON [envelopes](#envelope-and-identity). Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
 The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
 
-Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core closes the previous connection and evicts its Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core closes the previous connection and evicts its Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding; [assignments](#session-assignments) fence which Session a frame may act for.
 
 ## Capability declarations
 
@@ -53,7 +53,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 
 `permissions` gates permission decisions inside the Runtime. Core has no admission rule for `usage` and `resume`.
 
-The prompt request (`prompt_request`, or the configuration of `execution_prepare`) carries the Session's model configuration and the opt-ins Core sets for each Run:
+The configuration of `execution_prepare` carries the Session's model configuration and the opt-ins Core sets for each Run:
 
 | Field | Set by Core |
 | --- | --- |
@@ -71,11 +71,12 @@ Requests without an opt-in keep the frames and fields they had without it.
 
 ## Envelope and identity
 
-Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/envelope.go): `type`, a type-dependent `id`, a typed `payload` and an optional W3C `trace`. The trace is diagnostic correlation only; missing or invalid trace data creates a local trace and never changes ownership. Never use a trace ID as a request ID.
+Every data frame is one JSON [`Envelope`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/envelope.go): `type`, a type-dependent `id`, a typed `payload`, the Session's `assignment` on Session frames and an optional W3C `trace`. The trace is diagnostic correlation only; missing or invalid trace data creates a local trace and never changes ownership. Never use a trace ID as a request ID.
 
 | Identity | Scope and meaning |
 | --- | --- |
 | Device ID and connection | Authenticated Runtime routing and connection ownership |
+| Assignment | `Envelope.assignment`: the Session, assignment ID and epoch that fence the frame; see [Session assignments](#session-assignments) |
 | Session ID / Environment ID | Core-owned configuration and workspace binding; canonical UUIDs where the payload validator requires them |
 | Executor ID | Runtime-owned native resource, possibly retained across settled Turns with identical configuration |
 | Preparation request ID | `Envelope.id` for prepare, start, release and status; distinct from a Run |
@@ -95,9 +96,11 @@ The linked source files define the required fields, validators, limits and finit
 
 | Core → Runtime | Runtime → Core | Definition |
 | --- | --- | --- |
+| `assignment_bind`, `assignment_release` | `assignment_status` | [Session assignments](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/assignment.go) |
+| Any frame the Runtime cannot route | `protocol_error` | [Session assignments](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/assignment.go) |
 | `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
@@ -107,6 +110,18 @@ The linked source files define the required fields, validators, limits and finit
 Initial, prepared and active input use the same [ordered MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
 
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
+
+## Session assignments
+
+An assignment binds one Session to the Runtime that runs it. `Envelope.assignment` names it as `session_id`, `assignment_id` and `epoch`, and is the only place a frame carries it. Core advances the epoch whenever it changes the assignment's desired state, so a lower epoch is stale.
+
+Every Session frame carries the assignment: `execution_prepare`, `execution_start` and `execution_release`; `prompt_cancel`, `prompt_steer`, `function_result`, `permission_decision` and `prompt_for_user_choice_decision`; every frame of `runtime_prepare`, `workspace_read`, `workspace_write` and `workspace_export`; and `environment_quiesce` and `environment_resume`. A reply echoes its request's assignment, and a Run's frames carry the assignment that started it; Core rejects a reply or Run frame that names another. Heartbeats carry none.
+
+Before a Session's first operation on a connection, including Environment initialization and file work without a Turn, Core sends `assignment_bind` with the Session's Environment ID and waits for `assignment_status` `bound`. A repeated bind of the same assignment is `bound` again. The Runtime admits a Session frame only under the assignment it bound: an older epoch, or a released one, fails with `assignment_stale`; another assignment, Session or Environment fails with `assignment_conflict`. A started Run's frames, including its cancellation receipt, stay admissible under the assignment that started it until the release. A repeated function result or decision whose receipt the Runtime already recorded is answered only under the assignment that applied it; another fails with `assignment_conflict`.
+
+Core records a release and advances the epoch before it sends anything. Deleting a Session releases its assignment with `remove_home: true`; releasing its Environment sends `false`. A deletion never revokes a shared Runtime credential. `assignment_release` fences the assignment at once. The Runtime then stops the Session's work: a transfer still receiving its body, or committed but not yet applied, ends with `assignment_stale`; it releases read-only preparations and waits until every workspace read, write, export and Runtime preparation has sent its result. It closes the Session's Executors and, when asked, removes the native home; only then does it reply `released` or `home_removed`. Unfinished cleanup replies `failed` with `cleanup_unconfirmed`, and a retry at the same epoch repeats it. A Runtime that declares `home_removal` unsupported answers `remove_home: true` with `unsupported_operation`, and Core asks it only to release. Core records the release as applied from a matching `released` or `home_removed`, or at once when no Runtime is left to act on it: a release to a Runtime without authority is settled when recorded, and revoking a Runtime settles its releases. Core resends every unacknowledged release to a Runtime when it connects; a release that fails backs off, and the release due longest goes first, so failing releases cannot delay the rest. A quiesced Runtime admits only a release and the matching `environment_resume`, which carries the assignment that quiesced it.
+
+The Runtime answers a Core frame it cannot route with `protocol_error`, which echoes the request's ID and carries its type and an error code.
 
 ## Preparation and execution order
 
@@ -125,8 +140,6 @@ A preparation reserves a per-Turn admission, not a new Executor. It carries an e
 Preparation and start run outside the receive loop and router lock. An admission expires five minutes after it is granted, and retries do not extend that deadline; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains at most 64 admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
 
 Idle expiry of an Executor is a Runtime resource policy, separate from Core's active-Turn concurrency. On shutdown the Runtime closes active and idle Executors, keeps any target whose close failed and allows a later serialized retry. An ordinary disconnection closes the failed transport and keeps the exact router until shutdown succeeds; a wait timeout or failed cleanup never authorizes reconnection, and process shutdown keeps waiting rather than discarding owned native resources. Workspace operations keep their binding and settlement rules across Turn boundaries and Executor closure.
-
-`prompt_request` starts a Run directly, without an admission handle. It is not a fallback after a failed prepared start.
 
 ## Active input receipts
 
@@ -168,7 +181,7 @@ The public Turn status is a separate projection. [`execution/delivery.go`](https
 | Unsupported capability or invalid binding | Reject before starting the operation; never select another Harness |
 | Confirmed preparation or execution failure | Keep the finite error category and any observed result; the Runtime settles its resources |
 | Deadline or connection loss after dispatch | The effect is unknown unless an application receipt proves otherwise; do not convert it to an execution failure |
-| Reconnection | Reestablish the transport and the capability declaration; never replay input, initialization, transfers or unresolved mutations |
+| Reconnection | Reestablish the transport and the capability declaration, bind again before the next Session operation and resend unacknowledged releases; never replay input, initialization, transfers or unresolved mutations |
 | Duplicate preparation or start | Connection-local identity and fingerprint rules apply; a conflicting request rejects, and an old handle cannot start replacement work |
 | Duplicate input, function result or decision | That family's receipt identity and conflict rules apply; there is no transport-wide deduplication or exactly-once promise |
 | Cleanup failure | Keep resource ownership and report unconfirmed cleanup; a waiter's timeout does not make a resource reusable |
@@ -198,7 +211,7 @@ Core runs an idle directory read on the Worker's Session scheduling reservation 
 
 ## MCP connection authority
 
-Every public `MCPHTTPServer` in a prompt request carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
+Every public `MCPHTTPServer` in an execution configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
 
 ## Contract verification
 

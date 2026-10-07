@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 )
 
@@ -76,6 +77,8 @@ type Environment struct {
 // A running record without its process-local owner is unknown, never replayable.
 type EnvironmentInitialization struct {
 	EnvironmentID, SessionID, TenantID, DeviceID, State, Engine string
+	// Assignment is the Session's bound assignment to DeviceID.
+	Assignment proto.AssignmentRef
 }
 
 // EnvironmentInputActivity is the reservation-owned override before a newer Turn exists.

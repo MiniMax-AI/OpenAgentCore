@@ -111,6 +111,9 @@ type coreSide struct {
 	preparations map[string]*runtimegateway.Subscription
 	runs         map[string]*runtimegateway.Subscription
 	receipts     map[string]chan receipt
+	// bind is the pending Bind and bindID the request ID it generated.
+	bind   chan error
+	bindID string
 }
 
 func (c *coreSide) connect() {
@@ -156,7 +159,7 @@ func TestWireScenarios(t *testing.T) {
 			c.connect()
 			// Subscribing before any frame also observes that a failed
 			// preparation produces no Run result.
-			run, err := c.session.SubscribeDurable(prototest.RunID)
+			run, err := c.session.SubscribeDurable(prototest.RunID, prototest.Assignment)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -193,8 +196,22 @@ func (c *coreSide) coreSends(frame proto.Envelope) {
 	t := c.t
 	t.Helper()
 	switch frame.Type {
+	case proto.TypeAssignmentBind:
+		var request proto.AssignmentBindPayload
+		if err := frame.DecodePayload(&request); err != nil {
+			t.Fatal(err)
+		}
+		c.bind = make(chan error, 1)
+		go func() { c.bind <- c.session.Bind(t.Context(), frame.Assignment, request.EnvironmentID) }()
+		got := c.peer.receive(t)
+		// Bind generates its request ID; the Runtime's status echoes it.
+		c.bindID, got.ID = got.ID, frame.ID
+		if err := prototest.SameFrame(frame, got); err != nil {
+			t.Fatal(err)
+		}
+		return
 	case proto.TypeExecutionPrepare:
-		sub, err := c.session.SubscribePreparation(frame.ID)
+		sub, err := c.session.SubscribePreparation(frame.ID, frame.Assignment)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -257,6 +274,22 @@ func (c *coreSide) runtimeSends(frame proto.Envelope) {
 			t.Fatal("missing receipt")
 		}
 		delete(c.receipts, want.DeliveryID)
+	case proto.TypeAssignmentStatus:
+		select {
+		case err := <-c.bind:
+			t.Fatalf("Bind returned before the Runtime answered: %v", err)
+		default:
+		}
+		frame.ID = c.bindID
+		c.write(frame)
+		select {
+		case err := <-c.bind:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(wait):
+			t.Fatal("Bind did not complete")
+		}
 	case proto.TypePreparationStatus:
 		c.write(frame)
 		c.delivered(c.preparations[frame.ID], frame)

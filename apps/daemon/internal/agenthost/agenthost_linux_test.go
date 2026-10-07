@@ -144,8 +144,9 @@ func leftEntries(t *testing.T, cfg Config) []string {
 }
 
 // daemon drives Sessions through a dispatch Router, as the daemon does. It
-// binds each request to the Session its state key names and records the
-// latest Executor the agent host opened for each Session.
+// binds each request to the Session of the assignment the Router admitted it
+// under, records the latest Executor the agent host opened for each Session,
+// and removes a released Session's home.
 type daemon struct {
 	router *dispatch.Router
 	// mcp is the installed MCP that the Environment's preparation resolves
@@ -175,7 +176,16 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 		return e, err
 	})
 	var err error
-	if dm.router, err = dispatch.New(dispatch.Config{Registry: reg, Sender: dm, SessionEnvironments: true, Log: slog.New(slog.DiscardHandler)}); err != nil {
+	removeHome := func(session string) error {
+		dm.mu.Lock()
+		b, ok := dm.bindings[session]
+		dm.mu.Unlock()
+		if !ok {
+			return fmt.Errorf("%w: no binding", ErrInvalidSession)
+		}
+		return (&Host{cfg: cfg}).RemoveHome(b.SessionID)
+	}
+	if dm.router, err = dispatch.New(dispatch.Config{Registry: reg, Sender: dm, SessionEnvironments: true, RemoveHome: removeHome, Log: slog.New(slog.DiscardHandler)}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { dm.shutdown() })
@@ -188,11 +198,16 @@ const stateKeyPrefix = "agents-api-"
 func (dm *daemon) bind(req proto.PromptRequestPayload) (Binding, Environment, error) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
-	b, ok := dm.bindings[strings.TrimPrefix(req.AgentStateKey, stateKeyPrefix)]
-	if !ok {
+	b, ok := dm.bindings[req.Assignment.SessionID]
+	if !ok || ref(b) != req.Assignment {
 		return Binding{}, Environment{}, fmt.Errorf("%w: no binding", ErrInvalidSession)
 	}
 	return b, Environment{}, nil
+}
+
+// ref is the reference of b's assignment.
+func ref(b Binding) proto.AssignmentRef {
+	return proto.AssignmentRef{SessionID: b.SessionID.String(), AssignmentID: b.AssignmentID.String(), Epoch: b.AssignmentEpoch}
 }
 
 func (dm *daemon) Send(_ context.Context, e proto.Envelope) error {
@@ -211,13 +226,14 @@ func (dm *daemon) frame(id string) chan proto.Envelope {
 	return ch
 }
 
-// handle hands the Router an envelope from Core.
-func (dm *daemon) handle(t *testing.T, typ, id string, payload any) {
+// handle hands the Router an envelope from Core under the assignment ref.
+func (dm *daemon) handle(t *testing.T, ref proto.AssignmentRef, typ, id string, payload any) {
 	t.Helper()
 	e, err := proto.NewEnvelope(typ, id, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.Assignment = ref
 	if err := dm.router.Handle(context.Background(), e); err != nil {
 		t.Fatalf("%s: %v", typ, err)
 	}
@@ -235,17 +251,39 @@ func (dm *daemon) next(t *testing.T, id string) proto.Envelope {
 	}
 }
 
-// prepare prepares an Executor of b's Session for req. It returns the
-// request ID and the preparation's first status other than preparing.
+// assign binds b's Session to the Router in environment.
+func (dm *daemon) assign(t *testing.T, b Binding, environment string) {
+	t.Helper()
+	dm.mu.Lock()
+	dm.bindings[b.SessionID.String()] = b
+	dm.mu.Unlock()
+	id := sandboxwire.NewID().String()
+	dm.handle(t, ref(b), proto.TypeAssignmentBind, id, proto.AssignmentBindPayload{EnvironmentID: environment})
+	if status := dm.status(t, id); status.State != proto.AssignmentBound {
+		t.Fatalf("the bind is %s (%s), want bound", status.State, status.ErrorCode)
+	}
+}
+
+// status returns the assignment status sent with id.
+func (dm *daemon) status(t *testing.T, id string) proto.AssignmentStatusPayload {
+	t.Helper()
+	var status proto.AssignmentStatusPayload
+	if err := dm.next(t, id).DecodePayload(&status); err != nil {
+		t.Fatal(err)
+	}
+	return status
+}
+
+// prepare binds b's Session and prepares an Executor of it for req. It
+// returns the request ID and the preparation's first status other than
+// preparing.
 func (dm *daemon) prepare(t *testing.T, b Binding, req proto.PromptRequestPayload) (string, proto.PreparationStatusPayload) {
 	t.Helper()
+	dm.assign(t, b, req.EnvironmentID())
 	session := b.SessionID.String()
-	dm.mu.Lock()
-	dm.bindings[session] = b
-	dm.mu.Unlock()
 	req.AgentStateKey = stateKeyPrefix + session
 	id := sandboxwire.NewID().String()
-	dm.handle(t, proto.TypeExecutionPrepare, id, proto.ExecutionPreparePayload{SessionID: session, Configuration: req})
+	dm.handle(t, ref(b), proto.TypeExecutionPrepare, id, proto.ExecutionPreparePayload{SessionID: session, Configuration: req})
 	for {
 		var p proto.PreparationStatusPayload
 		if err := dm.next(t, id).DecodePayload(&p); err != nil {
@@ -266,7 +304,7 @@ func (dm *daemon) start(t *testing.T, b Binding, req proto.PromptRequestPayload,
 		t.Fatalf("the preparation is %s (%s), want ready", p.State, p.ErrorCode)
 	}
 	run := "run-" + id
-	dm.handle(t, proto.TypeExecutionStart, id, proto.ExecutionStartPayload{Handle: p.Handle, ExecutorID: p.ExecutorID, RunID: run, Input: proto.TextInput(text)})
+	dm.handle(t, ref(b), proto.TypeExecutionStart, id, proto.ExecutionStartPayload{Handle: p.Handle, ExecutorID: p.ExecutorID, RunID: run, Input: proto.TextInput(text)})
 	for {
 		if err := dm.next(t, id).DecodePayload(&p); err != nil {
 			t.Fatal(err)

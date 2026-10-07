@@ -30,9 +30,12 @@ func (s *capabilitiesTestSender) Send(ctx context.Context, env proto.Envelope) e
 	}
 }
 
+// capabilityRef is the assignment every capabilitiesTestRouter binds.
+var capabilityRef = proto.AssignmentRef{SessionID: "0b6f1f3e-6f0a-4d38-9c1e-2f5d7a8b9c10", AssignmentID: "assignment", Epoch: 1}
+
 func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string, string) {
 	t.Helper()
-	environment, session := uuid.NewString(), uuid.NewString()
+	environment, session := uuid.NewString(), capabilityRef.SessionID
 	binding, err := localworkspace.New(environment, session, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -42,6 +45,7 @@ func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, str
 	if err != nil {
 		t.Fatal(err)
 	}
+	bindAssignment(router, capabilityRef, environment)
 	return router, sender, environment, session
 }
 
@@ -51,6 +55,7 @@ func capabilityEnvelope(t *testing.T, id string, request proto.RuntimePreparePay
 	if err != nil {
 		t.Fatal(err)
 	}
+	env.Assignment = capabilityRef
 	return env
 }
 
@@ -169,7 +174,7 @@ func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 }
 
 func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
-	for _, mode := range []string{"write", "export", "read", "run", "idle", "executor", "preparation"} {
+	for _, mode := range []string{"write", "export", "read", "run", "executor", "preparation"} {
 		t.Run(mode, func(t *testing.T) {
 			r, sender, environment, session := capabilitiesTestRouter(t)
 			switch mode {
@@ -181,8 +186,6 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 				r.workspaceReads = map[string]struct{}{"read": {}}
 			case "run":
 				r.sessions["run"] = &sessionState{}
-			case "idle":
-				r.idle["state"] = map[*sessionState]struct{}{}
 			case "executor":
 				r.executors[session] = &executorState{}
 			case "preparation":
@@ -202,7 +205,6 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 			r.workspaceExport = nil
 			r.workspaceReads = nil
 			clear(r.sessions)
-			clear(r.idle)
 			clear(r.executors)
 			clear(r.preparations)
 			shutdownCapabilitiesRouter(t, r)
@@ -217,7 +219,7 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 		t.Fatal(err)
 	}
 	capabilitiesReceipt(t, sender, id, "ready")
-	if err := r.Quiesce(t.Context(), proto.EnvironmentSuspendPayload{EnvironmentID: environment, SuspendID: uuid.NewString()}); !errors.Is(err, ErrRouterBusy) {
+	if err := r.Quiesce(t.Context(), capabilityRef, proto.EnvironmentSuspendPayload{EnvironmentID: environment, SuspendID: uuid.NewString()}); !errors.Is(err, ErrRouterBusy) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256([]byte("abc"))
@@ -225,6 +227,7 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	write.Assignment = capabilityRef
 	if err := r.Handle(t.Context(), write); err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +269,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 		close(interrupted)
 		<-release
 		return os.WriteFile(retained, []byte("retained"), 0400)
-	})
+	}, func() {})
 	<-started
 	wait, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	err := r.Shutdown(wait)
@@ -335,7 +338,7 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	close(owner.ready)
 	r.runtimePreparation = owner
 	r.shutdownWG.Add(1)
-	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, proto.RuntimePreparePayload, []byte) error { return context.DeadlineExceeded })
+	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, proto.RuntimePreparePayload, []byte) error { return context.DeadlineExceeded }, func() {})
 	capabilitiesReceipt(t, sender, id, "unknown")
 	r.mu.Lock()
 	owned := r.runtimePreparation == owner && owner.uncertain && owner.data == nil

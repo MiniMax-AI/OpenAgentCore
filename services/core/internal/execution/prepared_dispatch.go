@@ -59,6 +59,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil {
 		return run, err
 	}
+	req.Assignment = bound.Device.Assignment
 	var messages proto.MessageInput
 	for _, input := range run.Reservation.Inputs {
 		if input.Kind != "message" {
@@ -76,12 +77,15 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err := d.configurePreparedEnvironment(session, environment, bound.Device, &req); err != nil {
 		return run, err
 	}
-	prepared, err := newPreparedStart(peer)
+	if err := peer.Bind(owner, req.Assignment, bound.Device.EnvironmentID); err != nil {
+		return run, err
+	}
+	prepared, err := newPreparedStart(peer, req.Assignment)
 	if err != nil {
 		return run, err
 	}
 	defer prepared.close()
-	if err = send(owner, peer, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: sessionID, Configuration: req}); err != nil {
+	if err = send(owner, peer, req.Assignment, proto.TypeExecutionPrepare, prepared.requestID, proto.ExecutionPreparePayload{SessionID: sessionID, Configuration: req}); err != nil {
 		return run, err
 	}
 	run.Reservation, err = d.awaitPreparation(owner, tenantID, sessionID, run.Reservation, prepared)

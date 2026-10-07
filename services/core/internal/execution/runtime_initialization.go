@@ -122,7 +122,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	if err != nil {
 		return err
 	}
-	peer, err := w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
+	peer, err := w.dispatcher.assignedPeer(ctx, sessions.ExecutionDevice{ID: owner.DeviceID, EnvironmentID: owner.EnvironmentID, Assignment: owner.Assignment})
 	if err != nil {
 		return err
 	}
@@ -144,12 +144,12 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 			var body []byte
 			metadata, body, err = w.dispatcher.SessionsReader.ReadInitialEnvironmentFile(step, owner.TenantID, owner.SessionID, index)
 			if err == nil {
-				err = installInitialFile(step, peer, identity, metadata, body)
+				err = installInitialFile(step, peer, owner.Assignment, identity, metadata, body)
 			}
 		} else if err == nil {
 			command := operations[index-len(cfg.Files)]
 			candidate = command.provisioningFailure(0)
-			err = runRuntimeSetup(step, peer, identity, command)
+			err = runRuntimeSetup(step, peer, owner.Assignment, identity, command)
 		}
 		stop()
 		if err != nil {

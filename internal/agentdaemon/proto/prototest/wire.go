@@ -28,10 +28,16 @@ const (
 const (
 	SessionID        = "session"
 	StateKey         = "agents-api-session"
+	AssignmentID     = "assignment"
+	BindID           = "bind"
 	PreparationID    = "prepare"
 	RunID            = "run"
 	CancelDeliveryID = "cancel"
 )
+
+// Assignment is the Session's assignment. Every scenario frame is
+// Session-scoped and carries it.
+var Assignment = proto.AssignmentRef{SessionID: SessionID, AssignmentID: AssignmentID, Epoch: 1}
 
 // Placeholders for values the Runtime generates. Core's side sends them as
 // written; the Runtime's side binds each to the value its Runtime sends.
@@ -112,7 +118,13 @@ func WireScenarios() []WireScenario {
 		SessionID:     SessionID,
 		Configuration: WithModel(proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, StrictResume: true, DisableExecutionEnvironment: true}),
 	})
+	// Core binds the Session before its first Session-scoped frame.
+	bind := []Step{
+		send(Core, proto.TypeAssignmentBind, BindID, proto.AssignmentBindPayload{}),
+		send(Runtime, proto.TypeAssignmentStatus, BindID, proto.AssignmentStatusPayload{State: proto.AssignmentBound}),
+	}
 	started := []Step{
+		bind[0], bind[1],
 		prepare,
 		status(1, "preparing", "", ""),
 		status(2, "ready", "", ""),
@@ -135,6 +147,7 @@ func WireScenarios() []WireScenario {
 			Name:             "preparation_failure_cleans_up_without_run_completion",
 			NativeSetupFails: true,
 			Steps: []Step{
+				bind[0], bind[1],
 				prepare,
 				status(1, "preparing", "", ""),
 				status(2, "failed", "", "preparation_failed"),
@@ -157,6 +170,7 @@ func send(from Peer, kind, id string, payload any) Step {
 	if err != nil {
 		panic(err)
 	}
+	frame.Assignment = Assignment
 	return Step{Action: Send, From: from, Frame: frame}
 }
 
@@ -166,7 +180,7 @@ func status(revision uint64, state, runID, errorCode string) Step {
 	})
 }
 
-// SameFrame checks that got carries want's type, correlation ID and payload.
+// SameFrame checks that got carries want's type, correlation ID, assignment and payload.
 // Trace is diagnostic correlation and is not part of a scenario.
 func SameFrame(want, got proto.Envelope) error {
 	return Bindings{}.match(want, got, false)
@@ -213,8 +227,8 @@ func (b Bindings) match(want, got proto.Envelope, bind bool) error {
 			wantFields[field] = value
 		}
 	}
-	if want.Type != got.Type || want.ID != got.ID || !reflect.DeepEqual(wantFields, gotFields) {
-		return fmt.Errorf("got %s %q %s, want %s %q %s", got.Type, got.ID, got.Payload, want.Type, want.ID, want.Payload)
+	if want.Type != got.Type || want.ID != got.ID || want.Assignment != got.Assignment || !reflect.DeepEqual(wantFields, gotFields) {
+		return fmt.Errorf("got %s %q %+v %s, want %s %q %+v %s", got.Type, got.ID, got.Assignment, got.Payload, want.Type, want.ID, want.Assignment, want.Payload)
 	}
 	for key, value := range bound {
 		b[key] = value

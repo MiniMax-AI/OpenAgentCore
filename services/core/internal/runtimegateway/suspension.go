@@ -9,7 +9,8 @@ import (
 
 // SuspendControl correlates one lifecycle operation on this authenticated socket.
 // A closed socket is not an acknowledgement; callers retain their durable intent.
-func (s *Session) SuspendControl(ctx context.Context, kind string, request proto.EnvironmentSuspendPayload) (proto.EnvironmentSuspendResultPayload, error) {
+// The reference names the Session's assignment.
+func (s *Session) SuspendControl(ctx context.Context, kind string, ref proto.AssignmentRef, request proto.EnvironmentSuspendPayload) (proto.EnvironmentSuspendResultPayload, error) {
 	var result proto.EnvironmentSuspendResultPayload
 	expected := proto.TypeEnvironmentQuiesced
 	if kind == proto.TypeEnvironmentResume {
@@ -25,6 +26,7 @@ func (s *Session) SuspendControl(ctx context.Context, kind string, request proto
 	if err != nil {
 		return result, err
 	}
+	envelope.Assignment = ref
 	s.suspendMu.Lock()
 	if s.IsClosed() {
 		s.suspendMu.Unlock()
@@ -41,33 +43,16 @@ func (s *Session) SuspendControl(ctx context.Context, kind string, request proto
 	s.suspendReplies[id] = replies
 	s.suspendMu.Unlock()
 	defer func() { s.suspendMu.Lock(); delete(s.suspendReplies, id); s.suspendMu.Unlock() }()
-	if err := s.Send(ctx, envelope); err != nil {
+	// The daemon closes after quiesced; the exchange reads a result that
+	// arrived before the closure.
+	reply, err := s.exchangeFrame(ctx, envelope, replies)
+	if err != nil {
 		return result, err
 	}
-	// The daemon closes after quiesced. Read the buffered result before treating
-	// connection closure as unknown, including when both channels become ready.
-	decode := func(reply proto.Envelope, ok bool) (proto.EnvironmentSuspendResultPayload, error) {
-		if !ok {
-			return result, ErrSessionClosed
-		}
-		if reply.Type != expected || reply.DecodePayload(&result) != nil || result.EnvironmentID != request.EnvironmentID || result.SuspendID != request.SuspendID || (result.Accepted && result.ErrorCode != "") {
-			return proto.EnvironmentSuspendResultPayload{}, errors.New("invalid suspension acknowledgement")
-		}
-		return result, nil
+	if reply.Type != expected || reply.DecodePayload(&result) != nil || result.EnvironmentID != request.EnvironmentID || result.SuspendID != request.SuspendID || (result.Accepted && result.ErrorCode != "") {
+		return proto.EnvironmentSuspendResultPayload{}, errors.New("invalid suspension acknowledgement")
 	}
-	select {
-	case reply, ok := <-replies:
-		return decode(reply, ok)
-	case <-ctx.Done():
-		return result, ctx.Err()
-	case <-s.closed:
-		select {
-		case reply, ok := <-replies:
-			return decode(reply, ok)
-		default:
-			return result, ErrSessionClosed
-		}
-	}
+	return result, nil
 }
 
 func (s *Session) dispatchSuspendReply(env proto.Envelope) {

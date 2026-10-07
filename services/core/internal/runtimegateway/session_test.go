@@ -14,6 +14,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
+// testAssignment is the assignment the Session operations under test name.
+var testAssignment = proto.AssignmentRef{SessionID: "session", AssignmentID: "assignment", Epoch: 1}
+
 // fakeConn is the WSConn implementation used by session + registry
 // tests. Concurrency-safe.
 type fakeConn struct {
@@ -203,7 +206,7 @@ func TestSession_DispatchDeliversToSubscriber(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	sub, err := sess.SubscribeDurable("run-1")
+	sub, err := sess.SubscribeDurable("run-1", proto.AssignmentRef{})
 	ch := sub.Events
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
@@ -229,7 +232,7 @@ func TestSession_DoneFrameAutoUnsubscribes(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	sub, _ := sess.SubscribeDurable("run-1")
+	sub, _ := sess.SubscribeDurable("run-1", proto.AssignmentRef{})
 	ch := sub.Events
 	env, _ := proto.NewEnvelope(proto.TypeDone, "run-1", proto.DonePayload{Content: "ok"})
 	raw, _ := jsonMarshal(env)
@@ -264,7 +267,7 @@ func TestSession_PermissionRequestIndexedInRegistry(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	sub, err := sess.SubscribeDurable("run-1")
+	sub, err := sess.SubscribeDurable("run-1", proto.AssignmentRef{})
 	ch := sub.Events
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
@@ -301,7 +304,7 @@ func TestSession_PermissionRequestIndexedInRegistry(t *testing.T) {
 
 func TestSession_CloseReportsUnknownWithoutExecutionEvents(t *testing.T) {
 	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
-	sub, err := sess.SubscribeDurable("run")
+	sub, err := sess.SubscribeDurable("run", proto.AssignmentRef{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,11 +345,7 @@ func TestSession_SendWritesToWire(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	env, _ := proto.NewEnvelope(proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{
-		AgentKind: "fake_alpha",
-		RunID:     "run-1",
-		Input:     proto.TextInput("hello"),
-	})
+	env, _ := proto.NewEnvelope(proto.TypePromptSteer, "run-1", proto.PromptSteerPayload{InputID: "1", Input: proto.TextInput("hello")})
 	if err := sess.Send(context.Background(), env); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
@@ -371,7 +370,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{
+	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported,
 		Timestamp:      1710000000,
 		ActiveRequests: 2,
 		DaemonVersion:  "0.2.0-test",
@@ -445,7 +444,7 @@ func TestSession_HeartbeatDoesNotInferCapabilities(t *testing.T) {
 	sess.Start()
 	defer sess.Close("test done")
 
-	conn.Feed([]byte(`{"type":"heartbeat","payload":{"ts":1710000100,"claude_available":true}}`))
+	conn.Feed([]byte(`{"type":"heartbeat","payload":{"ts":1710000100,"claude_available":true,"home_removal":false}}`))
 	got := heartbeat.waitDaemonHeartbeat(t)
 	if len(got.SupportedAgentKinds) != 0 {
 		t.Fatalf("undeclared capabilities inferred: %#v", got.SupportedAgentKinds)
@@ -456,7 +455,7 @@ func TestSession_PermissionRequiresPayloadIdentity(t *testing.T) {
 	reg := NewRegistry()
 	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, reg, nil)
 	defer sess.Close("test done")
-	sub, err := sess.SubscribeDurable("run")
+	sub, err := sess.SubscribeDurable("run", proto.AssignmentRef{})
 	if err != nil {
 		t.Fatal(err)
 	}

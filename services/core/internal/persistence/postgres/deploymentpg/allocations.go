@@ -340,8 +340,11 @@ func (t *cleanupTx) RevokeDevice(current deployment.Allocation) error {
 	if err != nil {
 		return err
 	}
-	_, err = t.q.RevokeRuntimeCleanupDevice(t.ctx, sqlc.RevokeRuntimeCleanupDeviceParams{TenantID: t.tenant, DeviceID: device})
-	return err
+	// The release follows the revocation, which leaves no Runtime to deliver it to.
+	if _, err := t.q.RevokeRuntimeCleanupDevice(t.ctx, sqlc.RevokeRuntimeCleanupDeviceParams{TenantID: t.tenant, DeviceID: device}); err != nil {
+		return err
+	}
+	return t.ReleaseAssignment(t.ctx, false)
 }
 
 func (t *cleanupTx) RequestCleanup(current deployment.Allocation) (deployment.Allocation, error) {

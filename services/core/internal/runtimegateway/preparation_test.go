@@ -12,7 +12,7 @@ func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T)
 	registry := NewRegistry()
 	s := NewSession(newFakeConn(), "device", "tenant", "test", registry, nil)
 	defer s.Close("test")
-	sub, err := s.SubscribePreparation("request")
+	sub, err := s.SubscribePreparation("request", proto.AssignmentRef{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T)
 func TestPreparationCloseAndOverflowDoNotInventRunEvents(t *testing.T) {
 	for _, overflow := range []bool{false, true} {
 		s := NewSession(newFakeConn(), "device", "tenant", "test", NewRegistry(), nil)
-		sub, err := s.SubscribePreparation("request")
+		sub, err := s.SubscribePreparation("request", proto.AssignmentRef{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +78,7 @@ func TestPreparationCloseAndOverflowDoNotInventRunEvents(t *testing.T) {
 }
 
 func TestPreparationCapabilitySurvivesHeartbeatMapping(t *testing.T) {
-	kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Preparation: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported})}}})
+	kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Preparation: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported})}}})
 	if len(kinds) != 1 || (!kinds[0].Capabilities.Preparation || !kinds[0].Capabilities.LocalEnvironment || !kinds[0].Capabilities.WorkspaceReadPreparation || !kinds[0].Capabilities.NativeSessionRecovery) {
 		t.Fatal("preparation capability lost")
 	}

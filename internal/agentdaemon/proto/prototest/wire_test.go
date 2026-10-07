@@ -15,6 +15,11 @@ func TestBindingsBindRuntimeValuesOnce(t *testing.T) {
 	if err := b.Match(ready, sent("h-1", 3)); err == nil {
 		t.Fatal("a payload difference matched")
 	}
+	stale := sent("h-1", 2)
+	stale.Assignment.Epoch++
+	if err := b.Match(ready, stale); err == nil {
+		t.Fatal("another assignment matched")
+	}
 	if len(b) != 0 {
 		t.Fatal("a failed match bound values")
 	}

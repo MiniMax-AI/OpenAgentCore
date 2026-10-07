@@ -146,7 +146,7 @@ func ValidRuntimePrepareResult(r RuntimePrepareResultPayload, expected string, o
 			return false
 		}
 		switch r.ErrorCode {
-		case "invalid_request", "resource_unavailable", "runtime_preparation_capacity", "runtime_preparation_unsupported", "runtime_preparation_rejected":
+		case "invalid_request", "resource_unavailable", "runtime_preparation_capacity", "runtime_preparation_unsupported", "runtime_preparation_rejected", AssignmentStale, AssignmentConflict:
 			return true
 		default:
 			return false

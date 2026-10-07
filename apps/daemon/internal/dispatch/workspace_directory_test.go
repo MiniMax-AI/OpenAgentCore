@@ -36,7 +36,7 @@ func TestWorkspaceDirectoryRetainsEnvironmentAndTransferredOwner(t *testing.T) {
 		bad := request
 		bad.EnvironmentID = "another-environment"
 		_ = r.Handle(t.Context(), mustEnv(t, proto.TypeWorkspaceRead, phase+"-foreign", bad))
-		if got := waitWorkspaceRead(t, sender, phase+"-foreign"); got.ErrorCode != "resource_unavailable" {
+		if got := waitWorkspaceRead(t, sender, phase+"-foreign"); got.ErrorCode != proto.AssignmentConflict {
 			t.Fatal(got)
 		}
 		if phase == "idle" {

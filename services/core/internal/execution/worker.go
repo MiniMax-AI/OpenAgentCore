@@ -187,6 +187,9 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 	preparationDone := make(chan error, 1)
 	running.Add(1)
 	go func() { defer running.Done(); preparationDone <- w.runEnvironmentInitializations(ctx) }()
+	releasesDone := make(chan error, 1)
+	running.Add(1)
+	go func() { defer running.Done(); releasesDone <- w.runAssignmentReleases(ctx) }()
 	lifecycleDone := make(chan error, 1)
 	if w.runtimes != nil {
 		running.Add(1)
@@ -220,6 +223,8 @@ func (w *Worker) Run(ctx context.Context) (runErr error) {
 		case <-ctx.Done():
 			return ctx.Err()
 		case err := <-preparationDone:
+			return err
+		case err := <-releasesDone:
 			return err
 		case err := <-lifecycleDone:
 			return err

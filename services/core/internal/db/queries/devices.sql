@@ -15,42 +15,75 @@ WHERE d.id = $1;
 UPDATE devices SET revoked_at = COALESCE(revoked_at, clock_timestamp()), archive_cancel_turn_id = NULL
 WHERE tenant_id = $1 AND id = $2;
 
+-- name: SettleRevokedRuntimeReleases :exec
+-- No Runtime is left to act on a revoked device's releases, so revocation
+-- settles them. It runs after the revocation in the same transaction: the
+-- revocation holds the device row, which a release locks before it reads the
+-- device's authority, so every release is either seen here or sees the
+-- revocation.
+UPDATE session_runtime_assignments SET applied_epoch = epoch
+WHERE runtime_id = $1 AND desired_state = 'released';
+
 -- name: TouchDevice :execrows
 UPDATE devices SET last_seen_at = clock_timestamp()
 WHERE devices.id = $1 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = devices.id);
 
 -- name: BindSessionDevice :one
-INSERT INTO session_devices (session_id, device_id)
+INSERT INTO session_runtime_assignments (session_id, runtime_id)
 SELECT s.id, d.id FROM sessions s JOIN devices d ON d.tenant_id = s.tenant_id
 WHERE s.tenant_id = $1 AND s.id = $2 AND d.id = $3 AND d.revoked_at IS NULL
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
 ))
-ON CONFLICT (session_id) DO UPDATE SET device_id = session_devices.device_id
-WHERE session_devices.device_id = EXCLUDED.device_id
-RETURNING device_id;
+ON CONFLICT (session_id) DO UPDATE SET runtime_id = session_runtime_assignments.runtime_id
+WHERE session_runtime_assignments.runtime_id = EXCLUDED.runtime_id AND session_runtime_assignments.desired_state = 'bound'
+RETURNING runtime_id;
 
 -- name: GetSessionDevice :one
-SELECT d.id, d.name, d.environment_id FROM session_devices b
+SELECT d.id, d.name, d.environment_id, b.assignment_id, b.epoch FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
-WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
+JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
 ));
 
 -- name: GetSessionExecutionBinding :one
-SELECT d.id, d.name, b.native_session_id, d.environment_id,
+SELECT d.id, d.name, b.native_session_id, d.environment_id, b.assignment_id, b.epoch,
     EXISTS (SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.started_at IS NOT NULL) AS has_started_turn
-FROM session_devices b
+FROM session_runtime_assignments b
 JOIN sessions s ON s.id = b.session_id
-JOIN devices d ON d.id = b.device_id AND d.tenant_id = s.tenant_id
-WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL
+JOIN devices d ON d.id = b.runtime_id AND d.tenant_id = s.tenant_id
+WHERE s.tenant_id = $1 AND s.id = $2 AND d.revoked_at IS NULL AND b.desired_state = 'bound'
 AND EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = d.id)
 AND (d.environment_id IS NULL OR EXISTS (
     SELECT 1 FROM environments e WHERE e.id = d.environment_id AND e.session_id = s.id
 ));
 
 -- name: RememberNativeSession :execrows
-UPDATE session_devices SET native_session_id = $2 WHERE session_id = $1;
+UPDATE session_runtime_assignments SET native_session_id = $2 WHERE session_id = $1;
+
+-- name: LockAssignmentRuntime :exec
+-- Locks the device row of the Session's Runtime before a release reads its
+-- authority; see SettleRevokedRuntimeReleases.
+SELECT 1 FROM session_runtime_assignments b JOIN devices d ON d.id = b.runtime_id
+WHERE b.session_id = $1 FOR SHARE OF d;
+
+-- name: ReleaseSessionAssignment :exec
+-- An identical release keeps its epoch; a release that adds home removal
+-- advances it. A release whose Runtime has no authority is settled, since no
+-- Runtime can act on it.
+UPDATE session_runtime_assignments b
+SET desired_state = 'released', epoch = b.epoch + 1, remove_home = b.remove_home OR sqlc.arg(remove_home)::boolean,
+    applied_epoch = CASE WHEN EXISTS (SELECT 1 FROM runtime_device_authority a WHERE a.id = b.runtime_id) THEN b.applied_epoch ELSE b.epoch + 1 END
+WHERE b.session_id = sqlc.arg(session_id) AND (b.desired_state = 'bound' OR (sqlc.arg(remove_home)::boolean AND NOT b.remove_home));
+
+-- name: ListPendingAssignmentReleases :many
+SELECT session_id, runtime_id, assignment_id, epoch, remove_home FROM session_runtime_assignments
+WHERE desired_state = 'released' AND applied_epoch < epoch AND runtime_id = ANY(sqlc.arg(runtime_ids)::uuid[])
+ORDER BY runtime_id, session_id;
+
+-- name: AcknowledgeAssignmentRelease :execrows
+UPDATE session_runtime_assignments SET applied_epoch = epoch
+WHERE session_id = $1 AND assignment_id = $2 AND epoch = $3 AND desired_state = 'released';

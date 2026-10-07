@@ -111,7 +111,6 @@ func (r *Router) claimPreparedReleaseLocked(state *sessionState, abort bool, fai
 	if release == nil {
 		release = &preparedRelease{abort: make(chan struct{}), failure: failure, settled: make(chan struct{})}
 		handoff.release = release
-		state.retain = false
 		state.steeringClosed = true
 		state.session = nil
 		r.clearInteractionRoutesLocked(state)
@@ -364,6 +363,7 @@ func (r *Router) sendSessionOutput(pumpCtx context.Context, state *sessionState,
 	if env.Trace == "" && state.traceparent != "" {
 		env.Trace = state.traceparent
 	}
+	env.Assignment = state.assignment
 	r.log.InfoContext(pumpCtx, "pump: forwarding envelope", "run_id", state.runID, "type", env.Type, "env_id", env.ID)
 	sendCtx, cancel := context.WithCancel(context.Background())
 	stopOnShutdown := make(chan struct{})

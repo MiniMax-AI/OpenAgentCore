@@ -73,9 +73,9 @@ INSERT INTO subagent_identities (
     id, session_id, device_id, engine, native_id, parent_native_id, native_created_at,
     first_turn_id, first_event_ordinal
 )
-SELECT $1, s.id, b.device_id, s.engine, $2,
+SELECT $1, s.id, b.runtime_id, s.engine, $2,
     $3, $4, $5, $6
-FROM sessions s JOIN session_devices b ON b.session_id = s.id
+FROM sessions s JOIN session_runtime_assignments b ON b.session_id = s.id
 WHERE s.id = $7
   AND (b.native_session_id = $3
        OR EXISTS (SELECT 1 FROM subagent_identities p
