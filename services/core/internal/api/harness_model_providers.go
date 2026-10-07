@@ -3,12 +3,10 @@ package api
 import (
 	"context"
 	"net/http"
-	"slices"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/modelconfiguration"
 	"github.com/go-chi/chi/v5"
 )
@@ -74,7 +72,7 @@ func (h *Handler) registerHarnessRoutes(r chi.Router) {
 // knownHarness reports the path harness, writing 404 for one this build lacks.
 func knownHarness(w http.ResponseWriter, r *http.Request) (string, bool) {
 	harness := chi.URLParam(r, "harness")
-	if !slices.Contains((engine.Catalog{}).Kinds(), harness) {
+	if !builtin.Contains(harness) {
 		writeError(w, http.StatusNotFound, "not_found", "This harness does not exist.")
 		return "", false
 	}
@@ -96,7 +94,7 @@ func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list := CoreHarnessList{Object: "list", Data: []CoreHarness{}}
-	for _, kind := range (engine.Catalog{}).Kinds() {
+	for _, kind := range builtin.Kinds() {
 		declaration, _ := builtin.Registry().Lookup(kind)
 		support := v1.ModelConfigurationSupport{Protocols: []string{}, AcceptsHarnessConfig: declaration.AcceptsHarnessConfig()}
 		for _, provider := range declaration.Providers {

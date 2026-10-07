@@ -3,10 +3,10 @@
 
 注册列表的源文件是 [`catalog.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/builtin/catalog.json)。修改后运行 `make generate-harness-catalog`；`make check-harness-catalog` 检查生成结果。
 
-| 标识符 | 显示名称 | 模型配置声明 | Core 验收构造函数 |
-| --- | --- | --- | --- |
-| `claude_sdk` | Claude Code | `claudesdk.Configuration` | `claudeProfile` |
-| `codex` | Codex | `codex.Configuration` | `codexProfile` |
-| `mcode` | MiniMax Code | `mcode.Configuration` | `mcodeProfile` |
+| 标识符 | 显示名称 | 声明 |
+| --- | --- | --- |
+| `claude_sdk` | Claude Code | `claudesdk.Configuration` |
+| `codex` | Codex | `codex.Configuration` |
+| `mcode` | MiniMax Code | `mcode.Configuration` |
 
-配置声明位于 `internal/harnessconfig/<package>`，验收构造函数位于 `services/core/internal/engine`。这些注册描述当前构建。部署启用的 Harness 由 `core.harnesses` [进程设置](../../../docs/zh/configuration.md#settings)决定；[Harness 能力](./harness-capabilities.md)列出各 Harness 的支持范围，连接的 Runtime 报告自身可用性。[Harness 接入](./harness-onboarding.md)介绍适配器和打包步骤。
+`internal/harnessconfig/<package>` 中的声明给出 Harness 的模型提供方及其支持范围，是 Core 和 Runtime 准入选择的唯一依据。这些注册描述当前构建。部署启用的 Harness 由 `core.harnesses` [进程设置](../../../docs/zh/configuration.md#settings)决定，连接的 Runtime 报告自身可用性。[Harness 接入](./harness-onboarding.md)介绍适配器和打包步骤。

@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: fe62502746c71dd9444acab51d5bf9e6929107b5e905d0348078376c635faacc
+source_hash: 3e6abc5b98cd47c332ff6f5c12fc8676a35428da02a6caae2648dc8bab6bc486
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -48,7 +48,7 @@ Go 输入投影排除 `packages.system`，保留下方记录的明确拒绝行�
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | 已实现 | [Files and Skills](source-files.md) |
 
-各 Harness 在不同部署位置支持哪些操作，请参阅 [Harness capabilities](harness-capabilities.md)。[Core wire behavior](wire-semantics.md) 包含适用于各项资源的通用规则：请求、错误和列表。
+每个 Harness 只在 `internal/harnessconfig/<kind>` 中声明一次自己的支持范围（[声明支持](harness-onboarding.md#declare-support)）。[Core wire behavior](wire-semantics.md) 包含适用于各项资源的通用规则：请求、错误和列表。
 
 Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh/api/public-agent-api.md#core-extensions-x-agents-core)）。Core 管理 API（`/core/v1`）和机器 API（`/api/v1`）不属于 Agents API。
 
@@ -112,7 +112,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **配置和工具**
 
 - 显式指定推理强度或摘要、使用 `auto` 之外的服务层级、启用 `web_search` 或启用程序化工具调用，这些设置都会被保存，但在 Session 准入时会被拒绝。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions、没有服务源 MCP，也不支持图像输入。
+- 各 Harness 的支持差异以其[声明](harness-onboarding.md#declare-support)为准。Codex 不支持结构化输出或 `tool_search`。Claude Code 不接受仅含空白的文本，只支持 `medium` 详细程度，函数结果图像只能内联且只能出现在成功结果中；它拒绝结构化输出与子智能体、MCP、已安装能力或 `tool_search` 同时使用，也拒绝 `tool_search` 与 MCP 或已安装能力同时使用。MiniMax Code 不提供公共 functions，没有服务源 MCP，不支持图像输入、仅含空白的文本和必需 MCP，只支持 `medium` 详细程度，且只接受值为 null 的 `allowed_tools`。每个 Harness 都保留一个 MCP `server_label`：Codex 保留 `codex_apps`，Claude Code 保留 `functions`，MiniMax Code 保留 `oac_workspace`。Claude Code 还要求标签匹配 `^[a-zA-Z0-9_-]+$`，`allowed_tools` 中的名称匹配 `^[a-zA-Z0-9_.-]+$`。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
@@ -125,7 +125,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 在[凭据网关](./model-execution.md#credential-gateway)之后，固定版本的 Codex 在本地压缩历史，从不调用 `/responses/compact`。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
-- 图像必须是内嵌的 PNG 或 JPEG data URI；远程 URL、`file_id` 和 `detail` 会被拒绝。
+- 消息图像必须是内嵌的 PNG 或 JPEG data URI；远程 URL、`file_id` 和 `detail` 会被拒绝。
 
 **Environments 和 Templates**
 

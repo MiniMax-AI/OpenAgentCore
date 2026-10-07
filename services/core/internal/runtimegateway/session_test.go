@@ -336,8 +336,8 @@ func TestSession_HeartbeatTouchesRuntimeAndAdmitsDeclarations(t *testing.T) {
 	defer sess.Close("test done")
 
 	kinds := []proto.SupportedAgentKind{
-		{Kind: "fake_beta", Available: false, Version: "missing", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})},
-		{Kind: "codex", Available: true, Version: "1.2.3", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported})},
+		{Kind: "claude_sdk", Available: false, Version: "missing", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported})},
+		{Kind: "codex", Available: true, Version: "1.2.3", Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported})},
 	}
 	env, _ := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: kinds})
 	raw, _ := jsonMarshal(env)

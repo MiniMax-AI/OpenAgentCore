@@ -87,18 +87,14 @@ func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.Vi
 	if err != nil {
 		return plan, err
 	}
+	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"web_search", strconv("disabled")})
 	if controls := req.ExecutionControls; controls != nil {
-		switch controls.WebSearch {
-		case "disabled", "cached", "live":
-		default:
-			return plan, fmt.Errorf("codex: web_search must be disabled, cached or live")
-		}
 		switch controls.TextVerbosity {
 		case "low", "medium", "high":
 		default:
 			return plan, fmt.Errorf("codex: text_verbosity must be low, medium or high")
 		}
-		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"web_search", strconv(controls.WebSearch)}, [2]string{"model_verbosity", strconv(controls.TextVerbosity)})
+		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_verbosity", strconv(controls.TextVerbosity)})
 	}
 	plan.Model = prepared.Model
 	plan.SystemPrompt = req.SystemPrompt

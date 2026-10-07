@@ -6,13 +6,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestClaudeSDKInvalidPathsFailBeforeProbe(t *testing.T) {
@@ -66,25 +64,6 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 	}
 }
 
-// The declaration must retain the complete baseline capability descriptor.
-func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "SubagentControl": true, "FunctionTools": true}
-	value := reflect.ValueOf(Declaration.Info.Capabilities)
-	for i := 0; i < value.NumField(); i++ {
-		name := value.Type().Field(i).Name
-		want := proto.CapabilityUnsupported
-		if expected[name] {
-			want = proto.CapabilitySupported
-		}
-		if got := value.Field(i).Interface(); got != want {
-			t.Errorf("%s = %v, want %v", name, got, want)
-		}
-	}
-	if err := Declaration.Info.ValidateDeclaration(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
@@ -118,7 +97,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 				}
 				continue
 			}
-			if calls != 1 || runtime.Info.Available != ready || (runtime.Executor != nil) != ready || runtime.Info.Capabilities.LocalEnvironment.IsSupported() {
+			if calls != 1 || runtime.Info.Available != ready || (runtime.Executor != nil) != ready || ready && runtime.Info.Capabilities.LocalEnvironment.IsSupported() {
 				t.Fatalf("runtime: %+v", runtime)
 			}
 		}

@@ -138,11 +138,6 @@ func withHarnesses(kinds []string) func(*api.Dependencies) {
 	return func(d *api.Dependencies) { d.Harnesses = kinds }
 }
 
-// withPolicy replaces the built-in Harness qualification.
-func withPolicy(policy execution.Policy) func(*api.Dependencies) {
-	return func(d *api.Dependencies) { d.Policy = policy }
-}
-
 // storeExecution admits Sessions and inputs through the Session service on s
 // without a Worker, so nothing runs them.
 func storeExecution(t testing.TB, s *Store) func(*api.Dependencies) {

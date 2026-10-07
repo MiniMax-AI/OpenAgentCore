@@ -9,9 +9,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, caps proto.AgentKindCapabilities, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
+func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, declaration proto.Declaration, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
 	recoverNativeSession := bound.HasStartedTurn && bound.NativeSessionID == ""
-	if recoverNativeSession && !caps.NativeSessionRecovery.IsSupported() {
+	if recoverNativeSession && !declaration.Capabilities.NativeSessionRecovery.IsSupported() {
 		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
@@ -34,7 +34,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 	if verbosity == "" {
 		verbosity = "medium"
 	}
-	controls := &proto.ExecutionControls{DisableProgrammaticToolCalling: tools.DisableProgrammatic, WebSearch: "disabled", TextVerbosity: verbosity}
+	controls := &proto.ExecutionControls{DisableProgrammaticToolCalling: tools.DisableProgrammatic, TextVerbosity: verbosity}
 	if snapshot.Agent.Text.Format.Type == "json_schema" {
 		controls.OutputFormat = &proto.OutputFormat{Type: "json_schema", Schema: snapshot.Agent.Text.Format.Schema}
 	}
@@ -46,7 +46,7 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,
 		DisableSubagents:          !snapshot.Agent.MultiAgent.Enabled}
 	if len(tools.MCP) != 0 {
-		selected, err := d.mcpExecutionCredentials(session.Engine, snapshot, tools.MCP, caps)
+		selected, err := selectedMCPCredentials(snapshot)
 		if err != nil {
 			return proto.PromptRequestPayload{}, err
 		}

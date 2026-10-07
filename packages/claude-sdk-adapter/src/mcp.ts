@@ -25,11 +25,10 @@ export function parseHTTPServers(value: unknown): HTTPServer[] | undefined {
     if (!server || typeof server !== "object" ||
         Object.keys(server).some(key => !["server_label", "server_url", "allowed_tools", "bearer_token_env_var", "required"].includes(key)) ||
         (server.required !== undefined && typeof server.required !== "boolean") ||
-        typeof server.server_label !== "string" || !/^[a-zA-Z0-9_-]+$/.test(server.server_label) ||
-        server.server_label === "functions" || labels.has(server.server_label) ||
+        typeof server.server_label !== "string" || !server.server_label || labels.has(server.server_label) ||
         typeof server.server_url !== "string" ||
         (server.allowed_tools !== null && (!Array.isArray(server.allowed_tools) ||
-          server.allowed_tools.some((name: unknown) => typeof name !== "string" || !/^[a-zA-Z0-9_.-]+$/.test(name))))) {
+          server.allowed_tools.some((name: unknown) => typeof name !== "string")))) {
       throw new Error("invalid_request");
     }
     const url = new URL(server.server_url);

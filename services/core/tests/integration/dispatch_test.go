@@ -102,7 +102,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 		t.Fatal("device connection failed")
 	}
 	t.Cleanup(func() { h.conn.Close() })
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, SubagentObservations: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{TextVerbosity: proto.CapabilitySupported, SubagentObservations: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		peer, e := h.registry.LookupDevice(h.device.ID)
@@ -427,16 +427,14 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 
 func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 	for _, tc := range []struct{ missing, message string }{
-		{"web_search_control", "device must advertise web_search_control"},
-		{"text_verbosity", "device must advertise text_verbosity"},
-		{"subagent_control", "device must advertise subagent_control"},
-		{"environment_none", "device must advertise environment_none"},
+		{"text_verbosity", "The harness supports medium text verbosity only."},
+		{"environment_none", "The harness does not support environment none."},
 	} {
 		missing := tc.missing
 		t.Run(missing, func(t *testing.T) {
 			// Only an explicit non-medium verbosity needs text_verbosity.
 			h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction.","text":{"verbosity":"high"}},"environment":{"type":"none"}}`), false)
-			caps := prototest.Capabilities(proto.AgentKindCapabilities{WebSearchControl: proto.CapabilityFromBool(missing != "web_search_control"), TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), SubagentControl: proto.CapabilityFromBool(missing != "subagent_control"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})
+			caps := prototest.Capabilities(proto.AgentKindCapabilities{TextVerbosity: proto.CapabilityFromBool(missing != "text_verbosity"), EnvironmentNone: proto.CapabilityFromBool(missing != "environment_none")})
 			h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})
 			deadline := time.Now().Add(3 * time.Second)
 			for {

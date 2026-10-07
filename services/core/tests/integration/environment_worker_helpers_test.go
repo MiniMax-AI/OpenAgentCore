@@ -27,7 +27,7 @@ func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) {
 }
 
 func workerEnvironmentCapabilities() proto.AgentKindCapabilities {
-	return prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, WorkspaceOutputExport: proto.CapabilitySupported})
+	return prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported})
 }
 
 func workerEnvironmentReservation(t *testing.T, h *dispatchHarness) sessions.EnvironmentInputReservation {

@@ -79,7 +79,6 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		}
 	}
 	for _, server := range []proto.MCPHTTPServer{
-		{ConnectionOrigin: "service", ServerLabel: "codex_apps", ServerURL: "https://docs.example/mcp"},
 		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://user:synthetic-secret@docs.example/mcp"},
 		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp?token=synthetic-secret"},
 		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "file:///tmp/mcp"},

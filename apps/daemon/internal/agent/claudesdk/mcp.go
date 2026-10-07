@@ -6,16 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
-
-var mcpLabel = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-var mcpTool = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 func validateMCP(req proto.PromptRequestPayload) error {
 	if req.MCPHTTPServers == nil {
@@ -32,7 +28,7 @@ func validateMCPServers(servers []proto.MCPHTTPServer) error {
 	labels := map[string]bool{}
 	for _, server := range servers {
 		endpoint, err := url.Parse(server.ServerURL)
-		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || labels[server.ServerLabel] ||
+		if server.ServerLabel == "" || labels[server.ServerLabel] ||
 			err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil ||
 			strings.ContainsAny(server.ServerURL, "?#") || endpoint.Opaque != "" {
 			return fmt.Errorf("claudesdk: unsupported HTTP MCP declaration")
@@ -41,13 +37,6 @@ func validateMCPServers(servers []proto.MCPHTTPServer) error {
 			return fmt.Errorf("claudesdk: unsupported HTTPS MCP bearer credential")
 		}
 		labels[server.ServerLabel] = true
-		if server.AllowedTools != nil {
-			for _, name := range *server.AllowedTools {
-				if !mcpTool.MatchString(name) {
-					return fmt.Errorf("claudesdk: unsupported MCP tool allowlist")
-				}
-			}
-		}
 	}
 	return nil
 }

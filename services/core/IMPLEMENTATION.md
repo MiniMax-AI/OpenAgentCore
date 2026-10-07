@@ -149,8 +149,8 @@ Accepted public MCP credential profiles are declared centrally by the service, s
 
 ## Message text and result targets
 
-- Admission and the Claude bridge share one whitespace set, the union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim` (`blankTextRune` in `services/core/internal/execution/message_support.go`). A shared table test keeps both sides equal; change them together.
-- Whitespace-only admission is a field of the engine profile (`WhitespaceOnlyText`) checked with the image profile during Worker admission. Never branch on the harness name in handlers.
+- Admission and the Claude bridge share one whitespace set, the union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim` (`blankTextRune` in `internal/agentdaemon/proto/selection.go`). A shared table test keeps both sides equal; change them together.
+- Whitespace-only admission is the declaration's `WhitespaceOnlyText`, which `proto.ValidateSelection` checks during Worker admission. Never branch on the harness name in handlers.
 - `MessageInput.Validate` treats any non-empty text part as content and never trims. It runs in Core admission, Worker delivery, daemon steering and prepared start, and in the Codex and MiniMax adapters.
 - Resolve a tool result's target under the tenant Session lock, after the Session lookup: a well-formed `turn_id` is looked up in that Session and must own the call; otherwise the Session's own calls decide between "unknown call" and "different Turn". Never reject a malformed `turn_id` before the Session lookup, so missing, malformed and foreign Sessions keep one 404, and read only the caller's Session.
 - The recorded Environment failure reason is composed only from a fixed step label and integers (setup command index, exit status 1-255), so commands, environment values, package names, paths and process output cannot reach the reason, events, logs or responses.

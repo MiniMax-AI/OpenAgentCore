@@ -49,7 +49,7 @@ func TestSelfHostedServiceMCPRejectedWithoutWrites(t *testing.T) {
 			handler.ServeHTTP(response, request)
 
 			// Credential selection errors (MV-03) precede the placement rejection.
-			expected, message := http.StatusBadRequest, "environment:none"
+			expected, message := http.StatusBadRequest, "Service-origin MCP requires environment none."
 			switch mode {
 			case "unattached":
 				message = "MCP credential_id requires an attached vault"

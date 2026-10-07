@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 87a7ecf9bfe2dbf03725c69ac68ae4abf4ee7b25206e49e72a4eb45fc160ca35
+source_hash: 9d9f7867b0d5d88d0212ffaa9ef55ddf4aa5624a53717f2be92e0453f2049f01
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -26,29 +26,26 @@ wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blo
 
 ## 能力声明 {#capability-declarations}
 
-[`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) 中的 `AgentKindCapabilities` 描述一个 Runtime 与 Harness 组合，独立于 `available` 和 Core 的 engine profile。每个字段都是 `CapabilitySupport`：支持或不支持。零值表示未指定且无效，即使 Harness 不可用也如此。注册在修改 registry 前验证完整声明；不存在隐含的基础 descriptor。
+[`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) 中的 `AgentKindCapabilities` 描述一个 Runtime 与 Harness 组合，独立于 `available`。它是 Harness [声明](../../contracts/agents-api/zh/harness-onboarding.md#declare-support)中由安装收窄的部分。每个字段都是 `CapabilitySupport`：支持或不支持。零值表示未指定且无效，即使 Harness 不可用也如此。注册在修改 registry 前验证完整声明；不存在隐含的基础 descriptor。
 
 wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `false`。不完整声明编码失败。解码拒绝省略、null、无效和未知字段，以及缺失的 capability 对象。无效 heartbeat 会清空连接的 admission snapshot 并关闭 transport；这不证明原生完成或取消结果。
 
-每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。Runtime 仅在 Harness 及其 [Environment owner](#session-assignments) 都支持时声明 `local_environment` 和 `environment_none`，并恰好在声明 `local_environment` 时声明 `workspace_read_preparation` 和 `workspace_output_export`，从不由 Harness adapter 声明后两者。
+每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。Runtime 仅在 Harness 及其 [Environment owner](#session-assignments) 都支持时声明 `local_environment` 和 `environment_none`；`local_environment` 同时涵盖 owner 的工作区读取、只读 preparation 和输出导出。
 
 新增字段要求每个生产声明都作出明确决定。契约测试为注册和 wire 往返逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)负责各声明的 adapter 侧规则。
 
-声明描述 Runtime 能做什么。Core 仅在 Harness 的 engine profile 也通过资格验证时准入公开功能。在设备选择及领取 Turn 前的最终检查中，Core 要求选定设备报告该 Harness 为 `available`，并检查其声明：
+heartbeat 只能收窄 Harness 的静态声明。某个 kind 没有内置声明，或宣称了其静态声明不具备的支持时，Core 将该 heartbeat 视为无效。在设备选择及领取 Turn 前的最终检查中，Core 要求选定设备报告该 Harness 为 `available`，并用 `proto.ValidateSelection` 按收窄到该 heartbeat 的静态声明检查 Session，它要求：
 
 | 能力 | Core 何时要求 |
 | --- | --- |
 | `environment_none` | Environment 类型为 `none` |
-| `local_environment`, `workspace_read_preparation`, `workspace_output_export` | Environment 类型为 `openai_hosted` 或 `self_hosted` |
-| `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
+| `local_environment` | Environment 类型为 `openai_hosted` 或 `self_hosted`，或空闲 Files 目录读取需要只读 preparation |
 | `native_session_recovery` | Session 已启动过 Turn，但未记录原生 Session ID |
-| `web_search_control`, `text_verbosity` | Harness 的 engine profile 声明该控制 |
+| `text_verbosity` | Agent 请求 `medium` 以外的 verbosity |
 | `structured_output` | Agent 请求 `json_schema` 输出 |
 | `subagent_observations` | `multi_agent.enabled` 为 true |
-| `subagent_control` | `multi_agent.enabled` 为 false |
 | `tool_search` | Agent 启用 tool search 或延迟 function 加载 |
-| `programmatic_tool_calling_disable` | Agent 明确禁用 programmatic tool calling |
-| `function_tools` | Agent 声明 function tool |
+| `function_tools` | Agent 声明 function tool，或交付 function result |
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
@@ -59,7 +56,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | 字段 | Core 设置方式 |
 | --- | --- |
 | `model`, `system_prompt`, `model_provider`, `harness_config` | 来自 Session 冻结的配置：Agent 的 model 和 instructions、Session 的 provider bundle，以及[原生模型参数](../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。Harness 在产生任何原生效果之前验证它们 |
-| `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
+| `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
@@ -199,7 +196,7 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 ## 工作区操作 {#workspace-operations}
 
-无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Session 的 Environment owner 提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
+无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `local_environment` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Session 的 Environment owner 提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
 
 `workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份，列出一个 workspace 相对目录（空路径选择根目录）；调用方不能提供 socket、凭据或 workspace root。结果最多携带 `max_entries`（1 到 1024）个单路径组件 UTF-8 名称，每个最多 255 字节，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。
 

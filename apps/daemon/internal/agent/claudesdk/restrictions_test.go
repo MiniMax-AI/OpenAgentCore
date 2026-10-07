@@ -19,7 +19,7 @@ func TestTextTurnAcceptsRestrictiveCapabilities(t *testing.T) {
 		controls               *proto.ExecutionControls
 	}{
 		{"environment", true, false, nil}, {"subagents", false, true, nil}, {"both", true, true, nil},
-		{"execution-controls", true, true, &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}},
+		{"execution-controls", true, true, &proto.ExecutionControls{TextVerbosity: "medium"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			root := t.TempDir()

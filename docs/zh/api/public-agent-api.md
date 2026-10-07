@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 07bcf81c1f4d131d55e38bf1158805a24e53bae13c79205857dc8fbe25001123
+source_hash: 78f630fdbc9a1ff51ebcbe4de53708f79a7ad8a75546ad19d14baa9baafa0ddb
 ---
 
 Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-reference)。可以使用官方 OpenAI SDK 或普通 HTTP。本指南针对每项常见操作同时展示这两种方式，并说明 Core 与 OpenAI 存在差异的地方。
@@ -160,7 +160,7 @@ harness 是运行 Session 的 Agent 程序：Codex（`codex`）、Claude Code（
 - **提供商。** harness 会使用其原生协议之一，经由一个让你的密钥不进入 harness 的[凭据网关](../../../contracts/agents-api/zh/model-execution.md#credential-gateway)调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[Model execution](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
 - **原生参数。** `harness_config` 承载 harness 自身的模型设置；请参阅[原生模型参数](../../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。
 
-并非每种 harness、部署位置和操作组合都受支持；[Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 列出了受支持的组合。
+并非每种 harness、部署位置和操作组合都受支持。不受支持的组合返回 400 `unsupported_or_invalid_configuration`，并在 `param` 中给出被拒绝的字段；[已知缺口](../../../contracts/agents-api/zh/index.md#known-gaps)列出各 harness 的差异。
 
 ## Agents（智能体） {#agents}
 
@@ -537,7 +537,7 @@ HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` �
 
 1. 读取 Session 的 `status` 和 `error`，以及最新 Turn 的 `error`。失败的 Turn 只会报告通用的 `internal_error`。
 2. 检查 Environment 是否已连接，以及其 harness 是否可用。
-3. 在 [Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 中检查 harness、模型和工具的组合。
+3. 对照[已知缺口](../../../contracts/agents-api/zh/index.md#known-gaps)检查 harness、模型和工具的组合。
 4. 向管理员索取 Session 的[诊断信息](../../../contracts/agents-api/zh/session-diagnostics.md)，其中会指出故障类别；同时请查看[故障排除](../getting-started/operations.md#troubleshooting)，了解服务日志、凭据和节点就绪状态。
 
 401 通常表示使用了其他命名空间中的密钥；请参阅 [API 命名空间与凭据](index.md)。

@@ -3,10 +3,10 @@
 
 The authored registration list is [`catalog.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/builtin/catalog.json). Change it and run `make generate-harness-catalog`; `make check-harness-catalog` checks the generated projections.
 
-| Identifier | Display name | Model configuration declaration | Core qualification constructor |
-| --- | --- | --- | --- |
-| `claude_sdk` | Claude Code | `claudesdk.Configuration` | `claudeProfile` |
-| `codex` | Codex | `codex.Configuration` | `codexProfile` |
-| `mcode` | MiniMax Code | `mcode.Configuration` | `mcodeProfile` |
+| Identifier | Display name | Declaration |
+| --- | --- | --- |
+| `claude_sdk` | Claude Code | `claudesdk.Configuration` |
+| `codex` | Codex | `codex.Configuration` |
+| `mcode` | MiniMax Code | `mcode.Configuration` |
 
-Configuration declarations live in `internal/harnessconfig/<package>` and qualification constructors in `services/core/internal/engine`. These registrations describe the build. Which Harnesses a deployment enables is the `core.harnesses` [process setting](../../docs/configuration.md#settings), [Harness capabilities](./harness-capabilities.md) lists what each Harness supports, and a connected Runtime reports its own availability. [Harness onboarding](./harness-onboarding.md) describes the adapter and packaging steps.
+Each declaration in `internal/harnessconfig/<package>` states the Harness's model providers and its support, the only source Core and the Runtime admit a selection against. These registrations describe the build. Which Harnesses a deployment enables is the `core.harnesses` [process setting](../../docs/configuration.md#settings), and a connected Runtime reports its own availability. [Harness onboarding](./harness-onboarding.md) describes the adapter and packaging steps.

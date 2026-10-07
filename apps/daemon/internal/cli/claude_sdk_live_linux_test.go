@@ -91,7 +91,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 		defer cancel()
 		id := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: prototest.StateKey, AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider}
+		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: prototest.StateKey, AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider}
 		if callFunction {
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}

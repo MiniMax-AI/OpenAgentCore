@@ -70,7 +70,7 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | `services/core/internal/persistence`, `services/core/internal/db` and `services/core/migrations` | Core's PostgreSQL adapters, transactions, queries and migrations | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
 | `services/core/tests/integration` | Tests that drive the HTTP boundaries, the execution Worker and the PostgreSQL adapters together | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#tests) |
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](./runtime-protocol.md) |
-| `services/core/internal/engine` | Pure qualification of harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
+| `internal/harnessconfig` | Built-in Harness registrations and their support declarations | [Declare support](../contracts/agents-api/harness-onboarding.md#declare-support) |
 | `internal/agentdaemon/proto` | Core–Runtime wire types and validators | [Runtime protocol](./runtime-protocol.md) |
 | `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](./runtime-bootstrap.md) |
 | `internal/sandboxwire` | Frame header, primitive encoding and request ID sequence shared by the sandbox I/O protocols | [Framing](./sandbox-link-protocol.md#framing) |

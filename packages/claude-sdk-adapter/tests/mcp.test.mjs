@@ -25,9 +25,9 @@ test("native selection composes unrestricted, selected and empty servers with ho
   }
 });
 
-test("invalid remote declarations and wildcard injection fail at the bridge boundary", () => {
+test("invalid remote declarations fail at the bridge boundary", () => {
   const start = { type: "start", input: [{ content: [{ type: "input_text", text: "hello" }] }], model: "model", system_prompt: "", cwd: "/tmp" };
-  for (const value of [null, {}, [declaration(["*"])], [{ ...declaration(null), server_label: "functions" }],
+  for (const value of [null, {}, [{ ...declaration(null), server_label: "" }],
     [{ ...declaration(null), server_url: "https://user:secret@example.invalid/mcp" }],
     [{ ...declaration(null), server_url: "https://example.invalid/mcp?" }],
     [{ ...declaration(null), required: "true" }], [{ ...declaration(null), required: null }], [declaration(null), declaration([])]]) {

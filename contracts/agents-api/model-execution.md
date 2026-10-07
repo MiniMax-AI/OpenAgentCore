@@ -15,7 +15,7 @@ Saved Agents accept `x_agents_core.harness` on create, update and read, and Sess
 - Omitted: a Session inherits its saved Agent's Harness; an inline Agent uses the deployment default.
 - Explicit null on the Session's inline extension: resets to the deployment default Harness while keeping inherited provider bundles. On a saved Agent, a null extension clears its Harness and provider.
 - A selected Harness must be enabled; Core never falls back to another one.
-- Session creation resolves the selection after saved-Agent overrides, validates the Harness profile and stores the result as the Session's engine. Session reads report it when the effective Agent includes the extension; other Sessions keep the official Agent shape. Reads never consult the current Agent or deployment default.
+- Session creation resolves the selection after saved-Agent overrides, checks the configuration against the Harness's [declaration](./harness-onboarding.md#declare-support) and stores the result as the Session's engine. Session reads report it when the effective Agent includes the extension; other Sessions keep the official Agent shape. Reads never consult the current Agent or deployment default.
 - Creation retries with an explicit selector keep the caller's intent; changing the selector under an existing Idempotency-Key conflicts.
 
 The Session's `environment` and Environment Templates select preparation, not Harnesses or providers. The extension is defined once in `contracts/agents-api/v1`; validators derive from the catalog, and no handler or schema keeps its own list of names.

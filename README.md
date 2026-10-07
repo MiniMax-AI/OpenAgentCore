@@ -71,7 +71,7 @@ The [installation guide](https://openagentcore.dev/docs/getting-started/install)
 | Build an application on the API | [Quickstart](https://openagentcore.dev/docs/getting-started/quickstart), then the [Agents API guide](https://openagentcore.dev/docs/api/public-agent-api) |
 | See a complete application | [Examples](https://openagentcore.dev/docs/examples) |
 | Run agents on my own machine | [Self-hosted execution](https://openagentcore.dev/docs/getting-started/self-hosted) |
-| Check Harness capabilities and limits | [Harness capabilities](https://openagentcore.dev/contracts/agents-api/harness-capabilities) |
+| Check Harness differences and limits | [Known gaps](https://openagentcore.dev/contracts/agents-api/#known-gaps) |
 | Understand the design | [Architecture](https://openagentcore.dev/docs/architecture) |
 | Add a sandbox, harness or other component | [Developer guide](https://openagentcore.dev/docs/development) |
 

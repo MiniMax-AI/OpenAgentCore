@@ -25,11 +25,11 @@ An `input_image` part carries `image_url` as an inline data URI: `data:image/png
 | Claude Code | Accepted on `none`, `openai_hosted` and `self_hosted` |
 | MiniMax Code | Rejected |
 
-Admission checks the harness before anything is written; an image the harness cannot take returns 400. The Runtime must also report message image support: Core binds a Session whose input carries images only to such a Runtime, and delivery to a Runtime without it fails. Use a model that accepts images.
+Admission checks the harness before anything is written; an image the harness cannot take returns 400 `unsupported_or_invalid_configuration`. The Runtime must also report message image support: Core binds a Session whose input carries images only to such a Runtime, and delivery to a Runtime without it fails. Use a model that accepts images.
 
 ## Whitespace-only text
 
-Whitespace-only text such as `"   "` or `"\n\t"` is valid content and is stored and returned verbatim. Whether a harness can run it is declared in its engine profile:
+Whitespace-only text such as `"   "` or `"\n\t"` is valid content and is stored and returned verbatim. Whether a harness can run it is part of its [declaration](./harness-onboarding.md#declare-support):
 
 | Harness | A message with no image and no non-whitespace text |
 | --- | --- |
@@ -50,7 +50,7 @@ An `agent.session.input.tool_result` event carries `success`, an optional nullab
 | Harness | Function results |
 | --- | --- |
 | Codex | Text and ordered text/image output. Core checks only that each part is well formed and passes image references to the harness unchanged |
-| Claude Code | Text output. Images only in successful results and only as inline PNG or JPEG; an image in a failed result or a remote reference returns 400 before anything is stored, and the pending call stays open. The harness may resize or re-encode images in its own history; public Items keep the submitted bytes |
+| Claude Code | Text output. Images only in successful results and only as inline PNG or JPEG; an image in a failed result or a remote or malformed reference returns 400 `unsupported_or_invalid_configuration` before anything is stored, and the pending call stays open. The harness may resize or re-encode images in its own history; public Items keep the submitted bytes |
 | MiniMax Code | No public functions |
 
 ### Application receipts
@@ -64,7 +64,7 @@ Both adapters wait at most 10 seconds for a receipt. A timeout or native release
 
 ## Runtime boundary
 
-The Core–Runtime wire carries messages as `MessageInput` for initial input, prepared start and steering, with the same ordered `InputContent` parts that function results use ([Core–Runtime protocol](../../docs/runtime-protocol.md)). Admission checks the harness's declared profile; binding and delivery check what the Runtime reports. Adapters own native encoding and application receipts. A text-only adapter rejects image parts instead of dropping them.
+The Core–Runtime wire carries messages as `MessageInput` for initial input, prepared start and steering, with the same ordered `InputContent` parts that function results use ([Core–Runtime protocol](../../docs/runtime-protocol.md)). Admission checks the Harness's declaration; binding and delivery check it as the Runtime's heartbeat narrows it. Adapters own native encoding and application receipts. A text-only adapter rejects image parts instead of dropping them.
 
 - **Codex** flattens a batch into its native input list with a blank-line separator between public messages. Public message boundaries stay in Core's storage; the native history does not keep them.
 - **Claude Code** sends native image blocks and a UUID per native user message. One public input is applied only after every message in its batch is consumed. Within one native Turn the bridge accepts at most 64 user messages, including the opening prompt; it rejects a steering batch that would exceed the bound before submitting any part of it, which ends the running Turn. The daemon requires bridge protocol 3.

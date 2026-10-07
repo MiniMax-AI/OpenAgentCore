@@ -53,7 +53,6 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 	for _, mutate := range []func(*proto.LocalEnvironment){
 		func(e *proto.LocalEnvironment) { e.NetworkAccess = "restricted" },
-		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Name = "functions" },
 		func(e *proto.LocalEnvironment) { e.MCP = append(e.MCP, e.MCP[0]) },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Type = "sse" },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.HTTPHeaders = map[string]string{"X-Key": "literal"} },

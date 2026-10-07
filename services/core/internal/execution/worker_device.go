@@ -58,14 +58,12 @@ func (w *Worker) bindDevice(ctx context.Context, tenantID, sessionID string, inp
 		return false, err
 	}
 	return w.bindSessionDevice(ctx, session, func(id string) bool {
-		if !w.ready(ctx, id, session.Engine, snapshot) {
+		peer, err := w.dispatcher.authorizedPeer(ctx, id)
+		if err != nil {
 			return false
 		}
-		if !input.HasImages() {
-			return true
-		}
-		peer, err := w.dispatcher.authorizedPeer(ctx, id)
-		return err == nil && w.dispatcher.messageInputSupport(peer, session.Engine, snapshot, input) == nil
+		_, err = admitSession(peer, session.Engine, snapshot, input)
+		return err == nil
 	})
 }
 
@@ -119,13 +117,4 @@ func (w *Worker) bindSessionDevice(ctx context.Context, session sessions.Session
 		return err == nil, err
 	}
 	return false, nil
-}
-
-func (w *Worker) ready(ctx context.Context, deviceID, engine string, snapshot Snapshot) bool {
-	peer, err := w.dispatcher.authorizedPeer(ctx, deviceID)
-	if err != nil {
-		return false
-	}
-	_, err = w.dispatcher.engineCapabilities(peer, engine, snapshot)
-	return err == nil
 }

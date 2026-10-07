@@ -114,7 +114,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
 		runID := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-" + assignment.SessionID, AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://api.minimax.cn/v1", APIKey: provider}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-" + assignment.SessionID, AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, Model: "MiniMax-M3", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://api.minimax.cn/v1", APIKey: provider}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 		sub, err := peer.SubscribeDurable(runID, assignment)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")

@@ -1,10 +1,10 @@
 ---
 title: "子智能体"
 source: contracts/agents-api/subagents.md
-source_hash: 8fed8b73a8403d2ccf80354b2a981f11240eba3c10d5a0257206a39d048b92a7
+source_hash: 7160c78c2f564b86154594d3c9735383300a692d9cdbc4569f628cb449771bc1
 ---
 
-启用 `multi_agent.enabled` 后，Harness 可以启动原生子智能体。Core 通过锁定版本的 SDK（见 [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）中的六项 Subagent 读取操作公开它们，并根据适配器观察结果记录它们。当 `multi_agent.enabled=false` 时，Runtime 会移除原生子智能体工具。[Harness capabilities](harness-capabilities.md) 列出各 Harness 在哪些组合中支持子智能体。
+启用 `multi_agent.enabled` 后，Harness 可以启动原生子智能体。Core 通过锁定版本的 SDK（见 [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）中的六项 Subagent 读取操作公开它们，并根据适配器观察结果记录它们。当 `multi_agent.enabled=false` 时，Runtime 会移除原生子智能体工具。每个 Harness 都支持子智能体。任何 Harness 都不会在启用函数工具或 `agent.tools` MCP 时运行子智能体，Claude 还会拒绝已安装的 Plugin MCP 或结构化输出与子智能体同时使用（[声明支持](harness-onboarding.md#declare-support)）。
 
 ## 公开读取 {#public-reads}
 
@@ -51,8 +51,6 @@ Core 根据已授权的 Session 绑定关系分配合公开 ID 和所有权。�
 适配器会在子级工作收敛前冻结根级输出，在有限子级工作完成期间保持原生所有者和读取器存活，并在子级终态 Turn 快照和 Run 完成之前交付子级 Items。取消操作使用相同所有者，并在释放前确保子级写入已经完成。失败的观察或不确定的原生操作结果绝不会转化为成功的空历史；父级输出、任务完成、观察时间或空列表均不能替代缺失的事实。
 
 ## 原生配置 {#native-profiles}
-
-[Harness capabilities](harness-capabilities.md#tools) 列出被拒绝的工具组合。
 
 **Codex.** 适配器会启用原生 `multi_agent` 特性，将嵌套深度设为 64，并把并发限制映射到 `agents.max_threads`。它会禁用原生钩子、插件、代码模式和 `multi_agent_v2`；如果原生钩子列表非空，或托管配置要求强制启用冲突特性，则拒绝启动。关闭和重新打开的事实来自直接工具输出，并与同一次调用的持久化完成记录相关联，因此需要原生持久化回执。原生 Turn 时间具有秒级精度。根级 Turn 完成后，子级文件工作可以在同一所有者下完成。超过调用方截止时间后，取消操作仍会在同一所有者下继续；后续调用可以确认已经收敛，而无需重复执行原生中断。
 

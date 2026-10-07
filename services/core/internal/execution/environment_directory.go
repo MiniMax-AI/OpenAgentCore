@@ -81,8 +81,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		result.err = sessions.ErrNotFound
 		return
 	}
-	placement, err := parseEnvironmentPlacement(environment.Configuration)
-	if err != nil {
+	if _, err := parseEnvironmentPlacement(environment.Configuration); err != nil {
 		return
 	}
 	session, err := w.dispatcher.SessionsReader.GetSession(check, environment.TenantID, environment.SessionID)
@@ -98,7 +97,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 		return
 	}
 	if reserved {
-		ready, err := w.bindSessionDevice(check, session, func(id string) bool { return w.directoryDeviceReady(check, id, session.Engine, placement, true) })
+		ready, err := w.bindSessionDevice(check, session, func(id string) bool { return w.directoryDeviceReady(check, id, session.Engine) })
 		if err != nil || !ready {
 			return
 		}
@@ -106,7 +105,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	// Capture retains the public Turn after its native Run has been released.
 	prepare := reserved || session.LastTurn != nil && session.LastTurn.ArtifactCaptureStarted
 	bound, err := w.dispatcher.SessionsReader.GetSessionDevice(check, session.TenantID, session.ID)
-	if err != nil || !environmentDeviceMatches(session, environment, bound) || !w.directoryDeviceReady(check, bound.ID, session.Engine, placement, prepare) {
+	if err != nil || !environmentDeviceMatches(session, environment, bound) || !w.directoryDeviceReady(check, bound.ID, session.Engine) {
 		return
 	}
 	peer, err := w.dispatcher.assignedPeer(check, bound)
@@ -123,7 +122,7 @@ func (w *Worker) runDirectoryRead(owner context.Context, request directoryReadRe
 	return
 }
 
-func (w *Worker) directoryDeviceReady(ctx context.Context, id, engine string, placement environmentPlacement, prepare bool) bool {
+func (w *Worker) directoryDeviceReady(ctx context.Context, id, engine string) bool {
 	if w.dispatcher.Registry == nil {
 		return false
 	}
@@ -132,8 +131,7 @@ func (w *Worker) directoryDeviceReady(ctx context.Context, id, engine string, pl
 		return false
 	}
 	info, found, known := peer.AgentKindStatus(engine)
-	placementReady := info.Capabilities.LocalEnvironment.IsSupported()
-	return known && found && info.Available && placementReady && (!prepare || info.Capabilities.WorkspaceReadPreparation.IsSupported())
+	return known && found && info.Available && info.Capabilities.LocalEnvironment.IsSupported()
 }
 
 func readEnvironmentDirectory(ctx context.Context, peer *runtimegateway.Session, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) directoryReadResult {

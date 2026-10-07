@@ -8,11 +8,8 @@ import (
 )
 
 func validateExecutionRequest(req proto.PromptRequestPayload) error {
-	if !req.DisableExecutionEnvironment || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
+	if !req.DisableExecutionEnvironment || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || req.ExecutionControls == nil {
 		return fmt.Errorf("mcode: unsupported execution configuration")
-	}
-	if req.ExecutionControls == nil || req.ExecutionControls.OutputFormat != nil || req.ExecutionControls.WebSearch != "disabled" || (req.ExecutionControls.TextVerbosity != "" && req.ExecutionControls.TextVerbosity != "medium") {
-		return fmt.Errorf("mcode: unsupported execution controls")
 	}
 	if !req.DisableSubagents && (req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1) {
 		return fmt.Errorf("mcode: Subagent concurrency limit is required")

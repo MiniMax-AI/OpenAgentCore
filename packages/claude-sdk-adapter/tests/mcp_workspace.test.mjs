@@ -31,8 +31,6 @@ function fixture(t, declarations = [stdio]) {
 test("installed MCP projection uses the common Runtime launcher", t => {
   const { request } = fixture(t);
   assert.deepEqual(parseStart(JSON.stringify(request)), request);
-  assert.throws(() => parseStart(JSON.stringify({ ...request,
-    output_format: { type: "json_schema", schema: { type: "object" } } })), /invalid_request/);
   assert.equal(immediateInput(request), undefined);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
   // An agent-host view's alias runs without arguments.

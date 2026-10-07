@@ -30,7 +30,7 @@ func claudeSession(t *testing.T, h *dispatchHarness, configuration string, prebo
 
 func claudeHeartbeat(t *testing.T, h *dispatchHarness, ready bool) {
 	t.Helper()
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: ready, Capabilities: caps}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -85,7 +85,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			if h.read(testExecutionRequest).DecodePayload(&prompt) != nil {
 				t.Fatal("invalid prompt")
 			}
-			if prompt.AgentKind != "claude_sdk" || len(prompt.FunctionTools) != 1 || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) {
+			if prompt.AgentKind != "claude_sdk" || len(prompt.FunctionTools) != 1 || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{TextVerbosity: "medium"}) {
 				t.Fatal(prompt)
 			}
 			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "claude-native"}})
@@ -140,7 +140,8 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 		return sessions.Input{Kind: "tool_result", Payload: payload}
 	}
 	batch := []sessions.Input{messageInput("Follow up"), result(`{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
-	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, sessions.ErrInvalidInput) {
+	var selection *proto.SelectionError
+	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.As(err, &selection) {
 		t.Fatal(err)
 	}
 	saved, err := FixtureFunctionCall(t.Context(), h.s.pool, h.tenant, h.session.ID, input.TurnID, call.CallID)

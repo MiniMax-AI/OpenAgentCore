@@ -47,27 +47,19 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
       !tool || typeof tool.name !== "string" || !tool.name || typeof tool.description !== "string" ||
       (tool.defer_loading !== undefined && typeof tool.defer_loading !== "boolean") ||
       !tool.parameters || tool.parameters.type !== "object"))) throw new Error("invalid_request");
-  const deferred = (request.functions as Start["functions"])?.some(tool => tool.defer_loading) ?? false;
-  if ((request.tool_search !== undefined && typeof request.tool_search !== "boolean") ||
-      (!!request.tool_search !== deferred) ||
-      (request.tool_search && (request.subagents || request.mcp_http_servers !== undefined || request.output_format))) throw new Error("invalid_request");
+  if (request.tool_search !== undefined && typeof request.tool_search !== "boolean") throw new Error("invalid_request");
   if (request.subagents !== undefined) {
     const value = request.subagents as Record<string, unknown>;
-    if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1 ||
-        (request.functions as unknown[] | undefined)?.length || request.mcp_http_servers !== undefined) throw new Error("invalid_request");
+    if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1) throw new Error("invalid_request");
   }
   if (request.output_format !== undefined) {
     const format = request.output_format as Start["output_format"];
-    if (!format || format.type !== "json_schema" || Object.keys(format).some(key => !["type", "schema"].includes(key)) ||
-        !format.schema || format.schema.type !== "object" || request.subagents ||
-        request.mcp_http_servers !== undefined) throw new Error("invalid_request");
+    if (!format || format.type !== "json_schema" || Object.keys(format).some(key => !["type", "schema"].includes(key)) || !format.schema) throw new Error("invalid_request");
   }
   if (request.type === "start") requestInput(request.input);
   parseNativeModelOptions(request.native_model_options);
   parseHTTPServers(request.mcp_http_servers);
   const workspace = parseWorkspace(request.workspace, request.cwd);
-  if (request.subagents && workspace?.mcp?.length) throw new Error("invalid_request");
-  if ((request.output_format || request.tool_search) && (workspace?.mcp?.length || workspace?.skills?.length)) throw new Error("invalid_request");
   if (request.require_history && !workspace) throw new Error("invalid_request");
   if ((workspace && "mcp_http_servers" in request) ||
       (request.type === "prepare" && !workspace)) throw new Error("invalid_request");

@@ -119,13 +119,13 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 	if err != nil {
 		return nil, err
 	}
-	if err := w.dispatcher.validateEngineInputs(value.Engine, value.Configuration, inputs); err != nil {
+	if err := validateInputs(value.Engine, inputs); err != nil {
 		return nil, err
 	}
 	if preparedEnvironmentConfiguration(value.Configuration) {
 		return w.submitEnvironmentInputs(ctx, value, key, inputs)
 	}
-	if !w.dispatcher.canAdmitInputs(value.Engine, value.Configuration) {
+	if !canAdmitInputs(value.Engine, value.Configuration) {
 		return nil, sessions.ErrInvalidInput
 	}
 	return w.admitInputs(ctx, tenant, session, key, inputs)

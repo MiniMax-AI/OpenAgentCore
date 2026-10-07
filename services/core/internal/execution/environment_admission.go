@@ -46,11 +46,11 @@ func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string
 	default:
 		return sessions.ErrInvalidInput
 	}
-	return w.dispatcher.ValidateSessionConfiguration(engine, configuration)
+	return ValidateSessionConfiguration(engine, configuration)
 }
 
 func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSession) error {
-	if err := w.dispatcher.validateEngineInputs(input.Engine, input.Configuration, input.InitialInputs); err != nil {
+	if err := validateInputs(input.Engine, input.InitialInputs); err != nil {
 		return err
 	}
 	if preparedEnvironmentConfiguration(input.Configuration) {
@@ -66,7 +66,7 @@ func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSess
 		}
 		return w.checkAdmissionOwnership(ctx)
 	}
-	if !w.dispatcher.canAdmitInputs(input.Engine, input.Configuration) {
+	if !canAdmitInputs(input.Engine, input.Configuration) {
 		return sessions.ErrInvalidInput
 	}
 	return nil

@@ -71,7 +71,7 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 | 基于 API 开发应用 | [快速开始](https://openagentcore.dev/zh/docs/getting-started/quickstart)，然后看 [Agents API 指南](https://openagentcore.dev/zh/docs/api/public-agent-api) |
 | 看一个完整的应用 | [示例](https://openagentcore.dev/zh/docs/examples) |
 | 在自己的机器上运行 Agent | [自托管执行](https://openagentcore.dev/zh/docs/getting-started/self-hosted) |
-| 查看 Harness 能力和限制 | [Harness 能力](https://openagentcore.dev/zh/contracts/agents-api/harness-capabilities) |
+| 查看 Harness 差异和限制 | [已知缺口](https://openagentcore.dev/zh/contracts/agents-api/#known-gaps) |
 | 了解设计 | [架构说明](https://openagentcore.dev/zh/docs/architecture) |
 | 接入新的沙箱、Harness 或其他组件 | [开发指南](https://openagentcore.dev/zh/docs/development) |
 

@@ -69,15 +69,13 @@ func TestTextTurnCompletionAndFailures(t *testing.T) {
 }
 
 func TestUnsupportedRequestRejectedBeforeLaunch(t *testing.T) {
-	for _, kind := range []string{"execution-controls", "tool", "outside"} {
+	for _, kind := range []string{"tool", "outside"} {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), Model: "fake"}
 			switch kind {
-			case "execution-controls":
-				request.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "low"}
 			case "tool":
 				request.FunctionTools = []proto.FunctionTool{{}}
 			case "outside":

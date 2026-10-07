@@ -30,8 +30,7 @@ class HarnessCatalogTests(unittest.TestCase):
         self.assertEqual(namespace["PROVIDERS"], providers)
 
     def test_new_registration_reaches_all_projections(self):
-        entries = [{"kind": "example", "label": "Example",
-                    "configuration": "example", "profile": "exampleProfile"}]
+        entries = [{"kind": "example", "label": "Example", "configuration": "example"}]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "catalog.json"
             path.write_text(json.dumps(entries))
@@ -43,7 +42,6 @@ class HarnessCatalogTests(unittest.TestCase):
             for old in ("codex", "claude_sdk", "mcode"):
                 self.assertNotIn(old, content)
         self.assertIn('"example": example.Configuration()', generated[Path("internal/harnessconfig/builtin/registry.go")])
-        self.assertIn('"example": exampleProfile()', generated[Path("services/core/internal/engine/catalog_generated.go")])
 
     def test_checked_in_openapi_enums_match_catalog(self):
         expected = [entry["kind"] for entry in catalog.load_catalog(catalog.ROOT / catalog.CATALOG)]
@@ -69,11 +67,9 @@ class HarnessCatalogTests(unittest.TestCase):
                                      "stale Harness enum; run make openapi")
 
     def test_invalid_or_duplicate_registration_is_rejected(self):
-        entry = {"kind": "example", "label": "Example",
-                 "configuration": "example", "profile": "exampleProfile"}
+        entry = {"kind": "example", "label": "Example", "configuration": "example"}
         candidates = [[], [entry, entry], [{**entry, "kind": "bad/kind"}],
                       [{**entry, "configuration": "../example"}],
-                      [{**entry, "profile": "bad()"}],
                       [{**entry, "unknown": True}]]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "catalog.json"

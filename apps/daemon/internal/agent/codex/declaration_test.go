@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"io"
-	"reflect"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestMCPRequiredDiscoveryRequiresPinnedNative(t *testing.T) {
@@ -24,25 +22,6 @@ func TestMCPRequiredDiscoveryRequiresPinnedNative(t *testing.T) {
 		if runtime.Info.Capabilities.NativeSessionRecovery.IsSupported() != (version == "codex-cli 0.153.4") {
 			t.Fatal("unverified native recovery advertised")
 		}
-	}
-}
-
-// The declaration must retain the complete baseline capability descriptor.
-func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"SubagentObservations": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "WebSearchControl": true, "TextVerbosity": SupportsTextVerbosity, "MessageImages": true, "FunctionResultImages": true, "SubagentControl": true, "FunctionTools": true, "MCPHTTPTools": true, "MCPHTTPBearerAuth": true}
-	value := reflect.ValueOf(Declaration.Info.Capabilities)
-	for i := 0; i < value.NumField(); i++ {
-		name := value.Type().Field(i).Name
-		want := proto.CapabilityUnsupported
-		if expected[name] {
-			want = proto.CapabilitySupported
-		}
-		if got := value.Field(i).Interface(); got != want {
-			t.Errorf("%s = %v, want %v", name, got, want)
-		}
-	}
-	if err := Declaration.Info.ValidateDeclaration(); err != nil {
-		t.Fatal(err)
 	}
 }
 

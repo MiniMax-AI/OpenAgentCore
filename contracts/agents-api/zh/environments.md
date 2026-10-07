@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: 0abc36c1fe157f0ef8e6a9fd18dd6edd659352c269d59e107c1e3bf4d29ce3b5
+source_hash: 6bfd865756dbe0d358c687ce83f23b610ab9f6db9902e86ef775741982920ae5
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -57,7 +57,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
-部署中配置的 Sandbox Provider（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
+部署中配置的 Sandbox Provider（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。声明支持 `local_environment` 的每个 Harness 都可在其中运行（[声明支持](harness-onboarding.md#declare-support)）。
 
 - Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行 Provider 的 Create。
 - 置备无需调用方执行任何操作；在 Turn 启动之前，Session 会保持空闲。
@@ -364,9 +364,7 @@ Plugin 可以在 `.codex-plugin/plugin.json` 中通过 `mcpServers: "./.mcp.json
 
 stdio 服务器通过 daemon 的 stdio helper 启动；该 helper 会解析已安装的声明，并以 Harness 的权限启动命令。在 Unix 上，helper 会将自身替换为服务器；在 Windows 上，它会在所属进程树内部转发 stdio。已初始化的值会覆盖声明中的变量。进程组和 Windows Jobs 负责取消及后代进程清理，而不负责隔离。
 
-[Harness capabilities](harness-capabilities.md#environment-preparation) 负责受支持的 Plugin 传输及每个 Harness 的限制。
-
-Environment MCP 需要启用的网络。重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
+Environment MCP 需要启用的网络。重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发；MiniMax Code 也会拒绝字面量标头。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
 
 ### 有效绑定 {#effective-bindings}
 
@@ -381,9 +379,7 @@ Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#http-mcp)）具有 
 | `service` | Core 的服务端执行主机 | 仅 `none` |
 | `environment` | Environment 的工作区 | `openai_hosted` 和启用网络的 `self_hosted` |
 
-Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与放置方式以及 Runtime 公布的 HTTP、bearer 和必需初始化能力进行核对，Runtime 会在调用适配器之前再次验证来源。不存在按 Harness 名称或 Provider 分支选择不同路径的逻辑。
-
-[Harness capabilities](harness-capabilities.md#tools) 负责每个 Harness 的来源支持和策略限制。
+每个 Harness 都会声明自己支持的来源（[声明支持](harness-onboarding.md#declare-support)）；MiniMax Code 只支持 `environment`。接纳和分派会将来源与放置方式以及 Runtime 声明的 HTTP、bearer 和必需初始化支持进行核对，Runtime 会在调用适配器之前再次验证该选择。不存在按 Harness 名称或 Provider 分支选择不同路径的逻辑。
 
 两种来源都支持匿名 HTTP 和 HTTPS bearer 凭据。所附加 Vault 的选择会冻结凭据身份，包括唯一的隐式 URL 匹配或匿名选择。只有该凭据经 Project 授权后，才会进入瞬时 Runtime 请求；绝不会搜索 Core 默认值或无关 Vault。解密失败或凭据缺失时，执行会失败且不会回退到匿名。公开 Environment MCP 保留 `project_vault` 权限，Plugin 凭据保留 `environment_configuration` 权限；两者都不会覆盖重复的服务器标签。Bearer 令牌绝不会进入持久化的原生配置或进程参数。
 

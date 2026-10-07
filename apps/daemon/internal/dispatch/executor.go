@@ -16,7 +16,7 @@ import (
 const executorIdleCapacity = 16
 
 type executorState struct {
-	capabilities                           proto.AgentKindCapabilities
+	declaration                            proto.Declaration
 	id, sessionID, environmentID, stateKey string
 	fingerprint                            [32]byte
 	native                                 agent.Executor
@@ -49,7 +49,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if strings.TrimSpace(input.SessionID) == "" || req.RunID != "" || len(req.Input) != 0 || req.AgentStateKey != "agents-api-"+input.SessionID {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	caps, available := r.availableCapabilities(req.AgentKind)
+	declaration, available := r.registry.Declaration(req.AgentKind)
 	if !available {
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
@@ -69,7 +69,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
+	if validateExecutionEnvironment(req) != nil || proto.ValidateSelection(declaration, req.Selection()) != nil {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
 	fingerprint, err := executorFingerprint(req)
@@ -155,12 +155,12 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 			return r.rejectPreparation(env, "executor_capacity")
 		}
 		ownerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		owner = &executorState{capabilities: caps, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, prepared: make(chan struct{}), nativeID: req.AgentSessionID}
+		owner = &executorState{declaration: declaration, id: uuid.NewString(), sessionID: input.SessionID, environmentID: req.EnvironmentID(), stateKey: req.AgentStateKey, fingerprint: fingerprint, ctx: ownerCtx, cancel: cancel, preparing: true, prepared: make(chan struct{}), nativeID: req.AgentSessionID}
 		r.executors[input.SessionID] = owner
 		r.log.Info("executor owner_created", "executor_id", owner.id, "session_id", owner.sessionID)
 	}
 	operation, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: owner.capabilities, request: proto.Envelope{ID: env.ID, Trace: env.Trace, Assignment: env.Assignment}, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{declaration: owner.declaration, request: proto.Envelope{ID: env.ID, Trace: env.Trace, Assignment: env.Assignment}, fingerprint: requestFingerprint, ctx: operation, cancel: cancel, environmentID: req.EnvironmentID(), executor: owner, owns: true, busy: !reused, deadline: time.Now().Add(r.preparationTimeout)}
 	state := "preparing"
 	if reused {
 		state = "ready"

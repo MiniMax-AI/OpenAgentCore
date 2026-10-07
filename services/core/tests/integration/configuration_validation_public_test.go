@@ -127,14 +127,14 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 	}
 	// K2 keeps the local configuration code; saved enabled web_search (TV-05) is
 	// covered by TestSavedWebSearchPostgres.
-	for _, request := range []struct{ path, body, message string }{
-		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"web_search","mode":"live"}]},"environment":{"type":"none"},"input":"hi"}`, "Only disabled web_search is qualified for execution."},
-		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"web_search"}]},"environment":{"type":"none"},"input":"hi"}`, "Only disabled web_search is qualified for execution."},
-		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"programmatic_tool_calling","enabled":true}]},"environment":{"type":"none"},"input":"hi"}`, "Programmatic tool calling is not qualified for execution."},
-		{"/v1/agents/sessions", `{"agent":{"model":"m","text":{"format":{"type":"json_schema","schema":{"type":"object"}}}},"environment":{"type":"none"},"input":"hi"}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not qualified for this engine."},
+	for _, request := range []struct{ path, body, message, param string }{
+		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"web_search","mode":"live"}]},"environment":{"type":"none"},"input":"hi"}`, "Only disabled web_search is qualified for execution.", "null"},
+		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"web_search"}]},"environment":{"type":"none"},"input":"hi"}`, "Only disabled web_search is qualified for execution.", "null"},
+		{"/v1/agents/sessions", `{"agent":{"model":"m","tools":[{"type":"programmatic_tool_calling","enabled":true}]},"environment":{"type":"none"},"input":"hi"}`, "Programmatic tool calling is not qualified for execution.", "null"},
+		{"/v1/agents/sessions", `{"agent":{"model":"m","text":{"format":{"type":"json_schema","schema":{"type":"object"}}}},"environment":{"type":"none"},"input":"hi"}`, "Harness codex does not support the requested Agent/environment configuration: The harness does not support json_schema output.", `"agent.text.format"`},
 	} {
 		encoded, _ := json.Marshal(request.message)
-		want := `{"error":{"message":` + string(encoded) + `,"type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
+		want := `{"error":{"message":` + string(encoded) + `,"type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":` + request.param + `}}` + "\n"
 		if status, body := client.do(owner, http.MethodPost, request.path, "application/json", []byte(request.body)); status != http.StatusBadRequest || body != want {
 			t.Errorf("%s: %d %s", request.path, status, body)
 		}

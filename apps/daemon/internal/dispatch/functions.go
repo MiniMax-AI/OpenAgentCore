@@ -64,8 +64,8 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 	defer finishOperation()
 	ctx, stop := r.shutdownContext(ctx)
 	defer stop()
-	if !state.capabilities.FunctionTools.IsSupported() {
-		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "unsupported", "The runtime declaration does not support function results.")
+	if err := proto.ValidateSelection(state.declaration, proto.Selection{FunctionResult: &result}); err != nil {
+		return r.sendInteractionDecisionAck(ctx, env, result.DeliveryID, false, "unsupported", err.Error())
 	}
 	if err := session.SubmitFunctionResult(ctx, result); err != nil {
 		code := "runtime_error"

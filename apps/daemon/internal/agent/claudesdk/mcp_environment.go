@@ -31,9 +31,6 @@ func mcpServers(bindings []agent.MCPBinding, stdio func(proto.EnvironmentMCP) (s
 	var servers []environmentMCPServer
 	var env []string
 	for _, binding := range bindings {
-		if !mcpLabel.MatchString(binding.ServerLabel) || binding.ServerLabel == "functions" {
-			return nil, nil, fmt.Errorf("claudesdk: unsupported MCP identity")
-		}
 		if binding.Stdio != nil {
 			command, args := stdio(*binding.Stdio)
 			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}, Command: command, Args: args})

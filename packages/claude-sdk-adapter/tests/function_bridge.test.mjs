@@ -104,18 +104,6 @@ test("successful image results confirm native preprocessing with unchanged ident
   bridge.assertComplete();
 });
 
-test("native error-image rejection leaves the pending call available for a supported result", async () => {
-  const events = [];
-  const bridge = new FunctionBridge(async event => { events.push(event); });
-  const waiting = bridge.invoke(call("error"), new AbortController().signal);
-  const value = { ...result("error", false), content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] };
-  assert.throws(() => bridge.submit(JSON.stringify(value)), /cannot retain images/);
-  bridge.submit(JSON.stringify(result("error", false)));
-  assert.equal((await waiting).isError, true);
-  await bridge.consume(native(result("error", false)), "native");
-  bridge.assertComplete();
-});
-
 for (const terminal of ["tool_result", "result"]) test(`native cancellation ${terminal} settles unanswered callbacks without application`, async () => {
   const events = [];
   const bridge = new FunctionBridge(async event => { events.push(event); });

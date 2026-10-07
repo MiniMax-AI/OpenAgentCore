@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: f0e5430d71b2d1f5f34569f9e4d0b623b9983175758bb217fa5f208913118da8
+source_hash: f3e891be155a821f011ebc75916a6b5c9a68984d1ffe29753fdce59162577c51
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -72,7 +72,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | `services/core/internal/persistence`、`services/core/internal/db` 和 `services/core/migrations` | Core 的 PostgreSQL adapter、事务、查询和迁移 | [服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
 | `services/core/tests/integration` | 共同驱动 HTTP 边界、执行 Worker 和 PostgreSQL adapter 的测试 | [服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#tests) |
 | `services/core/internal/execution` | 持久化 Turn 分发与调度 | [Runtime 协议](runtime-protocol.md) |
-| `services/core/internal/engine` | 对 harness 操作与执行位置进行纯资格验证 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |
+| `internal/harnessconfig` | 内置 Harness 注册及其支持声明 | [声明支持](../../contracts/agents-api/zh/harness-onboarding.md#declare-support) |
 | `internal/agentdaemon/proto` | Core–Runtime wire 类型与验证器 | [Runtime 协议](runtime-protocol.md) |
 | `internal/runtimebootstrap` | Provider 到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
 | `internal/sandboxwire` | 各沙箱 I/O 协议共享的帧头、基本类型编码和 request ID 序列 | [帧格式](sandbox-link-protocol.md#framing) |

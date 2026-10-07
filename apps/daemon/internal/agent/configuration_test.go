@@ -9,13 +9,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
+// Every registered factory prepares the bound model configuration before
+// native code.
 func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	registry := agent.NewRegistry()
-	configuration := harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "responses"}}}
+	configuration := prototest.ModelConfiguration()
 	calls := 0
 	expected := errors.New("native entry reached")
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, configuration)
@@ -48,5 +49,7 @@ func TestRegistryRejectsInvalidConfigurationDeclaration(t *testing.T) {
 			t.Fatal("invalid configuration registered")
 		}
 	}()
-	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: "unknown"}}})
+	configuration := prototest.ModelConfiguration()
+	configuration.Providers[0].Protocol = "unknown"
+	agent.NewRegistry().RegisterKind(proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, configuration)
 }

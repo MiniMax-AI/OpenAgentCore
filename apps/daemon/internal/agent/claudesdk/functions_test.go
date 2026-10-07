@@ -49,11 +49,6 @@ func TestFunctionTurnNativeReceipts(t *testing.T) {
 					if err := running.SubmitFunctionResult(ctx, invalid); err == nil {
 						t.Fatal("missing content consumed call")
 					}
-					image := "https://example.invalid/image"
-					invalid.Content = []proto.InputContent{{Type: "input_image", ImageURL: &image}}
-					if err := running.SubmitFunctionResult(ctx, invalid); err == nil {
-						t.Fatal("image should fail before delivery")
-					}
 					first, second := "first-"+call.CallID, "second-"+call.CallID
 					value := proto.FunctionResultPayload{DeliveryID: "delivery-" + call.CallID, CallID: call.CallID, Success: call.CallID == "b", Content: []proto.InputContent{{Type: "input_text", Text: &first}, {Type: "input_text", Text: &second}}}
 					go func() { submissions <- running.SubmitFunctionResult(ctx, value) }()

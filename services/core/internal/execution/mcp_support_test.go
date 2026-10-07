@@ -24,44 +24,33 @@ func (c *recordingCredentials) MCPBearerToken(_ context.Context, command vaults.
 	return c.token, nil
 }
 
-func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, proto.AgentKindCapabilities) {
+func mcpSupportFixture(t *testing.T) Snapshot {
 	t.Helper()
 	vault, credential := uuid.NewString(), uuid.NewString()
 	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example/tools"}}`)
 	snapshot := Snapshot{ModelProviderConfigured: true, Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{tool}}, Environment: &v1.Environment{Type: "none"}, VaultIDs: []string{vault},
 		MCPCredentials: []vaults.MCPCredentialBinding{{ServerLabel: "tickets", ServerURL: "https://mcp.example/tools", VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}}}
-	tools, err := executionTools(snapshot.Agent.Tools)
-	if err != nil {
-		t.Fatal(err)
-	}
-	caps := proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported}
-	return snapshot, tools.MCP, caps
+	return snapshot
 }
 
-func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
+func TestMCPBearerLookupUsesTheFrozenBinding(t *testing.T) {
 	for _, engine := range []string{"codex", "claude_sdk", "unknown"} {
 		t.Run(engine, func(t *testing.T) {
-			snapshot, servers, caps := mcpSupportFixture(t)
+			snapshot := mcpSupportFixture(t)
 			raw, _ := json.Marshal(snapshot)
 			allowed := engine == "codex" || engine == "claude_sdk"
-			if err := (Policy{}).ValidateSessionConfiguration(engine, raw); (err == nil) != allowed {
+			if err := ValidateSessionConfiguration(engine, raw); (err == nil) != allowed {
 				t.Fatal("creation bypassed public credential policy", err)
 			}
-			if (Policy{}).canAdmitInputs(engine, raw) != allowed {
+			if canAdmitInputs(engine, raw) != allowed {
 				t.Fatal("later input bypassed public credential policy")
 			}
-			if _, err := (Policy{}).mcpExecutionCredentials(engine, snapshot, servers, caps); (err == nil) != allowed {
-				t.Fatal("runtime capabilities widened public admission", err)
+			if !allowed {
+				return
 			}
 			credentials := &recordingCredentials{token: "scoped-token"}
 			session := sessions.Session{TenantID: uuid.NewString(), Engine: engine}
-			request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: engine}, Credentials: credentials}).executionRequest(t.Context(), session, snapshot, caps, sessions.ExecutionBinding{})
-			if !allowed {
-				if err == nil || request.MCPHTTPServers != nil || len(credentials.requests) != 0 {
-					t.Fatal("unverified profile bypassed public policy", err)
-				}
-				return
-			}
+			request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: engine}, Credentials: credentials}).executionRequest(t.Context(), session, snapshot, proto.Declaration{}, sessions.ExecutionBinding{})
 			// The lookup carries exactly the Session's tenant, attached Vaults and frozen binding.
 			want := []vaults.MCPBearerToken{{TenantID: session.TenantID, VaultIDs: snapshot.VaultIDs, Binding: snapshot.MCPCredentials[0]}}
 			if err != nil || !reflect.DeepEqual(credentials.requests, want) {
@@ -74,55 +63,11 @@ func TestMCPPublicBearerPolicyIsIndependentOfRuntimeCapabilities(t *testing.T) {
 	}
 }
 
-func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
-	for _, placement := range []string{"none", "self_hosted"} {
-		for _, missing := range []string{"", "mcp", "bearer", "placement", "required", "environment"} {
-			t.Run(placement+"/"+missing, func(t *testing.T) {
-				snapshot, servers, caps := mcpSupportFixture(t)
-				snapshot.Environment.Type = placement
-				snapshot.Environment.WorkspaceDirectory = "/work"
-				servers[0].Required = true
-				var tool v1.MCPTool
-				if err := json.Unmarshal(snapshot.Agent.Tools[0], &tool); err != nil {
-					t.Fatal(err)
-				}
-				tool.Required = true
-				snapshot.Agent.Tools[0], _ = json.Marshal(tool)
-				switch missing {
-				case "mcp":
-					caps.MCPHTTPTools = proto.CapabilityUnsupported
-				case "bearer":
-					caps.MCPHTTPBearerAuth = proto.CapabilityUnsupported
-				case "placement":
-					caps.EnvironmentNone = proto.CapabilityUnsupported
-				case "required":
-					caps.MCPHTTPRequired = proto.CapabilityUnsupported
-				case "environment":
-					snapshot.Environment = nil
-				}
-				allowed := placement == "none" && missing == ""
-				selected, err := (Policy{}).mcpExecutionCredentials("codex", snapshot, servers, caps)
-				if (err == nil) != allowed || allowed && len(selected) != 1 {
-					t.Fatal("incorrect combined MCP capability decision", err)
-				}
-				if !allowed {
-					credentials := &recordingCredentials{token: "scoped-token"}
-					request, requestErr := (&Dispatcher{SessionsReader: frozenProvider{engine: "codex"}, Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, caps, sessions.ExecutionBinding{})
-					if requestErr == nil || request.MCPHTTPServers != nil || len(credentials.requests) != 0 {
-						t.Fatal("request bypassed capability checks before credential lookup", requestErr)
-					}
-				}
-			})
-		}
-	}
-}
-
 func TestMCPAnonymousExecutionPreservesFrozenDecision(t *testing.T) {
 	for _, engine := range []string{"codex", "claude_sdk"} {
 		for _, mode := range []string{"unattached", "frozen anonymous", "invalid binding"} {
 			t.Run(engine+"/"+mode, func(t *testing.T) {
-				snapshot, _, caps := mcpSupportFixture(t)
-				caps.MCPHTTPBearerAuth = proto.CapabilityUnsupported
+				snapshot := mcpSupportFixture(t)
 				if mode == "unattached" {
 					snapshot.VaultIDs, snapshot.MCPCredentials = nil, nil
 				} else {
@@ -135,11 +80,14 @@ func TestMCPAnonymousExecutionPreservesFrozenDecision(t *testing.T) {
 				}
 				raw, _ := json.Marshal(snapshot)
 				allowed := mode != "invalid binding"
-				if err := (Policy{}).ValidateSessionConfiguration(engine, raw); (err == nil) != allowed || (Policy{}).canAdmitInputs(engine, raw) != allowed {
+				if err := ValidateSessionConfiguration(engine, raw); (err == nil) != allowed || canAdmitInputs(engine, raw) != allowed {
 					t.Fatal("anonymous binding validation changed", err)
 				}
+				if selection, err := harnessSelection(snapshot); allowed && (err != nil || selection.MCP[0].Bearer) {
+					t.Fatal("anonymous server selected bearer authentication", err)
+				}
 				credentials := &recordingCredentials{token: "scoped-token"}
-				request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: engine}, Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: engine}, snapshot, caps, sessions.ExecutionBinding{})
+				request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: engine}, Credentials: credentials}).executionRequest(t.Context(), sessions.Session{Engine: engine}, snapshot, proto.Declaration{}, sessions.ExecutionBinding{})
 				if len(credentials.requests) != 0 {
 					t.Fatal("anonymous or invalid binding reached credential lookup")
 				}

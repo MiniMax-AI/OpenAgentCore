@@ -23,7 +23,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
@@ -75,7 +74,9 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 func register(reg *agent.Registry, kind string, view *agent.View) {
 	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
 		LocalEnvironment: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})}
-	reg.RegisterKind(info, harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}})
+	configuration := prototest.ModelConfiguration()
+	configuration.Providers[0].Protocol = string(modelprovider.Anthropic)
+	reg.RegisterKind(info, configuration)
 	if view != nil {
 		reg.RegisterView(kind, *view)
 	}

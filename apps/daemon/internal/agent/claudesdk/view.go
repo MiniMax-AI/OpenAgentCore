@@ -123,7 +123,7 @@ func prepareView(layout viewLayout, req proto.PromptRequestPayload, view agent.V
 	if err != nil {
 		return startRequest{}, nil, err
 	}
-	start, provider, err := prepareOptions(req, len(servers) != 0)
+	start, provider, err := prepareOptions(req)
 	if err != nil {
 		return startRequest{}, nil, err
 	}

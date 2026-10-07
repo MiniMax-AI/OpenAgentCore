@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,18 +26,34 @@ type functionState struct {
 	closed bool
 }
 
-func validateFunctions(tools []proto.FunctionTool) error {
+// functionTools types each parameters root as an object, which the native SDK
+// requires. A typeless root or a union with object admits the same tool
+// arguments, since these are always objects.
+func functionTools(tools []proto.FunctionTool) ([]proto.FunctionTool, error) {
 	names := map[string]bool{}
-	for _, tool := range tools {
-		var schema struct {
-			Type string `json:"type"`
-		}
-		if strings.TrimSpace(tool.Name) == "" || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema.Type != "object" {
-			return fmt.Errorf("claudesdk: functions require unique names and object-root JSON schemas")
+	typed := slices.Clone(tools)
+	for i, tool := range typed {
+		var schema map[string]json.RawMessage
+		var root string
+		var union []string
+		if strings.TrimSpace(tool.Name) == "" || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
+			return nil, fmt.Errorf("claudesdk: functions require unique names and object JSON schemas")
 		}
 		names[tool.Name] = true
+		switch t := schema["type"]; {
+		case json.Unmarshal(t, &root) == nil && root == "object":
+		case t == nil || json.Unmarshal(t, &union) == nil && slices.Contains(union, "object"):
+			schema["type"] = json.RawMessage(`"object"`)
+			parameters, err := json.Marshal(schema)
+			if err != nil {
+				return nil, err
+			}
+			typed[i].Parameters = parameters
+		default:
+			return nil, fmt.Errorf("claudesdk: functions require unique names and object JSON schemas")
+		}
 	}
-	return nil
+	return typed, nil
 }
 
 func (s *session) receiveFunction(event bridgeEvent, start startRequest, emit func(string, any)) error {
@@ -102,14 +119,6 @@ func (s *session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 		return fmt.Errorf("claudesdk: function result identities are required")
 	}
 	if err := result.ValidateContent(); err != nil {
-		return err
-	}
-	for _, part := range result.Content {
-		if part.Type == "input_image" && !result.Success {
-			return fmt.Errorf("claudesdk: native error results cannot retain images")
-		}
-	}
-	if err := (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages(); err != nil {
 		return err
 	}
 	data, err := json.Marshal(struct {

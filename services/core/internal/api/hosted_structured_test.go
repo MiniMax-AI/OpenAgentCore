@@ -43,7 +43,7 @@ func TestHostedStructuredConfigurationQualification(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantAccepted := len(input.Environment.Skills)+len(input.Environment.Plugins)+len(input.Environment.CapabilityDirectories) == 0
-			if err := (execution.Policy{}).ValidateSessionConfiguration("claude_sdk", configuration); (err == nil) != wantAccepted {
+			if err := execution.ValidateSessionConfiguration("claude_sdk", configuration); (err == nil) != wantAccepted {
 				t.Fatal("incorrect inline/template qualification", environment, err)
 			}
 			if !wantAccepted {
@@ -52,7 +52,7 @@ func TestHostedStructuredConfigurationQualification(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := (execution.Policy{}).ValidateSessionConfiguration("claude_sdk", configuration); err != nil {
+				if err := execution.ValidateSessionConfiguration("claude_sdk", configuration); err != nil {
 					t.Fatal("ordinary workspace profile changed", err)
 				}
 			}

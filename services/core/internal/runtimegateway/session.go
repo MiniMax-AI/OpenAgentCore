@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
@@ -220,6 +221,21 @@ func (s *Session) AgentKindStatus(kind string) (info proto.SupportedAgentKind, f
 	return proto.SupportedAgentKind{}, false, true
 }
 
+// narrowsDeclarations reports kinds that each name a built-in Harness and
+// only narrow its static declaration.
+func narrowsDeclarations(kinds []proto.SupportedAgentKind) bool {
+	for _, kind := range kinds {
+		static, ok := builtin.Registry().Lookup(kind.Kind)
+		if !ok {
+			return false
+		}
+		if _, err := static.Declaration.Narrow(kind.Capabilities); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Session) setDeclarations(kinds []proto.SupportedAgentKind, homeRemoval proto.CapabilitySupport) {
 	copyKinds := make([]proto.SupportedAgentKind, len(kinds))
 	copy(copyKinds, kinds)
@@ -395,7 +411,7 @@ func (s *Session) markSeen() {
 
 func (s *Session) handleHeartbeat(env proto.Envelope) {
 	var p proto.HeartbeatPayload
-	if err := env.DecodePayload(&p); err != nil || p.HomeRemoval == proto.CapabilityUnspecified {
+	if err := env.DecodePayload(&p); err != nil || p.HomeRemoval == proto.CapabilityUnspecified || !narrowsDeclarations(p.SupportedAgentKinds) {
 		s.log("agentdaemon gateway: invalid heartbeat declaration device=%s", s.DeviceID)
 		s.setDeclarations(nil, proto.CapabilityUnspecified)
 		s.Close("invalid heartbeat declaration")

@@ -49,17 +49,6 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil {
 		return run, err
 	}
-	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
-	if err != nil {
-		return run, err
-	}
-	owner, cancel := context.WithCancel(ctx)
-	defer cancel()
-	req, err := d.executionRequest(owner, session, snapshot, caps, bound)
-	if err != nil {
-		return run, err
-	}
-	req.Assignment = bound.Device.Assignment
 	var messages proto.MessageInput
 	for _, input := range run.Reservation.Inputs {
 		if input.Kind != "message" {
@@ -71,9 +60,17 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		}
 		messages = append(messages, text...)
 	}
-	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
+	declaration, err := admitSession(peer, session.Engine, snapshot, messages)
+	if err != nil {
 		return run, err
 	}
+	owner, cancel := context.WithCancel(ctx)
+	defer cancel()
+	req, err := d.executionRequest(owner, session, snapshot, declaration, bound)
+	if err != nil {
+		return run, err
+	}
+	req.Assignment = bound.Device.Assignment
 	if err := d.configurePreparedEnvironment(session, environment, bound.Device, &req); err != nil {
 		return run, err
 	}
@@ -92,7 +89,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if err != nil || run.Reservation.State != sessions.EnvironmentInputPending {
 		return run, err
 	}
-	if err := d.messageInputSupport(peer, session.Engine, snapshot, messages); err != nil {
+	if _, err := admitSession(peer, session.Engine, snapshot, messages); err != nil {
 		return run, err
 	}
 	promoted, err := d.sessionExecution.PromoteEnvironmentInput(owner, tenantID, sessionID, reservationID)

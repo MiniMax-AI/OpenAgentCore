@@ -44,7 +44,7 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		return nil, errors.New("Nonempty MCP request_metadata is not supported yet.")
 	}
 	u, err := url.Parse(transport.ServerURL)
-	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery {
+	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || strings.Contains(transport.ServerURL, "#") || u.RawQuery != "" || u.ForceQuery {
 		return nil, errors.New("MCP server_url must be an absolute HTTP(S) URL without credentials, query or fragment.")
 	}
 	if transport.Authorization != nil {

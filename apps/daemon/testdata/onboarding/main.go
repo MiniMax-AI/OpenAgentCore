@@ -167,7 +167,7 @@ func run() error {
 	registry := agent.NewRegistry()
 	h := &harness{history: map[string]string{}}
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "mcode", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-		SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported,
+		EnvironmentNone: proto.CapabilitySupported,
 	})}, mcode.Configuration())
 	registry.RegisterExecutor("mcode", h.prepare)
 	sink := &sender{encoder: json.NewEncoder(os.Stdout)}

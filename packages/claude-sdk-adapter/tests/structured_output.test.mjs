@@ -21,8 +21,8 @@ test('unrelated or failed results cannot publish a candidate',()=>{
   const o=new StructuredOutput();o.consume(call('id'),'session');o.consume(receipt('id'),'session');assert.throws(()=>o.complete(r));
  }
 });
-test('output configuration is restricted to the qualified profile',()=>{
+test('output configuration is a json_schema format',()=>{
  const r={type:'start',input: [{ content: [{ type: "input_text", text: 'hello' }] }],model:'model',system_prompt:'',cwd:'/tmp',output_format:{type:'json_schema',schema:{type:'object'}}};
  assert.deepEqual(parseStart(JSON.stringify(r)),r);
- for(const change of [{subagents:{max_concurrent:1}},{mcp_http_servers:[]},{output_format:{type:'text',schema:{}}}]) assert.throws(()=>parseStart(JSON.stringify({...r,...change})));
+ for(const change of [{output_format:{type:'text',schema:{}}},{output_format:{type:'json_schema'}}]) assert.throws(()=>parseStart(JSON.stringify({...r,...change})));
 });

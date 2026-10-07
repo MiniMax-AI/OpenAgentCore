@@ -55,7 +55,7 @@ Both placements run the same Runtime: the daemon, the selected Harness, native t
 
 ### Hosted (`openai_hosted`)
 
-The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
+The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. Every Harness whose declaration supports `local_environment` runs there ([Declare support](./harness-onboarding.md#declare-support)).
 
 - Session creation, with or without initial input, commits the Session, Environment and retry identity before the Worker provisions compute. A creation interrupted before bootstrap is recovered without repeating the Provider's Create.
 - Provisioning needs no caller action; the Session stays idle until a Turn starts.
@@ -362,9 +362,7 @@ The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_h
 
 A stdio server starts through the daemon's stdio helper, which resolves the installed declaration and launches the command with the Harness's permissions. On Unix the helper replaces itself with the server; on Windows it forwards stdio inside the owned process tree. Initialized values override the declaration's variables. Process groups and Windows Jobs own cancellation and descendant cleanup, not isolation.
 
-[Harness capabilities](./harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
-
-Environment MCP needs enabled network. Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
+Environment MCP needs enabled network. Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins, and MiniMax Code rejects them too. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
 ### Effective bindings
 
@@ -379,9 +377,7 @@ An Agent's HTTP MCP tool ([declaration](./execution-tools.md#http-mcp)) has a `c
 | `service` | Core's service-side execution host | `none` only |
 | `environment` | The Environment's workspace | `openai_hosted` and `self_hosted` with enabled network |
 
-Core's Harness profile declares `MCPOrigins`; admission and dispatch check the origin against the placement and the Runtime's advertised HTTP, bearer and required-initialization capabilities, and the Runtime validates the origin again before invoking an adapter. No Harness-name or Provider branch selects a different path.
-
-[Harness capabilities](./harness-capabilities.md#tools) owns per-Harness origin support and policy limits.
+Each Harness declares the origins it supports ([Declare support](./harness-onboarding.md#declare-support)); MiniMax Code supports `environment` only. Admission and dispatch check the origin against the placement and the Runtime's declared HTTP, bearer and required-initialization support, and the Runtime validates the selection again before invoking an adapter. No Harness-name or Provider branch selects a different path.
 
 Both origins support anonymous HTTP and HTTPS bearer credentials. The attached-Vault selection freezes the credential identity, including a unique implicit URL match or an anonymous selection. Only that Project-authorized credential enters the transient Runtime request; Core defaults and unrelated Vaults are never searched. A decryption failure or missing credential fails execution without an anonymous fallback. Public Environment MCP keeps `project_vault` authority and Plugin credentials keep `environment_configuration` authority; neither overrides a duplicate server label. Bearers never enter persisted native configuration or process arguments.
 

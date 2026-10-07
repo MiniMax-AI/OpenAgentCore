@@ -18,8 +18,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Core implementation constraints beyond the public contracts | [Implementation constraints](services/core/IMPLEMENTATION.md) |
 | Environment ownership, preparation, Skills, Plugins, packages and MCP bindings | [Environments](contracts/agents-api/environments.md) |
 | Built-in Harness identifiers and display names | `internal/harnessconfig/builtin/catalog.json` and its [generated reference](contracts/agents-api/harness-catalog.md) |
-| Harness registration, service qualification and acceptance | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
-| Harness capabilities by placement | [Harness capabilities](contracts/agents-api/harness-capabilities.md) |
+| Harness registration, support declaration and acceptance | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
 | Harness selection, model providers and native parameters | [Model execution](contracts/agents-api/model-execution.md) |
 | Provider registration and lifecycle | [Sandbox Provider guide](docs/sandbox-provider.md) |
 | Sandbox deployment, selection and administrative transitions | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |

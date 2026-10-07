@@ -22,7 +22,7 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}
+	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium"}
 	before, _ := json.Marshal(request)
 	controlled, _, err := prepareConfiguration(config, request)
 	if err != nil {
@@ -31,33 +31,6 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	after, _ := json.Marshal(request)
 	if !reflect.DeepEqual(ordinary, controlled) || string(before) != string(after) {
 		t.Fatal("default controls changed instructions, continuation or caller options")
-	}
-}
-
-func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
-	cases := map[string]proto.ExecutionControls{
-		"empty": {}, "missing-search": {TextVerbosity: "medium"}, "missing-verbosity": {WebSearch: "disabled"},
-		"cached-search":     {WebSearch: "cached", TextVerbosity: "medium"},
-		"live-search":       {WebSearch: "live", TextVerbosity: "medium"},
-		"unknown-search":    {WebSearch: "invalid", TextVerbosity: "medium"},
-		"low-verbosity":     {WebSearch: "disabled", TextVerbosity: "low"},
-		"high-verbosity":    {WebSearch: "disabled", TextVerbosity: "high"},
-		"unknown-verbosity": {WebSearch: "disabled", TextVerbosity: "invalid"},
-	}
-	for name, controls := range cases {
-		t.Run(name, func(t *testing.T) {
-			root := t.TempDir()
-			t.Setenv("OAC_RUNTIME_HOME", root)
-			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("Original input."), ExecutionControls: &controls, Model: "native-model"}
-			_, err := startSingleTurn(t.Context(), config, request, make(chan proto.Envelope, 1))
-			if err == nil || !strings.Contains(err.Error(), "execution controls require") {
-				t.Fatal("unsupported controls did not fail at admission", err)
-			}
-			if _, err := os.Stat(config.StateDir); !os.IsNotExist(err) {
-				t.Fatal("unsupported controls reached native setup", err)
-			}
-		})
 	}
 }
 
@@ -81,7 +54,7 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	schema := json.RawMessage(`{"type":"object","properties":{"n":{"const":9007199254740992}}}`)
-	request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableSubagents: true, Model: "model", SystemPrompt: "Original instructions.", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
+	request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableSubagents: true, Model: "model", SystemPrompt: "Original instructions.", ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
 	start, _, err := prepareConfiguration(config, request)
 	if err != nil {
 		t.Fatal(err)
@@ -89,36 +62,24 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	if start.OutputFormat == nil || string(start.OutputFormat.Schema) != string(schema) || start.SystemPrompt != "Original instructions." {
 		t.Fatal("native configuration changed")
 	}
-	request.ExecutionControls.OutputFormat.Schema = json.RawMessage(`{"type":"object","const":9007199254740993}`)
-	if _, _, err := prepareConfiguration(config, request); err == nil {
-		t.Fatal("lossy schema accepted")
-	}
-	request.ExecutionControls.OutputFormat.Schema = schema
-	request.DisableSubagents = false
-	if _, _, err := prepareConfiguration(config, request); err == nil {
-		t.Fatal("unqualified subagent combination accepted")
-	}
 }
 
-func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing.T) {
+// Tool discovery keeps the frozen definitions; a typeless parameters root
+// becomes an object root, which admits the same arguments.
+func TestToolDiscoveryPreservesFrozenFunctions(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableSubagents: true, ToolSearch: true, Model: "model", FunctionTools: []proto.FunctionTool{
 		{Name: "lookup", Description: "Lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"const":"original"}}}`), DeferLoading: true},
-		{Name: "clock", Description: "Clock", Parameters: json.RawMessage(`{"type":"object"}`)},
+		{Name: "clock", Description: "Clock", Parameters: json.RawMessage(`{"properties":{}}`)},
+		{Name: "note", Description: "Note", Parameters: json.RawMessage(`{"type":["object","null"]}`)},
 	}}
 	start, _, err := prepareConfiguration(config, request)
-	if err != nil || !start.ToolSearch || !reflect.DeepEqual(start.Functions, request.FunctionTools) {
+	if err != nil || !start.ToolSearch || !reflect.DeepEqual(start.Functions[0], request.FunctionTools[0]) || string(start.Functions[1].Parameters) != `{"properties":{},"type":"object"}` || string(start.Functions[2].Parameters) != `{"type":"object"}` {
 		t.Fatal("function discovery changed native definitions", err)
 	}
-	request.DisableSubagents = false
-	if _, _, err := prepareConfiguration(config, request); err == nil {
-		t.Fatal("unqualified combination admitted")
-	}
-	request.DisableSubagents = true
-	request.ToolSearch = false
-	if _, _, err := prepareConfiguration(config, request); err == nil {
-		t.Fatal("deferred definitions became eager")
+	if string(request.FunctionTools[1].Parameters) != `{"properties":{}}` {
+		t.Fatal("typing the root changed the frozen request")
 	}
 }
