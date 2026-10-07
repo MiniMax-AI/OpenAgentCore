@@ -87,15 +87,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	if e != nil {
 		return qualified, e
 	}
-	connection, e := bootstrap.RuntimeConnection().Marshal()
-	if e != nil {
-		return wire.Response{}, e
-	}
-	serve, e := bootstrap.SandboxIO.Marshal()
-	if e != nil {
-		return wire.Response{}, e
-	}
-	data, e := json.Marshal(struct{ Runtime, SandboxIO json.RawMessage }{connection, serve})
+	data, e := launchInputs(bootstrap)
 	if e != nil {
 		return wire.Response{}, e
 	}
@@ -119,6 +111,20 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		return wire.Response{}, sandbox.ErrCommandUnconfirmed
 	}
 	return wire.Response{State: &state}, e
+}
+
+// launchInputs is the bootstrap script's stdin: the daemon's connection and
+// the Sandbox I/O service's input.
+func launchInputs(b sandbox.Bootstrap) ([]byte, error) {
+	connection, err := b.RuntimeConnection().Marshal()
+	if err != nil {
+		return nil, err
+	}
+	serve, err := b.SandboxIO.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct{ Runtime, SandboxIO json.RawMessage }{connection, serve})
 }
 
 // Only the initial post-Create inspection uses this proof. Native creation has
