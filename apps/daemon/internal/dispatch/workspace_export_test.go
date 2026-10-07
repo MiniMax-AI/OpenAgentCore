@@ -39,7 +39,7 @@ func (stubEnvironment) Configure(r proto.PromptRequestPayload) (proto.PromptRequ
 func (stubEnvironment) Prepare(_ context.Context, r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
 	return r, nil
 }
-func (stubEnvironment) ApplyRuntimePreparation(context.Context, proto.RuntimePreparePayload, []byte) error {
+func (stubEnvironment) ApplyRuntimePreparation(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {
 	return errors.New("stub")
 }
 func (stubEnvironment) ListWorkspaceDirectory(context.Context, string, int) (WorkspaceDirectoryResult, error) {

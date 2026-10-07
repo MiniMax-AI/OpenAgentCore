@@ -261,14 +261,14 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
 	request := proto.RuntimePreparePayload{Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
-	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+	owner := &runtimePreparationTransfer{id: uuid.MustParse(id), envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
 	r.shutdownWG.Add(1)
 	started, interrupted, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	retained := filepath.Join(t.TempDir(), "installed.json")
-	go r.runRuntimePreparationTransfer(ctx, owner, func(ctx context.Context, got proto.RuntimePreparePayload, data []byte) error {
-		if got.Action != "finalize" || len(data) != 0 {
+	go r.runRuntimePreparationTransfer(ctx, owner, func(ctx context.Context, transfer uuid.UUID, got proto.RuntimePreparePayload, data []byte) error {
+		if transfer.String() != id || got.Action != "finalize" || len(data) != 0 {
 			return agentcapabilities.ErrInvalid
 		}
 		close(started)
@@ -341,11 +341,13 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
 	request := capabilityBegin(environment, session, []byte("abc"))
-	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+	owner := &runtimePreparationTransfer{id: uuid.MustParse(id), envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
 	r.shutdownWG.Add(1)
-	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, proto.RuntimePreparePayload, []byte) error { return context.DeadlineExceeded }, func() {})
+	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {
+		return context.DeadlineExceeded
+	}, func() {})
 	capabilitiesReceipt(t, sender, id, "unknown")
 	r.mu.Lock()
 	owned := r.runtimePreparation == owner && owner.uncertain && owner.data == nil

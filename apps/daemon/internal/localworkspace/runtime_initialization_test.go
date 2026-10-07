@@ -18,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/google/uuid"
 )
 
 // The test executable doubles as a native package-manager fixture on all OSes.
@@ -351,14 +352,14 @@ func TestRuntimePreparationRejectsFilesAfterFinalization(t *testing.T) {
 	digest := sha256.Sum256(nil)
 	input := proto.RuntimePreparePayload{Step: "begin", EnvironmentID: b.environment, SessionID: b.capabilityIdentity().SessionID,
 		Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/file"}, SHA256: hex.EncodeToString(digest[:])}
-	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
+	if err = b.ApplyRuntimePreparation(t.Context(), uuid.New(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted file", err)
 	}
 	input.Action = "initialize"
 	input.File = nil
 	input.SHA256 = ""
 	input.Initialization = &proto.RuntimeInitialization{Action: "configure", Env: map[string]string{}}
-	if err = b.ApplyRuntimePreparation(t.Context(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
+	if err = b.ApplyRuntimePreparation(t.Context(), uuid.New(), input, nil); !errors.Is(err, agentcapabilities.ErrInvalid) {
 		t.Fatal("finalized Runtime accepted initialize", err)
 	}
 }

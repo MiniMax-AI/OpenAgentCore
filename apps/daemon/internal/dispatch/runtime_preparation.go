@@ -17,6 +17,7 @@ const runtimePreparationTimeout = 120 * time.Second
 // Router.mu protects one connection-local transfer. Partial installation data
 // belongs to the bound Environment and is never removed by transfer cleanup.
 type runtimePreparationTransfer struct {
+	id        uuid.UUID // the envelope's ID
 	envelope  proto.Envelope
 	request   proto.RuntimePreparePayload
 	data      []byte
@@ -75,7 +76,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		}
 		owner, cancel := context.WithTimeout(context.WithoutCancel(ctx), runtimePreparationTimeout)
 		u := &runtimePreparationTransfer{
-			envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
+			id: id, envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
 			ready: make(chan struct{}), cancel: cancel,
 		}
 		r.runtimePreparation = u
@@ -174,7 +175,7 @@ func (r *Router) finishRuntimePreparationTransferLocked(u *runtimePreparationTra
 // apply must return only after its local mutations stop. Cancellation requests
 // shutdown, but cannot release ownership while that call is still running.
 // done runs once the result is sent.
-func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, proto.RuntimePreparePayload, []byte) error, done func()) {
+func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePreparationTransfer, apply func(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error, done func()) {
 	defer r.shutdownWG.Done()
 	defer done()
 	defer u.cancel()
@@ -196,7 +197,7 @@ func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePr
 		result = rejectedRuntimePreparation(fenced)
 	}
 	if admitted {
-		result = runtimePreparationResult(apply(ctx, u.request, data), u.request.SizeBytes)
+		result = runtimePreparationResult(apply(ctx, u.id, u.request, data), u.request.SizeBytes)
 	}
 	// Release the potentially large body before waiting on transport delivery.
 	data = nil

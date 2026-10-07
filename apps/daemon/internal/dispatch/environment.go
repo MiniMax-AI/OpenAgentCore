@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/google/uuid"
 )
 
 // Environment owns one Session's Environment: its resources and every effect on
@@ -21,9 +22,11 @@ type Environment interface {
 	// Prepare fills the configured execution's installed capabilities before
 	// the Executor factory runs.
 	Prepare(context.Context, proto.PromptRequestPayload) (proto.PromptRequestPayload, error)
-	// ApplyRuntimePreparation applies one complete runtime_prepare transfer and
-	// returns only after its mutations stop.
-	ApplyRuntimePreparation(context.Context, proto.RuntimePreparePayload, []byte) error
+	// ApplyRuntimePreparation applies one complete runtime_prepare transfer,
+	// whose envelope ID is transfer, and returns only after its mutations
+	// stop. Core never sends a transfer ID twice, so transfer may name the
+	// effects the transfer starts.
+	ApplyRuntimePreparation(ctx context.Context, transfer uuid.UUID, payload proto.RuntimePreparePayload, data []byte) error
 	ListWorkspaceDirectory(ctx context.Context, path string, maxEntries int) (WorkspaceDirectoryResult, error)
 	WriteWorkspaceFile(ctx context.Context, path string, data []byte) (WorkspaceWriteResult, error)
 	ExportOutputs(context.Context, io.Writer) error
