@@ -116,6 +116,24 @@ The node installer writes Docker’s provider configuration into the node’s co
 
 The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolation, volume layout and lifecycle behavior.
 
+## Agent-host container
+
+The agent host runs each Session's Harness outside the sandbox, in a view of its own ([Run in an agent-host view](../contracts/agents-api/harness-onboarding.md#run-in-an-agent-host-view)). Its container runs the [agent-host image](./maintainers.md#runtime-images-and-helpers) as root and needs Linux 5.14 or newer with cgroup v2:
+
+| Requirement | Docker flag | Used for |
+| --- | --- | --- |
+| A private cgroup namespace | `--cgroupns=private` | Makes the container's own cgroup the root of a cgroup v2 mount inside it |
+| `CAP_SYS_ADMIN` | `--cap-add SYS_ADMIN` | That cgroup v2 mount, the views' mount namespaces and their FUSE world |
+| `CAP_NET_ADMIN` | `--cap-add NET_ADMIN` | Each view's loopback-only network |
+| `/dev/fuse` | `--device /dev/fuse` | The view's world, the sandbox's files served over the File access protocol |
+| No AppArmor profile | `--security-opt apparmor=unconfined` | Docker's default AppArmor profile denies these mounts |
+
+Docker's default seccomp profile stays: with `CAP_SYS_ADMIN` it allows `clone3`, `mount` and `unshare`. The container gets no Docker socket and publishes no port.
+
+The agent host needs a cgroup v2 directory delegated to it. It starts each view in a cgroup of its own there, ends the view with `cgroup.kill` and removes the cgroup. When it starts it ends and removes every cgroup in the directory, because each counts as a view's, so nothing else may use it. The directory must be writable and must not contain the agent host's own process. Docker mounts the container's cgroup read-only. With the flags above, cgroup v2 mounted again inside the container (`mount -t cgroup2 cgroup2 <dir>`) is the container's own cgroup and is writable, and a new directory in it is the delegated directory. Without that delegation the agent host does not start: it fails with `agenthost.ErrUnsupported`, and nothing falls back.
+
+Never set `GODEBUG=http2debug` for the agent host. With it, Go's HTTP/2 implementation logs every header it encodes, including the model and MCP credentials the agent host adds.
+
 ## Installation directory
 
 The installer creates the installation directory, `~/.oac/core` by default, with mode `0700`. Secret files are `0600`.

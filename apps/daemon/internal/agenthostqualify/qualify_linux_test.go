@@ -8,7 +8,10 @@ package agenthostqualify
 import (
 	"context"
 	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -40,41 +43,20 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
-// The rig is two privileged-suite style containers on the host network. The
-// sandbox is plain Debian with bash, git, coreutils and ripgrep, running
-// oac-sandbox-io against the Link test relay this test serves on loopback; the
-// bootstrap reaches it through a shared run directory. The agent host runs this
-// test with the pinned Harness installs, in a private cgroup namespace for the
-// views' cgroups. Each OAC_QUALIFY_<KIND> holds the
-// Harness's model and model_provider without api_key, which the test reads
-// from OAC_QUALIFY_KEY_FILE.
-//
-//	CGO_ENABLED=0 go build -o $BIN/oac-sandbox-io ./apps/sandboxio/cmd/oac-sandbox-io
-//	CGO_ENABLED=0 go build -o $BIN/oac-process-shim ./apps/daemon/cmd/oac-process-shim
-//	CGO_ENABLED=0 go test -c -o $BIN/qualify.test ./apps/daemon/internal/agenthostqualify
-//	printf 'FROM debian:bookworm-slim\nRUN apt-get update && apt-get install -y --no-install-recommends bash git coreutils ripgrep && mkdir -m 0777 /workspace\n' |
-//	  docker build -t oac-qualify-sandbox -
-//	RUN=$(mktemp -d)
-//	docker run -d --rm --network host -v $RUN:/run/qualify:ro -v $BIN/oac-sandbox-io:/usr/local/bin/oac-sandbox-io:ro oac-qualify-sandbox \
-//	  sh -c 'until [ -s /run/qualify/bootstrap.json ]; do sleep 1; done; exec oac-sandbox-io --bootstrap-file /run/qualify/bootstrap.json'
-//	docker run --rm --network host --cgroupns=private --cap-add SYS_ADMIN --cap-add NET_ADMIN --device /dev/fuse --security-opt apparmor=unconfined \
-//	  -v $RUN:/run/qualify -v $BIN:/qualify:ro -v $KEY:/run/model.key:ro -v /etc/ssl/certs/ca-certificates.crt:/etc/oac-ca/ca.pem:ro \
-//	  -v $CLAUDE_SDK:/opt/claude-sdk:ro -v $CODEX_BIN:/opt/codex:ro -v $MCODE_HARNESS:/opt/mcode-harness:ro \
-//	  -e OAC_TEST_QUALIFY=1 -e OAC_QUALIFY_KEY_FILE=/run/model.key -e OAC_RUNTIME_HOME=/var/lib/oac \
-//	  -e OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node -e OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js \
-//	  -e OAC_RUNTIME_CODEX_BIN=/opt/codex/codex \
-//	  -e OAC_RUNTIME_MCODE_NODE=/usr/local/bin/node -e OAC_RUNTIME_MCODE_BIN=/opt/mcode-harness/native/cli.js \
-//	  -e OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE=/opt/mcode-harness/bridge.mjs -e OAC_RUNTIME_MCODE_AGENTS_API=1 \
-//	  -e OAC_QUALIFY_CLAUDE_SDK='{"model":"...","model_provider":{"protocol":"anthropic","base_url":"..."}}' \
-//	  -e OAC_QUALIFY_CODEX='{"model":"...","model_provider":{"protocol":"responses","base_url":"..."}}' \
-//	  -e OAC_QUALIFY_MCODE='{"model":"...","model_provider":{"protocol":"anthropic","base_url":"...","context_window":200000,"max_output_tokens":8192}}' \
-//	  node:22.23.1-bookworm-slim /qualify/qualify.test -test.v -test.timeout 30m
+// scripts/qualify-agent-host.sh runs this test binary as the agent host in
+// the agent-host image, which activates each Harness from the image's
+// manifest, and oac-sandbox-io in the sandbox image, both on the host network.
+// The test serves the Link test relay over WSS on loopback and hands the
+// sandbox its bootstrap and the relay's CA through a shared run directory.
+// Each OAC_QUALIFY_<KIND> holds the Harness's model and model_provider without
+// api_key, which the test reads from OAC_QUALIFY_KEY_FILE.
 const (
 	gateEnv = "OAC_TEST_QUALIFY"
 	keyEnv  = "OAC_QUALIFY_KEY_FILE"
 	runDir  = "/run/qualify"
-	shim    = "/qualify/oac-process-shim"
-	caDir   = "/etc/oac-ca"
+	shim    = "/opt/oac/bin/oac-process-shim"
+	// caDir holds the agent-host image's roots, one regular PEM file each.
+	caDir = "/usr/share/ca-certificates/mozilla"
 	// workspace is the sandbox directory every Session works in.
 	workspace = "/workspace"
 	turnLimit = 10 * time.Minute
@@ -89,7 +71,7 @@ func TestMain(m *testing.M) {
 
 func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 	if os.Getenv(gateEnv) != "1" {
-		t.Skipf("set %s=1 and run the test binary as the agent host of the two-container rig; see the comment above", gateEnv)
+		t.Skipf("set %s=1 and run the test with scripts/qualify-agent-host.sh", gateEnv)
 	}
 	if err := sessionview.Probe(); err != nil {
 		t.Fatalf("Probe: %v", err)
@@ -98,9 +80,11 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatalf("model key: %v", err)
 	}
+	activate(t)
+	tunnel(t)
 	sb := startSandbox(t)
 	reg := agent.NewRegistry()
-	cfg := agenthost.Config{StateDir: t.TempDir(), ViewCgroups: sessionviewtest.CgroupParent(t), UIDs: agenthost.UIDRange{First: 70000, Count: 8}, RelayURL: sb.url,
+	cfg := agenthost.Config{StateDir: t.TempDir(), ViewCgroups: sessionviewtest.CgroupParent(t), UIDs: agenthost.UIDRange{First: 70000, Count: 8}, RelayURL: sb.url, TLS: sb.tls,
 		RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: reg, Shim: shim, CADir: caDir,
 		Log: slog.New(slog.NewTextHandler(os.Stderr, nil))}
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
@@ -146,7 +130,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 	b := sb.binding()
 	sb.grant(b, cfg.RuntimeID)
 	env := agenthost.Environment{
-		Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/root", "LANG": "C.UTF-8"},
+		Sandbox: map[string]string{"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HOME": "/home/runtime", "LANG": "C.UTF-8"},
 		Tool:    map[string]string{"QUALIFY_VALUE": value, "QUALIFY_EXIT": fmt.Sprint(exit)},
 	}
 	out := make(sender, 256)
@@ -269,25 +253,39 @@ func sessionOptions(t *testing.T, raw string, key []byte) map[string]any {
 type sandbox struct {
 	auth     *sandboxlinktest.Authority
 	url      string
+	tls      *tls.Config
 	resource sandboxlink.ResourceRef
 }
 
 func startSandbox(t *testing.T) *sandbox {
 	auth := sandboxlinktest.NewAuthority()
 	rl := relay.New(auth)
-	srv := httptest.NewServer(rl)
+	srv := httptest.NewUnstartedServer(rl)
+	srv.TLS = &tls.Config{Certificates: []tls.Certificate{testCA(t)}}
+	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { rl.Close() })
-	in := sandboxbootstrap.Input{Version: sandboxbootstrap.Version, LinkURL: "ws://" + strings.TrimPrefix(srv.URL, "http://"), Credential: "serve-" + rand.Text(),
+	in := sandboxbootstrap.Input{Version: sandboxbootstrap.Version, LinkURL: "wss://" + strings.TrimPrefix(srv.URL, "https://"), Credential: "serve-" + rand.Text(),
 		Resource: sandboxbootstrap.Resource{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), Kind: "allocation", ID: uuid.NewString(), Generation: 1}}
 	raw, err := in.Marshal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	sb := &sandbox{auth: auth, url: in.LinkURL, resource: in.Resource.Ref()}
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	sb := &sandbox{auth: auth, url: in.LinkURL, tls: &tls.Config{RootCAs: roots}, resource: in.Resource.Ref()}
 	auth.AddServe([]byte(in.Credential), sandboxlink.ServePeer{PeerID: sandboxwire.NewID(), Resource: sb.resource})
+	// The sandbox trusts the relay's CA through SSL_CERT_FILE, and reads the
+	// bootstrap as the image's user.
+	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(filepath.Join(runDir, "ca.pem"), ca, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	staged := filepath.Join(runDir, ".bootstrap.json")
 	if err := os.WriteFile(staged, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chown(staged, sandboxUser, sandboxUser); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(staged, filepath.Join(runDir, "bootstrap.json")); err != nil {
@@ -314,7 +312,7 @@ func (sb *sandbox) files(t *testing.T, cfg agenthost.Config, f func(ctx context.
 	defer cancel()
 	b, attachment := sb.binding(), sandboxwire.NewID()
 	sb.grant(b, cfg.RuntimeID)
-	link, err := sandboxlink.DialAttach(ctx, sandboxlink.AttachConfig{URL: sb.url, RuntimeID: cfg.RuntimeID, Credential: cfg.Credential})
+	link, err := sandboxlink.DialAttach(ctx, sandboxlink.AttachConfig{URL: sb.url, TLS: cfg.TLS, RuntimeID: cfg.RuntimeID, Credential: cfg.Credential})
 	if err != nil {
 		t.Fatal(err)
 	}

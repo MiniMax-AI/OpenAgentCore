@@ -190,7 +190,7 @@ check-distribution:
 	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/publish-core-release.test.py
-	bash -n deploy/install.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh
+	bash -n deploy/install.sh scripts/build-web.sh scripts/build-core-distribution.sh scripts/build-core-image-context.sh scripts/prepare-release-runtimes.sh scripts/build-agent-host-images.sh scripts/qualify-agent-host.sh
 	./scripts/build-web.sh
 
 build-core-distribution:

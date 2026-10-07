@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: e697e320a2df0c130cb004f5e8bbda50deff6515ef7727bea066fc0d4f688b7d
+source_hash: 0172bc723c66dbfa945c76eae575d8560bbd4b75d1a32cab70d1fb7313079032
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置。共有两类：
@@ -119,6 +119,24 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | `extra_hosts` | 可选 | 额外的容器主机映射 |
 
 [Docker 适配器](sandbox-provider.md#docker-adapter)负责容器隔离、卷布局和生命周期行为。
+
+## Agent-host 容器 {#agent-host-container}
+
+agent host 在沙箱之外、在每个 Session 自己的视图中运行该 Session 的 Harness（见[在 agent-host 视图中运行](../../contracts/agents-api/zh/harness-onboarding.md#run-in-an-agent-host-view)）。它的容器以 root 运行 [agent-host 镜像](maintainers.md#runtime-images-and-helpers)，需要 Linux 5.14 或更高版本以及 cgroup v2：
+
+| 要求 | Docker 参数 | 用途 |
+| --- | --- | --- |
+| 私有 cgroup 命名空间 | `--cgroupns=private` | 使容器自己的 cgroup 成为容器内 cgroup v2 挂载的根 |
+| `CAP_SYS_ADMIN` | `--cap-add SYS_ADMIN` | 该 cgroup v2 挂载、视图的挂载命名空间及其 FUSE world |
+| `CAP_NET_ADMIN` | `--cap-add NET_ADMIN` | 每个视图仅含 loopback 的网络 |
+| `/dev/fuse` | `--device /dev/fuse` | 视图的 world，即通过 File access 协议提供的沙箱文件 |
+| 不使用 AppArmor 配置文件 | `--security-opt apparmor=unconfined` | Docker 默认的 AppArmor 配置文件会拒绝这些挂载 |
+
+保留 Docker 默认的 seccomp 配置文件：有了 `CAP_SYS_ADMIN`，它允许 `clone3`、`mount` 和 `unshare`。容器不获得 Docker 套接字，也不发布端口。
+
+agent host 需要一个委派给它的 cgroup v2 目录。它在该目录中为每个视图启动一个独立的 cgroup，用 `cgroup.kill` 结束视图并删除该 cgroup。启动时，它会结束并删除该目录中的每个 cgroup，因为其中每个 cgroup 都视为视图的 cgroup，所以其他任何东西都不得使用该目录。该目录必须可写，且不能包含 agent host 自己的进程。Docker 以只读方式挂载容器的 cgroup。使用上述参数时，在容器内再次挂载的 cgroup v2（`mount -t cgroup2 cgroup2 <dir>`）就是容器自己的 cgroup 且可写，其中新建的目录即为委派目录。没有这项委派时 agent host 不会启动：它以 `agenthost.ErrUnsupported` 失败，且没有任何回退。
+
+绝不要为 agent host 设置 `GODEBUG=http2debug`。设置后，Go 的 HTTP/2 实现会记录它编码的每个请求头，包括 agent host 添加的模型和 MCP 凭据。
 
 ## 安装目录 {#installation-directory}
 
