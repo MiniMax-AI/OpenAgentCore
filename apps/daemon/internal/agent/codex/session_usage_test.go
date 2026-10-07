@@ -137,7 +137,7 @@ func TestAbnormalTerminationTransmitsKnownUsage(t *testing.T) {
 	s.setThreadID("thread")
 	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"turn"}}`))
 	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"turn","tokenUsage":{"total":{"inputTokens":10,"cachedInputTokens":4,"outputTokens":3,"reasoningOutputTokens":2,"totalTokens":13}}}`))
-	s.emitTerminal("native connection closed", true)
+	s.emitTerminal("native connection closed")
 	s.closeOut()
 	var done proto.DonePayload
 	for e := range out {

@@ -96,7 +96,7 @@ func (s *Session) collectSubagentFacts() {
 				continue
 			}
 			if terminal == nil {
-				s.emitTerminal("codex: subagent facts could not be confirmed", true)
+				s.emitTerminal("codex: subagent facts could not be confirmed")
 				select {
 				case terminal = <-o.terminal:
 				case <-o.ctx.Done():

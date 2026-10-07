@@ -24,9 +24,9 @@ func (s *Session) settleExecutorTurn(startErr error) {
 		select {
 		case <-s.outputDone:
 		case <-s.rpc.Done():
-			s.emitTerminal("codex: connection closed before settlement", true)
+			s.emitTerminal("codex: connection closed before settlement")
 		case <-s.cancelCtx.Done():
-			s.emitTerminal("codex: execution owner closed", true)
+			s.emitTerminal("codex: execution owner closed")
 		}
 	}
 	// Detach the old callbacks before waiting for their captured Turn and native

@@ -205,7 +205,7 @@ func (s *Session) onTurnCompleted(raw json.RawMessage) {
 		if errText != "" {
 			body = appendOnNewline(body, errText)
 		}
-		s.emitTerminalFailure(body, true, classifyTurnError(p.Turn.Error))
+		s.emitTerminalFailure(body, classifyTurnError(p.Turn.Error))
 		return
 	}
 	var completedAt *int64
@@ -270,7 +270,7 @@ func (s *Session) onTurnFailed(raw json.RawMessage) {
 		"turn_id", p.Turn.ID,
 		"turn_status", p.Turn.Status,
 		"last_err_text_present", s.peekLastErrText() != "")
-	s.emitTerminal("codex: turn failed", true)
+	s.emitTerminal("codex: turn failed")
 }
 
 func (s *Session) onErrorNotif(raw json.RawMessage) {
@@ -348,39 +348,28 @@ func (s *Session) emitUsage(u TurnUsage) {
 	s.trySend(env)
 }
 
-func (s *Session) emitTerminal(message string, asError bool) {
-	s.emitTerminalFailure(message, asError, proto.ErrorPayload{})
+func (s *Session) emitTerminal(message string) {
+	s.emitTerminalFailure(message, proto.ErrorPayload{})
 }
 
-func (s *Session) emitTerminalFailure(message string, asError bool, failure proto.ErrorPayload) {
+// emitTerminalFailure ends the Turn with an error and then done.
+func (s *Session) emitTerminalFailure(message string, failure proto.ErrorPayload) {
 	defer s.finishAfterTerminal()
 	if !s.terminal.CompareAndSwap(false, true) {
 		return
 	}
 	s.stopSteering()
 	s.stopFunctionCalls()
-	// Always log: this is the only place the daemon decides "the prompt is
-	// over, here's what went wrong (if anything)". Without this, post-
-	// mortem requires correlating server-side TypeError frames against
-	// daemon timestamps with no message body anywhere.
-	if asError {
-		s.cfg.logger.Warn("codex: emitting terminal error",
-			"run_id", s.runID,
-			"thread_id", s.currentThreadID(),
-			"message", message)
-	} else {
-		s.cfg.logger.Info("codex: emitting terminal done",
-			"run_id", s.runID,
-			"thread_id", s.currentThreadID(),
-			"message_len", len(message))
-	}
+	// Always log the failure the daemon decided on: Core persists only its
+	// error frame, and the message is the post-mortem's starting point.
+	s.cfg.logger.Warn("codex: emitting terminal error",
+		"run_id", s.runID,
+		"thread_id", s.currentThreadID(),
+		"message", message)
+	failure.Error = message
 	var events []proto.Envelope
-	if asError {
-		failure.Error = message
-		env, err := proto.NewEnvelope(proto.TypeError, s.runID, failure)
-		if err == nil {
-			events = append(events, env)
-		}
+	if env, err := proto.NewEnvelope(proto.TypeError, s.runID, failure); err == nil {
+		events = append(events, env)
 	}
 	doneMeta := map[string]any{}
 	if tid := s.currentThreadID(); tid != "" {

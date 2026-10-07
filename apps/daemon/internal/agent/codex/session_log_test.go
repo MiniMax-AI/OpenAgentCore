@@ -39,7 +39,7 @@ func TestEmitTerminal_LogsErrorMessage(t *testing.T) {
 	s.setThreadID("thread-abc")
 
 	const message = "codex: thread/start: bad provider config"
-	s.emitTerminal(message, true)
+	s.emitTerminal(message)
 
 	logs := buf.String()
 	for _, want := range []string{
@@ -69,43 +69,6 @@ func TestEmitTerminal_LogsErrorMessage(t *testing.T) {
 	}
 	if got[1].Type != proto.TypeDone {
 		t.Fatalf("second envelope type = %q, want done", got[1].Type)
-	}
-}
-
-// TestEmitTerminal_LogsDoneMessage covers the success-path log so a
-// future change that flips asError=false on a real prompt completion
-// still leaves a trace in the daemon log.
-func TestEmitTerminal_LogsDoneMessage(t *testing.T) {
-	var buf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-
-	out := make(chan proto.Envelope, 4)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	s := &Session{
-		runID:     "run-test-456",
-		cfg:       sessionConfig{logger: logger},
-		out:       out,
-		cancelCtx: ctx,
-	}
-
-	s.emitTerminal("hello world", false)
-
-	logs := buf.String()
-	for _, want := range []string{
-		`"msg":"codex: emitting terminal done"`,
-		`"run_id":"run-test-456"`,
-		`"message_len":11`,
-	} {
-		if !strings.Contains(logs, want) {
-			t.Errorf("log missing %q\n--- log ---\n%s", want, logs)
-		}
-	}
-	// asError=false: only TypeDone, no TypeError.
-	got := drainEnvelopes(out)
-	if len(got) != 1 || got[0].Type != proto.TypeDone {
-		t.Fatalf("envelopes = %+v, want exactly 1 done", got)
 	}
 }
 

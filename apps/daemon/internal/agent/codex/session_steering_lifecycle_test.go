@@ -55,7 +55,7 @@ func TestSteeringReceiptTimeoutAndCompletionKeepProcessAlive(t *testing.T) {
 				t.Fatal("response wait killed retained process")
 			}
 			if complete {
-				s.emitTerminal("late disconnect", true)
+				s.emitTerminal("late disconnect")
 				var frames []proto.Envelope
 				for env := range out {
 					frames = append(frames, env)

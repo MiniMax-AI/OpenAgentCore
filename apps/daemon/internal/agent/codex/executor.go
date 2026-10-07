@@ -118,7 +118,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 		}
 	}
 	if err != nil {
-		s.emitTerminal("codex: native start failed", true)
+		s.emitTerminal("codex: native start failed")
 	}
 	go s.settleExecutorTurn(err)
 	return s, err
