@@ -59,7 +59,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			defer instrumented.Close()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			worker := startWorker(t, ctx, New(instrumented), h.d)
+			worker := startWorker(t, ctx, NewWithCredentialCipher(instrumented, fixtureCipher), h.d)
 			done := make(chan error, 1)
 			go func() { done <- worker.Run(ctx) }()
 			defer func() {
@@ -83,7 +83,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 				t.Fatal("candidate was not cancelled", err)
 			}
 			// A later Session must still execute through this same Worker.
-			h.session, err = h.s.CreateSession(ctx, h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "healthy", Configuration: h.session.Configuration})
+			h.session, err = h.s.CreateSession(ctx, h.tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "healthy", Configuration: h.session.Configuration}))
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -1,14 +1,14 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 800b3eb891c20d34215344c0ea147dbb79b5921d25d6f2405bcfe5edccd88038
+source_hash: 93c50f38d5f44bea3290e32359aeea3c5d196df4717e6c2a6893dc1242d13d25
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
 
 **守护进程不是沙箱。** 工具以启动守护进程的账号权限运行，能访问该账号可访问的所有资源。需要隔离时，请使用容器或虚拟机；参阅 [Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)。守护进程不限制网络访问，因此要求网络策略的 Template 会被自托管 Session 拒绝。
 
-Session 自带模型提供商；安装默认模型不适用（[原因](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)）。机器获得的执行器凭据仅适用于这一个 Environment。
+Session 的模型提供商与其他 Session 一样解析，因此当 Session 及其 Agent 都未提供时会使用安装默认模型，其密钥随后会到达这台机器（[模型执行](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)）。机器获得的执行器凭据仅适用于这一个 Environment。
 
 ## 平台 {#platforms}
 

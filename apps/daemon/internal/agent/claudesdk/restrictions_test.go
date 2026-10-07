@@ -25,7 +25,7 @@ func TestTextFactoryAcceptsRestrictiveCapabilities(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=success", "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{RunID: "restricted-run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", DisableExecutionEnvironment: test.environment, DisableSubagents: test.subagents, ExecutionControls: test.controls, Model: "fake-model", SystemPrompt: "instructions"}
+			request := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "restricted-run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", DisableExecutionEnvironment: test.environment, DisableSubagents: test.subagents, ExecutionControls: test.controls, Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

@@ -1,8 +1,9 @@
 // This synthetic harness exercises the production router without a native model.
-// It is test-only, has no workspace/tools, and is never in the built-in catalog.
+// It is test-only and has no workspace or tools. Core admits only built-in
+// catalog Harnesses, so it registers as the mcode kind with that declaration.
 package main
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 
 import (
 	"context"
@@ -161,12 +162,12 @@ func (s *session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, er
 func run() error {
 	registry := agent.NewRegistry()
 	h := &harness{history: map[string]string{}}
-	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture_harness", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
+	registry.RegisterKind(proto.SupportedAgentKind{Kind: "mcode", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
 		Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported,
-	})}, harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+	})}, mcode.Configuration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 		return nil, errors.New("fixture execution requires an Executor")
 	})
-	registry.RegisterExecutor("fixture_harness", h.prepare)
+	registry.RegisterExecutor("mcode", h.prepare)
 	sink := &sender{encoder: json.NewEncoder(os.Stdout)}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sink, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -126,6 +127,14 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 	}
 	if err := w.dispatcher.validateEngineInputs(value.Engine, value.Configuration, inputs); err != nil {
 		return nil, err
+	}
+	// Messages start work. Every Session freezes a provider at creation, so a
+	// stored one without it cannot run; reject it instead of queueing work.
+	// Cancellation and results stay available.
+	var snapshot Snapshot
+	if slices.ContainsFunc(inputs, func(input sessions.Input) bool { return input.Kind == "message" }) &&
+		(json.Unmarshal(value.Configuration, &snapshot) != nil || !snapshot.ModelProviderConfigured) {
+		return nil, ErrModelProviderRequired
 	}
 	if preparedEnvironmentConfiguration(value.Configuration) {
 		return w.submitEnvironmentInputs(ctx, value, key, inputs)

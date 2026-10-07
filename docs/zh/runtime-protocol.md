@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 2b5d80e228532628ebf3fac18c37b32bc20ce235833bef96e9f4e2bb78a8b7ae
+source_hash: 05ce7a3d0cedd37b775d74a572b079586e1678e687738dd5aaa503c3c3e50d9e
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -59,7 +59,7 @@ prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Sess
 
 | 字段 | Core 设置方式 |
 | --- | --- |
-| `model`, `system_prompt`, `model_provider`, `harness_config` | 来自 Session 冻结的配置：Agent 的 model 和 instructions、Session 拥有的 provider bundle，以及[原生模型参数](../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。Harness 在产生任何原生效果之前验证它们 |
+| `model`, `system_prompt`, `model_provider`, `harness_config` | 来自 Session 冻结的配置：Agent 的 model 和 instructions、Session 的 provider bundle，以及[原生模型参数](../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。Harness 在产生任何原生效果之前验证它们 |
 | `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
 | `observe_tool_observations` | 始终设置。tool-call frame 随后携带与 engine 无关的 `observation` |
 | `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |

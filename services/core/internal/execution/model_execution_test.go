@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -14,6 +15,20 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
+// frozenProvider reads, for every Session, the bundle a Session of engine
+// froze: Responses for Codex, Anthropic otherwise.
+type frozenProvider struct {
+	sessions.Reader
+	engine string
+}
+
+func (r frozenProvider) SessionModelExecution(context.Context, string, string) (*v1.ModelProviderInput, error) {
+	if r.engine == "codex" {
+		return &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://model.example/v1", APIKey: "key"}, nil
+	}
+	return &v1.ModelProviderInput{Protocol: "anthropic", BaseURL: "https://model.example", APIKey: "key"}, nil
+}
+
 func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	reader, _ := testSessions(t, pgtest.Open(t), nil)
 	d := Dispatcher{SessionsReader: reader}
@@ -21,20 +36,12 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("missing Session credentials fell back", err)
 	}
-	// Hosted and self-hosted Runtimes have no model configuration of their own.
-	for _, environment := range []string{"openai_hosted", "self_hosted"} {
-		snapshot := Snapshot{Environment: &v1.Environment{Type: environment}}
+	// No Runtime has model configuration of its own.
+	for _, environment := range []string{"openai_hosted", "self_hosted", "none"} {
+		snapshot := Snapshot{Agent: v1.Agent{Model: "m"}, Environment: &v1.Environment{Type: environment}}
 		if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
 			t.Fatal("provider-free Session dispatched", environment, err)
 		}
-	}
-	// A none device without a frozen provider uses its own provider environment:
-	// Core sends only the Agent's model and instructions.
-	instructions := "Keep this instruction."
-	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: &v1.Environment{Type: "none"}}
-	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{})
-	if err != nil || request.Model != "device-model" || request.SystemPrompt != instructions || request.ModelProvider != nil || request.HarnessConfig != nil {
-		t.Fatal("none Session received model settings Core does not own", err)
 	}
 }
 

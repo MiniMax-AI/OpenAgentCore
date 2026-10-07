@@ -22,7 +22,7 @@ func TestWhitespaceInputStoredVerbatimPostgres(t *testing.T) {
 	s, _ := newManagedTestStore(t)
 	token := uuid.NewString()
 	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "whitespace-owner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: uuid.NewString()}})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 		}
 	})
 	serve := func(engine string) pathIDClient {
-		handler, err := publicHandler(t, s, auth, engine, workerExecution(t, worker), executorURL("https://offline-executor.example"))
+		handler, err := publicHandler(t, s, auth, engine, workerExecution(t, worker), executorURL("https://offline-executor.example"), fixtureDeploymentProvider())
 		if err != nil {
 			t.Fatal(err)
 		}

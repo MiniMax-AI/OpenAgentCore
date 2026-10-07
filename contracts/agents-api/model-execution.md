@@ -24,7 +24,7 @@ The Session's `environment` and Environment Templates select preparation, not Ha
 
 A saved Agent is editable configuration, not a bound runtime. Create or update it with `model`, optional `x_agents_core.harness` and an optional complete `x_agents_core.model_provider`. Responses return the safe provider fields and the output-only `api_key_configured` flag, never `api_key`, ciphertext or a reusable credential reference. Agent JSON stores only the safe view; the secret bundle has its own encrypted row, bound to the Project and Agent with a distinct encryption purpose, and is written in the same transaction. A model-only edit needs no key.
 
-Session creation resolves each explicit model or Harness override before saved defaults; without a selected Harness, the deployment default applies. Saved Agents require a model. An inline `openai_hosted` or `none` Session may omit its model to use the deployment model of the resolved Harness; `self_hosted` never uses deployment model settings. Core never infers a model from its name.
+Session creation resolves each explicit model or Harness override before saved defaults; without a selected Harness, the deployment default applies. Saved Agents require a model. An inline Session may omit its model to use the deployment model of the resolved Harness. Core never infers a model from its name.
 
 Provider precedence is: a complete Session bundle, then a complete saved bundle, then the deployment default for the resolved Harness. Core never merges a replacement endpoint with an inherited key; a model-only override reuses the whole inherited bundle. Each Harness connects only through its native protocols:
 
@@ -36,15 +36,7 @@ Provider precedence is: a complete Session bundle, then a complete saved bundle,
 
 MiniMax Code requires positive context and output limits. Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. Nothing converts between protocols, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
 
-Which sources apply depends on who owns the compute that receives the key:
-
-| Environment | Session or saved-Agent bundle | Deployment default | No bundle resolved |
-| --- | --- | --- | --- |
-| `openai_hosted` | Accepted | Applied | 400 `model_provider_required` |
-| `self_hosted` | Accepted | Never applied | 400 `model_provider_required` |
-| `none` | Rejected with 400 | Applied when configured | Accepted; the device's own environment supplies the model |
-
-The deployment default holds the operator's key, so it applies only to operator-run Environments: Core-managed sandboxes and operator-registered `none` devices. A `self_hosted` executor belongs to the application, which supplies its own bundle. Hosted and self-hosted Runtimes carry no model configuration of their own, so a Session there without a bundle is rejected before any write, with param `x_agents_core.model_provider` and a message saying what to configure.
+Every source applies to every Environment type, because the key reaches only the [credential gateway](#credential-gateway) on the agent host, never the Harness or the sandbox. For `self_hosted`, that agent host is the application's executor, so a deployment default there hands the operator's key to that executor's gateway. Every Session must resolve a bundle: without one, creation is rejected before any write with 400 `model_provider_required`, param `x_agents_core.model_provider` and a message saying what to configure. A saved Agent may omit its bundle and leave it to the Session or the deployment default.
 
 | Operation | Omitted | Explicit null |
 | --- | --- | --- |
@@ -59,7 +51,7 @@ An empty Session execution extension is invalid. An explicit null provider reque
 
 Core reads the Agent configuration and encrypted bundle from one database snapshot; an explicit complete Session override needs no decryption of the saved bundle. The Session's own encrypted snapshot is written atomically with the Session and its Environment. Existing Sessions never consult the Agent again: edits, key replacement, deletion, suspension and restarts cannot change their model, Harness or provider. A missing or wrong encryption key fails closed; keep the same [credential key](../../docs/configuration.md#installation-directory) across restarts. There is no Turn-level override.
 
-New hosted requests, and requests that omit the inline model, record caller intent before resolving mutable defaults. Other inline requests, such as `none`, keep the resolved-request retry rule; that hash leaves out the deployment default, so changing the default does not change their retry identity. A matching creation retry recovers the committed Session before resolving the Agent or provider again and enqueues no further input. Streaming is outside the retry identity. The [TypeScript client](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md#saved-agent-and-deployment-defaults) shows saved Agents and deployment defaults.
+Every creation request records caller intent before resolving saved Agents, templates, credentials or deployment defaults, so changing or removing them does not change its retry identity. A matching creation retry recovers the committed Session before resolving the Agent or provider again and enqueues no further input. Streaming is outside the retry identity. The [TypeScript client](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md#saved-agent-and-deployment-defaults) shows saved Agents and deployment defaults.
 
 ## Session override
 
@@ -80,7 +72,7 @@ New hosted requests, and requests that omit the inline model, record caller inte
 ```
 
 - `protocol` names the upstream API (`anthropic`, `responses` or `chat_completions`), not an engine. The selected Harness must support it natively.
-- `base_url` uses HTTPS with a valid host, without credentials, query or fragment. For `anthropic` it excludes the version path, because the Harness appends `/v1/messages`, so a value ending in `/v1` or `/v1/` is rejected.
+- `base_url` uses HTTPS with a valid host, without credentials, query or fragment. A loopback host means the agent host's network namespace, for every Environment type. For `anthropic` it excludes the version path, because the Harness appends `/v1/messages`, so a value ending in `/v1` or `/v1/` is rejected.
 - `api_key` is nonempty, at most 16 KiB and contains no NUL, CR or LF.
 - `context_window` and `max_output_tokens` are optional nonnegative integers, with output no larger than context; both must be positive for MiniMax Code. Use the real model's limits.
 - `agent.model` is the exact provider model ID; a supplied value always replaces the deployment model.
@@ -88,7 +80,7 @@ New hosted requests, and requests that omit the inline model, record caller inte
 
 Unsupported protocol, Harness or Environment combinations are rejected before the Session is created. Provider availability is checked during execution, not by a probe.
 
-The resolved provider configuration is frozen and encrypted in the Session creation transaction, with its own encryption purpose and Project and Session binding. Creation retries include it in their request hash, so a changed key or endpoint under the same Idempotency-Key conflicts; a key enters any stored hash only as a fingerprint keyed by the deployment credential key. No public Session, Agent, Environment, event or ordinary configuration contains the key. The top-level extension is write-only and cannot be updated.
+The resolved provider configuration is frozen and encrypted in the Session creation transaction, with its own encryption purpose and Project and Session binding. Creation retries include a Session's own bundle in their request hash, so a changed key or endpoint under the same Idempotency-Key conflicts; a key enters any stored hash only as a fingerprint keyed by the deployment credential key. No public Session, Agent, Environment, event or ordinary configuration contains the key. The top-level extension is write-only and cannot be updated.
 
 At dispatch, Core sends the snapshot as one confidential provider bundle over the daemon connection bound to the Session, and the adapter points the Harness at the [credential gateway](#credential-gateway) through native configuration. Core never falls back to other credentials when a snapshot is missing or cannot be decrypted. For `self_hosted`, the receiving daemon is the executor enrolled for the Session's own Environment with a current executor credential of the Session creator's principal; rotation or revocation closes the socket before further dispatch. The gateway holds the key in memory for the Session, and the key never enters the Harness's environment, configuration or home, or the sandbox.
 

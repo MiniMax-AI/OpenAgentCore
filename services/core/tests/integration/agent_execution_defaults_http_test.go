@@ -113,7 +113,6 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 		strings.Replace(replacement, `,"api_key":"override-canary"`, "", 1),
 		strings.Replace(replacement, `"protocol":"responses"`, `"protocol":"unknown"`, 1),
 		strings.Replace(modelOnly, `"model":"model-override"`, `"model":"model-override","x_agents_core":{"harness":"unknown"}`, 1),
-		strings.TrimSuffix(strings.Replace(body, `"type":"openai_hosted"`, `"type":"none"`, 1), "}") + `,"input":"test"}`,
 	} {
 		call("POST", "/v1/agents/sessions", raw, uuid.NewString(), 400)
 	}
@@ -160,13 +159,6 @@ func TestAgentExecutionDefaultsPublicSnapshotAndPrecedence(t *testing.T) {
 	preparedInline := strings.TrimSuffix(inline, "}") + `,"x_agents_core":{"environment":{"env":{"PREPARATION_PROOF":"deployment"}}}}`
 	preparedID := id(call("POST", "/v1/agents/sessions", preparedInline, uuid.NewString(), 201))
 	assertSnapshot(preparedID, "inline-model", "https://changed.example/v1", "changed-key")
-	callsBefore := defaultsCalls
-	selfHosted := strings.Replace(preparedInline, `"type":"openai_hosted"`, `"type":"self_hosted","workspace_directory":"/work"`, 1)
-	call("POST", "/v1/agents/sessions", selfHosted, uuid.NewString(), 400)
-	if defaultsCalls != callsBefore {
-		t.Fatal("preparation extension sent deployment credentials to a user machine")
-	}
-
 }
 
 // An Agent whose saved provider an earlier release accepted but validation

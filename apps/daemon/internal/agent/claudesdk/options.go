@@ -164,14 +164,8 @@ func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []s
 		return startRequest{}, nil, err
 	}
 	start.Model, start.SystemPrompt = modelConfiguration.Model, req.SystemPrompt
-	var provider []string
-	if selected := modelConfiguration.Provider; selected != nil {
-		// The key renders as ANTHROPIC_API_KEY, which Claude Code sends as the
-		// X-Api-Key header that the anthropic protocol declares.
-		provider = []string{"ANTHROPIC_BASE_URL=" + selected.BaseURL, "ANTHROPIC_API_KEY=" + selected.APIKey}
-	}
-	if strings.TrimSpace(start.Model) == "" {
-		return fail("model is required")
-	}
-	return start, provider, nil
+	// The key renders as ANTHROPIC_API_KEY, which Claude Code sends as the
+	// X-Api-Key header that the anthropic protocol declares.
+	selected := modelConfiguration.Provider
+	return start, []string{"ANTHROPIC_BASE_URL=" + selected.BaseURL, "ANTHROPIC_API_KEY=" + selected.APIKey}, nil
 }

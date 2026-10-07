@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: facf77cd5eb7e4edb8fcb74b38915dea87932ecf77b36e2da92d6532b22dad91
+source_hash: f7999939977b8cf4a516c2bea09cd50c8078d6fb05dffeb137dfba45c47839d1
 ---
 
 Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-reference)。可以使用官方 OpenAI SDK 或普通 HTTP。本指南针对每项常见操作同时展示这两种方式，并说明 Core 与 OpenAI 存在差异的地方。
@@ -156,7 +156,7 @@ Core 可以运行多种 harness，并允许接入你自己的模型访问方式�
 
 harness 是运行 Session 的 Agent 程序：Codex（`codex`）、Claude Code（`claude_sdk`）或 MiniMax Code（`mcode`）。请在 Agent 或内联 `agent` 上设置 `x_agents_core.harness`；如果未设置，则使用安装的默认 harness（[`core.default_harness`](../configuration.md#settings)，除非操作员另行更改，否则为 Codex）。
 
-- **模型。** `model` 是提供商给出的准确模型 ID。`openai_hosted` 或 `none` Session 上的内联 Agent 可以省略此字段，以使用其 harness 的默认模型配置。保存的 Agent 始终必须指定模型。
+- **模型。** `model` 是提供商给出的准确模型 ID。内联 Agent 可以省略此字段，以使用其 harness 的默认模型配置。保存的 Agent 始终必须指定模型。
 - **提供商。** harness 会使用其原生协议之一，经由一个让你的密钥不进入 harness 的[凭据网关](../../../contracts/agents-api/zh/model-execution.md#credential-gateway)调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[Model execution](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
 - **原生参数。** `harness_config` 承载 harness 自身的模型设置；请参阅[原生模型参数](../../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。
 
@@ -240,18 +240,18 @@ oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
 | 字段 | 含义 |
 | --- | --- |
 | `environment` | 必填。Agent 的工作位置；请参阅下表 |
-| `agent_id` 或 `agent` | 已保存的 Agent，或内联 Agent 对象（字段与 Agent 创建操作相同）。`openai_hosted` 或 `none` 上的内联 Agent 可以省略 `model`，以使用安装的默认模型 |
+| `agent_id` 或 `agent` | 已保存的 Agent，或内联 Agent 对象（字段与 Agent 创建操作相同）。内联 Agent 可以省略 `model`，以使用安装的默认模型 |
 | `input` | 第一条消息：字符串或消息数组。在 `none` 上为必填；在 `self_hosted` 之外使用 `stream: true` 时也为必填（[初始输入](../../../contracts/agents-api/zh/sessions-events.md#initial-input-at-session-creation)） |
 | `metadata` | 你自己的字符串键值对 |
 | `vault_ids` | MCP 服务器可使用其凭据的 [Vaults](#vaults) |
 | `stream` | `true` 时返回[服务器发送事件](#stream-events)，而不是 JSON |
-| `x_agents_core.model_provider` | 如果未从 Agent 或默认值继承，则指定此 Session 的模型访问方式。在 `none` 上会被拒绝 |
+| `x_agents_core.model_provider` | 如果未从 Agent 或默认值继承，则指定此 Session 的模型访问方式 |
 
 | `environment.type` | 运行位置 | 备注 |
 | --- | --- | --- |
 | `openai_hosted` | Core 在某个节点或 E2B 上创建的沙箱；容量由管理员提供 | 可选 `network`、`packages`、`files`、`skills`、`plugins`、`env`、`capability_directories`、`setup_commands`，也可指定模板 |
-| `self_hosted` | 你自己的 Linux、macOS 或 Windows 计算机 | 要求提供绝对路径 `workspace_directory`。Skills、软件包、文件或模板应放在 `x_agents_core.environment` 中。响应会在 `x_agents_core.installation` 中携带安装命令；请参阅 [self-hosted execution](../getting-started/self-hosted.md)。Session 会自带自己的 `model_provider` |
-| `none` | 由操作员注册的设备连接，无工作区 | `input` 为必填。模型来自安装的默认配置；如果未配置默认模型，则来自设备 |
+| `self_hosted` | 你自己的 Linux、macOS 或 Windows 计算机 | 要求提供绝对路径 `workspace_directory`。Skills、软件包、文件或模板应放在 `x_agents_core.environment` 中。响应会在 `x_agents_core.installation` 中携带安装命令；请参阅 [self-hosted execution](../getting-started/self-hosted.md) |
+| `none` | 由操作员注册的设备连接，无工作区 | `input` 为必填 |
 
 新建的 `openai_hosted` Session 在 Core 准备沙箱期间会读取到 `idle`；Environment 准备就绪后，其首个 Turn 才会启动。[Environment contract](../../../contracts/agents-api/zh/environments.md) 负责部署位置、过期和准备过程。
 

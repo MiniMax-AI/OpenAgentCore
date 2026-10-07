@@ -48,9 +48,7 @@ type Provider struct {
 }
 
 // Configuration is an adapter-owned declaration, not live provider readiness.
-// Providers is ordered; its first entry is the default. An explicit empty
-// declaration accepts no provider or nonempty native parameters. It is useful
-// only for direct adapters whose model connection remains native-owned.
+// Providers is ordered; its first entry is the default.
 type Configuration struct {
 	Providers []Provider
 	// ValidateNativeConfig belongs to the selected adapter, never Core. It
@@ -58,17 +56,18 @@ type Configuration struct {
 	ValidateNativeConfig func(map[string]any) bool
 }
 
-// PreparedConfiguration owns a validated snapshot without native side effects.
-// Model and Provider may be absent only for the existing native-owned connection
-// path. A supplied model must be nonempty; an explicit provider requires an
-// explicit model. HarnessConfig is always an independently owned object.
+// PreparedConfiguration owns a validated snapshot without native side effects:
+// a nonempty model, the provider and an independently owned HarnessConfig.
 type PreparedConfiguration struct {
 	Model         string
-	Provider      *modelprovider.Provider
+	Provider      modelprovider.Provider
 	HarnessConfig map[string]any
 }
 
-var ErrModel = errors.New("model must be a nonempty model identifier")
+var (
+	ErrModel         = errors.New("model must be a nonempty model identifier")
+	ErrModelProvider = errors.New("a model provider is required")
+)
 
 // ValidateModel is shared by public admission and Runtime preparation.
 func ValidateModel(value any) (string, error) {
@@ -80,33 +79,29 @@ func ValidateModel(value any) (string, error) {
 }
 
 // Prepare validates the request's model, model provider and native parameters
-// against this declaration before creating native resources. The provider must
-// be one this declaration supports, with the token limits it requires.
+// against this declaration before creating native resources. Every request
+// names a model and a provider; the provider must be one this declaration
+// supports, with the token limits it requires.
 func (c Configuration) Prepare(req proto.PromptRequestPayload) (PreparedConfiguration, error) {
-	var result PreparedConfiguration
-	if req.Model != "" || req.ModelProvider != nil {
-		model, err := ValidateModel(req.Model)
-		if err != nil {
-			return PreparedConfiguration{}, err
-		}
-		result.Model = model
+	model, err := ValidateModel(req.Model)
+	if err != nil {
+		return PreparedConfiguration{}, err
 	}
-	if req.ModelProvider != nil {
-		provider := *req.ModelProvider
-		if err := provider.Validate(); err != nil {
-			return PreparedConfiguration{}, err
-		}
-		if err := c.Validate(string(provider.Protocol), provider.ContextWindow, provider.MaxOutputTokens); err != nil {
-			return PreparedConfiguration{}, err
-		}
-		result.Provider = &provider
+	if req.ModelProvider == nil {
+		return PreparedConfiguration{}, ErrModelProvider
+	}
+	provider := *req.ModelProvider
+	if err := provider.Validate(); err != nil {
+		return PreparedConfiguration{}, err
+	}
+	if err := c.Validate(string(provider.Protocol), provider.ContextWindow, provider.MaxOutputTokens); err != nil {
+		return PreparedConfiguration{}, err
 	}
 	native, err := c.ParseHarnessConfig(req.HarnessConfig)
 	if err != nil {
 		return PreparedConfiguration{}, err
 	}
-	result.HarnessConfig = native
-	return result, nil
+	return PreparedConfiguration{Model: model, Provider: provider, HarnessConfig: native}, nil
 }
 
 // ValidateDeclaration rejects ambiguous support before registration. A caller

@@ -38,7 +38,7 @@ export const system = {
   },
   models: {
     title: "Default model configuration",
-    help: "Default model settings for new Core-hosted Sessions and Sessions without an environment. Explicit application settings take priority. Self-hosted Sessions supply their own configuration; existing Sessions keep their saved settings.",
+    help: "Default model settings for new Sessions that bring no model provider of their own. Explicit application settings take priority; existing Sessions keep their saved settings.",
     loadFailed: "Default model configurations could not be loaded.",
     refreshFailed: "Refresh failed; showing the last loaded default model configurations.",
     none: "Core reports no harnesses.",

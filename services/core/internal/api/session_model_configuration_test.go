@@ -28,7 +28,7 @@ func TestSessionNativeConfigurationSources(t *testing.T) {
 		{"session beats inline", `{"agent":{"model":"other","x_agents_core":{"harness_config":{"model_reasoning_effort":"medium"}}},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, nil, "other", `{}`, "session", false},
 		{"null rejects", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":null}}`, nil, "", "", "", true},
 		{"reserved rejects", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{"api_key":"secret"}}}`, nil, "", "", "", true},
-		{"self hosted never defaults", `{"agent":{},"environment":{"type":"self_hosted","workspace_directory":"/tmp/work"}}`, nil, "", "", "", true},
+		{"self_hosted deployment", `{"agent":{},"environment":{"type":"self_hosted","workspace_directory":"/tmp/work"}}`, nil, "deployment-model", `{"model_reasoning_effort":"high"}`, "deployment", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var decoded decodedSessionRequest
@@ -39,19 +39,14 @@ func TestSessionNativeConfigurationSources(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			calls := 0
 			deps, fakes := testDependencies(t)
 			fakes.modelProviders.resolve = func(context.Context, string) (*modelconfiguration.Snapshot, error) {
-				calls++
 				return &modelconfiguration.Snapshot{Provider: provider, Model: "deployment-model", HarnessConfig: json.RawMessage(`{"model_reasoning_effort":"high"}`)}, nil
 			}
 			h := &Handler{Dependencies: deps}
 			err = h.prepareSessionModelConfiguration(t.Context(), &input, tc.saved, nil)
 			if (err != nil) != tc.wantError {
 				t.Fatalf("error=%v", err)
-			}
-			if input.Environment.Type == "self_hosted" && calls != 0 {
-				t.Fatal("self-hosted accessed deployment credentials")
 			}
 			if tc.wantError {
 				return

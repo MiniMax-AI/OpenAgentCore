@@ -1,7 +1,7 @@
 ---
 title: "Core 协议行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 5524db9b90aaf51026746316d6305da396033f50e88ed50792a8f52cf5aac9db
+source_hash: 08b1d6adaabbc67bb28ff412dbea21095f4f56954fb62d4d244bd175319ca862
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[coverage ledger](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -225,7 +225,7 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 | 键相同但请求不同 | 409 `idempotency_conflict` |
 | 删除 Session 后使用相同键 | 409 `idempotency_conflict` |
 
-键的作用域限定为 Project；该 Project 的任何键，包括轮换后签发的键，都可以用于重试。如果请求包含缺少 `model` 的内联 Agent，或者指定了已保存的 Agent、Template、初始文件或准备配置、`vault_ids` 或凭据引用、`x_agents_core`，或者 `openai_hosted` 环境，则会在读取上述任何来源之前按发送内容进行比较：即使 Agent、Template、Credential 或 deployment 默认值已更改或删除，匹配的重试仍会返回原有 Session。其他请求则按解析后的配置进行比较。模型提供商密钥仅以指纹形式参与比较。
+键的作用域限定为 Project；该 Project 的任何键，包括轮换后签发的键，都可以用于重试。每个创建请求都会在读取任何已保存 Agent、Template、Credential 或 deployment 默认值之前按发送内容进行比较：即使这些来源已更改或删除，匹配的重试仍会返回原有 Session。流式传输以及空的或为 null 的 `metadata` 不参与比较；显式写出的 Agent 默认值（例如 `text.verbosity`）参与比较，因此这样的重试会产生冲突。模型提供商密钥仅以指纹形式参与比较。
 
 ### 更新和列表 {#update-and-list}
 

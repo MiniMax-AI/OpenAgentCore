@@ -35,16 +35,13 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 	} else if saved != nil && saved.XAgentsCore != nil && saved.XAgentsCore.Harness != "" {
 		harnessSource = "agent"
 	}
-	selection := v1.ExecutionProviderSelection{Source: "unknown", Status: "unavailable"}
-	if provider != nil {
-		// Deployment defaults are readable with the same Core key, so new
-		// Sessions record their safe view too; historical rows stay redacted.
-		selection.Source, selection.Status, selection.Configuration = "deployment", "available", provider.SafeView()
-		if input.XAgentsCore != nil && input.XAgentsCore.ModelProvider != nil {
-			selection.Source = "session"
-		} else if inherited != nil {
-			selection.Source = "agent"
-		}
+	// Deployment defaults are readable with the same Core key, so new Sessions
+	// record their safe view too; historical rows stay redacted.
+	selection := v1.ExecutionProviderSelection{Source: "deployment", Status: "available", Configuration: provider.SafeView()}
+	if input.XAgentsCore != nil && input.XAgentsCore.ModelProvider != nil {
+		selection.Source = "session"
+	} else if inherited != nil {
+		selection.Source = "agent"
 	}
 	native := json.RawMessage(`{}`)
 	if configuration.Agent.Core != nil {

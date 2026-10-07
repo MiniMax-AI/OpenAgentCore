@@ -39,8 +39,8 @@ func TestSessionVaultTypesAndCreationIntent(t *testing.T) {
 			continue
 		}
 		intent, err := sessionCreationRequest(input, nil)
-		if err != nil || (len(intent) != 0) != (len(input.VaultIDs) > 0) {
-			t.Fatal("attached inline intent missing or unrelated inline identity changed", err)
+		if err != nil || len(intent) == 0 {
+			t.Fatal("inline intent missing", err)
 		}
 	}
 	var request decodedSessionRequest

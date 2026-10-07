@@ -22,7 +22,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 const wait = 3 * time.Second
@@ -158,7 +157,7 @@ func connectRuntime(t *testing.T, peer *corePeer, setupErr error) *runtimeSide {
 	rt := &runtimeSide{conn: conn, executor: &controlledExecutor{turn: make(chan *controlledTurn, 1)}, stopped: make(chan struct{})}
 	kinds := agent.NewRegistry()
 	kinds.RegisterKind(proto.SupportedAgentKind{Kind: prototest.HarnessKind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-		harnessconfig.Configuration{}, func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
+		prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
 			return nil, errors.New("prepared execution must not use prompt_request")
 		})
 	kinds.RegisterExecutor(prototest.HarnessKind, func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {

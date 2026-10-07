@@ -49,6 +49,7 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		for _, req := range []proto.PromptRequestPayload{
 			{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "private-sentinel"}},
 			{ModelProvider: responses},
+			{Model: "fixture"},
 			{HarnessConfig: proto.HarnessConfig(`{"unknown":"private-sentinel"}`)},
 		} {
 			before := calls

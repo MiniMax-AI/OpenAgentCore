@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 6b6a84f1355ef3a45e8ed8ed2f0b1b7ad9de1938abb49109b51d592d6ddf5ace
+source_hash: 36c013fb36432a792ee693a7cee46d739710d6e3faba7f8448d418226dae38b4
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -26,7 +26,7 @@ Session 的 `environment` 和 Environment Templates 用于选择准备流程，�
 
 已保存 Agent 是可编辑配置，而不是绑定的运行时。创建或更新时，应提供 `model`、可选的 `x_agents_core.harness` 以及可选但完整的 `x_agents_core.model_provider`。响应仅返回安全的提供商字段和只读输出标志 `api_key_configured`，绝不返回 `api_key`、密文或可复用的凭据引用。Agent JSON 仅存储安全视图；密钥配置包拥有自己加密后的数据库行，使用独立的加密用途绑定到 Project 和 Agent，并与 Agent 在同一事务中写入。仅编辑模型时不需要密钥。
 
-创建 Session 时，Core 会先解析每个显式的模型或 Harness 覆盖值，再应用已保存默认值；未选择 Harness 时，应用部署默认值。已保存 Agent 必须指定模型。内联 `openai_hosted` 或 `none` Session 可以省略模型，以使用解析后 Harness 的部署模型；`self_hosted` 绝不会使用部署模型设置。Core 绝不会根据模型名称推断模型。
+创建 Session 时，Core 会先解析每个显式的模型或 Harness 覆盖值，再应用已保存默认值；未选择 Harness 时，应用部署默认值。已保存 Agent 必须指定模型。内联 Session 可以省略模型，以使用解析后 Harness 的部署模型。Core 绝不会根据模型名称推断模型。
 
 提供商配置的优先级依次为：完整的 Session 配置包、完整的已保存配置包，以及解析后 Harness 的部署默认值。Core 绝不会将替换后的端点与继承的密钥合并；仅覆盖模型时会复用整个继承的配置包。每个 Harness 仅通过其原生协议连接：
 
@@ -38,15 +38,7 @@ Session 的 `environment` 和 Environment Templates 用于选择准备流程，�
 
 MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。任何地方都不在协议之间转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
 
-适用来源取决于接收密钥的计算资源由谁拥有：
-
-| Environment | Session 或已保存 Agent 配置包 | 部署默认值 | 未解析到配置包 |
-| --- | --- | --- | --- |
-| `openai_hosted` | 接受 | 应用 | 400 `model_provider_required` |
-| `self_hosted` | 接受 | 从不应用 | 400 `model_provider_required` |
-| `none` | 以 400 拒绝 | 已配置时应用 | 接受；模型由设备自身的环境提供 |
-
-部署默认值保存运营方的密钥，因此仅适用于运营方运行的 Environment：Core 管理的沙箱和运营方注册的 `none` 设备。`self_hosted` 执行器属于应用程序，由应用程序提供自己的配置包。托管 Runtime 和自托管 Runtime 均不携带自己的模型配置，因此其中的 Session 如果没有配置包，就会在发生任何写入之前被拒绝；错误参数为 `x_agents_core.model_provider`，并会返回说明应配置内容的消息。
+每种 Environment 类型都接受所有来源，因为密钥只会到达 agent host 上的[凭据网关](#credential-gateway)，绝不会进入 Harness 或沙箱。对于 `self_hosted`，agent host 就是应用程序的执行器，因此在那里使用部署默认值会把运营方的密钥交给该执行器的网关。每个 Session 都必须解析到一个配置包：否则创建会在发生任何写入之前以 400 `model_provider_required` 被拒绝，错误参数为 `x_agents_core.model_provider`，并会返回说明应配置内容的消息。已保存 Agent 可以省略配置包，交由 Session 或部署默认值提供。
 
 | 操作 | 省略 | 显式 null |
 | --- | --- | --- |
@@ -61,7 +53,7 @@ MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写�
 
 Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式提供完整 Session 覆盖值时，无需解密已保存的配置包。Session 自身的加密快照会与 Session 及其 Environment 原子写入。现有 Session 绝不会再次查询 Agent：Agent 编辑、密钥替换、删除、暂停和重启均无法改变其模型、Harness 或提供商。加密密钥缺失或错误时会安全失败；重启前后应保持相同的 [credential key](../../../docs/zh/configuration.md#installation-directory)。不存在 Turn 级覆盖。
 
-新的托管请求以及省略内联模型的请求，会在解析可变默认值之前记录调用方意图。其他内联请求，例如 `none`，继续遵循已解析请求的重试规则；该哈希不包含部署默认值，因此更改默认值不会改变其重试标识。匹配的创建重试会在再次解析 Agent 或提供商之前恢复已提交的 Session，并且不会进一步加入输入。流式传输不参与重试标识的计算。[TypeScript client](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md#saved-agent-and-deployment-defaults) 展示了已保存 Agent 和部署默认值。
+每个创建请求都会在解析已保存 Agent、模板、凭据或部署默认值之前记录调用方意图，因此更改或删除它们不会改变其重试标识。匹配的创建重试会在再次解析 Agent 或提供商之前恢复已提交的 Session，并且不会进一步加入输入。流式传输不参与重试标识的计算。[TypeScript client](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md#saved-agent-and-deployment-defaults) 展示了已保存 Agent 和部署默认值。
 
 ## Session 覆盖 {#session-override}
 
@@ -82,7 +74,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 ```
 
 - `protocol` 指定上游 API（`anthropic`、`responses` 或 `chat_completions`），而不是引擎。所选 Harness 必须原生支持它。
-- `base_url` 使用 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。`anthropic` 的 `base_url` 不包含版本路径，因为 Harness 会自行追加 `/v1/messages`，所以以 `/v1` 或 `/v1/` 结尾的值会被拒绝。
+- `base_url` 使用 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。回环主机指 agent host 的网络命名空间，对每种 Environment 类型都是如此。`anthropic` 的 `base_url` 不包含版本路径，因为 Harness 会自行追加 `/v1/messages`，所以以 `/v1` 或 `/v1/` 结尾的值会被拒绝。
 - `api_key` 不得为空，最长为 16 KiB，并且不得包含 NUL、CR 或 LF。
 - `context_window` 和 `max_output_tokens` 是可选的非负整数，输出限制不得大于上下文限制；对于 MiniMax Code，两者都必须为正数。请使用真实模型的限制。
 - `agent.model` 是准确的提供商模型 ID；只要提供该值，就始终会替换部署模型。
@@ -90,7 +82,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 不受支持的协议、Harness 或 Environment 组合会在创建 Session 前被拒绝。提供商可用性在执行期间检查，而不是通过探测检查。
 
-解析后的提供商配置会在 Session 创建事务中被冻结并加密，使用自己的加密用途，并绑定到 Project 和 Session。创建重试会将其纳入请求哈希，因此使用相同 Idempotency-Key 时，更改密钥或端点会产生冲突；密钥进入任何存储哈希时，只会表现为由部署凭据密钥加键控的指纹。任何公开的 Session、Agent、Environment、事件或常规配置均不包含该密钥。顶层扩展仅可写入，无法更新。
+解析后的提供商配置会在 Session 创建事务中被冻结并加密，使用自己的加密用途，并绑定到 Project 和 Session。创建重试会将 Session 自身的配置包纳入请求哈希，因此使用相同 Idempotency-Key 时，更改密钥或端点会产生冲突；密钥进入任何存储哈希时，只会表现为由部署凭据密钥加键控的指纹。任何公开的 Session、Agent、Environment、事件或常规配置均不包含该密钥。顶层扩展仅可写入，无法更新。
 
 在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器通过原生配置让 Harness 指向[凭据网关](#credential-gateway)。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。网关在 Session 期间将密钥保存在内存中，密钥从不进入 Harness 的环境、配置或 home，也不进入沙箱。
 

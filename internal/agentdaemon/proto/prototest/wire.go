@@ -110,7 +110,7 @@ func WireScenarios() []WireScenario {
 	}
 	prepare := send(Core, proto.TypeExecutionPrepare, PreparationID, proto.ExecutionPreparePayload{
 		SessionID:     SessionID,
-		Configuration: proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, StrictResume: true, DisableExecutionEnvironment: true},
+		Configuration: WithModel(proto.PromptRequestPayload{AgentKind: HarnessKind, AgentStateKey: StateKey, StrictResume: true, DisableExecutionEnvironment: true}),
 	})
 	started := []Step{
 		prepare,

@@ -57,7 +57,7 @@ The prompt request (`prompt_request`, or the configuration of `execution_prepare
 
 | Field | Set by Core |
 | --- | --- |
-| `model`, `system_prompt`, `model_provider`, `harness_config` | From the Session's frozen configuration: the Agent's model and instructions, the provider bundle when the Session has one, and the [native model parameters](../contracts/agents-api/model-execution.md#native-model-parameters). The Harness validates them before any native effect |
+| `model`, `system_prompt`, `model_provider`, `harness_config` | From the Session's frozen configuration: the Agent's model and instructions, the Session's provider bundle, and the [native model parameters](../contracts/agents-api/model-execution.md#native-model-parameters). The Harness validates them before any native effect |
 | `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
 | `observe_tool_observations` | Always. Tool-call frames then carry the engine-neutral `observation` |
 | `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |

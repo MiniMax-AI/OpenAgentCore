@@ -28,7 +28,7 @@ func TestHarnessConfigAppliedWithoutChangingProvider(t *testing.T) {
 }
 
 func TestHarnessConfigConflictFailsBeforePreparation(t *testing.T) {
-	_, err := BuildSessionPlan(proto.PromptRequestPayload{RunID: "run", HarnessConfig: proto.HarnessConfig(`{"model_provider":"bypass"}`)})
+	_, err := BuildSessionPlan(proto.PromptRequestPayload{Model: "fixture", ModelProvider: fixtureProvider(), RunID: "run", HarnessConfig: proto.HarnessConfig(`{"model_provider":"bypass"}`)})
 	if err != harnessconfig.ErrHarnessConfig {
 		t.Fatalf("configuration must fail before filesystem preparation: %v", err)
 	}

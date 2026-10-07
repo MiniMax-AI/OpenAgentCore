@@ -223,11 +223,10 @@ func TestPrepareCreation(t *testing.T) {
 		"configuration over 512K": {func(input *CreateSession) {
 			input.Configuration = json.RawMessage(`"` + strings.Repeat("x", 512*1024) + `"`)
 		}, fingerprints, ErrInvalidInput},
-		"configuration array":    {func(input *CreateSession) { input.Configuration = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
-		"cancel initial input":   {func(input *CreateSession) { input.InitialInputs = []Input{cancelInput} }, fingerprints, ErrInvalidInput},
-		"deployment self_hosted": {withProvider("self_hosted", "key", v1.ModelProviderSourceDeployment), fingerprints, ErrInvalidInput},
-		"no credential key":      {withProvider("self_hosted", "key", "session"), unavailable, credentialcrypto.ErrUnavailable},
-		"unreadable intent":      {func(input *CreateSession) { input.CreationRequest = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
+		"configuration array":  {func(input *CreateSession) { input.Configuration = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
+		"cancel initial input": {func(input *CreateSession) { input.InitialInputs = []Input{cancelInput} }, fingerprints, ErrInvalidInput},
+		"no credential key":    {withProvider("self_hosted", "key", "session"), unavailable, credentialcrypto.ErrUnavailable},
+		"unreadable intent":    {func(input *CreateSession) { input.CreationRequest = json.RawMessage(`[]`) }, fingerprints, ErrInvalidInput},
 	} {
 		t.Run(name, func(t *testing.T) {
 			input := base

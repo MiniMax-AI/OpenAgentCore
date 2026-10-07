@@ -27,7 +27,7 @@ func persistentConfig(t *testing.T, mode string) (Config, proto.PromptRequestPay
 	if err := os.WriteFile(entry, []byte("version-one"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{DisableExecutionEnvironment: true, Model: "fixture"}
+	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{ModelProvider: fixtureProvider(), DisableExecutionEnvironment: true, Model: "fixture"}
 }
 
 func runPersistentExecutorHelper() {

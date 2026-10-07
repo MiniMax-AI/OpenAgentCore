@@ -181,7 +181,7 @@ Mutating `oac` commands hold `.oac.lock`. If another command holds it, retry aft
 | `This installation did not finish installing …` | The installer stopped before reporting that the services were running. Rerun the installer command, which [removes what is left](./install.md#install) and installs again, or [uninstall](#uninstall) it |
 | Web answers 403 `Forbidden` | The browser host is not `OAC_PUBLIC_URL`. Open that origin; a reverse proxy must pass the original Host |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `docker compose ps`, then Core's log |
-| Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the harness, or pass one; self-hosted Sessions always pass their own |
+| Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the harness, or pass one |
 | Add node shows no command | See [Before you add a node](./nodes.md#before-you-add-a-node) |
 | A node is not ready | See [node troubleshooting](./nodes.md#troubleshooting) |
 

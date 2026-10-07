@@ -1,8 +1,9 @@
 package codex
 
 import (
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestNativeInputRetainsImageOrderAndMessageSeparator(t *testing.T) {

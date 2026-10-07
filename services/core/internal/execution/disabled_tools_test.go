@@ -32,13 +32,13 @@ func TestDisabledToolsUseCommonOperationQualification(t *testing.T) {
 
 func TestDisabledToolRequestPreservesIntentOnResume(t *testing.T) {
 	for _, disabled := range []bool{false, true} {
-		snapshot := Snapshot{Agent: v1.Agent{Model: "model"}}
+		snapshot := Snapshot{ModelProviderConfigured: true, Agent: v1.Agent{Model: "model"}}
 		if disabled {
 			snapshot.Agent.Tools = []json.RawMessage{json.RawMessage(`{"type":"programmatic_tool_calling","enabled":false}`)}
 		}
 		before, _ := json.Marshal(snapshot)
 		for _, nativeID := range []string{"", "native-session"} {
-			request, err := (&Dispatcher{}).executionRequest(t.Context(), sessions.Session{ID: "session"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{NativeSessionID: nativeID})
+			request, err := (&Dispatcher{SessionsReader: frozenProvider{engine: "codex"}}).executionRequest(t.Context(), sessions.Session{ID: "session", Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{NativeSessionID: nativeID})
 			if err != nil || request.ExecutionControls.DisableProgrammaticToolCalling != disabled || request.ExecutionControls.WebSearch != "disabled" || request.AgentSessionID != nativeID {
 				t.Fatal(request, err)
 			}

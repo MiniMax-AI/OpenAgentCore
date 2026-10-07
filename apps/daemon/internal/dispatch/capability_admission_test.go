@@ -9,7 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 func TestSteeringUsesAdmittedDeclarationAndDoesNotReplayUnsupportedImplementation(t *testing.T) {
@@ -25,13 +24,13 @@ func TestSteeringUsesAdmittedDeclarationAndDoesNotReplayUnsupportedImplementatio
 				}}, nil
 			}
 			info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilityFromBool(supported)})}
-			h.reg.RegisterKind(info, harnessconfig.Configuration{}, factory)
-			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "fixture"})); err != nil {
+			h.reg.RegisterKind(info, prototest.ModelConfiguration(), factory)
+			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fixture"}))); err != nil {
 				t.Fatal(err)
 			}
 			// A new registration cannot rewrite the already admitted owner's contract.
 			info.Capabilities.Steering = proto.CapabilityFromBool(!supported)
-			h.reg.RegisterKind(info, harnessconfig.Configuration{}, factory)
+			h.reg.RegisterKind(info, prototest.ModelConfiguration(), factory)
 			for range 2 {
 				if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("hello")})); err != nil {
 					t.Fatal(err)
@@ -64,11 +63,11 @@ func TestInteractionDeclarationPrecedesResponderMethods(t *testing.T) {
 				defer h.router.Shutdown(context.Background())
 				var session *fakeSession
 				info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Permissions: proto.CapabilityFromBool(supported)})}
-				h.reg.RegisterKind(info, harnessconfig.Configuration{}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+				h.reg.RegisterKind(info, prototest.ModelConfiguration(), func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 					session = &fakeSession{out: out, closeOutOnCancel: true, submitErr: agent.ErrUnsupportedOperation, askErr: agent.ErrUnsupportedOperation}
 					return session, nil
 				})
-				if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "fixture"})); err != nil {
+				if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fixture"}))); err != nil {
 					t.Fatal(err)
 				}
 				event := mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "interaction", Tool: "fixture"})

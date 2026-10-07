@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/google/uuid"
 )
 
@@ -38,9 +39,9 @@ func TestLiveClaudeSDKCancelResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	provider := &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://api.minimax.cn/anthropic", APIKey: strings.TrimSpace(string(key))}
 	config := Config{Entrypoint: entrypoint, StateDir: filepath.Join(root, "state"), Env: []string{
-		"ANTHROPIC_BASE_URL=https://api.minimax.cn/anthropic", "ANTHROPIC_AUTH_TOKEN=" + strings.TrimSpace(string(key)),
-		"ANTHROPIC_API_KEY=", "CLAUDE_CODE_OAUTH_TOKEN=", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
+		"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL=MiniMax-M3", "ANTHROPIC_DEFAULT_OPUS_MODEL=MiniMax-M3", "ANTHROPIC_DEFAULT_HAIKU_MODEL=MiniMax-M3",
 	}}
 	readiness, err := CheckRuntime(context.Background(), config)
@@ -65,7 +66,7 @@ func TestLiveClaudeSDKCancelResume(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 		out := make(chan proto.Envelope, 64)
-		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", SystemPrompt: "Follow the user's requested format. Preserve the exact verification value in conversation history. Use no tools."}
+		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, StrictResume: true, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Follow the user's requested format. Preserve the exact verification value in conversation history. Use no tools."}
 		running, err := NewFactory(config)(ctx, request, out)
 		if err != nil {
 			t.Fatal(err)

@@ -170,22 +170,6 @@ func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 	}
 }
 
-func TestBuildSessionPlan_NoProviderLeavesBuiltinDefault(t *testing.T) {
-	plan, err := BuildSessionPlan(proto.PromptRequestPayload{RunID: "run-y", AgentStateKey: "conv-1/agent-1/codex"})
-	if err != nil {
-		t.Fatalf("BuildSessionPlan: %v", err)
-	}
-	defer plan.Cleanup()
-	if plan.ModelProvider != "" {
-		t.Fatalf("plan.ModelProvider = %q, want empty when no provider configured", plan.ModelProvider)
-	}
-	for _, kv := range plan.ExtraConfig {
-		if kv[0] == "model_provider" {
-			t.Fatalf("model_provider override leaked into ExtraConfig: %+v", plan.ExtraConfig)
-		}
-	}
-}
-
 func mustReadFile(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)

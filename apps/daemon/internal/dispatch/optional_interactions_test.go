@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"testing"
@@ -20,12 +18,12 @@ func TestOptionalInteractionResponders(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			var output chan<- proto.Envelope
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "minimal", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, harnessconfig.Configuration{}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "minimal", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, prototest.ModelConfiguration(), func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				output = out
 				s := &fakeSession{out: out, closeOutOnCancel: true}
 				return lifecycleOnly{Session: s}, nil
 			})
-			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", proto.PromptRequestPayload{AgentKind: "minimal"})); err != nil {
+			if err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "run", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "minimal"}))); err != nil {
 				t.Fatal(err)
 			}
 			event := mustEnv(t, proto.TypePermissionRequest, "run", proto.PermissionRequestPayload{RequestID: "interaction", Tool: "fixture"})

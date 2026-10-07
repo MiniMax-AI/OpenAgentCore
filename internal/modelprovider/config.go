@@ -56,8 +56,8 @@ func (p Provider) Validate() error {
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") || !p.Protocol.ValidBasePath(u.Path) {
 		return ErrConfiguration
 	}
-	// Remote providers require HTTPS. Runtime-local providers may use loopback
-	// HTTP; Core retains stricter public provider admission.
+	// Providers require HTTPS. Loopback HTTP exists only for the gateway
+	// listener a view hands its Harness; Core admits only HTTPS providers.
 	if u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
 		return ErrConfiguration
 	}

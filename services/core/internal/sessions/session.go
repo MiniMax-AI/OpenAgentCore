@@ -46,7 +46,7 @@ type CreateSession struct {
 	DeploymentProviderRevision uuid.UUID `json:"-"`
 	ExecutionConfiguration     *v1.SessionExecutionConfiguration
 	ModelProvider              *v1.ModelProviderInput
-	ModelProviderSource        string // session, agent or deployment; empty allows only openai_hosted
+	ModelProviderSource        string // session, agent or deployment
 	Initialization             environmentconfig.Setup
 	InitialFiles               []environmentconfig.InitialFile
 	Creator                    identity.Subject

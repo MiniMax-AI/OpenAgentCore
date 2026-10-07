@@ -36,7 +36,7 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-a", TokenSHA256: runtimedevice.HashCredential(tokenA), TenantID: tenantA},
 		{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "selection-b", TokenSHA256: runtimedevice.HashCredential(tokenB), TenantID: uuid.NewString()},
 	})
-	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s))
+	h, err := publicHandler(t, s, auth, "codex", storeExecution(t, s), fixtureDeploymentProvider())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,12 +171,7 @@ func TestMCPCredentialSelectionPublicPostgres(t *testing.T) {
 			t.Fatalf("Session origin case %d: %d %s", index, created.status, created.body)
 		}
 	}
-	// A Session created with an explicit origin, as before this change, recovers
-	// from a same-key retry that omits it: the resolved configuration is equal.
-	if retry := send(tokenA, http.MethodPost, "/v1/agents/sessions", inline(tool("records", url, ""), ""), "origin-explicit"); retry.status != http.StatusCreated || retry.body != explicitSession.body {
-		t.Fatal("same-key retry without origin", retry.status, retry.body)
-	}
-	// Recorded caller intent (attached Vaults) keeps comparing the request itself.
+	// Recorded caller intent compares the request itself.
 	attachedExplicit := send(tokenA, http.MethodPost, "/v1/agents/sessions", inline(tool("records", url, `,"connection_origin":"service"`), vaults(attachedA)), "origin-attached")
 	if attachedExplicit.status != http.StatusCreated {
 		t.Fatal("attached explicit origin", attachedExplicit.status, attachedExplicit.body)

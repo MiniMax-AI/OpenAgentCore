@@ -166,7 +166,6 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 		{name: "newline workspace placement", environment: `{"type":"self_hosted","workspace_directory":"/remote/\n"}`},
 		{name: "carriage return workspace placement", environment: `{"type":"self_hosted","workspace_directory":"/remote/\r"}`},
 		{name: "backslash workspace placement", environment: `{"type":"self_hosted","workspace_directory":"/remote/\\"}`},
-		{name: "capabilities", environment: `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":["/remote/skills"]}`},
 		{name: "null capability entry", environment: `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":[null]}`},
 		{name: "scalar capabilities", environment: `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":"/remote/skills"}`},
 		{name: "output field", environment: `{"type":"self_hosted","workspace_directory":"/workspace","remote_url":"https://forged.example"}`},

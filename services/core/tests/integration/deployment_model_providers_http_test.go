@@ -54,7 +54,7 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 		r.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r)
-		for _, secret := range []string{"deployment-canary", "session-canary", "agent-canary", "invalid-canary", `"api_key":`} {
+		for _, secret := range []string{"deployment-canary", "changed-canary", "session-canary", "agent-canary", "invalid-canary", `"api_key":`} {
 			if strings.Contains(w.Body.String(), secret) {
 				t.Fatalf("%s %s returned a key", method, path)
 			}
@@ -123,11 +123,15 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	}
 	call("PUT", "/core/v1/harnesses/mcode/model-configuration", coreKey, `{"model":"fixture","model_provider":{"protocol":"anthropic","base_url":"https://deployment.example/anthropic","api_key":"invalid-canary"}}`, 400)
 
-	// Without any provider, hosted and self-hosted creation fail before any write.
-	hosted := `{"agent":{"model":"hosted-model"},"environment":{"type":"openai_hosted"}}`
-	selfHosted := `{"agent":{"model":"self-hosted-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`
-	for _, body := range []string{hosted, selfHosted} {
-		failure := call("POST", "/v1/agents/sessions", projectKey, body, 400)
+	// Without any provider, creation fails before any write in every Environment type.
+	environments := map[string]string{
+		"openai_hosted": `"environment":{"type":"openai_hosted"}`,
+		"self_hosted":   `"environment":{"type":"self_hosted","workspace_directory":"/workspace"}`,
+		"none":          `"environment":{"type":"none"},"input":"hello"`,
+	}
+	hosted := `{"agent":{"model":"hosted-model"},` + environments["openai_hosted"] + `}`
+	for _, environment := range environments {
+		failure := call("POST", "/v1/agents/sessions", projectKey, `{"agent":{"model":"m"},`+environment+`}`, 400)
 		if !strings.Contains(string(failure["error"]), `"code":"model_provider_required","param":"x_agents_core.model_provider"`) {
 			t.Fatalf("unclear failure: %s", failure["error"])
 		}
@@ -196,24 +200,25 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	if err != nil || projection.ModelProvider.Source != "deployment" || projection.ModelProvider.Status != "available" || projection.ModelProvider.Configuration == nil || projection.ModelProvider.Configuration.BaseURL != "https://deployment.example/api" {
 		t.Fatal("deployment selection not recorded", projection, err)
 	}
-	call("PUT", path, coreKey, strings.Replace(codexDefault, "deployment.example", "changed.example", 1), 200)
+	call("PUT", path, coreKey, strings.Replace(strings.Replace(codexDefault, "deployment.example", "changed.example", 1), "deployment-canary", "changed-canary", 1), 200)
 	if providerOf(hostedID) != "deployment-canary" {
 		t.Fatal("a changed default reached an existing Session")
 	}
 
-	// Self-hosted Sessions take the request or saved Agent bundle, never the default.
-	failure := call("POST", "/v1/agents/sessions", projectKey, selfHosted, 400)
-	if !strings.Contains(string(failure["error"]), "never to self_hosted") {
-		t.Fatalf("self-hosted Session used or misreported the deployment default: %s", failure["error"])
-	}
-	requestProvider := strings.TrimSuffix(selfHosted, "}") + `,"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://session.example/v1","api_key":"session-canary"}}}`
-	if id := text(call("POST", "/v1/agents/sessions", projectKey, requestProvider, 201)["id"]); providerOf(id) != "session-canary" {
-		t.Fatal("self-hosted Session lost its request provider")
-	}
+	// Every Environment type accepts every source and freezes it.
 	agentID := text(call("POST", "/v1/agents", projectKey, `{"model":"agent-model","x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://agent.example/v1","api_key":"agent-canary"}}}`, 201)["id"])
-	fromAgent := `{"agent_id":"` + agentID + `","environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`
-	if id := text(call("POST", "/v1/agents/sessions", projectKey, fromAgent, 201)["id"]); providerOf(id) != "agent-canary" {
-		t.Fatal("self-hosted Session lost its saved Agent provider")
+	for name, environment := range environments {
+		for _, tc := range []struct{ source, body, key string }{
+			{"session", `{"agent":{"model":"m"},` + environment + `,"x_agents_core":{"model_provider":{"protocol":"responses","base_url":"https://session.example/v1","api_key":"session-canary"}}}`, "session-canary"},
+			{"agent", `{"agent_id":"` + agentID + `",` + environment + `}`, "agent-canary"},
+			{"deployment", `{"agent":{"model":"m"},` + environment + `}`, "changed-canary"},
+		} {
+			id := text(call("POST", "/v1/agents/sessions", projectKey, tc.body, 201)["id"])
+			projection, err := sessionAdapter(st).GetSessionExecutionConfiguration(t.Context(), tenant, id)
+			if providerOf(id) != tc.key || err != nil || projection.ModelProvider.Source != tc.source {
+				t.Fatal("Session did not freeze its provider", name, tc.source, err)
+			}
+		}
 	}
 
 	// Removal is idempotent and audited; hosted creation then fails fast again.
@@ -230,9 +235,9 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	}
 }
 
-// A hosted or self-hosted Session created before providers were required has
-// no frozen provider: new work is rejected before anything is queued, and input
-// reserved before the upgrade fails with that reason instead of waiting.
+// A stored Session without a frozen provider cannot run: new work is rejected
+// before anything is queued, and input already reserved fails with that reason
+// instead of waiting.
 func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	legacy, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -262,6 +267,14 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, legacy.ID, uuid.NewString(), message); !errors.Is(err, execution.ErrModelProviderRequired) {
 		t.Fatal("provider-free Session accepted work", err)
 	}
+	none, err := h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: []byte(`{"agent":{"model":"test-model"},"environment":{"type":"none"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.SubmitInputs(t.Context(), h.tenant, none.ID, uuid.NewString(), message); !errors.Is(err, execution.ErrModelProviderRequired) {
+		t.Fatal("provider-free none Session accepted work", err)
+	}
 	if after := reservations(); after != before {
 		t.Fatal("rejected work was queued", before, after)
 	}
@@ -285,10 +298,10 @@ func TestLegacySessionWithoutProviderCannotStartWork(t *testing.T) {
 	}
 }
 
-// A none Session may freeze the deployment default, so its caller intent is
-// recorded first: a same-key retry returns the committed Session after the
-// default was replaced or removed.
-func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
+// A Session may freeze the deployment default, so its caller intent is recorded
+// first: a same-key retry returns the committed Session after the default was
+// replaced or removed.
+func TestSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 	st, _ := NewModelTestStore(t)
 	if _, err := st.pool.Exec(t.Context(), "DELETE FROM deployment_model_providers"); err != nil {
 		t.Fatal(err)
@@ -307,13 +320,9 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	create := func(key string, agent ...string) string {
+	create := func(key string) string {
 		t.Helper()
-		body := `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hello"}`
-		if len(agent) > 0 {
-			body = `{"agent":` + agent[0] + `,"environment":{"type":"none"},"input":"hello"}`
-		}
-		r := httptest.NewRequest("POST", "/v1/agents/sessions", strings.NewReader(body))
+		r := httptest.NewRequest("POST", "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hello"}`))
 		r.Header.Set("Authorization", "Bearer "+token)
 		r.Header.Set("OpenAI-Beta", "agents=v1")
 		r.Header.Set("Content-Type", "application/json")
@@ -337,7 +346,7 @@ func TestNoneSessionRetryAfterDeploymentDefaultChanges(t *testing.T) {
 		t.Fatal("none Session did not freeze the deployment default", err)
 	}
 	setDefault("rotated-default-key")
-	if create(key) != original || create(key, `{"model":"m","text":{"verbosity":"medium"}}`) != original {
+	if create(key) != original {
 		t.Fatal("retry after rotation created another Session")
 	}
 	if err := defaults.Delete(admin, "codex"); err != nil {

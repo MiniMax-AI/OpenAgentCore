@@ -272,7 +272,7 @@ type ViewSession struct {
 // is the gateway with the placeholder key, and MCP arrives only in session.MCP
 // and without credentials.
 func checkViewHandoff(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, session ViewSession) error {
-	if provider := prepared.Provider; provider == nil || provider.APIKey != modelprovider.Placeholder || !isGatewayURL(provider.BaseURL, false) {
+	if provider := prepared.Provider; provider.APIKey != modelprovider.Placeholder || !isGatewayURL(provider.BaseURL, false) {
 		return fmt.Errorf("%w: the model provider is not the Session's gateway", ErrViewHandoff)
 	}
 	if req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) > 0) {

@@ -23,7 +23,7 @@ func workspaceFixture(t *testing.T) Config {
 		}
 	}
 	config := Config{Node: filepath.Join(root, "bin", "node"), Entrypoint: filepath.Join(root, "runtime", "dist", "main.js"), StateDir: filepath.Join(root, "state"),
-		Env: []string{"ANTHROPIC_AUTH_TOKEN=selected-provider-fixture", "ANTHROPIC_BASE_URL=https://example.invalid"},
+		Env: []string{"HTTPS_PROXY=http://proxy.example"},
 		Workspace: &WorkspaceConfig{Directory: filepath.Join(root, "workspace"), HomeDir: filepath.Join(root, "home"),
 			ScratchDir: filepath.Join(root, "scratch")}}
 	for _, name := range []string{config.Node, config.Entrypoint, filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js")} {
@@ -35,7 +35,7 @@ func workspaceFixture(t *testing.T) Config {
 }
 
 func workspaceRequest() proto.PromptRequestPayload {
-	return proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableSubagents: true,
+	return proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), DisableSubagents: true,
 		Model: "fixture"}
 }
 
@@ -43,6 +43,7 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 	config := workspaceFixture(t)
 	t.Setenv("OAC_TEST_PARENT_SECRET", "parent-only")
 	t.Setenv("ANTHROPIC_API_KEY", "unselected-provider")
+	config.Env = append(config.Env, "ANTHROPIC_BASE_URL=https://unselected.example")
 	start, env, err := prepare(config, workspaceRequest())
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +52,7 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 		t.Fatal("trusted binding was not retained")
 	}
 	raw, _ := json.Marshal(start)
-	if strings.Contains(string(raw), "selected-provider-fixture") || strings.Contains(string(raw), "parent-only") {
+	if strings.Contains(string(raw), "fixture-key") || strings.Contains(string(raw), "parent-only") {
 		t.Fatal("secret value entered the private request")
 	}
 	values := map[string]string{}
@@ -62,11 +63,12 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 	if values["OAC_TEST_PARENT_SECRET"] != "parent-only" {
 		t.Fatal("lost user environment")
 	}
-	if _, ok := values["ANTHROPIC_API_KEY"]; ok {
-		t.Fatal("inherited unselected provider credential")
+	_, token := values["ANTHROPIC_AUTH_TOKEN"]
+	if token || values["ANTHROPIC_API_KEY"] != "fixture-key" || values["ANTHROPIC_BASE_URL"] != "https://model.example" {
+		t.Fatal("environment credentials replaced the Session provider")
 	}
 	if values["HOME"] != config.Workspace.HomeDir || values["CLAUDE_CONFIG_DIR"] != config.StateDir ||
-		values["TMPDIR"] != config.Workspace.ScratchDir || values["ANTHROPIC_AUTH_TOKEN"] != "selected-provider-fixture" {
+		values["TMPDIR"] != config.Workspace.ScratchDir || values["HTTPS_PROXY"] != "http://proxy.example" {
 		t.Fatal("explicit runtime environment was not preserved")
 	}
 	entries, err := os.ReadDir(config.StateDir)
@@ -108,9 +110,9 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 			case "ambient-setting":
 				config.Env = append(config.Env, "NODE_OPTIONS=--require=untrusted")
 			case "duplicate-env":
-				config.Env = append(config.Env, "ANTHROPIC_AUTH_TOKEN=second")
+				config.Env = append(config.Env, "HTTPS_PROXY=http://second.example")
 			case "bad-env":
-				config.Env = append(config.Env, "ANTHROPIC_API_KEY=bad\x00value")
+				config.Env = append(config.Env, "NO_PROXY=bad\x00value")
 
 			}
 			if _, _, err := prepare(config, req); err == nil {

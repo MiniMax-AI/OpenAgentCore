@@ -37,7 +37,7 @@ func TestNativeProviderDeclarationIsSharedWithRuntime(t *testing.T) {
 				if err != nil && strings.Contains(err.Error(), "key-canary") {
 					t.Fatal("secret in error")
 				}
-				if accepted && *prepared.Provider != raw {
+				if accepted && prepared.Provider != raw {
 					t.Fatal("native bundle was rewritten")
 				}
 			}

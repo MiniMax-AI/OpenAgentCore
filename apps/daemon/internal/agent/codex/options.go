@@ -122,24 +122,18 @@ func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.Vi
 	}
 	plan.home = home
 	plan.Env = []string{"DISABLE_TELEMETRY=1", "CODEX_HOME=" + home.View}
-	if prepared.Provider != nil {
-		if err := writeCodexProviderConfig(home.Host, nativeProvider(*prepared.Provider)); err != nil {
-			return plan, err
-		}
-		plan.ModelProvider = oacProviderSlug
+	if err := writeCodexProviderConfig(home.Host, nativeProvider(prepared.Provider)); err != nil {
+		return plan, err
 	}
+	plan.ModelProvider = oacProviderSlug
 	if effort, ok := prepared.HarnessConfig["model_reasoning_effort"].(string); ok {
 		plan.ModelReasoningEffort = effort
 		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_reasoning_effort", strconv(effort)})
 	}
-	if plan.ModelProvider != "" {
-		// Pin model_provider at the CLI layer so codex skips its builtin
-		// "openai" provider — without this the [model_providers.oac]
-		// block we wrote into config.toml would be loaded but never
-		// selected (the default model_provider is "openai").
-		plan.ExtraConfig = append(plan.ExtraConfig,
-			[2]string{"model_provider", strconv(plan.ModelProvider)})
-	}
+	// Pin model_provider at the CLI layer so codex skips its builtin "openai"
+	// provider; otherwise the [model_providers.oac] block in config.toml would
+	// be loaded but never selected.
+	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_provider", strconv(plan.ModelProvider)})
 	return plan, nil
 }
 

@@ -23,7 +23,7 @@ func TestRequiredMCPNeedsQualifiedRuntime(t *testing.T) {
 	config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state"), Env: []string{
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
-	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		Model: "fixture", MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", Required: true}}}
 	if _, err := NewFactory(config)(t.Context(), req, make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support required HTTP MCP" {
 		t.Fatalf("unqualified runtime executed required MCP: %v", err)
@@ -44,7 +44,7 @@ func TestHTTPMCPRejectsOldPackagedRuntime(t *testing.T) {
 	if !info.SupportsHTTPMCP() {
 		t.Fatal("runtime feature not recognized")
 	}
-	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		Model: "fixture", MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}}
 	if _, err := NewFactory(config)(t.Context(), req, make(chan proto.Envelope, 1)); err == nil || !strings.Contains(err.Error(), "packaged runtime does not support HTTP MCP") {
 		t.Fatalf("old runtime was not rejected before execution: %v", err)
@@ -81,7 +81,7 @@ func TestMCPBearerRejectsAnonymousOnlyRuntimeWithoutProbeSecrets(t *testing.T) {
 		"GO_CLAUDE_READINESS_HELPER=1", "READINESS_MODE=ready-http-mcp", "GORACE=atexit_sleep_ms=0",
 	}}
 	token := "private-fixture-token"
-	req := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
+	req := proto.PromptRequestPayload{ModelProvider: fixtureProvider(), RunID: "run", Input: proto.TextInput("hello"), DisableExecutionEnvironment: true,
 		Model: "fixture", MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp", BearerToken: &token}}}
 	if _, err := NewFactory(config)(t.Context(), req, make(chan proto.Envelope, 1)); err == nil || err.Error() != "claudesdk: packaged runtime does not support authenticated HTTP MCP" {
 		t.Fatalf("old runtime executed authenticated request or readiness received its secret: %v", err)

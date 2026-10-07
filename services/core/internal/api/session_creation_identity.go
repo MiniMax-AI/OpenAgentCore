@@ -11,15 +11,9 @@ import (
 )
 
 // sessionCreationRequest records caller intent before mutable sources resolve:
-// saved Agents, templates, credentials and hosted deployment defaults. A retry
-// then returns the committed Session even after those sources change. Other
-// inline requests keep the resolved-request retry rule; the sessions package
-// leaves the deployment default out of that hash, so it cannot change their
-// identity.
+// saved Agents, templates, credentials and deployment defaults. A retry then
+// returns the committed Session even after those sources change or go away.
 func sessionCreationRequest(input sessionRequest, initial []sessions.Input) (json.RawMessage, error) {
-	if input.Agent != nil && input.Agent.Model != nil && (input.Environment == nil || input.Environment.Type != "openai_hosted") && input.XAgentsCore == nil && input.AgentID == nil && input.templateID == "" && len(input.initialFiles) == 0 && input.initialization.Empty() && !inlineCredentialIntent(input) && input.agentFields["x_agents_core"] == nil {
-		return nil, nil
-	}
 	agentID := ""
 	if input.AgentID != nil {
 		agentID = *input.AgentID
@@ -43,9 +37,6 @@ func sessionCreationRequest(input sessionRequest, initial []sessions.Input) (jso
 }
 
 func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request, key string, request json.RawMessage, stream bool) bool {
-	if len(request) == 0 {
-		return false
-	}
 	result, err := h.SessionCreation.FindSessionCreation(r.Context(), tenantID(r), key, request, sessionCreator(r))
 	if errors.Is(err, sessions.ErrNotFound) {
 		return false

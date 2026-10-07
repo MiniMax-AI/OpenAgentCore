@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -33,7 +31,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			calls, starts := 0, 0
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 				starts++
 				return &steeringSession{
 					fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
@@ -53,7 +51,7 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 				}, nil
 			})
 			ctx := context.Background()
-			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{AgentKind: "codex"})); err != nil {
+			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex"}))); err != nil {
 				t.Fatal(err)
 			}
 			input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("additional text")}
@@ -94,7 +92,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	calls := 0
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
 			steer: func(context.Context, proto.PromptSteerPayload) error {
@@ -107,7 +105,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 		}, nil
 	})
 	ctx := context.Background()
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{AgentKind: "codex"})); err != nil {
+	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex"}))); err != nil {
 		t.Fatal(err)
 	}
 	input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("extra")}
@@ -139,7 +137,7 @@ func TestSteeringReadinessAndUnsupportedRuns(t *testing.T) {
 	if ack := lastSteeringAck(t, h.sender, "run-1", "input-1"); ack.ErrorCode != "run_inactive" {
 		t.Fatalf("inactive: %+v", ack)
 	}
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-2", proto.PromptRequestPayload{AgentKind: "fake_alpha"})); err != nil {
+	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-2", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "fake_alpha"}))); err != nil {
 		t.Fatal(err)
 	}
 	session := <-h.gotSess
@@ -172,7 +170,7 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 	defer h.router.Shutdown(context.Background())
 	entered, release := make(chan struct{}), make(chan struct{})
 	defer close(release)
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
 			steer: func(context.Context, proto.PromptSteerPayload) error {
@@ -184,7 +182,7 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 	})
 	ctx := context.Background()
 	for _, run := range []struct{ id, engine string }{{"run-1", "codex"}, {"run-2", "fake_alpha"}} {
-		if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, run.id, proto.PromptRequestPayload{AgentKind: run.engine})); err != nil {
+		if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, run.id, prototest.WithModel(proto.PromptRequestPayload{AgentKind: run.engine}))); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -235,7 +233,7 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	calls := 0
-	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	h.reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
 			steer: func(context.Context, proto.PromptSteerPayload) error {
@@ -245,7 +243,7 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 		}, nil
 	})
 	ctx := context.Background()
-	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", proto.PromptRequestPayload{AgentKind: "codex"})); err != nil {
+	if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptRequest, "run-1", prototest.WithModel(proto.PromptRequestPayload{AgentKind: "codex"}))); err != nil {
 		t.Fatal(err)
 	}
 	for i := range 257 {

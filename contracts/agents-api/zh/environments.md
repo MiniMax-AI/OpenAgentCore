@@ -1,7 +1,7 @@
 ---
 title: "环境与模板"
 source: contracts/agents-api/environments.md
-source_hash: a70ea3e004d5b7e2fc48c26296c792a5d888b754a012a7f0c624c3ff597369e7
+source_hash: 86541a1daff0778038c33edd2eb76583faced17e310c94ff587405dbf2a3af10
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -73,7 +73,6 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 - `remote_url` 是根据 Core 的公共 URL 推导出的 daemon WebSocket URL，绝不根据请求头或 daemon 地址生成。它指定 Core 的私有 daemon 传输通道。
 - 注册会将精确的 Session、Environment、设备和 executor key 绑定在一起。它不会创建任何分配，也无法将 Session 迁移到另一台设备。
 - Session 的工作区必须等于 `/workspace` 别名，或等于 Runtime 绑定到的精确规范目录。指定某个路径并不会授予对它的访问权限。
-- Session 携带自己的模型提供方；部署默认值绝不适用（[model execution](model-execution.md#saved-defaults-and-precedence)）。
 - Session 读取、列表和事件会返回带有 Environment ID、工作区及能力目录的 `self_hosted` 输出，但绝不返回私有配置。`capability_directories` 列出调用方选择的内容；Runtime 的安装位置保持私有。
 - 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问，但不会停止原生进程；机器所有者负责停止和清理。
 - 工作区和原生历史必须能在 daemon 重启后继续存在。丢失它们绝不授权进行静默替换或重播。

@@ -34,7 +34,7 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 	explicitModel := input.Agent != nil && input.Agent.Model != nil
 	explicitProvider := input.XAgentsCore != nil && input.XAgentsCore.ModelProvider != nil
 	needsModel := !explicitModel && saved == nil
-	if v1.ModelProviderAllowed(input.Environment.Type, v1.ModelProviderSourceDeployment) && ((inherited == nil && !explicitProvider) || needsModel) {
+	if (inherited == nil && !explicitProvider) || needsModel {
 		input.deploymentDefaults, err = h.ModelProviders.Resolve(ctx, engine)
 		if err != nil {
 			var configurationError *v1.ModelProviderError
@@ -110,9 +110,6 @@ func freezeSessionHarnessConfig(raw json.RawMessage, native json.RawMessage) (js
 }
 
 func validateSessionModelConfiguration(engine string, provider *v1.ModelProviderInput, raw json.RawMessage) error {
-	if provider == nil {
-		return nil
-	}
 	var cfg configuration
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return err

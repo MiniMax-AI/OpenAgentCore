@@ -2,11 +2,12 @@ package dispatch
 
 import (
 	"errors"
+	"io/fs"
+	"testing"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
-	"io/fs"
-	"testing"
 )
 
 func TestNativeDirectoryFailureMapping(t *testing.T) {
