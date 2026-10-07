@@ -1,7 +1,7 @@
 ---
 title: "Agents API 覆盖台账"
 source: contracts/agents-api/index.md
-source_hash: 28df2db4daf579437501577a07ada832c944fdc46658d5a38ad28b867fc8216b
+source_hash: 9dadd4eec5a47b1fc2ceaa6e1844a0d997b21c919585448769d2a04258e7bb81
 ---
 
 Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。本台账记录 Core 对各项资源实现了哪些内容、哪些契约保存其详细信息，并列出相对于 OpenAI 服务的所有已知差异和所有未解决缺口。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API；[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
@@ -20,7 +20,9 @@ Core 旨在以下方固定版本为准支持完整的 OpenAI Agents API（[publi
 
 公共契约是官方 API 加上 Core 扩展。标准字段生成到 `v1/official.gen.go`；已有存储或自定义 JSON 编码需要特定表示时，由 `go-bindings.json` 控制其 Go 表示。联合类型序列化、请求准入和状态转换仍由实现代码负责。契约测试验证公共 schema 保留官方定义、扩展位于 `x_agents_core` 中，且所有文档与注册路由一致。官方客户端和原始 HTTP 测试验证行为。生成 schema 不代表某个尚未实现的功能已经得到验证；下方缺口仍然适用。升级上游时，在比对和兼容性测试后一起更新 OpenAPI 和 SDK 固定版本。
 
-已发布的 Agents 错误 schema 将 `code` 声明为字符串；Core 保留[传输语义](wire-semantics.md#authentication)中记录的实际鉴权错误行为，其 code 可以为 null。这一 schema 与服务行为的差异保持明确记录，生成过程不改变鉴权响应。
+官方源文件与已有服务存在以下已记录的差异：Agents 鉴权错误的 `code` 可以为 null；Files 空页的 `first_id` 和 `last_id` 为 null；File 资源的 `expires_at` 和 `status_details` 可以为 null。源文件将这些字段声明为非空。官方客户端响应验证器只对这些指定字段允许 null，其余部分按 OpenAPI 3.1 响应 schema 验证。源文件中的 Files 和 Skills 操作未声明错误响应，因此这些错误体使用上游共享的 `ErrorResponse` schema。[传输语义](wire-semantics.md)和原始 HTTP 测试验证服务行为；发布的 schema 保留官方定义。
+
+Go 输入投影排除 `packages.system`，保留下方记录的明确拒绝行为。生成过程不会启用尚未支持的操作，也不会改变已存储安装配置的验证。
 
 
 各项状态的证据必须来自固定版本的官方 SDK，以及针对运行中服务发出的原始 HTTP 请求，正如 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#compatibility-evidence) 所要求。

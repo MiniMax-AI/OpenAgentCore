@@ -231,14 +231,12 @@ type EnvironmentNetworkInput struct {
 type EnvironmentPackages struct {
 	NPM    []string `json:"npm" extensions:"x-nullable"`
 	Python []string `json:"python" extensions:"x-nullable"`
-	System []string `json:"system,omitempty" extensions:"x-nullable"`
 }
 
 // EnvironmentPackagesInput projects EnvironmentPackagesParam.
 type EnvironmentPackagesInput struct {
 	NPM    []string `json:"npm,omitempty" extensions:"x-nullable"`
 	Python []string `json:"python,omitempty" extensions:"x-nullable"`
-	System []string `json:"system,omitempty" extensions:"x-nullable"`
 }
 
 // EnvironmentPackagesResponse projects EnvironmentPackagesResource.

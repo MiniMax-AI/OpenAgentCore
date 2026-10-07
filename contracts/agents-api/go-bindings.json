@@ -150,6 +150,7 @@
     "order": ["access", "allowed_domains"]
   },
   "EnvironmentPackages": {
+    "exclude": ["system"],
     "sources": ["#/components/schemas/EnvironmentPackagesParam"],
     "fields": {
       "npm": {"omit": false},
@@ -158,6 +159,7 @@
     "order": ["npm", "python"]
   },
   "EnvironmentPackagesInput": {
+    "exclude": ["system"],
     "sources": ["#/components/schemas/EnvironmentPackagesParam"],
     "order": ["npm", "python"]
   },
