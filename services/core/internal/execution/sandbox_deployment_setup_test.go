@@ -24,14 +24,14 @@ func TestDeferredSandboxDeploymentLoadsOnceBeforeNodeCreation(t *testing.T) {
 	id := uuid.NewString()
 	var selected atomic.Bool
 	var loads atomic.Int32
-	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
+	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
 	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
 		loads.Add(1)
 		if !selected.Load() {
 			return nil, nil
 		}
 		return configuration, nil
-	}))
+	}, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestDeferredSandboxDeploymentShutdownCancelsLoad(t *testing.T) {
 		close(entered)
 		<-ctx.Done()
 		return nil, ctx.Err()
-	}))
+	}, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,13 +94,13 @@ func TestDeferredSandboxProviderFailureKeepsRecoveryAvailable(t *testing.T) {
 	id := uuid.NewString()
 	available := false
 	loadErr := ErrExecutionUnavailable
-	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
+	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
 	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) {
 		if !available {
 			return nil, loadErr
 		}
 		return configuration, nil
-	}))
+	}, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestRejectedSandboxCandidatePreservesActiveGeneration(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
+	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
 	rejected := errors.New("candidate provider unavailable")
 	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, unitDeploymentService(t), nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil },
 		func(context.Context, deployment.Setup) (PreparedRuntimeDeployment, error) {
@@ -192,20 +192,20 @@ func TestCommittedSandboxCandidatePublishesAfterShutdown(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }))
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := m.pauseDeployment(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	config := &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
+	config := &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
 	var published *RuntimeProvider
 	candidate := PreparedRuntimeDeployment{Config: config, Publish: func(value *RuntimeProvider) { published = value }}
 	m.stop()
 	m.publishDeployment(candidate, deployment.View{InstallationID: id, Generation: 2, Mode: "direct", Provider: "e2b", Reset: &deployment.Reset{}})
 	m.drain()
-	if m.config.Generation != 2 || !m.config.AdmissionPaused || published == nil || published.Generation != 2 || !published.AdmissionPaused || m.switching {
+	if m.config.Generation != 2 || published == nil || published.Generation != 2 || m.switching {
 		t.Fatal("committed candidate was lost during shutdown")
 	}
 	if _, _, err := m.enter(t.Context()); !errors.Is(err, ErrExecutionUnavailable) {

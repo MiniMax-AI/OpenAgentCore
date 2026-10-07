@@ -11,7 +11,7 @@ import (
 
 // writeAgentsError reports an error of the Agent operations.
 func writeAgentsError(w http.ResponseWriter, r *http.Request, err error) {
-	if writeTextValueError(w, r, err) || writeAuditSourceError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
+	if writeStoredDataError(w, r, err) || writeTextValueError(w, r, err) || writeAuditSourceError(w, r, err) || writeCredentialUnavailableError(w, r, err) {
 		return
 	}
 	var provider *v1.ModelProviderError

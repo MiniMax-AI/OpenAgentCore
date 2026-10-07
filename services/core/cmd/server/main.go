@@ -180,10 +180,10 @@ func run(config processconfig.Config) error {
 	})
 	defer managedNodes.close()
 	var managed *execution.RuntimeProvider
-	observationSources := map[string]runtimeobs.SourceResolver{}
+	var observationSource func(context.Context) (runtimeobs.Source, string, error)
 	if managedNodes != nil {
 		managed = managedNodes.runtime
-		observationSources[managed.InstallationID] = managedNodes.setup
+		observationSource = managedNodes.setup.observationSource
 	}
 	observationResolver, err := deployment.NewObservationResolver(sessionStore, deploymentStore)
 	if err != nil {
@@ -193,7 +193,7 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	observationService, err := runtimeobs.NewService(observationResolver, observationSources, history.Options...)
+	observationService, err := runtimeobs.NewService(observationResolver, observationSource, history.Options...)
 	if err != nil {
 		if history.Exporter != nil {
 			closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

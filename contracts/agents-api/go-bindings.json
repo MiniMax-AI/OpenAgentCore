@@ -159,10 +159,7 @@
   "FunctionToolInput": {
     "sources": ["#/components/schemas/AgentToolConfigParamFunction"],
     "fields": {
-      "name": {"type": "*string"},
-      "description": {"type": "*string"},
-      "parameters": {"type": "json.RawMessage"},
-      "defer_loading": {"type": "json.RawMessage"}
+      "parameters": {"type": "json.RawMessage"}
     }
   },
   "InlineAgent": {
@@ -233,16 +230,7 @@
     "order": ["type", "server_label", "transport", "allowed_tools", "connection_origin", "credential_id", "request_metadata", "required"]
   },
   "MCPToolInput": {
-    "sources": ["#/components/schemas/AgentToolConfigParamMcp"],
-    "fields": {
-      "server_label": {"type": "*string"},
-      "allowed_tools": {"type": "json.RawMessage", "omit": false},
-      "connection_origin": {"omit": false},
-      "credential_id": {"omit": false},
-      "request_metadata": {"type": "json.RawMessage", "omit": false},
-      "required": {"type": "json.RawMessage", "omit": false}
-    },
-    "order": ["type", "server_label", "transport", "allowed_tools", "connection_origin", "credential_id", "request_metadata", "required"]
+    "sources": ["#/components/schemas/AgentToolConfigParamMcp"]
   },
   "MultiAgentConfig": {
     "sources": ["#/components/schemas/MultiAgentConfigResource"],

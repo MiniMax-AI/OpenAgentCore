@@ -28,9 +28,8 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 			}
 			a, err := registry.Lookup(tc.kind)
 			checkpoint, checkpointErr := registry.SupportsCheckpoint(tc.kind)
-			isNode, nodeErr := registry.IsNode(tc.kind)
-			if err != nil || checkpointErr != nil || nodeErr != nil || checkpoint != tc.checkpoint || isNode != (tc.mode == "nodes") || (a.BuildLocal != nil) != (tc.mode == "nodes") || (a.BuildDirect != nil) != (tc.mode == "direct") {
-				t.Fatal("inconsistent construction/capability registration", err, checkpointErr, nodeErr)
+			if err != nil || checkpointErr != nil || checkpoint != tc.checkpoint || (a.BuildLocal != nil) != (tc.mode == "nodes") || (a.BuildDirect != nil) != (tc.mode == "direct") {
+				t.Fatal("inconsistent construction/capability registration", err, checkpointErr)
 			}
 		})
 	}
@@ -71,10 +70,9 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 	// Registration is test-local: production registrations are fixed, never plugins.
 	registry.adapters[kind] = registry.adapters["docker"]
 	s, err := registry.Normalize(sandbox.Selection{Provider: kind, DeploymentSpec: validRegistrationSpec()})
-	isNode, nodeErr := registry.IsNode(kind)
 	checkpoint, checkpointErr := registry.SupportsCheckpoint(kind)
-	if err != nil || nodeErr != nil || checkpointErr != nil || s.Provider != kind || !isNode || checkpoint {
-		t.Fatal("new entry did not follow shared boundary", err, nodeErr, checkpointErr)
+	if err != nil || checkpointErr != nil || s.Provider != kind || checkpoint {
+		t.Fatal("new entry did not follow shared boundary", err, checkpointErr)
 	}
 	d, err := registry.Describe(kind, uuid.NewString())
 	if err != nil || d.Mode != "nodes" || d.IdleSeconds != 0 {
@@ -113,9 +111,6 @@ func TestCapabilityLookupsReportFailures(t *testing.T) {
 	invalid.Operations = nil
 	registry.adapters["invalid-registration"] = invalid
 	for kind, want := range map[string]error{"unregistered": ErrUnknownProvider, "invalid-registration": providercontract.ErrContract} {
-		if _, err := registry.IsNode(kind); !errors.Is(err, want) {
-			t.Fatal(kind, "IsNode", err)
-		}
 		if _, err := registry.SupportsCheckpoint(kind); !errors.Is(err, want) {
 			t.Fatal(kind, "SupportsCheckpoint", err)
 		}

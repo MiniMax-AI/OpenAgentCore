@@ -116,20 +116,20 @@ func (s *managedSetup) prepare(ctx context.Context, setup deployment.Setup) (exe
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, err
 	}
-	selection := sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}
-	if err := providercontract.Require(candidate.Config.Provider, "DiscoverSelection"); err == nil {
-		discoverer := candidate.Config.Provider.(sandbox.SelectionDiscoverer)
-		selection, err = discoverer.DiscoverSelection(ctx, selection)
-		if err != nil {
+	adapter, err := s.registry.Lookup(setup.Provider)
+	if err != nil {
+		return execution.PreparedRuntimeDeployment{}, err
+	}
+	direct := s.direct(setup)
+	selection := direct.Selection
+	if adapter.Configuration.Requirements().SelectionDiscovery.State == providercontract.Supported {
+		if selection, err = s.registry.DiscoverSelection(ctx, direct); err != nil {
 			return execution.PreparedRuntimeDeployment{}, err
 		}
 		setup.Specification, setup.Configuration = selection.DeploymentSpec, selection.Configuration
-		candidate, err = s.configuration(setup)
-		if err != nil {
+		if candidate, err = s.configuration(setup); err != nil {
 			return execution.PreparedRuntimeDeployment{}, err
 		}
-	} else if !errors.Is(err, providercontract.ErrUnsupported) {
-		return execution.PreparedRuntimeDeployment{}, err
 	}
 	candidate.Selection = &selection
 	return s.routeGenerations(candidate, setup)
@@ -145,32 +145,26 @@ func (s *managedSetup) configuration(setup deployment.Setup) (execution.Prepared
 	if err != nil {
 		return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
-	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused,
+	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode,
 		CoreURL: s.runtimeAPI, BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	if setup.Suspension != nil {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
-			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}
+			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second}
 	}
 	return execution.PreparedRuntimeDeployment{Config: selected, Publish: s.publish}, nil
 }
 
-func (*managedSetup) ProviderOperations() providercontract.Operations {
-	return providercontract.Operations{"ResolveObservationSource": {State: providercontract.Supported}}
-}
-
-func (s *managedSetup) ResolveObservationSource(ctx context.Context) (runtimeobs.Source, error) {
+// observationSource returns the selected Provider and its registered kind for
+// Runtime observation.
+func (s *managedSetup) observationSource(ctx context.Context) (runtimeobs.Source, string, error) {
 	selected, err := s.load(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if selected == nil {
-		return nil, runtimeobs.ErrUnavailable
+		return nil, "", runtimeobs.ErrUnavailable
 	}
-	source, ok := selected.Provider.(runtimeobs.Source)
-	if !ok {
-		return nil, providercontract.ErrContract
-	}
-	return source, nil
+	return selected.Provider, selected.ProviderKind, nil
 }
 
 // provider builds the setup's provider. The setup carries the mode and
@@ -180,7 +174,12 @@ func (s *managedSetup) provider(setup deployment.Setup) (sandbox.SandboxProvider
 		if s.hub == nil {
 			return nil, errors.New("sandbox node transport is unavailable")
 		}
-		return s.hub.GenerationProvider(setup.Provider, setup.Operations, s.deployment.AllocationGeneration), nil
+		return s.hub.GenerationProvider(setup.Operations, s.deployment.AllocationGeneration), nil
 	}
-	return s.registry.BuildDirect(providers.DirectConfig{ProcessPaths: s.processPaths, InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls})
+	return s.registry.BuildDirect(s.direct(setup))
+}
+
+// direct is the setup's input to direct-mode construction and setup operations.
+func (s *managedSetup) direct(setup deployment.Setup) sandbox.DirectConfig {
+	return sandbox.DirectConfig{ProcessPaths: s.processPaths, InstallationID: setup.InstallationID, Selection: sandbox.Selection{Provider: setup.Provider, DeploymentSpec: setup.Specification, Configuration: setup.Configuration}, Fence: &s.providerCalls}
 }

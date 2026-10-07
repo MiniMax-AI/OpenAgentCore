@@ -75,7 +75,7 @@ func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
 
 	// Once Web claims an installation, still before initialization, another
 	// installation's token gets the same 401 it gets after initialization.
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_deployment SET installation_id=$1, web_managed=true WHERE singleton=true", claimed); err != nil {
+	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_deployment SET installation_id=$1 WHERE singleton=true", claimed); err != nil {
 		t.Fatal(err)
 	}
 	run([]check{

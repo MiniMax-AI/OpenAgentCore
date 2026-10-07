@@ -27,8 +27,7 @@ type SessionLister interface {
 	ListRuntimeObservationSessions(context.Context, string, int) (SessionPage, error)
 }
 
-// HistoryObserver reads one listed page, so providers with a batch read can
-// sample the whole page in one bounded request.
+// HistoryObserver reads one listed page with bounded concurrency.
 type HistoryObserver interface {
 	ObserveSessionsForHistory(context.Context, []SessionIdentity, OwnershipChecker, PageOptions) ([]Observation, []error)
 }

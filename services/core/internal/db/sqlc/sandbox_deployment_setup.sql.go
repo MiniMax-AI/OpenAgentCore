@@ -21,7 +21,7 @@ func (q *Queries) AdvanceSandboxOwnerEpoch(ctx context.Context) error {
 }
 
 const claimWebSandboxDeployment = `-- name: ClaimWebSandboxDeployment :exec
-UPDATE runtime_deployment SET installation_id=$1, web_managed=true,
+UPDATE runtime_deployment SET installation_id=$1,
 owner_epoch=owner_epoch+1, updated_at=clock_timestamp() WHERE singleton=true
 `
 

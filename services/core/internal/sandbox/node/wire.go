@@ -307,7 +307,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 	switch q.Operation {
 	case "observe":
 		var sample runtimeobs.Sample
-		sample, err = observeProvider(ctx, p, *q.Observation)
+		sample, err = p.Observe(ctx, *q.Observation)
 		out.Sample = &sample
 	case "create":
 		info, err = p.Create(ctx, *q.Bootstrap)
@@ -324,38 +324,33 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
 		out.Command = &command
 	default:
-		cp, checkpointErr := sandbox.Checkpoint(p)
-		if checkpointErr != nil {
-			err = checkpointErr
-			break
-		}
 		var state sandbox.ComputeState
 		var compute sandbox.Compute
 		switch q.Operation {
 		case "initial":
-			compute, err = cp.Initial(ctx, q.Reference)
+			compute, err = p.Initial(ctx, q.Reference)
 			out.Compute = &compute
 		case "new_compute":
-			compute, err = cp.NewCompute(ctx, q.Reference, q.Generation, q.Snapshot)
+			compute, err = p.NewCompute(ctx, q.Reference, q.Generation, q.Snapshot)
 			out.Compute = &compute
 		case "compute":
-			state, err = cp.GetCompute(ctx, q.Reference, *q.Compute)
+			state, err = p.GetCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
 		case "suspend":
-			state, err = cp.Suspend(ctx, *q.Suspend)
+			state, err = p.Suspend(ctx, *q.Suspend)
 			out.State = &state
 		case "resume":
-			state, err = cp.Resume(ctx, *q.Resume)
+			state, err = p.Resume(ctx, *q.Resume)
 			out.State = &state
 		case "kill_compute":
-			err = cp.KillCompute(ctx, q.Reference, *q.Compute)
+			err = p.KillCompute(ctx, q.Reference, *q.Compute)
 		case "delete_snapshot":
-			err = cp.DeleteSnapshot(ctx, q.Reference, *q.Snapshot)
+			err = p.DeleteSnapshot(ctx, q.Reference, *q.Snapshot)
 		case "resume_compute":
-			state, err = cp.ResumeCompute(ctx, q.Reference, *q.Compute)
+			state, err = p.ResumeCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
 		case "command_compute":
-			command, err = cp.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)
+			command, err = p.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)
 			out.Command = &command
 		default:
 			err = sandbox.ErrInvalid

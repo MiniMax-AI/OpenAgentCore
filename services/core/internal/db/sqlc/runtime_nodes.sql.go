@@ -119,7 +119,7 @@ func (q *Queries) DisconnectRuntimeNode(ctx context.Context, arg DisconnectRunti
 }
 
 const getRuntimeDeployment = `-- name: GetRuntimeDeployment :one
-SELECT singleton, installation_id, backend_fingerprint, admission_paused, updated_at, provider_kind, local_node_id, owner_epoch, web_managed, idle_seconds, retention_seconds, generation, mode, provider_credential, specification, reset_clear, reset_requested_at, reset_deadline_at, reset_forced_at, reset_audit, provider_config, provider_metadata FROM runtime_deployment WHERE singleton=true
+SELECT singleton, installation_id, backend_fingerprint, updated_at, provider_kind, owner_epoch, idle_seconds, retention_seconds, generation, mode, provider_credential, specification, reset_clear, reset_requested_at, reset_deadline_at, reset_forced_at, reset_audit, provider_config, provider_metadata FROM runtime_deployment WHERE singleton=true
 `
 
 func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, error) {
@@ -129,12 +129,9 @@ func (q *Queries) GetRuntimeDeployment(ctx context.Context) (RuntimeDeployment, 
 		&i.Singleton,
 		&i.InstallationID,
 		&i.BackendFingerprint,
-		&i.AdmissionPaused,
 		&i.UpdatedAt,
 		&i.ProviderKind,
-		&i.LocalNodeID,
 		&i.OwnerEpoch,
-		&i.WebManaged,
 		&i.IdleSeconds,
 		&i.RetentionSeconds,
 		&i.Generation,
@@ -523,20 +520,6 @@ UPDATE runtime_nodes SET removed_at=clock_timestamp(),connection_id=NULL,ready_g
 
 func (q *Queries) RemoveRuntimeNode(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, removeRuntimeNode, id)
-	return err
-}
-
-const setRuntimeManagerDeployment = `-- name: SetRuntimeManagerDeployment :exec
-UPDATE runtime_deployment SET provider_kind=$1, local_node_id=$2, mode='nodes', generation=GREATEST(generation,1), owner_epoch=owner_epoch+1 WHERE singleton=true
-`
-
-type SetRuntimeManagerDeploymentParams struct {
-	ProviderKind string      `json:"provider_kind"`
-	LocalNodeID  pgtype.UUID `json:"local_node_id"`
-}
-
-func (q *Queries) SetRuntimeManagerDeployment(ctx context.Context, arg SetRuntimeManagerDeploymentParams) error {
-	_, err := q.db.Exec(ctx, setRuntimeManagerDeployment, arg.ProviderKind, arg.LocalNodeID)
 	return err
 }
 

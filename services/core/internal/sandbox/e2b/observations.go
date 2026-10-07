@@ -9,21 +9,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-var (
-	_ runtimeobs.Source      = (*Provider)(nil)
-	_ runtimeobs.BatchSource = (*Provider)(nil)
-)
-
 // maxClockLead tolerates an E2B metrics timestamp slightly ahead of Core's
 // clock. A larger lead is treated as an unavailable sample, never as fresh data.
 const maxClockLead = 30 * time.Second
 
-// Observation is one allocation's latest E2B metrics point. Status is
-// observed, not_running, unavailable or ownership; only observed carries
-// values. A malformed E2B point is unavailable for its row only. Values keep E2B's units: CPUUsedPct is a percentage of all
-// CPUCount cores, and memory and disk are in bytes.
+// Observation is the requested allocation's latest E2B metrics point. Status
+// is observed, not_running, unavailable or ownership; only observed carries
+// values. A malformed E2B point is unavailable. Values keep E2B's units:
+// CPUUsedPct is a percentage of all CPUCount cores, and memory and disk are in
+// bytes.
 type Observation struct {
-	sandbox.Reference
 	Status                string
 	ObservedAt, StartedAt *time.Time `json:",omitempty"`
 	CPUCount, CPUUsedPct  *float64   `json:",omitempty"`
@@ -31,83 +26,46 @@ type Observation struct {
 	DiskUsed, DiskTotal   *uint64    `json:",omitempty"`
 }
 
-func (*Provider) ObservationProviderType() string { return "e2b" }
-
-// Observe reads one allocation through the same helper request as ObserveBatch.
+// Observe reads one allocation with one helper request. The helper takes the
+// sandbox ID from its private receipt, confirms the running sandbox by its
+// allocation labels and reads E2B's metrics. It never connects to, renews or
+// changes a sandbox.
 func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runtimeobs.Sample, error) {
-	results, _ := p.ObserveBatch(ctx, []runtimeobs.Target{target})
-	return results[0].Sample, results[0].Err
-}
-
-// ObserveBatch reads up to runtimeobs.MaxBatchTargets allocations with one
-// helper request. The helper takes sandbox IDs from its private receipts,
-// confirms each running sandbox by its allocation labels and reads E2B's batch
-// metrics once. It never connects to, renews or changes a sandbox.
-func (p *Provider) ObserveBatch(ctx context.Context, targets []runtimeobs.Target) ([]runtimeobs.BatchResult, error) {
-	results := make([]runtimeobs.BatchResult, len(targets))
-	references := make([]sandbox.Reference, 0, len(targets))
-	positions := make([]int, 0, len(targets))
-	for index, target := range targets {
-		reference := sandbox.Reference{TenantID: target.TenantID, EnvironmentID: target.EnvironmentID, AllocationID: target.Instance.AllocationID}
-		switch {
-		case target.Mode != runtimeobs.ModeManaged || !validReference(reference) || len(targets) > runtimeobs.MaxBatchTargets:
-			results[index].Err = sandbox.ErrInvalid
-		case target.Instance.ProviderKey != p.config.InstallationID:
-			results[index].Err = sandbox.ErrOwnership
-		default:
-			references = append(references, reference)
-			positions = append(positions, index)
-		}
+	reference := sandbox.Reference{TenantID: target.TenantID, EnvironmentID: target.EnvironmentID, AllocationID: target.Instance.AllocationID}
+	if target.Mode != runtimeobs.ModeManaged || !validReference(reference) {
+		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
-	if len(references) == 0 {
-		return results, nil
+	if target.Instance.ProviderKey != p.config.InstallationID {
+		return runtimeobs.Sample{}, sandbox.ErrOwnership
 	}
-	observations, err := p.observe(ctx, references)
-	now := p.now()
-	for offset, index := range positions {
-		if err != nil {
-			results[index].Err = err
-			continue
-		}
-		results[index].Sample, results[index].Err = sampleFromObservation(observations[offset], now)
-	}
-	return results, nil
-}
-
-func (p *Provider) observe(ctx context.Context, references []sandbox.Reference) ([]Observation, error) {
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		return nil, sandbox.ErrInvalid
+		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return runtimeobs.Sample{}, err
 	}
-	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: "observe", Config: p.config, References: references, Deadline: deadline})
+	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: "observe", Config: p.config, Reference: reference, Deadline: deadline})
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, ctxErr
+		return runtimeobs.Sample{}, ctxErr
 	}
 	if err != nil || out.Version != ProtocolVersion || out.Info != nil || out.Command != nil || out.DeploymentValid || out.TemplateBuild != nil {
-		return nil, runtimeobs.ErrUnavailable
+		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
 	}
 	switch out.ErrorCode {
 	case "":
 	case "invalid":
-		return nil, sandbox.ErrInvalid
+		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	case "ownership":
-		return nil, sandbox.ErrOwnership
+		return runtimeobs.Sample{}, sandbox.ErrOwnership
 	default:
-		// E2B API failures, including a rejected credential, leave rows unavailable.
-		return nil, runtimeobs.ErrUnavailable
+		// E2B API failures, including a rejected credential, are unavailable.
+		return runtimeobs.Sample{}, runtimeobs.ErrUnavailable
 	}
-	if len(out.Observations) != len(references) {
-		return nil, sandbox.ErrInvalid
+	if out.Observation == nil {
+		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
-	for index, observation := range out.Observations {
-		if observation.Reference != references[index] {
-			return nil, sandbox.ErrOwnership
-		}
-	}
-	return out.Observations, nil
+	return sampleFromObservation(*out.Observation, p.now())
 }
 
 // sampleFromObservation maps E2B's latest point to the provider-neutral
@@ -125,7 +83,7 @@ func sampleFromObservation(observation Observation, now time.Time) (runtimeobs.S
 		// An unknown status breaks Core's own helper protocol.
 		return runtimeobs.Sample{}, sandbox.ErrInvalid
 	}
-	// Malformed provider data leaves this row unavailable, not the whole page.
+	// Malformed provider data leaves this sample unavailable.
 	if observation.ObservedAt == nil || observation.StartedAt == nil || observation.CPUCount == nil || observation.CPUUsedPct == nil ||
 		observation.MemUsed == nil || observation.MemTotal == nil || !finite(*observation.CPUCount) || *observation.CPUCount <= 0 ||
 		!finite(*observation.CPUUsedPct) || *observation.CPUUsedPct < 0 || *observation.MemTotal == 0 {
@@ -160,7 +118,3 @@ func sampleFromObservation(observation Observation, now time.Time) (runtimeobs.S
 }
 
 func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
-
-func (p *Provider) ResolveObservationSource(context.Context) (runtimeobs.Source, error) {
-	return p, nil
-}

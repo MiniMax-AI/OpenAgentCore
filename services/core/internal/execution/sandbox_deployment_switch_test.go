@@ -18,8 +18,8 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
+	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("switch drain blocked")
 	}
-	config = &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: 2, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
+	config = &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: 2, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
 	if err := m.activateDeployment(t.Context(), deployment.View{InstallationID: id, Generation: 2, Mode: "direct", Provider: "e2b"}); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestSandboxManagerSwitchDrainsBeforeDirectActivation(t *testing.T) {
 
 func TestSandboxManagerFailedActivationStaysPaused(t *testing.T) {
 	id := uuid.NewString()
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, errors.New("provider unavailable") }))
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return nil, errors.New("provider unavailable") }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,8 +100,8 @@ func TestSandboxManagerCancelledSwitchCannotResumeBeforeDrain(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
-	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }))
+	config := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
+	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return config, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestSandboxManagerCancelledSwitchCannotResumeBeforeDrain(t *testing.T) {
 	m.mu.Lock()
 	originalDrain := m.switchDrained
 	m.mu.Unlock()
-	config = &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: 2, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}
+	config = &RuntimeProvider{InstallationID: id, ProviderKind: "e2b", Mode: "direct", Generation: 2, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("b", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
 	expected := deployment.View{InstallationID: id, Generation: 2, Mode: "direct", Provider: "e2b"}
 	ctx, cancel = context.WithTimeout(t.Context(), 10*time.Millisecond)
 	if err := m.activateDeployment(ctx, expected); !errors.Is(err, context.DeadlineExceeded) {
@@ -158,7 +158,7 @@ func TestSandboxActivationCannotBypassOutstandingDrain(t *testing.T) {
 	m, err := newRuntimeManager(Owner{Lease: heldLease{}}, nil, nil, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id,
 		func(context.Context) (*RuntimeProvider, error) { return nil, nil },
 		func(_ context.Context, setup deployment.Setup) (PreparedRuntimeDeployment, error) {
-			return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)}}, nil
+			return PreparedRuntimeDeployment{Config: &RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, CoreURL: "https://core.example/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}}, nil
 		}))
 	if err != nil {
 		t.Fatal(err)

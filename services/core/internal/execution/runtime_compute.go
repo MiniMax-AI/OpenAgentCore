@@ -8,17 +8,16 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
 
-// RuntimeSuspensionPolicy applies only to an explicitly qualified single-host
-// provider. Fixed guest sizing plus MaxActive bounds reserved CPU and memory.
+// RuntimeSuspensionPolicy is the idle suspension policy of a provider that
+// suspends sandboxes.
 type RuntimeSuspensionPolicy struct {
 	IdleTimeout time.Duration
 	Retention   time.Duration
-	MaxActive   int
-	MaxRetained int
 }
 
 type runtimeCompute struct {
@@ -30,23 +29,6 @@ type runtimeCompute struct {
 	Rollback  bool                      `json:"rollback,omitempty"`
 }
 
-func (r *runtimeLifecycle) computeCapacity(ctx context.Context, key string) error {
-	policy := r.config.Suspension
-	if key != r.config.InstallationID {
-		return sandbox.ErrOwnership
-	}
-	if policy == nil {
-		return nil
-	}
-	count, err := r.reader.CountComputeReservations(ctx, key)
-	if err != nil {
-		return err
-	}
-	if count >= int64(policy.MaxActive) {
-		return ErrExecutionUnavailable
-	}
-	return nil
-}
 func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.Allocation, phase string, state runtimeCompute, until *time.Time) (deployment.Allocation, error) {
 	raw, err := json.Marshal(state)
 	if err != nil {
@@ -63,9 +45,9 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 	return r.deployment.SetCompute(ctx, owner, phase, raw, until, idleTimeout)
 }
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) error {
-	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
-	if capabilityErr != nil {
-		return capabilityErr
+	p := r.config.Provider
+	if err := providercontract.Require(p, "Initial"); err != nil {
+		return err
 	}
 	initial, err := p.Initial(ctx, runtimeReference(owner))
 	if err != nil {
@@ -83,9 +65,9 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.A
 }
 
 func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) error {
-	p, capabilityErr := sandbox.Checkpoint(r.config.Provider)
-	if capabilityErr != nil {
-		return capabilityErr
+	p := r.config.Provider
+	if err := providercontract.Require(p, "Initial"); err != nil {
+		return err
 	}
 	var state runtimeCompute
 	if json.Unmarshal(owner.ComputeState, &state) != nil || state.Current.ID == "" {
@@ -122,7 +104,7 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 	}
 }
 
-func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
 	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
 	if err != nil {
 		return err
@@ -189,7 +171,7 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.Checkpoint
 	return r.captureCompute(ctx, p, suspending, state, false)
 }
 
-func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
+func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
 	result, err := p.Suspend(ctx, sandbox.SuspendRequest{Reference: runtimeReference(owner), OperationID: state.SuspendID, Source: state.Current, Snapshot: state.Snapshot, ObserveOnly: observeOnly})
 	if err != nil {
 		return err
@@ -222,16 +204,13 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Checkpo
 	return err
 }
 
-func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute) error {
+func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) error {
 	activity, err := r.reader.Activity(ctx, owner.ID)
 	if err != nil {
 		return err
 	}
 	if !activity.Busy && !activity.WakeRequested {
 		return nil
-	}
-	if err := r.computeCapacityForAllocation(ctx, owner); err != nil {
-		return err
 	}
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership
@@ -247,7 +226,7 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.Che
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
 }
-func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.CheckpointProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
+func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) error {
 	if state.Target == nil || state.Snapshot == nil || state.Rollback {
 		return sandbox.ErrOwnership
 	}
@@ -273,12 +252,4 @@ func ignoreComputeAbsent(err error) error {
 		return nil
 	}
 	return err
-}
-
-// Node-backed restores reserve capacity atomically in SetCompute.
-func (r *runtimeLifecycle) computeCapacityForAllocation(ctx context.Context, owner deployment.Allocation) error {
-	if owner.NodeID != "" {
-		return nil
-	}
-	return r.computeCapacity(ctx, owner.ProviderKey)
 }

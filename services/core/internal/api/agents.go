@@ -30,7 +30,7 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if writeFieldError(w, metadataTypeError(raw)) || writeFieldError(w, validateSavedAgentBody(raw, savedAgentCreate)) {
+	if writeFieldError(w, validateSavedAgentBody(raw, createAgentParams)) {
 		return
 	}
 	if err := validateSavedCoreInput(raw); err != nil {
@@ -38,13 +38,14 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var request v1.CreateAgentRequest
-	if decodeInputObject(raw, &request, "model", "name", "instructions", "metadata", "multi_agent", "reasoning", "service_tier", "text", "tools", "x_agents_core") != nil {
+	// The walks bound members and types, not integer ranges.
+	if json.Unmarshal(raw, &request) != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
 		return
 	}
 	command, err := resolveSavedAgent(request)
 	if err != nil {
-		if !writeFieldError(w, err) {
+		if !writeStoredDataError(w, r, err) && !writeFieldError(w, err) {
 			writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", err.Error())
 		}
 		return
@@ -83,7 +84,7 @@ func (h *Handler) respondAgentStatus(w http.ResponseWriter, r *http.Request, age
 func agentResponse(agent agents.Agent) (v1.SavedAgent, error) {
 	var response v1.SavedAgent
 	if err := json.Unmarshal(agent.Configuration, &response.SavedAgentConfiguration); err != nil {
-		return response, err
+		return response, &storedDataError{err}
 	}
 	response.ID, response.Object = agent.ID, "agent"
 	response.Metadata = agent.Metadata

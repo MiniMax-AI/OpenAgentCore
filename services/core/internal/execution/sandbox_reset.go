@@ -64,9 +64,6 @@ func (m *runtimeManager) committedView(ctx context.Context) (deployment.View, er
 // enter m.active, hold a Session/deployment transaction, or call a provider while
 // waiting for a deployment drain. Each page has both a row and time bound.
 func (m *runtimeManager) resetStep(parent context.Context) error {
-	if m.loadDeployment == nil {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 	return m.resetPage(parent, ctx)

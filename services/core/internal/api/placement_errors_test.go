@@ -19,7 +19,7 @@ func TestPlacementErrorsKeepTheirResponses(t *testing.T) {
 		code, message string
 	}{
 		{placement.ErrResetAdmission, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress."},
-		{fmt.Errorf("%w: sandbox creation is paused for provider maintenance", placement.ErrAdmissionClosed), http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input."},
+		{fmt.Errorf("%w: sandbox installation does not match deployment", placement.ErrAdmissionClosed), http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input."},
 		{placement.ErrPublicURLUnreachable, http.StatusConflict, "sandbox_configuration_error", placement.ErrPublicURLUnreachable.Error()},
 		{placement.ErrNodesPreparing, http.StatusServiceUnavailable, "sandbox_nodes_preparing", "Sandbox nodes are preparing the requested Runtime."},
 		{placement.ErrNodeUnavailable, http.StatusServiceUnavailable, "runtime_node_unavailable", "The selected sandbox node is unavailable or has no capacity."},

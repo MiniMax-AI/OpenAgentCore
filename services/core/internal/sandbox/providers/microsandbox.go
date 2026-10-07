@@ -59,6 +59,7 @@ func configureMicrosandbox(entry Microsandbox, resources sandbox.Resources, call
 	}
 	result.Provider = provider
 	result.Probe = microsandboxProbe(entry, resources)
+	result.Quiescent = caller.Quiescent
 	result.BackendFingerprint = BackendFingerprint("microsandbox", entry.RuntimeHome)
 	return nil
 }

@@ -125,7 +125,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 		t.Fatal("running node did not retain lifetime identity lock")
 	}
 	r := reference()
-	proxy := hub.Proxy(id.NodeID, "docker", docker.Operations(), 1)
+	proxy := hub.Proxy(id.NodeID, docker.Operations(), 1)
 	createCtx, stopCreate := context.WithTimeout(ctx, 150*time.Millisecond)
 	defer stopCreate()
 	createDone := make(chan error, 1)
@@ -168,7 +168,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 
 func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
 	h := NewHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
-	p := h.Proxy(uuid.NewString(), "docker", docker.Operations(), 1)
+	p := h.Proxy(uuid.NewString(), docker.Operations(), 1)
 	if sandbox.SupportsCheckpoint(p) {
 		t.Fatal("docker advertised checkpoint")
 	}

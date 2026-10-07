@@ -20,13 +20,11 @@ The resolver (`services/core/internal/deployment/observation.go`) reads the Sess
 
 Managed Docker, microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
 
-The allocation's persisted `provider_key` selects exactly one configured source, which verifies the allocation's labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, `cleanup_pending` or `released` gives `runtime_not_running`, and a provider key without a source gives `source_not_configured`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
+Every managed allocation is read through the deployment's selected Sandbox Provider, which verifies the allocation's installation (`provider_key`) and labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, `cleanup_pending` or `released` gives `runtime_not_running`, and a Core without an installation identity gives `source_not_configured`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
 
-The observation boundary is declared in `services/core/internal/runtimeobs/source.go`. Each registered `SourceResolver` declares supported `ResolveObservationSource`; registration validates this declaration without loading configuration or reading the database. Core resolves each provider key once per page, then validates the returned `Source` and uses that same immutable source for every read of the key on that page. An unconfigured resolver returns typed `ErrUnavailable`, which produces `sample_unavailable` without a provider type. Other resolution errors follow the provider-read error rules above.
+`Observe` belongs to the [Sandbox Provider protocol](../../docs/sandbox-provider.md); `services/core/internal/runtimeobs/source.go` owns the observation types and the `Source` view of a Provider. Core loads the selected Provider and its registered kind once per page and uses that same immutable Provider for every read on that page, reading each running target with `Observe`. Without a selection the load returns typed `ErrUnavailable`, which produces `sample_unavailable` without a provider type. Other load errors follow the provider-read error rules above.
 
-A source declares supported `ObservationProviderType`, which returns its immutable telemetry identity: a lowercase letter followed by at most 31 lowercase letters, digits or underscores. Empty identities are invalid. Provider registration and every resolved binding validate the identity and operation declarations before any sample or export. Reconfiguration affects later source resolutions; it cannot change the identity or provider selected for an in-flight page. Generation routers continue to resolve each allocation through its recorded deployment generation.
-
-A source implements `Observe` and declares `ObserveBatch` in its provider operations. When `ObserveBatch` is declared supported, one call reads up to 100 targets of that provider; when it is declared unsupported, Core reads each target with `Observe`. A failed batch read is never retried target by target. The [Sandbox Provider guide](../../docs/sandbox-provider.md) describes the operation declarations.
+An observation's provider type is that registered kind: `docker`, `microsandbox` or `e2b`. Reconfiguration affects later pages; it cannot change the provider type or Provider selected for an in-flight page. Generation routers continue to resolve each allocation through its recorded deployment generation.
 
 ## Sample semantics
 
@@ -56,7 +54,7 @@ Cumulative vCPU time, guest memory usage and the effective memory limit come fro
 
 ### E2B
 
-One helper `observe` request reads a page of at most 100 allocations: E2B's batch metrics for the sandboxes named in the private receipts, and a labelled listing of the installation's running sandboxes that confirms each one. The [E2B helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) owns that request. It never connects to, renews or changes a sandbox and writes no receipts.
+Core reads each allocation with one helper `observe` request: E2B's metrics for the sandbox named in its private receipt, and a listing of running sandboxes with the allocation's labels that confirms it. The [E2B helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) owns that request. It never connects to, renews or changes a sandbox and writes no receipts.
 
 | E2B value | Sample field |
 | --- | --- |
@@ -65,11 +63,11 @@ One helper `observe` request reads a page of at most 100 allocations: E2B's batc
 | `memUsed`, `memTotal` | Memory usage and limit |
 | `diskUsed`, `diskTotal` | Disk usage and capacity, kept only when both are present and the total is nonzero |
 
-E2B reports no cumulative CPU time, so CPU seconds stay null. `observed_at` is E2B's point time; a point up to 30 seconds ahead of Core's clock is recorded at Core's time, and a larger lead is `sample_unavailable`. A sandbox missing from the running listing is `runtime_not_running`. A missing or malformed point, an ambiguous listing and an E2B API failure, a rejected key included, are `sample_unavailable`; a malformed point affects only its own row.
+E2B reports no cumulative CPU time, so CPU seconds stay null. `observed_at` is E2B's point time; a point up to 30 seconds ahead of Core's clock is recorded at Core's time, and a larger lead is `sample_unavailable`. A sandbox missing from the running listing is `runtime_not_running`. A missing or malformed point, an ambiguous listing and an E2B API failure, a rejected key included, are `sample_unavailable`.
 
 ## Read budgets
 
-A current list read handles one page of up to 100 Sessions (default 20) with at most eight concurrent provider reads. Each provider read has two seconds, a batch read at least five, and the whole list request ten; beyond that the list returns 503. A single-Session read has two seconds. No provider call is retried within a request, and Core keeps no observation cache.
+A current list read handles one page of up to 100 Sessions (default 20) with at most eight concurrent provider reads. Each provider read has two seconds and the whole list request ten; beyond that the list returns 503. A single-Session read has two seconds. No provider call is retried within a request, and Core keeps no observation cache.
 
 ## Durations
 
@@ -123,7 +121,7 @@ With an OTLP endpoint configured, Core exports every record, both `on_read` and 
 | `agents.session.tokens.input` | Gauge, tokens | Measured Session input tokens |
 | `agents.session.tokens.output` | Gauge, tokens | Measured Session output tokens |
 | `agents.runtime.sample` | Monotonic delta sum | One per validated result, unavailable and unsupported included |
-| `agents.runtime.sample.duration` | Delta histogram, seconds | Provider read duration; a batch read counts once |
+| `agents.runtime.sample.duration` | Delta histogram, seconds | Provider read duration |
 
 CPU and memory points are exported only when the sample has `started_at`; a missing measurement produces no point. Attributes are `agents.tenant.id`, `agents.session.id`, `agents.environment.id`, `agents.runtime.allocation.id`, `agents.runtime.mode`, `agents.runtime.provider.type`, `agents.runtime.status`, `agents.runtime.reason`, `agents.runtime.collection.source` and nanosecond `agents.runtime.resolved_at_unix_nano`, `agents.runtime.observed_at_unix_nano` and `agents.runtime.compute.started_at_unix_nano`. The nanosecond times keep records joinable when a backend stores event time at lower precision. Provider keys, receipts, native identifiers, raw errors, paths and credentials are never attributes.
 

@@ -93,11 +93,10 @@ func TestCheckAdmission(t *testing.T) {
 		want         error
 		message      string
 	}{
-		"unclaimed admits everything": {Deployment{Resetting: true, AdmissionPaused: true}, installation, nil, ""},
+		"unclaimed admits everything": {Deployment{Resetting: true}, installation, nil, ""},
 		"admitted":                    {valid, installation, nil, ""},
 		"new Session":                 {valid, "", nil, ""},
-		"reset":                       {with(func(d *Deployment) { d.Resetting, d.AdmissionPaused = true, true }), installation, ErrResetAdmission, "hosted admission is paused for a sandbox reset"},
-		"paused":                      {with(func(d *Deployment) { d.AdmissionPaused = true }), installation, ErrAdmissionClosed, "environment is no longer available: sandbox creation is paused for provider maintenance"},
+		"reset":                       {with(func(d *Deployment) { d.Resetting = true }), installation, ErrResetAdmission, "hosted admission is paused for a sandbox reset"},
 		"malformed specification":     {with(func(d *Deployment) { d.Specification = json.RawMessage(`[`) }), installation, ErrAdmissionClosed, "environment is no longer available: sandbox creation requires a deployment specification"},
 		"rejected specification":      {with(func(d *Deployment) { d.Specification = json.RawMessage(`{"resources":{"cpus":3}}`) }), installation, ErrAdmissionClosed, "environment is no longer available: sandbox creation requires a deployment specification"},
 		"no provider":                 {with(func(d *Deployment) { d.Provider, d.Specification = "", json.RawMessage(`[`) }), installation, nil, ""},
@@ -117,7 +116,7 @@ func TestDecidePlacement(t *testing.T) {
 	ready := func(id string, g uint64, active int64) Node {
 		return Node{ID: id, Online: true, ServingReady: true, ReadyGeneration: generation(g), Active: active, MaxActive: 4, Retained: active, MaxRetained: 4, CoreURL: publicURL}
 	}
-	nodes := Deployment{Provider: "docker", Mode: "nodes", WebManaged: true}
+	nodes := Deployment{InstallationID: "installation", Provider: "docker", Mode: "nodes"}
 	with := func(change func(*Deployment)) Deployment {
 		d := nodes
 		change(&d)
@@ -140,16 +139,13 @@ func TestDecidePlacement(t *testing.T) {
 		"reset":                       {origin(false), publicURL, with(func(d *Deployment) { d.Resetting = true }), nil, nil, ErrResetAdmission},
 		"loopback public origin":      {origin(true), "http://localhost:8091", nodes, []Node{ready("a", 1, 0)}, nil, ErrPublicURLUnreachable},
 		"direct":                      {origin(false), publicURL, with(func(d *Deployment) { d.Mode = "direct" }), nil, nil, nil},
-		"direct paused":               {origin(false), publicURL, with(func(d *Deployment) { d.Mode, d.AdmissionPaused = "direct", true }), nil, nil, ErrNodeUnavailable},
 		"no provider":                 {&fakeDeclarations{t: t}, publicURL, Deployment{}, nil, nil, nil},
-		"no provider on Web":          {&fakeDeclarations{t: t}, publicURL, Deployment{WebManaged: true}, nil, nil, ErrNodeUnavailable},
-		"paused":                      {origin(false), publicURL, with(func(d *Deployment) { d.AdmissionPaused = true }), []Node{ready("a", 1, 0)}, nil, ErrNodeUnavailable},
+		"no provider on Web":          {&fakeDeclarations{t: t}, publicURL, Deployment{InstallationID: "installation"}, nil, nil, ErrNodeUnavailable},
 		"no nodes":                    {origin(false), publicURL, nodes, nil, nil, ErrNodeUnavailable},
 		"only ineligible nodes":       {origin(false), publicURL, nodes, []Node{offline, unready, full, retainedFull, elsewhere, {ID: "never", Online: true, ServingReady: true, MaxActive: 1, MaxRetained: 1, CoreURL: publicURL}}, nil, ErrNodeUnavailable},
 		"preparing":                   {origin(false), publicURL, nodes, []Node{offline, preparing}, nil, ErrNodesPreparing},
 		"highest generation":          {origin(false), publicURL, nodes, []Node{ready("old", 1, 0), ready("new", 2, 3), preparing}, &Placement{NodeID: "new", Generation: 2}, nil},
 		"fewest active":               {origin(false), publicURL, nodes, []Node{ready("busy", 2, 3), ready("idle", 2, 1)}, &Placement{NodeID: "idle", Generation: 2}, nil},
-		"other address off Web":       {origin(false), publicURL, with(func(d *Deployment) { d.WebManaged = false }), []Node{elsewhere}, &Placement{NodeID: "elsewhere", Generation: 9}, nil},
 		"public origin on public URL": {origin(true), publicURL, nodes, []Node{ready("a", 1, 0)}, &Placement{NodeID: "a", Generation: 1}, nil},
 	} {
 		got, err := rules(t, test.declarations, test.url).DecidePlacement(test.d, test.nodes)

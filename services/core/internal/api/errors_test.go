@@ -138,7 +138,6 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 	for err, code := range map[error]string{
 		deployment.ErrConflict:                 "sandbox_deployment_conflict",
 		deployment.ErrNodeInUse:                "runtime_node_in_use",
-		deployment.ErrLocalNodeConfigured:      "runtime_local_node_configured",
 		deployment.ErrNodeAddressMismatch:      "sandbox_node_address_mismatch",
 		sessions.ErrEnvironmentUnavailable:     "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",

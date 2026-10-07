@@ -9,7 +9,11 @@ import (
 
 // VerifyCredential is read-only and bounded. A public readable template alone
 // does not prove team ownership. References are one bounded Core-owned page.
-func (p *Provider) VerifyCredential(ctx context.Context, refs []sandbox.Reference) error {
+func (ConfigurationAdapter) VerifyCredential(ctx context.Context, c sandbox.DirectConfig, refs []sandbox.Reference) error {
+	p, err := newDirect(c)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if len(refs) > MaxCredentialReferences {
@@ -31,7 +35,7 @@ func (p *Provider) VerifyCredential(ctx context.Context, refs []sandbox.Referenc
 	case "team_mismatch", "invalid":
 		return sandbox.ErrCredentialOwnership
 	case "":
-		if out.DeploymentValid && out.Info == nil && out.Command == nil && out.Observations == nil && out.TemplateBuild == nil {
+		if out.DeploymentValid && out.Info == nil && out.Command == nil && out.Observation == nil && out.TemplateBuild == nil {
 			return nil
 		}
 	}
