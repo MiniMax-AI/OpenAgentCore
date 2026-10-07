@@ -75,15 +75,6 @@ func (r *Registry) Lookup(kind string) (Adapter, error) {
 	return a, nil
 }
 
-// IsNode reports whether the provider runs on enrolled sandbox nodes.
-func (r *Registry) IsNode(kind string) (bool, error) {
-	a, err := r.Lookup(kind)
-	if err != nil {
-		return false, err
-	}
-	return a.Mode == "nodes", nil
-}
-
 // SupportsCheckpoint reports whether the provider declares checkpoint suspension.
 func (r *Registry) SupportsCheckpoint(kind string) (bool, error) {
 	a, err := r.Lookup(kind)

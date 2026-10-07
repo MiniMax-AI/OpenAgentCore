@@ -4,11 +4,17 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/modelconfigurationpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -109,4 +115,77 @@ func fixtureOwner(s *Store, lease *pgunit.Lease) (execution.Owner, error) {
 		Deployment: changes,
 		Sessions:   sessionExecution,
 	}, nil
+}
+
+// webDeployment claims s's deployment for a new installation and selects
+// provider on it as Web setup does, then closes its execution lease so a
+// Worker can start. It returns the installation.
+func webDeployment(t *testing.T, s *Store, provider string) string {
+	t.Helper()
+	lease, err := pgunit.AcquireLease(t.Context(), s.pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close(context.Background())
+	owner, err := fixtureOwner(s, lease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installation := uuid.NewString()
+	input := sandbox.Selection{Provider: provider, DeploymentSpec: SandboxDeploymentTestSpec(provider)}
+	if provider == "e2b" {
+		input = e2bSelection()
+	}
+	if err := owner.Deployment.Claim(t.Context(), installation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.Deployment.Initialize(t.Context(), installation, input); err != nil {
+		t.Fatal(err)
+	}
+	return installation
+}
+
+// webRuntimes is the Worker's sandbox runtimes as cmd/server builds them for
+// installation: a deferred provider that runs s's committed Web setup on p.
+func webRuntimes(t testing.TB, s *Store, installation string, p sandbox.SandboxProvider, suspension *execution.RuntimeSuspensionPolicy) *execution.RuntimeProvider {
+	deployments := deploymentService(t, s)
+	return execution.NewDeferredRuntimeProvider(installation, func(ctx context.Context) (*execution.RuntimeProvider, error) {
+		setup, err := deployments.Setup(ctx)
+		if err != nil || setup.Provider == "" {
+			return nil, err
+		}
+		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation,
+			CoreURL: "http://core.invalid/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p, Suspension: suspension}, nil
+	}, unusedPreparation(t))
+}
+
+// unusedPreparation is the preparer of a test that submits no sandbox
+// selection through the Worker; preparing one fails the test.
+func unusedPreparation(t testing.TB) execution.RuntimeDeploymentPreparer {
+	return func(context.Context, deployment.Setup) (execution.PreparedRuntimeDeployment, error) {
+		t.Error("the test prepared a sandbox selection it did not submit")
+		return execution.PreparedRuntimeDeployment{}, errors.New("unexpected sandbox selection preparation")
+	}
+}
+
+// startWebWorker starts the Worker on webRuntimes.
+func startWebWorker(t *testing.T, s *Store, registry *runtimegateway.Registry, installation string, p sandbox.SandboxProvider, suspension *execution.RuntimeSuspensionPolicy) *execution.Worker {
+	t.Helper()
+	w, err := startNextWorker(t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: webRuntimes(t, s, installation, p, suspension)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w
+}
+
+// startNextWorker is startWorkerErr after another owner closed its lease. A
+// closed lease stays held until PostgreSQL ends its backend, so startup
+// retries ErrLeaseHeld briefly.
+func startNextWorker(ctx context.Context, s *Store, dispatcher *execution.Dispatcher) (*execution.Worker, error) {
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		w, err := startWorkerErr(ctx, s, dispatcher)
+		if !errors.Is(err, pgunit.ErrLeaseHeld) || time.Now().After(deadline) {
+			return w, err
+		}
+	}
 }

@@ -261,47 +261,6 @@ func TestRuntimeSuspensionRetentionAndDeletedSession(t *testing.T) {
 	}
 }
 
-func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
-	s, pool := testStore(t)
-	w := executionWriter(t, s)
-	provider := uuid.NewString()
-	cases := []struct {
-		state, phase string
-		count        bool
-	}{
-		{"creating", "disabled", true}, {"running", "running", true}, {"running", "quiescing", true}, {"running", "suspending", true}, {"running", "suspended", false}, {"running", "restoring", true}, {"running", "waking", true}, {"cleanup_pending", "restoring", true}, {"released", "running", false},
-	}
-	want := int64(0)
-	wantRetained := int64(0)
-	for _, item := range cases {
-		tenant := uuid.NewString()
-		_, env := localEnvironment(t, s, tenant)
-		owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID}, provider, runtimedevice.HashCredential(uuid.NewString()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		runtimeSuspensionSQL(t, pool, `UPDATE runtime_allocations SET state=$2,compute_phase=$3,create_settled=($2<>'creating'),released_at=CASE WHEN $2='released' THEN clock_timestamp() END WHERE id=$1`, owner.ID, item.state, item.phase)
-		if item.count {
-			want++
-		}
-		if item.state != "released" {
-			wantRetained++
-		}
-		retained, err := deploymentStore(w).CountRetainedAllocations(t.Context(), provider)
-		if err != nil || retained != wantRetained {
-			t.Fatalf("retained capacity state=%s phase=%s got=%d want=%d err=%v", item.state, item.phase, retained, wantRetained, err)
-		}
-		got, err := deploymentStore(w).CountComputeReservations(t.Context(), provider)
-		if err != nil || got != want {
-			t.Fatalf("capacity state=%s phase=%s got=%d want=%d err=%v", item.state, item.phase, got, want, err)
-		}
-	}
-	got, err := deploymentStore(w).CountComputeReservations(t.Context(), uuid.NewString())
-	if err != nil || got != 0 {
-		t.Fatal("capacity crossed installation boundary", got, err)
-	}
-}
-
 func TestRuntimeSuspensionIdleStartsAfterLastCompletion(t *testing.T) {
 	_, w, pool, owner := runtimeSuspensionFixture(t)
 	turn := runtimeSuspensionCompleted(t, pool, owner)
@@ -457,7 +416,7 @@ func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	}
 	listed := func() deployment.NodeAllocation {
 		t.Helper()
-		items, err := deploymentStore(s).NodeAllocations(t.Context(), d.LocalNodeID)
+		items, err := deploymentStore(s).NodeAllocations(t.Context(), d.NodeID)
 		if err != nil || len(items) != 1 || items[0].ID != allocation.ID {
 			t.Fatal(items, err)
 		}

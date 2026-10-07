@@ -88,10 +88,10 @@ func (s *Service) Setup(ctx context.Context) (Setup, error) {
 }
 
 func (s *Service) setup(d Record) (Setup, error) {
-	if !d.WebManaged {
+	if d.InstallationID == "" {
 		return Setup{}, ErrConflict
 	}
-	result := Setup{InstallationID: d.InstallationID, Provider: d.Provider, BackendFingerprint: d.BackendFingerprint, Generation: d.Generation, Mode: d.Mode, AdmissionPaused: d.AdmissionPaused}
+	result := Setup{InstallationID: d.InstallationID, Provider: d.Provider, BackendFingerprint: d.BackendFingerprint, Generation: d.Generation, Mode: d.Mode}
 	if err := json.Unmarshal(d.Specification, &result.Specification); err != nil {
 		return Setup{}, err
 	}

@@ -42,7 +42,7 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 	for _, cancelled := range []bool{false, true} {
 		t.Run(map[bool]string{false: "live caller", true: "cancelled caller"}[cancelled], func(t *testing.T) {
 			s, _ := newManagedTestStore(t)
-			key := uuid.NewString()
+			key := webDeployment(t, s, "e2b")
 			p := &absentCreationProvider{}
 			w, _ := managedWorker(t, s, key, p)
 			tenant, session, environment := managedSession(t, s)
@@ -80,7 +80,7 @@ func TestManagedRuntimeConfirmedAbsentCreateReleasesAtomically(t *testing.T) {
 }
 func TestManagedRuntimeForeignAbsenceCannotReleaseCreation(t *testing.T) {
 	s, _ := newManagedTestStore(t)
-	key := uuid.NewString()
+	key := webDeployment(t, s, "e2b")
 	p := &absentCreationProvider{foreign: true}
 	w, _ := managedWorker(t, s, key, p)
 	tenant, _, environment := managedSession(t, s)
@@ -94,7 +94,7 @@ func TestManagedRuntimeForeignAbsenceCannotReleaseCreation(t *testing.T) {
 }
 func TestManagedRuntimeObservedSettlementAllowsOwnedCleanup(t *testing.T) {
 	s, _ := newManagedTestStore(t)
-	key := uuid.NewString()
+	key := webDeployment(t, s, "e2b")
 	p := &absentCreationProvider{observeSettled: true}
 	w, _ := managedWorker(t, s, key, p)
 	tenant, session, environment := managedSession(t, s)

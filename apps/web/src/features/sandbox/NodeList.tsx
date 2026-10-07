@@ -15,11 +15,10 @@ export type NodeState = "unconfirmed" | "old_address" | "offline" | "degraded" |
 
 /**
  * Whether a node enrolled with another Core address than the deployment's
- * `coreUrl`. An empty address is unknown, not old: a node Core did not enroll,
- * such as a file-managed local one, reports none.
+ * `coreUrl`. While the deployment is unknown, no node is on an old address.
  */
 export function onOldAddress(node: SandboxNode, coreUrl: string): boolean {
-  return Boolean(node.core_url && coreUrl && node.core_url !== coreUrl);
+  return coreUrl !== "" && node.core_url !== coreUrl;
 }
 
 /**

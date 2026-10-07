@@ -16,7 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 )
 
-func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *testing.T) {
+func TestSandboxSpecificationRoundTripAndClaimStays(t *testing.T) {
 	for _, provider := range []string{"docker", "microsandbox", "e2b"} {
 		t.Run(provider, func(t *testing.T) {
 			f := newFixture(t)
@@ -44,11 +44,8 @@ func TestSandboxSpecificationRoundTripAndFileConfigurationCannotOverride(t *test
 			if _, err := changes.Initialize(t.Context(), view.InstallationID, changed); !errors.Is(err, deployment.ErrConflict) {
 				t.Fatal("initial setup silently resized a configured deployment", err)
 			}
-			file := deployment.ProcessDeployment{InstallationID: view.InstallationID, BackendFingerprint: setup.BackendFingerprint, ProviderKind: provider, AdmissionPaused: true}
-			for _, candidate := range []*deployment.ProcessDeployment{nil, &file} {
-				if err := changes.ConfigureProcess(t.Context(), candidate); !errors.Is(err, deployment.ErrConflict) {
-					t.Fatal("file configuration replaced database ownership", err)
-				}
+			if err := changes.RequireUnclaimed(t.Context()); !errors.Is(err, deployment.ErrConflict) {
+				t.Fatal("an owner without sandbox runtimes started on a claimed deployment", err)
 			}
 			after, err := f.service.View(t.Context())
 			if err != nil || !reflect.DeepEqual(after, view) {

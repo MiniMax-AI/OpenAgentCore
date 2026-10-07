@@ -177,9 +177,9 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 		t.Fatal("preparation published or lost candidate configuration")
 	}
 	committed := *candidate.Config
-	committed.Generation, committed.AdmissionPaused = 2, true
+	committed.Generation = 2
 	candidate.Publish(&committed)
-	if got := s.selected.Load(); got.Generation != 2 || got.Config.ProviderKind != "microsandbox" || !got.Config.AdmissionPaused {
+	if got := s.selected.Load(); got.Generation != 2 || got.Config.ProviderKind != "microsandbox" {
 		t.Fatal("commit did not publish the validated selection")
 	}
 }

@@ -133,9 +133,6 @@ func (s *Service) RemoveNode(ctx context.Context, id string) error {
 			if n.Retained != 0 || n.CleanupPending != 0 {
 				return ErrNodeInUse
 			}
-			if d.LocalNodeID == nodeID {
-				return ErrLocalNodeConfigured
-			}
 			return tx.RemoveNode(nodeID)
 		}
 		return ErrNotFound
@@ -165,7 +162,7 @@ func (s *Service) CreateEnrollment(ctx context.Context, capacity Capacity) (Enro
 		if d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" || d.AdmissionPaused {
+		if d.Mode != "nodes" {
 			return ErrConflict
 		}
 		if _, err := s.specification(d); err != nil {
@@ -214,7 +211,7 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 		if d.Reset != nil {
 			return ErrResetInProgress
 		}
-		if d.Mode != "nodes" || d.AdmissionPaused || input.Provider != d.Provider {
+		if d.Mode != "nodes" || input.Provider != d.Provider {
 			return ErrInvalidInput
 		}
 		spec, err := s.specification(d)
@@ -425,9 +422,6 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		spec, err := s.generationSpecification(tx, d, selected)
 		if err != nil {
 			return err
-		}
-		if node == nil && d.AdmissionPaused {
-			return ErrConflict
 		}
 		limit, err := s.registry.RetainedLimit(d.Provider, active, retained)
 		if err != nil {

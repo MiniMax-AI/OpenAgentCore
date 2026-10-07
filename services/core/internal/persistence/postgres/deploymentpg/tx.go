@@ -297,25 +297,6 @@ func (t *deploymentTx) ClaimInstallation(installationID string) error {
 	return t.q.ClaimWebSandboxDeployment(t.ctx, id)
 }
 
-func (t *deploymentTx) SetProcessDeployment(installationID, backendFingerprint string, admissionPaused bool) error {
-	id, err := parseID(installationID)
-	if err != nil {
-		return err
-	}
-	return t.q.SetRuntimeDeployment(t.ctx, sqlc.SetRuntimeDeploymentParams{InstallationID: id, BackendFingerprint: backendFingerprint, AdmissionPaused: admissionPaused})
-}
-
-func (t *deploymentTx) SetManagerDeployment(provider, localNodeID string) error {
-	var local pgtype.UUID
-	if localNodeID != "" {
-		var err error
-		if local, err = parseID(localNodeID); err != nil {
-			return err
-		}
-	}
-	return t.q.SetRuntimeManagerDeployment(t.ctx, sqlc.SetRuntimeManagerDeploymentParams{ProviderKind: provider, LocalNodeID: local})
-}
-
 func (t *deploymentTx) SaveSelection(selection deployment.SelectionRecord) error {
 	if selection.Generation > math.MaxInt64 {
 		return deployment.ErrInvalidInput

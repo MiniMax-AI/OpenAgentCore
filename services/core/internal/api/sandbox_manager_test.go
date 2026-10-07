@@ -69,15 +69,6 @@ func TestSandboxEnrollmentDoesNotAcceptProjectAsAdmin(t *testing.T) {
 	}
 }
 
-func TestSandboxLocalNodeRemovalExplainsDeploymentBinding(t *testing.T) {
-	request := httptest.NewRequest(http.MethodDelete, "/core/v1/sandbox/nodes/local", nil)
-	response := httptest.NewRecorder()
-	writeDeploymentError(response, request, deployment.ErrLocalNodeConfigured)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "runtime_local_node_configured") || !strings.Contains(response.Body.String(), "previous release") {
-		t.Fatal(response.Code, response.Body.String())
-	}
-}
-
 // nodeCapacity rejects max_active outside the deployment's node capacity
 // bounds.
 func nodeCapacity(active int) error {
