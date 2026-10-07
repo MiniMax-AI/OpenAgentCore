@@ -2,10 +2,11 @@ package localworkspace
 
 import (
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 )
 
 func TestNativeDirectoryAPI(t *testing.T) {
@@ -21,7 +22,7 @@ func TestNativeDirectoryAPI(t *testing.T) {
 		t.Fatal(got, err)
 	}
 	for _, path := range []string{"missing", "nested/data.bin"} {
-		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 10); !errors.Is(err, agent.ErrWorkspaceNotDirectory) {
+		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 10); !errors.Is(err, dispatch.ErrWorkspaceNotDirectory) {
 			t.Fatal(path, err)
 		}
 	}

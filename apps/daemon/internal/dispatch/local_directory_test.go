@@ -34,7 +34,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: dispatch.LocalEnvironments(binding)})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: binding.Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		return nil, errors.New("must not prepare a harness")
 	})
 	sender := &recSender{}
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: dispatch.LocalEnvironments(binding)})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, Environments: binding.Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}

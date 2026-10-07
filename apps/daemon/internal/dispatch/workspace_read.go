@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -93,14 +92,14 @@ func listWorkspaceDirectory(ctx context.Context, environment Environment, reques
 		return workspaceReadFailure(err)
 	}
 	if read.Entries == nil || len(read.Entries) > request.MaxEntries {
-		return workspaceReadFailure(agent.ErrWorkspaceReadUncertain)
+		return workspaceReadFailure(ErrWorkspaceReadUncertain)
 	}
 	directory := &proto.WorkspaceDirectoryResult{Entries: make([]proto.WorkspaceDirectoryEntry, 0, len(read.Entries)), Truncated: read.Truncated}
 	for _, entry := range read.Entries {
 		directory.Entries = append(directory.Entries, proto.WorkspaceDirectoryEntry{Name: entry.Name, Kind: entry.Kind, SizeBytes: entry.SizeBytes})
 	}
 	if !proto.ValidWorkspaceDirectory(directory, request.MaxEntries) {
-		return workspaceReadFailure(agent.ErrWorkspaceReadUncertain)
+		return workspaceReadFailure(ErrWorkspaceReadUncertain)
 	}
 	return proto.WorkspaceReadResultPayload{Outcome: "completed", Directory: directory, CloseAcknowledged: true}
 }
@@ -114,9 +113,9 @@ func workspaceReadFailure(err error) proto.WorkspaceReadResultPayload {
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceReadUnavailable, "resource_unavailable"},
-		{agent.ErrWorkspaceReadInvalid, "invalid_request"},
-		{agent.ErrWorkspaceNotDirectory, proto.WorkspaceReadNotDirectory},
+		{ErrWorkspaceReadUnavailable, "resource_unavailable"},
+		{ErrWorkspaceReadInvalid, "invalid_request"},
+		{ErrWorkspaceNotDirectory, proto.WorkspaceReadNotDirectory},
 		{fs.ErrNotExist, "not_found"},
 		{fs.ErrPermission, "permission_denied"},
 	} {

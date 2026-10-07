@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
@@ -187,7 +186,7 @@ func runtimePreparationResult(err error, size int) proto.RuntimePrepareResultPay
 	if err == nil {
 		return proto.RuntimePrepareResultPayload{Outcome: "completed", SizeBytes: size}
 	}
-	var initialization *localworkspace.InitializationFailure
+	var initialization *InitializationFailure
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && errors.As(err, &initialization) {
 		code := 0
 		if initialization.ExitCode != nil {

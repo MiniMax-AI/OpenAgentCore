@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
@@ -107,7 +108,7 @@ func runInitializationProcess(ctx context.Context, binary string, args []string,
 		return ErrInitializationUnconfirmed
 	}
 	if info, err := os.Stat(directory); err != nil || !info.IsDir() {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	process, err := clirunner.Start(clirunner.StartOptions{Parent: operation, Binary: binary, Args: args,
 		Dir: directory, Env: env, KillTimeout: 250 * time.Millisecond})
@@ -137,5 +138,5 @@ func runInitializationProcess(ctx context.Context, binary string, args []string,
 	if code < 1 || code > 255 {
 		return ErrInitializationUnconfirmed
 	}
-	return &InitializationFailure{ExitCode: &code}
+	return &dispatch.InitializationFailure{ExitCode: &code}
 }

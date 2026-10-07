@@ -321,12 +321,7 @@ func localEnvironments(local *localworkspace.Binding) func(proto.AssignmentRef, 
 	if local == nil {
 		return nil
 	}
-	return func(ref proto.AssignmentRef, bind proto.AssignmentBindPayload) dispatch.Environment {
-		if !local.Matches(bind.EnvironmentID, ref.SessionID) {
-			return nil
-		}
-		return local
-	}
+	return local.Resolve
 }
 
 // localEnvironmentKinds declares, for each kind that supports a local

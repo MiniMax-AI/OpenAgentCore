@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
@@ -36,12 +35,8 @@ var capabilityRef = proto.AssignmentRef{SessionID: "0b6f1f3e-6f0a-4d38-9c1e-2f5d
 func capabilitiesTestRouter(t *testing.T) (*Router, *capabilitiesTestSender, string, string) {
 	t.Helper()
 	environment, session := uuid.NewString(), capabilityRef.SessionID
-	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, t.TempDir(), t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
 	sender := &capabilitiesTestSender{frames: make(chan proto.Envelope, 64)}
-	router, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: LocalEnvironments(binding)})
+	router, err := New(Config{Registry: agent.NewRegistry(), Sender: sender, Environments: func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment { return stubEnvironment{} }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +294,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 
 func TestRuntimePreparationInitializationReceipts(t *testing.T) {
 	for _, code := range []int{-1, 0, 1, 255, 256} {
-		got := runtimePreparationResult(&localworkspace.InitializationFailure{ExitCode: &code}, 0)
+		got := runtimePreparationResult(&InitializationFailure{ExitCode: &code}, 0)
 		if code > 0 && code <= 255 {
 			if got.Outcome != "failed" || got.ExitCode != code {
 				t.Fatalf("lost confirmed exit code: %+v", got)
@@ -308,10 +303,10 @@ func TestRuntimePreparationInitializationReceipts(t *testing.T) {
 			t.Fatalf("accepted invalid failure receipt: %+v", got)
 		}
 	}
-	if got := runtimePreparationResult(&localworkspace.InitializationFailure{}, 0); got.Outcome != "failed" || got.ExitCode != 0 {
+	if got := runtimePreparationResult(&InitializationFailure{}, 0); got.Outcome != "failed" || got.ExitCode != 0 {
 		t.Fatalf("lost confirmed generic failure: %+v", got)
 	}
-	if got := runtimePreparationResult(errors.Join(&localworkspace.InitializationFailure{}, context.Canceled), 0); got.Outcome != "unknown" {
+	if got := runtimePreparationResult(errors.Join(&InitializationFailure{}, context.Canceled), 0); got.Outcome != "unknown" {
 		t.Fatalf("cancellation reported confirmed: %+v", got)
 	}
 }

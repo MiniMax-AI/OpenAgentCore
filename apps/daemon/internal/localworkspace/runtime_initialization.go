@@ -10,15 +10,11 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
-
-// InitializationFailure contains only a confirmed step's safe exit status.
-type InitializationFailure struct{ ExitCode *int }
-
-func (*InitializationFailure) Error() string { return "Runtime initialization failed" }
 
 var ErrInitializationUnconfirmed = errors.New("Runtime initialization unconfirmed")
 
@@ -42,11 +38,11 @@ func (b *Binding) initializeRuntime(ctx context.Context, input proto.RuntimeInit
 	}
 	values, err := ReadToolEnvironment()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	packages, err := PackageDirectory()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	var binary string
 	var args []string
@@ -67,7 +63,7 @@ func (b *Binding) initializeRuntime(ctx context.Context, input proto.RuntimeInit
 			}
 		}
 		if err = os.MkdirAll(packages, 0700); err != nil {
-			return &InitializationFailure{}
+			return &dispatch.InitializationFailure{}
 		}
 		if input.Action == "npm" {
 			binary, args, err = initializationNPM()
@@ -104,36 +100,36 @@ func configureRuntime(values map[string]string) error {
 	}
 	path, err := initializedToolEnvironmentPath()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	packages, err := PackageDirectory()
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	if os.MkdirAll(filepath.Dir(path), 0700) != nil || os.MkdirAll(packages, 0700) != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	root, err := os.OpenRoot(filepath.Dir(path))
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer root.Close()
 	unlock, err := runtimefs.LockDirectory(root)
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer unlock()
 	if _, err = root.Stat(filepath.Base(path)); !errors.Is(err, os.ErrNotExist) {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	configured := make(map[string]string, len(values)+2)
 	if source := os.Getenv("OAC_RUNTIME_TOOL_ENV_FILE"); source != "" {
 		if runtimefs.ValidateLocalPath(source) != nil {
-			return &InitializationFailure{}
+			return &dispatch.InitializationFailure{}
 		}
 		local, err := readToolEnvironmentFile(source)
 		if err != nil {
-			return &InitializationFailure{}
+			return &dispatch.InitializationFailure{}
 		}
 		for key, value := range local {
 			if runtime.GOOS == "windows" {
@@ -198,15 +194,15 @@ func (b *Binding) installInitialFile(ctx context.Context, input proto.RuntimeIni
 	defer func() { w.uncertain = errors.Is(err, ErrInitializationUnconfirmed) }()
 	root, err := os.OpenRoot(b.workspace)
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer root.Close()
 	if root.MkdirAll(filepath.Dir(relative), 0700) != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	parent, err := root.OpenRoot(filepath.Dir(relative))
 	if err != nil {
-		return &InitializationFailure{}
+		return &dispatch.InitializationFailure{}
 	}
 	defer parent.Close()
 	// Initial files replace existing contents, unlike public Files create. Finish
@@ -218,5 +214,5 @@ func (b *Binding) installInitialFile(ctx context.Context, input proto.RuntimeIni
 }
 
 func initializationDependency(name string) error {
-	return fmt.Errorf("Runtime initialization requires %s: %w", name, &InitializationFailure{})
+	return fmt.Errorf("Runtime initialization requires %s: %w", name, &dispatch.InitializationFailure{})
 }

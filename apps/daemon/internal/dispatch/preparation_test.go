@@ -103,7 +103,7 @@ func localPreparationHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	var err error
-	h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: dispatch.LocalEnvironments(preparationWorkspace(t))})
+	h.router, err = dispatch.New(dispatch.Config{Registry: h.reg, Sender: h.sender, Environments: preparationWorkspace(t).Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Durati
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{Kind: "prepared", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 	reg.RegisterExecutor("prepared", preparationExecutorFixture(factory))
-	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout, Environments: dispatch.LocalEnvironments(preparationWorkspace(t))})
+	r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, PreparationTimeout: timeout, Environments: preparationWorkspace(t).Resolve})
 	if err != nil {
 		t.Fatal(err)
 	}

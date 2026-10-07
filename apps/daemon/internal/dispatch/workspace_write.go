@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -155,7 +154,7 @@ func rejectedWorkspaceWrite(code string) proto.WorkspaceWriteResultPayload {
 	return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: code}
 }
 
-func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int) proto.WorkspaceWriteResultPayload {
+func workspaceWriteResult(write WorkspaceWriteResult, err error, size int) proto.WorkspaceWriteResultPayload {
 	if err == nil && write.SizeBytes == int64(size) {
 		return proto.WorkspaceWriteResultPayload{Outcome: "completed", SizeBytes: size}
 	}
@@ -163,8 +162,8 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 		err    error
 		reason string
 	}{
-		{agent.ErrWorkspaceWriteDirectory, proto.WorkspaceWriteReasonDirectory},
-		{agent.ErrWorkspaceWriteUnsafe, proto.WorkspaceWriteReasonUnsafe},
+		{ErrWorkspaceWriteDirectory, proto.WorkspaceWriteReasonDirectory},
+		{ErrWorkspaceWriteUnsafe, proto.WorkspaceWriteReasonUnsafe},
 	} {
 		if errors.Is(err, conflict.err) {
 			return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "write_rejected", Reason: conflict.reason}
@@ -174,10 +173,10 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceWriteUnavailable, "resource_unavailable"},
-		{agent.ErrWorkspaceWriteBusy, "write_capacity"},
-		{agent.ErrWorkspaceWriteInvalid, "invalid_request"},
-		{agent.ErrWorkspaceWriteRejected, "write_rejected"},
+		{ErrWorkspaceWriteUnavailable, "resource_unavailable"},
+		{ErrWorkspaceWriteBusy, "write_capacity"},
+		{ErrWorkspaceWriteInvalid, "invalid_request"},
+		{ErrWorkspaceWriteRejected, "write_rejected"},
 	} {
 		if errors.Is(err, failure.err) {
 			return rejectedWorkspaceWrite(failure.code)

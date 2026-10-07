@@ -81,7 +81,7 @@ func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, env
 	exported := make(chan struct{})
 	go func() {
 		defer close(exported)
-		err := environment.ExportOutputs(ctx, writer)
+		err := environment.ExportOutputs(ctx, &exportWriter{output: writer})
 		_ = writer.CloseWithError(err)
 	}()
 	var offset int64
@@ -142,4 +142,23 @@ func (r *Router) runWorkspaceExport(ctx context.Context, u *workspaceExport, env
 
 func (r *Router) sendWorkspaceExport(ctx context.Context, request proto.Envelope, result proto.WorkspaceExportResultPayload) error {
 	return r.reply(ctx, request, proto.TypeWorkspaceExportResult, result)
+}
+
+// exportWriter bounds the archive and drops empty writes, which a pipe would
+// deliver as empty reads.
+type exportWriter struct {
+	output io.Writer
+	size   int64
+}
+
+func (w *exportWriter) Write(data []byte) (int, error) {
+	if len(data) == 0 {
+		return 0, nil
+	}
+	if int64(len(data)) > proto.WorkspaceExportMaxBytes-w.size {
+		return 0, errors.New("workspace export exceeds bound")
+	}
+	n, err := w.output.Write(data)
+	w.size += int64(n)
+	return n, err
 }
