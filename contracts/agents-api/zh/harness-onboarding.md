@@ -1,7 +1,7 @@
 ---
-title: "将原生 Harness 添加到 OpenAgentCore"
+title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: b74f627ac8d518e0b780f827b8ccc6d268056d33c151b9e9f51866d93faf05d2
+source_hash: 38955b517dae94e5ce187e72a6b2e03cc7eeb7b886baa722b5f117dd3260253f
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。

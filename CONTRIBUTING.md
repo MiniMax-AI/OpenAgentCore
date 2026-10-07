@@ -8,7 +8,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | --- | --- |
 | Design principles, public API fidelity, settings and data ownership, documentation rules | [AGENTS.md](AGENTS.md) |
 | Protocol code and documents at each component boundary | [Protocol map](AGENTS.md#protocols-at-every-boundary) |
-| Projects, keys, resource isolation, administrator authority, secrets and audit concepts | [Concepts and ownership](docs/concepts.md) |
+| Projects, keys, resource isolation, administrator authority, secrets and audit concepts | [Concepts](docs/concepts.md) |
 | Component responsibilities and Session flow | [Architecture](docs/architecture.md) |
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/index.md) |

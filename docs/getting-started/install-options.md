@@ -1,5 +1,5 @@
 ---
-title: "Installation options and advanced deployments"
+title: "Installation options"
 ---
 
 The [default installation](./install.md) needs no options. Use this page to set installation options, deploy with Compose or configure a reverse proxy.

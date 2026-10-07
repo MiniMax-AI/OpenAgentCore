@@ -1,7 +1,7 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: b8a00701caa83314115f28c3fa754291e8eaf734e88de8e0012e45d8b1893338
+source_hash: 630c00591d3980e59b37969d1a149f774da118b3fce13ad5d9f63dfb9a4e216f
 ---
 
 OpenAgentCore 将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。Sandbox Provider 管理计算资源。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
@@ -40,7 +40,7 @@ flowchart TB
 | Model provider | 提供 Harness 选定的模型协议 | [模型执行](../../contracts/agents-api/zh/model-execution.md) |
 | Web | 让管理员通过服务端 Core API 连接配置与观察安装实例 | [控制台服务端](web/console-server.md) |
 
-[仓库地图](development.md#repository-map) 标出这些组件的位置。[概念与所有权](concepts.md) 解释 Project 边界、管理员权限和工具隔离。
+[仓库地图](development.md#repository-map) 标出这些组件的位置。[概念](concepts.md) 解释 Project 边界、管理员权限和工具隔离。
 
 ## Session 的完整流程 {#a-session-end-to-end}
 
