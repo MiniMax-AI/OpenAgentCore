@@ -6,8 +6,8 @@ import (
 )
 
 // MarshalJSON renders the wire shape. Messages always carry content and a
-// nullable phase, and function results a nullable output and error, as in the
-// pinned responses (EVT-09, SES-25). Other variants use the stored encoding.
+// nullable phase, function results a nullable output and error, and web search
+// a nullable action. Other variants use the stored encoding.
 func (i Item) MarshalJSON() ([]byte, error) {
 	type wire Item
 	switch i.Type {
@@ -25,6 +25,11 @@ func (i Item) MarshalJSON() ([]byte, error) {
 			Phase   *string       `json:"phase"`
 			Content []ItemContent `json:"content"`
 		}{wire(i), phase, content})
+	case "web_search_call":
+		return json.Marshal(struct {
+			wire
+			Action *WebSearchAction `json:"action"`
+		}{wire(i), i.Action})
 	case "function_call_output":
 		return json.Marshal(struct {
 			wire
@@ -41,6 +46,13 @@ func (i Item) MarshalJSON() ([]byte, error) {
 // required fields and nulls in both forms.
 func (i Item) MarshalStored() ([]byte, error) {
 	switch i.Type {
+	case "web_search_call":
+		type wire Item
+		type storedAction WebSearchAction
+		return json.Marshal(struct {
+			wire
+			Action *storedAction `json:"action,omitempty"`
+		}{wire(i), (*storedAction)(i.Action)})
 	case "create_subagent_call", "send_subagent_input_call", "agent_message":
 		content, err := coordinationContent(i.Content)
 		if err != nil {
