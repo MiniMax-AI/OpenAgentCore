@@ -409,6 +409,20 @@ func (op *operation) closeOutput(name sp.Stream) error {
 	return nil
 }
 
+// abandonOutput closes every open stream as CloseOutput does, once the launch
+// has published them.
+func (op *operation) abandonOutput() {
+	op.mu.Lock()
+	for op.state == sp.StateStarting {
+		op.cond.Wait()
+	}
+	streams := op.streams
+	op.mu.Unlock()
+	for _, st := range streams {
+		op.closeOutput(st.name) // a stream already closed needs nothing
+	}
+}
+
 func (op *operation) abandonLocked(name sp.Stream) (*stream, error) {
 	if op.released {
 		return nil, released()

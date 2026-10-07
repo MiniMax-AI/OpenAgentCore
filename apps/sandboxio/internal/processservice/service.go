@@ -319,18 +319,18 @@ func (s *Service) AttachmentRestored(id sandboxwire.ID) {
 
 // AttachmentRevoked marks a closed attachment stale and collects its
 // operations, then returns: the Link's callback must not block. A goroutine
-// cancels the operations and drops their records and the attachment's entry
-// once they have settled. The close is final, and the Link ends the
-// attachment's stream contexts before it reports the close: a request still
-// running on such a stream starts nothing, since Start refuses an ended
-// stream, and its answer never reaches a peer.
+// ends the operations and drops their records and the attachment's entry once
+// they have settled. The close is final, and the Link ends the attachment's
+// stream contexts before it reports the close: a request still running on
+// such a stream starts nothing, since Start refuses an ended stream, and its
+// answer never reaches a peer.
 func (s *Service) AttachmentRevoked(id sandboxwire.ID) {
 	s.mu.Lock()
 	s.stopGraceLocked(id)
 	ops := s.staleLocked(id)
 	s.mu.Unlock()
 	go func() {
-		s.cancelAll(ops)
+		s.endAll(ops)
 		for _, op := range ops {
 			op.mu.Lock()
 			for !op.settled {
@@ -347,11 +347,10 @@ func (s *Service) AttachmentRevoked(id sandboxwire.ID) {
 	}()
 }
 
-// Shutdown ends the incarnation's operations when the service stops: it
-// cancels every operation as ownership cleanup does, with TERM, then KILL
-// after the grace limit, and returns once every operation's scope has closed
-// or ctx ends. The binary calls it after its streams have ended, so no Start
-// arrives during or after it; Reap must still be running.
+// Shutdown ends the incarnation's operations when the service stops, as a
+// revoke does, and returns once every operation's scope has closed or ctx
+// ends. The binary calls it after its streams have ended, so no Start arrives
+// during or after it; Reap must still be running.
 func (s *Service) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	ops := make([]*operation, 0, len(s.ops))
@@ -359,7 +358,7 @@ func (s *Service) Shutdown(ctx context.Context) {
 		ops = append(ops, op)
 	}
 	s.mu.Unlock()
-	s.cancelAll(ops)
+	s.endAll(ops)
 	for _, op := range ops {
 		op.awaitScope(ctx)
 	}
@@ -391,5 +390,14 @@ func (s *Service) staleLocked(id sandboxwire.ID) []*operation {
 func (s *Service) cancelAll(ops []*operation) {
 	for _, op := range ops {
 		op.cancel(s.cfg.CancelGraceLimit)
+	}
+}
+
+// endAll cancels operations no one can acknowledge again and abandons their
+// output, so the replay limit holds none of their readers.
+func (s *Service) endAll(ops []*operation) {
+	s.cancelAll(ops)
+	for _, op := range ops {
+		op.abandonOutput()
 	}
 }

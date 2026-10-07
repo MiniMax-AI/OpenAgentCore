@@ -412,7 +412,9 @@ type Capabilities struct {
 	// MaxDataBytes bounds WriteStdin data and Output event data.
 	MaxDataBytes        uint32
 	MaxActiveOperations uint32
-	// MaxOperationRecords bounds live operations plus tombstones.
+	// MaxOperationRecords bounds the records the service keeps, tombstones
+	// included. An open attachment's records stay; a closed attachment's go
+	// once its operations have settled.
 	MaxOperationRecords uint32
 	// MaxReplayBytesPerOperation bounds unacknowledged Output data retained
 	// per operation; output reading pauses at the limit.

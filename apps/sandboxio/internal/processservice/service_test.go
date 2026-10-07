@@ -652,6 +652,7 @@ func TestRevokeWhileStarting(t *testing.T) {
 	if exit := op.inspect().Exit; exit.Signal != 15 {
 		t.Fatalf("exit %+v", exit)
 	}
+	h.waitDropped()
 }
 
 // waitDropped waits until the service's bookkeeping is back at a new
@@ -692,6 +693,26 @@ func TestClosedAttachmentsAreDropped(t *testing.T) {
 		h.svc.AttachmentLost(a.att)
 		h.svc.AttachmentRevoked(a.att)
 	}
+	h.waitDropped()
+}
+
+// A closed attachment's operation stopped at the replay limit still settles:
+// no acknowledgement can come, so the cleanup abandons its output.
+func TestRevokeEndsFullReplay(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxReplayBytesPerOperation = sandboxwire.MaxChunk
+	h := newHarness(t, cfg)
+	c := h.connect()
+	op := h.start(c, pipeSpec("cat", "/dev/zero"))
+	// The service stops reading once less than minRead of the limit remains.
+	for n := 0; n <= cfg.MaxReplayBytesPerOperation-minRead; {
+		if o, ok := next(t, op).(sp.OutputEvent); ok {
+			n += len(o.Data)
+		}
+	}
+	c.Close()
+	h.svc.AttachmentLost(h.att)
+	h.svc.AttachmentRevoked(h.att)
 	h.waitDropped()
 }
 

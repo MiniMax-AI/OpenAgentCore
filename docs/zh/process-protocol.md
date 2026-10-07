@@ -1,7 +1,7 @@
 ---
 title: "进程协议"
 source: docs/process-protocol.md
-source_hash: bf8d41ab0290aebae678c07371ea4ebae2084d0f2ea45da3a338c7929ec2c9a3
+source_hash: c2658d8462e8699b9ab5c5122c2f36ee19e30b5890bed69d54c545d60d596ff9
 ---
 
 进程协议定义 agent host 如何在沙箱中启动和控制进程。沙箱内的 Sandbox I/O 服务提供该协议，agent host 的 broker 是其客户端。协议依据明确的 spec 启动进程，以有序事件流式传输其输出，在精确 offset 处接受 stdin，并将 leader 退出、输出结束和进程 scope 结束作为独立事实报告。
@@ -40,7 +40,7 @@ Go 客户端为 `sandboxprocess.NewClient(stream)`。`Start` 和 `Attach` 返回
 
 Linux 服务在二进制的 `main` 中首先调用 `processservice.Init()`。Go 无法设置子进程的 umask，因此每次启动都会将服务二进制作为 trampoline 重新执行：它从继承的描述符读取启动信息，将所有大于 2 的继承描述符标记为 close-on-exec，应用 umask 和工作目录，然后 exec 目标。`Init` 负责运行该 trampoline，正常启动时立即返回。Linux 服务用 `setsid` 在新会话中启动每个 operation，通过 `/proc` 观测会话，并且只声明 `ScopePOSIXSession`。它要求 `pidfd_open` 和 `pidfd_send_signal`（Linux 5.3 或更高版本）：缺少它们时 `processservice.New` 以 `ErrPidfdUnsupported` 失败。
 
-开始服务前，`main` 将进程设为 child subreaper（`prctl(PR_SET_CHILD_SUBREAPER)`），并在进程整个生命周期内运行 `processservice.Reap(ctx)`。`Reap` 是进程中唯一的 `wait`：它回收每个子进程，将每个 leader 的退出交付给对应 operation，并回收 subreaper 继承的孤儿后代进程。二进制中其他任何代码都不得等待子进程；`Reap` 未运行时，任何 operation 都观测不到退出。二进制停止时，在其 stream 结束后调用 `Shutdown(ctx)`：`Shutdown` 像[所有权清理](#ownership)一样取消每个存活的 operation，并在每个 scope 关闭或 `ctx` 结束后返回。
+开始服务前，`main` 将进程设为 child subreaper（`prctl(PR_SET_CHILD_SUBREAPER)`），并在进程整个生命周期内运行 `processservice.Reap(ctx)`。`Reap` 是进程中唯一的 `wait`：它回收每个子进程，将每个 leader 的退出交付给对应 operation，并回收 subreaper 继承的孤儿后代进程。二进制中其他任何代码都不得等待子进程；`Reap` 未运行时，任何 operation 都观测不到退出。二进制停止时，在其 stream 结束后调用 `Shutdown(ctx)`：`Shutdown` 像撤销[所有权](#ownership)时一样，取消每个存活的 operation 并放弃其输出，在每个 scope 关闭或 `ctx` 结束后返回。
 
 ## 参考 {#reference}
 
@@ -156,7 +156,7 @@ stdin offset 从 0 开始，计算服务已接受的字节数。`WriteStdin` 和
 
 ### 所有权 {#ownership}
 
-丢失 stream 只会丢失 observer；operation 继续运行，同一 attachment 的任何 stream 都可以 `Attach` 到它。Link 层报告 attachment 的所有权失效时，服务等待 `OwnerLossGraceMillis`。所有权在宽限期内恢复则不做任何操作。宽限期到期或所有权被撤销时，服务对该 attachment 的每个存活 operation 先发送 TERM，`CancelGraceLimitMillis` 后再发送 KILL；仍在启动中的 operation 一启动就被取消。此后，在所有权恢复之前，该 attachment 上新 operation 的 `Start` 返回 `StaleAttachment`。
+丢失 stream 只会丢失 observer；operation 继续运行，同一 attachment 的任何 stream 都可以 `Attach` 到它。Link 层报告 attachment 的所有权失效时，服务等待 `OwnerLossGraceMillis`。所有权在宽限期内恢复则不做任何操作。宽限期到期或所有权被撤销时，服务对该 attachment 的每个存活 operation 先发送 TERM，`CancelGraceLimitMillis` 后再发送 KILL；仍在启动中的 operation 一启动就被取消。所有权被撤销时，服务还会像 `CloseOutput` 一样放弃每个 operation 的输出，因为此后不会再有确认到达。此后，在所有权恢复之前，该 attachment 上新 operation 的 `Start` 返回 `StaleAttachment`。
 
 ### 能力 {#capabilities}
 
