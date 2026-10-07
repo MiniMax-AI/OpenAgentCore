@@ -51,7 +51,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
-`permissions` gates permission decisions inside the Runtime, and `workspace_authoring` gates the daemon's authoring command. Core has no admission rule for `usage` and `resume`.
+`permissions` gates permission decisions inside the Runtime. Core has no admission rule for `usage` and `resume`.
 
 The prompt request (`prompt_request`, or the configuration of `execution_prepare`) carries the opt-ins Core sets for each Run:
 
@@ -59,17 +59,16 @@ The prompt request (`prompt_request`, or the configuration of `execution_prepare
 | --- | --- |
 | `agent_options` | Always `model` and `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
 | `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
-| `observe_tool_observations` | Always. Tool-call frames then carry the engine-neutral `observation` |
 | `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
-| `strict_resume`, `require_existing_native_session` | Always strict; the second when a native Session must be recovered |
+| `require_existing_native_session` | When a native Session must be recovered |
 | `durable_receipt` on `prompt_steer` | For every active input Core delivers |
 
 An execution configuration requires exactly one of `local_environment` and `disable_execution_environment`; `execution_prepare` rejects neither or both with `unsupported_configuration`.
 
-Requests without an opt-in keep the frames and fields they had without it.
+Requests without an opt-in keep the frames and fields they had without it. A `tool_call` frame carries the engine-neutral `observation` whenever the adapter maps the native tool.
 
 ## Envelope and identity
 

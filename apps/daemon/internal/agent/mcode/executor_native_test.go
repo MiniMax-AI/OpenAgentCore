@@ -28,7 +28,7 @@ func TestNativeMCodeExecutorReuse(t *testing.T) {
 	if err != nil {
 		t.Fatal("private provider options unavailable")
 	}
-	req := executionRequest(t)
+	req := testRequest(t)
 	req.ReleaseOnCompletion = false
 	req.RunID, req.Input, req.ConversationID = "", nil, ""
 	if json.Unmarshal(raw, &req.AgentOptions) != nil {

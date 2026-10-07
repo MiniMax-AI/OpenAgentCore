@@ -16,7 +16,7 @@ import (
 func CheckWorkspace(ctx context.Context, c WorkspaceConfig) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	p, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: c.Node, Args: []string{filepath.Join(filepath.Dir(c.Bridge), "check.mjs")}, Env: executionEnvironment(), OwnProcessGroup: true})
+	p, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: c.Node, Args: []string{filepath.Join(filepath.Dir(c.Bridge), "check.mjs")}, Env: executionEnvironment()})
 	if err != nil {
 		return err
 	}

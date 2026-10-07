@@ -117,7 +117,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"hold"}]}]}]}`, 202)
 	next := awaitOnboardingPrompt(t, started)
-	if next.RunID == first.RunID || next.AgentSessionID != bound.NativeSessionID || !next.StrictResume {
+	if next.RunID == first.RunID || next.AgentSessionID != bound.NativeSessionID {
 		t.Fatal(next)
 	}
 	request("POST", "/v1/agents/sessions/"+created.ID+"/events", `{"events":[{"type":"agent.session.input.cancel"}]}`, 202)

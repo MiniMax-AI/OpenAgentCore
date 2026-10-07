@@ -85,7 +85,7 @@ func TestTerminalFollowsAllNativeFrames(t *testing.T) {
 }
 
 func TestExecutionCancellationWaitsForOutputAndProcess(t *testing.T) {
-	s, out := helperSession(t, "strict-cancel", false)
+	s, out := helperSession(t, "cancel-wait", false)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	select {

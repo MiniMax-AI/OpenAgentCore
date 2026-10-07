@@ -29,7 +29,7 @@ func TestMCPRequiredDiscoveryRequiresPinnedNative(t *testing.T) {
 
 // The declaration must retain the complete baseline capability descriptor.
 func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"SubagentObservations": true, "Streaming": true, "Permissions": true, "Usage": true, "Resume": true, "Steering": true, "MessageItems": true, "ToolObservations": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "WebSearchControl": true, "MessageImages": true, "FunctionResultImages": true, "SubagentControl": true, "DurableInputReceipts": true, "DurableTurns": true, "FunctionTools": true, "MCPHTTPTools": true, "MCPHTTPBearerAuth": true, "WorkspaceAuthoring": true}
+	expected := map[string]bool{"SubagentObservations": true, "Streaming": true, "Permissions": true, "Usage": true, "Resume": true, "Steering": true, "MessageItems": true, "ToolObservations": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "WebSearchControl": true, "MessageImages": true, "FunctionResultImages": true, "SubagentControl": true, "DurableInputReceipts": true, "DurableTurns": true, "FunctionTools": true, "MCPHTTPTools": true, "MCPHTTPBearerAuth": true}
 	expected["ExecutionControls"], expected["TextVerbosity"] = SupportsTextVerbosity, SupportsTextVerbosity
 	value := reflect.ValueOf(Declaration.Info.Capabilities)
 	for i := 0; i < value.NumField(); i++ {

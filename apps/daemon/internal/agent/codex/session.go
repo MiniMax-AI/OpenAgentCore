@@ -70,11 +70,10 @@ type Session struct {
 	functions                 *functionCalls
 	observeMessages           bool
 
-	observeToolObservations bool
-	runID                   string
-	cfg                     sessionConfig
-	out                     chan<- proto.Envelope
-	rpc                     *JSONRPCClient
+	runID string
+	cfg   sessionConfig
+	out   chan<- proto.Envelope
+	rpc   *JSONRPCClient
 
 	cancelCtx context.Context
 	cancelFn  context.CancelFunc

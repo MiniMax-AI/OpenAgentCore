@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 13766041c9ed0c012ceb5051fe43dcc8a1738a198fe325aad15f1902fe373ee3
+source_hash: fd5bcb71c9234310a449fad97a30a899027133ca8df862e8a3306f6bd3dacae8
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -53,7 +53,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
-`permissions` 控制 Runtime 内部权限决定，`workspace_authoring` 控制 daemon 的 authoring 命令。Core 对 `usage` 和 `resume` 没有准入规则。
+`permissions` 控制 Runtime 内部权限决定。Core 对 `usage` 和 `resume` 没有准入规则。
 
 prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core 为各 Run 设置的显式启用项：
 
@@ -61,17 +61,16 @@ prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core
 | --- | --- |
 | `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了 model provider 时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
 | `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
-| `observe_tool_observations` | 始终设置。tool-call frame 随后携带与 engine 无关的 `observation` |
 | `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
-| `strict_resume`, `require_existing_native_session` | 始终严格；需要恢复原生 Session 时设置第二项 |
+| `require_existing_native_session` | 需要恢复原生 Session 时设置 |
 | `prompt_steer` 上的 `durable_receipt` | Core 交付的每个活动输入都设置 |
 
 执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
 
-未携带显式启用项的请求保留未启用时的 frame 和字段。
+未携带显式启用项的请求保留未启用时的 frame 和字段。只要 adapter 映射了原生工具，`tool_call` frame 就携带与 engine 无关的 `observation`。
 
 ## Envelope 与身份 {#envelope-and-identity}
 

@@ -10,7 +10,7 @@ import (
 )
 
 func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (SessionPlan, []string, error) {
-	if err := validateNativeTransportEnvironment(req); err != nil {
+	if err := validateNativeTransportEnvironment(); err != nil {
 		return SessionPlan{}, nil, err
 	}
 	if err := validatePermissionProfile(req); err != nil {

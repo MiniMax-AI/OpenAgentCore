@@ -122,7 +122,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 			registry := agent.NewRegistry()
 			registry.Register(Declaration, *runtime)
 			info := registry.SupportedAgentKinds()[0]
-			if info.Capabilities.WorkspaceAuthoring.IsSupported() || info.Capabilities.Preparation.IsSupported() != ready {
+			if info.Capabilities.Preparation.IsSupported() != ready {
 				t.Fatal(info)
 			}
 			if !ready {

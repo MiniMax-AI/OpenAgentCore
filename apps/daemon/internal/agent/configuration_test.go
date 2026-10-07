@@ -30,11 +30,6 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		return nil, expected
 	})
 	configuration.Providers[0].Protocol = "anthropic"
-	copy, err := registry.Configuration("fixture")
-	if err != nil {
-		t.Fatal(err)
-	}
-	copy.Providers[0].Protocol = "anthropic"
 	factory, _ := registry.Resolve("fixture")
 	executor, _ := registry.ResolveExecutor("fixture")
 	preparation, _ := registry.ResolvePreparation("fixture")
@@ -62,9 +57,6 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	}
 	if calls != 3 {
 		t.Fatal("unexpected native calls", calls)
-	}
-	if _, err := registry.Configuration("missing"); err == nil {
-		t.Fatal("undeclared configuration inferred")
 	}
 }
 

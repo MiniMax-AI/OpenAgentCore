@@ -197,8 +197,8 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 	if !s.functionsComplete(cancelled && settlementConfirmed) || !s.steeringComplete() || !mcp.complete() || !commands.complete() {
 		settlementConfirmed, reusable, reason = false, false, "unsettled_native_operations"
 	}
-	mcp.close(start, emit)
-	commands.close(start, emit)
+	mcp.close(emit)
+	commands.close(emit)
 	s.stopSteering()
 	metadata := map[string]any{proto.DoneMetaAgentSessionType: "claude_session"}
 	if id := s.inputSessionID(); id != "" {

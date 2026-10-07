@@ -13,8 +13,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 		t.Run(map[bool]string{false: "child without thread started", true: "child thread started"}[childStarted], func(t *testing.T) {
 			out := make(chan proto.Envelope, 64)
 			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(),
-				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), observeMessages: true,
-				observeToolObservations: true}
+				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), observeMessages: true}
 			s.registerHandlers()
 			s.setThreadID("root")
 			notify := func(method, params string) { t.Helper(); scopeNotification(t, s, method, params) }

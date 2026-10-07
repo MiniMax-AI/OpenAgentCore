@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -24,15 +23,13 @@ func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
 	if _, err := harnessconfiguration.Configuration().PrepareHarnessConfig(req.AgentOptions); err != nil {
 		return result, err
 	}
-	if req.StrictResume {
-		if err := validateExecutionRequest(req); err != nil {
-			return result, err
-		}
+	if err := validateExecutionRequest(req); err != nil {
+		return result, err
 	}
 	if req.Input.HasImages() {
 		return result, fmt.Errorf("mcode: ACP does not support attachments")
 	}
-	dataDir, err := agent.StateDir("mcode", req.AgentStateKey, req.ConversationID, req.RunID)
+	dataDir, err := agent.StateDir("mcode", req.AgentStateKey)
 	if err != nil {
 		return result, err
 	}
@@ -62,15 +59,13 @@ func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
 		return result, err
 	}
 	config["custom_provider"] = map[string]any{"oac": provider}
-	if req.StrictResume {
-		configureTextExecution(config)
-		if !req.DisableSubagents {
-			config["agents"] = map[string]any{"default": map[string]any{
-				"tools":        []string{"task", "task_append", "task_query", "task_output", "task_stop"},
-				"builtinTools": []string{"task", "task_append", "task_query", "task_output", "task_stop"}, "skills": []string{},
-				"features": map[string]bool{"mavis": false, "delegation": true, "webSearch": false},
-			}}
-		}
+	configureTextExecution(config)
+	if !req.DisableSubagents {
+		config["agents"] = map[string]any{"default": map[string]any{
+			"tools":        []string{"task", "task_append", "task_query", "task_output", "task_stop"},
+			"builtinTools": []string{"task", "task_append", "task_query", "task_output", "task_stop"}, "skills": []string{},
+			"features": map[string]bool{"mavis": false, "delegation": true, "webSearch": false},
+		}}
 	}
 	config["permissionMode"] = "auto"
 	data, err := json.Marshal(config)
@@ -80,36 +75,17 @@ func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
 	if err := os.WriteFile(filepath.Join(result.DataDir, "config.yaml"), data, 0o600); err != nil {
 		return result, err
 	}
-	result.Env = append([]string{}, os.Environ()...)
-	if req.StrictResume {
-		result.Env = append(executionEnvironment(), "OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1")
-		if err := os.WriteFile(filepath.Join(result.DataDir, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
-			return result, err
-		}
-		if !req.DisableSubagents {
-			result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
-		} else {
-			result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS=0")
-		}
+	result.Env = append(executionEnvironment(), "OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1")
+	if err := os.WriteFile(filepath.Join(result.DataDir, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
+		return result, err
 	}
-	if raw := opts["env"]; raw != nil && !req.StrictResume {
-		env, ok := raw.(map[string]any)
-		if !ok {
-			return result, fmt.Errorf("mcode: env must be an object")
-		}
-		for key, rawValue := range env {
-			value, ok := rawValue.(string)
-			if !ok || key == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, 0) {
-				return result, fmt.Errorf("mcode: invalid environment entry")
-			}
-			result.Env = append(result.Env, key+"="+value)
-		}
+	if !req.DisableSubagents {
+		result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
+	} else {
+		result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS=0")
 	}
 	// The adapter owns the native state location, including after cold resume.
-	result.Env = append(result.Env, "MINIMAX_DATA_DIR="+result.DataDir)
-	if req.StrictResume {
-		result.Env = append(result.Env, "HOME="+result.DataDir, "USERPROFILE="+result.DataDir)
-	}
+	result.Env = append(result.Env, "MINIMAX_DATA_DIR="+result.DataDir, "HOME="+result.DataDir, "USERPROFILE="+result.DataDir)
 	result.MCP = []map[string]any{}
 	return result, nil
 }

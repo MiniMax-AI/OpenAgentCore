@@ -107,9 +107,9 @@ func startOwnedHelper(t *testing.T, ctx context.Context, mode, dir string) *Proc
 	t.Helper()
 	p, err := Start(StartOptions{
 		Parent: ctx, Binary: os.Args[0],
-		Args:            []string{"-test.run=^TestOwnedGroupHelper$", "--", "leader", mode, dir},
-		Env:             append(os.Environ(), "GO_WANT_OWNED_GROUP=1", "GORACE=atexit_sleep_ms=0"),
-		OwnProcessGroup: true, KillTimeout: 300 * time.Millisecond,
+		Args:        []string{"-test.run=^TestOwnedGroupHelper$", "--", "leader", mode, dir},
+		Env:         append(os.Environ(), "GO_WANT_OWNED_GROUP=1", "GORACE=atexit_sleep_ms=0"),
+		KillTimeout: 300 * time.Millisecond,
 	})
 	if err != nil {
 		t.Fatal(err)
