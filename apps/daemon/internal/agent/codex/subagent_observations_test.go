@@ -83,7 +83,9 @@ func observationSession(t *testing.T, status string) (*Session, *subagentFixture
 	s.registerHandlers()
 	// Settle as Executor.StartTurn does after a confirmed native start.
 	go s.settleExecutorTurn(nil)
+	served := make(chan struct{})
 	go func() {
+		defer close(served)
 		decoder := json.NewDecoder(server.FromClient)
 		for {
 			var request JsonRpcRequest
@@ -128,6 +130,8 @@ func observationSession(t *testing.T, status string) (*Session, *subagentFixture
 	t.Cleanup(func() {
 		cancel()
 		cleanup()
+		// A reply may still be persisting after settlement closed the client.
+		<-served
 		select {
 		case <-s.subagents.done:
 		case <-time.After(time.Second):
