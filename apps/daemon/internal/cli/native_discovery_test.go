@@ -40,7 +40,7 @@ func TestDiscoveryAndRegistration(t *testing.T) {
 				t.Fatalf("probes %v, want %v", called, expected)
 			}
 			registry := agent.NewRegistry()
-			registerAgentKinds(registry, discovery, "")
+			registerAgentKinds(registry, discovery)
 			if len(registry.Kinds()) != len(expected) {
 				t.Fatal(registry.Kinds())
 			}

@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 // SessionPlan holds the resolved per-prompt launch plan derived from
@@ -28,12 +29,12 @@ type SessionPlan struct {
 	Env []string
 
 	// ExtraConfig is a list of `-c key=value` overrides applied at the
-	// app-server CLI. Used to layer model_reasoning_summary etc. without
-	// editing config.toml.
+	// app-server CLI. Used to layer web_search, model_verbosity and
+	// model_reasoning_effort without editing config.toml.
 	ExtraConfig [][2]string
 
 	// EnableFeatures / DisableFeatures forward to `--enable / --disable`
-	// flags. Today empty by default; reserved for future ARC opt-in.
+	// flags.
 	EnableFeatures  []string
 	DisableFeatures []string
 
@@ -73,135 +74,61 @@ type SessionPlan struct {
 	Cleanup func()
 }
 
-// BuildSessionPlan derives a SessionPlan from PromptRequestPayload's
-// fields. Options use a string-keyed map.
-//
-// The agent_options keys this function reads:
-//
-//	model                 string          codex model slug, e.g. "gpt-5.5"
-//	system_prompt         string          forwarded as developerInstructions
-//	override_system_prompt string         replaces system_prompt entirely when
-//	                                      non-empty
-//	env                   map[string]any  extra env vars (KEY=string-value)
-//	mcp_servers           map[string]any  rendered MCP server config — written
-//	                                      to <CODEX_HOME>/config.toml [mcp_servers]
-//	model_provider       object          frozen upstream protocol, endpoint, credential and token limits
-//	reasoning_summary     string          one of auto/concise/detailed/none —
-//	                                      routed via -c model_reasoning_summary
-//	mode                  string          Codex collaboration mode: default/plan
-//	enable_features       []any           string list, forwarded as --enable
-//	disable_features      []any           string list, forwarded as --disable
-//
-// The codex binary itself is resolved via PATH only — there's no
-// per-prompt override knob. If a deployment needs a custom binary
-// location, set it via the daemon's process environment (PATH /
-// codexBinary in sessionConfig) rather than per-call.
-//
+// BuildSessionPlan derives a SessionPlan from the request's frozen model
+// configuration and ExecutionControls. The codex binary is resolved via PATH.
 // Daemon-managed Codex sessions bypass approvals and the engine sandbox.
-func BuildSessionPlan(runID, agentStateKey string, opts map[string]any) (SessionPlan, error) {
-	return buildSessionPlan(opts, func() (agent.ViewDir, error) {
-		home, err := allocCodexHome(agentStateKey)
+func BuildSessionPlan(req proto.PromptRequestPayload) (SessionPlan, error) {
+	return buildSessionPlan(req, func() (agent.ViewDir, error) {
+		home, err := allocCodexHome(req.AgentStateKey)
 		return agent.ViewDir{Host: home, View: home}, err
 	})
 }
 
 // buildSessionPlan derives the plan with CODEX_HOME from allocHome, which runs
-// only after the options validate.
-func buildSessionPlan(opts map[string]any, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
-	cleanup := func() {}
+// only after the request validates.
+func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
 	plan := SessionPlan{
 		CollaborationMode: CollaborationModeDefault,
 		ApprovalPolicy:    AskForApproval{String: "never"},
 		Sandbox:           SandboxDangerFullAcces,
-		Cleanup:           cleanup,
+		Cleanup:           func() {},
 	}
-
-	nativeConfig, err := harnessconfiguration.Configuration().PrepareHarnessConfig(opts)
+	prepared, err := harnessconfiguration.Configuration().Prepare(req)
 	if err != nil {
 		return plan, err
 	}
-
-	if value, present := opts["model_provider"]; present && (value == nil || stringOpt(opts, "model") == "") {
-		return plan, errors.New("codex: model and complete model_provider are required")
-	}
-
-	if value, present := opts["web_search"]; present {
-		switch value {
+	if controls := req.ExecutionControls; controls != nil {
+		switch controls.WebSearch {
 		case "disabled", "cached", "live":
 		default:
 			return plan, fmt.Errorf("codex: web_search must be disabled, cached or live")
 		}
-	}
-
-	if value, present := opts["model_verbosity"]; present {
-		switch value {
+		switch controls.TextVerbosity {
 		case "low", "medium", "high":
 		default:
 			return plan, fmt.Errorf("codex: model_verbosity must be low, medium or high")
 		}
+		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"web_search", strconv(controls.WebSearch)}, [2]string{"model_verbosity", strconv(controls.TextVerbosity)})
 	}
-
-	plan.Model = stringOpt(opts, "model")
-	plan.SystemPrompt = stringOpt(opts, "system_prompt")
-	if override := stringOpt(opts, "override_system_prompt"); override != "" {
-		plan.SystemPrompt = override
-	}
-	if mode := CollaborationModeKind(stringOpt(opts, "mode")); mode != "" {
-		switch mode {
-		case CollaborationModeDefault, CollaborationModePlan:
-			plan.CollaborationMode = mode
-		default:
-			return plan, fmt.Errorf("codex: unsupported collaboration mode %q", mode)
-		}
-	}
-
-	env, err := buildSessionEnv(opts)
-	if err != nil {
-		return plan, err
-	}
+	plan.Model = prepared.Model
+	plan.SystemPrompt = req.SystemPrompt
 
 	home, err := allocHome()
 	if err != nil {
 		return plan, err
 	}
-	codexHome := home.Host
-	if err := resetGeneratedConfig(codexHome); err != nil {
+	if err := resetGeneratedConfig(home.Host); err != nil {
 		return plan, err
 	}
-	env = append(env, "CODEX_HOME="+home.View)
 	plan.home = home
-
-	// MCP servers come pre-rendered from server/internal/connector/agentdaemon
-	// (capabilityAdditions.MCPServers, rendered via render.TargetCodex)
-	// as a map of name → {command,args,env}. Write them into
-	// <CODEX_HOME>/config.toml so codex picks them up on startup.
-	mcpServers, err := normaliseMCPServers(opts["mcp_servers"])
-	if err != nil {
-		return plan, err
-	}
-	if len(mcpServers) > 0 {
-		if err := writeCodexMCPConfig(codexHome, mcpServers); err != nil {
-			return plan, err
-		}
-	}
-
-	provider, hasProvider, err := normaliseProviderConfig(opts["model_provider"])
-	if err != nil {
-		cleanup()
-		return plan, err
-	}
-	if hasProvider {
-		if err := writeCodexProviderConfig(codexHome, provider); err != nil {
-			cleanup()
+	plan.Env = []string{"DISABLE_TELEMETRY=1", "CODEX_HOME=" + home.View}
+	if prepared.Provider != nil {
+		if err := writeCodexProviderConfig(home.Host, nativeProvider(*prepared.Provider)); err != nil {
 			return plan, err
 		}
 		plan.ModelProvider = oacProviderSlug
 	}
-
-	plan.Env = env
-	plan.Cleanup = cleanup
-	plan.ExtraConfig = extraConfigFromOpts(opts)
-	if effort, ok := nativeConfig["model_reasoning_effort"].(string); ok {
+	if effort, ok := prepared.HarnessConfig["model_reasoning_effort"].(string); ok {
 		plan.ModelReasoningEffort = effort
 		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_reasoning_effort", strconv(effort)})
 	}
@@ -213,8 +140,6 @@ func buildSessionPlan(opts map[string]any, allocHome func() (agent.ViewDir, erro
 		plan.ExtraConfig = append(plan.ExtraConfig,
 			[2]string{"model_provider", strconv(plan.ModelProvider)})
 	}
-	plan.EnableFeatures = stringListOpt(opts, "enable_features")
-	plan.DisableFeatures = stringListOpt(opts, "disable_features")
 	return plan, nil
 }
 
@@ -281,155 +206,9 @@ func resetGeneratedConfig(codexHome string) error {
 	return nil
 }
 
-func buildSessionEnv(opts map[string]any) ([]string, error) {
-	env := []string{
-		"DISABLE_TELEMETRY=1",
-	}
-	raw, ok := opts["env"]
-	if !ok || raw == nil {
-		return env, nil
-	}
-	envMap, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("codex.BuildSessionPlan: env must be object, got %T", raw)
-	}
-	keys := make([]string, 0, len(envMap))
-	for k := range envMap {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		s, ok := envMap[k].(string)
-		if !ok {
-			return nil, fmt.Errorf("codex.BuildSessionPlan: env[%q] must be string, got %T", k, envMap[k])
-		}
-		env = append(env, k+"="+s)
-	}
-	return env, nil
-}
-
-func stringListOpt(opts map[string]any, key string) []string {
-	if opts == nil {
-		return nil
-	}
-	raw, ok := opts[key]
-	if !ok || raw == nil {
-		return nil
-	}
-	arr, ok := raw.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(arr))
-	for _, v := range arr {
-		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-func normaliseMCPServers(raw any) (map[string]mcpServerConfig, error) {
-	if raw == nil {
-		return nil, nil
-	}
-	m, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("codex: mcp_servers must be object, got %T", raw)
-	}
-	out := make(map[string]mcpServerConfig, len(m))
-	for name, v := range m {
-		entry, ok := v.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("codex: mcp_servers[%q] must be object, got %T", name, v)
-		}
-		srv := mcpServerConfig{Name: name}
-		if url, ok := entry["url"].(string); ok {
-			srv.URL = strings.TrimSpace(url)
-		}
-		if cmd, ok := entry["command"].(string); ok {
-			srv.Command = cmd
-		}
-		if args, ok := entry["args"].([]any); ok {
-			for _, a := range args {
-				if s, ok := a.(string); ok {
-					srv.Args = append(srv.Args, s)
-				}
-			}
-		}
-		if env, ok := entry["env"].(map[string]any); ok {
-			srv.Env = make(map[string]string, len(env))
-			for k, val := range env {
-				if s, ok := val.(string); ok {
-					srv.Env[k] = s
-				}
-			}
-		}
-		if headers, ok := entry["headers"].(map[string]any); ok {
-			srv.Headers = make(map[string]string, len(headers))
-			for key, value := range headers {
-				if text, ok := value.(string); ok {
-					srv.Headers[key] = text
-				}
-			}
-		} else if headers, ok := entry["headers"].(map[string]string); ok {
-			srv.Headers = headers
-		}
-		if srv.Command == "" && srv.URL == "" {
-			return nil, fmt.Errorf("codex: mcp_servers[%q] missing command or url", name)
-		}
-		if srv.Command != "" && srv.URL != "" {
-			return nil, fmt.Errorf("codex: mcp_servers[%q] cannot set both command and url", name)
-		}
-		out[name] = srv
-	}
-	return out, nil
-}
-
-// normaliseProviderConfig validates and renders the frozen native provider.
-func normaliseProviderConfig(raw any) (providerConfig, bool, error) {
-	if raw == nil {
-		return providerConfig{}, false, nil
-	}
-	provider, err := harnessconfiguration.Configuration().ParseProvider(raw)
-	if err != nil {
-		return providerConfig{}, false, err
-	}
-	return providerConfig{BaseURL: provider.BaseURL, BearerToken: provider.APIKey, WireAPI: "responses"}, true, nil
-}
-
-// intOpt extracts an integer-shaped value from a map. JSON-decoded
-// numbers arrive as float64; tests sometimes pass int directly. Both
-// are accepted; non-numeric / missing yields 0.
-func intOpt(m map[string]any, key string) int {
-	v, ok := m[key]
-	if !ok || v == nil {
-		return 0
-	}
-	switch x := v.(type) {
-	case int:
-		return x
-	case int64:
-		return int(x)
-	case float64:
-		return int(x)
-	}
-	return 0
-}
-
-func stringOpt(opts map[string]any, key string) string {
-	if opts == nil {
-		return ""
-	}
-	v, ok := opts[key]
-	if !ok || v == nil {
-		return ""
-	}
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(s)
+// nativeProvider renders the frozen model provider as Codex's provider entry.
+func nativeProvider(provider modelprovider.Provider) providerConfig {
+	return providerConfig{BaseURL: provider.BaseURL, BearerToken: provider.APIKey, WireAPI: "responses"}
 }
 
 func safePathPartCodex(runID string) string {

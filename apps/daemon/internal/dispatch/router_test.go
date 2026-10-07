@@ -593,30 +593,6 @@ func assertDecisionAck(t *testing.T, sender *recSender, deliveryID string, appli
 	t.Fatalf("no decision ack for delivery %q in %+v", deliveryID, frames)
 }
 
-func TestHandleDeviceShutdownCancelsAllSessions(t *testing.T) {
-	h := newHarness(t)
-	defer h.router.Shutdown(context.Background())
-
-	for _, rid := range []string{"r1", "r2", "r3"} {
-		if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, rid, proto.PromptRequestPayload{AgentKind: "fake_alpha"})); err != nil {
-			t.Fatalf("start %s: %v", rid, err)
-		}
-		<-h.gotReq
-	}
-	sessions := make([]*fakeSession, 3)
-	for i := range sessions {
-		sessions[i] = <-h.gotSess
-		sessions[i].closeOutOnCancel = true
-	}
-
-	if err := h.router.Handle(context.Background(), mustEnv(t, proto.TypeDeviceShutdown, "", proto.DeviceShutdownPayload{Reason: "reap"})); err != nil {
-		t.Fatalf("device_shutdown: %v", err)
-	}
-	for _, s := range sessions {
-		waitFor(t, func() bool { return s.cancels() == 1 }, "each session.Cancel to fire")
-	}
-}
-
 func TestHandleUnknownTypeIsNoop(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())

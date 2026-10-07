@@ -20,7 +20,6 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 		Usage:                          proto.CapabilitySupported,
 		Resume:                         proto.CapabilitySupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		WorkspaceAuthoring:             proto.CapabilitySupported,
 		Steering:                       proto.CapabilitySupported,
 		MessageItems:                   proto.CapabilitySupported,
 		ToolObservations:               proto.CapabilitySupported,
@@ -45,13 +44,13 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 		MCPHTTPRequired:                proto.CapabilityUnsupported,
 		MCPHTTPBearerAuth:              proto.CapabilitySupported,
 	},
-}, Configuration: configuration.Configuration(), ConnectionOptions: []string{"mcp_servers", "env"}, Discover: discover}
+}, Configuration: configuration.Configuration(), Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
-	runtime := &agent.Runtime{Info: info, Session: Factory, SessionCapabilityContext: true, ExecutorCapabilityContext: true}
+	runtime := &agent.Runtime{Info: info, Session: Factory}
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 	version, err := check(ctx, "")

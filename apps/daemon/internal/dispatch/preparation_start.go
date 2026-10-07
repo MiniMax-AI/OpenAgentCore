@@ -14,7 +14,7 @@ import (
 
 func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) error {
 	var input proto.ExecutionStartPayload
-	if env.DecodePayload(&input) != nil || input.Handle == "" || input.ExecutorID == "" || strings.TrimSpace(input.RunID) == "" || input.Input.Validate() != nil {
+	if env.DecodeRequest(&input) != nil || input.Handle == "" || input.ExecutorID == "" || strings.TrimSpace(input.RunID) == "" || input.Input.Validate() != nil {
 		return r.rejectPreparation(env, "invalid_start")
 	}
 	encoded, _ := json.Marshal(input)

@@ -61,8 +61,7 @@ func registry(harnesses *agent.Registry, factory agent.ExecutorFactory) *agent.R
 func viewInfo(info proto.SupportedAgentKind) proto.SupportedAgentKind {
 	c := &info.Capabilities
 	c.LocalEnvironment = proto.CapabilitySupported
-	for _, field := range []*proto.CapabilitySupport{&c.EnvironmentNone, &c.ToolSearch, &c.FunctionTools, &c.FunctionResultImages,
-		&c.WorkspaceAuthoring, &c.WorkspaceOutputExport} {
+	for _, field := range []*proto.CapabilitySupport{&c.EnvironmentNone, &c.ToolSearch, &c.FunctionTools, &c.FunctionResultImages, &c.WorkspaceOutputExport} {
 		*field = proto.CapabilityUnsupported
 	}
 	return info

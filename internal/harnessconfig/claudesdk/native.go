@@ -1,11 +1,8 @@
 package claudesdk
 
-import (
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"math"
-)
+import "math"
 
-func validateNativeConfig(config proto.HarnessConfig) bool {
+func validateNativeConfig(config map[string]any) bool {
 	for key, value := range config {
 		switch key {
 		case "effort":

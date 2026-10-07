@@ -13,14 +13,15 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	return proto.PromptRequestPayload{RunID: "run-1", ConversationID: "conversation-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"), AgentOptions: map[string]any{
-		"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "fixture-key", "context_window": 64000, "max_output_tokens": 4096}, "system_prompt": "Current instructions",
-	}}
+	return proto.PromptRequestPayload{RunID: "run-1", ConversationID: "conversation-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"),
+		Model: "fixture", SystemPrompt: "Current instructions",
+		ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "fixture-key", ContextWindow: 64000, MaxOutputTokens: 4096}}
 }
 
 func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan proto.Envelope) {

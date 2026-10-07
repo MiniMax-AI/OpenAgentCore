@@ -42,7 +42,6 @@ func TestBindingRejectsScopeOverrides(t *testing.T) {
 		},
 		"other Session":     func(r *proto.PromptRequestPayload) { r.AgentStateKey = "agents-api-" + uuid.NewString() },
 		"none":              func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
-		"product authoring": func(r *proto.PromptRequestPayload) { r.WorkspaceAuthoring = true },
 		"non-strict resume": func(r *proto.PromptRequestPayload) { r.StrictResume = false },
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -66,19 +66,3 @@ func TestNativeConfigurationBoundary(t *testing.T) {
 		}
 	}
 }
-
-func TestPreparedConfigurationOwnsNestedSnapshot(t *testing.T) {
-	c, _ := Registry().Lookup("claude_sdk")
-	original := map[string]any{"thinking": map[string]any{"type": "enabled", "budgetTokens": 1024}}
-	prepared, err := c.PrepareHarnessConfig(map[string]any{"harness_config": original})
-	if err != nil {
-		t.Fatal(err)
-	}
-	original["thinking"].(map[string]any)["budgetTokens"] = 2048
-	if prepared["thinking"].(map[string]any)["budgetTokens"] != float64(1024) {
-		t.Fatal("configuration retained caller ownership")
-	}
-	if _, err = c.PrepareHarnessConfig(map[string]any{"harness_config": nil}); err == nil {
-		t.Fatal("null accepted")
-	}
-}

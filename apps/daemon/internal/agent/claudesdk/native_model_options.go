@@ -1,7 +1,5 @@
 package claudesdk
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-
 // nativeModelOptions is private SDK input, compiled only after the shared
 // configuration declaration validates and owns the model parameters.
 type nativeModelOptions struct {
@@ -9,7 +7,7 @@ type nativeModelOptions struct {
 	Thinking map[string]any `json:"thinking,omitempty"`
 }
 
-func compileNativeModelOptions(config proto.HarnessConfig) *nativeModelOptions {
+func compileNativeModelOptions(config map[string]any) *nativeModelOptions {
 	if len(config) == 0 {
 		return nil
 	}

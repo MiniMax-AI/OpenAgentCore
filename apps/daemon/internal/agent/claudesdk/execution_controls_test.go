@@ -17,7 +17,7 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "native-model", "system_prompt": "Keep these exact instructions.\nDo not replace them."}}
+	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), AgentSessionID: "native-session", Model: "native-model", SystemPrompt: "Keep these exact instructions.\nDo not replace them."}
 	ordinary, _, err := prepare(config, request)
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ExecutionControls: &controls, AgentOptions: map[string]any{"model": "native-model"}}
+			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ExecutionControls: &controls, Model: "native-model"}
 			_, err := NewFactory(config)(t.Context(), request, make(chan proto.Envelope, 1))
 			if err == nil || !strings.Contains(err.Error(), "execution controls require") {
 				t.Fatal("unsupported controls did not fail at admission", err)
@@ -81,7 +81,7 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	schema := json.RawMessage(`{"type":"object","properties":{"n":{"const":9007199254740992}}}`)
-	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ObserveMessages: true, DisableSubagents: true, AgentOptions: map[string]any{"model": "model", "system_prompt": "Original instructions."}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
+	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ObserveMessages: true, DisableSubagents: true, Model: "model", SystemPrompt: "Original instructions.", ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
 	start, _, err := prepare(config, request)
 	if err != nil {
 		t.Fatal(err)
@@ -104,7 +104,7 @@ func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), DisableSubagents: true, ToolSearch: true, AgentOptions: map[string]any{"model": "model"}, FunctionTools: []proto.FunctionTool{
+	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), DisableSubagents: true, ToolSearch: true, Model: "model", FunctionTools: []proto.FunctionTool{
 		{Name: "lookup", Description: "Lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"const":"original"}}}`), DeferLoading: true},
 		{Name: "clock", Description: "Clock", Parameters: json.RawMessage(`{"type":"object"}`)},
 	}}

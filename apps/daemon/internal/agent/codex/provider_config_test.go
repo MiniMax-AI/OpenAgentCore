@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestWriteCodexProviderConfig_Minimal(t *testing.T) {
@@ -132,36 +135,10 @@ func TestWriteCodexProviderConfig_AppendsAlongsideMCP(t *testing.T) {
 	}
 }
 
-func TestNormaliseProviderConfig_FixedBundle(t *testing.T) {
-	raw := map[string]any{"protocol": "responses", "base_url": "https://x/v1", "api_key": "sk-x"}
-	cfg, present, err := normaliseProviderConfig(raw)
-	if err != nil || !present || cfg.BaseURL != "https://x/v1" || cfg.BearerToken != "sk-x" || cfg.WireAPI != "responses" {
-		t.Fatal("provider not preserved", err)
-	}
-	raw["http_headers"] = map[string]any{"Authorization": "other"}
-	if _, _, err := normaliseProviderConfig(raw); err == nil {
-		t.Fatal("undeclared configuration accepted")
-	}
-}
-
-func TestNormaliseProviderConfig_Nil(t *testing.T) {
-	cfg, hasProvider, err := normaliseProviderConfig(nil)
-	if err != nil {
-		t.Fatalf("normalise nil: %v", err)
-	}
-	if hasProvider {
-		t.Fatal("hasProvider must be false for nil")
-	}
-	_ = cfg
-}
-
 func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
-	plan, err := BuildSessionPlan("run-x", "conv-1/agent-1/codex", map[string]any{
-		"model": "fixture-model",
-		"model_provider": map[string]any{"protocol": "responses",
-			"base_url": "https://x/v1",
-			"api_key":  "sk-x",
-		},
+	plan, err := BuildSessionPlan(proto.PromptRequestPayload{
+		RunID: "run-x", AgentStateKey: "conv-1/agent-1/codex", Model: "fixture-model",
+		ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://x/v1", APIKey: "sk-x"},
 	})
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
@@ -194,7 +171,7 @@ func TestBuildSessionPlan_PinsModelProviderWhenProviderSet(t *testing.T) {
 }
 
 func TestBuildSessionPlan_NoProviderLeavesBuiltinDefault(t *testing.T) {
-	plan, err := BuildSessionPlan("run-y", "conv-1/agent-1/codex", nil)
+	plan, err := BuildSessionPlan(proto.PromptRequestPayload{RunID: "run-y", AgentStateKey: "conv-1/agent-1/codex"})
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}

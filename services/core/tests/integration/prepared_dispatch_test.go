@@ -20,7 +20,7 @@ type preparedDispatchResult struct {
 
 func preparedDispatchHarness(t *testing.T) (*dispatchHarness, sessions.EnvironmentInputReservation) {
 	t.Helper()
-	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction."},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
+	h := newDispatchHarnessForSession(t, []byte(`{"agent":{"model":"test-model","instructions":"Keep this instruction.","x_agents_core":{"harness_config":{"model_reasoning_effort":"low"}}},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`), true)
 	assertNoRuntimeAllocation(t, h)
 	h.d, h.lease = h.bound(), h.owner().Lease
 	enableWorkerEnvironment(t, h)
@@ -141,8 +141,9 @@ func TestPreparedDispatchOwnerOutlivesReservationDeadline(t *testing.T) {
 	assertPreparationReleased(t, h, frame.ID, handle)
 }
 
-// A self-hosted Session's frozen provider travels only in the preparation sent
-// to the executor bound to that Session, not to another executor of the tenant.
+// A self-hosted Session's model, instructions, frozen provider and
+// harness_config travel only in the preparation sent to the executor bound to
+// that Session, not to another executor of the tenant.
 func TestSelfHostedProviderReachesOnlyBoundExecutor(t *testing.T) {
 	h, pending := preparedDispatchHarness(t)
 	other, err := h.s.CreateSession(t.Context(), h.tenant, WithFixtureModelProvider(sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
@@ -155,13 +156,12 @@ func TestSelfHostedProviderReachesOnlyBoundExecutor(t *testing.T) {
 	result := runPreparedDispatch(h, ctx, pending)
 	frame := h.read(proto.TypeExecutionPrepare)
 	var prepare proto.ExecutionPreparePayload
-	if frame.DecodePayload(&prepare) != nil {
+	if frame.DecodeRequest(&prepare) != nil {
 		t.Fatal("invalid preparation")
 	}
-	provider, _ := prepare.Configuration.AgentOptions["model_provider"].(map[string]any)
-	fixture := FixtureModelProvider("codex")
-	if provider["base_url"] != fixture.BaseURL || provider["api_key"] != fixture.APIKey {
-		t.Fatal("bound executor did not receive the frozen provider", prepare.Configuration.AgentOptions)
+	fixture, got := FixtureModelProvider("codex"), prepare.Configuration
+	if got.Model != "test-model" || got.SystemPrompt != "Keep this instruction." || got.ModelProvider == nil || got.ModelProvider.BaseURL != fixture.BaseURL || got.ModelProvider.APIKey != fixture.APIKey || string(got.HarnessConfig) != `{"model_reasoning_effort":"low"}` {
+		t.Fatal("bound executor did not receive the Session's model configuration")
 	}
 	_ = bystander.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 	for {

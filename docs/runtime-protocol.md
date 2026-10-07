@@ -20,7 +20,7 @@ A Runtime connects in this order:
 
 The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
 
-Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core fences the owner lease and evicts the old Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core closes the previous connection and evicts its Run and interaction routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
 
 ## Capability declarations
 
@@ -51,12 +51,13 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
 
-`permissions` gates permission decisions inside the Runtime, and `workspace_authoring` gates the daemon's authoring command. Core has no admission rule for `usage` and `resume`.
+`permissions` gates permission decisions inside the Runtime. Core has no admission rule for `usage` and `resume`.
 
-The prompt request (`prompt_request`, or the configuration of `execution_prepare`) carries the opt-ins Core sets for each Run:
+The prompt request (`prompt_request`, or the configuration of `execution_prepare`) carries the Session's model configuration and the opt-ins Core sets for each Run:
 
 | Field | Set by Core |
 | --- | --- |
+| `model`, `system_prompt`, `model_provider`, `harness_config` | From the Session's frozen configuration: the Agent's model and instructions, the provider bundle when the Session has one, and the [native model parameters](../contracts/agents-api/model-execution.md#native-model-parameters). The Harness validates them before any native effect |
 | `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
 | `observe_tool_observations` | Always. Tool-call frames then carry the engine-neutral `observation` |
 | `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
@@ -90,13 +91,13 @@ User-choice decisions carry `question_answers`: an explicit `question_id` and an
 
 ## Message families
 
-The linked source files define the required fields, validators, limits and finite error categories.
+The linked source files define the required fields, validators, limits and finite error categories. The Runtime decodes every Core → Runtime payload strictly: a member its type does not declare, at any depth, rejects the request.
 
 | Core → Runtime | Runtime → Core | Definition |
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_request`, `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |

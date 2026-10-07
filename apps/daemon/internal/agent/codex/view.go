@@ -14,6 +14,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 const (
@@ -128,7 +129,7 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	if local == nil || req.DisableExecutionEnvironment || !path.IsAbs(local.WorkspaceRoot) {
 		return SessionPlan{}, fmt.Errorf("%w: codex: a view runs in an Environment workspace", agent.ErrUnsupportedOperation)
 	}
-	if local.Capabilities || len(local.Skills) > 0 || hasSkills(req.AgentOptions) {
+	if local.Capabilities || len(local.Skills) > 0 {
 		return SessionPlan{}, fmt.Errorf("%w: codex: Capabilities and skills in a view", agent.ErrUnsupportedOperation)
 	}
 	if !filepath.IsAbs(view.Home.Host) || !path.IsAbs(view.Home.View) {
@@ -146,7 +147,7 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	if err != nil {
 		return SessionPlan{}, err
 	}
-	plan, err := buildSessionPlan(req.AgentOptions, func() (agent.ViewDir, error) { return viewHome(view.Home) })
+	plan, err := buildSessionPlan(req, func() (agent.ViewDir, error) { return viewHome(view.Home) })
 	if err != nil {
 		return SessionPlan{}, fmt.Errorf("codex: build session plan: %w", err)
 	}
@@ -178,8 +179,8 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	// No login shell, and no ancestor walk above the workspace over the
 	// mount. No trust entry is written, so the project stays untrusted.
 	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"allow_login_shell", "false"}, [2]string{"project_root_markers", "[]"})
-	if stringOpt(req.AgentOptions, "model_verbosity") != "" {
-		if err := viewModelVerbosity(ctx, cfg.codexBinary, &plan, req.AgentOptions); err != nil {
+	if req.ExecutionControls != nil {
+		if err := viewModelVerbosity(ctx, cfg.codexBinary, &plan, req.ModelProvider); err != nil {
 			plan.Cleanup()
 			return SessionPlan{}, err
 		}
@@ -194,12 +195,6 @@ func prepareViewPlan(ctx context.Context, req proto.PromptRequestPayload, cfg se
 	}
 	plan.Env = append(append(env, "NO_PROXY=127.0.0.1,localhost", "no_proxy=127.0.0.1,localhost"), plan.Env...)
 	return plan, nil
-}
-
-func hasSkills(opts map[string]any) bool {
-	raw := opts["skills"]
-	items, isList := raw.([]any)
-	return raw != nil && (!isList || len(items) > 0)
 }
 
 // viewHome lays out CODEX_HOME and TMPDIR in the Session home. The Session
@@ -223,7 +218,7 @@ func viewHome(home agent.ViewDir) (agent.ViewDir, error) {
 
 // viewModelVerbosity reads the catalog from the trusted install on this host,
 // with a scratch CODEX_HOME that holds only the Session's provider.
-func viewModelVerbosity(ctx context.Context, binary string, plan *SessionPlan, opts map[string]any) error {
+func viewModelVerbosity(ctx context.Context, binary string, plan *SessionPlan, provider *modelprovider.Provider) error {
 	scratch, err := os.MkdirTemp("", "oac-codex-catalog-")
 	if err != nil {
 		return err
@@ -235,12 +230,8 @@ func viewModelVerbosity(ctx context.Context, binary string, plan *SessionPlan, o
 			return err
 		}
 	}
-	provider, hasProvider, err := normaliseProviderConfig(opts["model_provider"])
-	if err != nil {
-		return err
-	}
-	if hasProvider {
-		if err := writeCodexProviderConfig(home, provider); err != nil {
+	if provider != nil {
+		if err := writeCodexProviderConfig(home, nativeProvider(*provider)); err != nil {
 			return err
 		}
 	}

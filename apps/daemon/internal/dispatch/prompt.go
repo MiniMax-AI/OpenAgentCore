@@ -13,7 +13,7 @@ import (
 func (r *Router) handlePromptRequest(callerCtx context.Context, env proto.Envelope) error {
 	r.log.InfoContext(callerCtx, "handlePromptRequest: decoding payload", "env_id", env.ID, "env_type", env.Type)
 	var req proto.PromptRequestPayload
-	if err := env.DecodePayload(&req); err != nil {
+	if err := env.DecodeRequest(&req); err != nil {
 		r.log.ErrorContext(callerCtx, "handlePromptRequest: decode failed", "env_id", env.ID, "err", err)
 		return fmt.Errorf("dispatch: decode prompt_request: %w", err)
 	}
@@ -62,7 +62,6 @@ func (r *Router) handlePromptRequest(callerCtx context.Context, env proto.Envelo
 	r.log.InfoContext(callerCtx, "handlePromptRequest: decoded",
 		"run_id", runID, "agent_kind", req.AgentKind,
 		"message_count", len(req.Input),
-		"has_agent_options", req.AgentOptions != nil,
 		"agent_session_id", req.AgentSessionID,
 		"agent_state_key", req.AgentStateKey)
 

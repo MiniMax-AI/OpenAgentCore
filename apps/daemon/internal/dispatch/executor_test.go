@@ -170,7 +170,7 @@ func TestExecutorRejectsConfigurationAndNativeIdentityChanges(t *testing.T) {
 	for _, kind := range []string{"configuration", "native"} {
 		req := executorRequest()
 		if kind == "configuration" {
-			req.Configuration.AgentOptions = map[string]any{"model": "changed"}
+			req.Configuration.SystemPrompt = "changed"
 		} else {
 			req.Configuration.AgentSessionID = "other-native"
 		}

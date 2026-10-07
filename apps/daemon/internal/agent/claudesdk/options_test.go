@@ -7,26 +7,23 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestNullableSystemPrompt(t *testing.T) {
+func TestModelIsRequired(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		options map[string]any
-		want    string
-		reject  bool
+		name string
+		req  proto.PromptRequestPayload
+		want string
 	}{
-		{"omitted", map[string]any{"model": "test-model"}, "", false},
-		{"null", map[string]any{"model": "test-model", "system_prompt": nil}, "", false},
-		{"empty", map[string]any{"model": "test-model", "system_prompt": ""}, "", false},
-		{"text", map[string]any{"model": "test-model", "system_prompt": "instructions"}, "instructions", false},
-		{"null-model", map[string]any{"model": nil}, "", true},
-		{"null-unknown", map[string]any{"model": "test-model", "unsupported": nil}, "", true},
+		{"no system prompt", proto.PromptRequestPayload{Model: "test-model"}, ""},
+		{"system prompt", proto.PromptRequestPayload{Model: "test-model", SystemPrompt: "instructions"}, "instructions"},
+		{"no model", proto.PromptRequestPayload{SystemPrompt: "instructions"}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Entrypoint: filepath.Join(root, "main.js"), StateDir: filepath.Join(root, "state")}
-			start, _, err := prepare(config, proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentOptions: tc.options})
-			if (err != nil) != tc.reject || (!tc.reject && start.SystemPrompt != tc.want) {
+			tc.req.RunID, tc.req.Input = "run", proto.TextInput("hello")
+			start, _, err := prepare(config, tc.req)
+			if (err != nil) != (tc.req.Model == "") || start.SystemPrompt != tc.want {
 				t.Fatalf("system prompt %q, error %v", start.SystemPrompt, err)
 			}
 		})

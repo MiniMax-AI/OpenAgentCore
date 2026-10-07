@@ -19,7 +19,7 @@ func TestMCodeExecutionOptInIsVersionBound(t *testing.T) {
 			t.Setenv("OAC_RUNTIME_MCODE_AGENTS_API", tc.enabled)
 			rc := agent.DiscoveryOptions{Stdout: io.Discard, Stderr: io.Discard}
 			runtime := discoverWithCheck(t.Context(), rc, Declaration.Info, func(context.Context, string) (string, error) { return tc.version, nil })
-			if runtime.Executor == nil || runtime.Preparation != nil || !runtime.SessionCapabilityContext || !runtime.ExecutorCapabilityContext {
+			if runtime.Executor == nil || runtime.Preparation != nil {
 				t.Fatalf("factories: %+v", runtime)
 			}
 			info := runtime.Info
@@ -35,7 +35,7 @@ func TestMCodeExecutionOptInIsVersionBound(t *testing.T) {
 
 // The declaration must retain the complete baseline capability descriptor.
 func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"Streaming": true, "Permissions": true, "Resume": true, "WorkspaceAuthoring": true}
+	expected := map[string]bool{"Streaming": true, "Permissions": true, "Resume": true}
 	value := reflect.ValueOf(Declaration.Info.Capabilities)
 	for i := 0; i < value.NumField(); i++ {
 		name := value.Type().Field(i).Name

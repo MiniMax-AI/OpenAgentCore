@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestOptionsModelProviderProtocols(t *testing.T) {
@@ -14,9 +16,9 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 	} {
 		t.Run(tc.protocol, func(t *testing.T) {
 			req := testRequest(t)
-			req.AgentOptions["model_provider"].(map[string]any)["protocol"] = tc.protocol
-			req.AgentOptions["model"] = "chosen-model"
-			opts, err := prepareOptions(t.Context(), req)
+			req.ModelProvider.Protocol = modelprovider.Protocol(tc.protocol)
+			req.Model = "chosen-model"
+			opts, err := prepareOptions(req)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -44,41 +46,29 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 }
 
 func TestOptionsRejectInvalidProvider(t *testing.T) {
-	for _, tc := range []struct {
-		name, field string
-		value       any
-	}{
-		{"unknown protocol", "protocol", "unknown"},
-		{"protocol alias", "protocol", "chat-completions"},
-		{"remote HTTP", "base_url", "http://provider.example"},
-		{"empty key", "api_key", ""},
-		{"missing context", "context_window", 0},
-		{"missing output", "max_output_tokens", 0},
-		{"excess output", "max_output_tokens", 64001},
-		{"native options", "options", map[string]any{"apiKey": "fixture-key"}},
+	for name, edit := range map[string]func(*modelprovider.Provider){
+		"unknown protocol": func(p *modelprovider.Provider) { p.Protocol = "unknown" },
+		"protocol alias":   func(p *modelprovider.Provider) { p.Protocol = "chat-completions" },
+		"remote HTTP":      func(p *modelprovider.Provider) { p.BaseURL = "http://provider.example" },
+		"empty key":        func(p *modelprovider.Provider) { p.APIKey = "" },
+		"missing context":  func(p *modelprovider.Provider) { p.ContextWindow = 0 },
+		"missing output":   func(p *modelprovider.Provider) { p.MaxOutputTokens = 0 },
+		"excess output":    func(p *modelprovider.Provider) { p.MaxOutputTokens = 64001 },
 	} {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			req := testRequest(t)
-			req.AgentOptions["model_provider"].(map[string]any)[tc.field] = tc.value
-			if _, err := prepareOptions(t.Context(), req); err == nil {
+			edit(req.ModelProvider)
+			if _, err := prepareOptions(req); err == nil {
 				t.Fatal("invalid model provider accepted")
 			}
 		})
 	}
-	t.Run("retired native option", func(t *testing.T) {
-		req := testRequest(t)
-		req.AgentOptions["mcode_provider"] = req.AgentOptions["model_provider"]
-		delete(req.AgentOptions, "model_provider")
-		if _, err := prepareOptions(t.Context(), req); err == nil {
-			t.Fatal("retired native provider option accepted")
-		}
-	})
 }
 
 func TestOptionsAllowLoopbackProviderFixture(t *testing.T) {
 	req := testRequest(t)
-	req.AgentOptions["model_provider"].(map[string]any)["base_url"] = "http://127.0.0.1:4321"
-	if _, err := prepareOptions(t.Context(), req); err != nil {
+	req.ModelProvider.BaseURL = "http://127.0.0.1:4321"
+	if _, err := prepareOptions(req); err != nil {
 		t.Fatal(err)
 	}
 }

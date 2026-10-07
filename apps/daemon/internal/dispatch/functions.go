@@ -12,7 +12,7 @@ import (
 
 func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) error {
 	var result proto.FunctionResultPayload
-	if err := env.DecodePayload(&result); err != nil {
+	if err := env.DecodeRequest(&result); err != nil {
 		return err
 	}
 	if env.ID == "" || result.CallID == "" || result.DeliveryID == "" {

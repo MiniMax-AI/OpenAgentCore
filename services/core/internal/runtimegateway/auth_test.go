@@ -40,7 +40,7 @@ func TestAuthenticator_RejectsUnknownDevice(t *testing.T) {
 
 func TestAuthenticator_RejectsWrongRuntimeType(t *testing.T) {
 	// A legacy local runtime row trying to dial in as agent_daemon
-	// must fail — otherwise a paired local credential could open an
+	// must fail — otherwise a local credential could open an
 	// agent_daemon WS and bypass the device picker.
 	row := runtimedevice.Credential{
 		ID:             "dev-1",

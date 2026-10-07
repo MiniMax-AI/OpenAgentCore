@@ -1,7 +1,7 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: e9a16774d2924db9dde18385be315d3a0317c616b029b419165e442fa34fb08d
+source_hash: 18cc3d9491e65cc9845223045039967317c9e3532987c24cc2732dec820f8c57
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
@@ -106,7 +106,7 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 
 ### 设备状态 {#device-status}
 
-`GET /api/v1/agent-daemon/device-status?device_id=` 携带 daemon 凭据，返回 `device_id`、`online` 和 `owner`：当前连接所有者的 `owner_pod_id`、`owner_url`、`generation`、`status` 和 `lease_expires_at`，或 null。
+`GET /api/v1/agent-daemon/device-status?device_id=` 携带 daemon 凭据，返回 `device_id` 和 `online`，后者表示设备当前是否与 Core 保持活动连接。
 
 引导、设备状态和 WebSocket 路由共享错误体 `{"error": code, "detail": text}`：400 `missing_params`、`missing_device_id` 或 `bad_json`；401 `missing_bearer`、`unknown_device` 或 `bad_credential`；403 `wrong_runtime_type`；500 `internal`；WebSocket 的 `version` 不等于 Core 精确 Runtime 协议版本时返回 426 `incompatible_version`。
 

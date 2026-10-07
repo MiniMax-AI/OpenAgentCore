@@ -69,23 +69,21 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 	}
 	info := proto.SupportedAgentKind{Kind: "viewed", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}
 	declaration := agent.Declaration{
-		Info:              info,
-		Configuration:     harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Responses)}}},
-		ConnectionOptions: []string{"mcp_servers"},
+		Info:          info,
+		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Responses)}}},
 	}
 	reg.Register(declaration, agent.Runtime{Info: info, Session: stubFactory("viewed"), View: &declared})
 	view, err := reg.ResolveView("viewed")
 	if err != nil {
 		t.Fatal(err)
 	}
-	options := func(baseURL, key string, extra map[string]any) map[string]any {
-		o := map[string]any{"model": "m", "model_provider": map[string]any{"protocol": "responses", "base_url": baseURL, "api_key": key}}
-		for k, v := range extra {
-			o[k] = v
-		}
-		return o
+	request := func(baseURL, key string) proto.PromptRequestPayload {
+		return proto.PromptRequestPayload{Model: "m", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: baseURL, APIKey: key}}
 	}
-	gatewayOptions := options("http://127.0.0.1:4101", modelprovider.Placeholder, nil)
+	gatewayRequest := request("http://127.0.0.1:4101", modelprovider.Placeholder)
+	requestMCP, installedMCP := gatewayRequest, gatewayRequest
+	requestMCP.MCPHTTPServers = &[]proto.MCPHTTPServer{}
+	installedMCP.LocalEnvironment = &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{}}}
 	token := "secret"
 	gateway := agent.MCPBinding{ServerLabel: "docs", Transport: "http", ServerURL: "http://127.0.0.1:4100/mcp/docs"}
 	withBearer, withHeaders, remote := gateway, gateway, gateway
@@ -96,15 +94,14 @@ func TestViewExecutorReceivesOnlyGatewayConnections(t *testing.T) {
 		req proto.PromptRequestPayload
 		mcp []agent.MCPBinding
 	}{
-		"gateway":            {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{gateway}},
-		"model key":          {req: proto.PromptRequestPayload{AgentOptions: options("http://127.0.0.1:4101", token, nil)}},
-		"model endpoint":     {req: proto.PromptRequestPayload{AgentOptions: options("https://api.example.com", modelprovider.Placeholder, nil)}},
-		"connection option":  {req: proto.PromptRequestPayload{AgentOptions: options("http://127.0.0.1:4101", modelprovider.Placeholder, map[string]any{"mcp_servers": map[string]any{}})}},
-		"request MCP":        {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions, MCPHTTPServers: &[]proto.MCPHTTPServer{}}},
-		"installed MCP":      {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions, LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{}}}}},
-		"bearer":             {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{withBearer}},
-		"credential headers": {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{withHeaders}},
-		"direct MCP":         {req: proto.PromptRequestPayload{AgentOptions: gatewayOptions}, mcp: []agent.MCPBinding{remote}},
+		"gateway":            {req: gatewayRequest, mcp: []agent.MCPBinding{gateway}},
+		"model key":          {req: request("http://127.0.0.1:4101", token)},
+		"model endpoint":     {req: request("https://api.example.com", modelprovider.Placeholder)},
+		"request MCP":        {req: requestMCP},
+		"installed MCP":      {req: installedMCP},
+		"bearer":             {req: gatewayRequest, mcp: []agent.MCPBinding{withBearer}},
+		"credential headers": {req: gatewayRequest, mcp: []agent.MCPBinding{withHeaders}},
+		"direct MCP":         {req: gatewayRequest, mcp: []agent.MCPBinding{remote}},
 	} {
 		want := agent.ErrViewHandoff
 		if name == "gateway" {

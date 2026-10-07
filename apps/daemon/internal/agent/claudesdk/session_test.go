@@ -22,7 +22,7 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
+			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
@@ -74,19 +74,17 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 }
 
 func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
-	for _, kind := range []string{"execution-controls", "tool", "option", "outside"} {
+	for _, kind := range []string{"execution-controls", "tool", "outside"} {
 		t.Run(kind, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentOptions: map[string]any{"model": "fake"}}
+			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), Model: "fake"}
 			switch kind {
 			case "execution-controls":
 				request.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "low"}
 			case "tool":
 				request.FunctionTools = []proto.FunctionTool{{}}
-			case "option":
-				request.AgentOptions["allowed_tools"] = "anything"
 			case "outside":
 				config.StateDir = filepath.Dir(root)
 			}

@@ -29,7 +29,7 @@ type steeringReceipt struct {
 func (r *Router) handlePromptSteer(ctx context.Context, env proto.Envelope) error {
 	var input proto.PromptSteerPayload
 	ack := proto.PromptSteerAckPayload{}
-	if err := env.DecodePayload(&input); err != nil {
+	if err := env.DecodeRequest(&input); err != nil {
 		ack.ErrorCode, ack.Error = "invalid_input", "Invalid steering payload."
 	} else {
 		ack.InputID = input.InputID

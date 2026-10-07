@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
@@ -44,19 +45,19 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 		func(req proto.PromptRequestPayload) error { _, err := preparation(t.Context(), req); return err },
 	}
 	for _, entry := range entries {
-		for _, options := range []map[string]any{
-			{"model": nil},
-			{"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
-			{"model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}},
-			{"harness_config": map[string]any{"unknown": "private-sentinel"}},
+		responses := &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://provider.example", APIKey: "private-sentinel"}
+		for _, req := range []proto.PromptRequestPayload{
+			{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "private-sentinel"}},
+			{ModelProvider: responses},
+			{HarnessConfig: proto.HarnessConfig(`{"unknown":"private-sentinel"}`)},
 		} {
 			before := calls
-			err := entry(proto.PromptRequestPayload{AgentOptions: options})
+			err := entry(req)
 			if err == nil || errors.Is(err, expected) || calls != before || strings.Contains(err.Error(), "private-sentinel") {
 				t.Fatal("invalid configuration reached native entry or leaked values")
 			}
 		}
-		if err := entry(proto.PromptRequestPayload{AgentOptions: map[string]any{"model": "fixture", "model_provider": map[string]any{"protocol": "responses", "base_url": "https://provider.example", "api_key": "private-sentinel"}}}); !errors.Is(err, expected) {
+		if err := entry(proto.PromptRequestPayload{Model: "fixture", ModelProvider: responses}); !errors.Is(err, expected) {
 			t.Fatal("bound declaration was lost or mutated", err)
 		}
 	}

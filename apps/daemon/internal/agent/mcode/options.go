@@ -1,21 +1,20 @@
 package mcode
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/clirunner"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/managedskills"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 type launchOptions struct {
@@ -41,15 +40,16 @@ type launchOptions struct {
 	home string
 }
 
-func prepareOptions(ctx context.Context, req proto.PromptRequestPayload) (launchOptions, error) {
-	return prepareOptionsWithTools(ctx, req, nil)
+func prepareOptions(req proto.PromptRequestPayload) (launchOptions, error) {
+	return prepareOptionsWithTools(req, nil)
 }
 
-// prepareOptionsWithTools installs the managed Skills unless the workspace
-// bridge's tools present the Environment's.
-func prepareOptionsWithTools(ctx context.Context, req proto.PromptRequestPayload, tools *workspaceTools) (launchOptions, error) {
+// prepareOptionsWithTools prepares the Session's native data directory. With
+// tools, the workspace bridge presents the Environment's workspace and Skills.
+func prepareOptionsWithTools(req proto.PromptRequestPayload, tools *workspaceTools) (launchOptions, error) {
 	var result launchOptions
-	if err := validateOptions(req); err != nil {
+	prepared, err := validateOptions(req)
+	if err != nil {
 		return result, err
 	}
 	if req.StrictResume && !req.DisableSubagents {
@@ -57,11 +57,9 @@ func prepareOptionsWithTools(ctx context.Context, req proto.PromptRequestPayload
 			return result, err
 		}
 	}
-	root, err := agent.ManagedSkillsRoot("mcode", req.AgentStateKey, req.ConversationID, req.RunID)
-	if err != nil {
+	if result.DataDir, err = dataDirectory(req); err != nil {
 		return result, err
 	}
-	result.DataDir = filepath.Dir(root)
 	result.Dir = filepath.Join(result.DataDir, "workspace")
 	if err := os.MkdirAll(result.DataDir, 0o700); err != nil {
 		return result, err
@@ -69,87 +67,54 @@ func prepareOptionsWithTools(ctx context.Context, req proto.PromptRequestPayload
 	if err := os.MkdirAll(result.Dir, 0o700); err != nil {
 		return result, err
 	}
-	if tools == nil {
-		installed, err := managedskills.InstallManagedSkills(ctx, log.With("component", "mcode"), root, req.AgentOptions["skills"])
-		if err != nil {
-			return result, err
-		}
-		if len(installed.Warnings) > 0 {
-			return result, fmt.Errorf("mcode: one or more configured Skills could not be installed")
-		}
-	}
 	data, err := os.OpenRoot(result.DataDir)
 	if err != nil {
 		return result, err
 	}
 	defer data.Close()
-	if result.Model, err = writeNativeConfig(req, data, result.DataDir, tools); err != nil {
+	if err := writeNativeConfig(req, prepared, data, result.DataDir, tools); err != nil {
 		return result, err
 	}
-	opts := req.AgentOptions
-	result.Env = append([]string{}, os.Environ()...)
-	if req.StrictResume {
-		result.Env = executionEnvironment()
-	}
-	if raw := opts["env"]; raw != nil && !req.StrictResume {
-		env, ok := raw.(map[string]any)
-		if !ok {
-			return result, fmt.Errorf("mcode: env must be an object")
-		}
-		for key, rawValue := range env {
-			value, ok := rawValue.(string)
-			if !ok || key == "" || strings.ContainsAny(key, "=\x00") || strings.ContainsRune(value, 0) {
-				return result, fmt.Errorf("mcode: invalid environment entry")
-			}
-			result.Env = append(result.Env, key+"="+value)
-		}
-	}
-	result.Env = append(result.Env, nativeEnvironment(req, result.DataDir)...)
-	result.MCP, err = mcpServers(opts["mcp_servers"])
-	return result, err
+	result.Model = prepared.Model
+	result.Env = append(executionEnvironment(), nativeEnvironment(req, result.DataDir)...)
+	result.MCP = []map[string]any{}
+	return result, nil
 }
 
-func validateOptions(req proto.PromptRequestPayload) error {
-	if _, err := harnessconfiguration.Configuration().PrepareHarnessConfig(req.AgentOptions); err != nil {
-		return err
+// validateOptions checks the request before any native effect and returns its
+// model configuration, which must name a model and a model provider.
+func validateOptions(req proto.PromptRequestPayload) (harnessconfig.PreparedConfiguration, error) {
+	prepared, err := harnessconfiguration.Configuration().Prepare(req)
+	if err != nil {
+		return prepared, err
+	}
+	if prepared.Model == "" || prepared.Provider == nil {
+		return prepared, fmt.Errorf("mcode: model and model provider are required")
 	}
 	if req.StrictResume {
 		if err := validateExecutionRequest(req); err != nil {
-			return err
+			return prepared, err
 		}
 	}
 	if req.Input.HasImages() {
-		return fmt.Errorf("mcode: ACP does not support attachments")
+		return prepared, fmt.Errorf("mcode: ACP does not support attachments")
 	}
-	return nil
+	return prepared, nil
 }
 
 // writeNativeConfig writes the instructions and native configuration into the
-// data directory, which the native process sees at dataDir, and returns the
-// model. With tools, the workspace bridge replaces native permissions and
-// sandbox, and Subagents use it too.
-func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root, dataDir string, tools *workspaceTools) (string, error) {
-	opts := req.AgentOptions
-	prompt := optionString(opts, "system_prompt")
-	if override := optionString(opts, "override_system_prompt"); override != "" {
-		prompt = override
+// data directory, which the native process sees at dataDir. With tools, the
+// workspace bridge replaces native permissions and sandbox, and Subagents use
+// it too.
+func writeNativeConfig(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, data *os.Root, dataDir string, tools *workspaceTools) error {
+	if len(req.SystemPrompt) > 32*1024 {
+		return fmt.Errorf("mcode: combined instructions exceed the CLI's 32 KiB limit")
 	}
-	if len(prompt) > 32*1024 {
-		return "", fmt.Errorf("mcode: combined instructions exceed the CLI's 32 KiB limit")
-	}
-	if err := data.WriteFile("AGENTS.md", []byte(prompt), 0o600); err != nil {
-		return "", err
+	if err := data.WriteFile("AGENTS.md", []byte(req.SystemPrompt), 0o600); err != nil {
+		return err
 	}
 	config := map[string]any{"logLevel": "error", "skills": map[string]any{"external": map[string]any{"enabled": false}}}
-	model := optionString(opts, "model")
-	if model == "" {
-		return "", fmt.Errorf("mcode: model is required")
-	}
-	provider, err := modelProviderConfig(opts["model_provider"], model)
-	if err != nil {
-		return "", err
-	}
-	config["custom_provider"] = map[string]any{"oac": provider}
+	config["custom_provider"] = map[string]any{"oac": modelProviderConfig(*prepared.Provider, prepared.Model)}
 	if req.StrictResume {
 		configureTextExecution(config)
 		if !req.DisableSubagents {
@@ -160,14 +125,7 @@ func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root, dataDir st
 			}}
 		}
 	}
-	mode := optionString(opts, "mode")
-	if mode == "" {
-		mode = "auto"
-	}
-	if mode != "auto" && mode != "default" && mode != "bypassPermissions" {
-		return "", fmt.Errorf("mcode: unsupported permission mode")
-	}
-	config["permissionMode"] = mode
+	config["permissionMode"] = "auto"
 	servers := map[string]any{}
 	if tools != nil {
 		config["permissionMode"] = "bypassPermissions"
@@ -181,10 +139,10 @@ func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root, dataDir st
 		}
 		raw, err := json.Marshal(tools.profile)
 		if err != nil {
-			return "", err
+			return err
 		}
 		if err := data.WriteFile("workspace-profile.json", raw, 0o600); err != nil {
-			return "", err
+			return err
 		}
 		if !req.DisableSubagents {
 			// This native data directory belongs to one public Session and its
@@ -195,20 +153,20 @@ func writeNativeConfig(req proto.PromptRequestPayload, data *os.Root, dataDir st
 	}
 	raw, err := json.Marshal(config)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if err := data.WriteFile("config.yaml", raw, 0o600); err != nil {
-		return "", err
+		return err
 	}
 	if req.StrictResume {
 		if raw, err = json.Marshal(map[string]any{"mcpServers": servers}); err != nil {
-			return "", err
+			return err
 		}
 		if err := data.WriteFile("mcp.json", raw, 0o600); err != nil {
-			return "", err
+			return err
 		}
 	}
-	return model, nil
+	return nil
 }
 
 // nativeEnvironment is the adapter's own native environment, with dataDir as
@@ -250,88 +208,47 @@ func (o launchOptions) readData(name string) ([]byte, error) {
 	return root.ReadFile(rel)
 }
 
-func optionString(options map[string]any, key string) string {
-	value, _ := options[key].(string)
-	return value
+// dataDirectory returns the native data directory of the request's agent
+// state. It never derives runtime state from the subprocess cwd.
+func dataDirectory(req proto.PromptRequestPayload) (string, error) {
+	root, err := paths.Root()
+	if err != nil {
+		return "", fmt.Errorf("mcode: resolve data directory: %w", err)
+	}
+	base := filepath.Join(root, "runtime", "mcode")
+	if key := strings.TrimSpace(req.AgentStateKey); key != "" {
+		parts := []string{base, "state"}
+		for _, part := range strings.Split(key, "/") {
+			if safe := safePathPart(part); safe != "" {
+				parts = append(parts, safe)
+			}
+		}
+		if len(parts) == 2 {
+			return "", fmt.Errorf("mcode: invalid agent state key %q", req.AgentStateKey)
+		}
+		return filepath.Join(parts...), nil
+	}
+	if id := safePathPart(req.ConversationID); id != "" {
+		return filepath.Join(base, "conv-"+id), nil
+	}
+	if id := safePathPart(req.RunID); id != "" {
+		return filepath.Join(base, "run-"+id), nil
+	}
+	return "", errors.New("mcode: agent state key, conversation id, or run id is required")
 }
 
-func mcpServers(raw any) ([]map[string]any, error) {
-	result := []map[string]any{}
-	if raw == nil {
-		return result, nil
-	}
-	servers, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("mcode: mcp_servers must be an object")
-	}
-	names := make([]string, 0, len(servers))
-	for name := range servers {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		entry, ok := servers[name].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("mcode: invalid MCP server %q", name)
-		}
-		server := map[string]any{"name": name}
-		if url := optionString(entry, "url"); url != "" {
-			kind := optionString(entry, "type")
-			if kind == "" {
-				kind = "http"
-			}
-			if kind != "http" && kind != "sse" {
-				return nil, fmt.Errorf("mcode: unsupported MCP transport %q", kind)
-			}
-			server["type"] = kind
-			server["url"] = url
-			headers, err := namedValues(entry["headers"])
-			if err != nil {
-				return nil, err
-			}
-			server["headers"] = headers
+func safePathPart(value string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(value) {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
 		} else {
-			command := optionString(entry, "command")
-			if command == "" {
-				return nil, fmt.Errorf("mcode: MCP server %q needs command or URL", name)
-			}
-			server["command"] = command
-			args := entry["args"]
-			if args == nil {
-				args = []string{}
-			}
-			server["args"] = args
-			env, err := namedValues(entry["env"])
-			if err != nil {
-				return nil, err
-			}
-			server["env"] = env
+			b.WriteByte('_')
 		}
-		result = append(result, server)
 	}
-	return result, nil
-}
-
-func namedValues(raw any) ([]map[string]string, error) {
-	result := []map[string]string{}
-	if raw == nil {
-		return result, nil
+	value = b.String()
+	if value == "." || value == ".." {
+		return ""
 	}
-	values, ok := raw.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("mcode: MCP headers/env must be an object")
-	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		value, ok := values[key].(string)
-		if !ok {
-			return nil, fmt.Errorf("mcode: MCP headers/env values must be strings")
-		}
-		result = append(result, map[string]string{"name": key, "value": value})
-	}
-	return result, nil
+	return value
 }

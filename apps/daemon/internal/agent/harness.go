@@ -50,11 +50,7 @@ import (
 type Declaration struct {
 	Info          proto.SupportedAgentKind
 	Configuration harnessconfig.Configuration
-	// ConnectionOptions lists the AgentOptions keys whose values carry MCP
-	// servers, endpoints, credentials or environment values. An agent-host
-	// view rejects a request that sets any of them with ErrViewHandoff.
-	ConnectionOptions []string
-	Discover          func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
+	Discover      func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
 }
 
 // DiscoveryOptions provides process context without naming an implementation.
@@ -64,17 +60,12 @@ type DiscoveryOptions struct {
 }
 
 // Runtime binds one discovered descriptor to its native factories.
-// SessionCapabilityContext and ExecutorCapabilityContext request the Runtime's
-// capability-download URL and scoped product-upload context for those factories.
-// Preparation never receives those execution-only effects.
 type Runtime struct {
-	Info                      proto.SupportedAgentKind
-	Session                   Factory
-	Preparation               PreparationFactory
-	Executor                  ExecutorFactory
-	WorkspaceReadPreparation  bool
-	SessionCapabilityContext  bool
-	ExecutorCapabilityContext bool
+	Info                     proto.SupportedAgentKind
+	Session                  Factory
+	Preparation              PreparationFactory
+	Executor                 ExecutorFactory
+	WorkspaceReadPreparation bool
 	// View declares how the Harness runs in an agent-host Session view.
 	// A nil View means the agent host rejects the kind with ErrUnsupportedOperation.
 	View *View
@@ -93,7 +84,7 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 		r.RegisterPreparation(runtime.Info.Kind, runtime.WorkspaceReadPreparation, runtime.Preparation)
 	}
 	if runtime.View != nil {
-		r.RegisterView(runtime.Info.Kind, declaration.ConnectionOptions, *runtime.View)
+		r.RegisterView(runtime.Info.Kind, *runtime.View)
 	}
 }
 
@@ -146,8 +137,7 @@ var (
 var ErrInvalidView = errors.New("agent: invalid view declaration")
 
 // ErrViewHandoff rejects a view request that carries a model provider other
-// than the Session's gateway, MCP outside ViewSession.MCP, an MCP credential or
-// a connection option.
+// than the Session's gateway, MCP outside ViewSession.MCP or an MCP credential.
 var ErrViewHandoff = errors.New("agent: view request carries a connection outside the Session's gateway")
 
 // ViewSession.Launch and ViewSession.Spawn outcomes.
@@ -279,16 +269,11 @@ type ViewSession struct {
 
 // checkViewHandoff enforces, before the factory runs, that the view request
 // reaches the network only through the Session's gateway: the model provider
-// is the gateway with the placeholder key, MCP arrives only in session.MCP and
-// without credentials, and no connection option is set.
-func checkViewHandoff(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, connection []string, session ViewSession) error {
+// is the gateway with the placeholder key, and MCP arrives only in session.MCP
+// and without credentials.
+func checkViewHandoff(req proto.PromptRequestPayload, prepared harnessconfig.PreparedConfiguration, session ViewSession) error {
 	if provider := prepared.Provider; provider == nil || provider.APIKey != modelprovider.Placeholder || !isGatewayURL(provider.BaseURL, false) {
 		return fmt.Errorf("%w: the model provider is not the Session's gateway", ErrViewHandoff)
-	}
-	for _, key := range connection {
-		if _, set := req.AgentOptions[key]; set {
-			return fmt.Errorf("%w: option %q", ErrViewHandoff, key)
-		}
 	}
 	if req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) > 0) {
 		return fmt.Errorf("%w: MCP outside ViewSession.MCP", ErrViewHandoff)
@@ -426,10 +411,9 @@ func isWithin(p, dir string) bool {
 }
 
 // RegisterView validates and installs the kind's agent-host view after
-// RegisterKind. connection is the declaration's ConnectionOptions. Its
-// Executor factory validates the model configuration like RegisterExecutor and
-// then checks the request against the view's gateway rule.
-func (r *Registry) RegisterView(kind string, connection []string, view View) {
+// RegisterKind. Its Executor factory validates the model configuration like
+// RegisterExecutor and then checks the request against the view's gateway rule.
+func (r *Registry) RegisterView(kind string, view View) {
 	if err := view.Validate(); err != nil {
 		panic(err)
 	}
@@ -440,14 +424,13 @@ func (r *Registry) RegisterView(kind string, connection []string, view View) {
 		panic("agent.Registry.RegisterView: registered kind required")
 	}
 	view = view.clone()
-	connection = slices.Clone(connection)
 	factory := view.Executor
 	view.Executor = func(ctx context.Context, req proto.PromptRequestPayload, session ViewSession) (Executor, error) {
-		prepared, err := configuration.Prepare(req.AgentOptions)
+		prepared, err := configuration.Prepare(req)
 		if err != nil {
 			return nil, err
 		}
-		if err := checkViewHandoff(req, prepared, connection, session); err != nil {
+		if err := checkViewHandoff(req, prepared, session); err != nil {
 			return nil, err
 		}
 		return factory(ctx, req, session)
@@ -654,7 +637,7 @@ func (r *Registry) RegisterKind(info proto.SupportedAgentKind, configuration har
 	defer r.mu.Unlock()
 	r.configurations[kind] = configuration
 	r.factories[kind] = func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (Session, error) {
-		if _, err := configuration.Prepare(req.AgentOptions); err != nil {
+		if _, err := configuration.Prepare(req); err != nil {
 			return nil, err
 		}
 		return f(ctx, req, out)
@@ -681,7 +664,7 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 		panic("agent.Registry.RegisterExecutor: configuration required")
 	}
 	r.executors[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Executor, error) {
-		if _, err := configuration.Prepare(req.AgentOptions); err != nil {
+		if _, err := configuration.Prepare(req); err != nil {
 			return nil, err
 		}
 		return factory(ctx, req)
@@ -690,8 +673,7 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 	r.kinds[kind] = info
 }
 
-// RegisterPreparation installs a separate execution-only path. Product factory
-// wrappers must not add authoring or capability-download side effects to it.
+// RegisterPreparation installs a separate execution-only path.
 func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare PreparationFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -704,7 +686,7 @@ func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare 
 		panic("agent.Registry.RegisterPreparation: configuration required")
 	}
 	r.preparers[kind] = func(ctx context.Context, req proto.PromptRequestPayload) (Prepared, error) {
-		if _, err := configuration.Prepare(req.AgentOptions); err != nil {
+		if _, err := configuration.Prepare(req); err != nil {
 			return nil, err
 		}
 		return prepare(ctx, req)

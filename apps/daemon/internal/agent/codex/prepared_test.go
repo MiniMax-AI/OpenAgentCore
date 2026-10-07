@@ -30,7 +30,7 @@ func TestPreparedSessionTransfersSameResourceOnce(t *testing.T) {
 			pid := p.session.rpc.process.Cmd.Process.Pid
 			cfgPreparedCwd := p.plan.Cwd
 			// Caller-owned data cannot revise the prepared native configuration.
-			req.AgentOptions["model"] = "different-model"
+			req.Model = "different-model"
 			req.AgentSessionID = "different-thread"
 			copy(req.FunctionTools[0].Parameters, strings.ReplaceAll(string(req.FunctionTools[0].Parameters), "integer", "boolean"))
 			out := make(chan proto.Envelope, 8)

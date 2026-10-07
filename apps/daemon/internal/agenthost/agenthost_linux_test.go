@@ -69,10 +69,10 @@ func newConfig(t *testing.T, reg *agent.Registry, ca *x509.Certificate) Config {
 }
 
 // register declares kind with view, or without one when view is nil.
-func register(reg *agent.Registry, kind string, view *agent.View, connection ...string) {
+func register(reg *agent.Registry, kind string, view *agent.View) {
 	info := proto.SupportedAgentKind{Kind: kind, Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
 		MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})}
-	declaration := agent.Declaration{Info: info, ConnectionOptions: connection,
+	declaration := agent.Declaration{Info: info,
 		Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{{Protocol: string(modelprovider.Anthropic)}}}}
 	reg.Register(declaration, agent.Runtime{Info: info, View: view,
 		Session: func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
@@ -85,7 +85,8 @@ func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
 	return proto.PromptRequestPayload{
 		AgentKind:        kind,
 		StrictResume:     true,
-		AgentOptions:     map[string]any{"model": "m", "model_provider": map[string]any{"protocol": "anthropic", "base_url": baseURL, "api_key": key}},
+		Model:            "m",
+		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: baseURL, APIKey: key},
 		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"},
 	}
 }

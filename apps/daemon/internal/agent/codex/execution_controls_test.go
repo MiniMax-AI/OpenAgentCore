@@ -1,27 +1,24 @@
 package codex
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestExecutionControlsOverrideWithoutMutatingNativeOptions(t *testing.T) {
+func TestExecutionControlsSelectNativeSettings(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	original := map[string]any{"model": "test-model", "web_search": "live", "model_verbosity": "high"}
-	request := proto.PromptRequestPayload{AgentOptions: original}
-	if got := executionOptions(request); !reflect.DeepEqual(got, original) {
-		t.Fatal("ordinary options changed")
+	plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.Cleanup()
+	if len(plan.ExtraConfig) != 0 {
+		t.Fatal("native settings without ExecutionControls", plan.ExtraConfig)
 	}
 	for _, search := range []string{"disabled", "cached", "live"} {
 		for _, verbosity := range []string{"low", "medium", "high"} {
-			request.ExecutionControls = &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity}
-			options := executionOptions(request)
-			if options["model"] != "test-model" || original["web_search"] != "live" || original["model_verbosity"] != "high" {
-				t.Fatal("operator options mutated")
-			}
-			plan, err := BuildSessionPlan("run", "state", options)
+			plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state", ExecutionControls: &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -48,8 +45,7 @@ func TestExecutionControlsRejectIncompleteOrInvalidValues(t *testing.T) {
 		{}, {WebSearch: "disabled"}, {TextVerbosity: "medium"},
 		{WebSearch: "invalid", TextVerbosity: "medium"}, {WebSearch: "disabled", TextVerbosity: "invalid"},
 	} {
-		options := executionOptions(proto.PromptRequestPayload{ExecutionControls: &controls})
-		if plan, err := BuildSessionPlan("run", "state", options); err == nil {
+		if plan, err := BuildSessionPlan(proto.PromptRequestPayload{AgentStateKey: "state", ExecutionControls: &controls}); err == nil {
 			plan.Cleanup()
 			t.Fatal("invalid controls accepted", controls)
 		}

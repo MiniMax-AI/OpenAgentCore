@@ -2,21 +2,20 @@ package codex
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 )
 
-// mcpServerConfig is the daemon-internal MCP server config flattened
-// from agent_options["mcp_servers"] (rendered by render.TargetCodex /
-// the mcpServers JSON shape). Written into <CODEX_HOME>/config.toml
-// before spawning the app-server child.
+// mcpServerConfig is one declared MCP binding as Codex's native
+// McpServerConfig. Written into <CODEX_HOME>/config.toml before spawning the
+// app-server child.
 type mcpServerConfig struct {
 	Name              string
 	URL               string
-	Headers           map[string]string
 	Command           string
 	Args              []string
-	Env               map[string]string
 	EnabledTools      *[]string
 	Required          bool
 	BearerTokenEnvVar string
@@ -71,8 +70,16 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 				}
 				b.WriteString("]\n")
 			}
-			writeMCPHeaderMap(&b, "http_headers", srv.Headers)
-			writeMCPHeaderMap(&b, "env_http_headers", srv.EnvHTTPHeaders)
+			if len(srv.EnvHTTPHeaders) > 0 {
+				b.WriteString("env_http_headers = {")
+				for i, key := range slices.Sorted(maps.Keys(srv.EnvHTTPHeaders)) {
+					if i > 0 {
+						b.WriteString(", ")
+					}
+					b.WriteString(tomlQuoteString(key) + " = " + tomlQuoteString(srv.EnvHTTPHeaders[key]))
+				}
+				b.WriteString("}\n")
+			}
 			b.WriteByte('\n')
 			continue
 		}
@@ -89,45 +96,10 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 			}
 			b.WriteString("]\n")
 		}
-		if len(srv.Env) > 0 {
-			envKeys := make([]string, 0, len(srv.Env))
-			for k := range srv.Env {
-				envKeys = append(envKeys, k)
-			}
-			sort.Strings(envKeys)
-			b.WriteString("\n[mcp_servers.")
-			b.WriteString(tomlQuoteString(name))
-			b.WriteString(".env]\n")
-			for _, k := range envKeys {
-				b.WriteString(tomlQuoteString(k))
-				b.WriteString(" = ")
-				b.WriteString(tomlQuoteString(srv.Env[k]))
-				b.WriteByte('\n')
-			}
-		}
 		b.WriteByte('\n')
 	}
 
 	return appendConfigTOML(codexHome, b.String())
-}
-
-func writeMCPHeaderMap(b *strings.Builder, field string, values map[string]string) {
-	if len(values) == 0 {
-		return
-	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	b.WriteString(field + " = {")
-	for i, key := range keys {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString(tomlQuoteString(key) + " = " + tomlQuoteString(values[key]))
-	}
-	b.WriteString("}\n")
 }
 
 // tomlQuoteString returns a TOML basic-string literal (double-quoted)

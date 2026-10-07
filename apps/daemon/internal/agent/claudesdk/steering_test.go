@@ -27,7 +27,7 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 			if mode == "phased" {
 				config.Env[1] = "SDK_HELPER_MODE=steering-timeout"
 			}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
+			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native", Model: "fake-model", SystemPrompt: "instructions"}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

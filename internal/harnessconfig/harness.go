@@ -6,10 +6,11 @@
 // Adapter-specific validation and native rendering remain private implementations.
 // Execution lifecycle and operation qualification are separate contracts.
 //
-// The current HarnessConfig wire object is defined by proto.HarnessConfig.
-// Omission and {} mean no native parameters. Explicit null, arrays, repeated
-// object members and objects above MaxHarnessConfigBytes are rejected by the
-// shared decoder in native.go. Errors must omit submitted keys and values.
+// The request's typed model configuration is defined by proto.PromptRequestPayload,
+// and its HarnessConfig wire object by proto.HarnessConfig. Omission and {} mean
+// no native parameters. Explicit null, arrays, repeated object members and
+// objects above MaxHarnessConfigBytes are rejected by the shared decoder in
+// native.go. Errors must omit submitted keys and values.
 // Native schemas must reject unknown fields and any setting that overrides model,
 // provider/authentication, workspace, tools/MCP, permissions or lifecycle controls.
 // Never merge arbitrary host configuration into the frozen model configuration.
@@ -52,18 +53,19 @@ type Provider struct {
 // only for direct adapters whose model connection remains native-owned.
 type Configuration struct {
 	Providers []Provider
-	// ValidateNativeConfig belongs to the selected adapter, never Core.
-	ValidateNativeConfig func(proto.HarnessConfig) bool
+	// ValidateNativeConfig belongs to the selected adapter, never Core. It
+	// receives the decoded harness_config object.
+	ValidateNativeConfig func(map[string]any) bool
 }
 
 // PreparedConfiguration owns a validated snapshot without native side effects.
 // Model and Provider may be absent only for the existing native-owned connection
-// path. A supplied model must be a nonempty string; an explicit provider requires
-// an explicit model. HarnessConfig is always an independently owned object.
+// path. A supplied model must be nonempty; an explicit provider requires an
+// explicit model. HarnessConfig is always an independently owned object.
 type PreparedConfiguration struct {
 	Model         string
 	Provider      *modelprovider.Provider
-	HarnessConfig proto.HarnessConfig
+	HarnessConfig map[string]any
 }
 
 var ErrModel = errors.New("model must be a nonempty model identifier")
@@ -77,28 +79,29 @@ func ValidateModel(value any) (string, error) {
 	return model, nil
 }
 
-// Prepare validates the current model/provider/native-parameter contract before
-// creating native resources. Other options belong to the execution contract.
-func (c Configuration) Prepare(options map[string]any) (PreparedConfiguration, error) {
+// Prepare validates the request's model, model provider and native parameters
+// against this declaration before creating native resources. The provider must
+// be one this declaration supports, with the token limits it requires.
+func (c Configuration) Prepare(req proto.PromptRequestPayload) (PreparedConfiguration, error) {
 	var result PreparedConfiguration
-	if value, present := options["model"]; present {
-		model, err := ValidateModel(value)
+	if req.Model != "" || req.ModelProvider != nil {
+		model, err := ValidateModel(req.Model)
 		if err != nil {
 			return PreparedConfiguration{}, err
 		}
 		result.Model = model
 	}
-	if value, present := options["model_provider"]; present {
-		if result.Model == "" {
-			return PreparedConfiguration{}, ErrModel
+	if req.ModelProvider != nil {
+		provider := *req.ModelProvider
+		if err := provider.Validate(); err != nil {
+			return PreparedConfiguration{}, err
 		}
-		provider, err := c.ParseProvider(value)
-		if err != nil {
+		if err := c.Validate(string(provider.Protocol), provider.ContextWindow, provider.MaxOutputTokens); err != nil {
 			return PreparedConfiguration{}, err
 		}
 		result.Provider = &provider
 	}
-	native, err := c.PrepareHarnessConfig(options)
+	native, err := c.ParseHarnessConfig(req.HarnessConfig)
 	if err != nil {
 		return PreparedConfiguration{}, err
 	}

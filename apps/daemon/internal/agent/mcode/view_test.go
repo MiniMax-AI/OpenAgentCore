@@ -59,7 +59,7 @@ func viewFixture(t *testing.T) (viewInstall, agent.View, proto.PromptRequestPayl
 	req.RunID, req.Input, req.ConversationID = "", nil, ""
 	req.DisableExecutionEnvironment = false
 	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled"}
-	req.AgentOptions["model_provider"] = map[string]any{"protocol": "anthropic", "base_url": "http://127.0.0.1:4101", "api_key": modelprovider.Placeholder, "context_window": 64000, "max_output_tokens": 4096}
+	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "http://127.0.0.1:4101", APIKey: modelprovider.Placeholder, ContextWindow: 64000, MaxOutputTokens: 4096}
 	return install, view, req
 }
 

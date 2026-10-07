@@ -44,7 +44,7 @@ func TestViewExecutorLaunchesAClosedGatewayEnvironment(t *testing.T) {
 		},
 	}
 	req := proto.PromptRequestPayload{DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: "/workspace", NetworkAccess: "enabled"},
-		AgentOptions: map[string]any{"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "http://127.0.0.1:17101", "api_key": modelprovider.Placeholder}}}
+		Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder}}
 	executor, err := view.Executor(t.Context(), req, session)
 	if err != nil {
 		t.Fatal(err)

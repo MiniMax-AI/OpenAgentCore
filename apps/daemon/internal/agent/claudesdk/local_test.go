@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestLocalWorkspaceBindingNetworkAndRequiredHistory(t *testing.T) {
@@ -63,7 +64,7 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 	config := workspaceFixture(t)
 	original := slices.Clone(config.Env)
 	req := workspaceRequest()
-	req.AgentOptions["model_provider"] = map[string]any{"protocol": "anthropic", "base_url": "https://provider.example/anthropic", "api_key": "selected-secret"}
+	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example/anthropic", APIKey: "selected-secret"}
 	start, env, err := prepare(config, req)
 	if err != nil {
 		t.Fatal(err)
@@ -75,8 +76,8 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 	if !slices.Contains(env, "ANTHROPIC_API_KEY=selected-secret") || slices.ContainsFunc(env, func(entry string) bool { return strings.HasPrefix(entry, "ANTHROPIC_AUTH_TOKEN=") }) {
 		t.Fatal("provider selection was not exclusive")
 	}
-	for _, value := range []any{nil, "secret", map[string]any{"protocol": "anthropic", "base_url": "http://provider.example", "api_key": "secret"}, map[string]any{"protocol": "anthropic", "base_url": "https://user:pass@provider.example", "api_key": "secret"}} {
-		req.AgentOptions["model_provider"] = value
+	for _, baseURL := range []string{"http://provider.example", "https://user:pass@provider.example"} {
+		req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: baseURL, APIKey: "secret"}
 		if _, _, err := prepare(config, req); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatal("unsafe provider accepted or disclosed")
 		}

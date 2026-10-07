@@ -23,6 +23,7 @@
 package proto
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 )
@@ -89,6 +90,22 @@ func (e Envelope) DecodePayload(out any) error {
 	}
 	if err := json.Unmarshal(e.Payload, out); err != nil {
 		return fmt.Errorf("proto: decode payload for type %q: %w", e.Type, err)
+	}
+	return nil
+}
+
+// DecodeRequest unpacks the payload of a Core → Runtime request like
+// DecodePayload, and also rejects a member its type does not declare, at any
+// depth. The Runtime decodes every request with it, so a retired or misspelled
+// field fails instead of being ignored.
+func (e Envelope) DecodeRequest(out any) error {
+	if len(e.Payload) == 0 {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(e.Payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(out); err != nil {
+		return fmt.Errorf("proto: decode request for type %q: %w", e.Type, err)
 	}
 	return nil
 }

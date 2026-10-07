@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
@@ -161,7 +160,7 @@ func runEnvironmentConnect(parent context.Context, rc *runContext, profile strin
 		return err
 	}
 	if background && !daemonize.IsBackgroundChild() {
-		return spawnBackground(parent, rc, profile, os.Args, nil)
+		return spawnBackground(parent, rc, profile)
 	}
 	// Discovery consumes the immutable Runtime binding; it must follow enrollment.
 	discovery, err := preflightAgentCLIs(parent, rc, profile)

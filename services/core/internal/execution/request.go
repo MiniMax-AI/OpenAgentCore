@@ -2,11 +2,11 @@ package execution
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
@@ -25,9 +25,9 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 	if err != nil {
 		return proto.PromptRequestPayload{}, err
 	}
-	options := map[string]any{}
+	var provider *modelprovider.Provider
 	if snapshot.ModelProviderConfigured {
-		options, err = d.sessionModelOptions(ctx, session)
+		provider, err = d.sessionModelProvider(ctx, session)
 		if err != nil {
 			return proto.PromptRequestPayload{}, err
 		}
@@ -36,13 +36,13 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 		// select an implicit provider endpoint.
 		return proto.PromptRequestPayload{}, ErrModelProviderRequired
 	}
-	options["model"], options["system_prompt"] = snapshot.Agent.Model, snapshot.Agent.Instructions
-	if snapshot.Agent.XAgentsCore != nil && len(snapshot.Agent.XAgentsCore.HarnessConfig) > 0 {
-		var native map[string]any
-		if err := json.Unmarshal(snapshot.Agent.XAgentsCore.HarnessConfig, &native); err != nil {
-			return proto.PromptRequestPayload{}, err
-		}
-		options["harness_config"] = native
+	var harnessConfig proto.HarnessConfig
+	if snapshot.Agent.XAgentsCore != nil {
+		harnessConfig = snapshot.Agent.XAgentsCore.HarnessConfig
+	}
+	instructions := ""
+	if snapshot.Agent.Instructions != nil {
+		instructions = *snapshot.Agent.Instructions
 	}
 	verbosity := snapshot.Agent.Text.Verbosity
 	if verbosity == "" {
@@ -53,7 +53,8 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 		controls.OutputFormat = &proto.OutputFormat{Type: "json_schema", Schema: snapshot.Agent.Text.Format.Schema}
 	}
 	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: tools.Functions, ToolSearch: tools.Search,
-		AgentOptions: options, ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
+		Model: snapshot.Agent.Model, SystemPrompt: instructions, ModelProvider: provider, HarnessConfig: harnessConfig,
+		ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
 		AgentSessionID: bound.NativeSessionID, StrictResume: true,
 		RequireExistingNativeSession: recoverNativeSession,
 		ObserveMessages:              caps.MessageItems, ObserveToolObservations: true,

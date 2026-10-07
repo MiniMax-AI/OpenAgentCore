@@ -31,28 +31,22 @@ func runStatus(ctx *runContext, args []string) error {
 
 	prof, err := auth.Load(*profile)
 	switch {
-	case errors.Is(err, auth.ErrNotPaired):
-		fmt.Fprintln(ctx.stdout, "paired       : no saved pairing profile; check Host connection in Core for a self-hosted Runtime")
+	case errors.Is(err, auth.ErrNoProfile):
+		fmt.Fprintln(ctx.stdout, "device       : no device profile; check Host connection in Core for a self-hosted Runtime")
 	case err != nil:
-		fmt.Fprintf(ctx.stdout, "paired       : ERROR — %v\n", err)
+		fmt.Fprintf(ctx.stdout, "device       : ERROR — %v\n", err)
 	default:
-		fmt.Fprintln(ctx.stdout, "paired       : yes")
+		fmt.Fprintln(ctx.stdout, "device       : profile present")
 		fmt.Fprintf(ctx.stdout, "server_url   : %s\n", prof.ServerURL)
 		fmt.Fprintf(ctx.stdout, "runtime_id   : %s\n", prof.RuntimeID)
 		if prof.DeviceName != "" {
 			fmt.Fprintf(ctx.stdout, "device_name  : %s\n", prof.DeviceName)
 		}
-		if prof.Hostname != "" {
-			fmt.Fprintf(ctx.stdout, "hostname     : %s\n", prof.Hostname)
-		}
-		if !prof.PairedAt.IsZero() {
-			fmt.Fprintf(ctx.stdout, "paired_at    : %s\n", prof.PairedAt.Format("2006-01-02 15:04:05 MST"))
-		}
 	}
 
 	// connect.pid existence is the cheap signal; the full liveness
 	// check (kill -0) would be more accurate but a bare existence
-	// check is honest enough for the "paired but not connected"
+	// check is honest enough for the "provisioned but not connected"
 	// diagnosis.
 	pidPath, err := paths.PIDFile(*profile)
 	if err != nil {

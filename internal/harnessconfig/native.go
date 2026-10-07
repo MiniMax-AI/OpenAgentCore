@@ -14,9 +14,9 @@ var ErrHarnessConfig = errors.New("invalid or unsupported harness_config")
 
 const MaxHarnessConfigBytes = 16 * 1024
 
-func decodeHarnessConfig(raw json.RawMessage) (proto.HarnessConfig, error) {
+func decodeHarnessConfig(raw json.RawMessage) (map[string]any, error) {
 	if len(raw) == 0 {
-		return proto.HarnessConfig{}, nil
+		return map[string]any{}, nil
 	}
 	if len(raw) > MaxHarnessConfigBytes || !bytes.HasPrefix(bytes.TrimSpace(raw), []byte("{")) {
 		return nil, ErrHarnessConfig
@@ -24,14 +24,16 @@ func decodeHarnessConfig(raw json.RawMessage) (proto.HarnessConfig, error) {
 	if !uniqueMembers(json.NewDecoder(bytes.NewReader(raw))) {
 		return nil, ErrHarnessConfig
 	}
-	var result proto.HarnessConfig
+	var result map[string]any
 	if json.Unmarshal(raw, &result) != nil || result == nil {
 		return nil, ErrHarnessConfig
 	}
 	return result, nil
 }
 
-func (c Configuration) ParseHarnessConfig(raw json.RawMessage) (proto.HarnessConfig, error) {
+// ParseHarnessConfig decodes and validates a harness_config object for this
+// declaration. Empty input means {}.
+func (c Configuration) ParseHarnessConfig(raw proto.HarnessConfig) (map[string]any, error) {
 	result, err := decodeHarnessConfig(raw)
 	if err != nil {
 		return nil, err
@@ -40,20 +42,6 @@ func (c Configuration) ParseHarnessConfig(raw json.RawMessage) (proto.HarnessCon
 		return nil, ErrHarnessConfig
 	}
 	return result, nil
-}
-
-// PrepareHarnessConfig copies the wire object before passing it to native code.
-// An absent option means {}, while an explicitly supplied null is invalid.
-func (c Configuration) PrepareHarnessConfig(options map[string]any) (proto.HarnessConfig, error) {
-	value, present := options["harness_config"]
-	if !present {
-		return proto.HarnessConfig{}, nil
-	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return nil, ErrHarnessConfig
-	}
-	return c.ParseHarnessConfig(raw)
 }
 
 // ValidateHarnessConfig validates a selected adapter. An empty kind is for saved

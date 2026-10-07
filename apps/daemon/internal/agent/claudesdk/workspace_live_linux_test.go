@@ -105,7 +105,7 @@ func testLiveClaudeWorkspace(t *testing.T, explicitPreparation bool) {
 		req := workspaceRequest()
 		req.RunID, req.Input, req.AgentSessionID = uuid.NewString(), proto.TextInput(prompt), resume
 		req.StrictResume, req.ReleaseOnCompletion, req.ObserveMessages, req.ObserveToolObservations = true, true, true, true
-		req.AgentOptions = map[string]any{"model": "MiniMax-M3", "system_prompt": "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."}
+		req.Model, req.SystemPrompt = "MiniMax-M3", "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."
 		proof := evidence{RunID: req.RunID}
 		var running agent.Session
 		var owner agent.PreparedCancellation

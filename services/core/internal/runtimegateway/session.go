@@ -81,12 +81,6 @@ type Session struct {
 	log  SessionLogger
 	reg  *Registry
 
-	// owner is non-nil in multi-pod mode. It fences this WebSocket
-	// against the DB owner row so stale connections from an older pod
-	// cannot keep handling prompts after a reconnect claimed a newer
-	// generation.
-	owner *ownerLease
-
 	// heartbeat persists daemon-advertised capability snapshots.
 	heartbeat      HeartbeatTouch
 	credentialHash string
@@ -144,13 +138,6 @@ type Session struct {
 // The session does NOT start its goroutines automatically — Start runs
 // once the handler is ready so the session can't race with response writes.
 func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
-	return NewSessionWithOwner(conn, deviceID, workspaceID, daemonVersion, reg, log, nil)
-}
-
-// NewSessionWithOwner wires a session with an optional DB-backed owner
-// lease. Multi-pod deployments pass the lease returned by
-// ClaimAgentDaemonDeviceOwner so heartbeats can fence stale connections.
-func NewSessionWithOwner(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger, owner *ownerLease) *Session {
 	if log == nil {
 		log = func(string, ...any) {}
 	}
@@ -166,7 +153,6 @@ func NewSessionWithOwner(conn WSConn, deviceID, workspaceID, daemonVersion strin
 		conn:          conn,
 		log:           log,
 		reg:           reg,
-		owner:         owner,
 		lastSeenAt:    now,
 		subs:          map[string]*Subscription{},
 		preparations:  map[string]*preparationSubscription{},
@@ -261,7 +247,6 @@ func (s *Session) Close(reason string) {
 		s.closeWorkspaceWrites()
 		s.closeCapabilities()
 		s.closeWorkspaceExports()
-		s.releaseOwnerLease()
 	})
 }
 
@@ -391,9 +376,6 @@ func (s *Session) readLoop() {
 		}
 		if !s.receiptDraining() {
 			s.markSeen()
-			if !s.renewOwnerLease() {
-				return
-			}
 		}
 
 		var env proto.Envelope
@@ -409,48 +391,6 @@ func (s *Session) markSeen() {
 	s.hbMu.Lock()
 	s.lastSeenAt = time.Now()
 	s.hbMu.Unlock()
-}
-
-func (s *Session) renewOwnerLease() bool {
-	if s.owner == nil || s.owner.store == nil {
-		return true
-	}
-	now := time.Now().UTC()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	_, ok, err := s.owner.store.RenewAgentDaemonDeviceOwner(ctx, runtimedevice.RenewOwner{
-		DeviceID:       s.owner.deviceID,
-		OwnerPodID:     s.owner.ownerPodID,
-		Generation:     s.owner.generation,
-		Now:            now,
-		LeaseExpiresAt: now.Add(normalizeOwnerTTL(s.owner.ttl)),
-	})
-	if err != nil {
-		s.log("agentdaemon gateway: owner lease renew failed device=%s generation=%d: %v", s.DeviceID, s.owner.generation, err)
-		s.Close("owner lease renew failed")
-		return false
-	}
-	if !ok {
-		s.log("agentdaemon gateway: owner lease lost device=%s generation=%d", s.DeviceID, s.owner.generation)
-		s.Close("owner lease lost to a newer connection")
-		return false
-	}
-	return true
-}
-
-func (s *Session) releaseOwnerLease() {
-	if s.owner == nil || s.owner.store == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if _, err := s.owner.store.ReleaseAgentDaemonDeviceOwner(ctx, runtimedevice.ReleaseOwner{
-		DeviceID:   s.owner.deviceID,
-		OwnerPodID: s.owner.ownerPodID,
-		Generation: s.owner.generation,
-	}); err != nil {
-		s.log("agentdaemon gateway: owner lease release failed device=%s generation=%d: %v", s.DeviceID, s.owner.generation, err)
-	}
 }
 
 func (s *Session) handleHeartbeat(env proto.Envelope) {
@@ -533,7 +473,6 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.Supporte
 				MCPHTTPTools:                   info.Capabilities.MCPHTTPTools.IsSupported(),
 				MCPHTTPRequired:                info.Capabilities.MCPHTTPRequired.IsSupported(),
 				MCPHTTPBearerAuth:              info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
-				WorkspaceAuthoring:             info.Capabilities.WorkspaceAuthoring.IsSupported(),
 			},
 		})
 	}
