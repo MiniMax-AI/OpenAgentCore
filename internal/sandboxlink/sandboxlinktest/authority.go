@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
@@ -22,8 +23,8 @@ var AllowAll = []sandboxlink.EgressRule{
 }
 
 // DefaultExports is the export set the fixture grants to file streams by
-// default: the export "world", read-write.
-var DefaultExports = []sandboxlink.ExportGrant{{ID: "world"}}
+// default: the world export, read-write.
+var DefaultExports = []sandboxlink.ExportGrant{{ID: sandboxfs.WorldExport}}
 
 // Grant is what one attachment grant authorizes. A nil Exports grants
 // DefaultExports to file streams. A nil Egress grants AllowAll to network

@@ -96,7 +96,7 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 	stop := func() {}
 	defer func() { stop() }()
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
-		World:         worldfs.New(fileservicetest.Export, world.Dial).Serve,
+		World:         worldfs.New(world.Dial).Serve,
 		StagingParent: t.TempDir(),
 		CgroupParent:  sessionviewtest.CgroupParent(t),
 		Private:       []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},

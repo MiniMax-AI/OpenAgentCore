@@ -120,7 +120,7 @@ func serve(t *testing.T, backing string, id uint32, mps ...sessionview.Mountpoin
 		t.Fatalf("mount: %v", err)
 	}
 	m := &mounted{dir: mnt, srv: srv}
-	m.world = worldfs.New(fileservicetest.Export, func(ctx context.Context) (io.ReadWriteCloser, error) {
+	m.world = worldfs.New(func(ctx context.Context) (io.ReadWriteCloser, error) {
 		rw, err := srv.Dial(ctx)
 		if err != nil {
 			return nil, err
@@ -388,7 +388,7 @@ func TestStartEndsDuringAttach(t *testing.T) {
 		cancel()
 	}()
 	_, err = sessionview.Start(ctx, sessionview.Spec{
-		World:         worldfs.New(fileservicetest.Export, srv.Dial).Serve,
+		World:         worldfs.New(srv.Dial).Serve,
 		StagingParent: t.TempDir(),
 		CgroupParent:  sessionviewtest.CgroupParent(t),
 		Process:       sessionview.Process{Path: "/bin/true", Args: []string{"true"}, Dir: "/", UID: 1000, GID: 1000, Stderr: os.Stderr},

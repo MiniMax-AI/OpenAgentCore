@@ -579,6 +579,10 @@ type DescribeResponse struct {
 	Exports          []sandboxlink.ExportID
 }
 
+// WorldExport is the export of the sandbox's world: the file system the
+// sandbox's processes see, from its root.
+const WorldExport sandboxlink.ExportID = "world"
+
 // AttachRequest selects a declared export that the attachment's Link grant
 // includes. A read-only grant requires ReadOnly. An attachment attaches once
 // until it detaches.

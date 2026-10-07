@@ -59,7 +59,7 @@ A service must:
 
 ### The Linux service
 
-`fileservice.New(root)` serves the absolute directory `root` as the one export `world`, and `Describe` lists `world` only to an attachment granted it. `oac-sandbox-io` passes `/`; the Provider's sandbox setup owns the isolation of everything under it, as the [Sandbox bootstrap](./sandbox-bootstrap.md#responsibilities-and-readiness) states, and the service enforces no boundary inside the export. `New` sets the process umask to zero and reports its effective UID and GID as `Identity`. `InstanceID` returns the `ServerInstanceID` to give Link, and `Close` releases every attachment.
+`fileservice.New(root)` serves the absolute directory `root` as the [world export](#attach), its one export, and `Describe` lists it only to an attachment granted it. `oac-sandbox-io` passes `/`; the Provider's sandbox setup owns the isolation of everything under it, as the [Sandbox bootstrap](./sandbox-bootstrap.md#responsibilities-and-readiness) states, and the service enforces no boundary inside the export. `New` sets the process umask to zero and reports its effective UID and GID as `Identity`. `InstanceID` returns the `ServerInstanceID` to give Link, and `Close` releases every attachment.
 
 - Each node holds an `O_PATH|O_NOFOLLOW` descriptor. In an attachment a node is one mount ID, device and inode, so hard links share a node while a bind mount and its source stay two. The mount ID comes from `statx` with `STATX_MNT_ID`, or from the `mnt_id` line of `/proc/self/fdinfo/<fd>` on kernels older than 5.8.
 - A lookup opens one component with `openat` and `O_NOFOLLOW` on its parent's descriptor. A symlink, including a proc magic link such as `/proc/<pid>/cwd`, is a node of its own and is never traversed: `Lookup` and `Readlink` return the link itself, a directory operation on it fails with `Errno` `NotDirectory`, and `Open` fails with `SymlinkLoop`.
@@ -212,6 +212,8 @@ A writable service, one without `ReadOnly`, declares `AtomicAppend`, `AtomicRena
 ### Attach
 
 `Attach` selects one export by `ExportID`; it never takes a server path. The export must be one that the attachment's Link binding grants in `Attachment.Exports` (see the [Sandbox link protocol](./sandbox-link-protocol.md)), and a read-only grant allows only `ReadOnly` attaches; otherwise `Attach` fails with `Unauthorized`. A granted export the service does not declare fails with `InvalidArgument`, as does a second `Attach` before `Detach`. Every request that changes files on a read-only attachment fails with `Errno` `ReadOnlyFilesystem`: `SetAttr`, `Create`, `Write`, `Mkdir`, `Unlink`, `Rmdir`, `Rename`, `Link`, `Symlink`, and `Open` for writing or with `OpenTruncate`.
+
+The protocol defines one export ID, `world` (`sandboxfs.WorldExport`): the export of the sandbox's world, the file system its processes see from their `/`.
 
 ### Names and paths
 

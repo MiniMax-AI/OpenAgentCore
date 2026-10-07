@@ -51,9 +51,9 @@ func attachRoot(t *testing.T, dir string) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { svc.Close() })
-	f := &fixture{t: t, dir: dir, svc: svc, srv: sandboxfs.NewServer(svc), att: attachment(svc, sandboxlink.ExportGrant{ID: "world"})}
+	f := &fixture{t: t, dir: dir, svc: svc, srv: sandboxfs.NewServer(svc), att: attachment(svc, sandboxlink.ExportGrant{ID: sandboxfs.WorldExport})}
 	f.c, _, _ = f.connect(f.srv, f.att)
-	resp, err := f.c.Attach(context.Background(), &sandboxfs.AttachRequest{Export: "world"})
+	resp, err := f.c.Attach(context.Background(), &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestCreateWriteRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Identity != (sandboxfs.Identity{UID: uint32(os.Geteuid()), GID: uint32(os.Getegid())}) || !slices.Equal(d.Exports, []sandboxlink.ExportID{"world"}) || d.Capabilities.POSIXLocks || !d.Capabilities.Flock {
+	if d.Identity != (sandboxfs.Identity{UID: uint32(os.Geteuid()), GID: uint32(os.Getegid())}) || !slices.Equal(d.Exports, []sandboxlink.ExportID{sandboxfs.WorldExport}) || d.Capabilities.POSIXLocks || !d.Capabilities.Flock {
 		t.Fatalf("describe %+v", d)
 	}
 
@@ -399,7 +399,7 @@ func TestRootEscapeIsRefused(t *testing.T) {
 
 	// A client that skips validation gets the same answer from the server.
 	cc, sc := net.Pipe()
-	go f.srv.Serve(context.Background(), sc, attachment(f.svc, sandboxlink.ExportGrant{ID: "world"}), binds.Add(1))
+	go f.srv.Serve(context.Background(), sc, attachment(f.svc, sandboxlink.ExportGrant{ID: sandboxfs.WorldExport}), binds.Add(1))
 	defer cc.Close()
 	var e sandboxwire.Encoder
 	e.U64(f.root.ID)
@@ -494,7 +494,7 @@ func TestIncarnationChange(t *testing.T) {
 	c, _, _ := f.connect(nextSrv, a)
 	_, err = c.Lookup(context.Background(), &sandboxfs.LookupRequest{Parent: f.root, Name: []byte("f")})
 	wantFailure(t, err, sandboxfs.CodeStaleAttachment, 0, sandboxwire.EffectNone)
-	if _, err := c.Attach(context.Background(), &sandboxfs.AttachRequest{Export: "world"}); err != nil {
+	if _, err := c.Attach(context.Background(), &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport}); err != nil {
 		t.Fatal(err)
 	}
 	_, err = c.Lookup(context.Background(), &sandboxfs.LookupRequest{Parent: f.root, Name: []byte("f")})
@@ -508,13 +508,13 @@ func TestAttachFollowsExportGrants(t *testing.T) {
 	ctx := context.Background()
 
 	c, _, _ := f.connect(f.srv, attachment(f.svc, sandboxlink.ExportGrant{ID: "logs"}))
-	_, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: "world"})
+	_, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport})
 	wantFailure(t, err, sandboxfs.CodeUnauthorized, 0, sandboxwire.EffectNone)
 
-	c, _, _ = f.connect(f.srv, attachment(f.svc, sandboxlink.ExportGrant{ID: "world", ReadOnly: true}))
-	_, err = c.Attach(ctx, &sandboxfs.AttachRequest{Export: "world"})
+	c, _, _ = f.connect(f.srv, attachment(f.svc, sandboxlink.ExportGrant{ID: sandboxfs.WorldExport, ReadOnly: true}))
+	_, err = c.Attach(ctx, &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport})
 	wantFailure(t, err, sandboxfs.CodeUnauthorized, 0, sandboxwire.EffectNone)
-	r, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: "world", ReadOnly: true})
+	r, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: sandboxfs.WorldExport, ReadOnly: true})
 	if err != nil {
 		t.Fatal(err)
 	}

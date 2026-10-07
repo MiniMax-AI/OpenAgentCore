@@ -1,7 +1,7 @@
 ---
 title: "沙箱引导"
 source: docs/sandbox-bootstrap.md
-source_hash: d368f522fb87bddef67ead2cab6874f81a82ded858081bbf291cd805d5f16804
+source_hash: 8fb9435e72545859e5f4cf029dbfd41d482ad5c3d16d17bb5e8725e96a23a84b
 ---
 
 Sandbox Provider 通过交付一个引导文件来启动 Sandbox I/O 服务。本文负责 Provider 到该服务的启动输入。类型与验证器位于 [`internal/sandboxbootstrap`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/sandboxbootstrap/bootstrap.go)。服务凭此输入以 [沙箱 Link 协议](./sandbox-link-protocol.md)的 serve peer 身份连接 relay。
@@ -40,7 +40,7 @@ Provider 创建账户和沙箱，交付该文件，并以该账户启动 `oac-sa
 
 服务验证输入并负责 link：它以 serve peer 身份连接，服务已绑定的 stream，并在凭据有效期间重连。`resource`（包括其 generation）必须是该凭据服务的资源，否则 relay 拒绝该 link。
 
-File 服务只提供一个 export `world`，其根为沙箱的 `/`，该拓扑的隔离由 Provider 的沙箱设置负责。[Process 服务](./process-protocol.md#implement-a-service)以服务账户运行进程，服务作为 child subreaper 回收它们的孤儿后代进程。服务还提供 [Network 协议](./sandbox-network-protocol.md)：它在沙箱的网络命名空间中解析名称并建立 TCP 连接，范围限于每个 stream 的 `Bind` 携带的 egress。
+File 服务只提供一个 [world export](./file-access-protocol.md#attach)，其根为沙箱的 `/`，该拓扑的隔离由 Provider 的沙箱设置负责。[Process 服务](./process-protocol.md#implement-a-service)以服务账户运行进程，服务作为 child subreaper 回收它们的孤儿后代进程。服务还提供 [Network 协议](./sandbox-network-protocol.md)：它在沙箱的网络命名空间中解析名称并建立 TCP 连接，范围限于每个 stream 的 `Bind` 携带的 egress。
 
 服务无法启动时以非零状态退出，消息指出失败的步骤；`Serve` 返回[拒绝](./sandbox-link-protocol.md#implement-a-serve-peer)时，以 relay 的失败码退出。两种消息都不包含凭据。收到 SIGTERM 时，它停止接受 stream，像[所有权清理](./process-protocol.md#ownership)那样取消其活动操作，等待它们结束（最多为 cancel grace 上限加五秒），然后以 0 退出。
 

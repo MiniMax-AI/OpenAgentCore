@@ -42,7 +42,7 @@ func TestGoldenFixtures(t *testing.T) {
 		fail *Failure
 	}{
 		{file: "describe_response.hex", op: OpDescribe, id: 1, resp: &DescribeResponse{
-			ServerInstanceID: testInstance, Identity: Identity{UID: 1000, GID: 1000}, Capabilities: testCaps, Exports: []sandboxlink.ExportID{"world"}}},
+			ServerInstanceID: testInstance, Identity: Identity{UID: 1000, GID: 1000}, Capabilities: testCaps, Exports: []sandboxlink.ExportID{WorldExport}}},
 		{file: "walk_request.hex", op: OpWalk, id: 2, req: &WalkRequest{Parent: testNode, Names: [][]byte{[]byte("link"), []byte("x")}}},
 		{file: "walk_response.hex", op: OpWalk, id: 2, resp: &WalkResponse{Entries: []Entry{{Node: NodeRef{ID: 2, Generation: 7}, Attr: symlink}}}},
 		{file: "create_request.hex", op: OpCreate, id: 3, req: &CreateRequest{
@@ -111,8 +111,8 @@ func samples() []struct {
 		req  Request
 		resp message
 	}{
-		{&DescribeRequest{}, &DescribeResponse{ServerInstanceID: testInstance, Identity: Identity{UID: 1, GID: 2}, Capabilities: testCaps, Exports: []sandboxlink.ExportID{"world", "home"}}},
-		{&AttachRequest{Export: "world", ReadOnly: true}, &AttachResponse{Root: Entry{Node: testNode, Attr: testDirAttr}}},
+		{&DescribeRequest{}, &DescribeResponse{ServerInstanceID: testInstance, Identity: Identity{UID: 1, GID: 2}, Capabilities: testCaps, Exports: []sandboxlink.ExportID{WorldExport, "home"}}},
+		{&AttachRequest{Export: WorldExport, ReadOnly: true}, &AttachResponse{Root: Entry{Node: testNode, Attr: testDirAttr}}},
 		{&DetachRequest{}, &DetachResponse{}},
 		{&LookupRequest{Parent: testNode, Name: []byte("a\xff")}, &LookupResponse{Entry: testEntry}},
 		{&WalkRequest{Parent: testNode, Names: [][]byte{[]byte("a"), []byte("b")}}, &WalkResponse{Entries: []Entry{testEntry}, Failure: NewErrnoFailure(ErrnoNotFound, sandboxwire.EffectNone, "b")}},

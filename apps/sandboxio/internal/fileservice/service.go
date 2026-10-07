@@ -1,8 +1,8 @@
 //go:build linux
 
 // Package fileservice is the sandbox file service: it implements
-// sandboxfs.Service over the one export world with the Linux *at system
-// calls. It acts as its own process identity and never impersonates.
+// sandboxfs.Service over the one export sandboxfs.WorldExport with the Linux
+// *at system calls. It acts as its own process identity and never impersonates.
 package fileservice
 
 import (
@@ -21,9 +21,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 	"golang.org/x/sys/unix"
 )
-
-// Export is the one export the service serves.
-const Export sandboxlink.ExportID = "world"
 
 // Service serves File requests for any number of attachments. Its node and
 // handle tables live in memory, so each Service has its own ServerInstanceID.
@@ -193,8 +190,8 @@ func (s *Service) Describe(_ context.Context, a sandboxfs.Attachment, _ *sandbox
 		return nil, err
 	}
 	var exports []sandboxlink.ExportID
-	if _, ok := a.Grant(Export); ok {
-		exports = []sandboxlink.ExportID{Export}
+	if _, ok := a.Grant(sandboxfs.WorldExport); ok {
+		exports = []sandboxlink.ExportID{sandboxfs.WorldExport}
 	}
 	return &sandboxfs.DescribeResponse{ServerInstanceID: s.instance, Identity: s.identity, Capabilities: s.caps, Exports: exports}, nil
 }
@@ -212,7 +209,7 @@ func (s *Service) Attach(_ context.Context, a sandboxfs.Attachment, r *sandboxfs
 	if f := s.caps.Admit(r, r.ReadOnly); f != nil {
 		return nil, f
 	}
-	if r.Export != Export {
+	if r.Export != sandboxfs.WorldExport {
 		return nil, sandboxfs.NewFailure(sandboxfs.CodeInvalidArgument, sandboxwire.EffectNone, "unknown export "+string(r.Export))
 	}
 	var fd int
