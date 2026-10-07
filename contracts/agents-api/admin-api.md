@@ -137,7 +137,7 @@ Core writes this record in the same transaction that creates the Session. Later 
 | `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys. Null when `public_url` is null |
 | `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
 | `source_commit` | The full source commit Core was built from; null for development builds |
-| `configuration` | The process settings Core loaded from its environment. `path` and `apply_command` are empty, and `applied_at` is null |
+| `configuration` | The process settings Core loaded from its environment, under `settings` |
 | `address_bindings` | What a change of `public_url` affects, counted on each read |
 
 `configuration.settings` has one entry per setting Core loaded, with its dotted `key`, effective `value`, `default`, whether it is `changeable`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`, `database`).

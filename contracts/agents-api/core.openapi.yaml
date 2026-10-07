@@ -437,8 +437,7 @@ definitions:
       configuration:
         allOf:
           - $ref: '#/definitions/api.InstallationConfiguration'
-        description: The process settings Core loaded. path and apply_command are empty, and applied_at is null, because Core reports its environment rather than an installer file.
-        x-nullable: true
+        description: The process settings Core loaded.
       installation_id:
         description: The ID in OAC_INSTALLATION_ID_FILE; null when Core runs without the sandbox manager.
         type: string
@@ -461,16 +460,6 @@ definitions:
     type: object
   api.InstallationConfiguration:
     properties:
-      applied_at:
-        description: Null when Core reports its own environment.
-        type: string
-        x-nullable: true
-      apply_command:
-        description: Command that applies config.json changes. Empty when Core reports its own environment.
-        type: string
-      path:
-        description: Absolute host path of config.json. Empty when Core reports its own environment.
-        type: string
       settings:
         items:
           $ref: '#/definitions/api.InstallationSetting'
