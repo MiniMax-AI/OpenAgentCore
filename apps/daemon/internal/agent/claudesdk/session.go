@@ -23,7 +23,6 @@ type session struct {
 	cancelOutput   chan struct{}
 	nativeEnded    bool
 
-	reads       workspaceReadState
 	directories workspaceDirectoryState
 	process     *clirunner.Process
 	writeMu     *sync.Mutex

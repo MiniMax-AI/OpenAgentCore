@@ -9,20 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// ReadWorkspaceFile observes one private operation; cancellation never retries or cancels native work.
-func (s *Session) ReadWorkspaceFile(ctx context.Context, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
-	if request.Operation != "" {
-		return proto.WorkspaceReadResultPayload{}, errors.New("agentdaemon gateway: invalid byte read operation")
-	}
-	return s.readWorkspace(ctx, ref, request)
-}
-
+// ListWorkspaceDirectory observes one private operation; cancellation never retries or cancels native work.
 func (s *Session) ListWorkspaceDirectory(ctx context.Context, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
-	request.Operation = "directory"
-	return s.readWorkspace(ctx, ref, request)
-}
-
-func (s *Session) readWorkspace(ctx context.Context, ref proto.AssignmentRef, request proto.WorkspaceReadPayload) (proto.WorkspaceReadResultPayload, error) {
 	var result proto.WorkspaceReadResultPayload
 	if !proto.ValidWorkspaceReadRequest(request) {
 		return result, errors.New("agentdaemon gateway: invalid workspace read")
@@ -55,32 +43,17 @@ func (s *Session) readWorkspace(ctx context.Context, ref proto.AssignmentRef, re
 	if err != nil {
 		return result, err
 	}
-	if reply.DecodePayload(&result) != nil || !validWorkspaceOperationResult(result, request) {
+	if reply.DecodePayload(&result) != nil || !validWorkspaceReadResult(result, request.MaxEntries) {
 		return proto.WorkspaceReadResultPayload{}, errors.New("agentdaemon gateway: invalid workspace read response")
 	}
 	return result, nil
 }
 
-func validWorkspaceOperationResult(result proto.WorkspaceReadResultPayload, request proto.WorkspaceReadPayload) bool {
-	if request.Operation == "directory" && result.Outcome == "completed" {
-		return result.CloseAcknowledged && result.ErrorCode == "" && len(result.Data) == 0 && !result.Truncated && proto.ValidWorkspaceDirectory(result.Directory, request.MaxEntries)
-	}
-	// Only a directory request can report that its path names no directory.
-	if request.Operation == "directory" && result.Outcome == "rejected" && result.ErrorCode == proto.WorkspaceReadNotDirectory {
-		return result.Directory == nil && len(result.Data) == 0 && !result.Truncated && !result.CloseAcknowledged
-	}
-	return validWorkspaceReadResult(result, request.MaxBytes)
-}
-
 func validWorkspaceReadResult(result proto.WorkspaceReadResultPayload, limit int) bool {
-	if result.Directory != nil {
-		return false
-	}
 	if result.Outcome == "completed" {
-		return result.CloseAcknowledged && result.ErrorCode == "" && len(result.Data) <= limit &&
-			(!result.Truncated || len(result.Data) == limit)
+		return result.CloseAcknowledged && result.ErrorCode == "" && proto.ValidWorkspaceDirectory(result.Directory, limit)
 	}
-	if len(result.Data) != 0 || result.Truncated || result.CloseAcknowledged {
+	if result.Directory != nil || result.CloseAcknowledged {
 		return false
 	}
 	if result.Outcome == "unknown" {
@@ -90,7 +63,7 @@ func validWorkspaceReadResult(result proto.WorkspaceReadResultPayload, limit int
 		return false
 	}
 	switch result.ErrorCode {
-	case "invalid_request", "resource_unavailable", "read_capacity", "read_unsupported", "not_found", "permission_denied", proto.AssignmentStale, proto.AssignmentConflict:
+	case "invalid_request", "resource_unavailable", "read_capacity", "read_unsupported", "not_found", "permission_denied", proto.WorkspaceReadNotDirectory, proto.AssignmentStale, proto.AssignmentConflict:
 		return true
 	default:
 		return false

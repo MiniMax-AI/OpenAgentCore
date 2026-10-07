@@ -69,7 +69,6 @@ func startExecutor(ctx context.Context, checked *runtimeCheckCache, probe Config
 	if err != nil {
 		return nil, err
 	}
-	base.reads.supported = slices.Contains(info.Features, "workspace_read")
 	base.directories.supported = slices.Contains(info.Features, "workspace_directory")
 	e := &executor{base: base, start: start, ready: make(chan error, 1), done: make(chan struct{}), nativeID: start.Resume}
 	go e.read()
@@ -180,7 +179,6 @@ func (e *executor) read() {
 	}
 	<-stderrDone
 	_ = e.base.process.Wait()
-	e.base.stopWorkspaceReads()
 	e.base.stopWorkspaceDirectories()
 	e.mu.Lock()
 	e.invalid = true
@@ -320,9 +318,6 @@ func (s *session) invalidate() {
 	}
 }
 
-func (e *executor) ReadWorkspaceFile(ctx context.Context, path string, maxBytes int) (agent.WorkspaceReadResult, error) {
-	return e.base.ReadWorkspaceFile(ctx, path, maxBytes)
-}
 func (e *executor) ListWorkspaceDirectory(ctx context.Context, path string, maxEntries int) (agent.WorkspaceDirectoryResult, error) {
 	return e.base.ListWorkspaceDirectory(ctx, path, maxEntries)
 }
