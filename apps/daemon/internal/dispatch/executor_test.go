@@ -294,6 +294,25 @@ func TestExecutorRejectsSessionStateScopeMismatch(t *testing.T) {
 	}
 }
 
+func TestExecutorRejectsUnsupportedConfigurationBeforeFactory(t *testing.T) {
+	for name, change := range map[string]func(*proto.PromptRequestPayload){
+		"no environment":       func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },
+		"unknown agent option": func(r *proto.PromptRequestPayload) { r.AgentOptions = map[string]any{"mode": "plan"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			r, s, calls := executorRouter(t, &reusableExecutor{}, time.Minute)
+			req := executorRequest()
+			change(&req.Configuration)
+			if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "request", req)); err == nil {
+				t.Fatal("unsupported configuration accepted")
+			}
+			if status := waitPreparationStatus(t, s, "request", "rejected", ""); status.ErrorCode != "unsupported_configuration" || calls.Load() != 0 {
+				t.Fatalf("status=%+v factory calls=%d", status, calls.Load())
+			}
+		})
+	}
+}
+
 func TestExecutorRejectsOutputFromAnotherTurn(t *testing.T) {
 	e := &reusableExecutor{starts: make(chan *reusableTurn, 1)}
 	r, s, _ := executorRouter(t, e, time.Minute)

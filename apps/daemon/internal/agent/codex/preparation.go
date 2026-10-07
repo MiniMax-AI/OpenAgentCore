@@ -63,7 +63,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	}
 	req.AgentStateKey = effectiveAgentStateKey(req)
 
-	req.AgentOptions = executionOptions(req)
 	plan, skillRoots, err := prepareSessionPlan(parent, req, cfg)
 	if err != nil {
 		return nil, err

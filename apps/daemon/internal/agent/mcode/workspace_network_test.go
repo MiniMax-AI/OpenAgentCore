@@ -7,7 +7,7 @@ func TestWorkspaceRejectsInnerNetworkIsolation(t *testing.T) {
 		c, req, _ := workspaceFixture(t)
 		c.Network = access
 		req.LocalEnvironment.NetworkAccess = access
-		if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+		if _, err := prepareWorkspaceOptions(c, req); err == nil {
 			t.Fatal("unsupported network isolation accepted")
 		}
 	}

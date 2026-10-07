@@ -60,7 +60,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	if err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
+	if (req.LocalEnvironment != nil) == req.DisableExecutionEnvironment || validateExecutionEnvironment(req, caps) != nil || len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported() {
 		return r.rejectPreparation(env, "unsupported_configuration")
 	}
 	fingerprint, err := executorFingerprint(req)

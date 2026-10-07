@@ -1,7 +1,6 @@
 package mcode
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -50,7 +49,7 @@ func ConfigureLocal(binary, node, bridge, root, workspace string, network agentn
 	return c, nil
 }
 
-func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
+func prepareWorkspaceOptions(c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
 	if c.Network != "enabled" || len(c.AllowedDomains) != 0 {
 		return launchOptions{}, fmt.Errorf("mcode: Runtime does not implement network isolation")
 	}
@@ -67,7 +66,7 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	private.LocalEnvironment, private.DisableExecutionEnvironment = nil, true
 	// Public declarations have already been resolved into the transient ACP map.
 	private.MCPHTTPServers = nil
-	opts, err := prepareOptionsWithSkills(ctx, private, false)
+	opts, err := prepareOptions(private)
 	if err != nil {
 		return opts, err
 	}

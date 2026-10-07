@@ -48,7 +48,7 @@ func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.Su
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, result proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
-	runtime := &agent.Runtime{Info: result, Session: Factory, SessionCapabilityContext: true, ExecutorCapabilityContext: true}
+	runtime := &agent.Runtime{Info: result, Session: Factory}
 
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
@@ -78,7 +78,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 		runtime.Executor = NewExecutorFactory(workspace)
 	}
 	if workspace != nil {
-		runtime.SessionCapabilityContext = false
 		runtime.Info.Capabilities.WorkspaceAuthoring = proto.CapabilityUnsupported
 		runtime.Preparation = NewPreparationFactory(*workspace)
 		runtime.WorkspaceReadPreparation = true

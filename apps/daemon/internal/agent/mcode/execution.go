@@ -27,14 +27,8 @@ func validateExecutionRequest(req proto.PromptRequestPayload) error {
 			return err
 		}
 	}
-	if mode := optionString(req.AgentOptions, "mode"); mode != "" {
-		return fmt.Errorf("mcode: text execution uses default native permissions")
-	}
-	if req.AgentOptions["plugins"] != nil {
-		return fmt.Errorf("mcode: execution cannot import plugins")
-	}
-	if req.AgentOptions["skills"] != nil || req.AgentOptions["mcp_servers"] != nil || req.AgentOptions["env"] != nil {
-		return fmt.Errorf("mcode: execution cannot import product capabilities or environment")
+	if req.AgentOptions["env"] != nil {
+		return fmt.Errorf("mcode: execution cannot import an environment")
 	}
 	return nil
 }

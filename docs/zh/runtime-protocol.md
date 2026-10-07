@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: cbc3c6419e2d4991df82d5bbfe3b556d35cccb57d1e4e7437facca7487caabcc
+source_hash: 13766041c9ed0c012ceb5051fe43dcc8a1738a198fe325aad15f1902fe373ee3
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -59,6 +59,7 @@ prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core
 
 | 字段 | Core 设置方式 |
 | --- | --- |
+| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了 model provider 时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
 | `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
 | `observe_tool_observations` | 始终设置。tool-call frame 随后携带与 engine 无关的 `observation` |
 | `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
@@ -67,6 +68,8 @@ prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
 | `strict_resume`, `require_existing_native_session` | 始终严格；需要恢复原生 Session 时设置第二项 |
 | `prompt_steer` 上的 `durable_receipt` | Core 交付的每个活动输入都设置 |
+
+执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
 
 未携带显式启用项的请求保留未启用时的 frame 和字段。
 

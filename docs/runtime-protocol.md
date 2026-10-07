@@ -57,6 +57,7 @@ The prompt request (`prompt_request`, or the configuration of `execution_prepare
 
 | Field | Set by Core |
 | --- | --- |
+| `agent_options` | Always `model` and `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
 | `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
 | `observe_tool_observations` | Always. Tool-call frames then carry the engine-neutral `observation` |
 | `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
@@ -65,6 +66,8 @@ The prompt request (`prompt_request`, or the configuration of `execution_prepare
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
 | `strict_resume`, `require_existing_native_session` | Always strict; the second when a native Session must be recovered |
 | `durable_receipt` on `prompt_steer` | For every active input Core delivers |
+
+An execution configuration requires exactly one of `local_environment` and `disable_execution_environment`; `execution_prepare` rejects neither or both with `unsupported_configuration`.
 
 Requests without an opt-in keep the frames and fields they had without it.
 

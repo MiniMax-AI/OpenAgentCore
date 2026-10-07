@@ -16,9 +16,9 @@ Each Session has its own `CODEX_HOME` at `$OAC_RUNTIME_HOME/daemon/agent-session
 
 ## Execution controls
 
-The adapter applies Core's typed controls and opt-ins, described in the [Runtime protocol](../../../../docs/runtime-protocol.md#capability-declarations), through native Codex settings on both new and resumed Turns. Explicit controls take precedence over adapter options without changing them.
+The adapter applies Core's typed controls and opt-ins, described in the [Runtime protocol](../../../../docs/runtime-protocol.md#capability-declarations), through native Codex settings on both new and resumed Turns.
 
-- **`environment: none`.** The daemon forces `CODEX_EXEC_SERVER_URL=none` after the caller's environment options and confirms that Codex reports its `local` and `remote` environments as unknown before it starts or resumes a thread; a binary that cannot do this fails closed. The engine process runs on the bound device, which is not a user execution environment.
+- **`environment: none`.** The daemon forces `CODEX_EXEC_SERVER_URL=none` and confirms that Codex reports its `local` and `remote` environments as unknown before it starts or resumes a thread; a binary that cannot do this fails closed. The engine process runs on the bound device, which is not a user execution environment.
 - **Web search.** The control becomes Codex's `web_search` option (`disabled`, `cached` or `live`); Core sends `disabled`.
 - **Programmatic tool calling.** An explicit disable turns off the native `code_mode`, `code_mode_only` and `code_mode_prewarm` features and checks managed requirements before a thread starts or resumes, rejecting a conflicting requirement.
 - **Text verbosity.** The adapter reads the model catalog with `codex debug models`, checks the model's support and pins that catalog snapshot for the execution. The probe needs Unix process-group cancellation, so other hosts do not declare `text_verbosity`. For a model without declared verbosity support, including Codex's unknown-model fallback, `medium` omits the override and keeps native default text; a supported model receives an explicit `medium`. Unsupported `low` or `high` and an unreadable catalog fail before model execution.
@@ -26,7 +26,7 @@ The adapter applies Core's typed controls and opt-ins, described in the [Runtime
 
 ## MCP servers
 
-A typed MCP declaration replaces operator MCP options. The adapter renders it with the native renderer and the original tool names for `enabled_tools`, including `[]`. Before creating or resuming a thread it reads native `config/read` with the exact cwd and rejects additional servers or any difference in the effective configuration. It disables native plugins and apps, selects file-only MCP credentials, and rejects existing credentials in the private native home without deleting them or native history. Reserved native labels are an adapter restriction, not a rule of the saved resource. The check is a snapshot, not a barrier against concurrent operator configuration changes, and discovery of a deny-all server can still contact it.
+The adapter renders a typed MCP declaration with the native renderer and the original tool names for `enabled_tools`, including `[]`. Before creating or resuming a thread it reads native `config/read` with the exact cwd and rejects additional servers or any difference in the effective configuration. It disables native plugins and apps, selects file-only MCP credentials, and rejects existing credentials in the private native home without deleting them or native history. Reserved native labels are an adapter restriction, not a rule of the saved resource. The check is a snapshot, not a barrier against concurrent operator configuration changes, and discovery of a deny-all server can still contact it.
 
 With `required: true`, which needs `mcp_http_required`, root thread creation and cold resume wait for required servers to initialize and send no native Turn until they do; a failed strict resume is never replaced with a new thread. Public work may already be accepted while initialization waits.
 
