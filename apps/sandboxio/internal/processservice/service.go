@@ -317,19 +317,20 @@ func (s *Service) AttachmentRestored(id sandboxwire.ID) {
 	delete(s.stale, id)
 }
 
-// AttachmentRevoked cleans up a closed attachment's operations at once, and
-// drops their records and the attachment's entry once they have settled. The
-// close is final, and the Link ends the attachment's stream contexts before
-// it reports the close: a request still running on such a stream starts
-// nothing, since Start refuses an ended stream, and its answer never reaches
-// a peer.
+// AttachmentRevoked marks a closed attachment stale and collects its
+// operations, then returns: the Link's callback must not block. A goroutine
+// cancels the operations and drops their records and the attachment's entry
+// once they have settled. The close is final, and the Link ends the
+// attachment's stream contexts before it reports the close: a request still
+// running on such a stream starts nothing, since Start refuses an ended
+// stream, and its answer never reaches a peer.
 func (s *Service) AttachmentRevoked(id sandboxwire.ID) {
 	s.mu.Lock()
 	s.stopGraceLocked(id)
 	ops := s.staleLocked(id)
 	s.mu.Unlock()
-	s.cancelAll(ops)
 	go func() {
+		s.cancelAll(ops)
 		for _, op := range ops {
 			op.mu.Lock()
 			for !op.settled {

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -691,6 +692,39 @@ func TestClosedAttachmentsAreDropped(t *testing.T) {
 		h.svc.AttachmentLost(a.att)
 		h.svc.AttachmentRevoked(a.att)
 	}
+	h.waitDropped()
+}
+
+// Revocation returns while the cancellation is still scanning /proc.
+func TestRevokeDoesNotWaitForCancel(t *testing.T) {
+	h := newHarness(t, DefaultConfig())
+	var armed atomic.Bool
+	scanning, release := make(chan struct{}), make(chan struct{})
+	scanned, unblock := sync.OnceFunc(func() { close(scanning) }), sync.OnceFunc(func() { close(release) })
+	t.Cleanup(unblock)
+	h.svc.stat = func(pid int) (procStat, error) {
+		if armed.Load() {
+			scanned()
+			<-release
+		}
+		return readStat(pid)
+	}
+	c := h.connect()
+	h.start(c, pipeSpec("sleep", "30"))
+	c.Close()
+	armed.Store(true)
+	revoked := make(chan struct{})
+	go func() {
+		h.svc.AttachmentRevoked(h.att)
+		close(revoked)
+	}()
+	<-scanning
+	select {
+	case <-revoked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("AttachmentRevoked waited for the cancellation")
+	}
+	unblock()
 	h.waitDropped()
 }
 
