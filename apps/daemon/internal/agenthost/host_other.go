@@ -8,7 +8,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 )
 
 // Open reports that the agent host needs Linux.
@@ -27,6 +26,6 @@ func (*Host) Environments(proto.AssignmentRef, proto.AssignmentBindPayload) disp
 }
 
 // RemoveHome reports that the agent host needs Linux.
-func (*Host) RemoveHome(sandboxwire.ID) error {
+func (*Host) RemoveHome(string) error {
 	return fmt.Errorf("%w: remove home", ErrUnsupported)
 }

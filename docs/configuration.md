@@ -146,7 +146,14 @@ The agent host runs each Session's Harness outside the sandbox, in a view of its
 
 Docker's default seccomp profile stays: with `CAP_SYS_ADMIN` it allows `clone3`, `mount` and `unshare`. The container gets no Docker socket and publishes no port.
 
-The agent host needs a cgroup v2 directory delegated to it. It starts each view in a cgroup of its own there, ends the view with `cgroup.kill` and removes the cgroup. When it starts it ends and removes every cgroup in the directory, because each counts as a view's, so nothing else may use it. The directory must be writable and must not contain the agent host's own process. Docker mounts the container's cgroup read-only. With the flags above, cgroup v2 mounted again inside the container (`mount -t cgroup2 cgroup2 <dir>`) is the container's own cgroup and is writable, and a new directory in it is the delegated directory. Without that delegation the agent host does not start: it fails with `agenthost.ErrUnsupported`, and nothing falls back.
+The agent host needs a cgroup v2 directory delegated to it. It starts each view in a cgroup of its own there, ends the view with `cgroup.kill` and removes the cgroup. When it starts it ends and removes every cgroup in the directory, because each counts as a view's, so nothing else may use it. The directory must be writable and must not contain the agent host's own process. Docker mounts the container's cgroup read-only. With the flags above, cgroup v2 mounted again inside the container is the container's own cgroup and is writable: the agent host mounts it at `/run/oac/cgroup` when it starts and delegates the directory `/run/oac/cgroup/views` to its views. Without that delegation the agent host does not start: it fails with `agenthost.ErrUnsupported`, and nothing falls back.
+
+The container runs `oac-daemon agent-host --identity-file <path> --core-url <origin>`, which takes no other flag:
+
+- `--identity-file` is the agent host's identity, a JSON object with its `runtime_id` and `credential`. The agent host connects to Core as that Runtime and presents the credential as written, to the Runtime gateway and to the [Link](./sandbox-link-protocol.md).
+- `--core-url` is Core's origin. The agent host derives the Runtime gateway and Link URLs from it as Core derives them from `OAC_PUBLIC_URL`, and ignores the public addresses Core returns, so it must be an https origin or an http origin on a loopback host, which only a peer in Core's network namespace reaches.
+
+The agent host serves each Harness that the image's `/opt/oac/harnesses.json` installs and that declares a view, and it starts and connects with none. It keeps each Session's home, with the Harness's native history, in `/var/lib/oac/agent-host`, which must outlive the container for Sessions to continue after a restart. A lost connection is redialed with backoff; when Core stays unreachable for two minutes, the agent host exits with a nonzero status for its supervisor to restart it.
 
 Never set `GODEBUG=http2debug` for the agent host. With it, Go's HTTP/2 implementation logs every header it encodes, including the model and MCP credentials the agent host adds.
 
