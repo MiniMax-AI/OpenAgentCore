@@ -109,7 +109,6 @@ func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	c, req, _ := workspaceFixture(t)
 	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
-	req.ObserveToolObservations = true
 	script, err := os.ReadFile(c.Binary)
 	if err != nil {
 		t.Fatal(err)

@@ -151,8 +151,6 @@ A Harness that supports the Subagent reads implements the [neutral observation c
 
 Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
 
-An adapter that supports product workspace authoring declares `WorkspaceAuthoring` itself; common registration does not grant it.
-
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) iterates the discovered runtimes and calls `Registry.Register` from `agent/harness.go`. It verifies that discovery retained the declared kind and installs factories in this order:
 
 | Order | Method | Registers |
@@ -202,7 +200,7 @@ Run the `engine` and `execution` tests for omission, policy, combination and err
 
 ## Native model configuration
 
-[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) owns the shared configuration declaration and pure preparation contract. Each adapter supplies one `Configuration`, in `internal/harnessconfig/<kind>`, to Core's composition and to the Runtime's `RegisterKind`. The direct factory, preparation and Executor paths all validate through that declaration before native side effects, and Registry wrappers keep the declaration with the factory. The wire object is `proto.HarnessConfig`. [Model execution](./model-execution.md#native-model-parameters) lists each Harness's accepted fields.
+[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) owns the shared configuration declaration and pure preparation contract. Each adapter supplies one `Configuration`, in `internal/harnessconfig/<kind>`, to Core's composition and to the Runtime's `RegisterKind`. The direct factory, preparation and Executor paths all validate through that declaration before native side effects. The wire object is `proto.HarnessConfig`. [Model execution](./model-execution.md#native-model-parameters) lists each Harness's accepted fields.
 
 A supplied `model` must be a nonempty string, and an explicit `model_provider` requires it. The native-owned connection path may omit both; explicit null is invalid. An explicitly empty declaration accepts no provider or nonempty native parameters and advertises no provider support. Unknown protocol formats and duplicate protocol declarations fail at registration.
 
@@ -247,7 +245,7 @@ An adapter may supply `agent.Installation` from `installation.go` in its own pac
 
 ## Native process ownership
 
-The daemon's `clirunner` offers opt-in Unix process-group ownership for adapters whose SDK launches a native child; unsupported hosts reject this mode before launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
+The daemon's `clirunner` starts every native child in its own Unix process group (a Job object on Windows); other hosts reject the launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
 
 Owned output pipes stay readable after the leader exits. Consumers drain stdout and stderr before calling `Wait`, which joins the cached process result and closes the readers. `Done` reports leader reaping and group cleanup signals; it is not a native execution receipt or proof of persisted history. SDK adapters settle each Turn and drain its observations before publishing completion, and Executor close also closes the query and awaits the native child. Process groups are lifecycle supervision, not isolation or containment of descendants that leave the group.
 

@@ -28,7 +28,7 @@ func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, 
 	if workspace {
 		factory = NewExecutorFactory(&config)
 	} else {
-		req = executionRequest(t)
+		req = testRequest(t)
 		req.ReleaseOnCompletion = false
 		req.RunID, req.Input, req.ConversationID = "", nil, ""
 		t.Setenv("OAC_RUNTIME_MCODE_BIN", config.Binary)

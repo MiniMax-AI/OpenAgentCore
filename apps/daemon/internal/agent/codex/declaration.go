@@ -20,7 +20,6 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 		Usage:                          proto.CapabilitySupported,
 		Resume:                         proto.CapabilitySupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		WorkspaceAuthoring:             proto.CapabilitySupported,
 		Steering:                       proto.CapabilitySupported,
 		MessageItems:                   proto.CapabilitySupported,
 		ToolObservations:               proto.CapabilitySupported,

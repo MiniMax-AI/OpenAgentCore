@@ -226,7 +226,6 @@ type AgentKindCapabilities struct {
 	Usage                 CapabilitySupport `json:"usage"`
 	Resume                CapabilitySupport `json:"resume"`
 	NativeSessionRecovery CapabilitySupport `json:"native_session_recovery"`
-	WorkspaceAuthoring    CapabilitySupport `json:"workspace_authoring"`
 	Steering              CapabilitySupport `json:"steering"`
 	MessageItems          CapabilitySupport `json:"message_items"`
 

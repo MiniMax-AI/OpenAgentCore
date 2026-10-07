@@ -15,7 +15,7 @@ import (
 
 func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload, string) {
 	t.Helper()
-	r := executionRequest(t)
+	r := testRequest(t)
 	r.RunID, r.Input, r.ConversationID = "", nil, ""
 	r.DisableExecutionEnvironment = false
 	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}

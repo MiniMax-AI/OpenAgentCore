@@ -291,8 +291,7 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 	r.kinds[kind] = info
 }
 
-// RegisterPreparation installs a separate execution-only path. Product factory
-// wrappers must not add authoring side effects to it.
+// RegisterPreparation installs a separate execution-only path.
 func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare PreparationFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

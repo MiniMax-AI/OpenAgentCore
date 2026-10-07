@@ -148,7 +148,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	}
 	defer peer.Close()
 	env, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: "cleanup",
-		Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", StrictResume: true, DisableExecutionEnvironment: true}})
+		Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-cleanup", DisableExecutionEnvironment: true}})
 	if err != nil {
 		t.Fatal(err)
 	}

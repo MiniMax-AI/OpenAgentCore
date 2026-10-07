@@ -91,7 +91,6 @@ type KindCapabilities struct {
 	MCPHTTPBearerAuth    bool `json:"mcp_http_bearer_auth,omitempty"`
 	DurableInputReceipts bool `json:"durable_input_receipts,omitempty"`
 	DurableTurns         bool `json:"durable_turns,omitempty"`
-	WorkspaceAuthoring   bool `json:"workspace_authoring,omitempty"`
 }
 
 // SupportedAgentKind is the sanitized runtime.config view

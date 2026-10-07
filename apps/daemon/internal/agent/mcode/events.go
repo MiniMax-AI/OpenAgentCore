@@ -59,7 +59,7 @@ func (s *Session) emitTool(update toolUpdate) error {
 	if update.ID == "" || s.completedTools[update.ID] {
 		return nil
 	}
-	previous, started := s.tools[update.ID]
+	previous := s.tools[update.ID]
 	if update.Name == "" {
 		update.Name = previous.Name
 	}
@@ -69,21 +69,18 @@ func (s *Session) emitTool(update toolUpdate) error {
 	if update.RawInput == nil {
 		update.RawInput = previous.RawInput
 	}
-	if s.req.ObserveToolObservations {
-		update.mcp = previous.mcp
-		if update.mcp != nil && update.Name != previous.Name {
-			return fmt.Errorf("mcode: native MCP call identity changed")
-		}
-		if update.mcp == nil {
-			var err error
-			update.mcp, err = s.environmentMCPIdentity(update.Name)
-			if err != nil {
-				return err
-			}
-		}
-		started = previous.mcp != nil || workspaceToolObservation(previous, "before") != nil
+	update.mcp = previous.mcp
+	if update.mcp != nil && update.Name != previous.Name {
+		return fmt.Errorf("mcode: native MCP call identity changed")
 	}
-	if !started {
+	if update.mcp == nil {
+		var err error
+		update.mcp, err = s.environmentMCPIdentity(update.Name)
+		if err != nil {
+			return err
+		}
+	}
+	if previous.mcp == nil && workspaceToolObservation(previous, "before") == nil {
 		if err := s.emitToolStage(update, "before"); err != nil {
 			return err
 		}

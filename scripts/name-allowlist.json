@@ -145,16 +145,6 @@
     "reason": "Historical migration commentary records the environment name used when this migration was written."
   },
   {
-    "path": "apps/daemon/internal/cli/companion_path.go",
-    "regex": "\\bparsar\\b",
-    "reason": "The authoring bridge puts the separate product CLI on PATH; that CLI keeps its own name."
-  },
-  {
-    "path": "apps/daemon/internal/cli/companion_path_test.go",
-    "regex": "\\bparsar\\b",
-    "reason": "The authoring bridge puts the separate product CLI on PATH; that CLI keeps its own name."
-  },
-  {
     "path": "CONTRIBUTING.md",
     "regex": "apps/parsar/|Parsar owns",
     "reason": "These exact phrases refer to the separate Parsar product, its ownership or historical source, not the OpenAgentCore brand."

@@ -35,7 +35,7 @@ func TestMCodeExecutionOptInIsVersionBound(t *testing.T) {
 
 // The declaration must retain the complete baseline capability descriptor.
 func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"Streaming": true, "Permissions": true, "Resume": true, "WorkspaceAuthoring": true}
+	expected := map[string]bool{"Streaming": true, "Permissions": true, "Resume": true}
 	value := reflect.ValueOf(Declaration.Info.Capabilities)
 	for i := 0; i < value.NumField(); i++ {
 		name := value.Type().Field(i).Name

@@ -107,15 +107,3 @@ func (r *Registry) ResolvePreparation(kind string) (PreparationFactory, error) {
 	}
 	return f, nil
 }
-
-// Configuration returns an owned declaration for registry wrappers. Wrappers
-// transfer it with the factory; they must not infer configuration from kind names.
-func (r *Registry) Configuration(kind string) (harnessconfig.Configuration, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	configuration, ok := r.configurations[kind]
-	if !ok {
-		return harnessconfig.Configuration{}, ErrUnsupportedKind
-	}
-	return configuration.Clone(), nil
-}

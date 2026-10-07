@@ -24,33 +24,23 @@ func TestBuildSessionPlan_DefaultsToBypass(t *testing.T) {
 }
 
 func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
-	plan, err := BuildSessionPlan("conv-1/agent-1/codex", map[string]any{
-		"env": map[string]any{
-			"OPENAI_API_KEY": "sk-test",
-		},
-	}, nil)
+	plan, err := BuildSessionPlan("conv-1/agent-1/codex", nil, nil)
 	if err != nil {
 		t.Fatalf("BuildSessionPlan: %v", err)
 	}
 	defer plan.Cleanup()
 	hasCodexHome := false
-	hasOpenAI := false
 	hasTelemetry := false
 	for _, kv := range plan.Env {
 		switch {
 		case strings.HasPrefix(kv, "CODEX_HOME="):
 			hasCodexHome = true
-		case kv == "OPENAI_API_KEY=sk-test":
-			hasOpenAI = true
 		case kv == "DISABLE_TELEMETRY=1":
 			hasTelemetry = true
 		}
 	}
 	if !hasCodexHome {
 		t.Fatalf("env missing CODEX_HOME: %+v", plan.Env)
-	}
-	if !hasOpenAI {
-		t.Fatalf("env missing OPENAI_API_KEY: %+v", plan.Env)
 	}
 	if !hasTelemetry {
 		t.Fatalf("env missing DISABLE_TELEMETRY: %+v", plan.Env)

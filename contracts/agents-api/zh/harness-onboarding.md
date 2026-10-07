@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 32adff66e2fb33956e96f9a453518d70a3f87056eb777e82a60e087fe4e5aa31
+source_hash: cad1a3666f3c0d4c460bb6213da4bcca89c156fc387b1355d683593b55d025a0
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -153,8 +153,6 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、session 工厂、准备工厂和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不可用描述符和 session 工厂。将版本门控和工厂选择条件保留在适配器内部。
 
-支持产品工作区创作功能的适配器自行声明 `WorkspaceAuthoring`；通用注册不会授予该能力。
-
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) 遍历已发现的 Runtime，并调用 `agent/harness.go` 中的 `Registry.Register`。它验证发现过程是否保留了声明的 kind，并按以下顺序安装工厂：
 
 | 顺序 | 方法 | 注册内容 |
@@ -204,7 +202,7 @@ profile 是纯逻辑：它使用现有的公共类型和协议类型，声明受
 
 ## 原生模型配置 {#native-model-configuration}
 
-[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 负责共享配置声明和纯准备契约。每个适配器在 `internal/harnessconfig/<kind>` 中提供一个 `Configuration`，供 Core 组合和 Runtime 的 `RegisterKind` 使用。直接调用工厂、准备路径和 Executor 路径都会在产生原生副作用之前通过该声明进行验证，而 Registry 包装器会将声明与工厂保留在一起。线协议对象是 `proto.HarnessConfig`。[Model execution](model-execution.md#native-model-parameters) 列出了每个 Harness 接受的字段。
+[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 负责共享配置声明和纯准备契约。每个适配器在 `internal/harnessconfig/<kind>` 中提供一个 `Configuration`，供 Core 组合和 Runtime 的 `RegisterKind` 使用。直接调用工厂、准备路径和 Executor 路径都会在产生原生副作用之前通过该声明进行验证。线协议对象是 `proto.HarnessConfig`。[Model execution](model-execution.md#native-model-parameters) 列出了每个 Harness 接受的字段。
 
 提供的 `model` 必须是非空字符串，并且显式指定 `model_provider` 时必须提供它。原生所有权连接路径可以省略二者；显式 null 无效。显式为空的声明不接受任何 Provider 或非空原生参数，也不宣称支持 Provider。未知协议格式和重复协议声明会导致注册失败。
 
@@ -249,7 +247,7 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 
 ## 原生进程所有权 {#native-process-ownership}
 
-daemon 的 `clirunner` 为 SDK 会启动原生子进程的适配器提供可选的 Unix 进程组所有权；不支持的主机会在启动前拒绝此模式。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
+daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启动（Windows 上为 Job 对象）；其他主机会拒绝启动。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
 
 所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
 

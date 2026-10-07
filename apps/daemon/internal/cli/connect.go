@@ -12,7 +12,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/authoring"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
@@ -427,8 +426,6 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 	if err != nil {
 		return err
 	}
-	bridge := authoring.New(conn)
-	registry = authoringRegistry(registry, bridge)
 	router, err := dispatch.New(dispatch.Config{
 		Registry:       registry,
 		Sender:         conn,
@@ -470,10 +467,6 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 			if !ok {
 				obslog.Bg().Warn("pumpConn: recvCh closed", "err", conn.Err())
 				return conn.Err()
-			}
-			if env.Type == proto.TypeAuthoringResponse {
-				bridge.Deliver(env)
-				continue
 			}
 			obslog.Bg().Info("pumpConn: received envelope, calling router.Handle", "type", env.Type, "id", env.ID)
 			if err := router.Handle(parentCtx, env); err != nil {

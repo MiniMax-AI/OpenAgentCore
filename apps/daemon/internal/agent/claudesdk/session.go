@@ -86,7 +86,7 @@ func launch(ctx context.Context, config Config, start startRequest, env []string
 	if binary == "" {
 		binary = "node"
 	}
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{config.Entrypoint}, Dir: start.Cwd, Env: env, NeedStdin: true, OwnProcessGroup: true})
+	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{config.Entrypoint}, Dir: start.Cwd, Env: env, NeedStdin: true})
 	if err != nil {
 		return nil, err
 	}
