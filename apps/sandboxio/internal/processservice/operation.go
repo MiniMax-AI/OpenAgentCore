@@ -126,6 +126,7 @@ func (op *operation) settleLocked() {
 	}
 	op.settled = true
 	op.s.active.Add(-1)
+	op.cond.Broadcast()
 	// No process remains to read pipe stdin.
 	if op.pty == nil && op.stdin != nil && !op.stdinClosed {
 		op.stdinClosed = true
@@ -406,6 +407,20 @@ func (op *operation) closeOutput(name sp.Stream) error {
 	// Outside op.mu: Close waits for a read in progress, which holds op.mu.
 	st.f.Close()
 	return nil
+}
+
+// abandonOutput closes every open stream as CloseOutput does, once the launch
+// has published them.
+func (op *operation) abandonOutput() {
+	op.mu.Lock()
+	for op.state == sp.StateStarting {
+		op.cond.Wait()
+	}
+	streams := op.streams
+	op.mu.Unlock()
+	for _, st := range streams {
+		op.closeOutput(st.name) // a stream already closed needs nothing
+	}
 }
 
 func (op *operation) abandonLocked(name sp.Stream) (*stream, error) {

@@ -32,13 +32,13 @@ A service must:
 
 - generate a new `ServerInstanceID` whenever its operation records are lost, and answer requests for any other incarnation with `InstanceChanged`;
 - advertise only what it enforces, and reject anything else in a spec or signal request with `Unsupported`;
-- keep every operation record for the whole incarnation, as described in [Deduplication and tombstones](#deduplication-and-tombstones);
+- keep every operation record while its attachment is open, as described in [Deduplication and tombstones](#deduplication-and-tombstones);
 - never drop an event it has not been told was delivered, as described in [Output, replay and flow control](#output-replay-and-flow-control);
 - treat the loss of a stream as nothing more than the loss of an observer, as described in [Ownership](#ownership).
 
 The Linux service calls `processservice.Init()` first in the binary's `main`. Go cannot set a child's umask, so each launch re-executes the service binary as a trampoline that reads the launch from an inherited descriptor, marks every inherited descriptor above 2 close-on-exec, applies the umask and working directory, and execs the target. `Init` runs that trampoline and returns at once in a normal start. The Linux service launches every operation in a new session with `setsid`, observes the session through `/proc`, and advertises `ScopePOSIXSession` only. It requires `pidfd_open` and `pidfd_send_signal` (Linux 5.3 or later): without them `processservice.New` fails with `ErrPidfdUnsupported`.
 
-Before serving, `main` makes the process a child subreaper (`prctl(PR_SET_CHILD_SUBREAPER)`) and runs `processservice.Reap(ctx)` for the life of the process. `Reap` is the process's only `wait`: it reaps every child, delivers each leader's exit to its operation, and reaps the orphaned descendants the subreaper inherits. Nothing else in the binary may wait for children, and no operation observes an exit while `Reap` is not running. When the binary stops, it calls `Shutdown(ctx)` after its streams have ended: `Shutdown` cancels every live operation as [ownership cleanup](#ownership) does and returns once each scope has closed or `ctx` ends.
+Before serving, `main` makes the process a child subreaper (`prctl(PR_SET_CHILD_SUBREAPER)`) and runs `processservice.Reap(ctx)` for the life of the process. `Reap` is the process's only `wait`: it reaps every child, delivers each leader's exit to its operation, and reaps the orphaned descendants the subreaper inherits. Nothing else in the binary may wait for children, and no operation observes an exit while `Reap` is not running. When the binary stops, it calls `Shutdown(ctx)` after its streams have ended: `Shutdown` cancels every live operation and abandons its output, as revoking [ownership](#ownership) does, and returns once each scope has closed or `ctx` ends.
 
 ## Reference
 
@@ -114,8 +114,9 @@ Launch failures map the OS error: a missing file or directory is `NotFound`, a p
 
 - Operation IDs are scoped to `(AttachmentID, ServerInstanceID, OperationID)`.
 - `Start` reserves the ID before launching and keeps the SHA-256 digest of the encoded spec. The same ID with the same spec returns `Existing`, including for concurrent requests; a different spec returns `OperationConflict`.
-- Records last for the whole incarnation. `Release` keeps a tombstone with the digest, the state and the results; a `Start` for a released ID returns `Released`.
-- Records are never evicted. When `MaxOperationRecords` or `MaxActiveOperations` is reached, `Start` fails with `ResourceExhausted`.
+- Records last while their attachment is open. `Release` keeps a tombstone with the digest, the state and the results; a `Start` for a released ID returns `Released`.
+- An open attachment's records are never evicted. When `MaxOperationRecords` or `MaxActiveOperations` is reached, `Start` fails with `ResourceExhausted`.
+- Once an attachment has closed and its operations have settled, the service drops their records; no stream can name them any more.
 
 ### Stdin offsets
 
@@ -153,7 +154,7 @@ A signal reaches only a process the service can prove is in the operation's sess
 
 ### Ownership
 
-Losing a stream only loses the observer; the operation continues and any stream of the same attachment can `Attach` to it. When the Link layer reports that the attachment's ownership lapsed, the service waits `OwnerLossGraceMillis`. If ownership returns within the grace, nothing happens. When the grace expires or ownership is revoked, the service cancels each of the attachment's live operations with TERM, then KILL after `CancelGraceLimitMillis`; an operation still starting is cancelled as soon as it launches. From then on a `Start` of a new operation on that attachment returns `StaleAttachment` until ownership returns.
+Losing a stream only loses the observer; the operation continues and any stream of the same attachment can `Attach` to it. When the Link layer reports that the attachment's ownership lapsed, the service waits `OwnerLossGraceMillis`. If ownership returns within the grace, nothing happens. When the grace expires or ownership is revoked, the service cancels each of the attachment's live operations with TERM, then KILL after `CancelGraceLimitMillis`; an operation still starting is cancelled as soon as it launches. When ownership is revoked, the service also abandons each operation's output as `CloseOutput` does, since no acknowledgement can arrive any more. From then on a `Start` of a new operation on that attachment returns `StaleAttachment` until ownership returns.
 
 ### Capabilities
 
@@ -164,7 +165,7 @@ Losing a stream only loses the observer; the operation continues and any stream 
 | `MaxStartBytes` | The largest encoded `Start` payload |
 | `MaxDataBytes` | The largest stdin write and output chunk, at most 64 KiB |
 | `MaxActiveOperations` | Operations not yet settled |
-| `MaxOperationRecords` | All records of the incarnation, tombstones included |
+| `MaxOperationRecords` | All records the service keeps, tombstones included |
 | `MaxReplayBytesPerOperation` | Unacknowledged output retained per operation |
 | `OwnerLossGraceMillis` | How long operations survive lapsed ownership |
 | `CancelGraceLimitMillis` | The longest `Cancel` grace, and the grace of ownership cleanup |

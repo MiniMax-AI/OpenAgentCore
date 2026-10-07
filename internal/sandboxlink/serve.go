@@ -48,7 +48,8 @@ type ServeConfig struct {
 	// attached, restored when a stream binds it again, and closed when the
 	// relay reports AttachmentClosed. A lost attachment may be closed without
 	// being restored. Closed is final: a Bind for a recently closed
-	// attachment is refused with LeaseExpired.
+	// attachment is refused with LeaseExpired. OnAttachmentClosed runs after
+	// the attachment's handler contexts have ended.
 	OnAttachmentLost     func(sandboxwire.ID)
 	OnAttachmentRestored func(sandboxwire.ID)
 	OnAttachmentClosed   func(sandboxwire.ID, CloseReason)

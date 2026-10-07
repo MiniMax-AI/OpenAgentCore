@@ -1,7 +1,7 @@
 ---
 title: "沙箱 Link 协议"
 source: docs/sandbox-link-protocol.md
-source_hash: d753586c244650329796b8abd17994c2e57aa433b55ebd78c499c86368e8aa6f
+source_hash: ea2004916489420736d6bc73b31f1e26b409747406c20bf646729a2fe0478c41
 ---
 
 Link 协议通过 relay 连接沙箱 I/O 的两端。Sandbox I/O 服务运行在沙箱内并为其提供服务，是 serve peer。agent host 上的 Runtime 在沙箱外运行 Harness，并通过该服务使用沙箱，是 attach peer。每个 peer 各自向 relay 认证自己的 link。relay 授权 attach peer 打开的每个服务 stream，将其绑定到该资源当前的 serve peer，然后在两个 stream 之间复制字节而不读取内容。服务帧从不携带凭据或 grant。
@@ -25,7 +25,7 @@ Sandbox I/O 服务以 `ServeConfig` 运行 `sandboxlink.Serve`：
 - `URL`、`Credential` 和 `Resource` 来自[引导输入](./sandbox-bootstrap.md)。凭据标识该服务，因此 Hello 不携带 peer ID。服务每次在没有其 operation 与 handle registry 的情况下启动时，`ServerInstanceID` 都是新 ID。
 - `Services` 为每个提供的服务和版本保存一个 handler。handler 接收 `Bind`（携带已授权的 binding，包括 File stream 的 export）、一个 bind 序号和该 stream。handler 拥有该 stream，用完后返回。attachment 关闭或 `Serve` 返回时，其 context 结束。Bind 顺序是 `Serve` 分配 bind 序号的顺序，分配在跟踪 attachment 的锁下、回复 `Bound` 之前进行；并发的 `Bound` 和 `Opened` 回复可能以其他顺序到达打开方，延迟运行的 handler 保留其 stream 的位置。该序号属于一次 `Serve` 调用，跨重连保持；由于所有 attachment 共享该序号，它严格递增但有间隙，服务可以依靠它对接替进行 fencing。
 - link 断开时，`Serve` 以带 jitter 的指数 backoff 重连，并发送同一 `ServerInstanceID`。其 context 结束，或 relay 以不可[重试](#failures)的失败拒绝 Hello 时，它返回，例如凭据被撤回后的 `AuthenticationFailed`，或更新的沙箱接管该资源后的 `StaleGeneration`。返回前，它取消每个 handler 的 context 并等待 handler 结束。
-- attachment 仍处于打开状态而其最后一个打开的 stream 结束时（例如 link 断开），触发 `OnAttachmentLost`。某个 stream 重新绑定已丢失的 attachment 时，触发 `OnAttachmentRestored`。relay 报告 `AttachmentClosed` 时，携带原因触发 `OnAttachmentClosed`。丢失 socket 不等于关闭 attachment：服务保留 attachment 的状态，直到它被关闭。
+- attachment 仍处于打开状态而其最后一个打开的 stream 结束时（例如 link 断开），触发 `OnAttachmentLost`。某个 stream 重新绑定已丢失的 attachment 时，触发 `OnAttachmentRestored`。relay 报告 `AttachmentClosed` 时，携带原因触发 `OnAttachmentClosed`。此时该 attachment 的各 handler 的 context 均已结束。丢失 socket 不等于关闭 attachment：服务保留 attachment 的状态，直到它被关闭。
 - 关闭是最终的。relay 在关闭前发送的 `Bind` 可能在 `AttachmentClosed` 之后到达，因此对于在最近 `sandboxlink.HandshakeTimeout` 内关闭的 attachment，`Serve` 以 `LeaseExpired` 拒绝其 `Bind`。已关闭 attachment 的 stream 稍后结束时，绝不会将另一个 attachment 标记为丢失。
 
 serve peer 不打开 stream，在 Hello 之后也不在其 control stream 上发送任何内容。relay 会结束违反此规则的 link。relay 只向 serve peer 发送 `AttachmentClosed` 事件；link 上出现请求时，`Serve` 结束该 link。

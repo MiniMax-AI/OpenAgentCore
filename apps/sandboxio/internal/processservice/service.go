@@ -64,7 +64,8 @@ type Service struct {
 	ops    map[opKey]*operation
 	owners map[sandboxwire.ID]*time.Timer
 	// stale holds attachments whose operations were cleaned up; they start
-	// nothing more until ownership is restored.
+	// nothing more until ownership is restored. A closed attachment leaves
+	// it once its operations have settled.
 	stale  map[sandboxwire.ID]bool
 	active atomic.Int64
 }
@@ -147,10 +148,11 @@ func (s *Service) lookup(conn *sp.Conn, ref sp.OperationRef) (*operation, error)
 	return op, nil
 }
 
-// Start reserves the ID, then launches once. The record is kept for the
-// incarnation, so an ID is never launched twice. An attachment whose
+// Start reserves the ID, then launches once. The record is kept while the
+// attachment is open, so an ID is never launched twice. An attachment whose
 // operations were cleaned up still finds its existing operations but launches
-// nothing new until its ownership is restored.
+// nothing new until its ownership is restored. A stream whose context has
+// ended launches nothing: see AttachmentRevoked.
 func (s *Service) Start(_ context.Context, conn *sp.Conn, req sp.StartRequest) (sp.StartResponse, error) {
 	if err := s.checkInstance(req.OperationRef); err != nil {
 		return sp.StartResponse{}, err
@@ -168,7 +170,7 @@ func (s *Service) Start(_ context.Context, conn *sp.Conn, req sp.StartRequest) (
 		}
 		return sp.StartResponse{Disposition: sp.StartExisting}, nil
 	}
-	if s.stale[key.attachment] {
+	if s.stale[key.attachment] || conn.Context().Err() != nil {
 		s.mu.Unlock()
 		return sp.StartResponse{}, sp.Fail(sp.CodeStaleAttachment, sandboxwire.EffectNone, "the attachment's ownership ended")
 	}
@@ -315,20 +317,40 @@ func (s *Service) AttachmentRestored(id sandboxwire.ID) {
 	delete(s.stale, id)
 }
 
-// AttachmentRevoked cleans up an attachment's operations at once.
+// AttachmentRevoked marks a closed attachment stale and collects its
+// operations, then returns: the Link's callback must not block. A goroutine
+// ends the operations and drops their records and the attachment's entry once
+// they have settled. The close is final, and the Link ends the attachment's
+// stream contexts before it reports the close: a request still running on
+// such a stream starts nothing, since Start refuses an ended stream, and its
+// answer never reaches a peer.
 func (s *Service) AttachmentRevoked(id sandboxwire.ID) {
 	s.mu.Lock()
 	s.stopGraceLocked(id)
 	ops := s.staleLocked(id)
 	s.mu.Unlock()
-	s.cancelAll(ops)
+	go func() {
+		s.endAll(ops)
+		for _, op := range ops {
+			op.mu.Lock()
+			for !op.settled {
+				op.cond.Wait()
+			}
+			op.mu.Unlock()
+		}
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, op := range ops {
+			delete(s.ops, op.key)
+		}
+		delete(s.stale, id)
+	}()
 }
 
-// Shutdown ends the incarnation's operations when the service stops: it
-// cancels every operation as ownership cleanup does, with TERM, then KILL
-// after the grace limit, and returns once every operation's scope has closed
-// or ctx ends. The binary calls it after its streams have ended, so no Start
-// arrives during or after it; Reap must still be running.
+// Shutdown ends the incarnation's operations when the service stops, as a
+// revoke does, and returns once every operation's scope has closed or ctx
+// ends. The binary calls it after its streams have ended, so no Start arrives
+// during or after it; Reap must still be running.
 func (s *Service) Shutdown(ctx context.Context) {
 	s.mu.Lock()
 	ops := make([]*operation, 0, len(s.ops))
@@ -336,7 +358,7 @@ func (s *Service) Shutdown(ctx context.Context) {
 		ops = append(ops, op)
 	}
 	s.mu.Unlock()
-	s.cancelAll(ops)
+	s.endAll(ops)
 	for _, op := range ops {
 		op.awaitScope(ctx)
 	}
@@ -368,5 +390,14 @@ func (s *Service) staleLocked(id sandboxwire.ID) []*operation {
 func (s *Service) cancelAll(ops []*operation) {
 	for _, op := range ops {
 		op.cancel(s.cfg.CancelGraceLimit)
+	}
+}
+
+// endAll cancels operations no one can acknowledge again and abandons their
+// output, so the replay limit holds none of their readers.
+func (s *Service) endAll(ops []*operation) {
+	s.cancelAll(ops)
+	for _, op := range ops {
+		op.abandonOutput()
 	}
 }

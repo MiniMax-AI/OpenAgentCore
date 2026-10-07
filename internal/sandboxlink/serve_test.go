@@ -46,3 +46,17 @@ func TestReleaseOfClosedAttachment(t *testing.T) {
 		t.Fatalf("lost %v, want the current attachment lost", lost)
 	}
 }
+
+// OnAttachmentClosed runs after the closed attachment's handler context has
+// ended, so a service can refuse the handler's late requests by it.
+func TestCloseEndsHandlersFirst(t *testing.T) {
+	s := testServer(new([]sandboxwire.ID))
+	id := sandboxwire.NewID()
+	a, _ := s.track(context.Background(), id)
+	ended := false
+	s.cfg.OnAttachmentClosed = func(sandboxwire.ID, CloseReason) { ended = a.ctx.Err() != nil }
+	s.closed(AttachmentClosed{AttachmentID: id, Reason: CloseRevoked})
+	if !ended {
+		t.Fatal("OnAttachmentClosed ran while the handler context was live")
+	}
+}
