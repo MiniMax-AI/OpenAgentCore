@@ -32,7 +32,7 @@ jobs:
             instructions: |
               每次都检查文档与本次代码变化是否一致，即使 PR 没改文档。读取相关实现、测试和完整文档，核对平台、命令、配置、路径、默认值、接口和操作流程，找出遗漏更新或已经过时的说明。
               文档有修改（包括新增、删除和重命名）时，再检查文档内部及同主题文档间的矛盾、重复维护的事实、主题归属和中英文含义。按 AGENTS.md 和 CONTRIBUTING.md 的 Documentation ownership 表判断位置。必要的概述加链接、中英文对照和同一来源生成的文档不算重复。
-              分别报告“文档与代码一致性”和“文档矛盾、重复与归属”。未改文档时，第二项写“本次未修改文档”。只报告本次修改引入或使之过时的、有依据的问题，给出文件与行号、对应代码或文档依据，以及最小修改建议。测试或链接检查通过不代表语义一致。
+              分别报告“文档与代码一致性”和“文档矛盾、重复与归属”。未改文档时，第二项写“本次未修改文档”。只报告本次修改引入或使之过时的、有依据的问题，给出文件与行号、对应代码或文档依据，以及最小修改建议。测试或链接检查通过不代表语义一致。只报告影响读者理解或操作的具体问题，不把未穷举实现细节当作文档缺陷。
     if: github.event.pull_request.merged == true
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-24.04' || 'blacksmith-2vcpu-ubuntu-2404' }}
     timeout-minutes: 30
@@ -79,10 +79,10 @@ jobs:
             ${{ matrix.instructions }}
 
             按 JSON schema 返回中文报告。status 为 ok（未发现问题）、issues（发现有证据的问题）或 incomplete（审查失败、范围未检查完整或检查结果尚未完成）。有问题且仍有未检查项时，用 issues 并在 summary 中说明缺项。summary 无问题时简短，有问题时保留依据和建议，遵守 schema 的长度限制。
+            围绕本次 diff 和受影响的文档展开，证据充分后输出结果，避免重复核对同一结论。
             只读审查，不修改仓库，不触发新的 CI，不发送消息。两份报告会由后续 job 合并发送。
           claude_args: >-
             --allowedTools Bash Read Glob Grep
-            --max-turns 30
             --json-schema '${{ steps.schema.outputs.schema }}'
       - name: Save the review result
         if: always()
