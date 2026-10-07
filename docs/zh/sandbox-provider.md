@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: 7a39cd50c9d396af6140d358f2233e0cbd4ae14515b454b1429fd99592b832af
+source_hash: 33b301d5eff40dcd9e830c854b5dcd5221e632203161d8dd381eabe3005f32fb
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -167,7 +167,7 @@ allocation、专用 daemon credential digest、Serve credential digest 和精确
 
 终结清理原子撤销 device authority、记录 Environment 失败或到期、结算 pending input 并请求取消，然后才调用 `Kill`；原 input deadline 与 retry outcome 保留。临时 provider outage、未知 Create result 和停止的计算资源不证明永久失败。公开 Session 删除后 Core 保留 allocation，仅在所属 compute 与 volume 清理完成且原 Create 已结算的证明成立后标记 released；未知创建即使观察到不存在也保留 cleanup ownership，有界 scan 继续捕捉延迟资源，不再调用 `Create`。
 
-### Sandbox I/O 服务 {#sandbox-io-service}
+### `oac-sandbox-io` {#oac-sandbox-io}
 
 每个托管 sandbox 还会运行 `oac-sandbox-io`，它通过[沙箱 Link](./sandbox-link-protocol.md) Serve 该 allocation。`Bootstrap.SandboxIO` 是它的[沙箱引导](./sandbox-bootstrap.md)输入：从[公开 URL](./configuration.md#changing-the-public-url) 派生的 Link URL、allocation 的 Serve credential，以及作为 resource 的 allocation 及其 Serve generation。Core 在 `Create` 前用 `Bootstrap.Validate` 对整个 `Bootstrap` 校验一次，adapter 原样交付。`Create` 将 `SandboxIO` 写入私有文件（参考 adapter 中为 `/home/runtime/sandbox-io-bootstrap.json`，mode 0600、UID 1000），并以 daemon 的账户在 daemon 旁边启动 `oac-sandbox-io --bootstrap-file`，参数为该路径。`BootstrapComplete` 意味着两个进程都已启动。该输入从不通过命令参数或环境变量传递。每个 Runtime 镜像都包含 `/usr/local/bin/oac-sandbox-io`。allocation cleanup 在调用 `Kill` 前先在 relay 撤销该 resource。
 
@@ -229,7 +229,7 @@ Docker Sandbox Provider（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenA
 - 两个 named volume，label 包含 installation、tenant、Environment 和 allocation：`<name>-home` 挂载到 `/home`，`<name>-environment` 挂载到 `/environment`，后者的 `workspace` 子目录也挂载到 `/workspace`。Docker Engine 必须支持 volume subpath mount；
 - 配置 `nested_sandbox` option 时，解除 Docker `/proc` mask（`/sys/firmware` 和 `/sys/devices/virtual/powercap` 保持 mask），container 运行 init process。
 
-Create 拒绝复用没有 container 的保留 volume。它将 [Runtime 引导](runtime-bootstrap.md)文件复制到 `/home/runtime/runtime-bootstrap.json`（mode 0600、UID 1000），并将 `/environment` workspace、staging、initialization 和 package directory 放入 container，然后启动 `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json` 和 [Sandbox I/O 服务](#sandbox-io-service)。创建的 container 不具备配置的 CPU、memory 和精确 image 时，Create 返回 error 和 `CreateSettled`。Docker 没有 lease，因此 Renew 仅读取 container state。Kill 在删除前检查 container 和两个 volume 的 ownership label，再确认三者都已不存在。
+Create 拒绝复用没有 container 的保留 volume。它将 [Runtime 引导](runtime-bootstrap.md)文件复制到 `/home/runtime/runtime-bootstrap.json`（mode 0600、UID 1000），并将 `/environment` workspace、staging、initialization 和 package directory 放入 container，然后启动 `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json` 和 [`oac-sandbox-io`](#oac-sandbox-io)。创建的 container 不具备配置的 CPU、memory 和精确 image 时，Create 返回 error 和 `CreateSettled`。Docker 没有 lease，因此 Renew 仅读取 container state。Kill 在删除前检查 container 和两个 volume 的 ownership label，再确认三者都已不存在。
 
 node 使用 [provider 配置](configuration.md#docker-node-configuration)中的明确 Unix socket，忽略 `DOCKER_HOST`。不将 Docker socket、host home 或 Core credential 挂载进 Runtime。
 
