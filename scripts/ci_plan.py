@@ -59,7 +59,7 @@ RULES = (
     (("website/",), (*WEB, ".vue", ".md"), ("website",)),
     (("services/core/",), CORE, ("backend", "api", "compose")),
     (("services/core/cmd/oac/",), GO, ("native", "distribution")),
-    (("deploy/install.sh", "deploy/install.ps1"), (".sh", ".ps1"), ("native", "distribution")),
+    (("deploy/install.sh", "deploy/install.ps1", "deploy/test_install.ps1"), (".sh", ".ps1"), ("native", "distribution")),
     (("services/core/internal/nativeinstaller/",), GO, ("native", "distribution")),
     (("services/core/deploy/", "services/core/tools/"), CORE, ("distribution",)),
     (("apps/daemon/",), GO, ("backend", "native")),
