@@ -55,6 +55,10 @@ class HarnessCatalogTests(unittest.TestCase):
             text = (catalog.ROOT / "contracts/agents-api" / surface).read_text()
             for definition, member in fields:
                 with self.subTest(surface=surface, definition=definition):
+                    if surface == "openapi.yaml":
+                        actual = json.loads(text)["components"]["schemas"][definition]["properties"][member]["enum"]
+                        self.assertEqual(actual, expected)
+                        continue
                     body = re.search(r"^  " + re.escape(definition) + r":\n(.*?)(?=^  [^ ]|\Z)", text, re.M | re.S)
                     self.assertIsNotNone(body, "missing schema; run make openapi")
                     field = re.search(r"^      " + member + r":\n(.*?)(?=^      [^ ]|^    [^ ]|\Z)", body.group(1), re.M | re.S)

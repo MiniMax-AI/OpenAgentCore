@@ -31,11 +31,17 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 		t.Fatal(err)
 	}
 	var document struct {
+		Servers []struct {
+			URL string `yaml:"url"`
+		} `yaml:"servers"`
 		BasePath string                    `yaml:"basePath"`
 		Paths    map[string]map[string]any `yaml:"paths"`
 	}
 	if err := yaml.Unmarshal(raw, &document); err != nil {
 		t.Fatal(file, err)
+	}
+	if document.BasePath == "" && len(document.Servers) > 0 {
+		document.BasePath = document.Servers[0].URL
 	}
 	operations := map[string]bool{}
 	for path, item := range document.Paths {
@@ -55,7 +61,7 @@ func contractOperations(t *testing.T, file, prefix string) map[string]bool {
 	return operations
 }
 
-// The contracts are generated from handler annotations, so they must publish
+// The official public contract and generated internal contracts must publish
 // exactly the routes the server registers, with the same path parameter names.
 // The pinned upstream /v1 set is checked by TestEveryRouteAuthenticatesItsCanonicalPath
 // and the contract tests.

@@ -10,18 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// @Summary Create a Vault Credential
-// @Description Stores static_bearer or mcp_oauth secrets as execution-owned authenticated ciphertext without contacting any endpoint. Static bearer and OAuth access tokens must be nonempty strings; their bytes are preserved. OAuth accepts a required access token, nullable RFC3339 expiry and optional refresh configuration with none, client_secret_basic or client_secret_post authentication. Required name is trimmed to 1–256 UTF-8 bytes. Credential and token endpoints require HTTPS without userinfo or fragments. Responses contain safe metadata only, including explicit nullable OAuth expiry, refresh, resource and scope. Missing encryption configuration returns local 503. External authorization and provider revocation remain caller responsibilities; exact hosted error/default semantics remain unverified.
-// @Tags Credentials
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param vault_id path string true "Vault ID"
-// @Param body body v1.CreateCredentialRequest true "Write-only credential authentication union"
-// @Success 201 {object} v1.Credential
-// @Failure 400,401,404,413,500,503 {object} v1.ErrorResponse
-// @Router /vaults/{vault_id}/credentials [post]
 func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 	vaultID := chi.URLParam(r, "vault_id")
 	raw, ok := readJSONObject(w, r)
@@ -69,17 +57,6 @@ func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, credentialResponse(credential))
 }
 
-// @Summary Retrieve safe Vault Credential metadata
-// @Description Reads only non-secret metadata scoped to the authenticated project and owning Vault. No token decryption, network request or execution is performed. Unknown, foreign, wrong-Vault and malformed IDs use the same local not-found response; hosted error parity remains unverified.
-// @Tags Credentials
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param vault_id path string true "Vault ID"
-// @Param credential_id path string true "Credential ID"
-// @Success 200 {object} v1.Credential
-// @Failure 400,401,404,500 {object} v1.ErrorResponse
-// @Router /vaults/{vault_id}/credentials/{credential_id} [get]
 func (h *Handler) getCredential(w http.ResponseWriter, r *http.Request) {
 	vaultID, ok := credentialResourceID(w, r, "vault_id")
 	if !ok {

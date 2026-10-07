@@ -46,11 +46,6 @@
   },
   {
     "path": "*",
-    "regex": "(?:scripts/)?extract-agents-api-upstream\\.py",
-    "reason": "The upstream contract extraction helper names the pinned OpenAI Agents API protocol, not an installed command."
-  },
-  {
-    "path": "*",
     "regex": "https://developers\\.openai\\.com/api/docs/guides/agents-api(?:/[A-Za-z0-9_./-]*)?",
     "reason": "Official upstream documentation URLs are external protocol references."
   },
