@@ -55,7 +55,7 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 		Available: false,
 		Version:   "missing",
 		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-			MessageItems: proto.CapabilitySupported,
+			FunctionTools: proto.CapabilitySupported,
 		}),
 	}, harnessconfig.Configuration{})
 	reg.RegisterKind(proto.SupportedAgentKind{
@@ -63,7 +63,7 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 		Available: true,
 		Version:   "1.2.3",
 		Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-			MessageItems:    proto.CapabilitySupported,
+			FunctionTools:   proto.CapabilitySupported,
 			EnvironmentNone: proto.CapabilitySupported,
 		}),
 	}, harnessconfig.Configuration{})
@@ -75,10 +75,10 @@ func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 	if got[0].Kind != "fake_alpha" || got[1].Kind != "fake_beta" {
 		t.Fatalf("SupportedAgentKinds sort = %#v, want fake_alpha then fake_beta", got)
 	}
-	if !got[0].Available || got[0].Version != "1.2.3" || !got[0].Capabilities.MessageItems.IsSupported() || !got[0].Capabilities.EnvironmentNone.IsSupported() {
+	if !got[0].Available || got[0].Version != "1.2.3" || !got[0].Capabilities.FunctionTools.IsSupported() || !got[0].Capabilities.EnvironmentNone.IsSupported() {
 		t.Fatalf("fake_alpha descriptor not preserved: %#v", got[0])
 	}
-	if got[1].Available || got[1].Version != "missing" || !got[1].Capabilities.MessageItems.IsSupported() {
+	if got[1].Available || got[1].Version != "missing" || !got[1].Capabilities.FunctionTools.IsSupported() {
 		t.Fatalf("fake_beta descriptor not preserved: %#v", got[1])
 	}
 }

@@ -150,7 +150,7 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 		}
 		h.write(start.RunID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: steer.InputID, Accepted: true})
 	}
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "admitted-native"}})
+	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "admitted-native"}})
 	completeEmptyArtifactExport(t, h)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
 	if run.Turn.Status != sessions.TurnCompleted {

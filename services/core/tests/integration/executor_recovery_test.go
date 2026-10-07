@@ -42,7 +42,7 @@ func TestExecutorRecoveryRetriesOnlyConfirmedUnsubmittedInput(t *testing.T) {
 				t.Fatal("recovery changed input or reused retired control ownership")
 			}
 			h.write(next.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: replacement.Handle, ExecutorID: replacement.ExecutorID, Revision: 2, State: "started", RunID: replacement.RunID})
-			h.write(replacement.RunID, proto.TypeDone, proto.DonePayload{Content: "once"})
+			h.write(replacement.RunID, proto.TypeDone, proto.DonePayload{})
 			h.finished(result, sessions.TurnCompleted)
 		})
 	}

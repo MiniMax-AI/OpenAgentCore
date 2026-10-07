@@ -30,7 +30,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	if err = bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported})
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{HomeRemoval: proto.CapabilityUnsupported, SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture_harness", Available: true, Capabilities: caps}}})
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	for deadline := time.Now().Add(3 * time.Second); ; {

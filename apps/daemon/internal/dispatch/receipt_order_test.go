@@ -78,7 +78,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 			input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("original")}
 			handle(proto.TypePromptSteer, input)
 			<-sender.entered
-			session.out <- mustEnv(t, proto.TypeDone, "ordered", proto.DonePayload{Content: "finished"})
+			session.out <- mustEnv(t, proto.TypeDone, "ordered", proto.DonePayload{})
 			waitFor(t, func() bool { return router.SteeringClosedForTest("ordered") }, "closed steering admission")
 			// Native settlement precedes the receipt join; TestPreparedHandoffReleaseWaitsForMutationReceipt asserts that order.
 			if len(sender.snapshot()) != base {

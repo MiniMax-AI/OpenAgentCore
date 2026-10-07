@@ -15,8 +15,7 @@ import (
 )
 
 // LoadItem reads what the Session holds for update's Item: the stored Item and,
-// when update asks for them, whether the Turn has another assistant message and
-// the result the application saved for the call.
+// when update asks for it, the result the application saved for the call.
 func (t *SessionTx) LoadItem(ctx context.Context, turnID string, update items.Update) (items.Stored, error) {
 	var stored items.Stored
 	turn, err := parseID(turnID)
@@ -26,11 +25,6 @@ func (t *SessionTx) LoadItem(ctx context.Context, turnID string, update items.Up
 	id, err := pgunit.ParseID(update.Item.ID)
 	if err != nil {
 		return stored, err
-	}
-	if update.NeedsNativeMessage() {
-		if stored.NativeMessage, err = t.q.HasNativeMessageItem(ctx, sqlc.HasNativeMessageItemParams{TurnID: turn, ID: id}); err != nil {
-			return stored, err
-		}
 	}
 	row, err := t.q.GetSessionItem(ctx, sqlc.GetSessionItemParams{SessionID: t.session, ID: id})
 	if err == nil {

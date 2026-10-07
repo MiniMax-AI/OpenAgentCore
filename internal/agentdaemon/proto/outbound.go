@@ -53,7 +53,6 @@ type PromptRequestPayload struct {
 	WorkspaceReadOnly            bool           `json:"workspace_read_only,omitempty"`
 	AgentStateKey                string         `json:"agent_state_key,omitempty"`
 	RequireExistingNativeSession bool           `json:"require_existing_native_session,omitempty"`
-	ObserveMessages              bool           `json:"observe_messages,omitempty"`
 	ObserveSubagentIdentities    bool           `json:"observe_subagent_identities,omitempty"`
 	FunctionTools                []FunctionTool `json:"function_tools,omitempty"`
 	ToolSearch                   bool           `json:"tool_search,omitempty"`

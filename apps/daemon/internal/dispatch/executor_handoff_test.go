@@ -67,7 +67,7 @@ func (t *terminalHandoffTurn) finish() {
 }
 func (t *terminalHandoffTurn) Cancel(context.Context) error { t.finish(); return nil }
 func (t *terminalHandoffTurn) CancellationOutcome() proto.DonePayload {
-	return proto.DonePayload{Content: t.id, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native"}}
+	return proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native"}}
 }
 func (t *terminalHandoffTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, error) {
 	select {

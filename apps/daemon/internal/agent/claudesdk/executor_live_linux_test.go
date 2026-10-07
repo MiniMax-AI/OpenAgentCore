@@ -68,6 +68,7 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		Settlement        agent.TurnSettlement `json:"settlement"`
 		SettlementError   string               `json:"settlement_error,omitempty"`
 		Done              proto.DonePayload    `json:"done"`
+		Text              string               `json:"text"`
 		Errors            []string             `json:"errors,omitempty"`
 	}
 	evidence := struct {
@@ -82,7 +83,7 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		_ = os.WriteFile(filepath.Join(proof, "executor-evidence.json"), raw, 0600)
 	}
 	defer persist()
-	request := proto.PromptRequestPayload{DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: model, ModelProvider: provider, SystemPrompt: "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}
+	request := proto.PromptRequestPayload{DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: model, ModelProvider: provider, SystemPrompt: "Follow requested formats briefly. Remember the exact verification marker across the conversation. Use no tools."}
 	factory := NewExecutorFactory(config)
 	prepared := time.Now()
 	owner, err := factory(ctx, request)
@@ -123,6 +124,11 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		for event := range output {
 			if event.ID != id {
 				t.Fatal("output crossed Turn identity")
+			}
+			if event.Type == proto.TypeDelta {
+				var delta proto.DeltaPayload
+				_ = event.DecodePayload(&delta)
+				record.Text += delta.Delta
 			}
 			if event.Type == proto.TypeDelta && record.FirstTextMS == 0 {
 				record.FirstTextMS = time.Since(started).Milliseconds()
@@ -165,11 +171,11 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 	}
 	marker := "REUSE-" + uuid.NewString()
 	first := run("first", "Remember this marker: "+marker+". Reply with exactly the marker.", false)
-	if first.SettlementError != "" || !first.Settlement.Reusable || !strings.Contains(first.Done.Content, marker) {
+	if first.SettlementError != "" || !first.Settlement.Reusable || !strings.Contains(first.Text, marker) {
 		t.Fatal("first Turn failed or was not reusable")
 	}
 	second := run("second", "What exact marker did I give you? Reply with only that marker.", false)
-	if second.SettlementError != "" || !second.Settlement.Reusable || !strings.Contains(second.Done.Content, marker) || first.NodePID != second.NodePID || len(first.NativePIDs) == 0 || !slices.Equal(first.NativePIDs, second.NativePIDs) {
+	if second.SettlementError != "" || !second.Settlement.Reusable || !strings.Contains(second.Text, marker) || first.NodePID != second.NodePID || len(first.NativePIDs) == 0 || !slices.Equal(first.NativePIDs, second.NativePIDs) {
 		t.Fatal("ordinary Turns did not retain native execution and history")
 	}
 	interrupted := run("cancel", "List the numbers 1 through 10000, one number per line, without stopping early.", true)
@@ -196,7 +202,7 @@ func TestLiveClaudeExecutorReuseAndCancel(t *testing.T) {
 		evidence.Recovered = true
 	}
 	continued := run("continued", "What exact marker did I originally give you? Reply with only the marker.", false)
-	if continued.SettlementError != "" || !continued.Settlement.Reusable || !strings.Contains(continued.Done.Content, marker) {
+	if continued.SettlementError != "" || !continued.Settlement.Reusable || !strings.Contains(continued.Text, marker) {
 		t.Fatal("history did not continue after cancellation")
 	}
 	if !evidence.Recovered && (continued.NodePID != second.NodePID || !slices.Equal(continued.NativePIDs, second.NativePIDs)) {

@@ -114,11 +114,11 @@ func TestWorkerEnvironmentSharesCapacityThroughClaimAndCleanup(t *testing.T) {
 	}
 	normal = append(normal, resumed)
 	for _, request := range normal {
-		h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "ordinary complete"})
+		h.write(request.ID, proto.TypeDone, proto.DonePayload{})
 		h.session = ordinary[request.ID]
 		waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	}
-	firstRuntime.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "local complete"})
+	firstRuntime.write(start.RunID, proto.TypeDone, proto.DonePayload{})
 	completeEmptyArtifactExport(t, firstRuntime, frames)
 	nextWorkerFrame(t, frames, proto.TypeExecutionRelease)
 	stop()
@@ -144,7 +144,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 	if request.ID != receipt.TurnID {
 		t.Fatal("preparation failure blocked ordinary work")
 	}
-	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
+	h.write(request.ID, proto.TypeDone, proto.DonePayload{})
 	waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	second := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
 	if elapsed := time.Since(started); elapsed < 750*time.Millisecond || elapsed > 3*time.Second || first.ID == second.ID {
@@ -172,7 +172,7 @@ func TestWorkerEnvironmentRetriesPendingWithoutExtendingDeadline(t *testing.T) {
 		t.Fatal("restart changed retained preparation")
 	}
 	runtime.write(third.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
-	runtime.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
+	runtime.write(start.RunID, proto.TypeDone, proto.DonePayload{})
 	completeEmptyArtifactExport(t, runtime, frames)
 	run := awaitWorkerEnvironmentRun(t, t.Context(), h.s, h.tenant, pending)
 	if run.Turn.Status != sessions.TurnCompleted || !run.Reservation.Deadline.Equal(pending.Deadline) {

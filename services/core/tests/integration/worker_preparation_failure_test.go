@@ -73,7 +73,7 @@ func TestWorkerSettlesConfirmedPreparationFailureAndAcceptsNewInput(t *testing.T
 			if err != nil || current.State != sessions.EnvironmentInputAdmitted {
 				t.Fatal("new input state", err)
 			}
-			h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "complete"})
+			h.write(start.RunID, proto.TypeDone, proto.DonePayload{})
 		})
 	}
 }
@@ -164,5 +164,5 @@ func TestWorkerPreparationRejectionPreservesCancellationAndNewerInput(t *testing
 	if startFrame.DecodePayload(&start) != nil || start.RunID == "" || inputTextForTest(t, start.Input) != "next" {
 		t.Fatal("stale rejection prevented the newer input from starting")
 	}
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "complete"})
+	h.write(start.RunID, proto.TypeDone, proto.DonePayload{})
 }

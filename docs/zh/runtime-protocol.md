@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 30ea6710bb325ad4fb81a75ff870cb70c03cd099806f135eb92104c2616fd521
+source_hash: 0890cc82a6ab41096a81aebfee6024b22d8c298e82104b34f7ab194a54b05a55
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -43,7 +43,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
 | `native_session_recovery` | Session 已启动过 Turn，但未记录原生 Session ID |
 | `web_search_control`, `text_verbosity` | Harness 的 engine profile 声明该控制 |
-| `structured_output` 和 `message_items` | Agent 请求 `json_schema` 输出 |
+| `structured_output` | Agent 请求 `json_schema` 输出 |
 | `subagent_observations` | `multi_agent.enabled` 为 true |
 | `subagent_control` | `multi_agent.enabled` 为 false |
 | `tool_search` | Agent 启用 tool search 或延迟 function 加载 |
@@ -60,7 +60,6 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | --- | --- |
 | `model`, `system_prompt`, `model_provider`, `harness_config` | 来自 Session 冻结的配置：Agent 的 model 和 instructions、Session 的 provider bundle，以及[原生模型参数](../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。Harness 在产生任何原生效果之前验证它们 |
 | `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
-| `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
@@ -105,6 +104,8 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [暂停 fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
 
 初始、已准备和活动输入使用同一[有序 MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go)。Adapter 保留消息与内容顺序，并明确拒绝不支持的内容；仅文本 transport 拒绝图像内容而不丢弃它。[消息输入契约](../../contracts/agents-api/zh/message-content.md)负责公开图像 profile、空白规则和各 Harness 的原生转换。
+
+助手文本只以带身份的消息到达。一条消息以状态为 `in_progress`、带其 ID 的 `output_message` 开始，该 frame 可以指明 `phase`；每个文本片段是一个 `delta`，其 `item_id` 指向该消息；状态为 `completed` 的 `output_message` 携带消息的完整文本，并替换其片段。共享校验器拒绝没有 `item_id` 的 `delta`，`done` 不携带回答文本。Turn 结束时仍未结束的消息标记为 `incomplete`。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 
@@ -167,7 +168,7 @@ Core 通过 `prompt_steer` 交付活动输入，每个 Run 一次交付一个输
 | `interaction_decision_ack.applied=true` | 指定操作已结算；取消还要求原生结算 |
 | `done` 和之前的执行事件 | 执行流以观测到的结果完成 |
 
-不存在适用于每个 envelope 的通用回执。发送成功不证明对端已收到、接受或完成请求。进程退出、stop signal 或本地 context 取消不证明取消完成。`done` frame 也可能关闭已结算的取消流；它不覆盖取消回执，也不意味着成功。没有发布 `done` 时，取消回执仍可在 `outcome` 中保留部分内容、原生身份和 usage。无法取得结算结果时，状态继续为失败或未知，不会变为 `applied=true`。
+不存在适用于每个 envelope 的通用回执。发送成功不证明对端已收到、接受或完成请求。进程退出、stop signal 或本地 context 取消不证明取消完成。`done` frame 也可能关闭已结算的取消流；它不覆盖取消回执，也不意味着成功。没有发布 `done` 时，取消回执仍可在 `outcome` 中保留原生身份和 usage。无法取得结算结果时，状态继续为失败或未知，不会变为 `applied=true`。
 
 ## 故障、重试与清理 {#failures-retries-and-cleanup}
 

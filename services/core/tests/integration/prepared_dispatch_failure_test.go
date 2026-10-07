@@ -94,7 +94,7 @@ func TestPreparedDispatchHandlesStartRejectionAndPendingStartCancellation(t *tes
 				if frame.ID != start.RunID || frame.DecodePayload(&cancel) != nil || cancel.DeliveryID == "" {
 					t.Fatal("pending Start cancellation lost Run ownership", frame.ID, cancel)
 				}
-				ack := proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Content: "stopped"}}
+				ack := proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}}
 				if action == "cancel-no-outcome" {
 					// The current daemon can cancel a starting owner before a Session supplies an outcome.
 					ack.Outcome = nil
@@ -160,7 +160,7 @@ func TestPreparedDispatchCancellationReceiptSurvivesStartFailure(t *testing.T) {
 			ack := proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true}
 			if withOutcome {
 				// Also verify preservation when a native adapter can supply a complete outcome.
-				ack.Outcome = &proto.DonePayload{Content: "retained cancellation", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-prepared-native"}}
+				ack.Outcome = &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-prepared-native"}}
 			}
 			h.write(start.RunID, proto.TypeInteractionDecisionAck, ack)
 			got := awaitPreparedDispatch(t, result)
@@ -190,8 +190,8 @@ func TestPreparedDispatchCancellationReceiptSurvivesStartFailure(t *testing.T) {
 				t.Fatal("cancellation receipt was not journaled once", receipts)
 			}
 			bound, err := sessionAdapter(h.s).GetSessionExecutionBinding(t.Context(), h.tenant, h.session.ID)
-			if err != nil || (withOutcome && (bound.NativeSessionID != "cancelled-prepared-native" || outcome.Done.Content != "retained cancellation")) {
-				t.Fatal("cancellation lost native continuation or final output", err)
+			if err != nil || (withOutcome && bound.NativeSessionID != "cancelled-prepared-native") {
+				t.Fatal("cancellation lost native continuation", err)
 			}
 		})
 	}

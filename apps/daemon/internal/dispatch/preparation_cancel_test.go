@@ -78,7 +78,7 @@ func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
 	cancelEntered := make(chan struct{})
 	cleanupEntered, cleanupReturn := make(chan struct{}), make(chan struct{})
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}, outcome: proto.DonePayload{
-		Content: "observed", Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7, OutputTokens: 3, TotalTokens: 10}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "observed-native"},
+		Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7, OutputTokens: 3, TotalTokens: 10}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "observed-native"},
 	}}
 	var session *fakeSession
 	p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {

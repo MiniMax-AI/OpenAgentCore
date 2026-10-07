@@ -135,7 +135,7 @@ func TestLocalEnvironmentWorkerSchedulesPreparationWithoutRemoteResolver(t *test
 		t.Fatal("local Start changed reservation identity")
 	}
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "complete", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "local-native-history"}})
+	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "local-native-history"}})
 	completeLocalArtifactExport(t, h, worker, environment)
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "local completion", func() bool {
 		turn, err := sessionAdapter(h.s).GetTurn(t.Context(), h.tenant, h.session.ID, start.RunID)

@@ -50,16 +50,19 @@ func TestNativeMCodeACP(t *testing.T) {
 			t.Fatal(err)
 		}
 		var done proto.DonePayload
+		var message proto.OutputMessagePayload
 		for event := range out {
-			if event.Type == proto.TypeError {
+			switch event.Type {
+			case proto.TypeError:
 				t.Fatalf("native ACP failure: %s", event.Payload)
-			}
-			if event.Type == proto.TypeDone {
+			case proto.TypeOutputMessage:
+				_ = json.Unmarshal(event.Payload, &message)
+			case proto.TypeDone:
 				_ = json.Unmarshal(event.Payload, &done)
 			}
 		}
-		if done.Content != "OAC-MCODE-OK" {
-			t.Fatalf("native output=%q", done.Content)
+		if message.ID == "" || message.Status != "completed" || message.Text == nil || *message.Text != "OAC-MCODE-OK" {
+			t.Fatalf("native output=%+v", message)
 		}
 		if _, ok := done.Metadata[proto.DoneMetaAgentSessionID].(string); !ok {
 			t.Fatal("native session ID missing")

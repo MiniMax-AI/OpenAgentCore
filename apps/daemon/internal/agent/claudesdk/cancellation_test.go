@@ -59,7 +59,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 		t.Fatal("successful cancellation preceded owned process release")
 	}
 	got := running.CancellationOutcome()
-	if got.Content != "partialtaildrained" || got.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || got.Usage.Raw["claude_sdk_result"] == nil || got.Usage.Tokens != nil {
+	if got.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || got.Usage.Raw["claude_sdk_result"] == nil || got.Usage.Tokens != nil {
 		t.Fatalf("lost drained cancellation outcome: %+v", got)
 	}
 	var done proto.DonePayload
@@ -108,7 +108,7 @@ func TestFailureKeepsOnlyVerifiedNativeIdentity(t *testing.T) {
 				t.Fatal("native failure was not reported")
 			}
 			if mode == "failure" {
-				if done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || done.Content != "partial" || done.Usage.Raw["claude_sdk_result"] == nil {
+				if done.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || done.Usage.Raw["claude_sdk_result"] == nil {
 					t.Fatal("verified failure outcome was lost", done)
 				}
 			} else if done.Metadata[proto.DoneMetaAgentSessionID] != nil {
@@ -168,7 +168,7 @@ func cancellationRequest() proto.PromptRequestPayload {
 
 func runCancellationHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {
 	if mode == "cancellation-wait" {
-		emit(bridgeEvent{Type: "delta", Delta: "partial"})
+		emit(bridgeEvent{Type: "delta", ItemID: "message", Delta: "partial"})
 		if !scanner.Scan() {
 			return
 		}
@@ -179,7 +179,7 @@ func runCancellationHelper(request startRequest, mode string, scanner *bufio.Sca
 		// These valid observations were in flight when cancellation started.
 		emit(bridgeEvent{Type: "input_ready", SessionID: request.Resume})
 		emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: request.Resume, Usage: json.RawMessage(usageFixture)})
-		emit(bridgeEvent{Type: "delta", Delta: "tail"})
+		emit(bridgeEvent{Type: "delta", ItemID: "message", Delta: "tail"})
 		for {
 			if _, err := os.Stat(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "release")); err == nil {
 				break
@@ -187,7 +187,7 @@ func runCancellationHelper(request startRequest, mode string, scanner *bufio.Sca
 			time.Sleep(time.Millisecond)
 		}
 		_, _ = os.Stderr.WriteString(strings.Repeat("x", 2*1024*1024))
-		emit(bridgeEvent{Type: "delta", Delta: "drained"})
+		emit(bridgeEvent{Type: "delta", ItemID: "message", Delta: "drained"})
 		emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
 		emit(bridgeEvent{Type: "error", Code: "cancelled"})
 		return
@@ -199,7 +199,7 @@ func runCancellationHelper(request startRequest, mode string, scanner *bufio.Sca
 		}
 		emit(bridgeEvent{Type: "input_ready", SessionID: id})
 		emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: id, Usage: json.RawMessage(usageFixture)})
-		emit(bridgeEvent{Type: "delta", Delta: "partial"})
+		emit(bridgeEvent{Type: "delta", ItemID: "message", Delta: "partial"})
 	}
 	emit(bridgeEvent{Type: "error", Code: "execution_failed"})
 }

@@ -95,7 +95,7 @@ test("workspace native options bypass isolation and preserve selected tool inven
 test("structured workspace admits only its configured native terminal tool", async t => {
   const { dirs, config, request } = fixture(t);
   const output_format = { type: "json_schema", schema: { type: "object" } };
-  const configured = { ...request, observe_messages: true, output_format };
+  const configured = { ...request, output_format };
   assert.deepEqual(parseStart(JSON.stringify(configured)), configured);
   const ordinary = new WorkspaceProfile(dirs.workspace, config);
   const structured = new WorkspaceProfile(dirs.workspace, config, [], undefined, undefined, true);

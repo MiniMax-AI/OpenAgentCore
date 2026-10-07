@@ -99,7 +99,7 @@ func TestWorkerInputReadSkipsConcurrentlyCancelledCandidate(t *testing.T) {
 			if frame.ID != healthy.TurnID {
 				t.Fatal("cancelled candidate reached the Runtime", frame.ID)
 			}
-			h.write(healthy.TurnID, proto.TypeDone, proto.DonePayload{Content: "continued"})
+			h.write(healthy.TurnID, proto.TypeDone, proto.DonePayload{})
 			waitTurn(t, h, healthy.TurnID, sessions.TurnCompleted)
 		})
 	}

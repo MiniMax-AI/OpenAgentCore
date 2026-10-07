@@ -46,7 +46,7 @@ func TestPreparedHandoffDrainsBurstBeforeStartReturns(t *testing.T) {
 	assertPreparedDeltaOrder(t, sender, "run", preparedBurstFrames)
 	close(allowReturn)
 	waitPreparationStatus(t, sender, "request", "started", "")
-	session.out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{Content: "complete"})
+	session.out <- mustEnv(t, proto.TypeDone, "run", proto.DonePayload{})
 	waitFor(t, func() bool { return r.ActiveRuns() == 0 }, "prepared burst completion")
 	if session.cancels() != 1 {
 		t.Fatalf("Session release calls = %d, want 1", session.cancels())

@@ -52,10 +52,6 @@ SELECT * FROM turn_inputs WHERE session_id = $1 AND sequence = $2;
 -- name: ItemEventSources :many
 SELECT * FROM turn_events WHERE session_id = $1 AND turn_id = $2 AND ordinal >= $3 ORDER BY ordinal;
 
--- name: HasNativeMessageItem :one
-SELECT EXISTS(SELECT 1 FROM session_items WHERE turn_id = $1
-    AND payload->>'role' = 'assistant' AND id <> $2);
-
 -- name: ListTurnItemDiagnostics :many
 SELECT id, created_at, settled_at FROM session_items
 WHERE session_id = $1 AND turn_id = $2

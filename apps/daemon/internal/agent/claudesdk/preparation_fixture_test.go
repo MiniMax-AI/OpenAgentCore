@@ -103,15 +103,11 @@ func runPreparationHelper() {
 		return
 	}
 	emit(bridgeEvent{Type: "input_ready", SessionID: request.Resume})
-	if request.ObserveMessages {
-		text := "completed"
-		emit(bridgeEvent{Type: "output_message", Message: &proto.OutputMessagePayload{ID: "native-message", Status: "completed", Text: &text}})
-	} else {
-		emit(bridgeEvent{Type: "delta", Delta: "partial"})
-	}
+	text := "completed"
+	emit(bridgeEvent{Type: "output_message", Message: &proto.OutputMessagePayload{ID: "native-message", Status: "completed", Text: &text}})
 	emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: request.Resume, Usage: json.RawMessage(usageFixture)})
 	emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
-	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "completed"})
+	emit(bridgeEvent{Type: "result", SessionID: request.Resume})
 	_ = os.WriteFile(filepath.Join(state, "released"), nil, 0o600)
 }
 

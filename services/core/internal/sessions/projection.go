@@ -106,8 +106,8 @@ func projectItem(ctx context.Context, tx ItemProjectionTx, source Source, update
 	if err != nil {
 		return err
 	}
-	change, ok, err := items.Observe(source.Kind, update, stored)
-	if err != nil || !ok {
+	change, err := items.Observe(source.Kind, update, stored)
+	if err != nil {
 		return err
 	}
 	index, err := tx.PutItem(ctx, source.Turn, source.CreatedAt, change)

@@ -122,7 +122,7 @@ func TestDispatchCompletedItem_AgentMessage_BufferIsFinalText(t *testing.T) {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if len(envs) != 0 {
-		t.Fatalf("agentMessage must not produce envelopes (final text emits via Done), got %+v", envs)
+		t.Fatalf("agentMessage must not produce envelopes (its completion carries the text), got %+v", envs)
 	}
 	if text != "Hello world" {
 		// The buffered concatenation must win over item.Text fallback

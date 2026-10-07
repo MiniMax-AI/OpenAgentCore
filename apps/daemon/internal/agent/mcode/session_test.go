@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -95,17 +96,27 @@ func TestSessionStreamsCurrentTurnAndResumes(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "resume"}[resume], func(t *testing.T) {
 			_, out := helperSession(t, "happy", resume)
-			var content string
+			// Each ACP message is one identified message: its deltas, then its
+			// completion snapshot when the next message or the Turn ends it.
+			var messages []string
 			tools := map[string]int{}
 			doneCount := 0
 			for event := range out {
 				switch event.Type {
 				case proto.TypeError:
 					t.Fatalf("error: %s", event.Payload)
+				case proto.TypeOutputMessage:
+					var p proto.OutputMessagePayload
+					_ = json.Unmarshal(event.Payload, &p)
+					text := "<nil>"
+					if p.Text != nil {
+						text = *p.Text
+					}
+					messages = append(messages, p.ID+" "+p.Status+" "+text)
 				case proto.TypeDelta:
 					var p proto.DeltaPayload
 					_ = json.Unmarshal(event.Payload, &p)
-					content += p.Delta
+					messages = append(messages, p.ItemID+" delta "+p.Delta)
 				case proto.TypeToolCall:
 					var p proto.ToolCallPayload
 					_ = json.Unmarshal(event.Payload, &p)
@@ -114,7 +125,7 @@ func TestSessionStreamsCurrentTurnAndResumes(t *testing.T) {
 					doneCount++
 					var p proto.DonePayload
 					_ = json.Unmarshal(event.Payload, &p)
-					if p.Content != "Hello world" || p.Metadata[proto.DoneMetaAgentSessionID] != "native-1" {
+					if p.Metadata[proto.DoneMetaAgentSessionID] != "native-1" {
 						t.Fatalf("done = %#v", p)
 					}
 					if p.Usage.InputTokens != 0 || p.Usage.OutputTokens != 0 || p.Usage.CostUSD != 0 {
@@ -122,8 +133,9 @@ func TestSessionStreamsCurrentTurnAndResumes(t *testing.T) {
 					}
 				}
 			}
-			if content != "Hello world" || doneCount != 1 || tools["before"] != 1 || tools["after"] != 1 {
-				t.Fatalf("content=%q done=%d tools=%v", content, doneCount, tools)
+			want := []string{"m1 in_progress <nil>", "m1 delta Hello ", "m1 delta world", "m1 completed Hello world", "m2 in_progress <nil>", "m2 delta !", "m2 completed !"}
+			if !slices.Equal(messages, want) || doneCount != 1 || tools["before"] != 1 || tools["after"] != 1 {
+				t.Fatalf("messages=%q done=%d tools=%v", messages, doneCount, tools)
 			}
 		})
 	}
@@ -264,7 +276,7 @@ func TestMCodeProcess(t *testing.T) {
 				}
 			}
 			if frame.Method == "session/load" {
-				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "OLD HISTORY"}})
+				update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": "OLD HISTORY"}})
 			}
 			model := "m:custom_provider%3Aoac:fixture:v:"
 			if scenario == "unknown-model" {
@@ -304,10 +316,10 @@ func TestMCodeProcess(t *testing.T) {
 					os.Exit(0)
 				}
 				if input.Prompt[0]["text"] == "wait" {
-					update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "ready"}})
+					update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": "ready"}})
 					continue
 				}
-				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": input.Prompt[0]["text"]}})
+				update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": input.Prompt[0]["text"]}})
 				update("tool_call", map[string]any{"toolCallId": "repeated-call", "name": "mcp__oac_workspace__workspace_bash", "status": "in_progress", "rawInput": map[string]any{"command": "true"}})
 				update("tool_call_update", map[string]any{"toolCallId": "repeated-call", "status": "completed"})
 				raw, _ := json.Marshal(map[string]string{"stopReason": "end_turn"})
@@ -315,7 +327,7 @@ func TestMCodeProcess(t *testing.T) {
 				// These frames precede the next control barrier on the wire and
 				// must never become the following Turn's output.
 				for range 100 {
-					update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "OLD"}})
+					update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": "OLD"}})
 				}
 				continue
 			}
@@ -326,12 +338,12 @@ func TestMCodeProcess(t *testing.T) {
 			}
 			if scenario == "steering" || scenario == "steer-rejected" || scenario == "steer-lost" || scenario == "cancel-wait" {
 				promptID = frame.ID
-				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "ready"}})
+				update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": "ready"}})
 				continue
 			}
 			if scenario == "many-frames" || scenario == "prepared" {
 				for range 100 {
-					update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "x"}})
+					update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": "x"}})
 				}
 				result = map[string]string{"stopReason": "end_turn"}
 				break
@@ -345,12 +357,13 @@ func TestMCodeProcess(t *testing.T) {
 				send(map[string]any{"jsonrpc": "2.0", "id": "permission-1", "method": "session/request_permission", "params": map[string]any{"sessionId": "native-1", "toolCall": map[string]any{"toolCallId": "tool-1", "name": "Bash", "title": "Run fixture", "rawInput": map[string]any{"command": "echo fixture"}}, "options": []map[string]string{{"optionId": "once", "kind": "allow_once"}, {"optionId": "deny", "kind": "reject_once"}}}})
 				continue
 			}
-			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "Hello "}})
-			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "world"}})
+			update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": "Hello "}})
+			update("agent_message_chunk", map[string]any{"messageId": "m1", "content": map[string]string{"type": "text", "text": "world"}})
 			update("tool_call", map[string]any{"toolCallId": "tool-1", "name": "mcp__oac_workspace__workspace_bash", "status": "in_progress", "rawInput": map[string]any{"command": "cat fixture.txt"}})
 			for range 2 {
 				update("tool_call_update", map[string]any{"toolCallId": "tool-1", "status": "completed", "rawOutput": "fixture"})
 			}
+			update("agent_message_chunk", map[string]any{"messageId": "m2", "content": map[string]string{"type": "text", "text": "!"}})
 			update("usage_update", map[string]any{"used": 2000, "size": 64000, "cost": map[string]any{"amount": 2, "currency": "USD"}})
 			result = map[string]string{"stopReason": "end_turn"}
 		case "mcode/session/delegation/stop":
@@ -373,7 +386,7 @@ func TestMCodeProcess(t *testing.T) {
 			}
 			raw, _ := json.Marshal(map[string]string{"turnId": "native-turn", "mode": "steered"})
 			send(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Result: raw})
-			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "-steered"}})
+			update("agent_message_chunk", map[string]any{"messageId": "m2", "content": map[string]string{"type": "text", "text": "-steered"}})
 			raw, _ = json.Marshal(map[string]string{"stopReason": "end_turn"})
 			send(rpcFrame{JSONRPC: "2.0", ID: promptID, Result: raw})
 			continue

@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: f8fa825332c02a25340707485afe084d3d6a9cabf398975314589f299679b010
+source_hash: c8ffdd603108bace70451b09b123eb250e3a957358dc2d8c6b5af9601c044148
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -70,7 +70,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 | `Turn.Cancel`、`CancellationOutcome`、`AwaitSettlement` | 真实实现 | 取消精确的 Turn，保留已观察结果，并独立于取消请求确认结算 |
 | `Turn.SteerWithReceipt` | 真实实现 | 区分完整写入与原生应用回执；保留重试身份 |
 | `Turn.SubmitFunctionResult` | 真实实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
-| 中立消息、图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
+| 图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
 
 每个适配器的 `contracts.go` 在编译时断言其实现了 `agent.Executor` 和 `agent.Turn`。不要嵌入会让新方法看起来已经实现的默认实现。通用完整性检查遵循已编写的 Harness 目录，并拒绝 `agent` 中的任何其他导出接口。
 
@@ -114,7 +114,7 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 - 错误表示结算尚未确认，既不释放所有权，也不释放容量。调用方截止时间只会停止等待，不会停止受跟踪的清理。必须串行重试同一个清理目标；清理失败会阻止替换并保留其资源槽位。
 - `Executor.Close` 独立于 Turn 结果确认资源退役：不可变的 Turn 错误不得阻止在其工作和输出已经停止后关闭原生传输层。
 - 结算必须包含所属的后台工作，并在失败后保留精确的原生清理目标。原生终止由适配器负责；仅有批量清理确认并不能证明已达到静默状态。
-- 每个 Turn 都实现 `CancellationOutcome`。快照保留已观察到的原生身份、Usage 和输出，并在取消后仍可读取。缺失的证据保持未设置；空的 `DonePayload` 表示未观察到任何内容，而不是表示取消成功或不受支持。读取快照不会等待结算。
+- 每个 Turn 都实现 `CancellationOutcome`。快照保留已观察到的原生身份和 Usage，并在取消后仍可读取。缺失的证据保持未设置；空的 `DonePayload` 表示未观察到任何内容，而不是表示取消成功或不受支持。读取快照不会等待结算。
 - `Turn.Cancel` 请求取消；输出关闭表示拆卸开始。Turn 结算仍需要 `AwaitSettlement` 和所需的任何 `Executor.Close`；取消请求成功或其快照都不能替代这些等待。
 
 **Runtime 在 Turn 前后执行的工作。** 一个输出消费者会在原生 Start 之前启动，耗尽有界的 64 帧通道，并将终态观察保留到 Start 发布、Turn 结算和已准入操作回执完成为止。正常完成绝不调用 Cancel。输入和函数准入会在结算前关闭；已准入的操作会持有其屏障，直至原生回执和出站确认完成。Runtime 会在等待该屏障之前向 Turn 发送取消，因为已写入的输入可能需要原生中断才能生成回执。Runtime 会汇合原生结算、所需的已确认 Executor 关闭、输出耗尽和所有已准入操作，然后应用确认或执行复用，之后才会转发 Done 或已应用的取消回执。Close 失败可以报告失败，同时保留同一 Run 和未完成操作以供重试；已关闭的调用方等待无法凭空生成已应用输入回执。Runtime 会在发布 Done 前提交原生连续性状态并释放旧 Run 的准入，因为接收方可能立即启动另一个 Turn；迟到的终态发送失败属于旧 Run，不能使已拥有 Executor 的后继对象失效。连接关闭负责传输丢失清理。结算等待时间为十秒，回执发送预算为五秒；超时不能证明已达到静默状态。
@@ -122,6 +122,8 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 ## 事件、输入和可选能力 {#events-inputs-and-optional-capabilities}
 
 使用 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 处理中立请求、事件和回执。每个 Turn 只按顺序发出带有其 Run ID 的自身事件，并产生一个终态结果。原生 ID 和 usage 必须来自观察，绝不能虚构；缺失的度量值表示未知，而不是零。
+
+每条助手消息都携带其原生消息 ID。先发出带该 ID 的 `output_message` `in_progress`，再将每个文本片段作为在 `item_id` 中指向它的 `delta` 发出，最后发出带消息完整文本的 `output_message` `completed`（[消息顺序](../../../docs/zh/runtime-protocol.md#message-families)）。原生协议没有消息结束标记时（例如 ACP），在下一条消息开始或 Turn 结束时完成该消息。`Done` 和 `CancellationOutcome` 不携带回答文本；因取消或失败而未结束的消息保持未结束。
 
 初始输入和引导使用有序的 `proto.MessageInput`。必须保持用户消息顺序和内容顺序。仅支持文本的适配器通过 `TextOnly()` 拒绝图像，而不是丢弃图像；图像适配器在原生环境中转换每个部分，并且只有在其所有消息均已应用后才确认活动批次。成功传输写入与确认原生应用是不同的事件。只能恢复绑定到 Session 的精确历史；缺失、含糊或外部历史会在新的模型输入之前导致失败。设备身份不代表原生 session 所有权。
 

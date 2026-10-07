@@ -39,7 +39,7 @@ func TestWorkerEnvironmentExpiryAtFullExecutionCapacity(t *testing.T) {
 		}
 	}
 	for i, request := range requests {
-		h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "finished"})
+		h.write(request.ID, proto.TypeDone, proto.DonePayload{})
 		h.session = active[i]
 		waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	}
@@ -74,7 +74,7 @@ func TestWorkerEnvironmentExpirySkipsBusySessionAndAllowsDispatch(t *testing.T) 
 	if request.ID != receipt[0].TurnID {
 		t.Fatal("unrelated dispatch mismatch", request.ID)
 	}
-	h.write(request.ID, proto.TypeDone, proto.DonePayload{Content: "finished"})
+	h.write(request.ID, proto.TypeDone, proto.DonePayload{})
 	waitTurn(t, h, request.ID, sessions.TurnCompleted)
 	var state string
 	if err := pool.QueryRow(t.Context(), "SELECT state FROM environment_input_reservations WHERE id=$1", locked.ID).Scan(&state); err != nil || state != sessions.EnvironmentInputPending {

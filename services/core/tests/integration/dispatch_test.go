@@ -261,7 +261,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 		t.Fatal("steering retry changed identity")
 	}
 	h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Accepted: true})
-	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "Finished", Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread-1"}})
+	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread-1"}})
 	done := h.finished(result, sessions.TurnCompleted)
 	var outcome execution.Result
 	_ = json.Unmarshal(done.Outcome, &outcome)
@@ -287,7 +287,7 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 	if prompt.AgentSessionID != "native-thread-1" || prompt.AgentStateKey != "agents-api-"+h.session.ID {
 		t.Fatal("native continuity lost")
 	}
-	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "Continued"})
+	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{})
 	h.finished(result, sessions.TurnCompleted)
 }
 
@@ -360,7 +360,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 			case "late-input":
 				h.message("late", "Still unprocessed")
-				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "Only first input finished"})
+				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 			case "unconfirmed-input":
 				h.message("second", "Steer")
 				h.read(proto.TypePromptSteer)

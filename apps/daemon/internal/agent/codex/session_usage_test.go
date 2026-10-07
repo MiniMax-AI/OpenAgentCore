@@ -40,7 +40,6 @@ func TestNativeTokenUsageAcrossRuns(t *testing.T) {
 		t.Fatal("new turn retained previous turn usage")
 	}
 	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"next","tokenUsage":{"total":{"inputTokens":1700,"outputTokens":175},"last":{"inputTokens":200,"outputTokens":25}}}`))
-	s.finalText = "done"
 	s.onTurnCompleted(json.RawMessage(`{"threadId":"thread","turn":{"id":"next","status":"completed"}}`))
 	var usage proto.UsagePayload
 	var done proto.DonePayload
@@ -56,7 +55,7 @@ func TestNativeTokenUsageAcrossRuns(t *testing.T) {
 			}
 		}
 	}
-	if usage.InputTokens != 200 || usage.OutputTokens != 25 || done.Usage.InputTokens != 200 || done.Content != "done" {
+	if usage.InputTokens != 200 || usage.OutputTokens != 25 || done.Usage.InputTokens != 200 {
 		t.Fatalf("terminal usage=%+v done=%+v", usage, done)
 	}
 }

@@ -85,7 +85,8 @@ func (e *executor) StartTurn(ctx context.Context, run string, input proto.Messag
 		e.mu.Unlock()
 	}
 	e.active = s
-	s.emit(proto.TypeDelta, proto.DeltaPayload{Delta: "ready", Sequence: 1})
+	s.emit(proto.TypeOutputMessage, proto.OutputMessagePayload{ID: "answer", Status: "in_progress"})
+	s.emit(proto.TypeDelta, proto.DeltaPayload{ItemID: "answer", Delta: "ready", Sequence: 1})
 	return s, nil
 }
 
@@ -125,7 +126,7 @@ func (s *session) Cancel(context.Context) error {
 	return nil
 }
 func (s *session) CancellationOutcome() proto.DonePayload {
-	return proto.DonePayload{Content: "cancelled", Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}}
+	return proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}}
 }
 func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload, written func()) error {
 	text, err := p.Input.TextOnly()
@@ -138,8 +139,10 @@ func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload
 		return agent.ErrSteeringInactive
 	}
 	written()
-	s.emit(proto.TypeDelta, proto.DeltaPayload{Delta: text, Sequence: 2})
-	s.emit(proto.TypeDone, proto.DonePayload{Content: "ready" + text, Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}})
+	s.emit(proto.TypeDelta, proto.DeltaPayload{ItemID: "answer", Delta: text, Sequence: 2})
+	answer := "ready" + text
+	s.emit(proto.TypeOutputMessage, proto.OutputMessagePayload{ID: "answer", Status: "completed", Text: &answer})
+	s.emit(proto.TypeDone, proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}})
 	s.closed = true
 	close(s.out)
 	s.release()

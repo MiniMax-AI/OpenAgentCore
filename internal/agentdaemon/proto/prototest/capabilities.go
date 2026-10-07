@@ -14,7 +14,6 @@ func Capabilities(overrides proto.AgentKindCapabilities) proto.AgentKindCapabili
 	c := proto.AgentKindCapabilities{
 		SubagentObservations:           proto.CapabilityUnsupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		MessageItems:                   proto.CapabilityUnsupported,
 		EnvironmentNone:                proto.CapabilityUnsupported,
 		LocalEnvironment:               proto.CapabilityUnsupported,
 		WorkspaceReadPreparation:       proto.CapabilityUnsupported,

@@ -69,7 +69,7 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	} {
 		// A preceding new identity and public output must roll back with the conflict.
 		bad := []sessions.ExecutionEvent{subagentIdentityEvent("rollback-child", "root", 105),
-			{Kind: proto.TypeDelta, Payload: json.RawMessage(`{"delta":"must roll back","sequence":1}`)}, conflict}
+			{Kind: proto.TypeDelta, Payload: json.RawMessage(`{"item_id":"answer","delta":"must roll back","sequence":1}`)}, conflict}
 		if err = journal.AppendTurnEvents(ctx, tenant, session.ID, input.TurnID, 4, bad); !errors.Is(err, sessions.ErrIdempotencyConflict) {
 			t.Fatal("conflicting facts accepted", err)
 		}

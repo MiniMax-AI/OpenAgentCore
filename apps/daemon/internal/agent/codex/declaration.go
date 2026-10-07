@@ -16,7 +16,6 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:           proto.CapabilitySupported,
 		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		MessageItems:                   proto.CapabilitySupported,
 		EnvironmentNone:                proto.CapabilitySupported,
 		LocalEnvironment:               proto.CapabilityUnsupported,
 		WorkspaceReadPreparation:       proto.CapabilityUnsupported,

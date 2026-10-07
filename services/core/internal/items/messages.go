@@ -14,8 +14,6 @@ type Update struct {
 	Item               v1.Item
 	AppendText         bool
 	CommandOutputDelta *string
-	// A legacy aggregate is used only when no native message identity was recorded.
-	LegacyFinal bool
 }
 
 func Identity(turn, key string) string {
@@ -40,11 +38,10 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
-		key := "message:" + p.ItemID
-		if p.ItemID == "" {
-			key = "legacy-message"
+		if err := p.Validate(); err != nil {
+			return nil, err
 		}
-		return []Update{{Item: message(turn, key, "assistant", p.Delta, "in_progress"), AppendText: true}}, nil
+		return []Update{{Item: message(turn, "message:"+p.ItemID, "assistant", p.Delta, "in_progress"), AppendText: true}}, nil
 	case proto.TypeOutputMessage:
 		var p proto.OutputMessagePayload
 		if err := json.Unmarshal(raw, &p); err != nil {
@@ -62,34 +59,6 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 			item.Phase = p.Phase
 		}
 		return []Update{{Item: item, AppendText: p.Text == nil}}, nil
-	case proto.TypeDone, "execution_failed":
-		// Legacy Done may contain adapter diagnostics. Only a successful Turn
-		// confirms aggregate answer text; failures retain observed message deltas.
-		return nil, nil
-	case "cancel_receipt", "execution_completed", "execution_cancelled":
-		var p struct {
-			Applied bool               `json:"applied"`
-			Outcome *proto.DonePayload `json:"outcome"`
-			Done    *proto.DonePayload `json:"done"`
-		}
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, err
-		}
-		final := p.Done
-		if kind == "cancel_receipt" {
-			if !p.Applied {
-				return nil, nil
-			}
-			final = p.Outcome
-		}
-		if final == nil || final.Content == "" {
-			return nil, nil
-		}
-		status := "incomplete"
-		if kind == "execution_completed" {
-			status = "completed"
-		}
-		return []Update{{Item: message(turn, "legacy-message", "assistant", final.Content, status), LegacyFinal: true}}, nil
 	case proto.TypeToolCall:
 		return projectTool(turn, raw)
 	case proto.TypeCommandOutput:
@@ -107,7 +76,7 @@ func Merge(update Update, previous v1.Item) (v1.Item, error) {
 	if previous.ID == "" {
 		return item, nil
 	}
-	if previous.Status != "in_progress" && !(update.LegacyFinal && previous.Status == "incomplete") {
+	if previous.Status != "in_progress" {
 		return previous, nil
 	}
 	if (item.Type == "function_call") && (item.Arguments == nil || string(encoded(item.Arguments)) == "null") {
@@ -117,9 +86,6 @@ func Merge(update Update, previous v1.Item) (v1.Item, error) {
 		item.Output = previous.Output
 	}
 	if update.AppendText {
-		if previous.Status != "in_progress" {
-			return previous, nil
-		}
 		text := *previous.Content[0].Text + *item.Content[0].Text
 		item.Content = slices.Clone(item.Content)
 		item.Content[0].Text = &text

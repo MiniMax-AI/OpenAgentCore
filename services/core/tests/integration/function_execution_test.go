@@ -93,7 +93,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 			t.Fatal(saved, reply, err)
 		}
 		if index == 1 {
-			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-functions"}})
+			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-functions"}})
 			select {
 			case got := <-result:
 				t.Fatal("Done bypassed outstanding receipt", got)
@@ -112,7 +112,7 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 	if prompt.AgentSessionID != "native-functions" || len(prompt.FunctionTools) != 1 {
 		t.Fatal(prompt)
 	}
-	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
+	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{})
 	h.finished(result, sessions.TurnCompleted)
 }
 

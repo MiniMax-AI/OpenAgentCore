@@ -138,7 +138,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 		requestStart := len(requests)
 		mu.Unlock()
 		out := make(chan proto.Envelope, 64)
-		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Answer briefly and preserve the exact verification value in the conversation. Use no tools."}
+		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Answer briefly and preserve the exact verification value in the conversation. Use no tools."}
 		if success != nil {
 			request.SystemPrompt = "Call lookup exactly once as requested, then report both result parts and any prior verification value. Never retry a failed tool."
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a synthetic verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
@@ -265,7 +265,7 @@ func TestLiveClaudeSDKTextResume(t *testing.T) {
 				done = true
 				var payload proto.DonePayload
 				_ = json.Unmarshal(event.Payload, &payload)
-				proof.Text = payload.Content
+				proof.Text = messageText(proof.Events)
 				proof.SessionID, _ = payload.Metadata[proto.DoneMetaAgentSessionID].(string)
 			}
 		}

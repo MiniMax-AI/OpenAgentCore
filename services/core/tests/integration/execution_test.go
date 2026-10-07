@@ -162,10 +162,10 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 	mustReject("binding", sessionExecution(t, writer.lease).BindSessionDevice(t.Context(), tenant, queued.ID, host.ID))
 	_, err = operations.TransitionTurn(t.Context(), tenant, queued.ID, pending.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 	mustReject("claim", err)
-	mustReject("journal", operations.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"stale"}`)}}))
+	mustReject("journal", operations.AppendTurnEvents(t.Context(), tenant, active.ID, input.TurnID, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"stale"}`)}}))
 	mustReject("callback", operations.RecordFunctionCall(t.Context(), tenant, active.ID, input.TurnID, functionCallFixture("late")))
 	mustReject("receipt", operations.ConfirmFunctionResult(t.Context(), tenant, waiting.ID, waitInput.TurnID, call.CallID))
-	_, err = operations.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"content":"stale"}}`), "stale-native", input.Sequence)
+	_, err = operations.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{}}`), "stale-native", input.Sequence)
 	mustReject("completion", err)
 	_, err = operations.TransitionTurn(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnFailed})
 	mustReject("reconciliation", err)
@@ -201,7 +201,7 @@ func TestExecutionLeaseLossFencesAllLifecycleWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	successorOperations := sessionExecution(t, successor.lease)
-	if _, err = successorOperations.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{"content":"accepted"}}`), "successor-native", input.Sequence); err != nil {
+	if _, err = successorOperations.CompleteExecution(t.Context(), tenant, active.ID, input.TurnID, sessions.TurnCompleted, json.RawMessage(`{"done":{}}`), "successor-native", input.Sequence); err != nil {
 		t.Fatal(err)
 	}
 	bound, err := sessionAdapter(s).GetSessionExecutionBinding(t.Context(), tenant, active.ID)
@@ -248,7 +248,7 @@ func TestExecutionWriterSerializesWritesOnItsLease(t *testing.T) {
 		group.Go(func() {
 			_, err := journal.TransitionTurn(t.Context(), task.tenant, task.session, task.turn, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			if err == nil {
-				err = journal.AppendTurnEvents(t.Context(), task.tenant, task.session, task.turn, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"delta":"accepted"}`)}})
+				err = journal.AppendTurnEvents(t.Context(), task.tenant, task.session, task.turn, 1, []sessions.ExecutionEvent{{Kind: "delta", Payload: json.RawMessage(`{"item_id":"answer","delta":"accepted"}`)}})
 			}
 			results <- err
 		})

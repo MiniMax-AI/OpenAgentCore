@@ -14,7 +14,7 @@ import (
 // {reasoning,agentMessage}/delta notifications, plus the final item
 // body on item/completed. We keep both: deltas drive incremental UI
 // (TypeDelta / TypeThinking), and completed-item bodies anchor the
-// final text for the done event.
+// message's completion text.
 type ItemBuffers struct {
 	Reasoning map[string]string
 	AgentText map[string]string
@@ -69,18 +69,11 @@ func DispatchStartedItem(runID string, item ThreadItem) ([]proto.Envelope, error
 }
 
 // DispatchCompletedItem folds an item.completed payload into envelopes.
-// Reasoning and agentMessage produce a final TypeThinking / TypeDelta
-// (delta+sequence=0) so the buffer drained by upstream deltas can be
-// flushed; tool-call variants produce an "after" envelope so the UI
-// gets a stage transition.
-//
-// emitFinalDelta=true asks the dispatch to emit a synthetic full-text
-// TypeDelta whose Sequence will be set by the caller using a session-
-// level monotonic counter; this is only needed when no deltas were
-// observed (item.completed arrived without any item/agentMessage/delta).
+// Reasoning produces a final TypeThinking from its buffer; tool-call
+// variants produce an "after" envelope so the UI gets a stage transition.
 //
 // Returns the agent text body for agentMessage items so the session can
-// stamp it into DonePayload.Content. Empty string for everything else.
+// complete the message with it. Empty string for everything else.
 func DispatchCompletedItem(runID string, item ThreadItem, bufs *ItemBuffers) (envelopes []proto.Envelope, agentText string, err error) {
 	switch item.Type {
 	case "reasoning":

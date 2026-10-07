@@ -111,7 +111,7 @@ func runUsageHelper(request startRequest, mode string, encode func(bridgeEvent))
 	if mode == "changed-result" {
 		id = "changed"
 	}
-	encode(bridgeEvent{Type: "result", SessionID: id, Text: "final"})
+	encode(bridgeEvent{Type: "result", SessionID: id})
 }
 
 func verifyLiveUsageEvents(t *testing.T, events []proto.Envelope) {

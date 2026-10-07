@@ -152,9 +152,9 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 	}
 	k := newTicket(t)
 	s := sb.session(h, cfg, env, configuration)
-	done, _ := s.turn(t, "qualify", prompt, k)
-	if !strings.Contains(done.Content, "VALUE="+value) || !strings.Contains(done.Content, fmt.Sprintf("EXIT=%d", exit)) {
-		t.Errorf("the answer %q does not report VALUE=%s EXIT=%d", done.Content, value, exit)
+	done, answer, _ := s.turn(t, "qualify", prompt, k)
+	if !strings.Contains(answer, "VALUE="+value) || !strings.Contains(answer, fmt.Sprintf("EXIT=%d", exit)) {
+		t.Errorf("the answer %q does not report VALUE=%s EXIT=%d", answer, value, exit)
 	}
 	if got := sb.read(t, cfg, workspace+"/"+name); strings.TrimRight(got, "\n") != content {
 		t.Errorf("%s holds %q, want %q", name, got, content)
@@ -167,27 +167,27 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 			t.Fatal("the first Turn reported no native session to resume")
 		}
 		s.configuration.AgentSessionID = native
-		done, calls := s.turn(t, "resumed-function", k.prompt("Call the lookup_ticket function"), k)
+		done, answer, calls := s.turn(t, "resumed-function", k.prompt("Call the lookup_ticket function"), k)
 		if resumed, _ := done.Metadata[proto.DoneMetaAgentSessionID].(string); resumed != native {
 			t.Errorf("the resumed Turn reported the native session %q, want %q", resumed, native)
 		}
-		k.check(t, done, calls)
+		k.check(t, answer, calls)
 	}
 	if caps.ToolSearch.IsSupported() {
 		deferred := lookupTicket
 		deferred.DeferLoading = true
 		configuration.ToolSearch, configuration.FunctionTools = true, []proto.FunctionTool{deferred}
 		search := sb.session(h, cfg, env, configuration)
-		done, calls := search.turn(t, "tool-search", k.prompt("Search your tools for the function that looks up support tickets"), k)
-		k.check(t, done, calls)
+		_, answer, calls := search.turn(t, "tool-search", k.prompt("Search your tools for the function that looks up support tickets"), k)
+		k.check(t, answer, calls)
 	}
 	if caps.EnvironmentNone.IsSupported() {
 		none := configuration
 		none.LocalEnvironment, none.DisableExecutionEnvironment, none.FunctionTools, none.ToolSearch = nil, true, nil, false
 		s := sb.session(h, cfg, agenthost.Environment{}, none)
-		done, _ := s.turn(t, "environment-none", "What is 17 times 23? Answer with exactly one line: PRODUCT=<the number>", k)
-		if !strings.Contains(done.Content, "PRODUCT=391") {
-			t.Errorf("the answer %q does not report PRODUCT=391", done.Content)
+		_, answer, _ := s.turn(t, "environment-none", "What is 17 times 23? Answer with exactly one line: PRODUCT=<the number>", k)
+		if !strings.Contains(answer, "PRODUCT=391") {
+			t.Errorf("the answer %q does not report PRODUCT=391", answer)
 		}
 		s.checkCwd(t, agent.ViewPrivateRoot+"/"+agent.ViewHomeName+"/"+agent.ViewWorkName)
 	}
@@ -197,9 +197,9 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 		stdio.FunctionTools, stdio.ToolSearch = nil, false
 		s := sb.session(h, cfg, env, stdio)
 		s.mcp = []proto.EnvironmentMCP{{InstallationRoot: workspace, Server: agentplugin.MCPServer{Name: "qualify", Type: "stdio", Command: "python3", Args: []string{"-c", mcpServer, code}}}}
-		done, _ := s.turn(t, "stdio-mcp", "Call the reveal_code tool of the qualify MCP server once.\nAnswer with exactly one line: CODE=<the code it returns>", k)
-		if !strings.Contains(done.Content, "CODE="+code) {
-			t.Errorf("the answer %q does not report CODE=%s", done.Content, code)
+		_, answer, _ := s.turn(t, "stdio-mcp", "Call the reveal_code tool of the qualify MCP server once.\nAnswer with exactly one line: CODE=<the code it returns>", k)
+		if !strings.Contains(answer, "CODE="+code) {
+			t.Errorf("the answer %q does not report CODE=%s", answer, code)
 		}
 	}
 }
@@ -257,13 +257,13 @@ func (k ticket) prompt(find string) string {
 
 // check checks that the Turn called lookup_ticket for the ticket and
 // answered with both codes.
-func (k ticket) check(t *testing.T, done proto.DonePayload, calls []proto.FunctionCallPayload) {
+func (k ticket) check(t *testing.T, answer string, calls []proto.FunctionCallPayload) {
 	t.Helper()
 	if len(calls) == 0 || calls[0].Name != lookupTicket.Name || !strings.Contains(string(calls[0].Arguments), k.number) {
 		t.Errorf("the Turn made %d function calls, want the first to call %s for ticket %s", len(calls), lookupTicket.Name, k.number)
 	}
-	if !strings.Contains(done.Content, "FIRST="+k.first) || !strings.Contains(done.Content, "SECOND="+k.second) {
-		t.Errorf("the answer %q does not report FIRST=%s SECOND=%s", done.Content, k.first, k.second)
+	if !strings.Contains(answer, "FIRST="+k.first) || !strings.Contains(answer, "SECOND="+k.second) {
+		t.Errorf("the answer %q does not report FIRST=%s SECOND=%s", answer, k.first, k.second)
 	}
 }
 
@@ -288,10 +288,11 @@ func (sb *sandbox) session(h *agenthost.Host, cfg agenthost.Config, env agenthos
 	return s
 }
 
-// turn prepares an Executor of the Session, runs prompt as its Turn run,
-// answers each function call with k's result, and retires the Executor with
-// the Router's Shutdown. It returns the Turn's Done and its function calls.
-func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePayload, []proto.FunctionCallPayload) {
+// turn binds the Session's assignment, prepares an Executor of the Session,
+// runs prompt as its Turn run, answers each function call with k's result,
+// and retires the Executor with the Router's Shutdown. It returns the Turn's Done, its answer and its
+// function calls.
+func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePayload, string, []proto.FunctionCallPayload) {
 	t.Helper()
 	out := make(sender, 256)
 	reg := s.h.Registry(func(proto.PromptRequestPayload) (agenthost.Binding, agenthost.Environment, error) {
@@ -304,21 +305,27 @@ func (s *session) turn(t *testing.T, run, prompt string, k ticket) (proto.DonePa
 	if err != nil {
 		t.Fatal(err)
 	}
+	ref := proto.AssignmentRef{SessionID: s.id, AssignmentID: s.binding.AssignmentID.String(), Epoch: s.binding.AssignmentEpoch}
+	handle(t, router, ref, proto.TypeAssignmentBind, "bind-"+run, proto.AssignmentBindPayload{EnvironmentID: s.configuration.EnvironmentID()})
+	var bound proto.AssignmentStatusPayload
+	if err := out.next(t, "bind-"+run, time.After(turnLimit)).DecodePayload(&bound); err != nil || bound.State != proto.AssignmentBound {
+		t.Fatalf("assignment_bind: %+v %v", bound, err)
+	}
 	prepare := "prepare-" + run
-	handle(t, router, proto.TypeExecutionPrepare, prepare, proto.ExecutionPreparePayload{SessionID: s.id, Configuration: s.configuration})
+	handle(t, router, ref, proto.TypeExecutionPrepare, prepare, proto.ExecutionPreparePayload{SessionID: s.id, Configuration: s.configuration})
 	ready := out.status(t, prepare)
 	if ready.State != "ready" {
 		t.Fatalf("the preparation is %s (%s), want ready; the log above says why", ready.State, ready.ErrorCode)
 	}
-	handle(t, router, proto.TypeExecutionStart, prepare, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID,
+	handle(t, router, ref, proto.TypeExecutionStart, prepare, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID,
 		RunID: run, Input: proto.TextInput(prompt)})
-	done, calls := out.collect(t, router, run, k)
+	done, answer, calls := out.collect(t, router, ref, run, k)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	if err := router.Shutdown(ctx); err != nil {
 		t.Errorf("Shutdown: %v", err)
 	}
-	return done, calls
+	return done, answer, calls
 }
 
 // withMCP wraps reg so that each request's Environment carries mcp.
@@ -365,12 +372,14 @@ func (s *session) checkCwd(t *testing.T, cwd string) {
 	t.Logf("%s names %s", found, want)
 }
 
-func handle(t *testing.T, router *dispatch.Router, typ, id string, payload any) {
+// handle sends router a frame of ref's work.
+func handle(t *testing.T, router *dispatch.Router, ref proto.AssignmentRef, typ, id string, payload any) {
 	t.Helper()
 	e, err := proto.NewEnvelope(typ, id, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.Assignment = ref
 	if err := router.Handle(context.Background(), e); err != nil {
 		t.Fatalf("%s: %v", typ, err)
 	}
@@ -416,12 +425,41 @@ func (s sender) status(t *testing.T, id string) proto.PreparationStatusPayload {
 
 // collect reads the Turn's envelopes until its Done. It answers each function
 // call with k's result through router and checks that dispatch applied it.
-func (s sender) collect(t *testing.T, router *dispatch.Router, run string, k ticket) (proto.DonePayload, []proto.FunctionCallPayload) {
+// It checks that every delta names a started assistant message and every
+// started message completes, and returns the completed messages' text as the
+// answer.
+func (s sender) collect(t *testing.T, router *dispatch.Router, ref proto.AssignmentRef, run string, k ticket) (proto.DonePayload, string, []proto.FunctionCallPayload) {
 	t.Helper()
 	deadline := time.After(turnLimit)
 	var calls []proto.FunctionCallPayload
+	var answer strings.Builder
+	open := map[string]bool{}
 	for {
 		switch e := s.next(t, run, deadline); e.Type {
+		case proto.TypeOutputMessage:
+			var m proto.OutputMessagePayload
+			if err := e.DecodePayload(&m); err != nil {
+				t.Fatal(err)
+			}
+			if m.Status == "in_progress" {
+				open[m.ID] = true
+				continue
+			}
+			if !open[m.ID] || m.Text == nil {
+				t.Errorf("message %q completed without a start or text: %s", m.ID, e.Payload)
+				continue
+			}
+			delete(open, m.ID)
+			t.Logf("message %s: %s", m.ID, *m.Text)
+			answer.WriteString(*m.Text)
+		case proto.TypeDelta:
+			var d proto.DeltaPayload
+			if err := e.DecodePayload(&d); err != nil {
+				t.Fatal(err)
+			}
+			if !open[d.ItemID] {
+				t.Errorf("a delta names no started message: %s", e.Payload)
+			}
 		case proto.TypeError:
 			t.Errorf("Turn error: %s", e.Payload)
 		case proto.TypeFunctionCall:
@@ -431,7 +469,7 @@ func (s sender) collect(t *testing.T, router *dispatch.Router, run string, k tic
 			}
 			t.Logf("function call: %s %s", call.Name, call.Arguments)
 			calls = append(calls, call)
-			handle(t, router, proto.TypeFunctionResult, run, proto.FunctionResultPayload{DeliveryID: "result-" + call.CallID, CallID: call.CallID, Success: true, Content: k.result()})
+			handle(t, router, ref, proto.TypeFunctionResult, run, proto.FunctionResultPayload{DeliveryID: "result-" + call.CallID, CallID: call.CallID, Success: true, Content: k.result()})
 		case proto.TypeInteractionDecisionAck:
 			var ack proto.InteractionDecisionAckPayload
 			if err := e.DecodePayload(&ack); err != nil || !ack.Applied {
@@ -442,8 +480,10 @@ func (s sender) collect(t *testing.T, router *dispatch.Router, run string, k tic
 			if err := e.DecodePayload(&d); err != nil {
 				t.Fatal(err)
 			}
-			t.Logf("answer: %s", d.Content)
-			return d, calls
+			if len(open) != 0 {
+				t.Errorf("the Turn ended with incomplete messages: %v", open)
+			}
+			return d, answer.String(), calls
 		}
 	}
 }

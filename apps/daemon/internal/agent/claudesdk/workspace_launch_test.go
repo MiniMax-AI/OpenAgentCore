@@ -29,7 +29,7 @@ case "$1" in
     IFS= read -r request
     printf '%s\n' '{"type":"executor_ready","protocol":3}'
     IFS= read -r request
-    printf '%s\n' '{"type":"result","turn_id":"run","session_id":"native","text":"completed"}'
+    printf '%s\n' '{"type":"result","turn_id":"run","session_id":"native"}'
     printf '%s\n' '{"type":"turn_settled","turn_id":"run","confirmed":true,"reusable":true,"reason":""}' ;;
 esac
 `

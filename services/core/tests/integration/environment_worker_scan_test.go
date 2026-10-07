@@ -29,7 +29,7 @@ func TestWorkerEnvironmentRetriesNewlyReadyAtNextScan(t *testing.T) {
 		t.Fatal("unexpected scan barrier")
 	}
 	awaitFixtureCapabilities(t, runtime, workerEnvironmentCapabilities())
-	h.write(barrier.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
+	h.write(barrier.ID, proto.TypeDone, proto.DonePayload{})
 	waitTurn(t, h, barrier.ID, sessions.TurnCompleted)
 
 	prepare := nextWorkerFrame(t, frames, proto.TypeExecutionPrepare)
@@ -74,7 +74,7 @@ func TestWorkerEnvironmentPaginationReachesReadyTail(t *testing.T) {
 	if barrier.ID != receipt.TurnID {
 		t.Fatal("unexpected page barrier")
 	}
-	h.write(barrier.ID, proto.TypeDone, proto.DonePayload{Content: "complete"})
+	h.write(barrier.ID, proto.TypeDone, proto.DonePayload{})
 	waitTurn(t, h, barrier.ID, sessions.TurnCompleted)
 	// The first 100 unbound inputs must not pin the cursor, and the ready
 	// tail must wait for its own bounded page rather than an unbounded drain.

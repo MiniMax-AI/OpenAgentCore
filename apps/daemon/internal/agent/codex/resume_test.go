@@ -45,15 +45,14 @@ func TestFailedResumeDoesNotStartFresh(t *testing.T) {
 	}
 }
 
-func TestCancellationKeepsConsumedTerminalOutputAndUsage(t *testing.T) {
+func TestCancellationKeepsConsumedUsageAndIdentity(t *testing.T) {
 	out := make(chan proto.Envelope, 8)
 	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: sessionConfig{logger: log.With("component", "cancel-test")}}
 	s.setThreadID("native")
 	s.onTurnStarted(json.RawMessage(`{"threadId":"native","turn":{"id":"turn"}}`))
-	s.appendFinalText("Already produced")
 	s.onTurnCompleted(json.RawMessage(`{"threadId":"native","turn":{"id":"turn","status":"interrupted","usage":{"inputTokens":31,"outputTokens":7}}}`))
 	snapshot := s.CancellationOutcome()
-	if snapshot.Content != "Already produced" || snapshot.Usage.InputTokens != 31 || snapshot.Usage.OutputTokens != 7 || snapshot.Metadata[proto.DoneMetaAgentSessionID] != "native" {
+	if snapshot.Usage.InputTokens != 31 || snapshot.Usage.OutputTokens != 7 || snapshot.Metadata[proto.DoneMetaAgentSessionID] != "native" {
 		t.Fatalf("incomplete terminal snapshot: %+v", snapshot)
 	}
 }

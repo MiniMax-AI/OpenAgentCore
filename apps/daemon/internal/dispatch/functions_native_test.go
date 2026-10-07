@@ -113,6 +113,8 @@ func TestNativeFunctionBridge(t *testing.T) {
 	sender := make(nativeFunctionSender, 256)
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
+	// answer is the text of the last completed assistant message.
+	var answer string
 	await := func(kind string) proto.Envelope {
 		t.Helper()
 		for {
@@ -120,6 +122,10 @@ func TestNativeFunctionBridge(t *testing.T) {
 			case env := <-sender:
 				if env.Type == proto.TypeError {
 					t.Fatalf("native error: %s", env.Payload)
+				}
+				var message proto.OutputMessagePayload
+				if env.Type == proto.TypeOutputMessage && env.DecodePayload(&message) == nil && message.Text != nil {
+					answer = *message.Text
 				}
 				if env.Type == kind {
 					return env
@@ -162,6 +168,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 			}
 		}()
 		run := fmt.Sprintf("run-%d", index)
+		answer = ""
 		assign(t, router, session, "")
 		request := noEnvironmentPreparation(session, proto.PromptRequestPayload{AgentKind: "codex", AgentSessionID: nativeID,
 			FunctionTools: []proto.FunctionTool{{Name: "lookup_ticket", Description: "Read a synthetic ticket", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"type":"string"}},"required":["ticket"],"additionalProperties":false}`)}}})
@@ -210,7 +217,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 		var output proto.DonePayload
 		_ = done.DecodePayload(&output)
 		id, _ := output.Metadata[proto.DoneMetaAgentSessionID].(string)
-		if output.Content != "FUNCTION-OK" || id == "" || (nativeID != "" && id != nativeID) {
+		if answer != "FUNCTION-OK" || id == "" || (nativeID != "" && id != nativeID) {
 			t.Fatal(output)
 		}
 		nativeID = id

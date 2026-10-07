@@ -45,7 +45,7 @@ func (s *Session) runExecutorTurn(prompt string) {
 		err = fmt.Errorf("mcode: native input outcome is unknown")
 	}
 	metadata := map[string]any{proto.DoneMetaAgentSessionType: "mcode", proto.DoneMetaAgentSessionID: s.sessionID}
-	s.outcome = proto.DonePayload{Content: s.content.String(), Metadata: metadata, SourceCompletedAtMS: s.rootCompletedAtMS}
+	s.outcome = proto.DonePayload{Metadata: metadata, SourceCompletedAtMS: s.rootCompletedAtMS}
 	outcome := s.outcome
 	s.mu.Unlock()
 	if !reusable {

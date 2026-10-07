@@ -116,7 +116,7 @@ func TestWorkerWaitsForComputeAndSurvivesPromotionConflict(t *testing.T) {
 		t.Fatal("retry changed pending work", start)
 	}
 	h.write(prepare.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
-	h.write(start.RunID, proto.TypeDone, proto.DonePayload{Content: "completed once"})
+	h.write(start.RunID, proto.TypeDone, proto.DonePayload{})
 	completeEmptyArtifactExport(t, h, frames)
 	if release := nextWorkerFrame(t, frames, proto.TypeExecutionRelease); release.ID != prepare.ID {
 		t.Fatal("completed preparation was not released")

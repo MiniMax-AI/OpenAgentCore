@@ -13,7 +13,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 		t.Run(map[bool]string{false: "child without thread started", true: "child thread started"}[childStarted], func(t *testing.T) {
 			out := make(chan proto.Envelope, 64)
 			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(),
-				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), observeMessages: true}
+				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers()}
 			s.registerHandlers()
 			s.setThreadID("root")
 			notify := func(method, params string) { t.Helper(); scopeNotification(t, s, method, params) }
@@ -57,7 +57,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 			if s.terminal.Load() || s.currentThreadID() != "root" || len(out) != rootEvents {
 				t.Fatalf("foreign notification changed Run ownership/output: terminal=%v thread=%q events=%d want=%d", s.terminal.Load(), s.currentThreadID(), len(out), rootEvents)
 			}
-			if s.bufs.AgentText["shared"] != "root " || s.bufs.Reasoning["thought"] != "root thought" || s.peekLastErrText() != "root retry" || s.takeFinalText() != "" {
+			if s.bufs.AgentText["shared"] != "root " || s.bufs.Reasoning["thought"] != "root thought" || s.peekLastErrText() != "root retry" {
 				t.Fatal("foreign notification changed root buffers")
 			}
 			if s.latestUsage == nil || s.latestUsage.InputTokens != 20 || s.latestUsage.OutputTokens != 5 || s.usageTurnID != "root-turn" {
@@ -76,19 +76,29 @@ func TestRootNotificationIsolation(t *testing.T) {
 			notify("turn/completed", `{"threadId":"root","turn":{"id":"root-turn","status":"completed"}}`)
 			notify("turn/completed", `{"threadId":"root","turn":{"id":"root-turn","status":"completed","usage":{"inputTokens":999}}}`)
 			var doneCount int
+			var answer string
 			for env := range out {
-				if env.Type == proto.TypeDone {
+				switch env.Type {
+				case proto.TypeOutputMessage:
+					var message proto.OutputMessagePayload
+					if err := env.DecodePayload(&message); err != nil {
+						t.Fatal(err)
+					}
+					if message.Text != nil {
+						answer = *message.Text
+					}
+				case proto.TypeDone:
 					doneCount++
 					var done proto.DonePayload
 					if err := env.DecodePayload(&done); err != nil {
 						t.Fatal(err)
 					}
-					if done.Content != "root result" || done.Metadata[proto.DoneMetaAgentSessionID] != "root" || done.Usage.Tokens == nil || done.Usage.Tokens.TotalTokens != 25 {
+					if done.Metadata[proto.DoneMetaAgentSessionID] != "root" || done.Usage.Tokens == nil || done.Usage.Tokens.TotalTokens != 25 {
 						t.Fatalf("incorrect root completion: %+v", done)
 					}
 				}
 			}
-			if doneCount != 1 || s.deltaSeq.Load() != 2 || s.thinkingSeq.Load() != 1 {
+			if doneCount != 1 || answer != "root result" || s.deltaSeq.Load() != 2 || s.thinkingSeq.Load() != 1 {
 				t.Fatalf("root output duplicated or polluted: done=%d delta=%d thinking=%d", doneCount, s.deltaSeq.Load(), s.thinkingSeq.Load())
 			}
 		})
@@ -159,7 +169,7 @@ func TestRootNativeErrorNotification(t *testing.T) {
 						if err := env.DecodePayload(&done); err != nil {
 							t.Fatal(err)
 						}
-						if done.Content != "native provider failure" || done.Metadata[proto.DoneMetaAgentSessionID] != "root" {
+						if done.Metadata[proto.DoneMetaAgentSessionID] != "root" {
 							t.Fatalf("native failure lost: %+v", done)
 						}
 					}

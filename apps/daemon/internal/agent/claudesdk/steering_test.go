@@ -130,7 +130,7 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 				t.Fatalf("unexpected terminal failure=%v", failed)
 			}
 			if wantSuccess {
-				if measurements != 2 || done.Content != "final" || done.Metadata[proto.DoneMetaAgentSessionID] != "native" {
+				if measurements != 2 || done.Metadata[proto.DoneMetaAgentSessionID] != "native" {
 					t.Fatalf("bad completion: %+v, measurements=%d", done, measurements)
 				}
 				snapshots, ok := done.Usage.Raw["claude_sdk_results"].([]any)
@@ -170,7 +170,7 @@ func TestSteeringDoesNotSendBeforeReadiness(t *testing.T) {
 
 func runSteeringHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {
 	emit(bridgeEvent{Type: "input_ready", SessionID: request.Resume})
-	emit(bridgeEvent{Type: "delta", Delta: "ready"})
+	emit(bridgeEvent{Type: "delta", ItemID: "message", Delta: "ready"})
 	if mode == "steering-blocked-write" {
 		time.Sleep(time.Hour)
 		return
@@ -209,5 +209,5 @@ func runSteeringHelper(request startRequest, mode string, scanner *bufio.Scanner
 	}
 	emit(bridgeEvent{Type: "usage", SessionID: request.Resume, ResultID: id, Usage: json.RawMessage(`{"usage":{"input_tokens":7},"modelUsage":{"model":{"inputTokens":11}},"total_cost_usd":0.3}`)})
 	emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
-	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "final"})
+	emit(bridgeEvent{Type: "result", SessionID: request.Resume})
 }

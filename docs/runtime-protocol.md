@@ -41,7 +41,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
 | `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
 | `web_search_control`, `text_verbosity` | The Harness's engine profile declares that control |
-| `structured_output` and `message_items` | The Agent requests `json_schema` output |
+| `structured_output` | The Agent requests `json_schema` output |
 | `subagent_observations` | `multi_agent.enabled` is true |
 | `subagent_control` | `multi_agent.enabled` is false |
 | `tool_search` | The Agent enables tool search or defers function loading |
@@ -58,7 +58,6 @@ The `execution_prepare` configuration carries the Session's model configuration 
 | --- | --- |
 | `model`, `system_prompt`, `model_provider`, `harness_config` | From the Session's frozen configuration: the Agent's model and instructions, the Session's provider bundle, and the [native model parameters](../contracts/agents-api/model-execution.md#native-model-parameters). The Harness validates them before any native effect |
 | `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
-| `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
@@ -103,6 +102,8 @@ The linked source files define the required fields, validators, limits and finit
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
 
 Initial, prepared and active input use the same [ordered MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
+
+Assistant text arrives only as identified messages. A message opens with an `output_message` of status `in_progress` and its ID, which may name its `phase`; each text fragment is a `delta` whose `item_id` names that message; an `output_message` of status `completed` carries the message's full text, which replaces its fragments. The shared validator rejects a `delta` without `item_id`, and `done` carries no answer text. A message still open when its Turn ends is marked `incomplete`.
 
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 
@@ -165,7 +166,7 @@ Neither `written` nor a send failure advances Core's input cursor. Once cancella
 | `interaction_decision_ack.applied=true` | The identified operation settled; a cancellation also requires native settlement |
 | `done` and the preceding execution events | The execution stream completed with its observed outcome |
 
-No generic receipt exists for every envelope. A successful send does not prove that the peer received, accepted or completed a request. Process exit, a stop signal or a canceled local context does not prove cancellation. A `done` frame may also close a settled cancellation stream; it does not override the cancellation receipt or imply success. A cancellation receipt may keep partial content, native identity and usage in `outcome` even when no `done` is published. A failure to obtain settlement stays failed or unknown; it never becomes `applied=true`.
+No generic receipt exists for every envelope. A successful send does not prove that the peer received, accepted or completed a request. Process exit, a stop signal or a canceled local context does not prove cancellation. A `done` frame may also close a settled cancellation stream; it does not override the cancellation receipt or imply success. A cancellation receipt may keep native identity and usage in `outcome` even when no `done` is published. A failure to obtain settlement stays failed or unknown; it never becomes `applied=true`.
 
 ## Failures, retries and cleanup
 

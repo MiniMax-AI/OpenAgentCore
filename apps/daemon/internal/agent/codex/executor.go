@@ -62,7 +62,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 	functions := &functionCalls{definitions: base.functions.definitions, names: base.functions.names, pending: map[string]*pendingFunction{}}
 	turnCtx, cancel := context.WithCancel(base.cancelCtx)
 	s := &Session{nativeHome: base.nativeHome,
-		functions: functions, observeMessages: base.observeMessages, observeSubagentIdentities: base.observeSubagentIdentities,
+		functions: functions, observeSubagentIdentities: base.observeSubagentIdentities,
 		cfg: base.cfg, rpc: base.rpc, cancelCtx: turnCtx, cancelFn: cancel,
 		waitDone: make(chan struct{}), outputDone: make(chan struct{}),
 		bufs: NewItemBuffers(), resolvedModel: base.resolvedModel, runID: runID, out: out}

@@ -42,12 +42,7 @@ func TestTextTurnCompletionAndFailures(t *testing.T) {
 				case proto.TypeDelta:
 					var payload proto.DeltaPayload
 					_ = json.Unmarshal(event.Payload, &payload)
-					if payload.ItemID != "" {
-						t.Fatal("ordinary deltas acquired message identity")
-					}
 					deltas += payload.Delta
-				case proto.TypeOutputMessage:
-					t.Fatal("ordinary requests acquired message observations")
 				case proto.TypeError:
 					failed = true
 				case proto.TypeDone:
@@ -55,7 +50,7 @@ func TestTextTurnCompletionAndFailures(t *testing.T) {
 					var payload proto.DonePayload
 					_ = json.Unmarshal(event.Payload, &payload)
 					if mode == "success" {
-						if payload.Content != "final" || payload.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || deltas != "partial" {
+						if payload.Metadata[proto.DoneMetaAgentSessionID] != "native-session" || deltas != "partial" {
 							t.Fatalf("bad completion: %+v, deltas %q", payload, deltas)
 						}
 						if _, err := os.Stat(filepath.Join(config.StateDir, "released")); err != nil {
@@ -167,17 +162,17 @@ func runSDKHelper() {
 		encode(bridgeEvent{Type: "error", Code: "execution_failed"})
 		return
 	}
-	encode(bridgeEvent{Type: "delta", Delta: "partial"})
+	encode(bridgeEvent{Type: "delta", ItemID: "message", Delta: "partial"})
 	id := request.Resume
 	if mode == "wrong-resume" {
 		id = "different-session"
 	}
-	encode(bridgeEvent{Type: "result", Text: "final", SessionID: id})
+	encode(bridgeEvent{Type: "result", SessionID: id})
 	if mode == "process-failed" {
 		os.Exit(7)
 	}
 	if mode == "after-result" {
-		encode(bridgeEvent{Type: "delta", Delta: "too late"})
+		encode(bridgeEvent{Type: "delta", ItemID: "message", Delta: "too late"})
 		return
 	}
 	time.Sleep(50 * time.Millisecond)

@@ -96,8 +96,8 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	if profile.WebSearchControl.IsSupported() && !caps.WebSearchControl.IsSupported() {
 		return fail("device must advertise web_search_control")
 	}
-	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput.IsSupported() || !caps.MessageItems.IsSupported()) {
-		return fail("device must support structured output and message observations")
+	if snapshot.Agent.Text.Format.Type == "json_schema" && !caps.StructuredOutput.IsSupported() {
+		return fail("device must support structured output")
 	}
 	if verbosity := snapshot.Agent.Text.Verbosity; verbosity != "" && verbosity != "medium" && !caps.TextVerbosity.IsSupported() {
 		return fail("device must advertise text_verbosity")

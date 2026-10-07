@@ -16,11 +16,7 @@ func (s *Session) onAgentDelta(raw json.RawMessage) {
 	}
 	_ = FoldDeltaIntoBuffer(s.bufs, "agent", p.ItemID, p.Delta)
 	seq := s.deltaSeq.Add(1)
-	payload := proto.DeltaPayload{Delta: p.Delta, Sequence: seq}
-	if s.observeMessages {
-		payload.ItemID = p.ItemID
-	}
-	env, err := proto.NewEnvelope(proto.TypeDelta, s.runID, payload)
+	env, err := proto.NewEnvelope(proto.TypeDelta, s.runID, proto.DeltaPayload{ItemID: p.ItemID, Delta: p.Delta, Sequence: seq})
 	if err != nil {
 		return
 	}
@@ -66,13 +62,10 @@ func (s *Session) onItemCompleted(raw json.RawMessage) {
 		messageText = text
 	}
 	s.observeMessage(p.Item, "completed", &messageText)
-	if text != "" {
-		s.appendFinalText(text)
-	}
 }
 
 func (s *Session) observeMessage(item ThreadItem, status string, text *string) {
-	if !s.observeMessages || item.Type != "agentMessage" {
+	if item.Type != "agentMessage" {
 		return
 	}
 	env, err := proto.NewEnvelope(proto.TypeOutputMessage, s.runID, proto.OutputMessagePayload{ID: item.ID, Status: status, Phase: item.Phase, Text: text})

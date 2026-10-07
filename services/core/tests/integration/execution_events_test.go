@@ -18,7 +18,7 @@ func TestExecutionPersistsLiveAndCancelledPartialOutput(t *testing.T) {
 	input := h.message("start", "Stream then cancel")
 	result := h.run(ctx, input.TurnID)
 	h.read(testExecutionRequest)
-	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{Delta: "已输出", Sequence: 1})
+	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{ItemID: "answer", Delta: "已输出", Sequence: 1})
 	h.write(input.TurnID, proto.TypeToolCall, proto.ToolCallPayload{ID: "tool-1", Name: "Bash", Stage: "before", Observation: &proto.ToolObservation{Kind: "command", Command: "pwd", Status: "in_progress"}})
 	h.write(input.TurnID, proto.TypeToolCall, proto.ToolCallPayload{ID: "tool-1", Name: "Bash", Stage: "after", Observation: &proto.ToolObservation{Kind: "command", Command: "pwd", Status: "completed"}})
 	h.write(input.TurnID, proto.TypeUsage, proto.UsagePayload{Usage: proto.Usage{InputTokens: 11, OutputTokens: 2}})
@@ -45,7 +45,7 @@ func TestExecutionPersistsLiveAndCancelledPartialOutput(t *testing.T) {
 	var cancel proto.PromptCancelPayload
 	_ = cancelEnv.DecodePayload(&cancel)
 	for i := range 30 {
-		h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{Delta: "片段", Sequence: uint64(i + 2)})
+		h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{ItemID: "answer", Delta: "片段", Sequence: uint64(i + 2)})
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})
 	h.finished(result, sessions.TurnCancelled)
@@ -85,8 +85,8 @@ func TestExecutionDoesNotCompleteAfterEventPersistenceFailure(t *testing.T) {
 	if _, err := pool.Exec(ctx, "UPDATE turns SET event_bytes=33554432 WHERE id=$1", input.TurnID); err != nil {
 		t.Fatal(err)
 	}
-	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{Delta: "cannot be stored", Sequence: 1})
-	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "Do not report success", Usage: proto.Usage{InputTokens: 13}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "failed-native"}})
+	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{ItemID: "answer", Delta: "cannot be stored", Sequence: 1})
+	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Usage: proto.Usage{InputTokens: 13}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "failed-native"}})
 	turn := h.finished(result, sessions.TurnFailed)
 	var outcome execution.Result
 	_ = json.Unmarshal(turn.Outcome, &outcome)

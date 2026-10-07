@@ -34,32 +34,9 @@ func TestMessageSnapshotsReplaceDeltasAndDoNotRegress(t *testing.T) {
 	}
 }
 
-func TestLegacyDoneDoesNotConfirmSuccessfulAnswer(t *testing.T) {
-	var previous v1.Item
-	for _, event := range []struct{ kind, body string }{
-		{"delta", `{"delta":"partial answer"}`},
-		{"error", `{"error":"provider failure"}`},
-		{"done", `{"content":"provider failure"}`},
-		{"execution_failed", `{"done":{"content":"provider failure"}}`},
-	} {
-		updates, err := Project(testTurn, event.kind, 1, []byte(event.body))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, update := range updates {
-			previous = mustMerge(t, update, previous)
-		}
-	}
-	if previous.Status != "in_progress" || *previous.Content[0].Text != "partial answer" {
-		t.Fatal(previous)
-	}
-	updates, err := Project(testTurn, "execution_completed", 1, []byte(`{"done":{"content":"complete answer"}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	previous = mustMerge(t, updates[0], previous)
-	if previous.Status != "completed" || *previous.Content[0].Text != "complete answer" {
-		t.Fatal(previous)
+func TestMessageDeltaRequiresIdentity(t *testing.T) {
+	if _, err := Project(testTurn, "delta", 1, []byte(`{"delta":"unidentified"}`)); err == nil {
+		t.Fatal("a delta without message identity was projected")
 	}
 }
 

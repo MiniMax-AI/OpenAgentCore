@@ -62,7 +62,6 @@ type Session struct {
 	subagents                 *subagentObservations
 	observeSubagentIdentities bool
 	functions                 *functionCalls
-	observeMessages           bool
 
 	runID string
 	cfg   sessionConfig
@@ -100,8 +99,7 @@ type Session struct {
 	resumeUsageTotal    *TurnUsage
 	resolvedModel       string
 
-	finalTextMu sync.Mutex
-	finalText   string
+	errTextMu   sync.Mutex
 	lastErrText string
 
 	outcome cancellationOutcomeState
@@ -182,36 +180,28 @@ func (s *Session) onTurnCompleted(raw json.RawMessage) {
 	}
 
 	status := strings.ToLower(p.Turn.Status)
-	finalText := s.takeFinalText()
 	errText := s.takeLastErrText()
 	// Always log the turn outcome — operators need this when a prompt
 	// "completes" with no agent message (e.g. codex bailed before the
 	// model ran because the sandbox mode was misinterpreted as
-	// read-only) so the empty body in the upstream Done frame can be
-	// correlated with the turn status that produced it.
+	// read-only) so it can be correlated with the turn status that
+	// produced it.
 	s.cfg.logger.Info("codex: turn/completed",
 		"run_id", s.runID,
 		"turn_id", p.Turn.ID,
 		"status", p.Turn.Status,
-		"final_text_len", len(finalText),
 		"buffered_err_text_len", len(errText),
 		"raw_payload", string(raw))
 	if status == "failed" {
 		// Body precedence on failure:
-		//   1. agent's final text (rare on hard failures but exists for
-		//      partial completions that still surface a message)
-		//   2. codex's turn.error.message — this is where gateway /
+		//   1. codex's turn.error.message — this is where gateway /
 		//      provider errors land (e.g. an upstream gateway's "X-Sub-Module is
 		//      not allowed for this API key"). Without forwarding it
-		//      the upstream connector reports "empty final output" and
 		//      operators can't see why a key was rejected.
-		//   3. buffered text from the "error" notification stream
+		//   2. buffered text from the "error" notification stream
 		//      (sandbox warnings, late stream packets) — last because
 		//      it's noisier than turn.error.
-		body := finalText
-		if turnErrMsg := turnErrorMessage(p.Turn.Error); turnErrMsg != "" {
-			body = appendOnNewline(body, turnErrMsg)
-		}
+		body := turnErrorMessage(p.Turn.Error)
 		if errText != "" {
 			body = appendOnNewline(body, errText)
 		}
@@ -222,7 +212,7 @@ func (s *Session) onTurnCompleted(raw json.RawMessage) {
 	if status == "completed" {
 		completedAt = nativeMilliseconds(p.Turn.CompletedAt)
 	}
-	s.emitDoneAt(finalText, usage, completedAt)
+	s.emitDoneAt(usage, completedAt)
 	s.finishAfterTerminal()
 }
 
@@ -307,17 +297,17 @@ func (s *Session) onErrorNotif(raw json.RawMessage) {
 		"run_id", s.runID,
 		"thread_id", s.currentThreadID(),
 		"message", p.Message)
-	s.finalTextMu.Lock()
+	s.errTextMu.Lock()
 	s.lastErrText = p.Message
-	s.finalTextMu.Unlock()
+	s.errTextMu.Unlock()
 }
 
 // peekLastErrText reads lastErrText without consuming it, used by
 // loggers that want to record "we have a buffered upstream error"
 // without racing with the takeLastErrText path that emitDone uses.
 func (s *Session) peekLastErrText() string {
-	s.finalTextMu.Lock()
-	defer s.finalTextMu.Unlock()
+	s.errTextMu.Lock()
+	defer s.errTextMu.Unlock()
 	return s.lastErrText
 }
 
@@ -325,7 +315,7 @@ func (s *Session) peekLastErrText() string {
 // envelope emit helpers
 // ---------------------------------------------------------------------------
 
-func (s *Session) emitDoneAt(content string, usage *TurnUsage, completedAt *int64) {
+func (s *Session) emitDoneAt(usage *TurnUsage, completedAt *int64) {
 	if !s.terminal.CompareAndSwap(false, true) {
 		return
 	}
@@ -336,7 +326,7 @@ func (s *Session) emitDoneAt(content string, usage *TurnUsage, completedAt *int6
 		doneMeta[proto.DoneMetaAgentSessionID] = tid
 		doneMeta[proto.DoneMetaAgentSessionType] = "codex_thread"
 	}
-	payload := proto.DonePayload{Content: content, Metadata: doneMeta, SourceCompletedAtMS: completedAt}
+	payload := proto.DonePayload{Metadata: doneMeta, SourceCompletedAtMS: completedAt}
 	if usage != nil {
 		payload.Usage = s.usagePayload(*usage)
 	}
@@ -397,10 +387,7 @@ func (s *Session) emitTerminalFailure(message string, asError bool, failure prot
 		doneMeta[proto.DoneMetaAgentSessionID] = tid
 		doneMeta[proto.DoneMetaAgentSessionType] = "codex_thread"
 	}
-	payload := proto.DonePayload{
-		Content:  message,
-		Metadata: doneMeta,
-	}
+	payload := proto.DonePayload{Metadata: doneMeta}
 	payload = s.rememberOutcome(payload)
 	env, err := proto.NewEnvelope(proto.TypeDone, s.runID, payload)
 	if err != nil {
@@ -446,27 +433,9 @@ func (s *Session) setThreadID(id string) {
 	s.threadIDMu.Unlock()
 }
 
-func (s *Session) appendFinalText(text string) {
-	s.finalTextMu.Lock()
-	if s.finalText != "" {
-		s.finalText = s.finalText + "\n\n" + text
-	} else {
-		s.finalText = text
-	}
-	s.finalTextMu.Unlock()
-}
-
-func (s *Session) takeFinalText() string {
-	s.finalTextMu.Lock()
-	defer s.finalTextMu.Unlock()
-	t := s.finalText
-	s.finalText = ""
-	return t
-}
-
 func (s *Session) takeLastErrText() string {
-	s.finalTextMu.Lock()
-	defer s.finalTextMu.Unlock()
+	s.errTextMu.Lock()
+	defer s.errTextMu.Unlock()
 	e := s.lastErrText
 	s.lastErrText = ""
 	return e

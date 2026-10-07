@@ -100,7 +100,17 @@ func TestRootRPCNotificationOrdering(t *testing.T) {
 				<-barrier
 				waitResult(result)
 				var doneCount int
+				var answer string
 				for env := range out {
+					if env.Type == proto.TypeOutputMessage {
+						var message proto.OutputMessagePayload
+						if err := env.DecodePayload(&message); err != nil {
+							t.Fatal(err)
+						}
+						if message.Text != nil {
+							answer = *message.Text
+						}
+					}
 					if env.Type != proto.TypeDone {
 						continue
 					}
@@ -113,7 +123,7 @@ func TestRootRPCNotificationOrdering(t *testing.T) {
 					if resume {
 						wantInput = 30
 					}
-					if done.Content != "root answer" || done.Metadata[proto.DoneMetaAgentSessionID] != "root" || done.Usage.InputTokens != wantInput {
+					if answer != "root answer" || done.Metadata[proto.DoneMetaAgentSessionID] != "root" || done.Usage.InputTokens != wantInput {
 						t.Fatalf("reply ordering lost root output/usage: %+v", done)
 					}
 				}

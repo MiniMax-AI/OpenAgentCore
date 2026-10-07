@@ -160,7 +160,7 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 			}
 			select {
 			case event := <-out:
-				if event.Type != proto.TypeDelta {
+				if event.Type != proto.TypeOutputMessage {
 					t.Fatal(event.Type)
 				}
 			case <-time.After(3 * time.Second):
@@ -187,7 +187,7 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 			default:
 				t.Fatal("nonreusable settlement preceded native process exit")
 			}
-			if got := second.CancellationOutcome(); got.Content != "ready" || got.Metadata[proto.DoneMetaAgentSessionID] != "native-1" {
+			if got := second.CancellationOutcome(); got.Metadata[proto.DoneMetaAgentSessionID] != "native-1" {
 				t.Fatal("cancel lost settled outcome", got)
 			}
 			for range out {

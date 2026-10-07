@@ -136,7 +136,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	observeCapacity()
 	// After completion, Runtime can retire the idle Executor. Its cleanup
 	// still owns a slot and reports the same capacity rejection.
-	h.write(turns[first], proto.TypeDone, proto.DonePayload{Content: "done"})
+	h.write(turns[first], proto.TypeDone, proto.DonePayload{})
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "first completed Turn", func() bool {
 		turn, err := sessionAdapter(h.s).GetTurn(t.Context(), h.tenant, first, turns[first])
 		return err == nil && turn.Status == sessions.TurnCompleted
@@ -148,7 +148,7 @@ func TestWorkerDefersPreparationCapacityUntilCleanupReleasesSlot(t *testing.T) {
 	}
 	for session, turn := range turns {
 		if session != first {
-			h.write(turn, proto.TypeDone, proto.DonePayload{Content: "done"})
+			h.write(turn, proto.TypeDone, proto.DonePayload{})
 		}
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 5*time.Second, "all five Turns completed", func() bool {

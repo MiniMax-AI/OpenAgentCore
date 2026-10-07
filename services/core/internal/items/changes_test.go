@@ -24,18 +24,8 @@ func TestObserveDecidesItemChanges(t *testing.T) {
 		kind   string
 		update Update
 		stored Stored
-		skip   bool
 		check  func(Change) bool
 	}{
-		{
-			name: "a legacy aggregate yields to a native message", kind: "execution_completed",
-			update: project("execution_completed", `{"done":{"content":"final"}}`), stored: Stored{NativeMessage: true}, skip: true,
-		},
-		{
-			name: "a legacy aggregate applies without a native message", kind: "execution_completed",
-			update: project("execution_completed", `{"done":{"content":"final"}}`),
-			check:  func(c Change) bool { return c.Item.Status == "completed" && c.Output && c.Delta == nil },
-		},
 		{
 			name: "a text delta merges and keeps its own fragment", kind: "delta",
 			update: project("delta", `{"item_id":"a","delta":" more"}`), stored: Stored{Item: draft},
@@ -62,11 +52,11 @@ func TestObserveDecidesItemChanges(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			change, ok, err := Observe(test.kind, test.update, test.stored)
-			if err != nil || ok == test.skip {
-				t.Fatal(ok, err)
+			change, err := Observe(test.kind, test.update, test.stored)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if !test.skip && !test.check(change) {
+			if !test.check(change) {
 				t.Fatalf("%+v", change)
 			}
 		})
@@ -74,15 +64,12 @@ func TestObserveDecidesItemChanges(t *testing.T) {
 }
 
 func TestUpdatesDeclareTheFactsObserveReads(t *testing.T) {
-	legacy := Update{Item: v1.Item{Type: "message"}, LegacyFinal: true}
+	message := Update{Item: v1.Item{Type: "message"}}
 	result := Update{Item: v1.Item{Type: "function_call_output", CallID: "call"}}
-	if !legacy.NeedsNativeMessage() || result.NeedsNativeMessage() {
-		t.Fatal("native message need")
-	}
 	if call, ok := result.ResultCall(); !ok || call != "call" {
 		t.Fatal("result call", call, ok)
 	}
-	if _, ok := legacy.ResultCall(); ok {
+	if _, ok := message.ResultCall(); ok {
 		t.Fatal("message asked for a function result")
 	}
 }

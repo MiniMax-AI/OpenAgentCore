@@ -16,7 +16,6 @@ export type Start = {
   cwd: string;
   resume?: string;
   require_history?: boolean;
-  observe_messages?: boolean;
   subagents?: { max_concurrent: number };
   tool_search?: boolean;
   functions?: { name: string; description: string; parameters: Tool["inputSchema"]; defer_loading?: boolean }[];
@@ -35,14 +34,13 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
   const value: unknown = JSON.parse(line);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const request = value as Record<string, unknown>;
-  const allowed = new Set(["native_model_options", "type", "input", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "output_format", "subagents", "functions", "tool_search", "mcp_http_servers", "workspace"]);
+  const allowed = new Set(["native_model_options", "type", "input", "model", "system_prompt", "cwd", "resume", "require_history", "output_format", "subagents", "functions", "tool_search", "mcp_http_servers", "workspace"]);
   if (Object.keys(request).some(key => !allowed.has(key)) ||
       (request.type !== "start" && request.type !== "prepare" && request.type !== "executor_prepare") ||
       (request.type === "start" ? !Array.isArray(request.input) : "input" in request) ||
       typeof request.model !== "string" || !request.model.trim() ||
       typeof request.system_prompt !== "string" ||
       typeof request.cwd !== "string" || !isAbsolute(request.cwd) ||
-      (request.observe_messages !== undefined && typeof request.observe_messages !== "boolean") ||
       (request.require_history !== undefined && typeof request.require_history !== "boolean") ||
       (request.resume !== undefined && (typeof request.resume !== "string" || !request.resume))) throw new Error("invalid_request");
   if (request.functions !== undefined && (!Array.isArray(request.functions) || request.functions.some(tool =>
@@ -61,7 +59,7 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
   if (request.output_format !== undefined) {
     const format = request.output_format as Start["output_format"];
     if (!format || format.type !== "json_schema" || Object.keys(format).some(key => !["type", "schema"].includes(key)) ||
-        !format.schema || format.schema.type !== "object" || !request.observe_messages || request.subagents ||
+        !format.schema || format.schema.type !== "object" || request.subagents ||
         request.mcp_http_servers !== undefined) throw new Error("invalid_request");
   }
   if (request.type === "start") requestInput(request.input);

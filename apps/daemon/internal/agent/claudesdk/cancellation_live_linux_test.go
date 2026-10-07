@@ -66,7 +66,7 @@ func TestLiveClaudeSDKCancelResume(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 		defer cancel()
 		out := make(chan proto.Envelope, 64)
-		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Follow the user's requested format. Preserve the exact verification value in conversation history. Use no tools."}
+		request := proto.PromptRequestPayload{RunID: uuid.NewString(), Input: proto.TextInput(prompt), AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, Model: "MiniMax-M3", ModelProvider: provider, SystemPrompt: "Follow the user's requested format. Preserve the exact verification value in conversation history. Use no tools."}
 		running, err := startSingleTurn(ctx, config, request, out)
 		if err != nil {
 			t.Fatal(err)
@@ -148,11 +148,11 @@ func TestLiveClaudeSDKCancelResume(t *testing.T) {
 	nonce := "cancel-history-" + uuid.NewString()
 	first := run("Remember this exact verification value: "+nonce+". First repeat it, then write two hundred numbered sentences about trees. Do not use tools.", "", true)
 	id, _ := first.Outcome.Metadata[proto.DoneMetaAgentSessionID].(string)
-	if id == "" || first.Outcome.Content == "" || first.Failure == "" {
+	if id == "" || messageText(first.Events) == "" || first.Failure == "" {
 		t.Fatal("live cancellation lost identity, partial output or interruption evidence")
 	}
 	second := run("Return only the exact cancel-history verification value in the earlier user request. Ignore the earlier request for numbered sentences.", id, false)
-	if second.Failure != "" || second.Outcome.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(second.Outcome.Content, nonce) || first.NodePID == second.NodePID {
+	if second.Failure != "" || second.Outcome.Metadata[proto.DoneMetaAgentSessionID] != id || !strings.Contains(messageText(second.Events), nonce) || first.NodePID == second.NodePID {
 		t.Fatalf("cold continuation did not preserve identity/history; evidence %s", root)
 	}
 	data, _ := json.MarshalIndent(map[string]any{"scope": "private Go factory -> maintained SDK/native -> real MiniMax cancellation and cold continuation; public admission remains separate", "verification_value": nonce, "executions": []evidence{first, second}}, "", "  ")
