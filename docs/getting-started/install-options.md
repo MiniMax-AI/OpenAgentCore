@@ -2,7 +2,7 @@
 title: "Installation options and advanced deployments"
 ---
 
-The [default installation](./install.md) needs no options. Use this page to run behind an existing reverse proxy or install without internet access.
+The [default installation](./install.md) needs no options. Use this page to set installation options, deploy with Compose or configure a reverse proxy.
 
 Pass options to the downloaded script:
 
@@ -10,7 +10,7 @@ Pass options to the downloaded script:
 ./install.sh --public-url https://core.example
 ```
 
-On Windows, download `install.ps1` and pass the same flags with `& ./install.ps1 --public-url https://core.example`. With the Unix one-line command, append them after `bash -s --`. `--version TAG` selects a published release; otherwise the script selects the latest stable release and verifies each Compose file's SHA-256. A failed step stops installation without a success message.
+On Windows, download `install.ps1` and pass the same flags with `& ./install.ps1 --public-url https://core.example`. With the Unix one-line command, append them after `bash -s --`. `--version TAG` selects a published release; otherwise the script selects the latest stable release and verifies the native command and Compose files against their SHA-256 checksums.
 
 ## Docker Compose and hosting platforms
 
@@ -60,7 +60,7 @@ These flags are written to `.env` once. After installation, edit that file and r
 
 | Option | Purpose |
 | --- | --- |
-| `--install-dir DIR` | Absolute installation directory; defaults to `~/.oac/core`. A new installation requires an empty or missing directory, or one holding an [installation that never started](./install.md#install) |
+| `--install-dir DIR` | Absolute installation directory; defaults to `~/.oac/core`. Use an empty or missing directory for a new installation, or an existing installation directory to [retry](./install.md#install) |
 
 Several installations can share a machine when they use distinct installation directories and ports. Use distinct IP addresses or a shared reverse proxy for more. Each installation has its own database, Core key and nodes.
 
@@ -131,4 +131,4 @@ The address changes whenever `cloudflared` restarts; nodes bound to the old addr
 
 ## Offline hosts
 
-This installer does not install from an offline bundle. It downloads Compose files and container images from the release.
+Core installation requires access to GitHub Releases and the container registries to download release files and images.

@@ -17,12 +17,12 @@ This page follows the default path. Every flag, existing reverse proxies and off
 ## Prerequisites
 
 - Linux amd64/arm64 or macOS Intel/Apple Silicon with curl; Windows x64 with PowerShell.
-- Docker Engine 26 or newer and Docker Compose 2.26.0 or newer. On macOS and Windows, install and start Docker Desktop using Linux containers. Windows containers are unsupported.
+- Docker Engine 26 or newer and Docker Compose 2.26.0 or newer. On macOS and Windows, install and start Docker Desktop using Linux containers.
 - An account that can run `docker` and write to its home directory. Ordinary users and root both work; the installer never calls sudo.
 - Free port 8080 for Web. See [ports](./install-options.md#ports). Docker must be able to publish it; the installer does not change host policy.
 - For anything off this machine, the origin in `OAC_PUBLIC_URL` must be the address browsers, nodes and executors use. You can sign in on this machine first.
 
-The Core host needs no KVM. Sandbox nodes remain Linux amd64; use a separate Linux node or E2B when Core runs on macOS or Windows.
+Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a Linux node or use E2B.
 
 ## Install
 
@@ -50,7 +50,7 @@ The script downloads that release's Compose files, checks their SHA-256, and:
 2. prepares the [installation directory](../configuration.md#installation-directory), `~/.oac/core`, with `.env` and the native `oac` command (`oac.exe` on Windows);
 3. starts the services with Docker Compose. Web serves the console on port 8080 and forwards `/v1`, `/api/v1` and `/docs` to Core. Core and PostgreSQL are not published.
 
-It saves no sandbox backend, adds no node, creates no Project or key and makes no model request. It ends by printing the console address and the Core key.
+The installer prints the console address and Core key. After signing in, configure execution resources and create Projects in Web.
 
 Downloads and configuration checks happen before the installation directory is published. After that, failures preserve the configuration and data and report the failed step; inspect it with `docker compose logs --tail 100` in the installation directory. Fix the reported cause and rerun the same command, or specify the installation directory:
 

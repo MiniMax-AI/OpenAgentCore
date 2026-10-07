@@ -1,7 +1,7 @@
 ---
 title: "管理你的安装"
 source: docs/getting-started/operations.md
-source_hash: 3ae69501aecec7b82f8b9888d27f8a4dfe549289e7f38ef50c11add404f9a680
+source_hash: fd22b6b8ddbcb462183267aeb7192c50112681271e61fcb4b660f4ee00363e72
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -135,11 +135,8 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 - 安装目录中的 `.env`、`compose.yaml` 和管理命令。数据卷内的 `secrets/core/credential.key` 必须与数据库一起保留，否则存储的凭据无法解密。
 
 - 各节点主机上的状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及提供商存储：Docker 卷或 microsandbox 存储。恢复方法见[节点主机故障时](nodes.md#when-a-node-host-fails)。
-- 安装所使用的发行包，用于修复同一版本。
 
 运行 `docker compose stop`，导出完整数据卷并归档安装目录，再运行 `docker compose start`。Docker Desktop 的 **Volumes** 页面支持导出数据卷。SQL 转储不包含加密密钥和 Provider 状态。
-
-不要通过清理 Docker 卷或删除原生 Harness 历史来让重试成功。Session 已删除不证明所有提供商资源已回收。
 
 ## 卸载 {#uninstall}
 
@@ -149,7 +146,7 @@ docker compose down --volumes --remove-orphans --rmi all
 cd && rm -rf ~/.oac/core
 ```
 
-`down --volumes` 会删除安装数据卷。之后删除安装目录；Windows 使用 `Remove-Item -Recurse "$HOME/.oac/core"`。仅在确定要删除数据时运行这些命令。
+`down --volumes` 会删除安装数据卷。之后删除安装目录；Windows 使用 `Remove-Item -Recurse "$HOME/.oac/core"`。
 
 全部数据随之删除：Project 和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
 

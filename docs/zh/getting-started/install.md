@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 0f39254d81289651e709577bcdae88d77d6144b5bd93da159d0b1013ef90e2cd
+source_hash: 1366a76858085e015480c48c18891987397cdc1da0d859182da3685ed77355be
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -19,12 +19,12 @@ source_hash: 0f39254d81289651e709577bcdae88d77d6144b5bd93da159d0b1013ef90e2cd
 ## 前置条件 {#prerequisites}
 
 - Linux amd64/arm64 或 macOS Intel/Apple Silicon，需安装 curl；Windows x64 需 PowerShell。
-- Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。macOS 和 Windows 使用已启动的 Docker Desktop，并选择 Linux 容器；不支持 Windows 容器。
+- Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。macOS 和 Windows 使用已启动的 Docker Desktop，并选择 Linux 容器。
 - 能运行 `docker` 并向自己的主目录写入文件的账号。普通用户和 root 均可；安装程序不会调用 sudo。
 - Web 的 8080 端口空闲。参阅[端口](install-options.md#ports)。Docker 必须能发布该端口；安装程序不会修改主机策略。
 - 本机以外的访问要求 `OAC_PUBLIC_URL` 就是浏览器、节点和执行器使用的地址。可以先在本机登录。
 
-Core 主机不需要 KVM。沙箱节点仍只支持 Linux amd64；在 macOS 或 Windows 上部署 Core 时，可连接另一台 Linux 节点，或使用 E2B。
+沙箱节点运行在 Linux amd64 上。在 macOS 或 Windows 上部署 Core 时，可连接 Linux 节点，或使用 E2B。
 
 ## 安装 {#install}
 
@@ -52,7 +52,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 2. 准备[安装目录](../configuration.md#installation-directory) `~/.oac/core`，写入 `.env` 和原生 `oac` 命令（Windows 为 `oac.exe`）；
 3. 用 Docker Compose 启动服务。Web 在 8080 端口提供控制台，并把 `/v1`、`/api/v1` 和 `/docs` 转发到 Core。Core 和 PostgreSQL 不发布端口。
 
-安装程序不保存沙箱后端，不添加节点，不创建 Project 或密钥，也不发起模型请求。完成后输出控制台地址和 Core 密钥。
+安装器会打印控制台地址和 Core 密钥。登录后，在 Web 中配置执行资源并创建 Project。
 
 安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据，并报告失败步骤；在安装目录运行 `docker compose logs --tail 100` 查看日志。修复报错后，重新执行同一命令，或指定安装目录即可继续：
 

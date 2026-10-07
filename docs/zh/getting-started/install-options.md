@@ -1,10 +1,10 @@
 ---
 title: "安装选项与高级部署"
 source: docs/getting-started/install-options.md
-source_hash: d8bf53b09fa28f1d14e13bdcbadab8ac17de1d88420fc375871a4ed2df510697
+source_hash: 2e7717f76a46694af3c1ef33a56b195c0a321f54fd7318b488179b4b4c61f336
 ---
 
-[默认安装](install.md)无需任何选项。使用本页可以在现有反向代理后运行，或者在无法访问互联网时进行安装。
+[默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
 
 向下载的脚本传递选项：
 
@@ -12,11 +12,7 @@ source_hash: d8bf53b09fa28f1d14e13bdcbadab8ac17de1d88420fc375871a4ed2df510697
 ./install.sh --public-url https://core.example
 ```
 
-使用单行命令时，请将选项追加在 `bash -s --` 之后。发布包下载器还接受 `--version TAG` 来选择已发布的版本；否则会选择最新的稳定版本。它会在解压前验证捆绑包的 SHA-256，并保留已验证的捆绑包以供[修复](operations.md#installation-version-policy)。
-
-安装程序会打印每个阶段，然后打印地址、登录信息和后续步骤的摘要。设置 `NO_COLOR=1` 可禁用彩色输出。任一步骤失败都会停止安装，并且不会显示成功消息。
-
-Windows 可下载 `install.ps1`，然后使用相同参数，例如 `& ./install.ps1 --public-url https://core.example`。
+Windows 可下载 `install.ps1`，然后使用相同参数，例如 `& ./install.ps1 --public-url https://core.example`。Unix 单行命令的参数追加在 `bash -s --` 后。`--version TAG` 选择已发布的版本；默认选择最新稳定版，并校验原生命令和 Compose 文件的 SHA-256。
 
 ## Docker Compose 与托管平台 {#docker-compose-and-hosting-platforms}
 
@@ -66,7 +62,7 @@ docker compose exec web oac-web core-key
 
 | 选项 | 用途 |
 | --- | --- |
-| `--install-dir DIR` | 绝对安装目录；默认为 `~/.oac/core`。新安装要求目录为空或不存在，或者包含一个[从未启动过的安装](install.md#install) |
+| `--install-dir DIR` | 绝对安装目录；默认为 `~/.oac/core`。新安装使用空目录或不存在的目录；[重试](install.md#install)使用已有安装目录 |
 
 只要使用不同的安装目录和端口，多个安装就可以共用一台机器。需要更多安装时，请使用不同的 IP 地址或共享反向代理。每个安装都有自己的数据库、Core 密钥和节点。
 
@@ -139,4 +135,4 @@ http://:8443 {
 
 ## 离线主机 {#offline-hosts}
 
-本安装程序不支持从离线捆绑包安装。它从发布版本下载 Compose 文件和容器镜像。
+Core 安装需要访问 GitHub Releases 和容器注册表，以下载发行文件和镜像。

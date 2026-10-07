@@ -23,9 +23,8 @@ Installer flags in [installation options](./getting-started/install-options.md) 
 
 1. It runs `oac-core check-config` with the `.env` you edited and changes nothing if a value is invalid.
 2. It runs `docker compose up -d --wait`. Compose recreates only the services whose configuration changed.
-3. If the check fails, no container is recreated. See [stop and restart](./getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 
-`docker compose ps` shows the services. Domain state is `data/domain/status.json`.
+Use `docker compose ps` to check the services. See [stop and restart](./getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 
 ### Changing the public URL {#changing-the-public-url}
 
@@ -44,7 +43,7 @@ To change it, point the reverse proxy at the new address first, then edit `OAC_P
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OAC_PUBLIC_URL` | `http://localhost:8080` | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
-| `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. `install.sh` sets `0.0.0.0` |
+| `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. The installer sets `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
@@ -81,7 +80,7 @@ Core approves a node's capacity when you generate its Add node command: **Sandbo
 
 ### Default models
 
-Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/credential.key` and never returns them. [Model execution](../contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
+Set a default in **System** → **Default model configuration**, or use `PUT /core/v1/harnesses/{harness}/model-configuration`. Core encrypts provider keys with `secrets/core/credential.key` and never returns them. [Model execution](../contracts/agents-api/model-execution.md#deployment-defaults) owns the request fields and replacement rules, and [precedence](../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which Sessions use a default.
 
 ## Compose installations
 
@@ -132,7 +131,7 @@ The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `da
 
 ## Appendix: Core environment without the installer
 
-Core reads only its environment. Compose interpolates `.env` into the service environment. Compose must be 2.26.0 or newer. If you run Core yourself, set these variables; see the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md).
+Core reads only its environment. Compose interpolates `.env` into the service environment. If you run Core yourself, set these variables; see the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md).
 
 | Variable | Set from |
 | --- | --- |

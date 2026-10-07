@@ -1,5 +1,5 @@
 export const coreErrors = {
-  "invalid_admin_key": "控制台的 Core Key 被拒绝。请更新 Core 主机上的 secrets/core.key，再运行 oac apply。",
+  "invalid_admin_key": "控制台的 Core Key 被拒绝。请在 Core 主机上运行 oac rotate-core-key，然后重新登录。",
   "console_sign_in_required": "请重新登录控制台。",
   "console_origin_rejected": "请通过配置的地址打开控制台。",
   "console_request_invalid": "控制台请求被拒绝，请重新加载页面。",

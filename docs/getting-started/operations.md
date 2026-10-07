@@ -135,8 +135,6 @@ Back up these together; a restore needs all of them:
 
 Stop with `docker compose stop`, export the complete data volume and archive the installation directory, then `docker compose start`. Docker Desktop supports volume export from its **Volumes** view. A SQL dump alone does not include the encryption key or Provider state.
 
-Never prune Docker volumes or delete native harness history to make a retry pass. A deleted Session does not prove that all provider resources were reclaimed.
-
 ## Uninstall
 
 ```sh
@@ -145,7 +143,7 @@ docker compose down --volumes --remove-orphans --rmi all
 cd && rm -rf ~/.oac/core
 ```
 
-`down --volumes` deletes the installation data volume. Remove the installation directory afterward; on Windows use `Remove-Item -Recurse "$HOME/.oac/core"`. Run these only when you mean to delete the data.
+`down --volumes` deletes the installation data volume. Remove the installation directory afterward; on Windows use `Remove-Item -Recurse "$HOME/.oac/core"`.
 
 All data goes with it: Projects and API keys, Session history, stored credentials and the Core key. To keep the data, stop the installation with `docker compose stop` instead, or [back it up](#back-up) first.
 

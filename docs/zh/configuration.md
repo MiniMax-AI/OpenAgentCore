@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: ea29903383668ccf2b34fa0ca81743f6fa9f6dc52781ade249a2bee18eb10cdb
+source_hash: fc26ed25f073ae837be8992d4f7f3ad2719da93251745e9cc0004889a978d05e
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置。共有两类：
@@ -25,9 +25,8 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 1. 它用你改过的 `.env` 运行 `oac-core check-config`。值无效时什么都不改。
 2. 它运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务。
-3. 校验失败时，不会重新创建任何容器。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
 
-`docker compose ps` 展示服务。域名状态在 `data/domain/status.json`。
+用 `docker compose ps` 检查服务。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
 
 ### 更改公共 URL {#changing-the-public-url}
 
@@ -48,7 +47,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OAC_PUBLIC_URL` | `http://localhost:8080` | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[修改公开 URL](#changing-the-public-url) |
-| `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。`install.sh` 设置为 `0.0.0.0` |
+| `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。安装器设置为 `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
@@ -85,7 +84,7 @@ Web 的 **System** 页面显示该安装的地址、默认模型和沙箱配置�
 
 ### 默认模型 {#default-models}
 
-在 **System** → **Default model configuration** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
+在 **System** → **Default model configuration** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/core/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
 
 ## Compose 安装 {#compose-installations}
 
@@ -136,7 +135,7 @@ Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 
-Core 只读取其环境。Compose 把 `.env` 插值进服务环境。Compose 必须为 2.26.0 或更高版本。如果你自行运行 Core，请设置这些变量；见[服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md)。
+Core 只读取其环境。Compose 把 `.env` 插值进服务环境。如果你自行运行 Core，请设置这些变量；见[服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md)。
 
 | 变量 | 设置来源 |
 | --- | --- |
