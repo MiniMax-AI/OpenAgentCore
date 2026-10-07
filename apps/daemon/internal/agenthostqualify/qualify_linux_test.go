@@ -326,12 +326,11 @@ func withMCP(t *testing.T, reg *agent.Registry, mcp []proto.EnvironmentMCP) *age
 	wrapped := agent.NewRegistry()
 	for _, info := range reg.SupportedAgentKinds() {
 		configuration, err := reg.Configuration(info.Kind)
-		direct, directErr := reg.Resolve(info.Kind)
 		factory, factoryErr := reg.ResolveExecutor(info.Kind)
-		if err := errors.Join(err, directErr, factoryErr); err != nil {
+		if err := errors.Join(err, factoryErr); err != nil {
 			t.Fatal(err)
 		}
-		wrapped.RegisterKind(info, configuration, direct)
+		wrapped.RegisterKind(info, configuration)
 		wrapped.RegisterExecutor(info.Kind, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 			local := *req.LocalEnvironment
 			local.MCP = mcp

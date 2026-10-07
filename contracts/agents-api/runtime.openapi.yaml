@@ -151,13 +151,17 @@ definitions:
         x-nullable: true
       message:
         type: string
+      misalignment:
+        type: object
       param:
         type: string
         x-nullable: true
       type:
         type: string
     required:
+      - code
       - message
+      - param
       - type
     type: object
   v1.ErrorResponse:

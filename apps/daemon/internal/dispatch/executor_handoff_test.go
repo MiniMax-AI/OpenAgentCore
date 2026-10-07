@@ -91,10 +91,7 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 			}
 			owner := &terminalHandoffExecutor{turns: make(chan *terminalHandoffTurn, 3)}
 			registry := agent.NewRegistry()
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})},
-				prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-					return nil, errors.New("legacy path forbidden")
-				})
+			registry.RegisterKind(proto.SupportedAgentKind{Kind: "handoff", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 			var creates atomic.Int32
 			registry.RegisterExecutor("handoff", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) {
 				creates.Add(1)

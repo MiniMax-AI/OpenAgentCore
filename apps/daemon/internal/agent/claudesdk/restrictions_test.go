@@ -29,7 +29,7 @@ func TestTextFactoryAcceptsRestrictiveCapabilities(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
-			running, err := NewFactory(config)(ctx, request, out)
+			running, err := startSingleTurn(ctx, config, request, out)
 			if err != nil {
 				t.Fatal(err)
 			}

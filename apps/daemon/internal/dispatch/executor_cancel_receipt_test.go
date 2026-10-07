@@ -125,9 +125,7 @@ func TestExecutorCancellationReachesNativeBeforeDurableReceiptJoin(t *testing.T)
 			sender := &receiptCancelSender{recSender: &recSender{}, entered: make(chan struct{}), release: make(chan struct{})}
 			owner := &receiptCancelExecutor{turn: make(chan *receiptCancelTurn, 2), cancelFails: mode == "cancel_failure" || mode == "close_failure_retry", closeFailsFirst: mode == "close_failure_retry", closeEntered: make(chan struct{}), closeRelease: make(chan struct{})}
 			reg := agent.NewRegistry()
-			reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration(), func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error) {
-				return nil, errors.New("legacy factory forbidden")
-			})
+			reg.RegisterKind(proto.SupportedAgentKind{Kind: "reusable", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, prototest.ModelConfiguration())
 			reg.RegisterExecutor("reusable", func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return owner, nil })
 			r, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender, IdleTimeout: time.Hour})
 			if err != nil {

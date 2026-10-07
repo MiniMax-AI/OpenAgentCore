@@ -161,7 +161,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), ExecutorID: owner.id, Revision: 1, State: state, Reused: reused, ExpiresAt: p.deadline.UnixMilli()}
 	owner.admission = p
 	r.preparations[p.status.Handle], r.preparationRequests[env.ID] = p, p
-	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true, true) })
+	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true) })
 	if !reused {
 		r.shutdownWG.Add(1)
 	}

@@ -63,7 +63,7 @@ func resolveSavedFields(input v1.CreateAgentRequest) (agents.CreateCommand, erro
 	}
 	// Model-derived effort resolution is a recorded gap. Do not manufacture a
 	// default from the operator's execution engine or another model's catalog.
-	cfg.Text, err = resolveSavedText(input.Text)
+	cfg.Text, err = resolveText(input.Text)
 	if err != nil {
 		return agents.CreateCommand{}, err
 	}
@@ -103,21 +103,21 @@ func resolveSavedMultiAgent(raw json.RawMessage) (v1.MultiAgentConfig, error) {
 	return result, nil
 }
 
-func resolveSavedText(input *v1.SavedAgentTextInput) (v1.SavedAgentText, error) {
-	result := v1.SavedAgentText{Format: v1.SavedAgentTextFormat{Type: "text"}, Verbosity: "medium"}
+func resolveText(input *v1.TextConfigInput) (v1.TextConfig, error) {
+	result := v1.TextConfig{Format: v1.TextFormat{Type: "text"}, Verbosity: "medium"}
 	if input == nil {
 		return result, nil
 	}
-	// Reuse the Session verbosity policy without its narrower format admission.
-	text, err := resolveText(&v1.TextConfigInput{Verbosity: input.Verbosity})
-	if err != nil {
-		return result, err
+	if input.Verbosity != nil {
+		if err := validateTextVerbosity(*input.Verbosity); err != nil {
+			return result, err
+		}
+		result.Verbosity = *input.Verbosity
 	}
-	result.Verbosity = text.Verbosity
 	if len(input.Format) == 0 || bytes.Equal(bytes.TrimSpace(input.Format), []byte("null")) {
 		return result, nil
 	}
-	result.Format = v1.SavedAgentTextFormat{}
+	result.Format = v1.TextFormat{}
 	if decodeInputObject(input.Format, &result.Format, "type", "schema") != nil {
 		return result, errors.New("text.format must be a supported format object.")
 	}
@@ -135,4 +135,11 @@ func resolveSavedText(input *v1.SavedAgentTextInput) (v1.SavedAgentText, error) 
 		return result, errors.New("text.format.type must be text or json_schema.")
 	}
 	return result, nil
+}
+
+func validateTextVerbosity(value string) error {
+	if !slices.Contains([]string{"low", "medium", "high"}, value) {
+		return errors.New("text.verbosity must be low, medium or high.")
+	}
+	return nil
 }

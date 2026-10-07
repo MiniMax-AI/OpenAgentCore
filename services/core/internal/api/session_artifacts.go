@@ -23,20 +23,6 @@ type ArtifactsReader interface {
 	ReadSessionArtifact(context.Context, string, string, string, func(sessions.Artifact, io.Reader) error) error
 }
 
-// @Summary List immutable Session artifacts
-// @Description Lists published outputs independently of Environment availability. Sorting uses publication time and ID. A later Turn publishes a path again only when it is new, its bytes changed, or no Artifact remains for it. A malformed environment_id matches nothing. An after value that is not an Artifact of this Session, including a malformed one, returns 400 invalid_request_error with the message "after is not a valid artifact ID". The local default page size is 20; exact upstream defaults remain unverified.
-// @Tags Artifacts
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param environment_id query string false "Producing Environment ID; an unknown or malformed ID returns an empty page"
-// @Param after query string false "Last immutable artifact ID"
-// @Param limit query int false "Page size" minimum(1) maximum(100) default(20)
-// @Param order query string false "Publication order; omit for descending, explicit empty values are invalid" Enums(asc,desc) default(desc)
-// @Success 200 {object} v1.SessionArtifactList
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/artifacts [get]
 func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 	options, ok := readPage(w, r, "environment_id")
 	if !ok {
@@ -55,16 +41,6 @@ func (h *Handler) listSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v1.SessionArtifactList{Object: "list", Data: data, HasMore: page.NextCursor != "", FirstID: first, LastID: last})
 }
 
-// @Summary Retrieve immutable artifact metadata
-// @Tags Artifacts
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param artifact_id path string true "Artifact ID"
-// @Success 200 {object} v1.SessionArtifact
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [get]
 func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	artifact, err := h.ArtifactsReader.GetSessionArtifact(r.Context(), tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"))
 	if err != nil {
@@ -74,17 +50,6 @@ func (h *Handler) getSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, artifactResponse(artifact))
 }
 
-// @Summary Delete a published artifact
-// @Description Deletes the published copy without modifying its original workspace file. Already admitted content reads may finish; later reads reject.
-// @Tags Artifacts
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param artifact_id path string true "Artifact ID"
-// @Success 200 {object} v1.SessionArtifactDeleted
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/artifacts/{artifact_id} [delete]
 func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "artifact_id")
 	if err := h.Artifacts.DeleteSessionArtifact(r.Context(), sessions.DeleteSessionArtifactCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id"), ArtifactID: id}); err != nil {
@@ -94,17 +59,6 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, v1.SessionArtifactDeleted{ID: id, Object: "agent.session.artifact.deleted", Deleted: true})
 }
 
-// @Summary Download immutable artifact bytes
-// @Description Streams stored bytes after tenant and Session authorization, including after Environment expiration. Exact upstream headers and Range behavior remain unverified.
-// @Tags Artifacts
-// @Produce octet-stream
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param session_id path string true "Session ID"
-// @Param artifact_id path string true "Artifact ID"
-// @Success 200 {file} binary
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /agents/sessions/{session_id}/artifacts/{artifact_id}/content [get]
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
 	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
 		return h.ArtifactsReader.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a sessions.Artifact, body io.Reader) error {

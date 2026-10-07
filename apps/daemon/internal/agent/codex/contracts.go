@@ -11,8 +11,6 @@ var (
 	_ agent.DurableSteerer           = (*Session)(nil)
 	_ agent.Steerer                  = (*Session)(nil)
 	_ agent.FunctionResultSubmitter  = (*Session)(nil)
-	_ agent.PermissionResponder      = (*Session)(nil)
-	_ agent.UserChoiceResponder      = (*Session)(nil)
 	_ agent.WorkspaceDirectoryLister = (*Session)(nil)
 	_ agent.WorkspaceWriter          = (*Session)(nil)
 	_ agent.WorkspaceDirectoryLister = (*Executor)(nil)

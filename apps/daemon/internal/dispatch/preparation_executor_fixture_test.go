@@ -122,15 +122,3 @@ func (t *preparationTurn) SteerWithReceipt(ctx context.Context, p proto.PromptSt
 	}
 	return agent.ErrSteeringInactive
 }
-func (t *preparationTurn) SubmitPermission(ctx context.Context, id string, p proto.PermissionDecisionPayload) error {
-	if target, ok := t.Session.(agent.PermissionResponder); ok {
-		return target.SubmitPermission(ctx, id, p)
-	}
-	return agent.ErrUnknownPermission
-}
-func (t *preparationTurn) SubmitPromptForUserChoice(ctx context.Context, id string, p proto.PromptForUserChoiceDecisionPayload) error {
-	if target, ok := t.Session.(agent.UserChoiceResponder); ok {
-		return target.SubmitPromptForUserChoice(ctx, id, p)
-	}
-	return agent.ErrUnknownAsk
-}

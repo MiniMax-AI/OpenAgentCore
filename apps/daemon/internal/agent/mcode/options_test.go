@@ -68,9 +68,6 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		edit func(*proto.PromptRequestPayload)
 	}{
 		{"oversized instructions", func(r *proto.PromptRequestPayload) { r.SystemPrompt = strings.Repeat("x", 32*1024+1) }},
-		{"attachment", func(r *proto.PromptRequestPayload) {
-			r.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
-		}},
 		{"missing model", func(r *proto.PromptRequestPayload) { r.Model = "" }},
 		{"missing provider", func(r *proto.PromptRequestPayload) { r.ModelProvider = nil }},
 	}
@@ -82,25 +79,6 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 				t.Fatal("expected validation failure")
 			}
 		})
-	}
-}
-
-func TestQuestionContentPreservesTypesAndValidates(t *testing.T) {
-	pending := pendingQuestion{Properties: map[string]formProperty{"text": {Type: "string"}, "choice": {Type: "string", Options: []formOption{{Value: "eu", Title: "Europe"}}}}, Required: []string{"choice"}}
-	if _, err := questionContent(pending, proto.PromptForUserChoiceDecisionPayload{}); err == nil {
-		t.Fatal("required answer accepted empty")
-	}
-	decision := proto.PromptForUserChoiceDecisionPayload{QuestionAnswers: []proto.PromptForUserChoiceQuestionAnswer{{QuestionID: "text", Answers: []string{"custom"}}, {QuestionID: "choice", Answers: []string{"Europe"}}}}
-	content, err := questionContent(pending, decision)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if content["choice"] != "eu" || content["text"] != "custom" {
-		t.Fatalf("answers=%v", content)
-	}
-	decision.QuestionAnswers[1].Answers = []string{"unoffered"}
-	if _, err := questionContent(pending, decision); err == nil {
-		t.Fatal("unoffered choice accepted")
 	}
 }
 

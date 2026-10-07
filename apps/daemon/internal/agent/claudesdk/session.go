@@ -32,27 +32,6 @@ type session struct {
 	outcome     proto.DonePayload
 }
 
-func NewFactory(config Config) agent.Factory {
-	prepareExecutor := NewExecutorFactory(config)
-	return func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
-		run, input := req.RunID, req.Input
-		req.RunID, req.Input = "", nil
-		resource, err := prepareExecutor(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		turn, err := resource.StartTurn(ctx, run, input, out)
-		if turn == nil {
-			_ = resource.Close(context.Background())
-			return nil, err
-		}
-		// Factory callers own one execution. Both entrypoints use the same
-		// Executor implementation; Runtime pooling uses NewExecutorFactory.
-		go func() { _, _ = turn.AwaitSettlement(context.Background()); _ = resource.Close(context.Background()) }()
-		return turn, err
-	}
-}
-
 type bridgeEvent struct {
 	EngineErrorCode json.RawMessage `json:"engine_error_code"`
 	TurnID          string          `json:"turn_id"`

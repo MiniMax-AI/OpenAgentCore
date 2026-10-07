@@ -24,15 +24,6 @@ type FilesReader interface {
 	Read(ctx context.Context, tenantID, fileID string, consume func(files.File, io.Reader) error) error
 }
 
-// @Summary Retrieve source file metadata
-// @Description Returns immutable project-owned user_data file metadata. No Beta header is required. Other purposes, expiration and full hosted status/error semantics remain unimplemented or unverified.
-// @Tags Files
-// @Produce json
-// @Security BearerAuth
-// @Param file_id path string true "Source file ID"
-// @Success 200 {object} v1.SourceFile
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /files/{file_id} [get]
 func (h *Handler) getSourceFile(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -44,15 +35,6 @@ func (h *Handler) getSourceFile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sourceFileResponse(file))
 }
 
-// @Summary Delete a source file
-// @Description Atomically deletes project-owned metadata and stored bytes. Already-admitted reads or copies may finish. Workspace copies remain independent. Historical WAL/backups are not erased. No Beta header is required; exact hosted concurrent deletion/error semantics remain unverified.
-// @Tags Files
-// @Produce json
-// @Security BearerAuth
-// @Param file_id path string true "Source file ID"
-// @Success 200 {object} v1.SourceFileDeleted
-// @Failure 400,401,404,500,503 {object} v1.ErrorResponse
-// @Router /files/{file_id} [delete]
 func (h *Handler) deleteSourceFile(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()

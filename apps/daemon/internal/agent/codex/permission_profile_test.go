@@ -16,9 +16,6 @@ func TestRuntimeUsesHostPermissions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if plan.Sandbox != "danger-full-access" || plan.Permissions != "" || plan.ApprovalPolicy.String != "never" {
-			t.Fatal("Runtime must bypass inner sandbox", plan)
-		}
 		if plan.Cwd != req.LocalEnvironment.WorkspaceRoot {
 			t.Fatal("native cwd is not the bound workspace root", plan.Cwd)
 		}

@@ -1,13 +1,11 @@
 package codex
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -155,9 +153,9 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			path := filepath.Join(root, "native-config.json")
 			writeMCPHTTPConfigResponse(t, path, response)
 			t.Setenv("OAC_TEST_PREPARATION_MCP_CONFIG", path)
-			p, err := newPreparation(t.Context(), req, cfg)
+			e, err := testExecutor(t, "complete", req, cfg)
 			if strings.HasPrefix(mode, "reject") {
-				if err == nil || p != nil {
+				if err == nil || e != nil {
 					t.Fatal("ambient MCP configuration admitted")
 				}
 				assertPreparationOnly(t, root)
@@ -167,18 +165,18 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer p.Close()
 			assertPreparationOnly(t, root)
 			home, err := allocCodexHome(req.AgentStateKey)
 			if err != nil {
 				t.Fatal(err)
 			}
-			s, err := p.start(t.Context(), "actual-run", proto.TextInput("actual prompt"), make(chan proto.Envelope, 8))
+			out := make(chan proto.Envelope, 20)
+			turn, err := e.StartTurn(t.Context(), "actual-run", proto.TextInput("actual prompt"), out)
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer s.Cancel(context.Background())
-			frames := waitPreparationMethod(t, root, "turn/start")
+			awaitExecutorTurn(t, turn, out)
+			frames := preparationFrames(t, root)
 			checked, statuses := false, 0
 			for _, frame := range frames {
 				if frame.Method == "environment/status" {
@@ -202,12 +200,6 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 				if frame.Method == "mcpServerStatus/list" {
 					t.Fatal("preflight started discovery")
 				}
-			}
-			_ = s.Cancel(context.Background())
-			select {
-			case <-s.waitDone:
-			case <-time.After(4 * time.Second):
-				t.Fatal("native fixture did not release")
 			}
 		})
 	}

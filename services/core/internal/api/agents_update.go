@@ -10,18 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// @Summary Update a reusable Agent
-// @Description Preserves omitted fields and replaces supplied fields using shared saved-configuration validation. Null name/instructions clear; null or empty metadata clears all pairs. Name, metadata and configuration validation errors return invalid_request_error with the official param, using the Agent create rules before the Agent lookup. Existing Session snapshots are unchanged. Empty updates advance updated_at without changing saved fields. Nested replacement/null defaults, model-derived reasoning and exact hosted error behavior remain incompletely verified.
-// @Tags Agents
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param OpenAI-Beta header string true "agents=v1"
-// @Param agent_id path string true "Agent ID"
-// @Param body body v1.UpdateAgentRequest true "Supplied reusable Agent fields"
-// @Success 200 {object} v1.SavedAgent
-// @Failure 400,401,404,413,500 {object} v1.ErrorResponse
-// @Router /agents/{agent_id} [post]
 func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
 	if !ok {

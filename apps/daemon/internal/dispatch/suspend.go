@@ -42,7 +42,7 @@ func (r *Router) Quiesce(ctx context.Context, ref proto.AssignmentRef, request p
 		r.mu.Unlock()
 		return AssignmentError(code)
 	}
-	if r.runtimePreparation != nil || len(r.sessions) != 0 || len(r.workspaceReads) != 0 || r.workspaceWrite != nil || r.workspaceExport != nil || len(r.permIndex) != 0 || len(r.askIndex) != 0 {
+	if r.runtimePreparation != nil || len(r.sessions) != 0 || len(r.workspaceReads) != 0 || r.workspaceWrite != nil || r.workspaceExport != nil {
 		r.mu.Unlock()
 		return ErrRouterBusy
 	}

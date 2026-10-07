@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"syscall"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
 func main() {
@@ -28,6 +30,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, os.Args[1], os.Args[2:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return
+		}
 		if os.Args[1] != "init" {
 			fmt.Fprintln(os.Stderr, err.Error())
 		}
@@ -39,27 +44,35 @@ func main() {
 var buildRevision = "development"
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "oac (%s)\nUsage: oac apply|core-key|rotate-core-key|init\n", buildRevision)
+	fmt.Fprintf(os.Stderr, "oac (%s)\nUsage: oac install|apply|core-key|rotate-core-key\n", buildRevision)
 }
 
 func run(ctx context.Context, command string, args []string) error {
 	switch command {
+	case "install":
+		return installCommand(ctx, args)
 	case "init":
 		return initCommand()
+	case "rotate-volume-key":
+		return withLock("/data/secrets/init", func() error { return rotateVolumeKey("/data") })
 	}
 	root, err := installDir()
 	if err != nil {
 		return err
 	}
-	in := installation{root: root, data: dataDir(root)}
 	runner := execRunner{dir: root}
 	switch command {
 	case "apply":
 		return withLock(root, func() error { return apply(ctx, runner) })
 	case "core-key":
-		return coreKeyCommand(ctx, in, runner, args)
+		return coreKeyCommand(ctx, runner, args)
 	case "rotate-core-key":
-		return withLock(root, func() error { return rotateCoreKey(ctx, in, runner) })
+		return withLock(root, func() error {
+			if err := runner.Run(ctx, "run", "--rm", "--no-deps", "init", "/usr/local/bin/oac", "rotate-volume-key"); err != nil {
+				return err
+			}
+			return runner.Run(ctx, "restart", "core", "web")
+		})
 	default:
 		usage()
 		return errors.New("unknown command")
@@ -81,25 +94,24 @@ func installDir() (string, error) {
 	return "", errors.New("run oac from an installation directory that contains compose.yaml")
 }
 
-type installation struct{ root, data string }
-
-func dataDir(root string) string {
-	if dir := os.Getenv("OAC_DATA_MOUNT"); dir != "" {
-		return dir
-	}
-	return filepath.Join(root, "data")
-}
-
 func withLock(root string, fn func() error) error {
-	file, err := os.OpenFile(filepath.Join(root, ".oac.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	dir := root + ".lock"
+	if info, err := os.Lstat(dir); err == nil && !info.IsDir() {
+		return errors.New("invalid installation lock directory")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	handle, err := os.OpenRoot(dir)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
-		return err
+	defer handle.Close()
+	unlock, err := runtimefs.LockDirectory(handle)
+	if err != nil {
+		return fmt.Errorf("another operation is using this installation: %w", err)
 	}
-	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	defer unlock()
 	return fn()
 }
 
@@ -110,8 +122,8 @@ func apply(ctx context.Context, runner Runner) error {
 	return runner.Run(ctx, "up", "-d", "--wait")
 }
 
-func coreKeyCommand(ctx context.Context, in installation, runner Runner, args []string) error {
-	path := filepath.Join(in.data, "secrets", "web", "core.key")
+func coreKeyCommand(ctx context.Context, runner Runner, args []string) error {
+	path := "Docker volume: secrets/web/core.key (use oac core-key --show)"
 	if len(args) == 0 {
 		fmt.Println(path)
 		return nil
@@ -130,24 +142,33 @@ func generateCoreKey() (string, error) {
 	return "oac_admin_" + hex.EncodeToString(buf), nil
 }
 
-func rotateCoreKey(ctx context.Context, in installation, runner Runner) error {
+func rotateVolumeKey(data string) error {
 	key, err := generateCoreKey()
 	if err != nil {
 		return err
 	}
-	keyPath := filepath.Join(in.data, "secrets", "web", "core.key")
-	digestPath := filepath.Join(in.data, "secrets", "core", "core-key-digests.json")
-	if err := writeSecret(keyPath, key+"\n"); err != nil {
+	keyPath := filepath.Join(data, "secrets", "web", "core.key")
+	if err := writeOwned(keyPath, []byte(key+"\n")); err != nil {
 		return err
 	}
-	raw, err := json.Marshal([]string{keyDigest(key)})
+	return syncCoreKeyDigest(data)
+}
+
+func syncCoreKeyDigest(data string) error {
+	key, err := coreKey(data)
 	if err != nil {
 		return err
 	}
-	if err := writeSecret(digestPath, string(raw)+"\n"); err != nil {
-		return err
+	value, err := hex.DecodeString(strings.TrimPrefix(key, "oac_admin_"))
+	if err != nil || !strings.HasPrefix(key, "oac_admin_") || len(value) != 32 {
+		return errors.New("invalid saved Core key")
 	}
-	return runner.Run(ctx, "restart", "core", "web")
+	raw, _ := json.Marshal([]string{keyDigest(key)})
+	path := filepath.Join(data, "secrets", "core", "core-key-digests.json")
+	if saved, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(saved)) == string(raw) {
+		return nil
+	}
+	return writeOwned(path, raw)
 }
 
 func coreKey(data string) (string, error) {
@@ -161,24 +182,4 @@ func coreKey(data string) (string, error) {
 func keyDigest(key string) string {
 	sum := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(sum[:])
-}
-
-func writeSecret(path, contents string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return os.ErrInvalid
-	}
-	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, []byte(contents), 0o600); err != nil {
-		return err
-	}
-	if err := os.Chown(temporary, int(stat.Uid), int(stat.Gid)); err != nil {
-		_ = os.Remove(temporary)
-		return err
-	}
-	return os.Rename(temporary, path)
 }

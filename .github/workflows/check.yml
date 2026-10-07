@@ -184,8 +184,18 @@ jobs:
   compose:
     needs: plan
     if: needs.plan.result == 'success' && contains(fromJSON(needs.plan.outputs.jobs || '[]'), 'compose')
-    runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && 'ubuntu-22.04' || 'blacksmith-2vcpu-ubuntu-2204' }}
-    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      GOARCH: ${{ matrix.architecture }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -193,6 +203,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      - name: Test the native Core installation lifecycle
+        run: go test ./services/core/cmd/oac -count=1 -timeout=3m
+      - uses: ./.github/actions/e2b-provider
+      - name: Build and verify the architecture-matched E2B helper
+        run: bash scripts/build-e2b-provider.sh
       - name: Allocate an isolated Compose project
         run: python3 -c 'import uuid; print("COMPOSE_SMOKE_PROJECT=oac-smoke-" + uuid.uuid4().hex)' >> "$GITHUB_ENV"
       - name: Build the images, start the installation and verify it

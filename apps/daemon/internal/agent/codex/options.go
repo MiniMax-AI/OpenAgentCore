@@ -62,18 +62,12 @@ type SessionPlan struct {
 	// ModelReasoningEffort is frozen for launch and every native Turn.
 	ModelReasoningEffort string
 
-	// ApprovalPolicy + Sandbox apply to both new and resumed threads.
-	ApprovalPolicy AskForApproval
-	Sandbox        SandboxMode
-	Permissions    string
-
 	// Cleanup is the deferred housekeeping the session must run after the child exits.
 	Cleanup func()
 }
 
 // BuildSessionPlan derives a SessionPlan from the request's frozen model
 // configuration and ExecutionControls. The codex binary is resolved via PATH.
-// Daemon-managed Codex sessions bypass approvals and the engine sandbox.
 func BuildSessionPlan(req proto.PromptRequestPayload) (SessionPlan, error) {
 	return buildSessionPlan(req, func() (agent.ViewDir, error) {
 		home, err := allocCodexHome(req.AgentStateKey)
@@ -85,9 +79,9 @@ func BuildSessionPlan(req proto.PromptRequestPayload) (SessionPlan, error) {
 // only after the request validates.
 func buildSessionPlan(req proto.PromptRequestPayload, allocHome func() (agent.ViewDir, error)) (SessionPlan, error) {
 	plan := SessionPlan{
-		ApprovalPolicy: AskForApproval{String: "never"},
-		Sandbox:        SandboxDangerFullAcces,
-		Cleanup:        func() {},
+		// Harnesses run unattended: Codex never offers its ask-the-user tool.
+		ExtraConfig: [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
+		Cleanup:     func() {},
 	}
 	prepared, err := harnessconfiguration.Configuration().Prepare(req)
 	if err != nil {

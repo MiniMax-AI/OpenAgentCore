@@ -120,7 +120,7 @@ func (r *Router) handleAssignmentRelease(ctx context.Context, env proto.Envelope
 	go func() {
 		defer r.shutdownWG.Done()
 		for _, p := range preparations {
-			r.releasePreparation(p, "failed", proto.AssignmentStale, true, false)
+			r.releasePreparation(p, "failed", proto.AssignmentStale, true)
 		}
 		work.Wait()
 		state, code := proto.AssignmentReleased, ""
