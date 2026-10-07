@@ -67,7 +67,7 @@ func newSession(ctx context.Context, req proto.PromptRequestPayload, out chan<- 
 	if out == nil {
 		return nil, fmt.Errorf("mcode: output channel is required")
 	}
-	opts, err := prepareOptions(ctx, req)
+	opts, err := prepareOptions(req)
 	if err != nil {
 		return nil, err
 	}

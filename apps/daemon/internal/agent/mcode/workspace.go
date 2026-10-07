@@ -12,7 +12,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
-// WorkspaceConfig is frozen deployment input, separate from public Agent options.
+// WorkspaceConfig is frozen deployment input, separate from the Session request.
 type WorkspaceConfig struct {
 	Binary, Node, Bridge, Directory, Network, Scratch string
 	AllowedDomains                                    []string
@@ -77,7 +77,7 @@ func prepareWorkspaceOptions(ctx context.Context, c WorkspaceConfig, req proto.P
 	private.LocalEnvironment, private.DisableExecutionEnvironment = nil, true
 	// Public declarations have already been resolved into the transient ACP map.
 	private.MCPHTTPServers = nil
-	opts, err := prepareOptionsWithTools(ctx, private, &tools)
+	opts, err := prepareOptionsWithTools(private, &tools)
 	if err != nil {
 		return opts, err
 	}

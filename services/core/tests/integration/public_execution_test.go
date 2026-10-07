@@ -60,7 +60,7 @@ func TestExecutionWorkerAdmissionBindingAndRecovery(t *testing.T) {
 	if err := request.DecodePayload(&prompt); err != nil {
 		t.Fatal(err)
 	}
-	if inputTextForTest(t, prompt.Input) != "First\n\nSecond" || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) || prompt.AgentOptions["web_search"] != nil || prompt.AgentOptions["model_verbosity"] != nil {
+	if inputTextForTest(t, prompt.Input) != "First\n\nSecond" || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) {
 		t.Fatal(prompt)
 	}
 	bound, err := sessionAdapter(h.s).GetSessionDevice(ctx, h.tenant, h.session.ID)

@@ -17,7 +17,7 @@ type workspaceExport struct {
 
 func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) error {
 	var request proto.WorkspaceExportPayload
-	if len(env.ID) == 0 || len(env.ID) > proto.WorkspaceReadMaxIDBytes || len(env.Payload) > proto.WorkspaceReadMaxRequestBytes || env.DecodePayload(&request) != nil || !proto.ValidWorkspaceExportRequest(request) {
+	if len(env.ID) == 0 || len(env.ID) > proto.WorkspaceReadMaxIDBytes || len(env.Payload) > proto.WorkspaceReadMaxRequestBytes || env.DecodeRequest(&request) != nil || !proto.ValidWorkspaceExportRequest(request) {
 		return errors.New("dispatch: invalid workspace export request")
 	}
 	r.mu.Lock()

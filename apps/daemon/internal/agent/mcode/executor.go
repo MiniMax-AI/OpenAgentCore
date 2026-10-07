@@ -42,7 +42,7 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		}
 		return startExecutor(ctx, req, binary, func(ctx context.Context) (launchOptions, error) {
 			if frozen == nil {
-				return prepareOptions(ctx, req)
+				return prepareOptions(req)
 			}
 			return prepareWorkspaceOptions(ctx, *frozen, req)
 		})

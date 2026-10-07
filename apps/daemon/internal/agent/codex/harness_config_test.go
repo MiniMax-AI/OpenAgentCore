@@ -3,19 +3,20 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-	"slices"
-	"testing"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestHarnessConfigAppliedWithoutChangingProvider(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	plan, err := BuildSessionPlan("run", "native-config", map[string]any{
-		"model": "fixture", "harness_config": map[string]any{"model_reasoning_effort": "high"},
-		"model_provider": map[string]any{"base_url": "https://provider.invalid/v1", "protocol": "responses", "api_key": "test-key"},
+	plan, err := BuildSessionPlan(proto.PromptRequestPayload{
+		RunID: "run", AgentStateKey: "native-config", Model: "fixture", HarnessConfig: proto.HarnessConfig(`{"model_reasoning_effort":"high"}`),
+		ModelProvider: &modelprovider.Provider{BaseURL: "https://provider.invalid/v1", Protocol: modelprovider.Responses, APIKey: "test-key"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +28,7 @@ func TestHarnessConfigAppliedWithoutChangingProvider(t *testing.T) {
 }
 
 func TestHarnessConfigConflictFailsBeforePreparation(t *testing.T) {
-	_, err := BuildSessionPlan("run", "", map[string]any{"harness_config": map[string]any{"model_provider": "bypass"}})
+	_, err := BuildSessionPlan(proto.PromptRequestPayload{RunID: "run", HarnessConfig: proto.HarnessConfig(`{"model_provider":"bypass"}`)})
 	if err != harnessconfig.ErrHarnessConfig {
 		t.Fatalf("configuration must fail before filesystem preparation: %v", err)
 	}
@@ -39,8 +40,7 @@ func TestHarnessConfigReachesEveryNativeTurn(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
 			req.AgentSessionID = resumeID
-			native := map[string]any{"model_reasoning_effort": "high"}
-			req.AgentOptions["harness_config"] = native
+			req.HarnessConfig = proto.HarnessConfig(`{"model_reasoning_effort":"high"}`)
 			ownerCtx, cancelOwner := context.WithCancel(context.Background())
 			t.Cleanup(cancelOwner)
 			e, err := newExecutor(ownerCtx, req, cfg)
@@ -54,7 +54,6 @@ func TestHarnessConfigReachesEveryNativeTurn(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			native["model_reasoning_effort"] = "low"
 			for _, id := range []string{"one", "two"} {
 				out := make(chan proto.Envelope, 20)
 				turn, err := e.StartTurn(t.Context(), id, proto.TextInput("answer"), out)

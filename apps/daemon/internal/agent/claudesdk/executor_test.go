@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/contracttest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func persistentConfig(t *testing.T, mode string) (Config, proto.PromptRequestPayload) {
@@ -26,7 +27,7 @@ func persistentConfig(t *testing.T, mode string) (Config, proto.PromptRequestPay
 	if err := os.WriteFile(entry, []byte("version-one"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{DisableExecutionEnvironment: true, AgentOptions: map[string]any{"model": "fixture"}}
+	return Config{Node: os.Args[0], Entrypoint: entry, StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_EXECUTOR_HELPER=1", "SDK_EXECUTOR_DIR=" + root, "SDK_EXECUTOR_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}, proto.PromptRequestPayload{DisableExecutionEnvironment: true, Model: "fixture"}
 }
 
 func runPersistentExecutorHelper() {
@@ -150,9 +151,7 @@ func awaitExecutorTurn(t *testing.T, turn agent.Turn, out <-chan proto.Envelope,
 }
 func TestExecutorRetainsProcessAcrossTurnsAndCancellation(t *testing.T) {
 	config, req := persistentConfig(t, "")
-	req.AgentOptions["model_provider"] = map[string]any{
-		"protocol": "anthropic", "base_url": "https://provider.example/anthropic", "api_key": "fixture-key",
-	}
+	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example/anthropic", APIKey: "fixture-key"}
 	owner, err := NewExecutorFactory(config)(t.Context(), req)
 	if err != nil {
 		t.Fatal(err)

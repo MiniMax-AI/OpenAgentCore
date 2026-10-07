@@ -100,12 +100,8 @@ func TestSessionRunsInAViewOverItsAttachment(t *testing.T) {
 		ShimPaths: []string{"/bin/sh"},
 		Proxy:     agent.ViewProxyNone,
 		Executor: func(_ context.Context, req proto.PromptRequestPayload, s agent.ViewSession) (agent.Executor, error) {
-			provider, err := modelprovider.ParseProvider(req.AgentOptions["model_provider"])
-			if err != nil {
-				return nil, err
-			}
 			return &testExecutor{session: s, dir: req.LocalEnvironment.WorkspaceRoot,
-				env: []string{harnessEnv + "=1", modelEnv + "=" + provider.BaseURL, caEnv + "=" + cfg.CADir}}, nil
+				env: []string{harnessEnv + "=1", modelEnv + "=" + req.ModelProvider.BaseURL, caEnv + "=" + cfg.CADir}}, nil
 		},
 	})
 	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)

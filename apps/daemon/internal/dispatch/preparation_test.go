@@ -372,7 +372,6 @@ func TestPreparationRejectsInputAndProductConfiguration(t *testing.T) {
 		"run":          func(p *proto.PromptRequestPayload) { p.RunID = "run" },
 		"input":        func(p *proto.PromptRequestPayload) { p.Input = proto.TextInput("input") },
 		"conversation": func(p *proto.PromptRequestPayload) { p.ConversationID = "product" },
-		"authoring":    func(p *proto.PromptRequestPayload) { p.WorkspaceAuthoring = true },
 		"attachment": func(p *proto.PromptRequestPayload) {
 			p.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
 		},

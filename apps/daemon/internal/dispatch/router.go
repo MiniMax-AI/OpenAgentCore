@@ -169,7 +169,7 @@ func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
-	if r.suspension != nil && env.Type != proto.TypeDeviceShutdown {
+	if r.suspension != nil {
 		r.mu.Unlock()
 		return ErrRouterQuiesced
 	}
@@ -204,8 +204,6 @@ func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
 		return r.handlePermissionDecision(ctx, env)
 	case proto.TypePromptForUserChoiceDecision:
 		return r.handlePromptForUserChoiceDecision(ctx, env)
-	case proto.TypeDeviceShutdown:
-		return r.handleDeviceShutdown(ctx, env)
 	default:
 		// Unknown types are logged and dropped — keeps the daemon
 		// forward-compatible with server-side additions.

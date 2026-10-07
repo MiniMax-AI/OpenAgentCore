@@ -20,7 +20,7 @@ func (r *Router) releaseCompletedSession(state *sessionState) error {
 
 func (r *Router) handlePromptCancel(ctx context.Context, env proto.Envelope) error {
 	var request proto.PromptCancelPayload
-	if err := env.DecodePayload(&request); err != nil {
+	if err := env.DecodeRequest(&request); err != nil {
 		return err
 	}
 	r.mu.Lock()

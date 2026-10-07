@@ -5,12 +5,10 @@ package agenthost
 import (
 	"context"
 	"errors"
-	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -52,7 +50,7 @@ func newViewFixture(t *testing.T) *viewFixture {
 			return nil, errFactory
 		},
 	}
-	register(reg, "viewed", &view, "mcp_servers")
+	register(reg, "viewed", &view)
 	masked := view
 	masked.Masks = []agent.ViewMask{{Path: "/etc/passwd"}}
 	register(reg, "masked", &masked)
@@ -77,7 +75,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		}, []error{ErrUnsupported, agent.ErrUnsupportedOperation}},
 		"shim name without PATH": {func(r *proto.PromptRequestPayload) { r.AgentKind = "shimmed" }, []error{ErrInvalidSession}},
 		"relative workspace":     {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.WorkspaceDirectory = "workspace" }, []error{ErrInvalidSession}},
-		"no model provider":      {func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }, []error{ErrUnsupported}},
+		"no model provider":      {func(r *proto.PromptRequestPayload) { r.ModelProvider = nil }, []error{ErrUnsupported}},
 		"no strict resume":       {func(r *proto.PromptRequestPayload) { r.StrictResume = false }, []error{ErrUnsupported}},
 		"capabilities":           {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.Capabilities = true }, []error{ErrUnsupported}},
 		"restricted network":     {func(r *proto.PromptRequestPayload) { r.LocalEnvironment.NetworkAccess = "disabled" }, []error{ErrUnsupported}},
@@ -144,17 +142,16 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	bearer := "mcp-secret"
 	req := request("viewed", "/workspace", "https://model.test", "sk-test")
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs?tenant=a", BearerToken: &bearer}}
-	original := maps.Clone(req.AgentOptions)
+	original := *req.ModelProvider
 	var dials atomic.Int32
 	d := newDaemon(t, f.cfg, deps{dial: countingDial(&dials), tasks: noTasks})
 	if _, p := d.prepare(t, newBinding(newResource()), req); p.State != "failed" || p.ErrorCode != "preparation_failed" {
 		t.Fatalf("the preparation is %s (%s), want failed with the factory", p.State, p.ErrorCode)
 	}
-	provider, err := modelprovider.ParseProvider(f.req.AgentOptions["model_provider"])
-	if err != nil || provider.BaseURL != "http://127.0.0.1:17101" || provider.APIKey != modelprovider.Placeholder || provider.Protocol != modelprovider.Anthropic {
-		t.Errorf("model provider %+v, %v; want the gateway with the placeholder", provider.BaseURL, err)
+	if provider := f.req.ModelProvider; provider == nil || provider.BaseURL != "http://127.0.0.1:17101" || provider.APIKey != modelprovider.Placeholder || provider.Protocol != modelprovider.Anthropic {
+		t.Errorf("model provider %+v; want the gateway with the placeholder", provider)
 	}
-	if !reflect.DeepEqual(req.AgentOptions, original) {
+	if *req.ModelProvider != original {
 		t.Error("the Session's request changed")
 	}
 	if f.req.MCPHTTPServers != nil || f.req.LocalEnvironment == nil || f.req.LocalEnvironment.MCP != nil || f.req.LocalEnvironment.WorkspaceRoot != "/workspace" {
@@ -175,16 +172,4 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 		t.Errorf("%d dials, home %v and transient entries %v after the preparation", dials.Load(), err, leftEntries(t, f.cfg))
 	}
 
-	// A connection option reaches the factory's handoff check, which rejects
-	// it before the adapter runs.
-	req = request("viewed", "/workspace", "https://model.test", "sk-test")
-	req.AgentOptions["mcp_servers"] = map[string]any{}
-	f.req = proto.PromptRequestPayload{}
-	e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
-	if e == nil || !errors.Is(err, ErrUnsupported) || !errors.Is(err, agent.ErrViewHandoff) || f.req.AgentKind != "" {
-		t.Fatalf("open with a connection option = %v, want ErrUnsupported and ErrViewHandoff before the adapter, and an Executor to close", err)
-	}
-	if err := e.Close(context.Background()); err != nil || dials.Load() != 0 || len(leftEntries(t, f.cfg)) != 0 {
-		t.Errorf("Close = %v; %d dials and transient entries %v", err, dials.Load(), leftEntries(t, f.cfg))
-	}
 }

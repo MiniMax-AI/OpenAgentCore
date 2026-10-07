@@ -1,7 +1,6 @@
 package mcode
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,8 +12,7 @@ import (
 
 func TestOptionsRefreshManagedState(t *testing.T) {
 	req := testRequest(t)
-	req.AgentOptions["env"] = map[string]any{"MINIMAX_DATA_DIR": "/wrong", "FIXTURE": "yes"}
-	opts, err := prepareOptions(context.Background(), req)
+	opts, err := prepareOptions(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,12 +20,11 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 		t.Fatalf("workdir escaped managed state: %s", opts.Dir)
 	}
 	if opts.Env[len(opts.Env)-1] != "MINIMAX_DATA_DIR="+opts.DataDir {
-		t.Fatal("state override did not win")
+		t.Fatal("native data directory is not the adapter's")
 	}
-	req.AgentOptions["system_prompt"] = ""
-	req.AgentOptions["mode"] = "default"
+	req.SystemPrompt = ""
 	req.AgentSessionID = "native-1"
-	refreshed, err := prepareOptions(context.Background(), req)
+	refreshed, err := prepareOptions(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +43,8 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if json.Unmarshal(data, &cfg) != nil {
 		t.Fatal("invalid config")
 	}
-	if cfg["permissionMode"] != "default" {
-		t.Fatal("requested native permission mode was not refreshed")
+	if cfg["permissionMode"] != "auto" {
+		t.Fatal("native permission mode is not auto")
 	}
 	if cfg["skills"].(map[string]any)["external"].(map[string]any)["enabled"] != false {
 		t.Fatal("external discovery enabled")
@@ -63,38 +60,21 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		name string
 		edit func(*proto.PromptRequestPayload)
 	}{
-		{"oversized instructions", func(r *proto.PromptRequestPayload) { r.AgentOptions["system_prompt"] = strings.Repeat("x", 32*1024+1) }},
+		{"oversized instructions", func(r *proto.PromptRequestPayload) { r.SystemPrompt = strings.Repeat("x", 32*1024+1) }},
 		{"attachment", func(r *proto.PromptRequestPayload) {
 			r.Input = proto.MessageInput{{Content: []proto.InputContent{{Type: "input_image"}}}}
 		}},
-		{"missing model", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model") }},
-		{"missing provider", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }},
-		{"invalid permission mode", func(r *proto.PromptRequestPayload) { r.AgentOptions["mode"] = "plan" }},
+		{"missing model", func(r *proto.PromptRequestPayload) { r.Model = "" }},
+		{"missing provider", func(r *proto.PromptRequestPayload) { r.ModelProvider = nil }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := testRequest(t)
 			tt.edit(&req)
-			if _, err := prepareOptions(context.Background(), req); err == nil {
+			if _, err := prepareOptions(req); err == nil {
 				t.Fatal("expected validation failure")
 			}
 		})
-	}
-}
-
-func TestMCPTransportConversion(t *testing.T) {
-	servers, err := mcpServers(map[string]any{
-		"local":  map[string]any{"command": "fixture", "args": []any{"--stdio"}, "env": map[string]any{"TOKEN": "test"}},
-		"remote": map[string]any{"type": "http", "url": "https://mcp.example.test", "headers": map[string]any{"Authorization": "Bearer fixture"}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(servers) != 2 || servers[0]["command"] != "fixture" || servers[1]["type"] != "http" {
-		t.Fatalf("servers=%v", servers)
-	}
-	if servers[0]["env"].([]map[string]string)[0]["name"] != "TOKEN" || servers[1]["headers"].([]map[string]string)[0]["value"] != "Bearer fixture" {
-		t.Fatal("MCP credentials lost")
 	}
 }
 
@@ -114,5 +94,14 @@ func TestQuestionContentPreservesTypesAndValidates(t *testing.T) {
 	decision.QuestionAnswers[1].Answers = []string{"unoffered"}
 	if _, err := questionContent(pending, decision); err == nil {
 		t.Fatal("unoffered choice accepted")
+	}
+}
+
+func TestDataDirectorySanitizesFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", home)
+	got, err := dataDirectory(proto.PromptRequestPayload{ConversationID: "../conv name", RunID: "ignored"})
+	if want := filepath.Join(home, "runtime", "mcode", "conv-.._conv_name"); err != nil || got != want {
+		t.Fatalf("data directory = %q, %v; want %q", got, err, want)
 	}
 }

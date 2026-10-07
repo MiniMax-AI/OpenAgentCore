@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: cbc3c6419e2d4991df82d5bbfe3b556d35cccb57d1e4e7437facca7487caabcc
+source_hash: 2b5d80e228532628ebf3fac18c37b32bc20ce235833bef96e9f4e2bb78a8b7ae
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -22,7 +22,7 @@ Runtime 按以下顺序连接：
 
 wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go)，独立于 heartbeat 报告的 Runtime 构建版本。Core 仅接受精确匹配，包括 patch 部分。不匹配时，在任何 dispatch 前返回 HTTP 426 `incompatible_version`；daemon 将其视为永久错误并停止重连。应一起部署版本匹配的两端。
 
-每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 隔离 owner lease，移除旧 Run 和 interaction 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
+每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 关闭旧连接并移除其 Run 和 interaction 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
 
 ## 能力声明 {#capability-declarations}
 
@@ -53,12 +53,13 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
-`permissions` 控制 Runtime 内部权限决定，`workspace_authoring` 控制 daemon 的 authoring 命令。Core 对 `usage` 和 `resume` 没有准入规则。
+`permissions` 控制 Runtime 内部权限决定。Core 对 `usage` 和 `resume` 没有准入规则。
 
-prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Core 为各 Run 设置的显式启用项：
+prompt 请求（`prompt_request` 或 `execution_prepare` 的配置）携带 Session 的模型配置和 Core 为各 Run 设置的显式启用项：
 
 | 字段 | Core 设置方式 |
 | --- | --- |
+| `model`, `system_prompt`, `model_provider`, `harness_config` | 来自 Session 冻结的配置：Agent 的 model 和 instructions、Session 拥有的 provider bundle，以及[原生模型参数](../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。Harness 在产生任何原生效果之前验证它们 |
 | `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
 | `observe_tool_observations` | 始终设置。tool-call frame 随后携带与 engine 无关的 `observation` |
 | `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
@@ -92,13 +93,13 @@ User-choice decision 携带 `question_answers`：每个已提供回答都有明�
 
 ## 消息族 {#message-families}
 
-链接的源文件定义必需字段、验证器、限制和有限错误类别。
+链接的源文件定义必需字段、验证器、限制和有限错误类别。Runtime 严格解码每个 Core → Runtime payload：任意层级出现其类型未声明的成员都会拒绝该请求。
 
 | Core → Runtime | Runtime → Core | 定义 |
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [初始化与能力传输](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_request`, `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[交互](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |

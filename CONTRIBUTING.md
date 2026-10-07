@@ -52,7 +52,6 @@ Core must build, deploy and run independently of product services, frontends and
 - Parsar owns users, workspaces, business authorization, Agent/Team definitions, capabilities, product conversations, IM/sharing, approval decisions and billing. It uses Core for execution.
 - A product conversation may reference several execution Sessions. Core owns native engine session identities; an execution Session has its own lifetime, separate from a daemon connection, process or sandbox.
 - Build application orchestration on the [public Session and event contract](docs/api/public-agent-api.md). Product cursor replay must be an explicit product extension. Business Team orchestration belongs to the application; Core's pinned `multi_agent` and Subagent resources remain part of the public contract.
-- Daemon Skill/SP authoring is a product operation: forward it through a scoped product callback that checks the original requester and workspace. A Runtime credential alone must not authorize business writes.
 
 ### Optional application example
 

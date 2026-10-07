@@ -54,7 +54,8 @@ func TestViewExecutorLaunchesInTheSessionView(t *testing.T) {
 	}
 	req := proto.PromptRequestPayload{
 		AgentStateKey:    "state",
-		AgentOptions:     map[string]any{"model": "m", "model_provider": map[string]any{"protocol": "responses", "base_url": "http://127.0.0.1:17101", "api_key": modelprovider.Placeholder}},
+		Model:            "m",
+		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "http://127.0.0.1:17101", APIKey: modelprovider.Placeholder},
 		LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: "/workspace", NetworkAccess: "enabled"},
 	}
 	if _, err := view.Executor(t.Context(), req, session); err == nil || len(launched) != 1 {

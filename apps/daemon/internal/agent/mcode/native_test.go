@@ -1,11 +1,7 @@
 package mcode
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,6 +13,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 // Opt in with the installed native CLI; the default test gate uses protocol fixtures.
@@ -28,42 +25,6 @@ func TestNativeMCodeACP(t *testing.T) {
 	req := testRequest(t)
 	var mu sync.Mutex
 	var requests []string
-	mcpCalls := 0
-	mcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		var msg struct {
-			ID     json.RawMessage `json:"id"`
-			Method string          `json:"method"`
-		}
-		if json.NewDecoder(r.Body).Decode(&msg) != nil {
-			w.WriteHeader(400)
-			return
-		}
-		if len(msg.ID) == 0 {
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-		var result any
-		switch msg.Method {
-		case "initialize":
-			result = map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "fixture", "version": "1"}}
-		case "tools/list":
-			result = map[string]any{"tools": []map[string]any{{"name": "get_fixture", "description": "Returns the fixture marker", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}}}}
-		case "tools/call":
-			mu.Lock()
-			mcpCalls++
-			mu.Unlock()
-			result = map[string]any{"content": []map[string]string{{"type": "text", "text": "MCP-READY"}}}
-		default:
-			result = map[string]any{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": result})
-	}))
-	defer mcp.Close()
 	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
@@ -74,34 +35,12 @@ func TestNativeMCodeACP(t *testing.T) {
 		mu.Lock()
 		requests = append(requests, string(raw))
 		mu.Unlock()
-		tool := ""
-		if !strings.Contains(string(raw), "MCP-READY") && strings.Contains(string(raw), "QA-CALL-MCP") {
-			tools, _ := body["tools"].([]any)
-			for _, entry := range tools {
-				value, _ := entry.(map[string]any)
-				name, _ := value["name"].(string)
-				if strings.Contains(name, "get_fixture") {
-					tool = name
-					break
-				}
-			}
-		}
-		writeNativeResponse(w, tool)
+		writeNativeResponse(w)
 	}))
 	defer model.Close()
-	var archive bytes.Buffer
-	zw := zip.NewWriter(&archive)
-	f, _ := zw.Create("SKILL.md")
-	_, _ = f.Write([]byte("---\nname: qa-mcode-skill\ndescription: Test skill marker SKILL-MCODE-451\n---\nReturn SKILL-MCODE-451.\n"))
-	_ = zw.Close()
-	digest := sha256.Sum256(archive.Bytes())
-	skill := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(archive.Bytes()) }))
-	defer skill.Close()
-	req.AgentOptions["model_provider"] = map[string]any{"protocol": "anthropic", "base_url": model.URL, "api_key": "fixture-only", "context_window": 64000, "max_output_tokens": 4096}
-	req.AgentOptions["skills"] = []any{map[string]any{"name": "qa-mcode-skill", "version": "1", "download_url": skill.URL, "sha256": hex.EncodeToString(digest[:])}}
-	req.AgentOptions["mcp_servers"] = map[string]any{"qa": map[string]any{"type": "http", "url": mcp.URL}}
-	req.AgentOptions["system_prompt"] = "SP-MCODE-672: use the available tools when requested."
-	req.Input = proto.TextInput("QA-CALL-MCP: call get_fixture, then reply OAC-MCODE-OK.")
+	req.ModelProvider = &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: model.URL, APIKey: "fixture-only", ContextWindow: 64000, MaxOutputTokens: 4096}
+	req.SystemPrompt = "SP-MCODE-672: reply concisely."
+	req.Input = proto.TextInput("Reply OAC-MCODE-OK.")
 	run := func() proto.DonePayload {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		t.Cleanup(cancel)
@@ -138,20 +77,15 @@ func TestNativeMCodeACP(t *testing.T) {
 	done := run()
 	mu.Lock()
 	firstRequests := strings.Join(requests, "\n")
-	calls := mcpCalls
 	requests = nil
 	mu.Unlock()
-	if !strings.Contains(firstRequests, "SP-MCODE-672") || !strings.Contains(firstRequests, "qa-mcode-skill") {
-		t.Fatalf("native context missing: prompt=%t skill=%t", strings.Contains(firstRequests, "SP-MCODE-672"), strings.Contains(firstRequests, "qa-mcode-skill"))
-	}
-	if calls == 0 {
-		t.Fatal("native MCP was not called")
+	if !strings.Contains(firstRequests, "SP-MCODE-672") {
+		t.Fatal("native instructions missing")
 	}
 	req.RunID = "run-2"
 	req.AgentSessionID = done.Metadata[proto.DoneMetaAgentSessionID].(string)
-	req.AgentOptions["system_prompt"] = "SP-MCODE-NEW: reply concisely."
-	req.AgentOptions["skills"] = []any{}
-	req.AgentOptions["model"] = "fixture-new"
+	req.SystemPrompt = "SP-MCODE-NEW: reply concisely."
+	req.Model = "fixture-new"
 	req.Input = proto.TextInput("Now reply OAC-MCODE-OK.")
 	run()
 	mu.Lock()
@@ -163,26 +97,19 @@ func TestNativeMCodeACP(t *testing.T) {
 	if !strings.Contains(resumed, `"model":"fixture-new"`) {
 		t.Fatal("resume did not use the updated model")
 	}
-	t.Logf("native new/resume, model, instructions, Skill discovery and MCP verified (%d tool calls)", calls)
+	t.Log("native new/resume, model and instructions verified")
 }
 
-func writeNativeResponse(w http.ResponseWriter, tool string) {
+func writeNativeResponse(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	send := func(kind string, payload any) {
 		data, _ := json.Marshal(payload)
 		_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", kind, data)
 	}
 	send("message_start", map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_qa", "type": "message", "role": "assistant", "model": "fixture", "content": []any{}, "stop_reason": nil, "stop_sequence": nil, "usage": map[string]int{"input_tokens": 20, "output_tokens": 0}}})
-	stop := "end_turn"
-	if tool != "" {
-		send("content_block_start", map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]any{"type": "tool_use", "id": "call_fixture", "name": tool, "input": map[string]any{}}})
-		send("content_block_delta", map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]string{"type": "input_json_delta", "partial_json": "{}"}})
-		stop = "tool_use"
-	} else {
-		send("content_block_start", map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]string{"type": "text", "text": ""}})
-		send("content_block_delta", map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]string{"type": "text_delta", "text": "OAC-MCODE-OK"}})
-	}
+	send("content_block_start", map[string]any{"type": "content_block_start", "index": 0, "content_block": map[string]string{"type": "text", "text": ""}})
+	send("content_block_delta", map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]string{"type": "text_delta", "text": "OAC-MCODE-OK"}})
 	send("content_block_stop", map[string]any{"type": "content_block_stop", "index": 0})
-	send("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil}, "usage": map[string]int{"output_tokens": 8}})
+	send("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil}, "usage": map[string]int{"output_tokens": 8}})
 	send("message_stop", map[string]string{"type": "message_stop"})
 }

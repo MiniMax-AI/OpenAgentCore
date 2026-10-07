@@ -5,7 +5,7 @@ set -euo pipefail
 # against the images scripts/build-agent-host-images.sh builds. The test binary
 # runs as the agent host in OAC_AGENT_HOST_IMAGE, and OAC_SANDBOX_IMAGE runs
 # oac-sandbox-io with the bootstrap the test writes. OAC_QUALIFY_KEY_FILE is the
-# model key's file, each OAC_QUALIFY_<KIND> the Harness's model options without
+# model key's file, each OAC_QUALIFY_<KIND> the Harness's model and model_provider without
 # api_key, and OAC_QUALIFY_PROXY an HTTP proxy for a host whose only egress it
 # is. Further arguments go to the test binary.
 

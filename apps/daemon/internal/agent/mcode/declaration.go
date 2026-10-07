@@ -18,7 +18,6 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode"
 	Usage:                          proto.CapabilityUnsupported,
 	Resume:                         proto.CapabilitySupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	WorkspaceAuthoring:             proto.CapabilitySupported,
 	Steering:                       proto.CapabilityUnsupported,
 	MessageItems:                   proto.CapabilityUnsupported,
 	ToolObservations:               proto.CapabilityUnsupported,
@@ -42,13 +41,13 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode"
 	MCPHTTPTools:                   proto.CapabilityUnsupported,
 	MCPHTTPRequired:                proto.CapabilityUnsupported,
 	MCPHTTPBearerAuth:              proto.CapabilityUnsupported,
-}}, Configuration: configuration.Configuration(), ConnectionOptions: []string{"mcp_servers", "env"}, Discover: discover}
+}}, Configuration: configuration.Configuration(), Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
 }
 func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, result proto.SupportedAgentKind, check func(context.Context, string) (string, error)) *agent.Runtime {
-	runtime := &agent.Runtime{Info: result, Session: Factory, SessionCapabilityContext: true, ExecutorCapabilityContext: true}
+	runtime := &agent.Runtime{Info: result, Session: Factory}
 
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
@@ -81,8 +80,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 		}
 	}
 	if workspace != nil {
-		runtime.SessionCapabilityContext = false
-		runtime.Info.Capabilities.WorkspaceAuthoring = proto.CapabilityUnsupported
 		runtime.Preparation = NewPreparationFactory(*workspace)
 		runtime.WorkspaceReadPreparation = true
 	}

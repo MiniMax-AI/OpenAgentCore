@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
-	"maps"
 	"math"
 	"os"
 	"path"
@@ -115,12 +114,11 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 	case len(view.Shims) > 0 && !hasPATH(env):
 		return nil, invalidSession("the view's shims run names on the sandbox PATH, and the Environment sets no PATH")
 	}
-	raw, ok := req.AgentOptions["model_provider"]
-	if !ok {
+	if req.ModelProvider == nil {
 		return nil, unsupported("a Session without a frozen model provider")
 	}
-	provider, err := modelprovider.ParseProvider(raw)
-	if err != nil {
+	provider := *req.ModelProvider
+	if err := provider.Validate(); err != nil {
 		return nil, invalidSession("model provider: %v", err)
 	}
 	bindings, err := agent.ResolveMCPBindings(req)
@@ -166,8 +164,7 @@ func admit(cfg Config, roots *x509.CertPool, req proto.PromptRequestPayload, env
 // which the view shows from the sandbox.
 func handoff(req proto.PromptRequestPayload, provider modelprovider.Provider, endpoints gateway.Endpoints) proto.PromptRequestPayload {
 	provider.BaseURL, provider.APIKey = endpoints.Model, modelprovider.Placeholder
-	req.AgentOptions = maps.Clone(req.AgentOptions)
-	req.AgentOptions["model_provider"] = provider
+	req.ModelProvider = &provider
 	req.MCPHTTPServers = nil
 	local := *req.LocalEnvironment
 	local.MCP, local.WorkspaceRoot = nil, local.WorkspaceDirectory

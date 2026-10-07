@@ -19,7 +19,7 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		return errors.New("dispatch: invalid workspace read ID")
 	}
 	var request proto.WorkspaceReadPayload
-	if len(env.Payload) > proto.WorkspaceReadMaxRequestBytes || env.DecodePayload(&request) != nil || strings.TrimSpace(env.ID) == "" ||
+	if len(env.Payload) > proto.WorkspaceReadMaxRequestBytes || env.DecodeRequest(&request) != nil || strings.TrimSpace(env.ID) == "" ||
 		!proto.ValidWorkspaceReadRequest(request) {
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead("invalid_request"))
 	}

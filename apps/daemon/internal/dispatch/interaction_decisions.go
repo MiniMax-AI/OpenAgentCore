@@ -18,7 +18,7 @@ func (r *Router) handlePermissionDecision(ctx context.Context, env proto.Envelop
 		return errors.New("dispatch: permission_decision missing perm id (Envelope.ID empty)")
 	}
 	var payload proto.PermissionDecisionPayload
-	if err := env.DecodePayload(&payload); err != nil {
+	if err := env.DecodeRequest(&payload); err != nil {
 		return fmt.Errorf("dispatch: decode permission_decision: %w", err)
 	}
 	if payload.DeliveryID == "" {
@@ -107,7 +107,7 @@ func (r *Router) handlePromptForUserChoiceDecision(ctx context.Context, env prot
 		return errors.New("dispatch: prompt_for_user_choice_decision missing ask id (Envelope.ID empty)")
 	}
 	var payload proto.PromptForUserChoiceDecisionPayload
-	if err := env.DecodePayload(&payload); err != nil {
+	if err := env.DecodeRequest(&payload); err != nil {
 		return fmt.Errorf("dispatch: decode prompt_for_user_choice_decision: %w", err)
 	}
 	if payload.DeliveryID == "" {

@@ -34,7 +34,7 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		return errors.New("dispatch: invalid Runtime preparation identity")
 	}
 	var request proto.RuntimePreparePayload
-	if len(env.Payload) > proto.RuntimePrepareMaxFrameBytes || env.DecodePayload(&request) != nil || !proto.ValidRuntimePrepareRequest(request) {
+	if len(env.Payload) > proto.RuntimePrepareMaxFrameBytes || env.DecodeRequest(&request) != nil || !proto.ValidRuntimePrepareRequest(request) {
 		r.mu.Lock()
 		pending := r.runtimePreparation != nil && r.runtimePreparation.envelope.ID == env.ID
 		if pending && !r.runtimePreparation.finished {

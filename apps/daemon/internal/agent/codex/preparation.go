@@ -62,8 +62,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		return nil, err
 	}
 	req.AgentStateKey = effectiveAgentStateKey(req)
-
-	req.AgentOptions = executionOptions(req)
 	var plan SessionPlan
 	var skillRoots []string
 	if cfg.view != nil {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
@@ -51,7 +52,8 @@ func TestExecutorNativeReuse(t *testing.T) {
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "executor-native",
 		StrictResume: true, DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true,
-		AgentOptions:  map[string]any{"model": model, "model_provider": map[string]any{"base_url": endpoint, "protocol": "responses", "api_key": strings.TrimSpace(string(key))}},
+		Model:         model,
+		ModelProvider: &modelprovider.Provider{BaseURL: endpoint, Protocol: modelprovider.Responses, APIKey: strings.TrimSpace(string(key))},
 		FunctionTools: []proto.FunctionTool{{Name: "hold", Description: "Wait until the host supplies a result.", Parameters: json.RawMessage("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")}},
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)

@@ -16,10 +16,8 @@ import (
 // in the same CODEX_HOME could disagree on which provider to use.
 const oacProviderSlug = "oac"
 
-// providerConfig is the daemon-internal view of the model provider the
-// Runtime prepared for this Session. Flattened from the common
-// agent_options["model_provider"] bundle into a typed
-// struct before TOML emission. Field names mirror the codex-rs
+// providerConfig is the daemon-internal view of the Session's frozen model
+// provider before TOML emission. Field names mirror the codex-rs
 // ModelProviderInfo enum (model-provider-info/src/lib.rs) so the
 // rendered TOML deserialises 1:1 against upstream.
 type providerConfig struct {

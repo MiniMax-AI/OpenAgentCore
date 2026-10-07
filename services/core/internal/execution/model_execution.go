@@ -4,23 +4,22 @@ import (
 	"context"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func (d *Dispatcher) sessionModelOptions(ctx context.Context, session sessions.Session) (map[string]any, error) {
+func (d *Dispatcher) sessionModelProvider(ctx context.Context, session sessions.Session) (*modelprovider.Provider, error) {
 	provider, err := d.SessionsReader.SessionModelExecution(ctx, session.TenantID, session.ID)
 	if err != nil {
 		return nil, err
 	}
-	return resolvedSessionModelOptions(provider, session.Engine)
+	return resolvedSessionModelProvider(provider, session.Engine)
 }
 
-func resolvedSessionModelOptions(provider *v1.ModelProviderInput, engine string) (map[string]any, error) {
+func resolvedSessionModelProvider(provider *v1.ModelProviderInput, engine string) (*modelprovider.Provider, error) {
 	if err := provider.ValidateHarness(engine); err != nil {
 		return nil, err
 	}
-	return map[string]any{"model_provider": map[string]any{
-		"protocol": provider.Protocol, "base_url": provider.BaseURL, "api_key": provider.APIKey,
-		"context_window": provider.ContextWindow, "max_output_tokens": provider.MaxOutputTokens,
-	}}, nil
+	return &modelprovider.Provider{Protocol: modelprovider.Protocol(provider.Protocol), BaseURL: provider.BaseURL, APIKey: provider.APIKey,
+		ContextWindow: provider.ContextWindow, MaxOutputTokens: provider.MaxOutputTokens}, nil
 }

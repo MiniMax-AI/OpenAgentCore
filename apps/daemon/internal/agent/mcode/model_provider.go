@@ -1,17 +1,8 @@
 package mcode
 
-import (
-	"fmt"
+import "github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 
-	harnessconfiguration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
-)
-
-func modelProviderConfig(raw any, model string) (map[string]any, error) {
-	provider, err := harnessconfiguration.Configuration().ParseProvider(raw)
-	if err != nil {
-		return nil, fmt.Errorf("mcode: %w", err)
-	}
+func modelProviderConfig(provider modelprovider.Provider, model string) map[string]any {
 	var api string
 	switch provider.Protocol {
 	case modelprovider.Anthropic:
@@ -28,5 +19,5 @@ func modelProviderConfig(raw any, model string) (map[string]any, error) {
 			"name": model, "tool_call": true,
 			"limit": map[string]any{"context": provider.ContextWindow, "output": provider.MaxOutputTokens},
 		}},
-	}, nil
+	}
 }

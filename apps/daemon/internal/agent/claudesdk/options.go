@@ -106,8 +106,8 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	return start, env, nil
 }
 
-// prepareOptions validates the request's execution options and renders the
-// selected model provider. mcp reports whether the Executor serves MCP, which
+// prepareOptions validates the request's execution configuration and renders
+// the selected model provider. mcp reports whether the Executor serves MCP, which
 // an agent-host view takes from its Session rather than the request.
 func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []string, error) {
 	skills := req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) != 0
@@ -115,14 +115,11 @@ func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []s
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
-	modelConfiguration, err := harnessconfiguration.Configuration().Prepare(req.AgentOptions)
+	modelConfiguration, err := harnessconfiguration.Configuration().Prepare(req)
 	if err != nil {
 		return startRequest{}, nil, err
 	}
 	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig)
-	if req.WorkspaceAuthoring {
-		return fail("requested capability is not available in the private SDK adapter")
-	}
 	if err := req.ValidateToolSearch(true); err != nil {
 		return startRequest{}, nil, err
 	}
@@ -166,34 +163,12 @@ func prepareOptions(req proto.PromptRequestPayload, mcp bool) (startRequest, []s
 	if err := validateFunctions(req.FunctionTools); err != nil {
 		return startRequest{}, nil, err
 	}
+	start.Model, start.SystemPrompt = modelConfiguration.Model, req.SystemPrompt
 	var provider []string
-	for name, raw := range req.AgentOptions {
-		if name == "harness_config" {
-			continue
-		}
-		if name == "model_provider" {
-			var err error
-			provider, err = providerEnvironment(raw)
-			if err != nil {
-				return startRequest{}, nil, err
-			}
-			continue
-		}
-		if name == "system_prompt" && raw == nil {
-			continue
-		}
-		value, ok := raw.(string)
-		if !ok {
-			return fail("model and system_prompt options must be strings")
-		}
-		switch name {
-		case "model":
-			start.Model = value
-		case "system_prompt":
-			start.SystemPrompt = value
-		default:
-			return fail("unsupported option: " + name)
-		}
+	if selected := modelConfiguration.Provider; selected != nil {
+		// The key renders as ANTHROPIC_API_KEY, which Claude Code sends as the
+		// X-Api-Key header that the anthropic protocol declares.
+		provider = []string{"ANTHROPIC_BASE_URL=" + selected.BaseURL, "ANTHROPIC_API_KEY=" + selected.APIKey}
 	}
 	if strings.TrimSpace(start.Model) == "" {
 		return fail("model is required")

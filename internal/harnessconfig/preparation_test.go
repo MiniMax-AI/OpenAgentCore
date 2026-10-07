@@ -1,36 +1,39 @@
 package harnessconfig
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
 func TestPrepareModelConfiguration(t *testing.T) {
 	c := Configuration{Providers: []Provider{{Protocol: "responses"}}}
-	provider := func() map[string]any {
-		return map[string]any{"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "private-sentinel"}
+	provider := func() *modelprovider.Provider {
+		return &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://provider.example/v1", APIKey: "private-sentinel"}
 	}
 	for _, tc := range []struct {
-		name    string
-		options map[string]any
-		valid   bool
+		name  string
+		req   proto.PromptRequestPayload
+		valid bool
 	}{
-		{"native owned", nil, true},
-		{"native model", map[string]any{"model": "fixture"}, true},
-		{"explicit", map[string]any{"model": "fixture", "model_provider": provider()}, true},
-		{"missing model", map[string]any{"model_provider": provider()}, false},
-		{"empty model", map[string]any{"model": ""}, false},
-		{"blank model", map[string]any{"model": "  "}, false},
-		{"null model", map[string]any{"model": nil}, false},
-		{"non string model", map[string]any{"model": 42}, false},
-		{"null provider", map[string]any{"model": "fixture", "model_provider": nil}, false},
-		{"null native", map[string]any{"harness_config": nil}, false},
-		{"array native", map[string]any{"harness_config": []any{}}, false},
-		{"undeclared native", map[string]any{"harness_config": map[string]any{"effort": "high"}}, false},
+		{"native owned", proto.PromptRequestPayload{}, true},
+		{"native model", proto.PromptRequestPayload{Model: "fixture"}, true},
+		{"explicit", proto.PromptRequestPayload{Model: "fixture", ModelProvider: provider()}, true},
+		{"missing model", proto.PromptRequestPayload{ModelProvider: provider()}, false},
+		{"blank model", proto.PromptRequestPayload{Model: "  "}, false},
+		{"invalid provider", proto.PromptRequestPayload{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Responses}}, false},
+		{"undeclared protocol", proto.PromptRequestPayload{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "private-sentinel"}}, false},
+		{"empty native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`{}`)}, true},
+		{"null native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`null`)}, false},
+		{"array native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`[]`)}, false},
+		{"undeclared native", proto.PromptRequestPayload{HarnessConfig: json.RawMessage(`{"effort":"high"}`)}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := c.Prepare(tc.options)
+			got, err := c.Prepare(tc.req)
 			if (err == nil) != tc.valid {
 				t.Fatalf("valid=%v err=%v", tc.valid, err)
 			}
@@ -42,19 +45,19 @@ func TestPrepareModelConfiguration(t *testing.T) {
 			}
 		})
 	}
-	raw := provider()
-	got, err := c.Prepare(map[string]any{"model": "fixture", "model_provider": raw})
+	req := proto.PromptRequestPayload{Model: "fixture", ModelProvider: provider()}
+	got, err := c.Prepare(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw["api_key"] = "changed"
+	req.ModelProvider.APIKey = "changed"
 	if got.Model != "fixture" || got.Provider.APIKey != "private-sentinel" {
 		t.Fatal("prepared provider did not own snapshot")
 	}
-	if _, err := (Configuration{}).Prepare(map[string]any{"model": "fixture", "model_provider": provider()}); err == nil {
+	if _, err := (Configuration{}).Prepare(proto.PromptRequestPayload{Model: "fixture", ModelProvider: provider()}); err == nil {
 		t.Fatal("empty declaration inferred provider support")
 	}
-	if _, err := c.Prepare(map[string]any{"model_provider": provider()}); !errors.Is(err, ErrModel) {
+	if _, err := c.Prepare(proto.PromptRequestPayload{ModelProvider: provider()}); !errors.Is(err, ErrModel) {
 		t.Fatal("model error was not shared")
 	}
 }

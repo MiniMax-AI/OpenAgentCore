@@ -216,9 +216,6 @@ func (p *fakeCheckpointProvider) connect(ctx context.Context, b sandbox.Bootstra
 				}
 				continue
 			}
-			if env.Type == proto.TypeDeviceShutdown {
-				return
-			}
 			if env.Type != proto.TypeEnvironmentQuiesce && env.Type != proto.TypeEnvironmentResume {
 				p.mu.Lock()
 				p.promptFrames.Add(1)

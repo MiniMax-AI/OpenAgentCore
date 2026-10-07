@@ -24,7 +24,7 @@ type Credential struct {
 	RuntimeAllocationID string
 }
 
-// HashCredential preserves the paired runtime bearer format, including trimming
+// HashCredential preserves the runtime bearer format, including trimming
 // whitespace appended when operators paste tokens.
 func HashCredential(plaintext string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(plaintext)))

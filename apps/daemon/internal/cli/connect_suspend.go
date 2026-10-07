@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/authoring"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
@@ -17,7 +16,7 @@ import (
 
 const suspendReconnectTimeout = 30 * time.Second
 
-// The bridge and router share this sender across the one explicitly planned
+// The router keeps this sender across the one explicitly planned
 // reconnect. Quiesce has drained every prior send before replace is called.
 type reconnectSender struct {
 	mu   sync.RWMutex
@@ -34,7 +33,6 @@ func (s *reconnectSender) replace(conn *transport.Conn) { s.mu.Lock(); s.conn = 
 
 type suspendedRouter struct {
 	router   *dispatch.Router
-	bridge   *authoring.Bridge
 	sender   *reconnectSender
 	registry *agent.Registry
 	local    *localworkspace.Binding
@@ -46,13 +44,11 @@ func newSuspendedRouter(conn *transport.Conn, registry *agent.Registry) (*suspen
 		return nil, err
 	}
 	sender := &reconnectSender{conn: conn}
-	bridge := authoring.New(sender)
-	wrapped := authoringRegistry(registry, bridge)
-	router, err := dispatch.New(dispatch.Config{Registry: wrapped, Sender: sender, Log: obslog.Bg(), LocalWorkspace: local})
+	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Log: obslog.Bg(), LocalWorkspace: local})
 	if err != nil {
 		return nil, err
 	}
-	return &suspendedRouter{router: router, bridge: bridge, sender: sender, registry: wrapped, local: local}, nil
+	return &suspendedRouter{router: router, sender: sender, registry: registry, local: local}, nil
 }
 
 func (s *suspendedRouter) shutdown() {
@@ -177,10 +173,6 @@ func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *
 			if !ok {
 				return nil, conn.Err()
 			}
-			if env.Type == proto.TypeAuthoringResponse {
-				s.bridge.Deliver(env)
-				continue
-			}
 			if env.Type == proto.TypeEnvironmentResume {
 				request := rejectedResumeRequest(env)
 				code := "not_suspended"
@@ -196,7 +188,7 @@ func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *
 			}
 			if env.Type == proto.TypeEnvironmentQuiesce {
 				var request proto.EnvironmentSuspendPayload
-				if env.ID == "" || len(env.ID) > 128 || env.DecodePayload(&request) != nil || request.EnvironmentID != control.identity.EnvironmentID || request.SuspendID == "" || request.Rollback {
+				if env.ID == "" || len(env.ID) > 128 || env.DecodeRequest(&request) != nil || request.EnvironmentID != control.identity.EnvironmentID || request.SuspendID == "" || request.Rollback {
 					if err := sendSuspendResult(ctx, conn, env, proto.TypeEnvironmentQuiesced, request, "invalid_request"); err != nil {
 						return nil, err
 					}
@@ -246,7 +238,7 @@ func (s *suspendedRouter) resume(ctx context.Context, conn *transport.Conn, requ
 			return transport.ErrConnClosed
 		}
 		var echoed proto.EnvironmentSuspendPayload
-		if env.Type != proto.TypeEnvironmentResume || env.ID == "" || env.DecodePayload(&echoed) != nil || !echoed.SameSuspension(request) {
+		if env.Type != proto.TypeEnvironmentResume || env.ID == "" || env.DecodeRequest(&echoed) != nil || !echoed.SameSuspension(request) {
 			return errors.Join(transport.ErrPermanent, errors.New("connect: expected authenticated suspension resume"))
 		}
 		s.sender.replace(conn)
@@ -270,8 +262,8 @@ func sendSuspendResult(ctx context.Context, conn *transport.Conn, env proto.Enve
 
 func rejectedResumeRequest(env proto.Envelope) proto.EnvironmentSuspendPayload {
 	var request proto.EnvironmentSuspendPayload
-	if len(env.Payload) <= 1024 {
-		_ = env.DecodePayload(&request)
+	if len(env.Payload) > 1024 || env.DecodeRequest(&request) != nil {
+		return proto.EnvironmentSuspendPayload{}
 	}
 	return request
 }

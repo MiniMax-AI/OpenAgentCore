@@ -1,6 +1,10 @@
 package proto
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+)
 
 // Type constants for server → daemon frames.
 const (
@@ -24,12 +28,6 @@ const (
 	// to the daemon. Envelope.ID = the ask_<8hex> id the daemon minted
 	// in the matching prompt_for_user_choice frame.
 	TypePromptForUserChoiceDecision = "prompt_for_user_choice_decision"
-
-	// TypeDeviceShutdown asks the daemon to exit gracefully (SIGTERM
-	// child processes, flush state, close the socket). Ignored by
-	// long-lived local devices unless the operator explicitly
-	// requested it.
-	TypeDeviceShutdown = "device_shutdown"
 )
 
 // PromptRequestPayload is the daemon-side view of a connector.PromptInput,
@@ -53,11 +51,13 @@ type PromptRequestPayload struct {
 	// Input preserves ordered user messages and content.
 	Input MessageInput `json:"input,omitempty"`
 
-	// AgentOptions carries agent-specific overrides (model, mode,
-	// allowed_tools, system_prompt, mcp_servers, plugin_dirs, env,
-	// ...). The daemon's agent interprets these; the gateway never
-	// inspects them.
-	AgentOptions map[string]any `json:"agent_options,omitempty"`
+	// Model, SystemPrompt, ModelProvider and HarnessConfig are the Session's
+	// frozen model configuration. internal/harnessconfig validates them
+	// against the selected Harness before any native effect.
+	Model         string                  `json:"model,omitempty"`
+	SystemPrompt  string                  `json:"system_prompt,omitempty"`
+	ModelProvider *modelprovider.Provider `json:"model_provider,omitempty"`
+	HarnessConfig HarnessConfig           `json:"harness_config,omitempty"`
 
 	// ExecutionControls are authoritative engine-neutral settings, translated by the adapter.
 	ExecutionControls *ExecutionControls `json:"execution_controls,omitempty"`
@@ -72,9 +72,8 @@ type PromptRequestPayload struct {
 
 	// AgentStateKey is the stable daemon-side state directory key.
 	// WorkspaceReadOnly prepares temporary native state that cannot start a Run.
-	WorkspaceReadOnly  bool   `json:"workspace_read_only,omitempty"`
-	AgentStateKey      string `json:"agent_state_key,omitempty"`
-	WorkspaceAuthoring bool   `json:"workspace_authoring,omitempty"`
+	WorkspaceReadOnly bool   `json:"workspace_read_only,omitempty"`
+	AgentStateKey     string `json:"agent_state_key,omitempty"`
 	// ReleaseOnCompletion closes the native writer before acknowledging Done.
 	ReleaseOnCompletion          bool `json:"release_on_completion,omitempty"`
 	StrictResume                 bool `json:"strict_resume,omitempty"`
@@ -121,14 +120,8 @@ type PromptForUserChoiceDecisionPayload struct {
 	Reason          string                              `json:"reason,omitempty"`
 }
 
-// DeviceShutdownPayload tells the daemon why we're closing it (for log
-// lines / metrics on the daemon side). Optional.
-type DeviceShutdownPayload struct {
-	Reason string `json:"reason,omitempty"`
-}
-
-// ExecutionControls requires both values when supplied; omitting the block preserves agent options.
-// Send only to a peer advertising execution_controls, independently of older option capabilities.
+// ExecutionControls requires both values when supplied; omitting the block keeps native defaults.
+// Send only to a peer advertising execution_controls.
 type ExecutionControls struct {
 	DisableProgrammaticToolCalling bool          `json:"disable_programmatic_tool_calling,omitempty"`
 	WebSearch                      string        `json:"web_search"`

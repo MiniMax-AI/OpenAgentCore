@@ -104,7 +104,7 @@ The credential is checked before any deployment state, so a rejected credential,
 
 ### Device status
 
-`GET /api/v1/agent-daemon/device-status?device_id=` with the daemon credential returns `device_id`, `online` and `owner`: the current connection owner's `owner_pod_id`, `owner_url`, `generation`, `status` and `lease_expires_at`, or null.
+`GET /api/v1/agent-daemon/device-status?device_id=` with the daemon credential returns `device_id` and `online`, which says whether the device has a live connection to Core.
 
 The bootstrap, device-status and WebSocket routes share one error body, `{"error": code, "detail": text}`: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
 

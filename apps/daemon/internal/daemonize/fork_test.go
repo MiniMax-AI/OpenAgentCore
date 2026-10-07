@@ -16,14 +16,8 @@ func TestSpawnReExecsWithSentinelAndPIDFile(t *testing.T) {
 	// argv[0] is ignored (Spawn uses os.Executable()); argv[1:]
 	// becomes child args. Placeholder subcommand so flag parsing
 	// wouldn't choke — runSpawnTestChild short-circuits anyway.
-	pid, err := Spawn(
-		[]string{"oac-daemon", "child-mode"},
-		ReExecOptions{
-			LogPath:  logPath,
-			PIDPath:  pidPath,
-			ExtraEnv: []string{spawnTestChildEnv + "=1"},
-		},
-	)
+	t.Setenv(spawnTestChildEnv, "1")
+	pid, err := Spawn([]string{"oac-daemon", "child-mode"}, ReExecOptions{LogPath: logPath, PIDPath: pidPath})
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}

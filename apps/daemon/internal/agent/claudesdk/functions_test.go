@@ -22,7 +22,7 @@ func TestFunctionFactoryNativeReceipts(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", ObserveToolObservations: true, AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}, FunctionTools: []proto.FunctionTool{{Name: "lookup", Description: "Lookup.", Parameters: json.RawMessage(`{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}}}}`)}}}
+			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", ObserveToolObservations: true, Model: "fake-model", SystemPrompt: "instructions", FunctionTools: []proto.FunctionTool{{Name: "lookup", Description: "Lookup.", Parameters: json.RawMessage(`{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"}}}}`)}}}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)

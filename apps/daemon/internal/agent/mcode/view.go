@@ -168,7 +168,8 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 	}
 	private := req
 	private.LocalEnvironment, private.DisableExecutionEnvironment, private.MCPHTTPServers = nil, true, nil
-	if err := validateOptions(private); err != nil {
+	prepared, err := validateOptions(private)
+	if err != nil {
 		return launchOptions{}, err
 	}
 
@@ -192,9 +193,10 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 		start: session.Launch, script: i.cli, home: session.Home.Host}
 	dataDir, tempDir := path.Join(session.Home.View, viewDataName), path.Join(session.Home.View, viewTempName)
 	tools := workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": workspace, "scratch": tempDir, "network": "enabled"}}
-	if opts.Model, err = writeNativeConfig(private, data, dataDir, &tools); err != nil {
+	if err := writeNativeConfig(private, prepared, data, dataDir, &tools); err != nil {
 		return opts, err
 	}
+	opts.Model = prepared.Model
 	opts.MCP = append([]map[string]any{tools.server(dataDir)}, servers...)
 	opts.Env = []string{
 		"PATH=" + path.Join(agent.ViewPrivateRoot, agent.ViewShimName),

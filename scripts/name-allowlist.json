@@ -40,11 +40,6 @@
     "reason": "Guard regression fixtures intentionally contain retired identifiers, including rejected examples."
   },
   {
-    "path": "apps/daemon/internal/cli/skill_upload*.go",
-    "regex": "\\bPARSAR_(?:CAPABILITY_UPLOAD_TOKEN|SERVER_URL)\\b",
-    "reason": "These settings belong to the separate product capability upload integration; Core does not rename their protocol."
-  },
-  {
     "path": "services/core/migrations/000078_oac_runtime_names.sql",
     "regex": "parsar-core-runtime@",
     "reason": "The guarded up/down data migration must recognize and restore the historical stored Runtime reference prefix."
@@ -148,26 +143,6 @@
     "path": "services/core/migrations/000075_public_url_binding.sql",
     "regex": "AGENTS_API_PUBLIC_URL",
     "reason": "Historical migration commentary records the environment name used when this migration was written."
-  },
-  {
-    "path": "apps/daemon/internal/cli/skill_upload.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
-  },
-  {
-    "path": "apps/daemon/internal/cli/skill_upload_test.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
-  },
-  {
-    "path": "apps/daemon/internal/cli/companion_path_test.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
-  },
-  {
-    "path": "apps/daemon/internal/cli/capability_downloads_test.go",
-    "regex": "parsar(?:-server|\\.example\\.test)?|PARSAR_RUNNER_TOKEN",
-    "reason": "The dormant product capability upload/download integration locates the separate product CLI and checks its product credentials; it is explicitly retained."
   },
   {
     "path": "CONTRIBUTING.md",

@@ -42,7 +42,7 @@ type preparationState struct {
 
 func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope) error {
 	var input proto.ExecutionPreparePayload
-	if env.DecodePayload(&input) != nil || strings.TrimSpace(env.ID) == "" {
+	if env.DecodeRequest(&input) != nil || strings.TrimSpace(env.ID) == "" {
 		return r.rejectPreparation(env, "invalid_request")
 	}
 	req := input.Configuration
@@ -63,7 +63,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if req, err = r.localWorkspace.Configure(req); err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.WorkspaceAuthoring || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.StrictResume || !req.ReleaseOnCompletion {
+	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.StrictResume || !req.ReleaseOnCompletion {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported()) {
@@ -167,7 +167,7 @@ func (r *Router) prepareExecution(p *preparationState, req proto.PromptRequestPa
 
 func (r *Router) handleExecutionRelease(_ context.Context, env proto.Envelope) error {
 	var input proto.ExecutionReleasePayload
-	if env.DecodePayload(&input) != nil || input.Handle == "" {
+	if env.DecodeRequest(&input) != nil || input.Handle == "" {
 		return r.rejectPreparation(env, "invalid_release")
 	}
 	r.mu.Lock()

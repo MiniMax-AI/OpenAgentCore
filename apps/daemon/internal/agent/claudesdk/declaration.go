@@ -26,7 +26,6 @@ var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude
 	Usage:                          proto.CapabilitySupported,
 	Resume:                         proto.CapabilitySupported,
 	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	WorkspaceAuthoring:             proto.CapabilityUnsupported,
 	Steering:                       proto.CapabilitySupported,
 	MessageItems:                   proto.CapabilitySupported,
 	ToolObservations:               proto.CapabilitySupported,

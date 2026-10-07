@@ -60,6 +60,28 @@ func TestDecodePayloadEmptyIsNoop(t *testing.T) {
 	}
 }
 
+func TestDecodeRequestRejectsUndeclaredMembers(t *testing.T) {
+	for name, c := range map[string]struct {
+		typ     string
+		payload string
+		out     any
+	}{
+		"unknown key":                  {TypePromptRequest, `{"agent_kind":"codex","model":"m","unknown":true}`, &PromptRequestPayload{}},
+		"agent_options":                {TypePromptRequest, `{"agent_kind":"codex","agent_options":{"model":"m"}}`, &PromptRequestPayload{}},
+		"agent_options in preparation": {TypeExecutionPrepare, `{"session_id":"s","configuration":{"agent_kind":"codex","agent_options":{}}}`, &ExecutionPreparePayload{}},
+	} {
+		env := Envelope{Type: c.typ, Payload: json.RawMessage(c.payload)}
+		if err := env.DecodeRequest(c.out); err == nil {
+			t.Errorf("%s: DecodeRequest accepted %s", name, c.payload)
+		}
+	}
+	var prepare ExecutionPreparePayload
+	env := Envelope{Type: TypeExecutionPrepare, Payload: json.RawMessage(`{"session_id":"s","configuration":{"agent_kind":"codex","model":"m","system_prompt":"p","model_provider":{"protocol":"responses","base_url":"https://model.example","api_key":"k"},"harness_config":{"reasoning_effort":"low"}}}`)}
+	if err := env.DecodeRequest(&prepare); err != nil || prepare.Configuration.Model != "m" || prepare.Configuration.SystemPrompt != "p" || prepare.Configuration.ModelProvider == nil || string(prepare.Configuration.HarnessConfig) != `{"reasoning_effort":"low"}` {
+		t.Fatalf("DecodeRequest = %+v, %v", prepare, err)
+	}
+}
+
 func TestUsagePayloadEmbedsUsage(t *testing.T) {
 	// The gateway hands UsagePayload straight to the connector boundary,
 	// which translates Usage → store.UsageInput. If we accidentally

@@ -37,7 +37,7 @@ func TestStructuredOutputRequestKeepsFrozenSchemaAndInstructions(t *testing.T) {
 		t.Fatal(err)
 	}
 	format := request.ExecutionControls.OutputFormat
-	if format.Type != "json_schema" || string(format.Schema) != string(schema) || request.AgentOptions["system_prompt"] != &instructions {
+	if format.Type != "json_schema" || string(format.Schema) != string(schema) || request.SystemPrompt != instructions {
 		t.Fatal("configuration was rewritten")
 	}
 	encoded, err := json.Marshal(request)

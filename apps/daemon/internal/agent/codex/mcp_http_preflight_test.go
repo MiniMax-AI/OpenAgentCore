@@ -127,7 +127,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 	for _, mode := range []string{"new", "resume", "reject", "reject bearer reference"} {
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
-			req.AgentOptions = map[string]any{"model": "fixture-model"}
+			req.ExecutionControls = nil
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp"}}
 			if mode == "reject bearer reference" {
 				token := "synthetic-private-bearer"

@@ -100,14 +100,14 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			raw := os.Getenv("OAC_QUALIFY_" + strings.ToUpper(kind))
 			if raw == "" {
-				t.Skipf("set OAC_QUALIFY_%s to the Harness's model options", strings.ToUpper(kind))
+				t.Skipf("set OAC_QUALIFY_%s to the Harness's model and model_provider", strings.ToUpper(kind))
 			}
 			runtime := declaration.Discover(context.Background(), agent.DiscoveryOptions{Profile: "default", Stdout: io.Discard, Stderr: os.Stderr}, declaration.Info)
 			if runtime == nil || runtime.View == nil {
 				t.Fatalf("%s declares no agent-host view; discovery reported why above", kind)
 			}
 			reg.Register(declaration, *runtime)
-			qualify(t, h, cfg, sb, kind, sessionOptions(t, raw, key))
+			qualify(t, h, cfg, sb, kind, sessionModel(t, raw, key))
 		})
 	}
 }
@@ -115,7 +115,7 @@ func TestHarnessSessionsAgainstTheSandbox(t *testing.T) {
 // qualify runs one Turn that writes a file, runs a failing command and
 // reports what it printed and its exit status, then checks all three. Only
 // the sandbox's tool environment holds the value and the status.
-func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, options map[string]any) {
+func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox, kind string, model proto.PromptRequestPayload) {
 	name := "qualify-" + kind + ".txt"
 	value, content := strings.ToLower(rand.Text()), "qualified "+strings.ToLower(rand.Text()[:12])
 	code, _ := rand.Int(rand.Reader, big.NewInt(90))
@@ -142,7 +142,7 @@ func qualify(t *testing.T, h *agenthost.Host, cfg agenthost.Config, sb *sandbox,
 	session := uuid.NewString()
 	handle(t, router, proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{
 		AgentKind: kind, AgentStateKey: "agents-api-" + session, StrictResume: true, DisableSubagents: true,
-		AgentOptions: options, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
+		Model: model.Model, ModelProvider: model.ModelProvider, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
 		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"}}})
 	ready := out.status(t, "prepare")
 	if ready.State != "ready" {
@@ -233,19 +233,15 @@ func (s sender) collect(t *testing.T, run string) string {
 	}
 }
 
-// sessionOptions decodes the Harness's model options and adds the key.
-func sessionOptions(t *testing.T, raw string, key []byte) map[string]any {
+// sessionModel decodes the Harness's model and model_provider and adds the key.
+func sessionModel(t *testing.T, raw string, key []byte) proto.PromptRequestPayload {
 	t.Helper()
-	var options map[string]any
-	if err := json.Unmarshal([]byte(raw), &options); err != nil {
-		t.Fatalf("model options: %v", err)
+	var model proto.PromptRequestPayload
+	if err := json.Unmarshal([]byte(raw), &model); err != nil || model.ModelProvider == nil {
+		t.Fatalf("the model settings hold no model_provider: %v", err)
 	}
-	provider, ok := options["model_provider"].(map[string]any)
-	if !ok {
-		t.Fatal("model options hold no model_provider")
-	}
-	provider["api_key"] = strings.TrimSpace(string(key))
-	return options
+	model.ModelProvider.APIKey = strings.TrimSpace(string(key))
+	return model
 }
 
 // sandbox is the Link test relay that oac-sandbox-io in the sandbox

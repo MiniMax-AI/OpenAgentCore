@@ -1,7 +1,7 @@
 ---
 title: "将原生 Harness 添加到 OpenAgentCore"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 82787672338b502a32b22201c8c82c87c354a73a94e0ae0e5281e9c0a57eed79
+source_hash: 3d74f674c1cc68fbf40c2fe15b81c30f7fe69b6731da779fb75003b5f438e5f4
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -151,9 +151,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration`、agent-host 视图拒绝的 `ConnectionOptions`（[端点与代理](#endpoints-and-proxy)）和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、session 工厂、准备工厂和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不可用描述符和 session 工厂。将版本门控和工厂选择条件保留在适配器内部。
-
-`Runtime.SessionCapabilityContext` 和 `Runtime.ExecutorCapabilityContext` 会为相应的执行工厂显式请求能力下载 URL 解析和限定范围的产品上传上下文。准备过程绝不会收到这些影响。支持产品工作区创作功能的适配器自行声明 `WorkspaceAuthoring`；通用注册不会授予该能力。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile 和诊断写入器，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符、session 工厂、准备工厂和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不可用描述符和 session 工厂。将版本门控和工厂选择条件保留在适配器内部。
 
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) 遍历已发现的 Runtime，并调用 `agent/harness.go` 中的 `Registry.Register`。它验证发现过程是否保留了声明的 kind，并按以下顺序安装工厂：
 
@@ -162,7 +160,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration, agent.Factory)` | Kind、可用性、版本、`AgentKindCapabilities`、模型配置声明和直接调用工厂。它会重置其他注册项，因此必须首先调用。 |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期；据此派生 `Preparation` 能力 |
 | 3 | `RegisterPreparation(kind, workspaceRead, agent.PreparationFactory)` | 可选：针对已认定合格的工作区操作的独立只读工作区准备 |
-| 4 | `RegisterView(kind, connectionOptions, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明，以及声明的 `ConnectionOptions`。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂像 `RegisterExecutor` 一样验证模型配置，并执行[网关规则](#endpoints-and-proxy)。 |
+| 4 | `RegisterView(kind, agent.View)` | 可选：来自 `Runtime.View` 的 agent-host 视图声明。`View.Validate` 失败时以 `ErrInvalidView` panic。其 Executor 工厂像 `RegisterExecutor` 一样验证模型配置，并执行[网关规则](#endpoints-and-proxy)。 |
 
 直接调用的 `agent.Factory` 委托给同一个 Executor 实现。
 
@@ -309,7 +307,7 @@ agent host 根据声明推导进程 broker 的映射表：`/.oac/bin/<name>` 在
 
 调用工厂之前，agent host 将请求的 `model_provider` 指向 Session 的[凭据网关](./model-execution.md#credential-gateway)：`base_url` 是不带路径的 `http://127.0.0.1:<port>`，`api_key` 是 `modelprovider.Placeholder`。它把公开声明和已安装的 Environment MCP 一次性解析为 Session 的 MCP，放入 `ViewSession.MCP`，并从请求中移除这两者。每个 HTTP 绑定指向其网关 URL，不携带 bearer，也不携带 header；网关添加声明的凭据和 header。stdio 绑定保持解析结果，并通过声明的 shim 在沙箱中运行。视图 Executor 只从 `ViewSession.MCP` 获取 MCP，从不解析请求。适配器像对待本地 Harness 一样渲染提供商和绑定，从不接触真实凭据。
 
-若适配器的 Harness 从其他 `AgentOptions` key 读取 MCP server、端点、凭据或环境值，适配器在 `Declaration.ConnectionOptions` 中列出这些 key。Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：模型提供商缺失或不是带占位凭据的网关、请求设置了连接选项、请求在 `ViewSession.MCP` 之外携带 MCP，或 HTTP 绑定不是不含凭据的 loopback 端点。
+Registry 在调用工厂之前对每个视图请求检查一次，并在以下情况下以 `ErrViewHandoff` 拒绝：模型提供商缺失或不是带占位凭据的网关、请求在 `ViewSession.MCP` 之外携带 MCP，或 HTTP 绑定不是不含凭据的 loopback 端点。
 
 使用 `ViewProxyEnv` 时，`ViewSession.Proxy` 是网关的代理 URL。适配器将 `HTTPS_PROXY` 和 `HTTP_PROXY` 设为该值，将 `NO_PROXY` 设为 `127.0.0.1,localhost`，每个变量都设置大写和小写两种形式。只有在确认 Harness 在本地发出的每个请求都遵循这些变量之后，才声明 `ViewProxyEnv`。忽略这些变量的请求会连接失败，因为视图没有出站路由。
 

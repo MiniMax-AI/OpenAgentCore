@@ -29,7 +29,7 @@ func (r *Router) handleWorkspaceWrite(ctx context.Context, env proto.Envelope) e
 		return errors.New("dispatch: invalid workspace write identity")
 	}
 	var request proto.WorkspaceWritePayload
-	if len(env.Payload) > proto.WorkspaceWriteMaxFrameBytes || env.DecodePayload(&request) != nil || !proto.ValidWorkspaceWriteRequest(request) {
+	if len(env.Payload) > proto.WorkspaceWriteMaxFrameBytes || env.DecodeRequest(&request) != nil || !proto.ValidWorkspaceWriteRequest(request) {
 		// A malformed frame on an already admitted operation cannot claim that
 		// its earlier commit did not execute.
 		r.mu.Lock()

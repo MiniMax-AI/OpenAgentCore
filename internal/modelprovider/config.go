@@ -4,8 +4,6 @@
 package modelprovider
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/url"
@@ -32,23 +30,6 @@ type Provider struct {
 }
 
 var ErrConfiguration = errors.New("invalid model provider configuration")
-
-func ParseProvider(raw any) (Provider, error) {
-	var provider Provider
-	body, err := json.Marshal(raw)
-	if err != nil {
-		return provider, ErrConfiguration
-	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&provider) != nil {
-		return Provider{}, ErrConfiguration
-	}
-	if err := provider.Validate(); err != nil {
-		return Provider{}, err
-	}
-	return provider, nil
-}
 
 // Valid is the single vocabulary of supported upstream protocol formats.
 func (p Protocol) Valid() bool {
