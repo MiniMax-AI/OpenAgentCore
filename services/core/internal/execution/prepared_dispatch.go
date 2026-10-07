@@ -111,17 +111,16 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	if run.Reservation.Receipts[0].Replayed {
 		return run, nil
 	}
-	req.RunID = run.Reservation.Receipts[0].TurnID
-	req.Input = messages
+	turnID := run.Reservation.Receipts[0].TurnID
 	through := run.Reservation.Receipts[len(run.Reservation.Receipts)-1].Sequence
-	releaseDelivery, err := peer.TrackExecutionDelivery(req.RunID)
+	releaseDelivery, err := peer.TrackExecutionDelivery(turnID)
 	if err != nil {
-		run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
+		run.Turn, err = d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 		return run, err
 	}
 	defer releaseDelivery()
-	result, status := d.deliver(owner, tenantID, sessionID, peer, req, through, prepared)
-	result, status = d.captureCompletedArtifacts(owner, peer, session, environment, bound.Device, req.RunID, result, status)
-	run.Turn, err = d.finishRun(tenantID, sessionID, req.RunID, snapshot.Agent.Model, result, status)
+	result, status := d.deliver(owner, tenantID, sessionID, peer, req, turnID, messages, through, prepared)
+	result, status = d.captureCompletedArtifacts(owner, peer, session, environment, bound.Device, turnID, result, status)
+	run.Turn, err = d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
 	return run, err
 }

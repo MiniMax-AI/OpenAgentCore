@@ -31,7 +31,6 @@ type preparationState struct {
 	ctx               context.Context
 	cancel            context.CancelFunc
 	prepared          agent.Prepared
-	stateKey          string
 	environmentID     string
 	busy              bool
 	owns              bool
@@ -63,7 +62,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 	if req, err = r.localWorkspace.Configure(req); err != nil {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
-	if req.RunID != "" || len(req.Input) != 0 || req.ConversationID != "" || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" || !req.ReleaseOnCompletion {
+	if req.RunID != "" || len(req.Input) != 0 || req.EnvironmentID() == "" || strings.TrimSpace(req.AgentStateKey) == "" {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	if validateExecutionEnvironment(req, caps) != nil || (len(req.FunctionTools) > 0 && !caps.FunctionTools.IsSupported()) {
@@ -108,7 +107,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		return r.rejectPreparation(env, "preparation_capacity")
 	}
 	owner, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, stateKey: req.AgentStateKey, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
+	p := &preparationState{capabilities: caps, requestID: env.ID, trace: env.Trace, fingerprint: fingerprint, ctx: owner, cancel: cancel, environmentID: req.EnvironmentID(), workspaceReadOnly: req.WorkspaceReadOnly, busy: true, owns: true, deadline: time.Now().Add(r.preparationTimeout)}
 	p.status = proto.PreparationStatusPayload{Handle: uuid.NewString(), Revision: 1, State: "preparing", ExpiresAt: p.deadline.UnixMilli()}
 	r.preparations[p.status.Handle], r.preparationRequests[p.requestID] = p, p
 	p.timer = time.AfterFunc(r.preparationTimeout, func() { r.releasePreparation(p, "expired", "", true, true) })

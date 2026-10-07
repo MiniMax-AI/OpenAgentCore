@@ -53,7 +53,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 
 `permissions` gates permission decisions inside the Runtime. Core has no admission rule for `usage` and `resume`.
 
-The prompt request (`prompt_request`, or the configuration of `execution_prepare`) carries the opt-ins Core sets for each Run:
+The `execution_prepare` configuration carries the opt-ins Core sets for each Run:
 
 | Field | Set by Core |
 | --- | --- |
@@ -98,7 +98,7 @@ The linked source files define the required fields, validators, limits and finit
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [Initialization and capability transfer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_request`, `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel`, `device_shutdown` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `permission_decision`, `prompt_for_user_choice_decision` | `permission_request`, `permission_cancel`, `prompt_for_user_choice`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [interactions](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
@@ -127,8 +127,6 @@ Preparation and start run outside the receive loop and router lock. An admission
 
 Idle expiry of an Executor is a Runtime resource policy, separate from Core's active-Turn concurrency. On shutdown the Runtime closes active and idle Executors, keeps any target whose close failed and allows a later serialized retry. An ordinary disconnection closes the failed transport and keeps the exact router until shutdown succeeds; a wait timeout or failed cleanup never authorizes reconnection, and process shutdown keeps waiting rather than discarding owned native resources. Workspace operations keep their binding and settlement rules across Turn boundaries and Executor closure.
 
-`prompt_request` starts a Run directly, without an admission handle. It is not a fallback after a failed prepared start.
-
 ## Active input receipts
 
 Core delivers active input as `prompt_steer` with `durable_receipt: true`, one input at a time per Run, and waits for its receipt before sending the next:
@@ -139,7 +137,7 @@ Core delivers active input as `prompt_steer` with `durable_receipt: true`, one i
 | `written` acknowledgement | Core waits at most 30 seconds from delivery for `written`; otherwise the input outcome is unknown |
 | Receipt send | Each receipt send has its own 5-second, shutdown-aware budget |
 | Native acceptance | `accepted` arrives under the Turn lifetime, with no automatic redelivery |
-| Done | Before `done`, the Runtime waits at most 15 seconds (the write and send budgets) for an in-flight input |
+| Done | The Runtime sends `done` after native Turn settlement and after the receipt send of any in-flight input; the native write and receipt send budgets bound that input |
 
 Neither `written` nor a send failure advances Core's input cursor. Once cancellation is sent, its receipt owns the terminal outcome even if an input becomes unknown first; Core records `cancel_unconfirmed` when no cancellation confirmation arrives within 15 seconds. A cancellation receipt carries the stopped Turn's confirmed continuity snapshot when no `done` is emitted.
 
@@ -199,7 +197,7 @@ Core runs an idle directory read on the Worker's Session scheduling reservation 
 
 ## MCP connection authority
 
-Every public `MCPHTTPServer` in a prompt request carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
+Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
 
 ## Contract verification
 

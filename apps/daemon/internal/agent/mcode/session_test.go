@@ -18,9 +18,9 @@ import (
 func testRequest(t *testing.T) proto.PromptRequestPayload {
 	t.Helper()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	return proto.PromptRequestPayload{RunID: "run-1", ConversationID: "conversation-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"), AgentOptions: map[string]any{
+	return proto.PromptRequestPayload{RunID: "run-1", AgentStateKey: "conversation-1/agent-1/mcode", Input: proto.TextInput("Hello"), AgentOptions: map[string]any{
 		"model": "fixture", "model_provider": map[string]any{"protocol": "anthropic", "base_url": "https://provider.example/v1", "api_key": "fixture-key", "context_window": 64000, "max_output_tokens": 4096}, "system_prompt": "Current instructions",
-	}, ReleaseOnCompletion: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+	}, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
 }
 
 func helperSession(t *testing.T, scenario string, resume bool) (*Session, <-chan proto.Envelope) {

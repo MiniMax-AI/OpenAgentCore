@@ -86,18 +86,41 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		t.Helper()
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
-		runID := uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", ConversationID: "mcp-bearer-acceptance", RunID: runID, Input: proto.TextInput(prompt), AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		runID, prepareID := uuid.NewString(), uuid.NewString()
+		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-mcp-bearer-acceptance", AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		send := func(kind, id string, payload any) {
+			t.Helper()
+			envelope, err := proto.NewEnvelope(kind, id, payload)
+			if err != nil || peer.Send(ctx, envelope) != nil {
+				t.Fatal("cannot dispatch the private MCP request")
+			}
+		}
+		statuses, err := peer.SubscribePreparation(prepareID)
+		if err != nil {
+			t.Fatal("cannot subscribe to preparation before real daemon dispatch")
+		}
+		defer peer.UnsubscribePreparation(prepareID)
+		send(proto.TypeExecutionPrepare, prepareID, proto.ExecutionPreparePayload{SessionID: "mcp-bearer-acceptance", Configuration: request})
+		var ready proto.PreparationStatusPayload
+		for ready.State != "ready" {
+			select {
+			case event, ok := <-statuses.Events:
+				if !ok || event.DecodePayload(&ready) != nil || ready.State != "preparing" && ready.State != "ready" {
+					t.Fatal("real daemon did not prepare the private MCP Executor")
+				}
+			case <-ctx.Done():
+				t.Fatal("real daemon preparation timed out")
+			}
+		}
 		sub, err := peer.SubscribeDurable(runID)
 		if err != nil {
 			t.Fatal("cannot subscribe before real daemon dispatch")
 		}
 		defer peer.Unsubscribe(runID)
-		envelope, err := proto.NewEnvelope(proto.TypePromptRequest, runID, request)
-		if err != nil || peer.Send(ctx, envelope) != nil {
-			t.Fatal("cannot dispatch the private MCP request")
-		}
+		send(proto.TypeExecutionStart, prepareID, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: runID, Input: proto.TextInput(prompt)})
 		mcpBearerCollectTurn(t, ctx, sub, runID, turn, expected, token, provider)
+		// The Executor stays warm after Done; closing it makes the next Turn a cold continuation.
+		send(proto.TypeDeviceShutdown, "", proto.DeviceShutdownPayload{Reason: "cold continuation"})
 		turn.NativeLaunches = mcpBearerReleased(t, root)
 		turn.BearerEnvironmentReference = mcpBearerConfigReference(t, root, token)
 		return turn

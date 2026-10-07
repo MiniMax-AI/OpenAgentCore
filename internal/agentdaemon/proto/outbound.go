@@ -7,12 +7,6 @@ import (
 
 // Type constants for server → daemon frames.
 const (
-	// TypePromptRequest triggers one prompt cycle. Envelope.ID = RunID;
-	// the daemon stamps every resulting upstream frame with the same
-	// ID so the gateway can fan them back to the matching StreamPrompt
-	// subscriber.
-	TypePromptRequest = "prompt_request"
-
 	// TypePromptCancel aborts an in-flight prompt. Envelope.ID =
 	// RunID. Idempotent — cancelling an unknown / already-finished
 	// run is a no-op on the daemon side.
@@ -35,22 +29,16 @@ const (
 	TypeDeviceShutdown = "device_shutdown"
 )
 
-// PromptRequestPayload is the daemon-side view of a connector.PromptInput,
-// trimmed to fields a daemon agent actually needs. Kept separate from
-// PromptInput so future agent implementations can evolve the wire shape
-// without touching the connector surface.
+// PromptRequestPayload is the execution configuration that execution_prepare
+// carries. execution_start supplies the Run identity and input.
 type PromptRequestPayload struct {
 	MaxConcurrentSubagents *int `json:"max_concurrent_subagents,omitempty"`
 	// AgentKind selects which agent implementation the daemon
 	// dispatches to.
 	AgentKind string `json:"agent_kind"`
 
-	// ConversationID is the Core Session ID of a prompt_request Run. Preparation
-	// and Executor configurations leave it empty, and no adapter reads it.
-	ConversationID string `json:"conversation_id"`
-
-	// RunID is the ID of the Core Turn this prompt executes; mirrored
-	// back on every upstream frame via Envelope.ID.
+	// RunID and Input are empty in an execution_prepare configuration.
+	// Adapters set them from execution_start when they start a Turn.
 	RunID string `json:"run_id"`
 
 	// Input preserves ordered user messages and content.
@@ -73,10 +61,8 @@ type PromptRequestPayload struct {
 
 	// AgentStateKey is the stable daemon-side state directory key.
 	// WorkspaceReadOnly prepares temporary native state that cannot start a Run.
-	WorkspaceReadOnly bool   `json:"workspace_read_only,omitempty"`
-	AgentStateKey     string `json:"agent_state_key,omitempty"`
-	// ReleaseOnCompletion closes the native writer before acknowledging Done.
-	ReleaseOnCompletion          bool           `json:"release_on_completion,omitempty"`
+	WorkspaceReadOnly            bool           `json:"workspace_read_only,omitempty"`
+	AgentStateKey                string         `json:"agent_state_key,omitempty"`
 	RequireExistingNativeSession bool           `json:"require_existing_native_session,omitempty"`
 	ObserveMessages              bool           `json:"observe_messages,omitempty"`
 	ObserveSubagentIdentities    bool           `json:"observe_subagent_identities,omitempty"`

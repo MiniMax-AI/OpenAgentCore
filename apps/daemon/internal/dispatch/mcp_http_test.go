@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,33 +17,38 @@ import (
 )
 
 func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
-	for _, mode := range []string{"supported", "claude", "claude old peer", "claude local", "no bearer capability", "no MCP capability", "unavailable", "no none capability", "local", "other engine", "HTTP", "credential-free", "product", "required", "required old peer", "optional old peer"} {
+	for _, mode := range []string{"supported", "claude", "claude old peer", "claude local", "no bearer capability", "no MCP capability", "unavailable", "no none capability", "local", "other engine", "HTTP", "credential-free", "no declaration", "required", "required old peer", "optional old peer"} {
 		t.Run(mode, func(t *testing.T) {
-			h := newHarness(t)
+			// Service-origin servers need a service execution host, never a local Environment.
+			var h *harness
+			prepare := noEnvironmentPreparation("mcp-bearer", proto.PromptRequestPayload{AgentKind: "codex"})
+			if strings.HasSuffix(mode, "local") {
+				h = localPreparationHarness(t)
+				prepare = preparationRequest()
+				prepare.Configuration.AgentKind = "codex"
+			} else {
+				h = newHarness(t)
+			}
 			defer h.router.Shutdown(context.Background())
 			token := "synthetic-private-token"
 			servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
-			req := proto.PromptRequestPayload{AgentKind: "codex", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
-			caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})
+			req := &prepare.Configuration
+			req.MCPHTTPServers = &servers
+			caps := prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported})
 			switch mode {
 			case "claude", "claude old peer", "claude local":
 				req.AgentKind = "claude_sdk"
 				caps.MCPHTTPBearerAuth = proto.CapabilityFromBool(mode != "claude old peer")
-				if mode == "claude local" {
-					req.DisableExecutionEnvironment = false
-				}
 			case "required", "required old peer", "optional old peer":
 				servers[0].Required = mode != "optional old peer"
 				servers[0].BearerToken = nil
 				caps.MCPHTTPRequired = proto.CapabilityFromBool(mode == "required")
-			case "no bearer capability", "credential-free", "product":
+			case "no bearer capability", "credential-free", "no declaration":
 				caps.MCPHTTPBearerAuth = proto.CapabilityUnsupported
 			case "no MCP capability":
 				caps.MCPHTTPTools = proto.CapabilityUnsupported
 			case "no none capability":
 				caps.EnvironmentNone = proto.CapabilityUnsupported
-			case "local":
-				req.DisableExecutionEnvironment = false
 			case "other engine":
 				req.AgentKind = "other"
 			case "HTTP":
@@ -51,13 +57,13 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 			if mode == "credential-free" {
 				servers[0].BearerToken = nil
 			}
-			if mode == "product" {
-				req.MCPHTTPServers, req.DisableExecutionEnvironment = nil, false
+			if mode == "no declaration" {
+				req.MCPHTTPServers = nil
 			}
-			called := false
-			h.reg.RegisterKind(proto.SupportedAgentKind{Kind: req.AgentKind, Available: mode != "unavailable", Capabilities: caps},
-				harnessconfig.Configuration{}, func(_ context.Context, got proto.PromptRequestPayload, _ chan<- proto.Envelope) (agent.Session, error) {
-					called = true
+			var called atomic.Bool
+			registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: req.AgentKind, Available: mode != "unavailable", Capabilities: caps},
+				func(_ context.Context, got proto.PromptRequestPayload) (agent.Executor, error) {
+					called.Store(true)
 					if mode == "required" && !(*got.MCPHTTPServers)[0].Required {
 						t.Error("required initialization lost before adapter")
 					}
@@ -66,14 +72,15 @@ func TestMCPHTTPBearerRejectsUnsupportedRequestsBeforeFactory(t *testing.T) {
 					}
 					return nil, errors.New("controlled factory stop")
 				})
-			err := h.router.Handle(t.Context(), mustEnv(t, proto.TypePromptRequest, "mcp-bearer", req))
-			if called != (mode == "supported" || mode == "claude" || mode == "other engine" || mode == "credential-free" || mode == "product" || mode == "required" || mode == "optional old peer") {
-				t.Fatal("wrong factory admission")
+			err := h.router.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "mcp-bearer", prepare))
+			admitted := mode == "supported" || mode == "claude" || mode == "other engine" || mode == "credential-free" || mode == "no declaration" || mode == "required" || mode == "optional old peer"
+			assertPreparationOutcome(t, h.sender, "mcp-bearer", admitted)
+			if called.Load() != admitted || (err == nil) != admitted {
+				t.Fatal("wrong factory admission", err)
 			}
-			frames := h.sender.snapshot()
-			raw, _ := json.Marshal(frames)
-			if err == nil || strings.Contains(err.Error(), token) || strings.Contains(string(raw), token) || len(frames) != 2 || frames[0].Type != proto.TypeError || frames[1].Type != proto.TypeDone {
-				t.Fatal("terminal rejection missing or exposed credential")
+			raw, _ := json.Marshal(h.sender.snapshot())
+			if err != nil && strings.Contains(err.Error(), token) || strings.Contains(string(raw), token) {
+				t.Fatal("terminal status exposed credential")
 			}
 		})
 	}

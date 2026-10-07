@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -52,7 +50,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 			registry := agent.NewRegistry()
 			var session *fakeSession
 			var calls atomic.Int32
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
 				return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload) error {
 					calls.Add(1)
@@ -61,7 +59,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 					}
 					return nil
 				}}, nil
-			})
+			}))
 			router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender})
 			if err != nil {
 				t.Fatal(err)
@@ -75,18 +73,20 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			handle(proto.TypePromptRequest, proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "stable", ReleaseOnCompletion: true})
+			startRun(t, router, &sender.recSender, "ordered", proto.PromptRequestPayload{AgentKind: "codex"})
+			base := len(sender.snapshot())
 			input := proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("original")}
 			handle(proto.TypePromptSteer, input)
 			<-sender.entered
 			session.out <- mustEnv(t, proto.TypeDone, "ordered", proto.DonePayload{Content: "finished"})
 			waitFor(t, func() bool { return router.SteeringClosedForTest("ordered") }, "closed steering admission")
-			if session.cancels() != 0 || len(sender.snapshot()) != 0 {
-				t.Fatal("native release or Done overtook receipt")
+			// Native settlement precedes the receipt join; TestPreparedHandoffReleaseWaitsForMutationReceipt asserts that order.
+			if len(sender.snapshot()) != base {
+				t.Fatal("Done overtook receipt")
 			}
 			if mode != "send_failure" {
 				handle(proto.TypePromptSteer, input)
-				frames := sender.snapshot()
+				frames := sender.snapshot()[base:]
 				var ack proto.PromptSteerAckPayload
 				if len(frames) != 1 || frames[0].DecodePayload(&ack) != nil || ack.Accepted != (mode == "consumed") {
 					t.Fatalf("cached receipt lost: %+v", ack)
@@ -98,7 +98,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 				handle(proto.TypePromptSteer, input)
 				input.InputID = "new"
 				handle(proto.TypePromptSteer, input)
-				frames = sender.snapshot()
+				frames = sender.snapshot()[base:]
 				for i, want := range []string{"input_conflict", "run_inactive"} {
 					if frames[i+1].DecodePayload(&ack) != nil || ack.ErrorCode != want {
 						t.Fatalf("receipt %d: %+v", i, ack)
@@ -106,8 +106,8 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 				}
 			}
 			release.Do(func() { close(sender.release) })
-			waitFor(t, func() bool { return router.ActiveRuns() == 0 }, "durable completion")
-			frames := sender.snapshot()
+			waitFor(t, func() bool { return hasFrame(&sender.recSender, proto.TypeDone, "ordered") }, "durable completion")
+			frames := sender.snapshot()[base:]
 			if len(frames) == 0 || frames[len(frames)-1].Type != proto.TypeDone || calls.Load() != 1 || session.cancels() != 1 {
 				t.Fatalf("invalid terminal order/calls: %+v, calls=%d cancels=%d", frames, calls.Load(), session.cancels())
 			}
@@ -118,14 +118,14 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 	}
 }
 
-func TestShutdownReleasesSteeringWorkerAndCompletionBarrier(t *testing.T) {
+func TestShutdownReleasesSteeringWorkerAndReceiptJoin(t *testing.T) {
 	for _, phase := range []string{"native", "receipt_send"} {
 		t.Run(phase, func(t *testing.T) {
 			sender := &blockedReceiptSender{entered: make(chan struct{}), release: make(chan struct{}), exited: make(chan struct{})}
 			registry := agent.NewRegistry()
 			entered, exited := make(chan struct{}), make(chan struct{})
 			var session *fakeSession
-			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, harnessconfig.Configuration{}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
 				return &steeringSession{fakeSession: session, steer: func(ctx context.Context, _ proto.PromptSteerPayload) error {
 					close(entered)
@@ -136,15 +136,13 @@ func TestShutdownReleasesSteeringWorkerAndCompletionBarrier(t *testing.T) {
 					}
 					return nil
 				}}, nil
-			})
+			}))
 			router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender})
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer router.Shutdown(context.Background())
-			if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptRequest, "shutdown", proto.PromptRequestPayload{AgentKind: "codex", ReleaseOnCompletion: true})); err != nil {
-				t.Fatal(err)
-			}
+			startRun(t, router, &sender.recSender, "shutdown", proto.PromptRequestPayload{AgentKind: "codex"})
 			if err = router.Handle(context.Background(), mustEnv(t, proto.TypePromptSteer, "shutdown", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text")})); err != nil {
 				t.Fatal(err)
 			}
@@ -152,7 +150,7 @@ func TestShutdownReleasesSteeringWorkerAndCompletionBarrier(t *testing.T) {
 			if phase == "receipt_send" {
 				<-sender.entered
 				session.out <- mustEnv(t, proto.TypeDone, "shutdown", proto.DonePayload{})
-				waitFor(t, func() bool { return router.SteeringClosedForTest("shutdown") }, "completion barrier")
+				waitFor(t, func() bool { return router.SteeringClosedForTest("shutdown") }, "receipt join")
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()

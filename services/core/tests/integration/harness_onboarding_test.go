@@ -262,7 +262,7 @@ func startOnboardingPeer(t *testing.T, h *dispatchHarness) (<-chan proto.PromptR
 					return
 				}
 				request := p.Configuration
-				request.RunID, request.ConversationID, request.Input = start.RunID, p.SessionID, start.Input
+				request.RunID, request.Input = start.RunID, start.Input
 				started <- request
 			}
 			if e.Type == proto.TypeExecutionRelease {

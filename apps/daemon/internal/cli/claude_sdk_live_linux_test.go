@@ -86,14 +86,14 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 		}()
 		ctx, cancel := context.WithTimeout(t.Context(), 120*time.Second)
 		defer cancel()
-		id := uuid.NewString()
-		request := proto.PromptRequestPayload{RunID: id, AgentKind: "claude_sdk", Input: proto.TextInput(prompt), AgentStateKey: "registered-acceptance", AgentSessionID: resume, ReleaseOnCompletion: true, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": nil}}
+		id, prepare := uuid.NewString(), uuid.NewString()
+		request := proto.PromptRequestPayload{AgentKind: "claude_sdk", AgentStateKey: "agents-api-registered-acceptance", AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}, AgentOptions: map[string]any{"model": "MiniMax-M3", "system_prompt": nil}}
 		if callFunction {
 			request.FunctionTools = []proto.FunctionTool{{Name: "lookup", Description: "Return a verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"],"additionalProperties":false}`)}}
 		}
-		handle := func(kind string, payload any) {
+		send := func(kind, envelopeID string, payload any) {
 			t.Helper()
-			env, err := proto.NewEnvelope(kind, id, payload)
+			env, err := proto.NewEnvelope(kind, envelopeID, payload)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +101,21 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 				t.Fatal("registered router request failed", err)
 			}
 		}
-		handle(proto.TypePromptRequest, request)
+		handle := func(kind string, payload any) { send(kind, id, payload) }
+		send(proto.TypeExecutionPrepare, prepare, proto.ExecutionPreparePayload{SessionID: "registered-acceptance", Configuration: request})
+		var ready proto.PreparationStatusPayload
+		for ready.State != "ready" {
+			var event proto.Envelope
+			select {
+			case event = <-sender:
+			case <-ctx.Done():
+				t.Fatal("registered preparation timed out", ctx.Err())
+			}
+			if event.Type != proto.TypePreparationStatus || event.ID != prepare || event.DecodePayload(&ready) != nil || ready.State != "preparing" && ready.State != "ready" {
+				t.Fatalf("registered preparation failed: %s", event.Payload)
+			}
+		}
+		send(proto.TypeExecutionStart, prepare, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: id, Input: proto.TextInput(prompt)})
 		proof := execution{}
 		defer func() {
 			data, _ := json.MarshalIndent(proof, "", "  ")
@@ -116,6 +130,13 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 			case event = <-sender:
 			case <-ctx.Done():
 				t.Fatal("registered execution timed out", ctx.Err())
+			}
+			if event.Type == proto.TypePreparationStatus && event.ID == prepare {
+				var status proto.PreparationStatusPayload
+				if event.DecodePayload(&status) != nil || status.RunID != id || status.State != "starting" && status.State != "started" {
+					t.Fatalf("registered start failed: %s", event.Payload)
+				}
+				continue
 			}
 			if event.ID != id {
 				t.Fatal("event identity changed")

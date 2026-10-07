@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"encoding/json"
@@ -110,13 +108,8 @@ func TestNativeFunctionBridge(t *testing.T) {
 	}))
 	defer model.Close()
 	reg := agent.NewRegistry()
-	reg.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}, harnessconfig.Configuration{}, codex.Factory)
+	registerExecutorKind(reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{FunctionTools: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}, codex.NewExecutorFactory())
 	sender := make(nativeFunctionSender, 256)
-	router, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer router.Shutdown(context.Background())
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	await := func(kind string) proto.Envelope {
@@ -135,14 +128,48 @@ func TestNativeFunctionBridge(t *testing.T) {
 			}
 		}
 	}
+	awaitReady := func(id string) proto.PreparationStatusPayload {
+		t.Helper()
+		for {
+			env := await(proto.TypePreparationStatus)
+			var status proto.PreparationStatusPayload
+			if env.ID != id {
+				continue
+			}
+			if err := env.DecodePayload(&status); err != nil {
+				t.Fatal(env, err)
+			}
+			if status.State == "ready" {
+				return status
+			}
+			if status.State != "preparing" {
+				t.Fatalf("preparation %s: %+v", id, status)
+			}
+		}
+	}
 	nativeID := ""
-	for index := 0; index < 3; index++ {
+	// Each Run owns a fresh Router, so every resume starts a new native process.
+	run := func(index int) {
+		router, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if err := router.Shutdown(ctx); err != nil {
+				t.Error(err)
+			}
+		}()
 		run := fmt.Sprintf("run-%d", index)
-		request := proto.PromptRequestPayload{AgentKind: "codex", Input: proto.TextInput("Look up ticket 42."), RunID: run, AgentStateKey: "native-functions", AgentSessionID: nativeID, ReleaseOnCompletion: true, DisableExecutionEnvironment: true,
+		request := noEnvironmentPreparation("native-functions", proto.PromptRequestPayload{AgentKind: "codex", AgentSessionID: nativeID,
 			FunctionTools: []proto.FunctionTool{{Name: "lookup_ticket", Description: "Read a synthetic ticket", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"type":"string"}},"required":["ticket"],"additionalProperties":false}`)}},
-			AgentOptions:  map[string]any{"model": "gpt-5.5", "model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-local-token"}}}
-		env, _ := proto.NewEnvelope(proto.TypePromptRequest, run, request)
-		if err := router.Handle(ctx, env); err != nil {
+			AgentOptions:  map[string]any{"model": "gpt-5.5", "model_provider": map[string]any{"protocol": "responses", "base_url": model.URL + "/v1", "api_key": "synthetic-local-token"}}})
+		prepare, _ := proto.NewEnvelope(proto.TypeExecutionPrepare, run, request)
+		if err := router.Handle(ctx, prepare); err != nil {
+			t.Fatal(err)
+		}
+		ready := awaitReady(run)
+		start, _ := proto.NewEnvelope(proto.TypeExecutionStart, run, proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: run, Input: proto.TextInput("Look up ticket 42.")})
+		if err := router.Handle(ctx, start); err != nil {
 			t.Fatal(err)
 		}
 		call := await(proto.TypeFunctionCall)
@@ -169,7 +196,7 @@ func TestNativeFunctionBridge(t *testing.T) {
 			if receipt.Applied || receipt.ErrorCode != "not_pending" {
 				t.Fatal(receipt)
 			}
-			break
+			return
 		}
 		result, _ := proto.NewEnvelope(proto.TypeFunctionResult, run, proto.FunctionResultPayload{CallID: payload.CallID, Success: index == 0, Content: functionResultContent("TICKET-RESULT"), DeliveryID: "result"})
 		if err := router.Handle(ctx, result); err != nil {
@@ -189,6 +216,9 @@ func TestNativeFunctionBridge(t *testing.T) {
 			t.Fatal(output)
 		}
 		nativeID = id
+	}
+	for index := range 3 {
+		run(index)
 	}
 	t.Logf("Native function success/failure, fresh-process resume, cancellation and late-result rejection passed; evidence %s", home)
 }

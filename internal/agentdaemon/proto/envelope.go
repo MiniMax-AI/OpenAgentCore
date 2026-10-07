@@ -12,7 +12,7 @@
 // a lookup table.
 //
 // Envelope.ID correlation:
-//   - prompt_request / prompt_cancel: ID = RunID.
+//   - prompt_cancel: ID = RunID.
 //   - delta / tool_call / usage / error / done: ID = originating RunID.
 //   - permission_request: ID = RunID; payload.request_id is the interaction ID.
 //   - permission_decision / permission_cancel: ID = interaction ID.

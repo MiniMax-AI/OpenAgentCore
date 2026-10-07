@@ -119,8 +119,8 @@ type TurnSettlement struct {
 	Reason   string
 }
 
-// Session is the cancellation and outcome surface shared by direct prompt runs
-// and Turns. Every owner exposes observed state, including direct-call sessions.
+// Session is the cancellation and outcome surface shared by direct-call
+// sessions and Turns. Every owner exposes observed state.
 // For Executor-owned Turns, AwaitSettlement and Executor.Close define settlement
 // and resource retirement; Cancel alone does not transfer resource ownership.
 type Session interface {
@@ -199,7 +199,7 @@ type WorkspaceWriter interface {
 	WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error)
 }
 
-// Separate preparation for qualified workspace access and direct-call paths.
+// Separate preparation for qualified workspace access.
 
 // Prepared owns native resources until Start returns a non-nil Session. The
 // preparation owner context spans the eventual Session; Start's context is local
@@ -227,11 +227,12 @@ type PreparedCancellation interface {
 // cleanup remains unconfirmed. The caller must retain and close that resource.
 type PreparationFactory func(context.Context, proto.PromptRequestPayload) (Prepared, error)
 
-// Direct-call factory and registration. These use the existing Registry behavior.
+// Kind registration and the direct-call factory.
 
-// Factory builds a Session for one prompt_request. out is the upstream
-// channel the agent writes into and closes exactly once after terminal output.
-// ctx is cancelled by the router to wind the session down.
+// Factory builds a Session that runs req.Input as req.RunID without an
+// Executor; the router starts every Run through RegisterExecutor instead. out
+// is the channel the agent writes into and closes exactly once after terminal
+// output. ctx is cancelled to wind the session down.
 type Factory func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (Session, error)
 
 // RegisterKind installs f and the heartbeat descriptor for an
