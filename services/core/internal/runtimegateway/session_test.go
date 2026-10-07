@@ -16,6 +16,12 @@ import (
 
 // NewSession builds an unowned Session over a test connection.
 func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
+	if log == nil {
+		log = func(string, ...any) {}
+	}
+	if reg == nil {
+		reg = NewRegistry()
+	}
 	return NewSessionWithOwner(conn, deviceID, workspaceID, daemonVersion, reg, log, nil)
 }
 

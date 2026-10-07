@@ -48,7 +48,7 @@ func TestSessionOwnerLeaseLostClosesStaleConnection(t *testing.T) {
 	conn := newFakeConn()
 	owners := &fakeOwnerStore{renewOK: false, releaseCh: make(chan struct{})}
 	lease := &ownerLease{store: owners, deviceID: "dev-1", ownerPodID: "pod-a", generation: 7, ttl: time.Minute}
-	sess := NewSessionWithOwner(conn, "dev-1", "wks-1", proto.Version, reg, nil, lease)
+	sess := NewSessionWithOwner(conn, "dev-1", "wks-1", proto.Version, reg, func(string, ...any) {}, lease)
 	reg.Register(sess)
 	sess.Start()
 
