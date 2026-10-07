@@ -2,7 +2,7 @@
 title: "Machine connection API"
 ---
 
-Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons and the self-hosted installer. Each route accepts only the credential listed for it, never the Core key or a Project API key, and a console sign-in grants nothing here. The reverse proxy sends `/api/v1` directly to Core; Web never serves these routes.
+Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons, the Sandbox I/O service and the self-hosted installer. Each route accepts only the credential listed for it, never the Core key or a Project API key, and a console sign-in grants nothing here. The reverse proxy sends `/api/v1` directly to Core; Web never serves these routes.
 
 ## Routes
 
@@ -19,10 +19,11 @@ Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons and the self-
 | `POST agent-daemon/bootstrap` | Runtime daemon | Daemon credential | [Daemon bootstrap](#daemon-bootstrap) |
 | `GET agent-daemon/device-status?device_id=` | Runtime daemon | Daemon credential | [Device status](#device-status) |
 | WebSocket `GET agent-daemon/ws?device_id=&version=` | Runtime daemon | Daemon credential | [Core–Runtime protocol](../../docs/runtime-protocol.md) |
+| WebSocket `GET sandbox-link` | Sandbox I/O service (serve peer) and agent-host Runtime (attach peer) | The resource's Serve credential or the agent host's Runtime credential, in the Link Hello | [Sandbox link protocol](../../docs/sandbox-link-protocol.md) |
 
-Every credential travels in an `Authorization: Bearer` header, never in a URL.
+Every credential travels in an `Authorization: Bearer` header, except on `sandbox-link`, where each peer sends it in its Link Hello after the upgrade. No credential travels in a URL. Core derives the [Link URL](../../docs/configuration.md#changing-the-public-url) from `OAC_PUBLIC_URL`.
 
-The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes and the two installation routes. The two WebSockets and the daemon bootstrap, device-status, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
+The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes, the two installation routes and the `sandbox-link` upgrade, whose messages the Sandbox link protocol defines. The `sandbox-node/connect` and `agent-daemon/ws` WebSockets and the daemon bootstrap, device-status, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
 
 ## Credentials
 

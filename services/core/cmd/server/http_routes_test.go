@@ -114,6 +114,7 @@ func daemonComposition(t testing.TB) http.Handler {
 			InputAdmission:   struct{ api.InputAdmission }{},
 			SessionArchive:   struct{ api.SessionArchive }{},
 			Workspaces:       struct{ api.EnvironmentWorkspaces }{},
+			Links:            struct{ http.Handler }{},
 		},
 		Sandboxes: &api.Sandboxes{Deployment: struct{ api.Deployment }{}, NodeAllocations: unusedNodeAllocations{}, DeploymentChanges: struct{ api.DeploymentChanges }{},
 			DeploymentReset: struct{ api.DeploymentReset }{}, ConfigurationDiscovery: struct{ api.ConfigurationDiscovery }{}},

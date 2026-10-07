@@ -50,6 +50,7 @@ type testFakes struct {
 	inputAdmission         *fakeInputAdmission
 	sessionArchive         *fakeSessionArchive
 	workspaces             *fakeEnvironmentWorkspaces
+	links                  *fakeLinks
 	deployment             *fakeDeployment
 	nodeAllocations        *fakeNodeAllocations
 	deploymentChanges      *fakeDeploymentChanges
@@ -88,7 +89,7 @@ func testDependencies(t testing.TB) (Dependencies, *testFakes) {
 		runtimeObservations: &fakeRuntimeObservations{t: t}, runtimeHistory: &fakeRuntimeHistory{t: t}, installationBindings: &fakeInstallationBindings{t: t},
 		sessionAdmission: &fakeSessionAdmission{t: t},
 		inputAdmission:   &fakeInputAdmission{t: t},
-		sessionArchive:   &fakeSessionArchive{t: t}, workspaces: &fakeEnvironmentWorkspaces{t: t},
+		sessionArchive:   &fakeSessionArchive{t: t}, workspaces: &fakeEnvironmentWorkspaces{t: t}, links: &fakeLinks{t: t},
 		deployment: &fakeDeployment{t: t}, nodeAllocations: &fakeNodeAllocations{t: t},
 		deploymentChanges: &fakeDeploymentChanges{t: t}, deploymentReset: &fakeDeploymentReset{t: t},
 		configurationDiscovery: &fakeConfigurationDiscovery{t: t},
@@ -126,6 +127,7 @@ func (f *testFakes) execution() *Execution {
 		InputAdmission:   f.inputAdmission,
 		SessionArchive:   f.sessionArchive,
 		Workspaces:       f.workspaces,
+		Links:            f.links,
 	}
 }
 

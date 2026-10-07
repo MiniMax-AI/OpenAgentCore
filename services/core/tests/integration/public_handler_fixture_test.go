@@ -154,6 +154,7 @@ func storeExecution(t testing.TB, s *Store) func(*api.Dependencies) {
 			InputAdmission:   service,
 			SessionArchive:   strictStandIn{t},
 			Workspaces:       strictStandIn{t},
+			Links:            strictStandIn{t},
 		}
 	}
 }
@@ -168,6 +169,7 @@ func workerExecution(t testing.TB, worker *execution.Worker) func(*api.Dependenc
 			InputAdmission:   worker,
 			SessionArchive:   strictStandIn{t},
 			Workspaces:       worker,
+			Links:            strictStandIn{t},
 		}
 	}
 }
@@ -236,6 +238,8 @@ func (s strictStandIn) Read(context.Context, string) (coremetrics.View, error) {
 }
 
 func (s strictStandIn) RecordUnavailable() { s.unexpected("RecordUnavailable") }
+
+func (s strictStandIn) ServeHTTP(http.ResponseWriter, *http.Request) { s.unexpected("ServeHTTP") }
 
 func (s strictStandIn) ObserveSession(context.Context, string, string) (runtimeobs.Observation, error) {
 	s.unexpected("ObserveSession")

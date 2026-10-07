@@ -28,7 +28,9 @@ Use `docker compose ps` to check the services. See [stop and restart](./getting-
 
 ### Changing the public URL {#changing-the-public-url}
 
-`OAC_PUBLIC_URL` is the one origin that applications, nodes, sandboxes and self-hosted executors use. Core derives the daemon WebSocket URL, the self-hosted `remote_url` and each sandbox's connection address from it. It is an http or https origin: the address browsers and nodes use. The installation serves Web over HTTP on `OAC_WEB_PORT`; a reverse proxy or hosting platform terminates HTTPS when you put one in front.
+`OAC_PUBLIC_URL` is the one origin that applications, nodes, sandboxes and self-hosted executors use. Core derives the daemon WebSocket URL, the sandbox Link URL, the self-hosted `remote_url` and each sandbox's connection address from it. It is an http or https origin: the address browsers and nodes use. The installation serves Web over HTTP on `OAC_WEB_PORT`; a reverse proxy or hosting platform terminates HTTPS when you put one in front.
+
+Sandboxes and agent hosts dial the [sandbox Link](./sandbox-link-protocol.md) at `wss://<origin>/api/v1/sandbox-link` when the origin is https. An http origin on `localhost` or a loopback address gives `ws://<origin>/api/v1/sandbox-link`, which only peers in Core's own network namespace can reach. An http origin on any other host gives no Link URL: nothing can use the Link until the origin is https.
 
 To change it, point the reverse proxy at the new address first, then edit `OAC_PUBLIC_URL` and run `oac apply`. Afterwards:
 
@@ -153,7 +155,7 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 
 | Variable | Set from |
 | --- | --- |
-| `OAC_PUBLIC_URL` | The public origin. Core derives the daemon WebSocket URL, the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
+| `OAC_PUBLIC_URL` | The public origin. Core derives the daemon WebSocket URL, the [sandbox Link URL](#changing-the-public-url), the self-hosted `remote_url`, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers. Without it, Core runs no Runtime gateway and executes no Sessions |
 | `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
 | `OAC_DATABASE_URL` | PostgreSQL without a password |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`. The URL must then carry no password |

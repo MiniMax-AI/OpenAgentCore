@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -143,7 +145,8 @@ func newRequestID() string {
 
 // processingTimeWriter reports the elapsed handling time when the final
 // response headers are written, flushed or implied by the first body write.
-// Unwrap keeps http.ResponseController deadlines and flushing available.
+// Unwrap keeps http.ResponseController deadlines and flushing available, and
+// Hijack keeps the WebSocket upgrade, which asserts http.Hijacker, available.
 type processingTimeWriter struct {
 	http.ResponseWriter
 	started time.Time
@@ -185,6 +188,10 @@ func (w *processingTimeWriter) FlushError() error {
 func (w *processingTimeWriter) Flush() { _ = w.FlushError() }
 
 func (w *processingTimeWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *processingTimeWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(w.ResponseWriter).Hijack()
+}
 
 // methodNotAllowed keeps Core's JSON 405 and adds the route's Allow header
 // (HP-20). It also answers HEAD on routes that exclude it.

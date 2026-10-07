@@ -48,10 +48,11 @@ type SessionsReader interface {
 // routes builds the router. HEAD runs the GET route without a body after the
 // same authentication and Beta checks (HP-19). Routes that stream events,
 // download content, read a live workspace directory, sample Runtime
-// observations or query Runtime history register an explicit HEAD 405 instead,
-// so HEAD never holds a stream open, reads full content or does Runtime or
-// telemetry work. Every 405, including unknown methods and routes outside the
-// Beta group, has the JSON body and Allow header.
+// observations, query Runtime history or upgrade to the Link register an
+// explicit HEAD 405 instead, so HEAD never holds a stream open, reads full
+// content or does Runtime or telemetry work. Every 405, including unknown
+// methods and routes outside the Beta group, has the JSON body and Allow
+// header.
 func (h *Handler) routes() *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(h.responseHeaders, log.HTTPMiddleware, middleware.GetHead)
@@ -73,6 +74,10 @@ func (h *Handler) routes() *chi.Mux {
 	h.registerSandboxNodeRoutes(router)
 	h.registerCoreRoutes(router)
 	h.registerNativeInstallationRoutes(router)
+	if h.Execution != nil {
+		router.Get("/api/v1/sandbox-link", h.sandboxLink)
+		router.Head("/api/v1/sandbox-link", methodNotAllowed)
+	}
 	router.Route("/v1", func(r chi.Router) {
 		r.Use(h.authenticate)
 		r.Post("/vaults", h.createVault)
