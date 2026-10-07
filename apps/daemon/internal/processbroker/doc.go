@@ -1,20 +1,14 @@
 // Package processbroker runs a Session's shim invocations in its sandbox.
 //
-// A Harness in the Session view executes oac-process-shim
-// (apps/daemon/internal/processshim), which hands its invocation and its
-// descriptors 0, 1 and 2 to the Session's process relay. The relay is the
-// same binary in relay mode, which sessionview starts in the view as the
-// Session user, with no capabilities, before the Harness. It is the only
-// process that holds a descriptor from the view: it does every read, write
-// and terminal ioctl on them with the Session's own authority. It hands the
-// broker the request and the terminal's mode over a socketpair that
-// sessionview creates. The broker does all process protocol work: it
-// resolves the invocation against the declared executable table and
-// environment policy, starts the program with the process protocol
-// (internal/sandboxprocess), sends the relay the program's output and asks
-// it for stdin, forwards the signals the shim reports, and has the relay
-// send the shim the remote exit. Neither the shim nor the relay holds
-// credentials.
+// Package processshim (apps/daemon/internal/processshim) describes the shim,
+// the Session's process relay and their IPC with the broker. The broker does
+// all process protocol work: it resolves each invocation against the
+// declared executable table and environment policy, starts the program with
+// the process protocol (internal/sandboxprocess), sends the relay the
+// program's output and asks it for stdin, forwards the signals the shim
+// reports, and has the relay send the shim the remote exit. Neither the shim
+// nor the relay holds credentials. The broker runs only on Linux; elsewhere
+// the package declares only its configuration.
 //
 // The broker treats the relay as untrusted Session input. It reads the
 // socketpair without a control buffer, so the kernel closes any descriptor
@@ -24,23 +18,11 @@
 // ErrRelayLost. The broker never restarts the relay and never replays output
 // whose delivery is uncertain. Close never waits on the relay.
 //
-// The relay pumps each descriptor on its own, and its dispatch never waits
-// on one, so a descriptor nobody reads holds back only its own stream. The
-// broker sends the relay at most processshim.OutputWindow bytes of a stream
-// that the relay has not reported written, and acknowledges output to the
-// process service only after that report, so the service in turn holds back
-// the program.
-//
-// The relay never changes the flags of a passed descriptor, whose open file
-// description the Harness shares. It reopens a pipe, FIFO or pty slave
-// through /proc/self/fd as its own non-blocking description, uses a socket
-// with MSG_DONTWAIT and a regular file or block device as it is, and polls
-// any other descriptor before each call, so it waits on a peer only in a
-// poll that ending the invocation interrupts. Output on an AF_UNIX socket
-// carries the relay's own credentials.
-//
-// Invocations on one terminal share its saved mode in the relay: the first
-// saves it, each runs the terminal raw, and the last to finish restores it.
+// The relay pumps each descriptor on its own, so a descriptor nobody reads
+// holds back only its own stream. The broker sends the relay at most
+// processshim.OutputWindow bytes of a stream that the relay has not reported
+// written, and acknowledges output to the process service only after that
+// report, so the service in turn holds back the program.
 //
 // The broker forwards the exit without waiting for output, and the relay
 // answers the shim once the output the program wrote before exiting is

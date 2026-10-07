@@ -262,7 +262,13 @@ func TestEnvironmentIsDeclaredOnly(t *testing.T) {
 }
 
 func TestLinkLossKeepsOutputOrdered(t *testing.T) {
-	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser { return &cutConn{Conn: c, left: 64 << 10} }))
+	var dials atomic.Int32
+	f := newFixture(t, dialService(t, func(n int32, c net.Conn) io.ReadWriteCloser {
+		if dials.Store(n); n > 1 {
+			return c
+		}
+		return &cutConn{Conn: c, left: 64 << 10}
+	}))
 	out, err := f.command("seq", "1", "2000000").Output()
 	if err != nil {
 		t.Fatalf("Output = %v", err)
@@ -275,7 +281,7 @@ func TestLinkLossKeepsOutputOrdered(t *testing.T) {
 	if !bytes.Equal(out, want) {
 		t.Fatalf("output differs: %d bytes, want %d", len(out), len(want))
 	}
-	if n := f.dials.Load(); n < 2 {
+	if n := dials.Load(); n < 2 {
 		t.Fatalf("%d dials; the link was never cut", n)
 	}
 }
@@ -325,7 +331,7 @@ func TestIncompleteRequestHoldsNothing(t *testing.T) {
 // A gone output reader must not hold the exit back while the stream that
 // would close the remote output is lost behind the settled operation.
 func TestGoneReaderDoesNotHoldExit(t *testing.T) {
-	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser { return &holdEvents{Conn: c} }))
+	f := newFixture(t, dialService(t, first(func(c net.Conn) io.ReadWriteCloser { return &holdEvents{Conn: c} })))
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -555,7 +561,15 @@ func TestRelayDescriptorsAreDiscarded(t *testing.T) {
 // A Busy acknowledgement is retried, or output past the replay limit would
 // never arrive.
 func TestBusyAckIsRetried(t *testing.T) {
-	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser { return &busyAck{Conn: c} }))
+	var acks atomic.Int32
+	f := newFixture(t, dialService(t, first(func(c net.Conn) io.ReadWriteCloser {
+		return intercept(c, func(fr sandboxwire.Frame) verdict {
+			if fr.Type == sp.OpAckEvents && acks.Add(1) == 1 {
+				return refuseBusy
+			}
+			return pass
+		})
+	})))
 	cmd := f.command("seq", "1", "2000000")
 	var out countWriter
 	cmd.Stdout = &out
@@ -631,14 +645,14 @@ func TestSharedTerminalRestoredByLastUser(t *testing.T) {
 // accept, so the program reads every byte once.
 func TestBusyStdinIsRetried(t *testing.T) {
 	var writes atomic.Int32
-	f := newFixture(t, first(func(c net.Conn) io.ReadWriteCloser {
+	f := newFixture(t, dialService(t, first(func(c net.Conn) io.ReadWriteCloser {
 		return intercept(c, func(fr sandboxwire.Frame) verdict {
 			if fr.Type == sp.OpWriteStdin && writes.Add(1) == 2 {
 				return refuseBusy
 			}
 			return pass
 		})
-	}))
+	})))
 	var in []byte
 	for i := range 30000 {
 		in = strconv.AppendInt(in, int64(i), 10)
@@ -668,14 +682,14 @@ func TestBusyStdinIsRetried(t *testing.T) {
 // scope gets one TERM, and KILL after the grace.
 func TestUncertainCancelIsNotReplayed(t *testing.T) {
 	var cancels atomic.Int32
-	f := newFixture(t, func(_ int32, c net.Conn) io.ReadWriteCloser {
+	f := newFixture(t, dialService(t, func(_ int32, c net.Conn) io.ReadWriteCloser {
 		return intercept(c, func(fr sandboxwire.Frame) verdict {
 			if fr.Type == sp.OpCancel && cancels.Add(1) == 1 {
 				return loseResponse
 			}
 			return pass
 		})
-	})
+	}))
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -713,7 +727,7 @@ func TestUncertainCancelIsNotReplayed(t *testing.T) {
 // invocation: the broker closes the shim's descriptors.
 func TestShimLossEndsWaitForStream(t *testing.T) {
 	dialed := make(chan struct{})
-	f := newFixture(t, func(n int32, c net.Conn) io.ReadWriteCloser {
+	f := newFixture(t, dialService(t, func(n int32, c net.Conn) io.ReadWriteCloser {
 		if n > 1 {
 			return c
 		}
@@ -723,7 +737,7 @@ func TestShimLossEndsWaitForStream(t *testing.T) {
 		broker, svc := net.Pipe()
 		go io.Copy(io.Discard, svc)
 		return broker
-	})
+	}))
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -766,9 +780,9 @@ func TestShimLossEndsWaitForStream(t *testing.T) {
 func TestRetriedStartWaitsForStarted(t *testing.T) {
 	for _, fails := range []bool{false, true} {
 		t.Run(fmt.Sprintf("start fails %v", fails), func(t *testing.T) {
-			svc := newFakeService()
+			svc := newPeer()
 			svc.startLate, svc.startFails = true, fails
-			f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpStart }))
+			f := newFixture(t, svc.dial(sp.OpStart))
 			// Once the retried Start's Attach found the operation starting,
 			// it starts when the broker observes it without forwarding stdin.
 			// A broker that forwards stdin first gets the refusal it counts.
@@ -819,14 +833,14 @@ func awaitsStarted() bool {
 // resumes from the offset Inspect reports: the program reads every byte
 // once, and stdin closes at the end of the input.
 func TestUncertainStdinWriteResumes(t *testing.T) {
-	svc := newFakeService()
+	svc := newPeer()
 	svc.partialFirst = true
-	f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpWriteStdin }))
+	f := newFixture(t, svc.dial(sp.OpWriteStdin))
 	const in = "stdin that crosses a lost stream\n"
 	out, stderr, err := runFor(t, f.command("sh", "-c", "cat"), in)
 	c := svc.counts()
-	if err != nil || out != in || string(c.stdin) != in || c.closedAt != uint64(len(in)) || c.writes < 2 {
-		t.Fatalf("Run = %v after %d writes; stdout %q, stderr %q; the service took %q and closed stdin at %d", err, c.writes, out, stderr, c.stdin, c.closedAt)
+	if err != nil || out != in || string(c.stdin) != in || !c.st.StdinClosed || c.writes < 2 {
+		t.Fatalf("Run = %v after %d writes; stdout %q, stderr %q; the service took %q, stdin closed %v", err, c.writes, out, stderr, c.stdin, c.st.StdinClosed)
 	}
 }
 
@@ -834,9 +848,9 @@ func TestUncertainStdinWriteResumes(t *testing.T) {
 // shim exits with 255 and the reason, and the program is cancelled, rather
 // than both waiting for input that never comes.
 func TestUnresolvedStdinEndsTheInvocation(t *testing.T) {
-	svc := newFakeService()
+	svc := newPeer()
 	svc.partialFirst, svc.inspectFails = true, true
-	f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpWriteStdin }))
+	f := newFixture(t, svc.dial(sp.OpWriteStdin))
 	_, stderr, err := runFor(t, f.command("sh", "-c", "cat"), "stdin\n")
 	if exitCode(err) != processshim.ExitLost || !strings.Contains(stderr, "stdin could not be resumed: inspect failed") {
 		t.Fatalf("Run = %v; stderr %q", err, stderr)
@@ -849,17 +863,17 @@ func TestUnresolvedStdinEndsTheInvocation(t *testing.T) {
 // before its Exited event arrives: stdin closes after the bytes the service
 // took, the background process gets end of file, and the operation settles.
 func TestBackgroundReaderGetsEOFAfterUncertainWrite(t *testing.T) {
-	svc := newFakeService()
+	svc := newPeer()
 	svc.leaderExits = true
-	f := newFixture(t, svc.serve(t.Context(), func(fr sandboxwire.Frame) bool { return fr.Type == sp.OpWriteStdin }))
+	f := newFixture(t, svc.dial(sp.OpWriteStdin))
 	const in = "stdin for a background reader\n"
 	out, stderr, err := runFor(t, f.command("sh", "-c", "cat"), in)
 	if err != nil || out != in {
 		t.Fatalf("Run = %v; stdout %q, stderr %q", err, out, stderr)
 	}
-	await(t, "the operation's release", func() bool { return svc.counts().released })
-	if c := svc.counts(); c.closedAt != uint64(len(in)) {
-		t.Fatalf("stdin closed at %d, not %d", c.closedAt, len(in))
+	await(t, "the operation's release", func() bool { return svc.counts().st.Released })
+	if st := svc.counts().st; !st.StdinClosed || st.StdinOffset != uint64(len(in)) {
+		t.Fatalf("stdin closed %v at %d, not %d", st.StdinClosed, st.StdinOffset, len(in))
 	}
 }
 
@@ -890,19 +904,19 @@ func runFor(t *testing.T, cmd *exec.Cmd, in string) (string, string, error) {
 type fixture struct {
 	dir, bin string
 	uid, gid int // the relay's
-	service  string
-	wrap     func(int32, net.Conn) io.ReadWriteCloser
-	dials    atomic.Int32
 	relay    *exec.Cmd
 	broker   *Broker
 }
 
 // newFixture starts a relay and its broker, whose shims are this binary
-// under the names bash, sh, env and seq. As root the relay runs as viewID. A
-// non-nil wrap wraps each stream to the service, which it gets with the
-// stream's number, counting from 1.
-func newFixture(t *testing.T, wrap func(int32, net.Conn) io.ReadWriteCloser) *fixture {
+// under the names bash, sh, env and seq. As root the relay runs as viewID.
+// The broker reaches the process service through dial, or the shared one
+// when dial is nil.
+func newFixture(t *testing.T, dial func(context.Context) (io.ReadWriteCloser, error)) *fixture {
 	t.Helper()
+	if dial == nil {
+		dial = dialService(t, nil)
+	}
 	self, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
@@ -915,7 +929,7 @@ func newFixture(t *testing.T, wrap func(int32, net.Conn) io.ReadWriteCloser) *fi
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{dir: dir, uid: os.Getuid(), gid: os.Getgid(), service: service.socket(t), wrap: wrap}
+	f := &fixture{dir: dir, uid: os.Getuid(), gid: os.Getgid()}
 	if f.uid == 0 {
 		f.uid, f.gid = viewID, viewID
 	}
@@ -941,7 +955,7 @@ func newFixture(t *testing.T, wrap func(int32, net.Conn) io.ReadWriteCloser) *fi
 			Tool:    map[string]string{"TOOL": "1"},
 		},
 		Scope:       sp.ScopePOSIXSession,
-		Dial:        f.dial,
+		Dial:        dial,
 		CancelGrace: time.Second,
 	})
 	end.Close()
@@ -1024,15 +1038,18 @@ func (f *fixture) command(name string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-func (f *fixture) dial(ctx context.Context) (io.ReadWriteCloser, error) {
-	c, err := new(net.Dialer).DialContext(ctx, "unix", f.service)
-	if err != nil {
-		return nil, err
+// dialService dials the shared process service. A non-nil wrap wraps each
+// stream, which it gets with the stream's number, counting from 1.
+func dialService(t *testing.T, wrap func(int32, net.Conn) io.ReadWriteCloser) func(context.Context) (io.ReadWriteCloser, error) {
+	sock := service.socket(t)
+	var dials atomic.Int32
+	return func(ctx context.Context) (io.ReadWriteCloser, error) {
+		c, err := new(net.Dialer).DialContext(ctx, "unix", sock)
+		if err != nil || wrap == nil {
+			return c, err
+		}
+		return wrap(dials.Add(1), c), nil
 	}
-	if n := f.dials.Add(1); f.wrap != nil {
-		return f.wrap(n, c), nil
-	}
-	return c, nil
 }
 
 // first applies wrap to the first stream alone.
@@ -1150,31 +1167,6 @@ func (c *holdEvents) Read(p []byte) (int, error) {
 		if fr.Type == sp.EventScopeClosed {
 			c.held.WriteTo(&c.out)
 			c.cut = true
-		}
-	}
-	return c.out.Read(p)
-}
-
-// busyAck answers the first acknowledgement with Busy after the service
-// applied it.
-type busyAck struct {
-	net.Conn
-	out  bytes.Buffer
-	sent bool
-}
-
-func (c *busyAck) Read(p []byte) (int, error) {
-	for c.out.Len() == 0 {
-		fr, err := sandboxwire.ReadFrame(c.Conn, sandboxwire.MaxPayload)
-		if err != nil {
-			return 0, err
-		}
-		if !c.sent && fr.Type == sandboxwire.ResponseType(sp.OpAckEvents) {
-			c.sent = true
-			fr.Payload = sp.Encode(sp.ResponseFailure{Request: sp.OpAckEvents, Failure: *sp.Fail(sp.CodeBusy, sandboxwire.EffectNone, "busy")})
-		}
-		if err := sandboxwire.WriteFrame(&c.out, fr); err != nil {
-			return 0, err
 		}
 	}
 	return c.out.Read(p)

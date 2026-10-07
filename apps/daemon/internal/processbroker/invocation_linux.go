@@ -585,7 +585,7 @@ func (inv *invocation) releaseOp(h handle) bool {
 		if f.Code == sp.CodeBusy && inv.sleep(backoff) {
 			continue
 		}
-		if f.Code != sp.CodeReleased && f.Code != sp.CodeBusy {
+		if f.Code != sp.CodeReleased && f.Code != sp.CodeBusy && inv.b.ctx.Err() == nil {
 			inv.log.Warn("operation release failed", "error", err)
 		}
 		h.op.Detach()
@@ -653,7 +653,9 @@ func (inv *invocation) answer(r processshim.Result, marks []processshim.Mark, be
 // reason is written even after the shim exited, because the Harness may still
 // read the output the failure cut short.
 func (inv *invocation) fail(reason string) {
-	inv.log.Warn("process invocation failed", "reason", reason)
+	if inv.b.ctx.Err() == nil { // a stopped broker fails every invocation
+		inv.log.Warn("process invocation failed", "reason", reason)
+	}
 	inv.halted()
 	if !inv.reply(processshim.Result{Code: processshim.ExitLost, Message: message(reason)}, nil) {
 		inv.send(processshim.Notice{ID: inv.rid, Message: message(reason)})
@@ -673,7 +675,7 @@ func (inv *invocation) shimGone() {
 	inv.loseShim()
 	cancel := !inv.exited
 	inv.mu.Unlock()
-	inv.log.Info("process shim lost", "cancel", cancel)
+	inv.log.Debug("process shim lost", "cancel", cancel)
 	inv.stopInput()
 	if cancel {
 		inv.cancelRemote()
@@ -776,7 +778,12 @@ func (inv *invocation) receive(m processshim.RelayMessage) error {
 		for _, seq := range sent {
 			inv.acks.deliver(seq)
 		}
-		inv.log.Info("output reader gone", "stream", w.stream, "error", unix.Errno(m.Errno))
+		// A reader that closes its end, as on a Cancel, is expected.
+		if errno := unix.Errno(m.Errno); errno == unix.EPIPE || errno == unix.ECONNRESET {
+			inv.log.Debug("output reader gone", "stream", w.stream, "error", errno)
+		} else {
+			inv.log.Info("output write failed", "stream", w.stream, "error", errno)
+		}
 		inv.helpers.Add(1)
 		go func() {
 			defer inv.helpers.Done()

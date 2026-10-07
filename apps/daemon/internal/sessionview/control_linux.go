@@ -36,7 +36,6 @@ type launchSpec struct {
 	Command  command
 	UID      uint32
 	GID      uint32
-	Groups   []uint32
 	Grace    time.Duration
 }
 
@@ -60,6 +59,7 @@ const (
 	msgSignaled                    // launcher: whether msgSignal reached it
 	msgSpawn                       // daemon: start another process; carries a pipe with its command, then its stdin, stdout and stderr
 	msgSpawned                     // launcher: the spawned process's Pid, or why none started
+	msgNoRelay                     // launcher: the relay ended before the launcher
 )
 
 type message struct {

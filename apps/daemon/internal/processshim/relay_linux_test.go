@@ -5,6 +5,7 @@ package processshim
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -296,6 +297,134 @@ func TestTerminalOutputWaitsForRawMode(t *testing.T) {
 	}
 	if got := readN(t, int(ptm.Fd()), len(out)); string(got) != out {
 		t.Fatalf("the terminal got %q, want %q", got, out)
+	}
+}
+
+// A Notice reaches fd 2 after the stderr queued before it, even while that
+// stderr waits in its pump and the control goroutine has moved on.
+func TestNoticeFollowsQueuedStderr(t *testing.T) {
+	answered := make(chan struct{})
+	r := startTestRelay(t, func(r *relay) {
+		r.gating = func() {
+			select {
+			case <-answered:
+			case <-time.After(10 * time.Second):
+				t.Error("the shim never got its Result")
+			}
+		}
+	})
+	go func() {
+		for {
+			m, err := r.read()
+			if err != nil {
+				return
+			}
+			switch m := m.(type) {
+			case Open:
+				id := m.ID
+				// The Exit has no Marks, so its Result shows that the
+				// control goroutine is past the Notice.
+				r.send(Accept{ID: id}, Started{ID: id}, Output{ID: id, FD: 2, Seq: 1, Data: []byte("err\n")},
+					Notice{ID: id, Message: []byte("note")}, Exit{ID: id, Result: Result{Code: 0}}, Close{ID: id, FD: 2, Seq: 2})
+			case Written:
+				if m.Seq == 2 {
+					r.send(End{ID: m.ID})
+				}
+			}
+		}
+	}()
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	fds := devNull(t)
+	fds[2] = int(pw.Fd())
+	conn := r.shim(t, "sh", fds)
+	pw.Close()
+	if res, err := finished(conn); err != nil || res.Code != 0 {
+		t.Fatalf("Result %+v, %v", res, err)
+	}
+	close(answered)
+	pr.SetDeadline(time.Now().Add(10 * time.Second))
+	got, err := io.ReadAll(pr)
+	if want := "err\noac-process-shim: note\n"; err != nil || string(got) != want {
+		t.Fatalf("fd 2 got %q, %v; want %q", got, err, want)
+	}
+}
+
+// A Notice queued behind stderr still reaches fd 2 when End stops that
+// stderr first, and a stderr nobody reads holds neither from ending.
+func TestNoticeOutlivesEnd(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprintf("full=%v", full), func(t *testing.T) {
+			var rl *relay
+			release := make(chan struct{})
+			r := startTestRelay(t, func(r *relay) {
+				rl = r
+				if !full {
+					r.gating = func() { <-release } // the stderr waits until End has stopped it
+				}
+			})
+			opened := make(chan uint64, 1)
+			go func() {
+				for {
+					m, err := r.read()
+					if err != nil {
+						return
+					}
+					if m, ok := m.(Open); ok {
+						id := m.ID
+						r.send(Accept{ID: id}, Started{ID: id}, Output{ID: id, FD: 2, Seq: 1, Data: []byte("err\n")},
+							Notice{ID: id, Message: []byte("note")}, Exit{ID: id, Result: Result{Code: 0}})
+						opened <- id
+					}
+				}
+			}()
+			pr, pw, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer pr.Close()
+			filled := 0
+			if full {
+				fd := int(pw.Fd())
+				unix.SetNonblock(fd, true)
+				for _, chunk := range []int{pipeBuf, 1} {
+					for n, err := 0, error(nil); err == nil; n, err = unix.Write(fd, make([]byte, chunk)) {
+						filled += n
+					}
+				}
+			}
+			fds := devNull(t)
+			fds[2] = int(pw.Fd())
+			conn := r.shim(t, "sh", fds)
+			pw.Close()
+			if res, err := finished(conn); err != nil || res.Code != 0 {
+				t.Fatalf("Result %+v, %v", res, err)
+			}
+			r.send(End{ID: <-opened})
+			for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(time.Millisecond) {
+				rl.mu.Lock()
+				ended := len(rl.invs) == 0
+				rl.mu.Unlock()
+				if ended {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("the invocation never took End")
+				}
+			}
+			close(release)
+			pr.SetDeadline(time.Now().Add(10 * time.Second))
+			got, err := io.ReadAll(pr)
+			const note = "oac-process-shim: note\n"
+			rest, ok := strings.CutPrefix(string(got), string(make([]byte, filled)))
+			// A full stderr may still be full when the Notice is tried.
+			if err != nil || !ok || (rest != note && !(full && rest == "")) {
+				t.Fatalf("fd 2 got %d bytes ending in %q, %v; want %d filler bytes and %q", len(got), got[max(0, len(got)-32):], err, filled, note)
+			}
+		})
 	}
 }
 

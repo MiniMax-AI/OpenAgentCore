@@ -112,15 +112,12 @@ func (b *Broker) read() {
 		}
 	}
 	b.mu.Lock()
-	lost := !b.closing
-	if lost {
+	if !b.closing {
 		b.err = fmt.Errorf("%w: %w", ErrRelayLost, err)
 	}
 	b.mu.Unlock()
-	if lost {
-		b.log.Error("process relay lost", "error", err)
-	}
 	b.cancel()
+	b.conn.CloseWrite() // a relay the broker stops serving ends too
 	b.conn.Close()
 	close(b.done)
 }

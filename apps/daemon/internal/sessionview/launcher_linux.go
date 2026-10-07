@@ -345,8 +345,12 @@ func (l *launcher) reapChildren() bool {
 	}
 }
 
-// reaped retires the ID of pid, if it has one, and reports its exit. mu is held.
+// reaped retires the ID of pid, if it has one, and reports its exit, or reports the relay's loss: the relay ignores the view's signals, so it ends before the launcher only when it is lost. mu is held.
 func (l *launcher) reaped(pid int, ws unix.WaitStatus) {
+	if pid == l.relay {
+		l.post(message{Kind: msgNoRelay})
+		return
+	}
 	id, ok := l.spawned[pid]
 	if !ok {
 		return
@@ -362,7 +366,7 @@ func (l *launcher) reaped(pid int, ws unix.WaitStatus) {
 // exitOf describes how a process ended, with the code the launcher exits with for it.
 func exitOf(ws unix.WaitStatus) (Exit, int) {
 	if ws.Signaled() {
-		return Exit{Signal: ws.Signal(), CoreDumped: ws.CoreDump()}, 128 + int(ws.Signal())
+		return Exit{Signal: ws.Signal()}, 128 + int(ws.Signal())
 	}
 	return Exit{Code: ws.ExitStatus()}, ws.ExitStatus()
 }
@@ -417,7 +421,7 @@ func startRelay(spec *launchSpec, listener int) (int, error) {
 		Files: files,
 		Sys: &syscall.SysProcAttr{
 			Setsid:     true,
-			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID, Groups: spec.Groups},
+			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID}, // and no supplementary groups
 		},
 	})
 	if err != nil {
@@ -426,12 +430,8 @@ func startRelay(spec *launchSpec, listener int) (int, error) {
 	return pid, nil
 }
 
-// takeIdentity gives this thread a working directory of its own and the process's file system identity, with no capability but the two a fork needs to set the child's user, so that it enters a directory as the process would. The other threads keep theirs.
+// takeIdentity gives this thread a working directory of its own and the process's file system identity, with no supplementary groups and no capability but the two a fork needs to set the child's user, so that it enters a directory as the process would. The other threads keep theirs.
 func takeIdentity(spec *launchSpec) error {
-	groups := make([]int, len(spec.Groups))
-	for i, g := range spec.Groups {
-		groups[i] = int(g)
-	}
 	const setID = 1<<unix.CAP_SETUID | 1<<unix.CAP_SETGID
 	caps := [2]unix.CapUserData{{Effective: setID, Permitted: setID}}
 	err := unix.Unshare(unix.CLONE_FS)
@@ -439,7 +439,7 @@ func takeIdentity(spec *launchSpec) error {
 		err = unix.Capset(&unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}, &caps[0])
 	}
 	if err == nil {
-		err = unix.Setgroups(groups)
+		err = unix.Setgroups(nil)
 	}
 	if err != nil {
 		return &Error{Kind: ErrRestrict, Op: "take the process's identity", Err: err}
@@ -475,7 +475,7 @@ func startProcess(spec *launchSpec, c command, stdio []uintptr) (int, error) {
 		Files: stdio,
 		Sys: &syscall.SysProcAttr{
 			Setsid:     true,
-			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID, Groups: spec.Groups},
+			Credential: &syscall.Credential{Uid: spec.UID, Gid: spec.GID}, // and no supplementary groups
 		},
 	})
 	if err != nil {

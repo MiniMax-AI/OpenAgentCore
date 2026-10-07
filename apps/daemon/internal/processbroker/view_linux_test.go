@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -88,7 +87,6 @@ func startView(t *testing.T, w *hangWorld, p sessionview.Process) (*sessionview.
 	if err := sessionview.Probe(); err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
-	sock := service.socket(t)
 	harness := t.TempDir()
 	self, err := os.Executable()
 	if err != nil {
@@ -119,9 +117,7 @@ func startView(t *testing.T, w *hangWorld, p sessionview.Process) (*sessionview.
 		Executables: Executables{Paths: map[string]string{"/bin/sh": "/bin/sh"}},
 		Environment: Environment{Sandbox: map[string]string{"PATH": "/usr/bin:/bin"}},
 		Scope:       sp.ScopePOSIXSession,
-		Dial: func(ctx context.Context) (io.ReadWriteCloser, error) {
-			return new(net.Dialer).DialContext(ctx, "unix", sock)
-		},
+		Dial:        dialService(t, nil),
 		CancelGrace: time.Second,
 	})
 	if err != nil {

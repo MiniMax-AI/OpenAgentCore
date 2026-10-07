@@ -1,6 +1,7 @@
 package processshim
 
 import (
+	"bytes"
 	"errors"
 	"net"
 	"os"
@@ -95,9 +96,9 @@ func TestUnexpectedDescriptorsAreRejected(t *testing.T) {
 		}
 		closeAll(recv[:])
 		frame := Frame(Signal{Number: 2})
-		var buf frameBuffer
+		var buf bytes.Buffer
 		_ = sandboxwire.WriteFrame(&buf, frame)
-		if _, _, err := shim.c.WriteMsgUnix(buf, unix.UnixRights(fds[0]), nil); err != nil {
+		if _, _, err := shim.c.WriteMsgUnix(buf.Bytes(), unix.UnixRights(fds[0]), nil); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := broker.ReadMessage(); !errors.Is(err, ErrProtocol) {

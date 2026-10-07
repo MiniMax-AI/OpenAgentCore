@@ -144,6 +144,32 @@ func TestViewSignalAndTeardown(t *testing.T) {
 	}
 }
 
+// TestRelayLossIsReported checks that a relay lost while the process runs is reported, even when the process exits right after, and that the view's own end reports no loss.
+func TestRelayLossIsReported(t *testing.T) {
+	for _, lose := range []bool{false, true} {
+		v, _ := startStalled(t)
+		if lose {
+			if err := syscall.Kill(relayPID(), syscall.SIGKILL); err != nil {
+				t.Fatal(err)
+			}
+			eventually(t, "the relay's end", func() bool { return relayPID() == 0 })
+		}
+		if err := v.Signal(syscall.SIGTERM); err != nil {
+			t.Fatalf("Signal: %v", err)
+		}
+		v.Wait()
+		reported := false
+		select {
+		case <-v.RelayLost():
+			reported = true
+		default:
+		}
+		if reported != lose {
+			t.Errorf("relay killed: %v; RelayLost closed: %v", lose, reported)
+		}
+	}
+}
+
 // TestViewDescendantsKeepTheGrace checks that helpers still cleaning up when their parent exits, the Harness or a spawned process, get TERM and finish within the grace.
 func TestViewDescendantsKeepTheGrace(t *testing.T) {
 	requireView(t)
@@ -222,8 +248,8 @@ func TestSpawnRunsInTheView(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(ids[0]) != 20 || !maps.Equal(ids[0], ids[1]) {
-		t.Errorf("spawned process runs as and in %v, the process as and in %v", ids[1], ids[0])
+	if len(ids[0]) != 20 || !maps.Equal(ids[0], ids[1]) || ids[0]["Groups"] != "" {
+		t.Errorf("spawned process runs as and in %v, the process as and in %v; want both alike, with no supplementary groups", ids[1], ids[0])
 	}
 	report, err := v.Spawn(context.Background(), "/.oac/harness/harness", []string{"harness"}, []string{helperEnv + "=report"}, "/data", true)
 	if err != nil {

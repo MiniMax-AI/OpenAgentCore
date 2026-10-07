@@ -48,8 +48,12 @@ type View struct {
 	dev     *os.File
 	staging string
 	cgroup  string // the view's cgroup, once created
+	uid     uint32 // the process's user and group
+	gid     uint32
 	pipes   [3]*os.File
 	relay   *os.File // the broker's end of the relay connection
+
+	relayLost chan struct{} // closed when the relay ends before the launcher
 
 	waited     chan struct{} // closed once the launcher has been reaped
 	waitErr    error
@@ -74,7 +78,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	if err := Probe(); err != nil {
 		return nil, err
 	}
-	v := &View{done: make(chan struct{}), requests: map[uint64]chan reply{}, spawning: make(chan struct{}, 1)}
+	v := &View{done: make(chan struct{}), relayLost: make(chan struct{}), requests: map[uint64]chan reply{}, spawning: make(chan struct{}, 1)}
 	if err := v.launch(&spec); err != nil {
 		return nil, v.abort(err)
 	}
@@ -96,12 +100,14 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 }
 
 func (v *View) launch(spec *Spec) error {
-	child, err := v.stdio(&spec.Process)
+	p := &spec.Process
+	given := [3]*os.File{p.Stdin, p.Stdout, p.Stderr}
+	child, pipes, err := Stdio(given, true, p.UID, p.GID)
 	if err != nil {
 		return &Error{Kind: ErrLauncher, Op: "pipe", Err: err}
 	}
+	v.pipes, v.uid, v.gid = pipes, p.UID, p.GID
 	defer func() {
-		given := []*os.File{spec.Process.Stdin, spec.Process.Stdout, spec.Process.Stderr}
 		for i, f := range child {
 			if f != given[i] {
 				f.Close()
@@ -177,7 +183,7 @@ func (v *View) launch(spec *Spec) error {
 	ls := &launchSpec{
 		Staging: v.staging, Private: spec.Private, Overlays: spec.Overlays, Shim: spec.Shim,
 		Command: command{Path: spec.Process.Path, Args: spec.Process.Args, Env: spec.Process.Env, Dir: spec.Process.Dir},
-		UID:     spec.Process.UID, GID: spec.Process.GID, Groups: spec.Process.Groups, Grace: spec.Process.Grace,
+		UID:     spec.Process.UID, GID: spec.Process.GID, Grace: spec.Process.Grace,
 	}
 	// A launcher that dies early breaks the pipe; the handshake reports that.
 	go func() {
@@ -187,36 +193,36 @@ func (v *View) launch(spec *Spec) error {
 	return nil
 }
 
-// stdio returns the launcher's ends of the process's stdio, creating pipes where the spec gives no file. The pipes belong to the process's user, so that the relay can open them as its own.
-func (v *View) stdio(p *Process) ([3]*os.File, error) {
-	child := [3]*os.File{p.Stdin, p.Stdout, p.Stderr}
+// Stdio returns the stdio of a process that runs as uid and gid: each file of given, and for each nil one a pipe, or /dev/null for stdin when stdin is false. ends holds the other ends of the pipes. The pipes belong to uid and gid, so that the process relay can open them as its own. On error, nothing Stdio made stays open.
+func Stdio(given [3]*os.File, stdin bool, uid, gid uint32) (child, ends [3]*os.File, err error) {
+	child = given
 	for i := range child {
-		if child[i] != nil {
+		switch {
+		case child[i] != nil:
 			continue
-		}
-		r, w, err := os.Pipe()
-		if err == nil {
-			if err = r.Chown(int(p.UID), int(p.GID)); err != nil {
-				r.Close()
-				w.Close()
+		case i == 0 && !stdin:
+			child[0], err = os.Open(os.DevNull)
+		default:
+			var r, w *os.File
+			if r, w, err = os.Pipe(); err == nil {
+				child[i], ends[i] = w, r
+				if i == 0 {
+					child[i], ends[i] = r, w
+				}
+				err = r.Chown(int(uid), int(gid))
 			}
 		}
 		if err != nil {
-			for j := range i {
-				if v.pipes[j] != nil {
-					v.pipes[j].Close()
-					child[j].Close()
+			for j, f := range child {
+				if f != given[j] {
+					f.Close()
 				}
 			}
-			return child, err
-		}
-		if i == 0 {
-			child[i], v.pipes[i] = r, w
-		} else {
-			child[i], v.pipes[i] = w, r
+			closeFiles(ends[:])
+			return given, [3]*os.File{}, err
 		}
 	}
-	return child, nil
+	return child, ends, nil
 }
 
 func (v *View) handshake(ctx context.Context, spec *Spec) error {
@@ -301,7 +307,7 @@ func (v *View) abort(err error) error {
 		_ = v.cmd.Process.Kill()
 	}
 	_, _ = v.teardown()
-	v.closePipes()
+	closeFiles(v.pipes[:])
 	if v.cleanupErr != nil {
 		return errors.Join(err, v.cleanupErr)
 	}
@@ -385,14 +391,6 @@ func shutdown(f *os.File) {
 	}
 }
 
-func (v *View) closePipes() {
-	for _, p := range v.pipes {
-		if p != nil {
-			p.Close()
-		}
-	}
-}
-
 // reply is the launcher's answer to a request, with the process a spawn started.
 type reply struct {
 	message
@@ -438,6 +436,8 @@ func (v *View) watch() {
 			v.requestMu.Unlock()
 		case msgFailed:
 			failed = m.Fail.err()
+		case msgNoRelay:
+			close(v.relayLost)
 		}
 	}
 	v.requestMu.Lock()
@@ -549,25 +549,18 @@ func (v *View) Spawn(ctx context.Context, path string, args, env []string, dir s
 		return nil, &Error{Kind: ErrExited, Op: "spawn"}
 	}
 	// files are the launcher's: the command's read end and the process's stdio. ends are the caller's.
-	files := make([]*os.File, 4)
-	var cmdW *os.File
-	var ends [3]*os.File
-	var err error
-	files[0], cmdW, err = os.Pipe()
-	if err == nil && stdin {
-		files[1], ends[0], err = os.Pipe()
-	} else if err == nil {
-		files[1], err = os.Open(os.DevNull)
-	}
-	for i := 1; i < 3 && err == nil; i++ {
-		ends[i], files[i+1], err = os.Pipe()
+	child, ends, err := Stdio([3]*os.File{}, stdin, v.uid, v.gid)
+	var cmdR, cmdW *os.File
+	if err == nil {
+		if cmdR, cmdW, err = os.Pipe(); err != nil {
+			closeFiles(append(child[:], ends[:]...))
+		}
 	}
 	if err != nil {
-		closeFiles(append(files, cmdW))
-		closeFiles(ends[:])
 		<-v.spawning
 		return nil, &Error{Kind: ErrLauncher, Op: "pipe", Err: err}
 	}
+	files := append([]*os.File{cmdR}, child[:]...)
 	// The command travels over a pipe, as the spec does, so its size is exec's to bound. The write ends once the launcher has read it, or once no read end remains or the spawn is cancelled.
 	c := command{Path: path, Args: args, Env: env, Dir: dir}
 	go func() {
@@ -668,10 +661,13 @@ func (v *View) Close() error {
 		// A spawn blocked on the world keeps the killed launcher, and its end, open until the teardown stops the world.
 		v.ctl.interrupt()
 		<-v.done
-		v.closePipes()
+		closeFiles(v.pipes[:])
 	})
 	return v.cleanupErr
 }
+
+// RelayLost closes when the relay ends before the launcher, which the view's own end never causes: the relay crashed, was killed or lost its broker. It closes before Wait returns.
+func (v *View) RelayLost() <-chan struct{} { return v.relayLost }
 
 // Relay is the broker's end of the relay's connection, or nil when the spec declares no shim. processbroker.Start takes a duplicate of it. The view shuts the connection down as it ends, so a broker still running then sees the relay lost.
 func (v *View) Relay() *os.File { return v.relay }
