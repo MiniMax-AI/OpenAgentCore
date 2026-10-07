@@ -178,15 +178,8 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 func (dm *daemon) route(t *testing.T, reg *agent.Registry) {
 	t.Helper()
 	dm.frames, dm.opened = map[string]chan proto.Envelope{}, map[string]*session{}
-	removeHome := func(session string) error {
-		id, err := canonicalID(session)
-		if err != nil {
-			return err
-		}
-		return dm.host.RemoveHome(id)
-	}
 	var err error
-	if dm.router, err = dispatch.New(dispatch.Config{Registry: reg, Sender: dm, Environments: dm.host.Environments, RemoveHome: removeHome, Log: slog.New(slog.DiscardHandler)}); err != nil {
+	if dm.router, err = dispatch.New(dispatch.Config{Registry: reg, Sender: dm, Environments: dm.host.Environments, RemoveHome: dm.host.RemoveHome, Log: slog.New(slog.DiscardHandler)}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { dm.shutdown() })

@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
@@ -193,7 +195,7 @@ func TestRemoveHome(t *testing.T) {
 		opened <- e
 	}()
 	<-claimed
-	if err := h.RemoveHome(b.SessionID); !errors.Is(err, ErrSessionExists) {
+	if err := h.RemoveHome(uuid.UUID(b.SessionID).String()); !errors.Is(err, ErrSessionExists) {
 		t.Fatalf("RemoveHome during an open = %v, want ErrSessionExists", err)
 	}
 	close(proceed)
@@ -201,7 +203,7 @@ func TestRemoveHome(t *testing.T) {
 	if e == nil {
 		t.Fatal("open returned no Executor to close")
 	}
-	if err := h.RemoveHome(b.SessionID); !errors.Is(err, ErrSessionExists) {
+	if err := h.RemoveHome(uuid.UUID(b.SessionID).String()); !errors.Is(err, ErrSessionExists) {
 		t.Errorf("RemoveHome before the Executor closed = %v, want ErrSessionExists", err)
 	}
 	if _, err := os.Stat(f.session.Home.Host); err != nil {
@@ -221,7 +223,7 @@ func TestRemoveHome(t *testing.T) {
 	}
 	// Removal is idempotent: an absent home is removed.
 	for range 2 {
-		if err := h.RemoveHome(b.SessionID); err != nil {
+		if err := h.RemoveHome(uuid.UUID(b.SessionID).String()); err != nil {
 			t.Fatalf("RemoveHome = %v", err)
 		}
 	}

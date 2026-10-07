@@ -195,7 +195,7 @@ func TestWorkspaceExportCancelUnblocksWriterAndReleasesCapacity(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		r.mu.Lock()
-		active := r.workspaceExport != nil
+		active := len(r.workspaceExports) != 0
 		r.mu.Unlock()
 		if !active {
 			return
@@ -220,7 +220,9 @@ func TestCanceledExportAnswersTheRequestCoreAwaits(t *testing.T) {
 	// Core asks for the next chunk as the preparation that owns the export is released.
 	r.mu.Lock()
 	release()
-	r.workspaceExport.requests <- proto.WorkspaceExportPayload{Step: "next", Offset: int64(len(first.Data))}
+	for _, u := range r.workspaceExports {
+		u.requests <- proto.WorkspaceExportPayload{Step: "next", Offset: int64(len(first.Data))}
+	}
 	r.mu.Unlock()
 	if got := readExport(t, s); got.Outcome != "failed" && got.Outcome != "chunk" {
 		t.Fatal("the canceled export answered with", got)

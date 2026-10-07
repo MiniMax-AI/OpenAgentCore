@@ -103,7 +103,7 @@ func TestRuntimePreparationTransferValidatesCompleteBodyBeforeMutation(t *testin
 			}
 			capabilitiesReceipt(t, sender, id, "ready")
 			r.mu.Lock()
-			owner := r.runtimePreparation
+			owner := r.runtimePreparations[session]
 			r.mu.Unlock()
 			duplicate := uuid.NewString()
 			if err := r.Handle(t.Context(), capabilityEnvelope(t, duplicate, request)); err != nil {
@@ -133,7 +133,7 @@ func TestRuntimePreparationTransferValidatesCompleteBodyBeforeMutation(t *testin
 			capabilitiesReceipt(t, sender, id, "rejected")
 			r.mu.Lock()
 			defer r.mu.Unlock()
-			if owner.apply || owner.data != nil || r.runtimePreparation != nil {
+			if owner.apply || owner.data != nil || len(r.runtimePreparations) != 0 {
 				t.Fatal("invalid body retained or admitted a mutation")
 			}
 		})
@@ -164,7 +164,7 @@ func TestRuntimePreparationBeginRequiresExactBindingAndBounds(t *testing.T) {
 			t.Fatal(err)
 		}
 		capabilitiesReceipt(t, sender, id, "rejected")
-		if r.runtimePreparation != nil {
+		if len(r.runtimePreparations) != 0 {
 			t.Fatal("invalid scope allocated a transfer")
 		}
 	}
@@ -177,9 +177,9 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 			own := proto.Envelope{Assignment: capabilityRef}
 			switch mode {
 			case "write":
-				r.workspaceWrite = &workspaceUpload{envelope: own}
+				r.workspaceWrites[session] = &workspaceUpload{envelope: own}
 			case "export":
-				r.workspaceExport = &workspaceExport{request: own}
+				r.workspaceExports[session] = &workspaceExport{request: own}
 			case "read":
 				r.workspaceReads = map[string]string{"read": session}
 			case "run":
@@ -199,17 +199,17 @@ func TestRuntimePreparationPreparationExcludesOwnedResources(t *testing.T) {
 			if mode == "other session" {
 				capabilitiesReceipt(t, sender, id, "ready")
 				r.mu.Lock()
-				r.finishRuntimePreparationTransferLocked(r.runtimePreparation, false)
+				r.finishRuntimePreparationTransferLocked(r.runtimePreparations[session], false)
 				r.mu.Unlock()
 				capabilitiesReceipt(t, sender, id, "rejected")
 			} else if got := capabilitiesReceipt(t, sender, id, "rejected"); got.ErrorCode != "resource_unavailable" {
 				t.Fatal(got)
 			}
-			if r.runtimePreparation != nil {
+			if len(r.runtimePreparations) != 0 {
 				t.Fatal("busy Runtime admitted capability preparation")
 			}
-			r.workspaceWrite = nil
-			r.workspaceExport = nil
+			clear(r.workspaceWrites)
+			clear(r.workspaceExports)
 			r.workspaceReads = nil
 			clear(r.sessions)
 			clear(r.executors)
@@ -248,10 +248,10 @@ func TestRuntimePreparationUploadBlocksWorkspaceWriteAndSuspension(t *testing.T)
 		t.Fatal("missing write rejection")
 	}
 	r.mu.Lock()
-	owner := r.runtimePreparation
+	owner := r.runtimePreparations[session]
 	r.mu.Unlock()
 	shutdownCapabilitiesRouter(t, r)
-	if owner.data != nil || r.runtimePreparation != nil {
+	if owner.data != nil || len(r.runtimePreparations) != 0 {
 		t.Fatal("disconnect retained uncommitted body")
 	}
 }
@@ -263,7 +263,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 	request := proto.RuntimePreparePayload{Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
 	owner := &runtimePreparationTransfer{id: uuid.MustParse(id), envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
-	r.runtimePreparation = owner
+	r.runtimePreparations[session], r.transferBytes = owner, request.SizeBytes
 	r.shutdownWG.Add(1)
 	started, interrupted, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	retained := filepath.Join(t.TempDir(), "installed.json")
@@ -286,7 +286,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 	}
 	<-interrupted
 	r.mu.Lock()
-	owned := r.runtimePreparation == owner
+	owned := r.runtimePreparations[session] == owner
 	r.mu.Unlock()
 	if !owned {
 		t.Fatal("cancel released unsettled capability ownership")
@@ -297,7 +297,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 	if _, err := os.Stat(retained); err != nil {
 		t.Fatal("shutdown deleted installation result")
 	}
-	if r.runtimePreparation != nil {
+	if len(r.runtimePreparations) != 0 {
 		t.Fatal("confirmed completion retained capacity")
 	}
 }
@@ -344,14 +344,14 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	request := capabilityBegin(environment, session, []byte("abc"))
 	owner := &runtimePreparationTransfer{id: uuid.MustParse(id), envelope: capabilityEnvelope(t, id, request), request: request, data: []byte("abc"), ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
-	r.runtimePreparation = owner
+	r.runtimePreparations[session], r.transferBytes = owner, request.SizeBytes
 	r.shutdownWG.Add(1)
 	go r.runRuntimePreparationTransfer(ctx, owner, func(context.Context, uuid.UUID, proto.RuntimePreparePayload, []byte) error {
 		return context.DeadlineExceeded
 	}, func() {})
 	capabilitiesReceipt(t, sender, id, "unknown")
 	r.mu.Lock()
-	owned := r.runtimePreparation == owner && owner.uncertain && owner.data == nil
+	owned := r.runtimePreparations[session] == owner && owner.uncertain && owner.data == nil
 	r.mu.Unlock()
 	if !owned {
 		t.Fatal("unknown mutation released its ownership")
@@ -360,5 +360,100 @@ func TestRuntimePreparationResultCategoriesAndUnknownOwnership(t *testing.T) {
 	defer stop()
 	if err := r.Shutdown(wait); err == nil {
 		t.Fatal("shutdown claimed uncertain mutation settled")
+	}
+}
+
+func TestSessionTransferBlocksOnlyItsSession(t *testing.T) {
+	for _, mode := range []string{"held", "uncertain"} {
+		t.Run(mode, func(t *testing.T) {
+			r, sender, environment, session := capabilitiesTestRouter(t)
+			other := proto.AssignmentRef{SessionID: uuid.NewString(), AssignmentID: "other", Epoch: 1}
+			bindAssignment(r, other, environment)
+			next := func(id string) proto.Envelope {
+				t.Helper()
+				select {
+				case env := <-sender.frames:
+					if env.ID != id {
+						t.Fatalf("frame %s %s, want %s", env.Type, env.ID, id)
+					}
+					return env
+				case <-time.After(3 * time.Second):
+					t.Fatal("missing frame", id)
+				}
+				return proto.Envelope{}
+			}
+			if mode == "held" {
+				id := uuid.NewString()
+				if err := r.Handle(t.Context(), capabilityEnvelope(t, id, capabilityBegin(environment, session, []byte("abc")))); err != nil {
+					t.Fatal(err)
+				}
+				capabilitiesReceipt(t, sender, id, "ready")
+			} else {
+				r.mu.Lock()
+				r.workspaceWrites[session] = &workspaceUpload{finished: true, uncertain: true}
+				r.mu.Unlock()
+			}
+			start := func(ref proto.AssignmentRef) string {
+				env, err := proto.NewEnvelope(proto.TypeExecutionStart, uuid.NewString(), proto.ExecutionStartPayload{Handle: "handle", ExecutorID: "executor", RunID: "run", Input: proto.TextInput("input")})
+				if err != nil {
+					t.Fatal(err)
+				}
+				env.Assignment = ref
+				_ = r.Handle(t.Context(), env)
+				var status proto.PreparationStatusPayload
+				if err := next(env.ID).DecodePayload(&status); err != nil {
+					t.Fatal(err)
+				}
+				return status.ErrorCode
+			}
+			if got := start(capabilityRef); got != "resource_unavailable" {
+				t.Fatalf("the transferring Session started a Run: %s", got)
+			}
+			if got := start(other); got != "unknown_preparation" {
+				t.Fatalf("another Session's transfer blocked execution_start: %s", got)
+			}
+			// The other Session's transfers proceed while the connection's
+			// memory bound allows their bodies.
+			id := uuid.NewString()
+			request := capabilityBegin(environment, other.SessionID, []byte("abc"))
+			env := capabilityEnvelope(t, id, request)
+			env.Assignment = other
+			if err := r.Handle(t.Context(), env); err != nil {
+				t.Fatal(err)
+			}
+			capabilitiesReceipt(t, sender, id, "ready")
+			r.mu.Lock()
+			r.finishRuntimePreparationTransferLocked(r.runtimePreparations[other.SessionID], false)
+			r.mu.Unlock()
+			capabilitiesReceipt(t, sender, id, "rejected")
+			digest := sha256.Sum256([]byte("abc"))
+			for _, buffered := range []int{transferMemory, 0} {
+				write, err := proto.NewEnvelope(proto.TypeWorkspaceWrite, uuid.NewString(), proto.WorkspaceWritePayload{Step: "begin", EnvironmentID: environment, SessionID: other.SessionID, Path: "proof", SizeBytes: 3, SHA256: hex.EncodeToString(digest[:])})
+				if err != nil {
+					t.Fatal(err)
+				}
+				write.Assignment = other
+				r.mu.Lock()
+				r.transferBytes += buffered
+				r.mu.Unlock()
+				if err := r.Handle(t.Context(), write); err != nil {
+					t.Fatal(err)
+				}
+				r.mu.Lock()
+				r.transferBytes -= buffered
+				r.mu.Unlock()
+				var result proto.WorkspaceWriteResultPayload
+				if err := next(write.ID).DecodePayload(&result); err != nil {
+					t.Fatal(err)
+				}
+				if want := map[int]string{0: "ready", transferMemory: "write_capacity"}[buffered]; result.Outcome != want && result.ErrorCode != want {
+					t.Fatalf("write with %d bytes buffered = %+v", buffered, result)
+				}
+			}
+			r.mu.Lock()
+			delete(r.workspaceWrites, session)
+			r.mu.Unlock()
+			shutdownCapabilitiesRouter(t, r)
+		})
 	}
 }

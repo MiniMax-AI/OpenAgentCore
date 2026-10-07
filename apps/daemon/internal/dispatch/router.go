@@ -33,9 +33,8 @@ type Router struct {
 	log      *slog.Logger
 
 	admission           sync.RWMutex
-	suspension          *proto.EnvironmentSuspendPayload
-	suspendedBy         proto.AssignmentRef // the assignment that quiesced
 	mu                  sync.Mutex
+	suspensions         map[string]*suspension           // Environment ID → its quiescence
 	assignments         map[string]*assignmentState      // SessionID → assignment
 	sessions            map[string]*sessionState         // RunID → state
 	applied             map[string]appliedFunctionResult // RunID and call ID → applied result
@@ -48,9 +47,12 @@ type Router struct {
 	preparations        map[string]*preparationState
 	preparationRequests map[string]*preparationState
 	preparationTimeout  time.Duration
-	runtimePreparation  *runtimePreparationTransfer
-	workspaceWrite      *workspaceUpload
-	workspaceExport     *workspaceExport
+	// Each Session has at most one transfer of each kind; transferBytes
+	// counts the bodies that admitted writes and Runtime preparations buffer.
+	runtimePreparations map[string]*runtimePreparationTransfer // SessionID →
+	workspaceWrites     map[string]*workspaceUpload            // SessionID →
+	workspaceExports    map[string]*workspaceExport            // SessionID →
+	transferBytes       int
 	workspaceReads      map[string]string // read ID → SessionID
 	environments        func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
 	removeHome          func(sessionID string) error
@@ -91,9 +93,10 @@ type Config struct {
 	IdleTimeout        time.Duration
 	PreparationTimeout time.Duration
 	// Environments resolves the Environment owner of a Session's first bind on
-	// this Router, under the Router's lock, without I/O. A nil owner rejects
-	// the bind: the Runtime does not serve that Session. Nil Environments
-	// leaves every Session without an owner.
+	// this Router, and of a bind that supersedes its assignment, under the
+	// Router's lock, without I/O. A nil owner rejects the bind: the Runtime
+	// does not serve that Session. Nil Environments leaves every Session
+	// without an owner.
 	Environments func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
 	// RemoveHome removes the Session's native home once its Executors have
 	// closed. Nil declares that assignment_release does not accept RemoveHome.
@@ -136,19 +139,34 @@ func New(cfg Config) (*Router, error) {
 		preparations:        make(map[string]*preparationState),
 		preparationRequests: make(map[string]*preparationState),
 		preparationTimeout:  preparationTimeout,
+		suspensions:         make(map[string]*suspension),
+		runtimePreparations: make(map[string]*runtimePreparationTransfer),
+		workspaceWrites:     make(map[string]*workspaceUpload),
+		workspaceExports:    make(map[string]*workspaceExport),
 		environments:        cfg.Environments,
 		removeHome:          cfg.RemoveHome,
 	}, nil
 }
 
+// transferMemory bounds the bodies that a connection's admitted workspace
+// writes and Runtime preparations buffer together.
+const transferMemory = proto.WorkspaceWriteMaxBytes + proto.RuntimePrepareMaxBytes
+
 // Handle dispatches one inbound Envelope. Errors are returned for
 // programmer-visible problems (bad shape, registry miss); transient
-// session-level failures are logged and swallowed. A quiesced Router
-// still handles assignment_release.
+// session-level failures are logged and swallowed. A quiesced Environment's
+// Sessions still have their assignment_release handled.
 //
 // Adopts env.Trace into ctx so every downstream log under it inherits
 // the same trace_id, making a single grep cover both sides.
 func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
+	ctx = adoptEnvelopeTrace(ctx, env)
+	switch env.Type {
+	case proto.TypeEnvironmentQuiesce:
+		return r.handleQuiesce(ctx, env)
+	case proto.TypeEnvironmentResume:
+		return r.handleResume(ctx, env)
+	}
 	r.admission.RLock()
 	defer r.admission.RUnlock()
 	r.mu.Lock()
@@ -156,13 +174,11 @@ func (r *Router) Handle(ctx context.Context, env proto.Envelope) error {
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
-	if r.suspension != nil && env.Type != proto.TypeAssignmentRelease {
+	if a := r.assignments[env.Assignment.SessionID]; a != nil && r.suspensions[a.environmentID] != nil && env.Type != proto.TypeAssignmentRelease {
 		r.mu.Unlock()
 		return ErrRouterQuiesced
 	}
 	r.mu.Unlock()
-
-	ctx = adoptEnvelopeTrace(ctx, env)
 
 	switch env.Type {
 	case proto.TypeAssignmentBind:

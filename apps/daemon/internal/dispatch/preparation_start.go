@@ -20,11 +20,11 @@ func (r *Router) handleExecutionStart(_ context.Context, env proto.Envelope) err
 	encoded, _ := json.Marshal(input)
 	fingerprint := sha256.Sum256(encoded)
 	r.mu.Lock()
-	if r.closed || r.suspension != nil {
+	if r.closed {
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
-	if r.workspaceWrite != nil || r.workspaceExport != nil || r.runtimePreparation != nil {
+	if r.environmentTransferLocked(env.Assignment.SessionID) {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "resource_unavailable")
 	}

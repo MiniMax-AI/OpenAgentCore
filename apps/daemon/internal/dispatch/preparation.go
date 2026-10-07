@@ -83,7 +83,7 @@ func (r *Router) handleExecutionPrepare(ctx context.Context, env proto.Envelope)
 		r.mu.Unlock()
 		return r.rejectPreparation(env, code)
 	}
-	if u := r.runtimePreparation; u != nil && u.envelope.Assignment.SessionID == input.SessionID {
+	if r.runtimePreparations[input.SessionID] != nil {
 		r.mu.Unlock()
 		return r.rejectPreparation(env, "resource_unavailable")
 	}
@@ -168,7 +168,7 @@ func (r *Router) handleExecutionRelease(_ context.Context, env proto.Envelope) e
 
 func (r *Router) releasePreparation(p *preparationState, state, code string, publish bool) {
 	r.mu.Lock()
-	if r.closed || r.suspension != nil {
+	if r.closed {
 		r.mu.Unlock()
 		return
 	}
@@ -221,7 +221,7 @@ func (r *Router) publishPreparation(p *preparationState, status proto.Preparatio
 		r.mu.Unlock()
 		return
 	}
-	if r.closed || r.suspension != nil {
+	if r.closed {
 		r.mu.Unlock()
 		return
 	}

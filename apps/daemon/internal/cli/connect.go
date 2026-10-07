@@ -263,12 +263,25 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	if control != nil {
 		return runSuspendLoop(rootCtx, dial, registry, local, boot, agentCLIs, control)
 	}
+	return serveConnections(rootCtx, wsURL, dial, 0, func(conn *transport.Conn) error {
+		return pumpConn(rootCtx, conn, dispatch.Config{Registry: registry, Environments: localEnvironments(local)}, boot)
+	})
+}
+
+// serveConnections dials Core with dial and serves each connection until ctx
+// ends or Core rejects the credential. With a positive unreachable bound it
+// fails once Core has stayed unreachable that long.
+func serveConnections(ctx context.Context, wsURL string, dial transport.DialFn, unreachable time.Duration, serve func(*transport.Conn) error) error {
 	for {
-		if err := rootCtx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return nil
 		}
 
-		conn, err := transport.Reconnect(rootCtx, dial, transport.DefaultBackoff, func(attempt int, lastDelay time.Duration, lastErr error) {
+		dialCtx, stop := ctx, context.CancelFunc(func() {})
+		if unreachable > 0 {
+			dialCtx, stop = context.WithTimeout(ctx, unreachable)
+		}
+		conn, err := transport.Reconnect(dialCtx, dial, transport.DefaultBackoff, func(attempt int, lastDelay time.Duration, lastErr error) {
 			switch {
 			case attempt == 1:
 				obslog.Bg().Info("connecting", "ws_url", wsURL)
@@ -281,21 +294,24 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 				obslog.Bg().Warn("dial retry", "attempt", attempt, "delay", lastDelay)
 			}
 		})
+		stop()
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			if ctx.Err() != nil {
 				return nil
 			}
 			if errors.Is(err, transport.ErrPermanent) {
 				return fmt.Errorf("connect: permanent error (reissue the daemon credential): %w", err)
 			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				return fmt.Errorf("connect: Core unreachable for %s: %w", unreachable, err)
+			}
 			return fmt.Errorf("connect: dial: %w", err)
 		}
 		obslog.Bg().Info("ws connected", "device_id", conn.DeviceID())
 
-		// pumpConn returns on conn close (peer hangup, transport
-		// error, root ctx cancel). Loop back into Reconnect unless
-		// root ctx is cancelled.
-		pumpErr := pumpConn(rootCtx, conn, registry, local, boot, agentCLIs)
+		// serve returns on conn close (peer hangup, transport error, ctx
+		// cancel). Loop back into Reconnect unless ctx is cancelled.
+		pumpErr := serve(conn)
 		if pumpErr != nil {
 			obslog.Bg().Warn("ws session ended", "err", pumpErr)
 		} else {
@@ -305,7 +321,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 
 		// Server-initiated clean close (e.g. shutdown) → exit;
 		// otherwise loop back and reconnect.
-		if rootCtx.Err() != nil {
+		if ctx.Err() != nil {
 			return nil
 		}
 		// Permanent error (e.g. runtime deleted) → exit instead of
@@ -315,7 +331,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 		}
 		// Small breather before redialing so a flapping server doesn't
 		// get a tight loop of upgrade requests.
-		_ = transport.Sleep(rootCtx, 1*time.Second)
+		_ = transport.Sleep(ctx, 1*time.Second)
 	}
 }
 
@@ -328,17 +344,14 @@ func localEnvironments(local *localworkspace.Binding) func(proto.AssignmentRef, 
 	return local.Resolve
 }
 
-// pumpConn runs the per-connection workload: a dispatch.Router fed by
-// conn.Recv(), heartbeats every boot.HeartbeatInterval(), and a
-// confirmed router.Shutdown before returning ownership to the reconnect loop.
-// Failed cleanup keeps this exact Router alive, including after a shutdown signal.
-func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, local *localworkspace.Binding, boot *transport.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
-	router, err := dispatch.New(dispatch.Config{
-		Registry:     registry,
-		Sender:       conn,
-		Log:          obslog.Bg(),
-		Environments: localEnvironments(local),
-	})
+// pumpConn runs the per-connection workload: a dispatch.Router of cfg's
+// Harness kinds and Environment owners fed by conn.Recv(), heartbeats every
+// boot.HeartbeatInterval(), and a confirmed router.Shutdown before returning
+// ownership to the reconnect loop. Failed cleanup keeps this exact Router
+// alive, including after a shutdown signal.
+func pumpConn(parentCtx context.Context, conn *transport.Conn, cfg dispatch.Config, boot *transport.BootstrapResponse) error {
+	cfg.Sender, cfg.Log = conn, obslog.Bg()
+	router, err := dispatch.New(cfg)
 	if err != nil {
 		return fmt.Errorf("router init: %w", err)
 	}
@@ -352,8 +365,8 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 			Timestamp:           time.Now().Unix(),
 			ActiveRequests:      router.ActiveRuns(),
 			DaemonVersion:       Version,
-			SupportedAgentKinds: registry.SupportedAgentKinds(),
-			HomeRemoval:         proto.CapabilityUnsupported,
+			SupportedAgentKinds: cfg.Registry.SupportedAgentKinds(),
+			HomeRemoval:         proto.CapabilityFromBool(cfg.RemoveHome != nil),
 		}
 	}, obslog.Bg().With("component", "heartbeat"))
 

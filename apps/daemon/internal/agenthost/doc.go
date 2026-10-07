@@ -3,11 +3,10 @@
 // Session's Link attachment. It needs Linux; elsewhere Open returns
 // ErrUnsupported.
 //
-// The process that runs the agent host calls Open once at startup, hands
-// Host.Registry and Host.Environments to the daemon's dispatch, which drives
-// each Turn of each Executor, and calls Close once every Executor has closed. No production
-// caller constructs Host.Registry yet; oac-daemon connect still runs
-// Harnesses in the sandbox. Open takes two installation locks, which the
+// The process that runs the agent host, oac-daemon agent-host, calls Open
+// once at startup, hands Host.Registry and Host.Environments to the daemon's
+// dispatch, which drives each Turn of each Executor, and calls Close once
+// every Executor has closed. Open takes two installation locks, which the
 // Host holds until Close: a flock on StateDir/lock for the Session
 // directories and one on the Config.ViewCgroups directory for the view
 // cgroups. Under the locks, Open checks the requirements that need nothing

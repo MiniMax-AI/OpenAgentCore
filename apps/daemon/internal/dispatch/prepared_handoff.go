@@ -236,6 +236,8 @@ func (r *Router) runPreparedRelease(state *sessionState, handoff *preparedHandof
 	r.mu.Unlock()
 	r.mu.Lock()
 	outputErr, terminal, closed := handoff.outputErr, handoff.terminal, r.closed
+	// The retired Run's terminal is the Session's work until it is sent.
+	tail := r.trackWorkLocked(state.assignment)
 	r.mu.Unlock()
 	// Done can become visible before Sender.Send returns. Commit the settled
 	// owner and retire this Run before publication so an immediate successor
@@ -281,6 +283,7 @@ func (r *Router) runPreparedRelease(state *sessionState, handoff *preparedHandof
 	p.closeErr = terminalErr
 	close(release.settled)
 	r.mu.Unlock()
+	tail()
 }
 
 func (r *Router) forwardPreparedOutput(state *sessionState) {

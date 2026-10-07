@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
@@ -133,7 +134,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 			return
 		}
 		defer conn.Close()
-		finished <- pumpConn(ctx, conn, registry, nil, boot, agentCLIDiscovery{})
+		finished <- pumpConn(ctx, conn, dispatch.Config{Registry: registry}, boot)
 	}()
 	var peer *websocket.Conn
 	select {

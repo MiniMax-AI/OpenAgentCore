@@ -14,8 +14,9 @@ import (
 
 const runtimePreparationTimeout = 120 * time.Second
 
-// Router.mu protects one connection-local transfer. Partial installation data
-// belongs to the bound Environment and is never removed by transfer cleanup.
+// Router.mu protects a Session's Runtime preparation transfer. Partial
+// installation data belongs to the bound Environment and is never removed by
+// transfer cleanup.
 type runtimePreparationTransfer struct {
 	id        uuid.UUID // the envelope's ID
 	envelope  proto.Envelope
@@ -36,9 +37,10 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 	var request proto.RuntimePreparePayload
 	if len(env.Payload) > proto.RuntimePrepareMaxFrameBytes || env.DecodeRequest(&request) != nil || !proto.ValidRuntimePrepareRequest(request) {
 		r.mu.Lock()
-		pending := r.runtimePreparation != nil && r.runtimePreparation.envelope.ID == env.ID
-		if pending && !r.runtimePreparation.finished {
-			r.finishRuntimePreparationTransferLocked(r.runtimePreparation, false)
+		u := r.runtimePreparations[env.Assignment.SessionID]
+		pending := u != nil && u.envelope.ID == env.ID
+		if pending && !u.finished {
+			r.finishRuntimePreparationTransferLocked(u, false)
 		}
 		r.mu.Unlock()
 		if pending {
@@ -48,13 +50,14 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("invalid_request"))
 	}
 	r.mu.Lock()
-	if r.closed || r.suspension != nil {
+	if r.closed {
 		r.mu.Unlock()
 		return ErrRouterClosed
 	}
+	u := r.runtimePreparations[env.Assignment.SessionID]
 	if request.Step == "begin" {
-		if r.runtimePreparation != nil {
-			duplicate := r.runtimePreparation.envelope.ID == env.ID
+		if u != nil || r.transferBytes > transferMemory-request.SizeBytes {
+			duplicate := u != nil && u.envelope.ID == env.ID
 			r.mu.Unlock()
 			if duplicate {
 				return errors.New("dispatch: Runtime preparation already admitted")
@@ -79,7 +82,8 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 			id: id, envelope: env, request: request, data: make([]byte, 0, request.SizeBytes),
 			ready: make(chan struct{}), cancel: cancel,
 		}
-		r.runtimePreparation = u
+		r.runtimePreparations[request.SessionID] = u
+		r.transferBytes += request.SizeBytes
 		done := r.trackWorkLocked(env.Assignment)
 		r.shutdownWG.Add(1)
 		r.mu.Unlock()
@@ -90,7 +94,6 @@ func (r *Router) handleRuntimePrepare(ctx context.Context, env proto.Envelope) e
 		}
 		return nil
 	}
-	u := r.runtimePreparation
 	if u == nil || u.envelope.ID != env.ID || u.envelope.Assignment != env.Assignment {
 		r.mu.Unlock()
 		return r.sendRuntimePrepareResult(ctx, env, rejectedRuntimePreparation("resource_unavailable"))
@@ -141,9 +144,7 @@ func (r *Router) runtimePreparationResourcesBusyLocked(sessionID string) bool {
 // environmentTransferLocked reports whether the Session has a workspace write,
 // a workspace export or a Runtime preparation. Router.mu must be held.
 func (r *Router) environmentTransferLocked(sessionID string) bool {
-	return r.workspaceWrite != nil && r.workspaceWrite.envelope.Assignment.SessionID == sessionID ||
-		r.workspaceExport != nil && r.workspaceExport.request.Assignment.SessionID == sessionID ||
-		r.runtimePreparation != nil && r.runtimePreparation.envelope.Assignment.SessionID == sessionID
+	return r.workspaceWrites[sessionID] != nil || r.workspaceExports[sessionID] != nil || r.runtimePreparations[sessionID] != nil
 }
 
 // sessionWorkLocked reports whether the Session has a Run, a workspace read or
@@ -202,9 +203,10 @@ func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePr
 	// Release the potentially large body before waiting on transport delivery.
 	data = nil
 	r.mu.Lock()
+	r.transferBytes -= u.request.SizeBytes
 	u.uncertain = result.Outcome == "unknown"
-	if !u.uncertain && r.runtimePreparation == u {
-		r.runtimePreparation = nil
+	if !u.uncertain {
+		delete(r.runtimePreparations, u.request.SessionID)
 	}
 	r.mu.Unlock()
 	// The result has a separate send budget, independent of an installation timeout.

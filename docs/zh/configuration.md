@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 104a52b9f4f2840326a0a06d30f508435cf0606d5d83c1aee4cdb7473877ebab
+source_hash: 286ca5de3c5f97cf261feea1145b98cf59055c5f197fa7ad3bb02bf0e281a5b4
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -150,7 +150,14 @@ agent host 在沙箱之外、在每个 Session 自己的视图中运行该 Sessi
 
 保留 Docker 默认的 seccomp 配置文件：有了 `CAP_SYS_ADMIN`，它允许 `clone3`、`mount` 和 `unshare`。容器不获得 Docker 套接字，也不发布端口。
 
-agent host 需要一个委派给它的 cgroup v2 目录。它在该目录中为每个视图启动一个独立的 cgroup，用 `cgroup.kill` 结束视图并删除该 cgroup。启动时，它会结束并删除该目录中的每个 cgroup，因为其中每个 cgroup 都视为视图的 cgroup，所以其他任何东西都不得使用该目录。该目录必须可写，且不能包含 agent host 自己的进程。Docker 以只读方式挂载容器的 cgroup。使用上述参数时，在容器内再次挂载的 cgroup v2（`mount -t cgroup2 cgroup2 <dir>`）就是容器自己的 cgroup 且可写，其中新建的目录即为委派目录。没有这项委派时 agent host 不会启动：它以 `agenthost.ErrUnsupported` 失败，且没有任何回退。
+agent host 需要一个委派给它的 cgroup v2 目录。它在该目录中为每个视图启动一个独立的 cgroup，用 `cgroup.kill` 结束视图并删除该 cgroup。启动时，它会结束并删除该目录中的每个 cgroup，因为其中每个 cgroup 都视为视图的 cgroup，所以其他任何东西都不得使用该目录。该目录必须可写，且不能包含 agent host 自己的进程。Docker 以只读方式挂载容器的 cgroup。使用上述参数时，在容器内再次挂载的 cgroup v2 就是容器自己的 cgroup 且可写：agent host 启动时把它挂载到 `/run/oac/cgroup`，并把目录 `/run/oac/cgroup/views` 委派给它的视图。没有这项委派时 agent host 不会启动：它以 `agenthost.ErrUnsupported` 失败，且没有任何回退。
+
+容器运行 `oac-daemon agent-host --identity-file <path> --core-url <origin>`，该命令不接受其他参数：
+
+- `--identity-file` 是 agent host 的身份，一个包含 `runtime_id` 和 `credential` 的 JSON 对象。agent host 以该 Runtime 的身份连接 Core，并按原样向 Runtime gateway 和 [Link](./sandbox-link-protocol.md) 出示该凭据。
+- `--core-url` 是 Core 的源地址。agent host 按 Core 从 `OAC_PUBLIC_URL` 推导的方式，从它推导 Runtime gateway 和 Link 的 URL，并忽略 Core 返回的公开地址，因此它必须是 https 源地址，或回环主机上的 http 源地址，后者只有 Core 网络命名空间内的 peer 才能访问。
+
+agent host 为镜像的 `/opt/oac/harnesses.json` 所安装、且声明了视图的每个 Harness 提供服务；没有任何 Harness 时它也会启动并连接。它把每个 Session 的 home（含 Harness 的原生历史）保存在 `/var/lib/oac/agent-host`，该目录必须比容器存活更久，Session 才能在重启后继续。连接断开后它按退避策略重新拨号；当 Core 连续两分钟不可达时，agent host 以非零状态退出，由其监管程序重启。
 
 绝不要为 agent host 设置 `GODEBUG=http2debug`。设置后，Go 的 HTTP/2 实现会记录它编码的每个请求头，包括 agent host 添加的模型和 MCP 凭据。
 

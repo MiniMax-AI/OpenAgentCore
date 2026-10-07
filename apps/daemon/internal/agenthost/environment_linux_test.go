@@ -204,6 +204,52 @@ func TestEnvironmentOwnerServesTheSandbox(t *testing.T) {
 	}
 }
 
+// TestSupersedingBindRebindsTheOwner checks that a bind of the Session's
+// assignment at a higher epoch with a new grant drains the owner's
+// attachment and gives the owner the new binding, under which its next write
+// attaches to the sandbox again.
+func TestSupersedingBindRebindsTheOwner(t *testing.T) {
+	if os.Getenv(gateEnv) != "1" {
+		t.Skipf("set %s=1 and run the test binary as root in a throwaway container; see the view suite", gateEnv)
+	}
+	sb := startSandbox(t, os.Getenv(sandboxIOEnv))
+	for _, name := range []string{"before.txt", "after.txt"} {
+		if err := os.RemoveAll(path.Join(sandboxWorkspace, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(sandboxWorkspace, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{StateDir: t.TempDir(), RelayURL: sb.url, RuntimeID: sandboxwire.NewID(), Credential: []byte("runtime-credential"), Harnesses: agent.NewRegistry()}
+	sb.auth.AddRuntime(cfg.Credential, cfg.RuntimeID)
+	sb.ready(t, cfg)
+	dm := &daemon{host: &Host{cfg: cfg, owners: owners{d: deps{dial: relayDial(cfg)}}}}
+	dm.route(t, agent.NewRegistry())
+	b := sb.bind(cfg.RuntimeID, time.Minute)
+	dm.assign(t, b)
+	if r := dm.write(t, b, "before.txt", []byte("before")); r.Outcome != "completed" || dm.host.drained(t, b) {
+		t.Fatalf("the write at epoch 1 is %+v", r)
+	}
+
+	next := b
+	next.AssignmentEpoch, next.AttachGrant = 2, []byte("grant-"+sandboxwire.NewID().String())
+	sb.grant(next, cfg.RuntimeID, time.Minute)
+	dm.assign(t, next)
+	o := dm.host.owner(t, next)
+	rebound, drained := sameBinding(o.binding, next), o.link == nil
+	o.release()
+	if !rebound || !drained {
+		t.Fatalf("after the superseding bind the owner has the new binding %t and no attachment %t", rebound, drained)
+	}
+	if r := dm.write(t, next, "after.txt", []byte("after")); r.Outcome != "completed" {
+		t.Fatalf("the write at epoch 2 is %+v", r)
+	}
+	if body, err := os.ReadFile(path.Join(sandboxWorkspace, "after.txt")); err != nil || string(body) != "after" {
+		t.Fatalf("the sandbox has %q, %v", body, err)
+	}
+}
+
 // TestUnreachableSandboxRejectsRuntimePreparation checks that a
 // runtime_prepare whose owner cannot reach the sandbox ends rejected, which
 // leaves the Router free to run another Session's and to shut down.

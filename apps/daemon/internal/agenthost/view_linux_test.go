@@ -566,10 +566,15 @@ func (sb *sandbox) stop() {
 // runtimeID for lease.
 func (sb *sandbox) bind(runtimeID sandboxwire.ID, lease time.Duration) Binding {
 	b := newBinding(sb.resource)
+	sb.grant(b, runtimeID, lease)
+	return b
+}
+
+// grant lets runtimeID attach b's Session to the resource for lease.
+func (sb *sandbox) grant(b Binding, runtimeID sandboxwire.ID, lease time.Duration) {
 	sb.auth.AddGrant(b.AttachGrant, sandboxlinktest.Grant{RuntimeID: runtimeID, Resource: b.Resource, SessionID: b.SessionID,
 		AssignmentID: b.AssignmentID, AssignmentEpoch: b.AssignmentEpoch, Lease: lease,
 		Services: []sandboxlink.Service{sandboxlink.ServiceFile, sandboxlink.ServiceProcess, sandboxlink.ServiceNetwork}})
-	return b
 }
 
 func (sb *sandbox) dial(t *testing.T, cfg Config) *sandboxlink.AttachLink {

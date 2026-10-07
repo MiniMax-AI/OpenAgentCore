@@ -66,6 +66,7 @@ func TestSubcommandsAreRegistered(t *testing.T) {
 		"runtime-mcp-exec": false,
 		"placement":        false,
 		"connect":          false,
+		"agent-host":       false,
 		"status":           false,
 		"stop":             false,
 		"logs":             false,
