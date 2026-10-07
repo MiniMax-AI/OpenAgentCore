@@ -1,3 +1,4 @@
+// Package installroot probes native adapter installations.
 package installroot
 
 import (

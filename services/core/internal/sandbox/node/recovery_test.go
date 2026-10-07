@@ -68,7 +68,7 @@ func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T)
 		t.Fatal(err)
 	}
 	wait(t, func() bool { return !second.Online(id.NodeID) })
-	persisted, err := LoadIdentity(dir)
+	persisted, err := readIdentity(dir)
 	if err != nil || persisted.OwnerEpoch != 5 || persisted.Credential != credential {
 		t.Fatal("restart identity changed")
 	}
@@ -264,7 +264,7 @@ func TestCorruptOrMismatchedIdentityNeverRotates(t *testing.T) {
 	if _, err = InitIdentity(dir, stored.CoreURL, mismatch); err == nil {
 		t.Fatal("adopted wrong backend")
 	}
-	original, err := LoadIdentity(dir)
+	original, err := readIdentity(dir)
 	if err != nil || original.Credential != stored.Credential {
 		t.Fatal("credential rotated")
 	}
@@ -273,11 +273,5 @@ func TestCorruptOrMismatchedIdentityNeverRotates(t *testing.T) {
 	}
 	if _, err = InitIdentity(dir, stored.CoreURL, id); err == nil {
 		t.Fatal("corrupt identity replaced")
-	}
-	if err = os.Remove(filepath.Join(dir, "identity.json")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = LoadIdentity(dir); err == nil {
-		t.Fatal("missing identity recreated by load")
 	}
 }

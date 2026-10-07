@@ -27,10 +27,6 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 	if binding == nil {
 		return nil
 	}
-	if !runtime.Info.Available || !SupportsExecution(runtime.Info.Version) {
-		fail(fmt.Errorf("local execution requires the qualified native version"))
-		return nil
-	}
 	root, err := paths.Root()
 	if err != nil {
 		fail(err)

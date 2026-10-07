@@ -88,7 +88,3 @@ func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registr
 	}
 	return nil
 }
-
-func ValidateModelProtocol(protocol, harness string) error {
-	return builtin.Registry().ValidateProtocol(harness, protocol)
-}

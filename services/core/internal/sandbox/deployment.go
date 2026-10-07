@@ -67,11 +67,6 @@ type RuntimeRelease struct {
 	FirmwareSHA256      string `json:"firmware_sha256"`
 }
 
-func lowerHex(v string, bytes int) bool {
-	x, err := hex.DecodeString(v)
-	return err == nil && len(x) == bytes && hex.EncodeToString(x) == v
-}
-
 func (r RuntimeRelease) Validate() error {
 	values := reflect.ValueOf(r)
 	for i, rule := range runtimeContract {

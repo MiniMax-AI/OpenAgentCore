@@ -2,6 +2,7 @@ package mcode
 
 import (
 	"context"
+	"errors"
 	"io"
 	"reflect"
 	"testing"
@@ -10,20 +11,20 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestMCodeExecutionOptInIsVersionBound(t *testing.T) {
+// An available runtime is execution-capable; a rejected native version is unavailable.
+func TestMCodeExecutionFollowsAvailability(t *testing.T) {
 	for _, tc := range []struct {
-		enabled, version string
-		qualified        bool
-	}{{"", "0.4.12", false}, {"1", "0.3.11", false}, {"1", "0.4.12", true}} {
-		t.Run(tc.enabled+"/"+tc.version, func(t *testing.T) {
-			t.Setenv("OAC_RUNTIME_MCODE_AGENTS_API", tc.enabled)
+		version string
+		check   error
+	}{{SupportedVersion, nil}, {"0.3.11", errors.New("mcode: unsupported version 0.3.11")}} {
+		t.Run(tc.version, func(t *testing.T) {
 			rc := agent.DiscoveryOptions{Stdout: io.Discard, Stderr: io.Discard}
-			runtime := discoverWithCheck(t.Context(), rc, Declaration.Info, func(context.Context, string) (string, error) { return tc.version, nil })
-			if runtime.Executor == nil || runtime.Info.Capabilities.WorkspaceReadPreparation.IsSupported() {
+			runtime := discoverWithCheck(t.Context(), rc, Declaration.Info, func(context.Context, string) (string, error) { return tc.version, tc.check })
+			info, available := runtime.Info, tc.check == nil
+			if (runtime.Executor != nil) != available || info.Capabilities.WorkspaceReadPreparation.IsSupported() {
 				t.Fatalf("factories: %+v", runtime)
 			}
-			info := runtime.Info
-			if !info.Available || info.Capabilities.EnvironmentNone.IsSupported() != tc.qualified || info.Capabilities.DurableInputReceipts.IsSupported() != tc.qualified || info.Capabilities.SubagentObservations.IsSupported() != tc.qualified {
+			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.DurableInputReceipts.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {
 				t.Fatalf("capabilities=%+v", info.Capabilities)
 			}
 			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.LocalEnvironment.IsSupported() || info.Capabilities.FunctionTools.IsSupported() {

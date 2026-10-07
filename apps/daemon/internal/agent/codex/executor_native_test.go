@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
-	obslog "github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 )
 
 // This opt-in test uses the real pinned harness and an explicitly configured
@@ -48,7 +48,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 	}
 	cfg := defaultSessionConfig()
 	cfg.codexBinary = binary
-	cfg.logger = obslog.Discard()
+	cfg.logger = slog.New(slog.DiscardHandler)
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "executor-native",
 		DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true,

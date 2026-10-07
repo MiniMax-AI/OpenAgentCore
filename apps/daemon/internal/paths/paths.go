@@ -88,12 +88,3 @@ func LogFile(profile string) (string, error) {
 	}
 	return filepath.Join(dir, "connect.log"), nil
 }
-
-// SessionsFile returns the absolute path to sessions.json.
-func SessionsFile(profile string) (string, error) {
-	dir, err := ProfileDir(profile)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "sessions.json"), nil
-}

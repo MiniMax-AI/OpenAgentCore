@@ -154,7 +154,7 @@ func (r *Router) fenceSessionWorkLocked(sessionID string) []*preparationState {
 	}
 	var preparations []*preparationState
 	for _, p := range r.preparations {
-		if p.executor == nil && p.workspaceReadOnly && p.owns && p.request.Assignment.SessionID == sessionID {
+		if p.executor == nil && p.owns && p.request.Assignment.SessionID == sessionID {
 			preparations = append(preparations, p)
 		}
 	}

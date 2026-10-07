@@ -140,7 +140,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 	}
 	running = false
 	wait(t, func() bool { return !hub.Online(id.NodeID) })
-	persisted, err := LoadIdentity(dir)
+	persisted, err := readIdentity(dir)
 	if err != nil || persisted.Credential != credential || persisted.Identity.NodeID != id.NodeID {
 		t.Fatal("node restart changed identity", err)
 	}
