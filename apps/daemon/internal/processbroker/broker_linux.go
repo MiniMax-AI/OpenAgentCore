@@ -117,6 +117,7 @@ func (b *Broker) read() {
 	}
 	b.mu.Unlock()
 	b.cancel()
+	b.conn.CloseWrite() // a relay the broker stops serving ends too
 	b.conn.Close()
 	close(b.done)
 }

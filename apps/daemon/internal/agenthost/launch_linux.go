@@ -38,6 +38,7 @@ type runningView interface {
 	Wait() (sessionview.Exit, error)
 	Close() error
 	Relay() *os.File
+	RelayLost() <-chan struct{}
 	Spawn(ctx context.Context, path string, args, env []string, dir string, stdin bool) (*sessionview.Spawned, error)
 }
 
@@ -302,34 +303,27 @@ type ownedView struct {
 // while the view runs.
 func (h *ownedView) watch() {
 	defer close(h.watched)
-	var relayEnded <-chan struct{}
+	var relayLost <-chan struct{}
 	if h.broker != nil {
-		relayEnded = h.broker.Done()
+		relayLost = h.v.RelayLost()
 	}
-	for {
+	select {
+	case <-h.world.Lost():
+		h.s.fail(fmt.Errorf("%w: world: %w", ErrWorld, h.world.Err()))
+		return
+	case <-relayLost:
+	case <-h.ended:
+		// A lost relay is reported before the view ends.
 		select {
-		case <-h.world.Lost():
-			h.s.fail(fmt.Errorf("%w: world: %w", ErrWorld, h.world.Err()))
-			return
-		case <-relayEnded:
-			// The broker stops serving on Close, which end calls only after
-			// watch returns, or when its relay connection ends. sessionview
-			// ends that connection itself only in its teardown, which starts
-			// once the launcher has stopped answering, and from then on
-			// Signal fails with ErrExited, ErrClosed or a lost launcher. So a
-			// delivered signal means that the view still runs its process
-			// and the relay was lost while the Harness ran. A failed one
-			// means that the view is ending, and Wait reports how.
-			if h.v.Signal(0) == nil {
-				h.s.log.Error("process relay lost", "error", h.broker.Err())
-				h.s.brokerFailed("relay", h.broker.Err())
-				return
-			}
-			relayEnded = nil
-		case <-h.ended:
+		case <-relayLost:
+		default:
 			return
 		}
 	}
+	// The relay's end ends its connection, so the broker stops.
+	<-h.broker.Done()
+	h.s.log.Error("process relay lost", "error", h.broker.Err())
+	h.s.brokerFailed("relay", h.broker.Err())
 }
 
 func (h *ownedView) Signal(sig syscall.Signal) error { return h.v.Signal(sig) }

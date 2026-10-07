@@ -53,6 +53,8 @@ type View struct {
 	pipes   [3]*os.File
 	relay   *os.File // the broker's end of the relay connection
 
+	relayLost chan struct{} // closed when the relay ends before the launcher
+
 	waited     chan struct{} // closed once the launcher has been reaped
 	waitErr    error
 	cleanupErr error // set before done closes
@@ -76,7 +78,7 @@ func Start(ctx context.Context, spec Spec) (*View, error) {
 	if err := Probe(); err != nil {
 		return nil, err
 	}
-	v := &View{done: make(chan struct{}), requests: map[uint64]chan reply{}, spawning: make(chan struct{}, 1)}
+	v := &View{done: make(chan struct{}), relayLost: make(chan struct{}), requests: map[uint64]chan reply{}, spawning: make(chan struct{}, 1)}
 	if err := v.launch(&spec); err != nil {
 		return nil, v.abort(err)
 	}
@@ -434,6 +436,8 @@ func (v *View) watch() {
 			v.requestMu.Unlock()
 		case msgFailed:
 			failed = m.Fail.err()
+		case msgNoRelay:
+			close(v.relayLost)
 		}
 	}
 	v.requestMu.Lock()
@@ -661,6 +665,9 @@ func (v *View) Close() error {
 	})
 	return v.cleanupErr
 }
+
+// RelayLost closes when the relay ends before the launcher, which the view's own end never causes: the relay crashed, was killed or lost its broker. It closes before Wait returns.
+func (v *View) RelayLost() <-chan struct{} { return v.relayLost }
 
 // Relay is the broker's end of the relay's connection, or nil when the spec declares no shim. processbroker.Start takes a duplicate of it. The view shuts the connection down as it ends, so a broker still running then sees the relay lost.
 func (v *View) Relay() *os.File { return v.relay }

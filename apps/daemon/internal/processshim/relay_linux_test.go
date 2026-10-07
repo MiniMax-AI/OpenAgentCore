@@ -353,6 +353,81 @@ func TestNoticeFollowsQueuedStderr(t *testing.T) {
 	}
 }
 
+// A Notice queued behind stderr still reaches fd 2 when End stops that
+// stderr first, and a stderr nobody reads holds neither from ending.
+func TestNoticeOutlivesEnd(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprintf("full=%v", full), func(t *testing.T) {
+			var rl *relay
+			release := make(chan struct{})
+			r := startTestRelay(t, func(r *relay) {
+				rl = r
+				if !full {
+					r.gating = func() { <-release } // the stderr waits until End has stopped it
+				}
+			})
+			opened := make(chan uint64, 1)
+			go func() {
+				for {
+					m, err := r.read()
+					if err != nil {
+						return
+					}
+					if m, ok := m.(Open); ok {
+						id := m.ID
+						r.send(Accept{ID: id}, Started{ID: id}, Output{ID: id, FD: 2, Seq: 1, Data: []byte("err\n")},
+							Notice{ID: id, Message: []byte("note")}, Exit{ID: id, Result: Result{Code: 0}})
+						opened <- id
+					}
+				}
+			}()
+			pr, pw, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer pr.Close()
+			filled := 0
+			if full {
+				fd := int(pw.Fd())
+				unix.SetNonblock(fd, true)
+				for _, chunk := range []int{pipeBuf, 1} {
+					for n, err := 0, error(nil); err == nil; n, err = unix.Write(fd, make([]byte, chunk)) {
+						filled += n
+					}
+				}
+			}
+			fds := devNull(t)
+			fds[2] = int(pw.Fd())
+			conn := r.shim(t, "sh", fds)
+			pw.Close()
+			if res, err := finished(conn); err != nil || res.Code != 0 {
+				t.Fatalf("Result %+v, %v", res, err)
+			}
+			r.send(End{ID: <-opened})
+			for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(time.Millisecond) {
+				rl.mu.Lock()
+				ended := len(rl.invs) == 0
+				rl.mu.Unlock()
+				if ended {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("the invocation never took End")
+				}
+			}
+			close(release)
+			pr.SetDeadline(time.Now().Add(10 * time.Second))
+			got, err := io.ReadAll(pr)
+			const note = "oac-process-shim: note\n"
+			rest, ok := strings.CutPrefix(string(got), string(make([]byte, filled)))
+			// A full stderr may still be full when the Notice is tried.
+			if err != nil || !ok || (rest != note && !(full && rest == "")) {
+				t.Fatalf("fd 2 got %d bytes ending in %q, %v; want %d filler bytes and %q", len(got), got[max(0, len(got)-32):], err, filled, note)
+			}
+		})
+	}
+}
+
 // readN reads n bytes from the terminal's master side. It fails the test
 // when they do not arrive within 10s.
 func readN(t *testing.T, fd, n int) []byte {

@@ -345,8 +345,12 @@ func (l *launcher) reapChildren() bool {
 	}
 }
 
-// reaped retires the ID of pid, if it has one, and reports its exit. mu is held.
+// reaped retires the ID of pid, if it has one, and reports its exit, or reports the relay's loss: the relay ignores the view's signals, so it ends before the launcher only when it is lost. mu is held.
 func (l *launcher) reaped(pid int, ws unix.WaitStatus) {
+	if pid == l.relay {
+		l.post(message{Kind: msgNoRelay})
+		return
+	}
 	id, ok := l.spawned[pid]
 	if !ok {
 		return

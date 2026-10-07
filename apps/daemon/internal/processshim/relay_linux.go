@@ -617,6 +617,7 @@ func (o *output) next() (item, bool) {
 
 func (o *output) run() {
 	defer o.inv.pumps.Done()
+	defer o.notices()
 	id := o.inv.id
 	for {
 		it, ok := o.next()
@@ -671,6 +672,20 @@ func (o *output) run() {
 			}
 		case o.progress(it.seq, false):
 			o.inv.r.send(Written{ID: id, FD: o.fd, Seq: it.seq})
+		}
+	}
+}
+
+// notices writes the Notices still queued once the pump has stopped, each
+// as far as the descriptor takes it now, so End drops none it can take.
+func (o *output) notices() {
+	o.mu.Lock()
+	queue := o.queue
+	o.queue = nil
+	o.mu.Unlock()
+	for _, it := range queue {
+		if it.notice != nil {
+			o.message(it.notice)
 		}
 	}
 }

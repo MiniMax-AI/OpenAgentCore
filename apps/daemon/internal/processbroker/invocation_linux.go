@@ -778,7 +778,12 @@ func (inv *invocation) receive(m processshim.RelayMessage) error {
 		for _, seq := range sent {
 			inv.acks.deliver(seq)
 		}
-		inv.log.Info("output reader gone", "stream", w.stream, "error", unix.Errno(m.Errno))
+		// A reader that closes its end, as on a Cancel, is expected.
+		if errno := unix.Errno(m.Errno); errno == unix.EPIPE || errno == unix.ECONNRESET {
+			inv.log.Debug("output reader gone", "stream", w.stream, "error", errno)
+		} else {
+			inv.log.Info("output write failed", "stream", w.stream, "error", errno)
+		}
 		inv.helpers.Add(1)
 		go func() {
 			defer inv.helpers.Done()

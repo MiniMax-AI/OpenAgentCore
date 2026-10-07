@@ -417,6 +417,8 @@ func (v *fakeView) Signal(syscall.Signal) error { return nil }
 
 func (v *fakeView) Relay() *os.File { return nil }
 
+func (v *fakeView) RelayLost() <-chan struct{} { return nil }
+
 func (v *fakeView) Spawn(context.Context, string, []string, []string, string, bool) (*sessionview.Spawned, error) {
 	return nil, v.spawnErr
 }
