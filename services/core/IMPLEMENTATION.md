@@ -138,7 +138,7 @@ Provider input validation uses the adapter rules in `internal/harnessconfig`: on
 - At dispatch, Core rechecks the tenant, attached Vault, selected ID, frozen auth type and exact URL before scoped decryption, and the token enters only the transient daemon request. A missing key or binding failure never falls back to anonymous execution.
 
 - `credentialcrypto` ciphertext is a format version byte followed by the standard AEAD nonce, ciphertext and tag. The authenticated data holds a fixed domain and version plus the binding (tenant, Vault, Credential, auth type, exact destination). Keep the domain string unchanged: existing rows must still decrypt.
-- Random-nonce GCM allows at most 2^32 encryptions per key. `secrets/credential.key` also seals model providers, the E2B key, Skills, initial files and environment setup, so every sealed write counts toward that bound; there is no rotation or re-encryption path.
+- Random-nonce GCM allows at most 2^32 encryptions per key. `secrets/core/credential.key` also seals model providers, the E2B key, Skills, initial files and environment setup, so every sealed write counts toward that bound; there is no rotation or re-encryption path.
 - OAuth dispatch refresh holds the Credential row lock and the external exchange under one 20-second context (`vaults.oauthRefreshTimeout`). The refresh HTTP client has a 10-second overall timeout and 5-second TLS handshake and response-header timeouts, uses no proxy and treats any redirect as failure.
 
 ## MCP

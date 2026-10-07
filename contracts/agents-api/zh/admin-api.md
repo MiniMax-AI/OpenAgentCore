@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 7759541dbc59dab917499f506c9e9c11184e8065fd1ed6fb418baaf4a478faf3
+source_hash: 7eb295db6402db8dae91fcdd97f90a5900f740925caaee9d0172b9886544f6ec
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -134,7 +134,7 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 | 字段 | 含义 |
 | --- | --- |
 | `object` | `core.installation` |
-| `installation_id` | `state.json` 中的安装 ID（[安装目录](../../../docs/zh/configuration.md#installation-directory)）；Core 在不使用沙箱管理器运行时为 null |
+| `installation_id` | `OAC_INSTALLATION_ID_FILE` 中的安装 ID（[Compose 安装](../../../docs/zh/configuration.md#compose-installations)）；Core 在不使用沙箱管理器运行时为 null |
 | `public_url` | `public_url` 设置（[设置](../../../docs/zh/configuration.md#settings)）：应用程序、节点、沙箱和自托管执行器使用的源地址。未设置时为 null |
 | `api_base_url` | 在 `public_url` 后附加 `/v1`，即 Project API 密钥使用的 `OPENAI_BASE_URL`。当 `public_url` 为 null 时为 null |
 | `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
