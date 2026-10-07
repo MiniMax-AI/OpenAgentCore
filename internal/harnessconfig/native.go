@@ -9,8 +9,13 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// ErrHarnessConfig deliberately excludes caller-controlled keys and values.
-var ErrHarnessConfig = errors.New("invalid or unsupported harness_config")
+var (
+	// ErrHarnessConfig deliberately excludes caller-controlled keys and values.
+	ErrHarnessConfig = errors.New("invalid or unsupported harness_config")
+	// ErrHarnessRequired rejects native parameters without the Harness whose
+	// adapter defines them.
+	ErrHarnessRequired = errors.New("harness_config parameters require a selected harness")
+)
 
 const MaxHarnessConfigBytes = 16 * 1024
 
@@ -44,9 +49,8 @@ func (c Configuration) ParseHarnessConfig(raw proto.HarnessConfig) (map[string]a
 	return result, nil
 }
 
-// ValidateHarnessConfig validates a selected adapter. An empty kind is for saved
-// Agents without a selected Harness: at least one registered adapter must accept
-// the object. Session admission always validates its resolved kind again.
+// ValidateHarnessConfig validates native parameters against the selected
+// adapter. Only an empty object is valid without one.
 func (r Registry) ValidateHarnessConfig(kind string, raw json.RawMessage) error {
 	config, err := decodeHarnessConfig(raw)
 	if err != nil {
@@ -57,20 +61,15 @@ func (r Registry) ValidateHarnessConfig(kind string, raw json.RawMessage) error 
 	if len(config) == 0 {
 		return nil
 	}
-	if kind != "" {
-		c, ok := r.Lookup(kind)
-		if !ok {
-			return ErrHarnessConfig
-		}
-		_, err := c.ParseHarnessConfig(raw)
-		return err
+	if kind == "" {
+		return ErrHarnessRequired
 	}
-	for _, c := range r.configurations {
-		if _, err := c.ParseHarnessConfig(raw); err == nil {
-			return nil
-		}
+	c, ok := r.Lookup(kind)
+	if !ok {
+		return ErrHarnessConfig
 	}
-	return ErrHarnessConfig
+	_, err = c.ParseHarnessConfig(raw)
+	return err
 }
 
 // Reject repeated members before storage so values discarded by encoding/json

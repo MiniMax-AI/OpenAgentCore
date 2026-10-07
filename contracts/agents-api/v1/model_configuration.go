@@ -2,6 +2,7 @@ package v1
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
@@ -28,11 +29,14 @@ func (c ModelConfigurationInput) ValidateHarness(harness string) error {
 	return ValidateNativeModelConfiguration(harness, c.Model, c.HarnessConfig)
 }
 
+// ValidateHarnessConfig returns harnessconfig.ErrHarnessRequired unchanged:
+// the caller names the missing harness field of its own resource.
 func ValidateHarnessConfig(harness string, raw json.RawMessage) error {
-	if err := builtin.Registry().ValidateHarnessConfig(harness, raw); err != nil {
-		return &ModelProviderError{Code: "harness_config_invalid", Param: "harness_config", message: "harness_config contains unsupported or invalid native model parameters"}
+	err := builtin.Registry().ValidateHarnessConfig(harness, raw)
+	if err == nil || errors.Is(err, harnessconfig.ErrHarnessRequired) {
+		return err
 	}
-	return nil
+	return &ModelProviderError{Code: "harness_config_invalid", Param: "harness_config", message: "harness_config contains unsupported or invalid native model parameters"}
 }
 
 func (c ModelConfigurationInput) SafeView() ModelConfigurationView {

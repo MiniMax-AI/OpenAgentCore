@@ -2,9 +2,11 @@ package agents
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/metadata"
 )
@@ -55,7 +57,8 @@ func normalizeConfiguration(raw json.RawMessage) (json.RawMessage, error) {
 
 // validateModelExecution checks the saved Harness configuration and that the
 // model provider bundle suits the saved Harness. provider is the bundle being
-// saved, if any.
+// saved, if any. Native parameters without a saved Harness return
+// harnessconfig.ErrHarnessRequired.
 func validateModelExecution(configuration json.RawMessage, provider *v1.ModelProviderInput) error {
 	if provider != nil {
 		if err := provider.Validate(); err != nil {
@@ -69,7 +72,11 @@ func validateModelExecution(configuration json.RawMessage, provider *v1.ModelPro
 		return fmt.Errorf("%w: x_agents_core: %v", ErrInvalidInput, err)
 	}
 	if config.Core != nil {
-		if err := v1.ValidateHarnessConfig(config.Core.Harness, config.Core.HarnessConfig); err != nil {
+		err := v1.ValidateHarnessConfig(config.Core.Harness, config.Core.HarnessConfig)
+		if errors.Is(err, harnessconfig.ErrHarnessRequired) {
+			return err
+		}
+		if err != nil {
 			return fmt.Errorf("%w: %s", ErrInvalidInput, err)
 		}
 	}

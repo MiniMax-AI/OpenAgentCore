@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 36c013fb36432a792ee693a7cee46d739710d6e3faba7f8448d418226dae38b4
+source_hash: 2a80d9958e34d744793307b46354dfc887becc632f70d1e5193ee4b7c27d2172
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -102,7 +102,7 @@ Harness 通过 agent host 上 Session 本地的凭据网关访问其冻结的上
 
 ## 原生模型参数 {#native-model-parameters}
 
-`harness_config` 保存所选 Harness 的原生模型参数。已保存 Agent 在 `x_agents_core` 中接受它，Session 则在内联的 `agent.x_agents_core` 和顶层 `x_agents_core` 中接受它；顶层值优先。
+`harness_config` 保存所选 Harness 的原生模型参数。已保存 Agent 在 `x_agents_core` 中接受它，Session 则在内联的 `agent.x_agents_core` 和顶层 `x_agents_core` 中接受它；顶层值优先。非空对象需要显式选择的 Harness：Agent 的 `x_agents_core.harness`（更新时保留已保存的值），或者对 Session 而言，内联的 `agent.x_agents_core.harness` 或已保存 Agent 的 Harness。部署默认 Harness 不算在内。缺少 Harness 时，请求以 400 `invalid_request_error` 失败，`param` 为 `x_agents_core.harness`；创建 Session 时为 `agent.x_agents_core.harness`。
 
 | Harness | 接受的字段 | 应用方式 |
 | --- | --- | --- |

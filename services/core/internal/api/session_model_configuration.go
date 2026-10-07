@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 // Resolve mutable defaults once, before constructing the immutable Agent. Model
@@ -24,6 +25,22 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 				copy.Harness = saved.XAgentsCore.Harness
 				extension = &copy
 			}
+		}
+	}
+	var inline, session json.RawMessage
+	if input.Agent != nil && input.Agent.XAgentsCore != nil {
+		inline = input.Agent.XAgentsCore.HarnessConfig
+	}
+	if input.XAgentsCore != nil {
+		session = input.XAgentsCore.HarnessConfig
+	}
+	harness := ""
+	if extension != nil {
+		harness = extension.Harness
+	}
+	for _, native := range []json.RawMessage{inline, session} {
+		if errors.Is(v1.ValidateHarnessConfig(harness, native), harnessconfig.ErrHarnessRequired) {
+			return &fieldError{param: "agent.x_agents_core.harness", message: harnessRequiredMessage}
 		}
 	}
 	selected, _ := json.Marshal(configuration{Agent: v1.Agent{XAgentsCore: extension}})
@@ -61,12 +78,9 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 	}
 	raw := json.RawMessage(`{}`)
 	source := "unknown"
-	var supplied json.RawMessage
-	if input.Agent != nil && input.Agent.XAgentsCore != nil {
-		supplied = input.Agent.XAgentsCore.HarnessConfig
-	}
-	if input.XAgentsCore != nil && len(input.XAgentsCore.HarnessConfig) > 0 {
-		supplied = input.XAgentsCore.HarnessConfig
+	supplied := inline
+	if len(session) > 0 {
+		supplied = session
 	}
 	if len(supplied) > 0 {
 		raw, source = supplied, "session"

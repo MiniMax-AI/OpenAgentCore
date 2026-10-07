@@ -5,9 +5,14 @@ import (
 	"net/http"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 )
+
+// harnessRequiredMessage reports native parameters on an Agent or Session
+// without a selected Harness.
+const harnessRequiredMessage = "harness_config parameters require an explicit x_agents_core.harness."
 
 // writeAgentsError reports an error of the Agent operations.
 func writeAgentsError(w http.ResponseWriter, r *http.Request, err error) {
@@ -16,6 +21,8 @@ func writeAgentsError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	var provider *v1.ModelProviderError
 	switch {
+	case errors.Is(err, harnessconfig.ErrHarnessRequired):
+		writeError(w, http.StatusBadRequest, "invalid_request_error", harnessRequiredMessage, "x_agents_core.harness")
 	case errors.As(err, &provider):
 		writeError(w, http.StatusBadRequest, "unsupported_or_invalid_configuration", provider.Error())
 	case errors.Is(err, agents.ErrNotFound):
