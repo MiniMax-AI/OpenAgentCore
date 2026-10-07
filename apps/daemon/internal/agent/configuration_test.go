@@ -25,28 +25,19 @@ func TestEveryRegistryEntryPreparesTheBoundModelConfiguration(t *testing.T) {
 	})
 	configuration.Providers[0].Protocol = "anthropic"
 	executor, _ := registry.ResolveExecutor("fixture")
-	entries := []func(proto.PromptRequestPayload) error{
-		func(req proto.PromptRequestPayload) error { _, err := executor(t.Context(), req); return err },
-	}
-	for _, entry := range entries {
-		responses := &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://provider.example", APIKey: "private-sentinel"}
-		for _, req := range []proto.PromptRequestPayload{
-			{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "private-sentinel"}},
-			{ModelProvider: responses},
-			{HarnessConfig: proto.HarnessConfig(`{"unknown":"private-sentinel"}`)},
-		} {
-			before := calls
-			err := entry(req)
-			if err == nil || errors.Is(err, expected) || calls != before || strings.Contains(err.Error(), "private-sentinel") {
-				t.Fatal("invalid configuration reached native entry or leaked values")
-			}
-		}
-		if err := entry(proto.PromptRequestPayload{Model: "fixture", ModelProvider: responses}); !errors.Is(err, expected) {
-			t.Fatal("bound declaration was lost or mutated", err)
+	responses := &modelprovider.Provider{Protocol: modelprovider.Responses, BaseURL: "https://provider.example", APIKey: "private-sentinel"}
+	for _, req := range []proto.PromptRequestPayload{
+		{Model: "fixture", ModelProvider: &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://provider.example", APIKey: "private-sentinel"}},
+		{ModelProvider: responses},
+		{HarnessConfig: proto.HarnessConfig(`{"unknown":"private-sentinel"}`)},
+	} {
+		_, err := executor(t.Context(), req)
+		if err == nil || errors.Is(err, expected) || calls != 0 || strings.Contains(err.Error(), "private-sentinel") {
+			t.Fatal("invalid configuration reached native entry or leaked values")
 		}
 	}
-	if calls != 1 {
-		t.Fatal("unexpected native calls", calls)
+	if _, err := executor(t.Context(), proto.PromptRequestPayload{Model: "fixture", ModelProvider: responses}); !errors.Is(err, expected) || calls != 1 {
+		t.Fatal("bound declaration was lost or mutated", err)
 	}
 }
 

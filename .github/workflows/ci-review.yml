@@ -48,7 +48,7 @@ jobs:
           persist-credentials: false
       - name: Prepare the report schema
         id: schema
-        run: python3 scripts/ci_review.py schema >> "$GITHUB_OUTPUT"
+        run: python3 scripts/ci_review.py schema "${{ matrix.kind }}" >> "$GITHUB_OUTPUT"
       - name: Review with Claude Code
         id: llm
         continue-on-error: true
@@ -78,7 +78,7 @@ jobs:
 
             ${{ matrix.instructions }}
 
-            按 JSON schema 返回中文报告。status 为 ok（未发现问题）、issues（发现有证据的问题）或 incomplete（审查失败、范围未检查完整或检查结果尚未完成）。有问题且仍有未检查项时，用 issues 并在 summary 中说明缺项。summary 无问题时简短，有问题时保留依据和建议，遵守 schema 的长度限制。
+            按 JSON schema 返回中文报告。status 为 ok（未发现问题）、issues（发现有证据的问题）或 incomplete（审查失败、范围未检查完整或检查结果尚未完成）。有问题且仍有未检查项时，用 issues 并在对应字段中说明缺项。按 schema 把各项结论分别填入字段，不要重复标题；changes 用 1–3 条 Markdown 列表，其他字段无问题时一句话，有问题时保留依据和建议，遵守各字段长度限制。
             围绕本次 diff 和受影响的文档展开，证据充分后输出结果，避免重复核对同一结论。
             只读审查，不修改仓库，不触发新的 CI，不发送消息。两份报告会由后续 job 合并发送。
           claude_args: >-
@@ -89,7 +89,7 @@ jobs:
         env:
           REVIEW_OUTCOME: ${{ steps.llm.outcome }}
           REVIEW_RESULT: ${{ steps.llm.outputs.structured_output }}
-        run: python3 scripts/ci_review.py collect "$RUNNER_TEMP/review-${{ matrix.kind }}.json"
+        run: python3 scripts/ci_review.py collect "${{ matrix.kind }}" "$RUNNER_TEMP/review-${{ matrix.kind }}.json"
       - uses: actions/upload-artifact@v6
         if: always()
         with:

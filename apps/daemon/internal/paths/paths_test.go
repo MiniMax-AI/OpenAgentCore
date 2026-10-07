@@ -75,10 +75,9 @@ func TestProfileDirAndFiles(t *testing.T) {
 	}
 
 	cases := map[string]func(string) (string, error){
-		"auth.json":     paths.AuthFile,
-		"connect.pid":   paths.PIDFile,
-		"connect.log":   paths.LogFile,
-		"sessions.json": paths.SessionsFile,
+		"auth.json":   paths.AuthFile,
+		"connect.pid": paths.PIDFile,
+		"connect.log": paths.LogFile,
 	}
 	for filename, fn := range cases {
 		got, err := fn("test")

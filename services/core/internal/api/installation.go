@@ -1,15 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
-	"path/filepath"
-	"regexp"
-	"slices"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -60,46 +53,6 @@ type InstallationSetting struct {
 	Sensitive  bool `json:"sensitive"`
 	// Services that restart when the setting changes.
 	Restarts []string `json:"restarts"`
-}
-
-var installationSettingKey = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
-
-const maxInstallationSettings = 64 << 10
-
-// ParseInstallationConfiguration validates the installer's settings snapshot.
-// A sensitive setting that carries a value is rejected, so the snapshot cannot
-// leak a secret through this read.
-func ParseInstallationConfiguration(raw []byte) (*InstallationConfiguration, error) {
-	invalid := errors.New("installation configuration is invalid")
-	if len(raw) > maxInstallationSettings {
-		return nil, invalid
-	}
-	var value InstallationConfiguration
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&value) != nil || decoder.Decode(new(any)) != io.EOF {
-		return nil, invalid
-	}
-	if value.Path != "" && !filepath.IsAbs(value.Path) || len(value.ApplyCommand) > 4096 || value.Settings == nil {
-		return nil, invalid
-	}
-	if value.Path != "" && (value.ApplyCommand == "" || value.AppliedAt == nil || value.AppliedAt.IsZero()) {
-		return nil, invalid
-	}
-	seen := make(map[string]bool, len(value.Settings))
-	for _, setting := range value.Settings {
-		if !installationSettingKey.MatchString(setting.Key) || seen[setting.Key] || setting.Restarts == nil ||
-			setting.Sensitive != (setting.Configured != nil) || (setting.Sensitive && (setting.Value != nil || setting.Default != nil)) {
-			return nil, invalid
-		}
-		for _, service := range setting.Restarts {
-			if !slices.Contains([]string{"core", "web", "database"}, service) {
-				return nil, invalid
-			}
-		}
-		seen[setting.Key] = true
-	}
-	return &value, nil
 }
 
 // InstallationBindings counts what is bound to the current public URL.

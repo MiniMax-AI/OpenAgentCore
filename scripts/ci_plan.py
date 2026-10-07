@@ -85,7 +85,7 @@ RULES = (
     (("scripts/build-codex-runtime.sh",), (".sh",), ("backend", "native", "distribution")),
     (("scripts/build-agent-host-images.sh", "scripts/qualify-agent-host.sh"), (".sh",), ("distribution",)),
     (("scripts/generate-harness-catalog", "scripts/harness-catalog/", "scripts/openapi-split/", "scripts/patch-agents-openapi.py",
-      "scripts/extract-agents-api-upstream.py"), SCRIPTS, JOBS),
+      "scripts/generate-public-api"), SCRIPTS, JOBS),
     (("scripts/check-sqlc.py", "scripts/go-test-shard.py"), (".py",), ("backend",)),
     (("scripts/check-names", "scripts/name-allowlist.json", "scripts/ci_"), (".py", ".json"), ("hygiene",)),
     ((".github/workflows/", ".github/actions/"), (".yml", ".yaml"), JOBS),

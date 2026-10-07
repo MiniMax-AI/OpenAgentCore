@@ -62,4 +62,4 @@ It checks the upstream and generated response schemas, retries, ordering, tenant
 
 ## Generated contracts
 
-Handler annotations generate the OpenAPI documents. Run `make openapi` after changing them: it runs the pinned swaggo generator and splits the result by namespace into [`openapi.yaml`](../../contracts/agents-api/openapi.yaml) (`/v1`), [`core.openapi.yaml`](../../contracts/agents-api/core.openapi.yaml) (`/core/v1`) and [`runtime.openapi.yaml`](../../contracts/agents-api/runtime.openapi.yaml) (`/api/v1`), each with only the security schemes its operations use. Review and commit the three diffs. Contract tests hold `openapi.yaml` to the pinned routes and fields, and hold all three to exactly the routes the server registers.
+Run `make openapi` after changing the pinned public schema, Go bindings, Core extensions or internal handler annotations. The [contract generation guide](../../contracts/agents-api/index.md#pinned-baseline) owns the inputs, generated files and checks. Review and commit the generated diffs. `make check-openapi` verifies freshness; contract tests check all three documents against registered routes.

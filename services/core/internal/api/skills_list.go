@@ -8,16 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// @Summary List Skills
-// @Description Lists tenant-owned metadata in timestamp order. Default page size 20, maximum 100. Limit 0 returns an empty page whose has_more reports whether any Skill follows the cursor; exact hosted defaults remain unverified.
-// @Tags Skills
-// @Produce json
-// @Security BearerAuth
-// @Param after query string false "Skill resource cursor"
-// @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
-// @Param order query string false "Creation order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
-// @Success 200 {object} v1.SkillList
-// @Router /skills [get]
 func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 	options, ok := readPage(w, r)
 	if !ok {
@@ -39,17 +29,6 @@ func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// @Summary List Skill versions
-// @Description Orders by version number; after identifies a version resource, not a version number. An after value that does not begin with skillver, or a version of another Skill, returns 400 invalid_value with param after; a missing version returns not found. No contents are decrypted. Limit 0 returns an empty page whose has_more reports whether any version follows the cursor.
-// @Tags Skills
-// @Produce json
-// @Security BearerAuth
-// @Param skill_id path string true "Skill ID"
-// @Param after query string false "Version resource cursor"
-// @Param limit query integer false "Page size; 0 returns an empty page" default(20) minimum(0) maximum(100)
-// @Param order query string false "Version order; omit for descending, explicit empty values are invalid" Enums(asc,desc)
-// @Success 200 {object} v1.SkillVersionList
-// @Router /skills/{skill_id}/versions [get]
 func (h *Handler) listSkillVersions(w http.ResponseWriter, r *http.Request) {
 	options, ok := readPage(w, r)
 	if !ok {

@@ -19,15 +19,6 @@ type processIdentity struct {
 	StopEvent string `json:"stop_event,omitempty"`
 }
 
-func WritePIDFile(path string, pid int) error {
-	identity, err := identifyProcess(pid)
-	if err != nil {
-		return err
-	}
-	identity.StopEvent = os.Getenv(stopEventEnv)
-	return writeIdentity(path, identity)
-}
-
 func writeIdentity(path string, identity processIdentity) error {
 	if path == "" {
 		return errors.New("daemonize: process record path required")
@@ -70,8 +61,6 @@ func ReadPIDFile(path string) (int, error) {
 	identity, err := readIdentity(path)
 	return identity.PID, err
 }
-
-func IsAlive(pid int) error { _, err := identifyProcess(pid); return err }
 
 // StopPIDFile never removes ownership before the exact process has exited.
 // A cleanup timeout leaves the record available for observation and a later stop.

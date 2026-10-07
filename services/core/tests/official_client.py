@@ -18,7 +18,7 @@ import sys
 sys.dont_write_bytecode = True
 
 import httpx2
-from jsonschema import Draft4Validator
+from official_schema import ResponseValidator
 from official_items import verify_items
 from official_agents import verify_agents
 from official_vaults import verify_vaults, verify_vault_recovery
@@ -38,47 +38,12 @@ from official_session_creators import verify_session_creators, verify_creator_re
 from official_source_file_list import verify_source_file_list, verify_source_file_list_recovery
 from official_diagnostics import finish_server
 from openai import AuthenticationError, BadRequestError, ConflictError, InternalServerError, NotFoundError, OpenAI
-import yaml
 
-
-def nullable_schema(value):
-    """Translate Swagger 2's nullable extension for JSON Schema validation."""
-    if isinstance(value, list):
-        return [nullable_schema(item) for item in value]
-    if not isinstance(value, dict):
-        return value
-    converted = {key: nullable_schema(item) for key, item in value.items() if key != "x-nullable"}
-    return {"anyOf": [{"type": "null"}, converted]} if value.get("x-nullable") else converted
 
 
 def main():
     root = Path(__file__).resolve().parents[3]
-    contract = nullable_schema(yaml.safe_load((root / "contracts/agents-api/openapi.yaml").read_text()))
-
-    def validate_response(response):
-        response.read()
-        path = response.request.url.path.removeprefix("/v1")
-        if path.startswith("/agents/sessions/"):
-            suffix = path.split("/")[4:]
-            path = "/agents/sessions/{session_id}"
-            if suffix and suffix[0] == "turns":
-                path += "/turns" + ("/{turn_id}" if len(suffix) > 1 else "")
-            elif suffix and suffix[0] in ("items", "events"):
-                path += "/" + suffix[0]
-        elif path.startswith("/vaults/"):
-            suffix = path.split("/")[3:]
-            path = "/vaults/{vault_id}"
-            if suffix and suffix[0] == "credentials":
-                path += "/credentials" + ("/{credential_id}" if len(suffix) > 1 else "")
-        elif path.startswith("/agents/") and path != "/agents/sessions":
-            path = "/agents/{agent_id}"
-        elif path.startswith("/files/"):
-            path = "/files/{file_id}/content" if path.endswith("/content") else "/files/{file_id}"
-        if path.endswith("/events") and response.status_code == 202:
-            assert response.content == b""
-            return
-        schema = contract["paths"][path][response.request.method.lower()]["responses"][str(response.status_code)]["schema"]
-        Draft4Validator({"definitions": contract["definitions"], **schema}).validate(response.json())
+    validate_response = ResponseValidator(root / "contracts/agents-api/openapi.yaml")
     pin = json.loads((root / "contracts/agents-api/upstream.json").read_text())
     distribution = importlib.metadata.distribution("openai")
     source = json.loads(distribution.read_text("direct_url.json") or "{}")

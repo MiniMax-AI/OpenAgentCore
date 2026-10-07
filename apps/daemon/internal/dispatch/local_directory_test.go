@@ -23,7 +23,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 	workspace := t.TempDir()
 
 	environment, session := uuid.NewString(), uuid.NewString()
-	binding, err := localworkspace.New(environment, session, workspace)
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment, session := uuid.NewString(), uuid.NewString()
-	binding, err := localworkspace.New(environment, session, workspace)
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -56,27 +56,23 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 		return runtime
 	}
 	result.Available, result.Version = true, version
-	if SupportsExecution(version) {
-		result.Capabilities.Steering = proto.CapabilitySupported
-		result.Capabilities.DurableTurns = proto.CapabilitySupported
-		result.Capabilities.DurableInputReceipts = proto.CapabilitySupported
-		result.Capabilities.ExecutionControls = proto.CapabilitySupported
-		result.Capabilities.ProgrammaticToolCallingDisable = proto.CapabilitySupported
-		result.Capabilities.ToolObservations = proto.CapabilitySupported
-		result.Capabilities.SubagentControl = proto.CapabilitySupported
-		// Native preparation verifies the applied admission/tool profile before input.
-		result.Capabilities.SubagentObservations = proto.CapabilitySupported
-		result.Capabilities.EnvironmentNone = proto.CapabilitySupported
-		result.Capabilities.MCPHTTPTools = proto.CapabilitySupported
-		result.Capabilities.MCPHTTPBearerAuth = proto.CapabilitySupported
-	}
+	result.Capabilities.Steering = proto.CapabilitySupported
+	result.Capabilities.DurableTurns = proto.CapabilitySupported
+	result.Capabilities.DurableInputReceipts = proto.CapabilitySupported
+	result.Capabilities.ExecutionControls = proto.CapabilitySupported
+	result.Capabilities.ProgrammaticToolCallingDisable = proto.CapabilitySupported
+	result.Capabilities.ToolObservations = proto.CapabilitySupported
+	result.Capabilities.SubagentControl = proto.CapabilitySupported
+	// Native preparation verifies the applied admission/tool profile before input.
+	result.Capabilities.SubagentObservations = proto.CapabilitySupported
+	result.Capabilities.EnvironmentNone = proto.CapabilitySupported
+	result.Capabilities.MCPHTTPTools = proto.CapabilitySupported
+	result.Capabilities.MCPHTTPBearerAuth = proto.CapabilitySupported
 	runtime.Info = result
 	workspace := discoverWorkspace(parent, options, runtime)
 	if runtime.Info.Available {
 		runtime.Executor = NewExecutorFactory(workspace)
-		if SupportsExecution(version) {
-			runtime.View = discoverView(options)
-		}
+		runtime.View = discoverView(options)
 	}
 	fmt.Fprintf(options.Stdout, "mcode preflight ok (%s)\n", version)
 	return runtime

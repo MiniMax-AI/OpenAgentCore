@@ -2,8 +2,10 @@ package codex
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,22 +19,32 @@ import (
 func executorFixture(t *testing.T, mode string) (*Executor, string) {
 	t.Helper()
 	req, cfg, root := preparationFixture(t)
+	e, err := testExecutor(t, mode, req, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e, root
+}
+
+// testExecutor prepares through the production factory and closes the owner at cleanup.
+func testExecutor(t *testing.T, mode string, req proto.PromptRequestPayload, cfg sessionConfig) (*Executor, error) {
+	t.Helper()
 	t.Setenv("OAC_TEST_EXECUTOR_MODE", mode)
 	ownerCtx, cancelOwner := context.WithCancel(context.Background())
 	t.Cleanup(cancelOwner)
 	e, err := newExecutor(ownerCtx, req, cfg)
-	if err != nil {
-		t.Fatal(err)
+	if e != nil {
+		t.Cleanup(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := e.Close(ctx); err != nil {
+				t.Error(err)
+			}
+		})
 	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := e.Close(ctx); err != nil {
-			t.Error(err)
-		}
-	})
-	return e, root
+	return e, err
 }
+
 func awaitExecutorTurn(t *testing.T, turn agent.Turn, out <-chan proto.Envelope) agent.TurnSettlement {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -51,6 +63,21 @@ func awaitExecutorTurn(t *testing.T, turn agent.Turn, out <-chan proto.Envelope)
 		t.Fatalf("terminal count %d", count)
 	}
 	return settlement
+}
+
+// settledFrames waits for a Turn to settle and returns its complete output.
+func settledFrames(t *testing.T, turn agent.Turn, out <-chan proto.Envelope) []proto.Envelope {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if _, err := turn.AwaitSettlement(ctx); errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("Turn did not settle")
+	}
+	var frames []proto.Envelope
+	for frame := range out {
+		frames = append(frames, frame)
+	}
+	return frames
 }
 func TestExecutorNormalTurnsKeepProcessAndThread(t *testing.T) {
 	e, root := executorFixture(t, "complete")
@@ -84,6 +111,95 @@ func TestExecutorNormalTurnsKeepProcessAndThread(t *testing.T) {
 		t.Fatal("normal completion closed executor")
 	}
 }
+func TestExecutorFreezesPreparedConfiguration(t *testing.T) {
+	for _, resume := range []bool{false, true} {
+		t.Run(map[bool]string{false: "new", true: "resumed"}[resume], func(t *testing.T) {
+			req, cfg, root := preparationFixture(t)
+			expectedThread := "thread/start"
+			if resume {
+				req.AgentSessionID, expectedThread = "fixture-native-thread", "thread/resume"
+			}
+			e, err := testExecutor(t, "complete", req, cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertPreparationOnly(t, root)
+			cwd := e.prepared.plan.Cwd
+			// Caller-owned data cannot revise the prepared native configuration.
+			req.Model = "different-model"
+			req.AgentSessionID = "different-thread"
+			copy(req.FunctionTools[0].Parameters, strings.ReplaceAll(string(req.FunctionTools[0].Parameters), "integer", "boolean"))
+			out := make(chan proto.Envelope, 20)
+			turn, err := e.StartTurn(t.Context(), "actual-run", proto.TextInput("actual prompt"), out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			awaitExecutorTurn(t, turn, out)
+			counts := map[string]int{}
+			for _, frame := range preparationFrames(t, root) {
+				counts[frame.Method]++
+				var params struct {
+					Model        string                `json:"model"`
+					ThreadID     string                `json:"threadId"`
+					DynamicTools []dynamicFunctionTool `json:"dynamicTools"`
+					Cwd          string                `json:"cwd"`
+					Environments json.RawMessage       `json:"environments"`
+				}
+				if err := json.Unmarshal(frame.Params, &params); err != nil {
+					t.Fatal(err)
+				}
+				if frame.Method == "thread/start" && (params.Model != "fixture-model" || len(params.DynamicTools) != 1 ||
+					!strings.Contains(string(params.DynamicTools[0].InputSchema), "integer") || params.Cwd != cwd) {
+					t.Fatal("prepared configuration changed", string(frame.Params))
+				}
+				if frame.Method == "thread/resume" && params.ThreadID != "fixture-native-thread" {
+					t.Fatal("prepared resume changed")
+				}
+				if len(params.Environments) != 0 {
+					t.Fatal("prepared environment changed")
+				}
+			}
+			if counts["initialize"] != 1 || counts["environment/status"] != 2 || counts[expectedThread] != 1 || counts["turn/start"] != 1 {
+				t.Fatal("unexpected native setup/start count", counts)
+			}
+		})
+	}
+}
+
+func TestExecutorUnavailableOwnerStartsNoTurn(t *testing.T) {
+	for _, reason := range []string{"closed", "owner cancelled", "rpc exited"} {
+		t.Run(reason, func(t *testing.T) {
+			req, cfg, root := preparationFixture(t)
+			owner, cancelOwner := context.WithCancel(context.Background())
+			defer cancelOwner()
+			e, err := newExecutor(owner, req, cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer e.Close(context.Background())
+			switch reason {
+			case "closed":
+				err = e.Close(t.Context())
+			case "owner cancelled":
+				cancelOwner()
+			case "rpc exited":
+				err = e.prepared.session.rpc.Close()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := make(chan proto.Envelope, 1)
+			if turn, err := e.StartTurn(t.Context(), "late-run", proto.TextInput("must not start"), out); turn != nil || err == nil {
+				t.Fatal("unavailable executor started a Turn", err)
+			}
+			if len(out) != 0 {
+				t.Fatal("rejected start emitted output")
+			}
+			assertPreparationOnly(t, root)
+		})
+	}
+}
+
 func TestExecutorCancellationSettlesThenReuses(t *testing.T) {
 	e, root := executorFixture(t, "complete")
 	out := make(chan proto.Envelope, 20)
