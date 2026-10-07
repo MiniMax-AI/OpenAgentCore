@@ -74,7 +74,7 @@ func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T)
 	if _, err := nodes.NodeConfiguration(t.Context(), "", "invalid-token", 0); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("unauthenticated configuration read", err)
 	}
-	node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest}
+	node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.placement.PublicURL()}
 	for _, change := range []func(*deployment.Enrollment){
 		func(n *deployment.Enrollment) { n.DeploymentGeneration++ },
 		func(n *deployment.Enrollment) { n.SpecificationDigest = strings.Repeat("c", 64) },
@@ -138,7 +138,7 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 			}
 			var owner deployment.Allocation
 			if state != "pending" {
-				owner, err = deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+				owner, err = deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -265,7 +265,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 	for _, session := range created {
 		go func() {
 			<-start
-			owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+			owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 			results <- result{session, owner, err}
 		}()
 	}
@@ -283,7 +283,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 		result := <-results
 		if result.err == nil {
 			allocated++
-			retry, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: result.session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()))
+			retry, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: result.session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 			if err != nil || retry.ID != result.owner.ID || !retry.Replayed {
 				t.Fatal("maintenance changed an admitted allocation retry", err)
 			}
@@ -291,7 +291,7 @@ func TestSandboxSpecificationAllocationRaceWithMaintenance(t *testing.T) {
 			if !errors.Is(result.err, placement.ErrResetAdmission) {
 				t.Fatal("allocation race failed outside admission", result.err)
 			}
-			if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: result.session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrResetAdmission) {
+			if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: result.session.Environment.ID}, view.InstallationID, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, placement.ErrResetAdmission) {
 				t.Fatal("fresh allocation passed committed maintenance", err)
 			}
 		}

@@ -27,7 +27,7 @@ func TestManagedRuntimeAutomaticBootstrapRecoversCommittedSessions(t *testing.T)
 	key := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	start := func() *execution.Worker {
-		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
+		w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p}})
 		return w
 	}
 	stop := func(w *execution.Worker) {

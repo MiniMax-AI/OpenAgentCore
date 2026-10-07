@@ -149,7 +149,7 @@ cp -R apps/web/dist "$stage/web/dist"
 cp services/web/Dockerfile "$stage/web/Dockerfile"
 build_image web "$stage/web"
 
-CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/oac-daemon" ./apps/daemon/cmd/oac-daemon
+CGO_ENABLED=0 go build -mod=readonly -trimpath -o "$stage/" ./apps/daemon/cmd/oac-daemon ./apps/sandboxio/cmd/oac-sandbox-io
 cp "$stage/oac-daemon" "$bundle/native/bin/oac-daemon"
 codex_image="${CORE_DISTRIBUTION_CODEX_IMAGE:-}"
 claude_image="${CORE_DISTRIBUTION_CLAUDE_IMAGE:-}"
@@ -173,7 +173,7 @@ else
   mcode_image="$(cat "$stage/mcode.id")"
 fi
 for image in "$codex_image" "$claude_image" "$mcode_image"; do
-  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/oac-daemon" "$source_dir"
+  python3 scripts/core-distribution-manifest.py verify-runtime "$image" "$stage/oac-daemon" "$stage/oac-sandbox-io" "$source_dir"
 done
 tag_suffix="${stage##*.}"
 for harness in codex claude mcode; do

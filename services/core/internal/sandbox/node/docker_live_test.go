@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	sandboxdocker "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
-	"github.com/google/uuid"
 	"github.com/moby/moby/client"
 )
 
@@ -87,7 +87,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-node-transport-credential", NetworkAccess: "enabled"}
+	b := contracttest.Bootstrap(r)
 	callCtx, callCancel := context.WithTimeout(ctx, 25*time.Second)
 	info, err := proxy.Create(callCtx, b)
 	callCancel()

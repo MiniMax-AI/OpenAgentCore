@@ -2,6 +2,8 @@ package deployment
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -16,10 +18,10 @@ import (
 // ReserveAllocation commits the allocation of the tenant's hosted Environment
 // and its dedicated device together, before the provider creates compute.
 // installation is the provider key the allocation is provisioned for, and
-// credentialHash the SHA-256 digest of the device credential. An existing
-// allocation for the same installation returns Replayed; only a fresh one
-// authorizes the one Create call.
-func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key AllocationKey, installation, credentialHash string) (Allocation, error) {
+// credentialHash and serveCredentialHash the SHA-256 digests of the device
+// and Link Serve credentials. An existing allocation for the same installation
+// returns Replayed; only a fresh one authorizes the one Create call.
+func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key AllocationKey, installation, credentialHash, serveCredentialHash string) (Allocation, error) {
 	key, err := key.parse()
 	if err != nil {
 		return Allocation{}, err
@@ -28,7 +30,8 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 		return Allocation{}, err
 	}
 	registration, err := sessions.NewDeviceRegistration("managed-runtime", credentialHash)
-	if err != nil {
+	serve, serveErr := hex.DecodeString(serveCredentialHash)
+	if err != nil || serveErr != nil || len(serve) != sha256.Size {
 		return Allocation{}, fmt.Errorf("%w: SHA-256 credential digest required", ErrInvalidInput)
 	}
 	var result Allocation
@@ -67,7 +70,7 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 		if environment.Status == "failed" || environment.Status == "expired" {
 			return ErrInvalidInput
 		}
-		allocation := NewAllocation{ID: uuid.NewString(), EnvironmentID: environment.ID, DeviceID: uuid.NewString(), ProviderKey: installation, Generation: d.Generation}
+		allocation := NewAllocation{ID: uuid.NewString(), EnvironmentID: environment.ID, DeviceID: uuid.NewString(), ProviderKey: installation, Generation: d.Generation, ServeCredentialHash: hex.EncodeToString(serve)}
 		if d.Mode == "nodes" {
 			reserved, err := tx.LoadReserved()
 			if err != nil {

@@ -67,7 +67,7 @@ func TestConcurrentReservationsCommitOneAllocation(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range results {
 		wg.Go(func() {
-			results[i], errs[i] = changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+			results[i], errs[i] = changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
 		})
 	}
 	wg.Wait()
@@ -87,7 +87,7 @@ func TestConcurrentReservationsCommitOneAllocation(t *testing.T) {
 	if allocations, state, _, _, _ := allocationRows(t, f, key); fresh != 1 || allocations != 1 || devices != 1 || state != "creating" {
 		t.Fatal("reservations committed more than one allocation", fresh, allocations, devices, state)
 	}
-	if _, err := changes.ReserveAllocation(t.Context(), key, uuid.NewString(), credentialHash()); !errors.Is(err, deployment.ErrAllocationConflict) {
+	if _, err := changes.ReserveAllocation(t.Context(), key, uuid.NewString(), credentialHash(), credentialHash()); !errors.Is(err, deployment.ErrAllocationConflict) {
 		t.Fatal("another installation replayed the allocation", err)
 	}
 }
@@ -100,12 +100,12 @@ func TestAllocationWritesNeedTheLease(t *testing.T) {
 	changes, _ := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	key := hostedEnvironment(t, f.pool)
-	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
 	if err != nil {
 		t.Fatal(err)
 	}
 	unallocated := hostedEnvironment(t, f.pool)
-	if _, err := closed.ReserveAllocation(t.Context(), unallocated, installation, credentialHash()); !errors.Is(err, pgunit.ErrLeaseClosed) {
+	if _, err := closed.ReserveAllocation(t.Context(), unallocated, installation, credentialHash(), credentialHash()); !errors.Is(err, pgunit.ErrLeaseClosed) {
 		t.Fatal("reserved without the lease", err)
 	}
 	if allocations, _, _, _, _ := allocationRows(t, f, unallocated); allocations != 0 {
@@ -138,7 +138,7 @@ func TestFailedCleanupSettlementRollsBackRevocation(t *testing.T) {
 	changes, _ := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	key := hostedEnvironment(t, f.pool)
-	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestFailedPruneRollsBackTheAllocationWrite(t *testing.T) {
 	changes, _ := f.execution(t)
 	installation, _ := f.initialize(t, changes, setupE2BSelection())
 	key := hostedEnvironment(t, f.pool)
-	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
+	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash(), credentialHash())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestFailedPruneRollsBackTheAllocationWrite(t *testing.T) {
 		t.Fatal("a failed prune kept the change", state)
 	}
 	unallocated := hostedEnvironment(t, f.pool)
-	if _, err := changes.ReserveAllocation(t.Context(), unallocated, installation, credentialHash()); err == nil || !strings.Contains(err.Error(), "injected prune failure") {
+	if _, err := changes.ReserveAllocation(t.Context(), unallocated, installation, credentialHash(), credentialHash()); err == nil || !strings.Contains(err.Error(), "injected prune failure") {
 		t.Fatal("a reservation committed without the prune", err)
 	}
 	var devices int

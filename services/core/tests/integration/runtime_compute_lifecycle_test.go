@@ -293,7 +293,7 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 func (f *computeLifecycleFixture) start() {
 	t := f.t
 	t.Helper()
-	dispatcher := &execution.Dispatcher{Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}}
+	dispatcher := &execution.Dispatcher{Registry: f.provider.registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: f.key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: f.provider, Suspension: &f.policy}}
 	// Closing the previous Worker's connection can return before PostgreSQL drops its advisory lock.
 	deadline := time.Now().Add(2 * time.Second)
 	var w *execution.Worker

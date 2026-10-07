@@ -21,6 +21,11 @@ package sandbox
 import (
 	"context"
 	"errors"
+
+	"github.com/google/uuid"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 )
 
@@ -42,6 +47,25 @@ type Bootstrap struct {
 	SessionID, DeviceID, CoreURL, Credential string
 	NetworkAccess                            string
 	AllowedDomains                           []string
+	// SandboxIO is the Sandbox I/O service's launch input, which the Provider
+	// delivers as a private file (docs/sandbox-bootstrap.md).
+	SandboxIO sandboxbootstrap.Input
+}
+
+// Validate checks a Create input once, before Create: Providers deliver it
+// as given. SandboxIO serves the Reference's allocation.
+func (b Bootstrap) Validate() error {
+	for _, id := range []string{b.TenantID, b.EnvironmentID, b.AllocationID, b.SessionID, b.DeviceID} {
+		if u, err := uuid.Parse(id); err != nil || u == uuid.Nil || u.String() != id {
+			return ErrInvalid
+		}
+	}
+	resource := sandboxbootstrap.Resource{TenantID: b.TenantID, EnvironmentID: b.EnvironmentID, Kind: "allocation", ID: b.AllocationID, Generation: b.SandboxIO.Resource.Generation}
+	if b.RuntimeConnection().Validate() != nil || (agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}).Validate() != nil ||
+		b.SandboxIO.Validate() != nil || b.SandboxIO.Resource != resource {
+		return ErrInvalid
+	}
+	return nil
 }
 
 // Info describes compute only. Running does not establish daemon authentication,

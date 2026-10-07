@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 1ee43dfcdd0eec0806ea3bc8a4c1227e10bd8ac5e69486505cb113a98e3f548a
+source_hash: 1562f69c8c7a5937a10b98c8b7dea2518bfbf1f875c2bd67ff0461467ed72cb9
 ---
 
 沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
@@ -54,6 +54,8 @@ Core 发送包含以下内容的 `request` 帧：
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | 无 |
+
+`bootstrap` 是 Provider 的 `sandbox.Bootstrap`，其 `SandboxIO` 包含[沙箱引导](../../../docs/zh/sandbox-bootstrap.md)输入；Core 在发送 `create` 前完成校验。
 
 只要 `connection_id`、`owner_epoch` 或 `sequence` 中任一值不匹配，请求就会关闭连接。格式错误的请求会得到 `invalid` 响应。未启用代次管理的节点仅接受其登记的 `deployment_generation`；支持代次管理的节点在对应代次的 Provider 上运行请求，无法运行时回复 `unconfirmed`。Core 仅向节点上已就绪的代次发送 `create` 和非 observe-only 的 `resume`，并且每条连接最多保留 32 个待处理请求。
 

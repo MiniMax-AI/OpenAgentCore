@@ -63,7 +63,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(err)
 			}
 			secret := uuid.NewString()
-			owner, err := leased.Deployment.ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(secret))
+			owner, err := leased.Deployment.ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(secret), runtimedevice.HashCredential(secret))
 			if err != nil {
 				t.Fatal(err)
 			}

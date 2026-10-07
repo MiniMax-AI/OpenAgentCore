@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates bash git python3 python3-pip ripgrep \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /environment/workspace /workspace /home/runtime
-COPY --chmod=0555 oac-daemon /usr/local/bin/
+COPY --chmod=0555 oac-daemon oac-sandbox-io /usr/local/bin/
 COPY mcode-harness /opt/mcode-harness
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_MCODE_NODE=/usr/local/bin/node \

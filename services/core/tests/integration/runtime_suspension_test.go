@@ -21,7 +21,7 @@ func runtimeSuspensionFixture(t *testing.T) (*Store, *Store, *pgxpool.Pool, depl
 	w := executionWriter(t, s)
 	tenant := uuid.NewString()
 	_, environment := localEnvironment(t, s, tenant)
-	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()))
+	owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID}, uuid.NewString(), runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestRuntimeSuspensionCountsUncertainCapacityUntilReleased(t *testing.T) {
 	for _, item := range cases {
 		tenant := uuid.NewString()
 		_, env := localEnvironment(t, s, tenant)
-		owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID}, provider, runtimedevice.HashCredential(uuid.NewString()))
+		owner, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: env.ID}, provider, runtimedevice.HashCredential(uuid.NewString()), runtimedevice.HashCredential(uuid.NewString()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -451,7 +451,7 @@ func TestRuntimeComputePhaseChangedAtInNodeAllocations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	allocation, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -113,9 +113,6 @@ func (p *Provider) Renew(ctx context.Context, r sandbox.Reference) (sandbox.Info
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
 	info := sandbox.Info{Reference: b.Reference}
 	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
-	if policy.Validate() != nil || !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
-		return info, sandbox.ErrInvalid
-	}
 	if existing, e := p.GetInfo(ctx, b.Reference); e == nil {
 		return existing, sandbox.ErrExists
 	} else if !errors.Is(e, sandbox.ErrNotFound) {
@@ -178,6 +175,14 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		return info, fmt.Errorf("runtime bootstrap: %w", e)
 	}
 	if _, e = p.client.ContainerStart(ctx, v.ID, client.ContainerStartOptions{}); e != nil {
+		return info, e
+	}
+	// The Sandbox I/O service runs beside the daemon, as the same account.
+	exec, e := p.client.ExecCreate(ctx, v.ID, client.ExecCreateOptions{User: "1000:1000", Cmd: []string{"/usr/local/bin/oac-sandbox-io", "--bootstrap-file", "/home/runtime/sandbox-io-bootstrap.json"}})
+	if e != nil {
+		return info, e
+	}
+	if _, e = p.client.ExecStart(ctx, exec.ID, client.ExecStartOptions{Detach: true}); e != nil {
 		return info, e
 	}
 	return p.GetInfo(ctx, b.Reference)

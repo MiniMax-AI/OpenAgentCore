@@ -9,6 +9,9 @@ require (
 
 require (
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/libp2p/go-buffer-pool v0.0.2 // indirect
+	github.com/libp2p/go-yamux/v5 v5.1.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 )
 

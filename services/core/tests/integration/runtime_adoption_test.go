@@ -18,7 +18,7 @@ func nodelessAllocationFixture(t *testing.T) (*Store, *Store, deployment.Process
 	deploymentConfigure(t, w, &d)
 	tenant := uuid.NewString()
 	_, e := localEnvironment(t, s, tenant)
-	a, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: e.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"))
+	a, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: e.ID}, d.InstallationID, runtimedevice.HashCredential("runtime"), runtimedevice.HashCredential("runtime"))
 	if err != nil {
 		t.Fatal(err)
 	}

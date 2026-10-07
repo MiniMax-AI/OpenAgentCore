@@ -162,9 +162,6 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 	var connection *runtimebootstrap.Connection
 	if b != nil {
 		value := b.RuntimeConnection()
-		if value.Validate() != nil {
-			return unstarted(operation, r), sandbox.ErrInvalid
-		}
 		connection = &value
 	}
 	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
@@ -234,15 +231,7 @@ func (p *Provider) info(ctx context.Context, operation string, r sandbox.Referen
 	return sandbox.Info{Reference: r}, err
 }
 func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
-	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
-	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || policy.Validate() != nil || b.RuntimeConnection().Validate() != nil {
-		info := sandbox.Info{Reference: b.Reference}
-		if validReference(b.Reference) {
-			info.State, info.CreateSettled = "absent", true
-		}
-		return info, sandbox.ErrInvalid
-	}
-	b.AllowedDomains = policy.Hosts()
+	b.AllowedDomains = agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}.Hosts()
 	return p.info(ctx, "create", b.Reference, &b)
 }
 func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {

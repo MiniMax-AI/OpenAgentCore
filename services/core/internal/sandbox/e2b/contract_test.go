@@ -16,7 +16,7 @@ func (f contractCaller) Call(ctx context.Context, q Request) (Response, error) {
 func TestProviderContract(t *testing.T) {
 	contracttest.RunFailures(t, func(t *testing.T, s contracttest.Scenario, cancel context.CancelFunc) contracttest.Fixture {
 		p, _, r := fixture(t)
-		b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", NetworkAccess: "enabled"}
+		b := contracttest.Bootstrap(r)
 		var calls []string
 		p.caller = contractCaller(func(ctx context.Context, q Request) (Response, error) {
 			calls = append(calls, q.Operation)
@@ -47,7 +47,7 @@ func TestProviderContract(t *testing.T) {
 func TestProviderContractObservation(t *testing.T) {
 	p, f, r := fixture(t)
 	f.response.Info = &sandbox.Info{Reference: r, ProviderID: "native-owned", State: "running", CreateSettled: true, BootstrapComplete: true}
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", NetworkAccess: "enabled"}
+	b := contracttest.Bootstrap(r)
 	got, err := p.Create(bounded(t), b)
 	contracttest.AssertObservation(t, got, err, r, "native-owned", "running")
 	got, err = p.GetInfo(bounded(t), r)

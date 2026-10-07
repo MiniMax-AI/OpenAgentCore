@@ -23,7 +23,7 @@ func TestManagedDeploymentStartupRejectsSwitchBeforeBackendAccess(t *testing.T) 
 	}
 	stop()
 	replacement := &lifecycleProvider{resources: map[string]sandbox.Info{}}
-	config := &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("b", 64), Provider: replacement, AdmissionPaused: true}
+	config := &execution.RuntimeProvider{CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: uuid.NewString(), BackendFingerprint: strings.Repeat("b", 64), Provider: replacement, AdmissionPaused: true}
 	start := func(config *execution.RuntimeProvider) error {
 		_, err := startWorkerErr(t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), ManagedRuntimes: config})
 		return err

@@ -13,8 +13,9 @@ import (
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-// Runtime reads the shared launch input; its private auth storage stays opaque.
-// All credential bytes enter the guest on stdin before any native work is admitted.
+// Runtime and the Sandbox I/O service read their launch inputs; Runtime's
+// private auth storage stays opaque. All credential bytes enter the guest on
+// stdin before any native work is admitted.
 const bootstrapScript = `
 import ctypes,json,os,stat,subprocess,sys
 b=json.load(sys.stdin)
@@ -22,11 +23,15 @@ for p in ['/home/runtime','/home/runtime/.oac','/environment','/environment/work
     os.makedirs(p,mode=0o700,exist_ok=True)
     if not stat.S_ISDIR(os.lstat(p).st_mode): raise RuntimeError('invalid bootstrap directory')
     os.chmod(p,0o700);os.chown(p,1000,1000)
+def private(p,v):
+    fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+    with os.fdopen(fd,'w') as f:
+        json.dump(v,f)
+        f.flush();os.fsync(f.fileno());os.fchown(f.fileno(),1000,1000)
 p='/home/runtime/runtime-bootstrap.json'
-fd=os.open(p,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-with os.fdopen(fd,'w') as f:
-    json.dump(b,f)
-    f.flush();os.fsync(f.fileno());os.fchown(f.fileno(),1000,1000)
+private(p,b['Runtime'])
+s='/home/runtime/sandbox-io-bootstrap.json'
+private(s,b['SandboxIO'])
 if not stat.S_ISDIR(os.lstat('/workspace').st_mode): raise RuntimeError('invalid workspace alias')
 libc=ctypes.CDLL(None,use_errno=True)
 if libc.mount(b'/environment/workspace',b'/workspace',None,4096,None)!=0:
@@ -36,6 +41,9 @@ def runtime_user():
 subprocess.run(['/usr/local/bin/oac-daemon','connect','--profile','default','--bootstrap-file',p,'-b'],
                stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
                cwd='/environment/workspace',preexec_fn=runtime_user,check=True)
+subprocess.Popen(['/usr/local/bin/oac-sandbox-io','--bootstrap-file',s],env={},start_new_session=True,
+                 stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                 cwd='/environment/workspace',preexec_fn=runtime_user)
 `
 
 func (b backend) create(ctx context.Context) (wire.Response, error) {
@@ -79,7 +87,15 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	if e != nil {
 		return qualified, e
 	}
-	data, e := bootstrap.RuntimeConnection().Marshal()
+	connection, e := bootstrap.RuntimeConnection().Marshal()
+	if e != nil {
+		return wire.Response{}, e
+	}
+	serve, e := bootstrap.SandboxIO.Marshal()
+	if e != nil {
+		return wire.Response{}, e
+	}
+	data, e := json.Marshal(struct{ Runtime, SandboxIO json.RawMessage }{connection, serve})
 	if e != nil {
 		return wire.Response{}, e
 	}

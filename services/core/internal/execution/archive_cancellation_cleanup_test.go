@@ -86,7 +86,7 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 			session := created.Session
 			secret := uuid.NewString()
 			key := deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: session.Environment.ID}
-			owner, err := leased.Deployment.ReserveAllocation(t.Context(), key, installation, runtimedevice.HashCredential(secret))
+			owner, err := leased.Deployment.ReserveAllocation(t.Context(), key, installation, runtimedevice.HashCredential(secret), runtimedevice.HashCredential(secret))
 			if err != nil {
 				t.Fatal(err)
 			}

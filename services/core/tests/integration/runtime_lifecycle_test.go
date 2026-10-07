@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -28,6 +29,7 @@ type lifecycleProvider struct {
 	loseCreate, absent, unavailable bool
 	credentialHash                  string
 	credential                      string
+	serve                           sandboxbootstrap.Input
 }
 
 func (p *lifecycleProvider) Create(_ context.Context, b sandbox.Bootstrap) (sandbox.Info, error) {
@@ -36,6 +38,7 @@ func (p *lifecycleProvider) Create(_ context.Context, b sandbox.Bootstrap) (sand
 	p.creates++
 	p.credentialHash = runtimedevice.HashCredential(b.Credential)
 	p.credential = b.Credential
+	p.serve = b.SandboxIO
 	i := sandbox.Info{Reference: b.Reference, ProviderID: b.AllocationID, State: "running", BootstrapComplete: true}
 	if !p.absent {
 		p.resources[b.AllocationID] = i
@@ -88,7 +91,7 @@ func managedWorkerMode(t *testing.T, s *Store, key string, p sandbox.SandboxProv
 		t.Cleanup(server.Close)
 		peer.setRuntimeGateway(t, "ws"+strings.TrimPrefix(server.URL, "http"), registry)
 	}
-	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
+	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry, ManagedRuntimes: &execution.RuntimeProvider{CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: key, BackendFingerprint: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Provider: p, AdmissionPaused: maintenance}})
 	if len(run) > 0 && run[0] {
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)

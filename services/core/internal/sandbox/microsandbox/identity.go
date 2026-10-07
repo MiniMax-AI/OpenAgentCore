@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -75,12 +74,6 @@ func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
 	}
 	return nil
 }
-func ValidateBootstrap(b sandbox.Bootstrap) error {
-	if !ValidReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
-		return sandbox.ErrInvalid
-	}
-	return (agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}).Validate()
-}
 func ValidateCommand(c sandbox.Command) error {
 	if len(c.Args) == 0 || c.Args[0] == "" || len(c.Stdin) > sandbox.MaxCommandInputBytes || (c.Directory != "" && !filepath.IsAbs(c.Directory)) {
 		return sandbox.ErrInvalid
@@ -98,7 +91,7 @@ func ValidateRequest(q Request) error {
 	}
 	switch q.Operation {
 	case "create":
-		if q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
+		if q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference {
 			return sandbox.ErrInvalid
 		}
 	case "inspect", "kill", "resume_compute", "metrics":

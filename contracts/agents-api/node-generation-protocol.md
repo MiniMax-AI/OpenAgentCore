@@ -53,6 +53,8 @@ Each operation carries its own arguments and returns the following result on suc
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | None |
 
+`bootstrap` is the Provider's `sandbox.Bootstrap`, including the [Sandbox bootstrap](../../docs/sandbox-bootstrap.md) input in `SandboxIO`; Core validates it before it sends `create`.
+
 A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. A node without generation management accepts only its enrolled `deployment_generation`; a generation-managing node runs the request on that generation's provider and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
 
 The budget is relative: the node anchors `timeout_ms` to its own clock on receipt and consumes it while the request waits in its queue, so the hosts' clocks need not agree. Core still bounds its own wait. A full node queue closes the connection.

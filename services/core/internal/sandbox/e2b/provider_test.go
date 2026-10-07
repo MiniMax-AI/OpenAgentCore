@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/contracttest"
 	"github.com/google/uuid"
 )
 
@@ -103,13 +104,13 @@ func TestKillRequiresTerminalProof(t *testing.T) {
 }
 func TestCreateAndCommandUseOnlyPrivateRequest(t *testing.T) {
 	p, f, r := fixture(t)
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "private-bootstrap", NetworkAccess: "enabled"}
+	b := contracttest.Bootstrap(r)
 	f.response.Info = &sandbox.Info{Reference: r, State: "running", ProviderID: "native-id", CreateSettled: true, BootstrapComplete: true}
 	if _, err := p.Create(bounded(t), b); err != nil {
 		t.Fatal(err)
 	}
 	q := f.requests[0]
-	if q.Operation != "create" || q.Bootstrap == nil || q.Bootstrap.Credential != b.Credential || q.Config.APIKey != p.config.APIKey {
+	if q.Operation != "create" || q.Bootstrap == nil || q.Bootstrap.Credential != b.Credential || q.Bootstrap.SandboxIO != b.SandboxIO || q.Config.APIKey != p.config.APIKey {
 		t.Fatal("private request lost")
 	}
 	f.response.Info = nil
@@ -143,7 +144,7 @@ func TestDeadlineAndCommandAdmission(t *testing.T) {
 
 func TestDefinitePreHelperCreateFailureCarriesAbsenceProof(t *testing.T) {
 	p, f, r := fixture(t)
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "private", NetworkAccess: "enabled"}
+	b := contracttest.Bootstrap(r)
 	for _, err := range []error{errHelperNotStarted, context.DeadlineExceeded} {
 		f.err = err
 		info, gotErr := p.Create(bounded(t), b)

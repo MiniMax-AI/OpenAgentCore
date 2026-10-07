@@ -457,18 +457,19 @@ func TestLinkAuthorityDestroyedAllocation(t *testing.T) {
 	tenant, session, environment := managedSession(t, s)
 	key := uuid.NewString()
 	srv := startLinkRoute(t, s)
+	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
 	w := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: runtimegateway.NewRegistry(), Links: srv.Relay, ManagedRuntimes: &execution.RuntimeProvider{
-		CoreURL: "http://core.invalid/api/v1", InstallationID: key, BackendFingerprint: strings.Repeat("a", 64), Provider: &lifecycleProvider{resources: map[string]sandbox.Info{}}}})
+		CoreURL: "https://core.invalid/api/v1", SandboxLink: "wss://core.invalid/api/v1/sandbox-link", InstallationID: key, BackendFingerprint: strings.Repeat("a", 64), Provider: provider}})
 	t.Cleanup(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
 	owner, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	credential := []byte(uuid.NewString())
-	if _, err := s.pool.Exec(t.Context(), "UPDATE runtime_allocations SET serve_credential_hash = $2 WHERE id = $1", owner.ID, serveHash(credential)); err != nil {
-		t.Fatal(err)
+	// The sandbox Serves with the input provisioning minted for it.
+	if provider.serve.Resource != (sandboxbootstrap.Resource{TenantID: tenant, EnvironmentID: environment.ID, Kind: "allocation", ID: owner.ID, Generation: 1}) || provider.serve.LinkURL != "wss://core.invalid/api/v1/sandbox-link" {
+		t.Fatalf("Create input: %+v %s", provider.serve.Resource, provider.serve.LinkURL)
 	}
-	p := startLinkServe(t, srv, credential, sandboxbootstrap.Resource{TenantID: tenant, EnvironmentID: environment.ID, Kind: "allocation", ID: owner.ID, Generation: 1}.Ref())
+	p := startLinkServe(t, srv, []byte(provider.serve.Credential), provider.serve.Resource.Ref())
 	within(t, p.connected)
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)

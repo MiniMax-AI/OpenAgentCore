@@ -70,6 +70,9 @@ type NewAllocation struct {
 	// NodeID is empty when no node serves the allocation.
 	NodeID     string
 	Generation uint64
+	// ServeCredentialHash is the SHA-256 hex digest of the allocation's Link
+	// Serve credential.
+	ServeCredentialHash string
 }
 
 // SessionDevice is the Runtime device a Session is bound to.

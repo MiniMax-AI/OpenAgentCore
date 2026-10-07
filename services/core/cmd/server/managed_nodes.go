@@ -74,8 +74,10 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health))
 		},
 	})
-	// Load requires OAC_PUBLIC_URL with an installation ID.
-	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, runtimeAPI: config.PublicOrigin.RuntimeAPI()}
+	// Load requires OAC_PUBLIC_URL with an installation ID. An origin without a
+	// sandbox Link admits no hosted sandbox.
+	link, _ := config.PublicOrigin.SandboxLink()
+	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, runtimeAPI: config.PublicOrigin.RuntimeAPI(), sandboxLink: link}
 	result.runtime = execution.NewDeferredRuntimeProvider(config.InstallationID, result.setup.load, result.setup.prepare)
 	result.runtime.PublishUnconfigured = result.setup.publishUnconfigured
 	return result
