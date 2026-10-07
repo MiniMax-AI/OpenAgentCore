@@ -50,9 +50,9 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 			registry := agent.NewRegistry()
 			var session *fakeSession
 			var calls atomic.Int32
-			registerSession(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registerSession(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
-				return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload) error {
+				return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload, func()) error {
 					calls.Add(1)
 					if mode == "unknown" {
 						return errors.New("native outcome unknown")
@@ -125,9 +125,9 @@ func TestShutdownReleasesSteeringWorkerAndReceiptJoin(t *testing.T) {
 			registry := agent.NewRegistry()
 			entered, exited := make(chan struct{}), make(chan struct{})
 			var session *fakeSession
-			registerSession(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registerSession(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
-				return &steeringSession{fakeSession: session, steer: func(ctx context.Context, _ proto.PromptSteerPayload) error {
+				return &steeringSession{fakeSession: session, steer: func(ctx context.Context, _ proto.PromptSteerPayload, _ func()) error {
 					close(entered)
 					defer close(exited)
 					if phase == "native" {

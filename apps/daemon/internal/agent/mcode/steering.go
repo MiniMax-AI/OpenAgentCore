@@ -10,12 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-var _ agent.DurableSteerer = (*Session)(nil)
-
-func (s *Session) Steer(ctx context.Context, input proto.PromptSteerPayload) error {
-	return s.SteerWithReceipt(ctx, input, nil)
-}
-
 // Native acceptance belongs to the active ACP Turn; it does not promise model consumption.
 func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
 	s.mu.Lock()
@@ -53,9 +47,7 @@ func (s *Session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerP
 		s.markInputUncertain()
 		return fmt.Errorf("mcode: input transport failed")
 	}
-	if written != nil {
-		written()
-	}
+	written()
 	var frame rpcFrame
 	var stopped error
 	select {

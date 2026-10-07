@@ -67,7 +67,7 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 						}
 					})
 				} else {
-					reply <- s.Steer(receiptCtx, input)
+					reply <- s.SteerWithReceipt(receiptCtx, input, func() {})
 				}
 			}()
 			if mode == "blocked-write" {
@@ -144,7 +144,7 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 			if mode == "duplicate-usage" && measurements != 1 {
 				t.Fatal("duplicate measurement was published")
 			}
-			if err := s.Steer(ctx, input); !errors.Is(err, agent.ErrSteeringInactive) {
+			if err := s.SteerWithReceipt(ctx, input, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 				t.Fatal("completed execution accepted input", err)
 			}
 			if _, err := s.AwaitSettlement(ctx); err != nil && (mode == "success" || mode == "phased" || mode == "timeout") {
@@ -159,11 +159,11 @@ func TestSteeringReceiptsAndLifecycle(t *testing.T) {
 
 func TestSteeringDoesNotSendBeforeReadiness(t *testing.T) {
 	s := &session{process: &clirunner.Process{}}
-	if err := s.Steer(context.Background(), proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("hello")}); !errors.Is(err, agent.ErrSteeringNotReady) {
+	if err := s.SteerWithReceipt(context.Background(), proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("hello")}, func() {}); !errors.Is(err, agent.ErrSteeringNotReady) {
 		t.Fatal(err)
 	}
 	s.stopSteering()
-	if err := s.Steer(context.Background(), proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("hello")}); !errors.Is(err, agent.ErrSteeringInactive) {
+	if err := s.SteerWithReceipt(context.Background(), proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("hello")}, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatal(err)
 	}
 }

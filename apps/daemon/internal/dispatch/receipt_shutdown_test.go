@@ -45,9 +45,9 @@ func TestShutdownCancelsCompletionErrorSend(t *testing.T) {
 	sender := &shutdownAllSendsBlockSender{entered: make(chan struct{}), terminal: make(chan context.Context, 1), rescue: make(chan struct{})}
 	registry := agent.NewRegistry()
 	var session *fakeSession
-	registerSession(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(_ context.Context, _ proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 		session = &fakeSession{out: out, closeOutOnCancel: true}
-		return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload) error { return nil }}, nil
+		return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload, func()) error { return nil }}, nil
 	})
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender})
 	if err != nil {

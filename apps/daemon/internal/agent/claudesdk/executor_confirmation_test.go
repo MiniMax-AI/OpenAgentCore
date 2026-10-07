@@ -38,7 +38,7 @@ func TestExecutorNativeConfirmationSurvivesCleanup(t *testing.T) {
 			if mode == "pending_input" {
 				inputReceipt = make(chan error, 1)
 				go func() {
-					inputReceipt <- turn.(*session).SteerWithReceipt(t.Context(), proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("extra")}, nil)
+					inputReceipt <- turn.SteerWithReceipt(t.Context(), proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("extra")}, func() {})
 				}()
 				if event := <-out; event.Type != proto.TypeDelta {
 					t.Fatal("input write barrier missing")

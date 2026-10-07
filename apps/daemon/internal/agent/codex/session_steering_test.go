@@ -33,7 +33,7 @@ func TestSteeringUsesNativeActiveTurnAndReceipt(t *testing.T) {
 			s.onTurnStarted(json.RawMessage(`{"threadId":"native-thread","turn":{"id":"native-turn"}}`))
 			done := make(chan error, 1)
 			go func() {
-				done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("追加输入")})
+				done <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "input-1", Input: proto.TextInput("追加输入")}, func() {})
 			}()
 			var request struct {
 				ID     string          `json:"id"`
@@ -78,7 +78,7 @@ func TestSteeringDeadlineReleasesBlockedNativeWrite(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- s.Steer(ctx, proto.PromptSteerPayload{InputID: "blocked", Input: proto.TextInput("extra")})
+		done <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "blocked", Input: proto.TextInput("extra")}, func() {})
 	}()
 	// No reader drains the pipe, so the request never reaches its response wait.
 	select {
@@ -103,18 +103,18 @@ func TestSteeringDoesNotStartOrReviveTurns(t *testing.T) {
 	// A nil RPC client proves these states do not issue a request.
 	for _, notification := range []json.RawMessage{nil, json.RawMessage(`{"threadId":"other-thread","turn":{"id":"other-turn"}}`)} {
 		s.onTurnStarted(notification)
-		if err := s.Steer(ctx, input); !errors.Is(err, agent.ErrSteeringNotReady) {
+		if err := s.SteerWithReceipt(ctx, input, func() {}); !errors.Is(err, agent.ErrSteeringNotReady) {
 			t.Fatalf("starting turn: %v", err)
 		}
 	}
 	s.stopSteering()
 	s.onTurnStarted(json.RawMessage(`{"threadId":"native-thread","turn":{"id":"late-turn"}}`))
-	if err := s.Steer(ctx, input); !errors.Is(err, agent.ErrSteeringInactive) {
+	if err := s.SteerWithReceipt(ctx, input, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatalf("terminal turn revived: %v", err)
 	}
 	s = &Session{cancelCtx: ctx}
 	cancel()
-	if err := s.Steer(context.Background(), input); !errors.Is(err, agent.ErrSteeringInactive) {
+	if err := s.SteerWithReceipt(context.Background(), input, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatalf("cancelled run: %v", err)
 	}
 }

@@ -107,8 +107,6 @@ type Session struct {
 	outcome cancellationOutcomeState
 }
 
-var _ agent.Session = (*Session)(nil)
-
 // ---------------------------------------------------------------------------
 // notification handlers
 // ---------------------------------------------------------------------------

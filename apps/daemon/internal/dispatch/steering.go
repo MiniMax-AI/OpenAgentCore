@@ -23,7 +23,6 @@ const (
 type steeringReceipt struct {
 	fingerprint [32]byte
 	ack         proto.PromptSteerAckPayload
-	durable     bool
 }
 
 func (r *Router) handlePromptSteer(ctx context.Context, env proto.Envelope) error {
@@ -70,7 +69,7 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 	encoded, _ := json.Marshal(input.Input)
 	fingerprint := sha256.Sum256(encoded)
 	if previous, ok := state.steering[input.InputID]; ok {
-		if previous.fingerprint != fingerprint || previous.durable != input.DurableReceipt {
+		if previous.fingerprint != fingerprint {
 			ack.ErrorCode, ack.Error = "input_conflict", "This input ID was already used with different text."
 			return &ack
 		}
@@ -91,19 +90,13 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 	ack.ErrorCode, ack.Error = "not_ready", "The run is still starting."
 	// Bind input identity before any retryable state so changed text cannot
 	// slip through a startup or in-flight retry.
-	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
+	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack}
 	if state.session == nil {
-		return &ack
-	}
-	session := state.session
-	steerer, supportsSteering := session.(agent.Steerer)
-	if !input.DurableReceipt && !supportsSteering {
-		ack.ErrorCode, ack.Error = "unsupported", "This engine does not support active-turn input."
 		return &ack
 	}
 	if state.steerBusy {
 		ack.ErrorCode, ack.Error = "busy", "Another input is awaiting an engine receipt; retry this input later."
-		state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
+		state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack}
 		return &ack
 	}
 	session, finishOperation, ready := r.preparedOperationLocked(state)
@@ -112,7 +105,7 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 		return &ack
 	}
 	ack.ErrorCode, ack.Error = "in_flight", "This input is awaiting an engine receipt."
-	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack, durable: input.DurableReceipt}
+	state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack}
 	state.steerBusy = true
 	r.shutdownWG.Add(1)
 	go func() {
@@ -125,14 +118,7 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 		}()
 		ctx, stop := r.shutdownContext(ctx)
 		defer stop()
-		var err error
-		if input.DurableReceipt {
-			err = r.steerDurably(ctx, state, session, env, input, fingerprint)
-		} else {
-			callCtx, cancel := context.WithTimeout(ctx, steeringCallTimeout)
-			err = steerer.Steer(callCtx, input)
-			cancel()
-		}
+		err := r.steerDurably(ctx, state, session, env, input, fingerprint)
 		r.publishSteeringReceipt(ctx, state, env, input, fingerprint, steeringResult(input.InputID, err))
 	}()
 	return nil

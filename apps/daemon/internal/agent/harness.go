@@ -3,11 +3,10 @@
 // contracts/agents-api/harness-onboarding.md.
 //
 // Required lifecycle: ExecutorFactory prepares a fixed Session-owned Executor;
-// each StartTurn returns a fresh Turn with its own output and settlement.
-// Turn includes the public text DurableSteerer requirement. Keep extension
-// interfaces separate, but implement each explicitly: unsupported operations
-// return ErrUnsupportedOperation before any native effects. Interface presence
-// does not advertise support; the capability declaration controls admission. MCP,
+// each StartTurn returns a fresh Turn with its own output and settlement. Turn
+// is one interface: an operation the adapter does not support returns
+// ErrUnsupportedOperation before any native effects, and the capability
+// declaration, not the method, decides whether the Runtime calls it. MCP,
 // images, structured output and Subagent observations use protocol messages
 // rather than additional Go interfaces; qualify and advertise them separately.
 //
@@ -552,9 +551,24 @@ type Executor interface {
 }
 
 // Turn owns one output stream and never retargets cancellation to a successor.
+// For Executor-owned Turns, AwaitSettlement and Executor.Close define settlement
+// and resource retirement; Cancel alone does not transfer resource ownership.
 type Turn interface {
-	Session
-	DurableSteerer
+	// Cancel signals the Turn to abort. Idempotent. Actual teardown
+	// happens asynchronously and is signalled via the out channel close.
+	Cancel(ctx context.Context) error
+	// CancellationOutcome snapshots observed native identity, usage and output.
+	// It remains readable after Cancel; missing evidence stays unset. An empty
+	// result means no observed evidence, not unsupported cancellation or success.
+	// Reading it does not wait for or establish native settlement.
+	CancellationOutcome() proto.DonePayload
+	// SteerWithReceipt delivers active input: it calls written once the complete
+	// input is written, then waits for the native application receipt. Every
+	// public Harness implements it; returning Unsupported is not a receipt.
+	SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error
+	// SubmitFunctionResult delivers a result for an outstanding native call.
+	// A successful return requires its native application receipt.
+	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
 	// Success confirms closed output and settled native input, function and
 	// child-work obligations. Errors cannot prove cancellation.
 	AwaitSettlement(context.Context) (TurnSettlement, error)
@@ -565,43 +579,6 @@ type Turn interface {
 type TurnSettlement struct {
 	Reusable bool
 	Reason   string
-}
-
-// Session is the cancellation and outcome surface of a Turn. Every owner
-// exposes observed state.
-// For Executor-owned Turns, AwaitSettlement and Executor.Close define settlement
-// and resource retirement; Cancel alone does not transfer resource ownership.
-type Session interface {
-	// Cancel signals the session to abort. Idempotent. Actual teardown
-	// happens asynchronously and is signalled via the out channel close.
-	Cancel(ctx context.Context) error
-	// CancellationOutcome snapshots observed native identity, usage and output.
-	// It remains readable after Cancel; missing evidence stays unset. An empty
-	// result means no observed evidence, not unsupported cancellation or success.
-	// Reading it does not wait for or establish native settlement.
-	CancellationOutcome() proto.DonePayload
-}
-
-// Turn extension contracts. Every public Harness implements each interface;
-// unsupported operations return ErrUnsupportedOperation with a fixed safe reason.
-
-// DurableSteerer reports one complete write synchronously, then waits for the native receipt.
-// It is independent of Steerer and is mandatory on every public Turn.
-// Required input receipts cannot be implemented by returning Unsupported.
-type DurableSteerer interface {
-	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
-}
-
-// Steerer delivers non-durable input when qualified; otherwise it explicitly
-// returns ErrUnsupportedOperation without submitting input.
-type Steerer interface {
-	Steer(context.Context, proto.PromptSteerPayload) error
-}
-
-// FunctionResultSubmitter delivers a result for an outstanding native call.
-// A successful return requires its native application receipt.
-type FunctionResultSubmitter interface {
-	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
 }
 
 // Kind registration.

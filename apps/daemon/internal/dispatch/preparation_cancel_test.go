@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -82,7 +81,7 @@ func TestPreparedCancellationWaitsForOutputAndCleanup(t *testing.T) {
 		Content: "observed", Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7, OutputTokens: 3, TotalTokens: 10}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "observed-native"},
 	}}
 	var session *fakeSession
-	p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session = &fakeSession{out: out, closeOutOnCancel: true,
 			postCancelEnvelopes: []proto.Envelope{mustEnv(t, proto.TypeDone, id, p.outcome)}}
 		out <- mustEnv(t, proto.TypeDelta, id, proto.DeltaPayload{Delta: "observed"})
@@ -150,7 +149,7 @@ func TestPreparedCancellationBeforeTransferPreservesUnknownOutcome(t *testing.T)
 				cancelOnce.Do(func() { close(cancelled) })
 				return p.Close()
 			}
-			p.start = func(_ context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (agent.Session, error) {
+			p.start = func(_ context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (fixtureSession, error) {
 				close(entered)
 				<-cancelled
 				<-allowReturn
@@ -204,7 +203,7 @@ func TestPreparedCancellationFailuresRemainConservative(t *testing.T) {
 			entered, allowReturn := make(chan struct{}), make(chan struct{})
 			var session *fakeSession
 			p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-			p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+			p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
 				out <- mustEnv(t, proto.TypeUsage, id, proto.UsagePayload{Usage: proto.Usage{InputTokens: 3}})
 				close(entered)
@@ -255,7 +254,7 @@ func TestPreparedCancellationTimeoutKeepsCapacityUntilStartReturns(t *testing.T)
 	entered, allowReturn := make(chan struct{}), make(chan struct{})
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
 	p.cancel = func(context.Context) error { return p.Close() }
-	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (fixtureSession, error) {
 		close(entered)
 		<-allowReturn
 		return nil, ctx.Err()

@@ -338,3 +338,6 @@ func TestExecutorRejectsOutputFromAnotherTurn(t *testing.T) {
 func (*reusableTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
 	return agent.ErrSteeringRejected
 }
+func (*reusableTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return agent.ErrUnknownFunctionCall
+}

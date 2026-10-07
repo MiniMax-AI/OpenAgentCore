@@ -730,6 +730,10 @@ func (t *testTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, f
 	return agent.ErrUnsupportedOperation
 }
 
+func (t *testTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return agent.ErrUnsupportedOperation
+}
+
 func (t *testTurn) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, error) {
 	select {
 	case <-t.settled:

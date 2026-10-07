@@ -72,6 +72,15 @@ type fakeSession struct {
 
 func (s *fakeSession) CancellationOutcome() proto.DonePayload { return proto.DonePayload{} }
 
+// fakeSession takes no active input and has no outstanding function calls.
+func (s *fakeSession) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
+	return agent.ErrSteeringInactive
+}
+
+func (s *fakeSession) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return agent.ErrUnknownFunctionCall
+}
+
 func (s *fakeSession) Cancel(context.Context) error {
 	s.cancelMu.Lock()
 	s.cancelCalls++
@@ -114,7 +123,7 @@ func newHarness(t *testing.T) *harness {
 		gotReq:  make(chan proto.PromptRequestPayload, 16),
 		gotSess: make(chan *fakeSession, 16),
 	}
-	registerSession(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "fake_alpha", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 		sess := &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}
 		h.gotReq <- req
 		h.gotSess <- sess
@@ -130,11 +139,11 @@ func newHarness(t *testing.T) *harness {
 
 // registerSession declares info, without an Environment, and starts each
 // Turn of the kind with factory.
-func registerSession(reg *agent.Registry, info proto.SupportedAgentKind, factory func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (agent.Session, error)) {
+func registerSession(reg *agent.Registry, info proto.SupportedAgentKind, factory func(context.Context, proto.PromptRequestPayload, chan<- proto.Envelope) (fixtureSession, error)) {
 	info.Capabilities.EnvironmentNone = proto.CapabilitySupported
 	reg.RegisterKind(info, prototest.ModelConfiguration())
 	reg.RegisterExecutor(info.Kind, preparationExecutorFixture(func(_ context.Context, req proto.PromptRequestPayload) (preparedFixture, error) {
-		return &controlledPreparation{start: func(ctx context.Context, id string, input proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+		return &controlledPreparation{start: func(ctx context.Context, id string, input proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 			req.RunID, req.Input = id, input
 			return factory(ctx, req, out)
 		}}, nil

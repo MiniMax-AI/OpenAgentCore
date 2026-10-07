@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 667a4f20a030e5af7787a4240c14dc648ec622c3de01c7f965813fbefac55f6d
+source_hash: 30ea6710bb325ad4fb81a75ff870cb70c03cd099806f135eb92104c2616fd521
 ---
 
 此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
@@ -65,7 +65,6 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
 | `require_existing_native_session` | 需要恢复原生 Session 时设置 |
-| `prompt_steer` 上的 `durable_receipt` | Core 交付的每个活动输入都设置 |
 
 执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
 
@@ -143,7 +142,7 @@ Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并�
 
 ## 活动输入回执 {#active-input-receipts}
 
-Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`，每个 Run 一次交付一个输入，并等待回执后再发送下一个：
+Core 通过 `prompt_steer` 交付活动输入，每个 Run 一次交付一个输入，并等待回执后再发送下一个。每个输入都是持久化的，经历以下阶段：
 
 | 阶段 | 定时器 |
 | --- | --- |

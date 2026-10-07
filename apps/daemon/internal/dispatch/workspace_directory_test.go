@@ -8,14 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestWorkspaceDirectoryRetainsEnvironmentAndTransferredOwner(t *testing.T) {
 	sender := &recSender{}
 	p := &controlledPreparation{closed: make(chan struct{})}
-	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(ctx context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		return &fakeSession{out: out, ctx: ctx, closeOutOnCancel: true}, nil
 	}
 	r := preparationRouter(t, sender, time.Minute, func(context.Context, proto.PromptRequestPayload) (preparedFixture, error) { return p, nil })

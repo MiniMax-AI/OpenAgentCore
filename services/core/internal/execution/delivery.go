@@ -332,7 +332,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					result.ErrorCode = "message_input_unsupported"
 					return
 				}
-				if send(ctx, peer, request.Assignment, proto.TypePromptSteer, runID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input, DurableReceipt: true}) != nil {
+				if send(ctx, peer, request.Assignment, proto.TypePromptSteer, runID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input}) != nil {
 					result.ErrorCode = "input_outcome_unknown"
 					return
 				}

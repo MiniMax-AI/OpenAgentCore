@@ -3,7 +3,6 @@ package claudesdk
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -63,5 +62,3 @@ func (s *session) CancellationOutcome() proto.DonePayload {
 		return proto.DonePayload{}
 	}
 }
-
-var _ agent.Turn = (*session)(nil)

@@ -14,11 +14,11 @@ import (
 
 type steeringSession struct {
 	*fakeSession
-	steer func(context.Context, proto.PromptSteerPayload) error
+	steer func(context.Context, proto.PromptSteerPayload, func()) error
 }
 
-func (s *steeringSession) Steer(ctx context.Context, input proto.PromptSteerPayload) error {
-	return s.steer(ctx, input)
+func (s *steeringSession) SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
+	return s.steer(ctx, input, written)
 }
 
 func TestSteeringReceiptsAndRetries(t *testing.T) {
@@ -31,15 +31,12 @@ func TestSteeringReceiptsAndRetries(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			calls, starts := 0, 0
-			registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+			registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 				starts++
 				return &steeringSession{
 					fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
-					steer: func(ctx context.Context, input proto.PromptSteerPayload) error {
+					steer: func(_ context.Context, input proto.PromptSteerPayload, _ func()) error {
 						calls++
-						if _, ok := ctx.Deadline(); !ok {
-							t.Error("native request has no deadline")
-						}
 						if input.InputID != "input-1" || *input.Input[0].Content[0].Text != "additional text" {
 							t.Errorf("input lost: %+v", input)
 						}
@@ -90,10 +87,10 @@ func TestSteeringReadinessAndInputValidation(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	calls := 0
-	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
-			steer: func(context.Context, proto.PromptSteerPayload) error {
+			steer: func(context.Context, proto.PromptSteerPayload, func()) error {
 				calls++
 				if calls == 1 {
 					return agent.ErrSteeringNotReady
@@ -156,10 +153,10 @@ func TestSteeringDoesNotBlockOtherRunCancellation(t *testing.T) {
 	defer h.router.Shutdown(context.Background())
 	entered, release := make(chan struct{}), make(chan struct{})
 	defer close(release)
-	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
-			steer: func(context.Context, proto.PromptSteerPayload) error {
+			steer: func(context.Context, proto.PromptSteerPayload, func()) error {
 				close(entered)
 				<-release
 				return agent.ErrSteeringRejected
@@ -214,10 +211,10 @@ func TestSteeringCapacityPreservesExistingReceipts(t *testing.T) {
 	h := newHarness(t)
 	defer h.router.Shutdown(context.Background())
 	calls := 0
-	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (agent.Session, error) {
+	registerSession(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}, func(ctx context.Context, req proto.PromptRequestPayload, out chan<- proto.Envelope) (fixtureSession, error) {
 		return &steeringSession{
 			fakeSession: &fakeSession{out: out, closeOutOnCancel: true},
-			steer: func(context.Context, proto.PromptSteerPayload) error {
+			steer: func(context.Context, proto.PromptSteerPayload, func()) error {
 				calls++
 				return nil
 			},

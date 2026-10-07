@@ -44,7 +44,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	if got := running.CancellationOutcome(); !reflect.DeepEqual(got, proto.DonePayload{}) {
 		t.Fatal("unsettled outcome was exposed", got)
 	}
-	if err := running.(*session).Steer(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}); !errors.Is(err, agent.ErrSteeringInactive) {
+	if err := running.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatal("cancelled execution accepted steering", err)
 	}
 	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {

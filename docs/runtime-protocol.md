@@ -63,7 +63,6 @@ The `execution_prepare` configuration carries the Session's model configuration 
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
 | `require_existing_native_session` | When a native Session must be recovered |
-| `durable_receipt` on `prompt_steer` | For every active input Core delivers |
 
 An execution configuration requires exactly one of `local_environment` and `disable_execution_environment`; `execution_prepare` rejects neither or both with `unsupported_configuration`.
 
@@ -141,7 +140,7 @@ Idle expiry of an Executor is a Runtime resource policy, separate from Core's ac
 
 ## Active input receipts
 
-Core delivers active input as `prompt_steer` with `durable_receipt: true`, one input at a time per Run, and waits for its receipt before sending the next:
+Core delivers active input as `prompt_steer`, one input at a time per Run, and waits for its receipt before sending the next. Every input is durable, with these phases:
 
 | Phase | Timer |
 | --- | --- |

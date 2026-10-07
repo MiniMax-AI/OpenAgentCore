@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -37,7 +36,7 @@ func TestPreparedCancellationDoesNotAcknowledgeFailedCleanup(t *testing.T) {
 		close(cancelled)
 		return nil
 	}}}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, _ chan<- proto.Envelope) (fixtureSession, error) {
 		close(entered)
 		<-cancelled
 		return nil, context.Canceled
@@ -64,7 +63,7 @@ func TestShutdownRetriesFailedPreparedCancellationOnSameTarget(t *testing.T) {
 	sender := &recSender{}
 	var session *fakeSession
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session = &fakeSession{out: out, closeOutOnCancel: true}
 		return session, nil
 	}
@@ -165,7 +164,7 @@ func TestPublishedPreparedRunRetainsRetryAfterHandleRetirement(t *testing.T) {
 	sender := &recSender{}
 	session := &fakeSession{closeOutOnCancel: true}
 	p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
-	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	p.start = func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (fixtureSession, error) {
 		session.out = out
 		return session, nil
 	}

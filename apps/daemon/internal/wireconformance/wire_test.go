@@ -361,7 +361,10 @@ func (turn *controlledTurn) AwaitSettlement(ctx context.Context) (agent.TurnSett
 	}
 }
 
-// These fixtures exercise settlement only; active input is deliberately rejected.
+// These fixtures exercise settlement only; active input and results are deliberately rejected.
 func (*controlledTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
 	return agent.ErrSteeringRejected
+}
+func (*controlledTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return agent.ErrUnknownFunctionCall
 }
