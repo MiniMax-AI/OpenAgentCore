@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -21,12 +20,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/processshim"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxbootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
+	"github.com/google/uuid"
 )
 
 // The test binary is also the privileged suite's Harness inside the view,
@@ -83,7 +85,7 @@ func request(kind, workspace, baseURL, key string) proto.PromptRequestPayload {
 		AgentKind:        kind,
 		Model:            "m",
 		ModelProvider:    &modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: baseURL, APIKey: key},
-		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled"},
+		LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: workspace, NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}},
 	}
 }
 
@@ -134,31 +136,30 @@ func leftEntries(t *testing.T, cfg Config) []string {
 	return left
 }
 
-// daemon drives Sessions through a dispatch Router, as the daemon does. It
-// binds each request to the Session of the assignment the Router admitted it
-// under, records the latest Executor the agent host opened for each Session,
-// and removes a released Session's home.
+// daemon drives Sessions through a dispatch Router, as the daemon does, with
+// a Host's Environment owners and Executor factory. It records the latest
+// Executor the agent host opened for each Session.
 type daemon struct {
+	host   *Host
 	router *dispatch.Router
 	// mcp is the installed MCP that the Environment's preparation resolves
 	// into each request; the wire does not carry it.
-	mcp      []proto.EnvironmentMCP
-	mu       sync.Mutex
-	frames   map[string]chan proto.Envelope // by envelope ID
-	bindings map[string]Binding             // by Session ID
-	opened   map[string]*session            // by Session ID
+	mcp    []proto.EnvironmentMCP
+	mu     sync.Mutex
+	frames map[string]chan proto.Envelope // by envelope ID
+	opened map[string]*session            // by Session ID
 }
 
 func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 	t.Helper()
-	dm := &daemon{frames: map[string]chan proto.Envelope{}, bindings: map[string]Binding{}, opened: map[string]*session{}}
+	dm := &daemon{host: &Host{cfg: cfg, owners: owners{d: d}}, frames: map[string]chan proto.Envelope{}, opened: map[string]*session{}}
 	reg := registry(cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
 		if dm.mcp != nil {
 			local := *req.LocalEnvironment
 			local.MCP = dm.mcp
 			req.LocalEnvironment = &local
 		}
-		e, err := open(ctx, cfg, req, dm.bind, d)
+		e, err := dm.host.openExecutor(ctx, req)
 		if s, ok := e.(*session); ok {
 			dm.mu.Lock()
 			dm.opened[strings.TrimPrefix(req.AgentStateKey, stateKeyPrefix)] = s
@@ -166,17 +167,15 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 		}
 		return e, err
 	})
-	var err error
 	removeHome := func(session string) error {
-		dm.mu.Lock()
-		b, ok := dm.bindings[session]
-		dm.mu.Unlock()
-		if !ok {
-			return fmt.Errorf("%w: no binding", ErrInvalidSession)
+		id, err := canonicalID(session)
+		if err != nil {
+			return err
 		}
-		return (&Host{cfg: cfg}).RemoveHome(b.SessionID)
+		return dm.host.RemoveHome(id)
 	}
-	if dm.router, err = dispatch.New(dispatch.Config{Registry: reg, Sender: dm, SessionEnvironments: true, RemoveHome: removeHome, Log: slog.New(slog.DiscardHandler)}); err != nil {
+	var err error
+	if dm.router, err = dispatch.New(dispatch.Config{Registry: reg, Sender: dm, Environments: dm.host.Environments, RemoveHome: removeHome, Log: slog.New(slog.DiscardHandler)}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { dm.shutdown() })
@@ -186,19 +185,31 @@ func newDaemon(t *testing.T, cfg Config, d deps) *daemon {
 // stateKeyPrefix and the Session ID make the state key dispatch requires.
 const stateKeyPrefix = "agents-api-"
 
-func (dm *daemon) bind(req proto.PromptRequestPayload) (Binding, Environment, error) {
-	dm.mu.Lock()
-	defer dm.mu.Unlock()
-	b, ok := dm.bindings[req.Assignment.SessionID]
-	if !ok || ref(b) != req.Assignment {
-		return Binding{}, Environment{}, fmt.Errorf("%w: no binding", ErrInvalidSession)
-	}
-	return b, Environment{}, nil
-}
-
 // ref is the reference of b's assignment.
 func ref(b Binding) proto.AssignmentRef {
-	return proto.AssignmentRef{SessionID: b.SessionID.String(), AssignmentID: b.AssignmentID.String(), Epoch: b.AssignmentEpoch}
+	return proto.AssignmentRef{SessionID: uuid.UUID(b.SessionID).String(), AssignmentID: uuid.UUID(b.AssignmentID).String(), Epoch: b.AssignmentEpoch}
+}
+
+// environmentID is the Environment of b's resource; empty for environment
+// none, whose binding has no resource.
+func environmentID(b Binding) string {
+	if b.Resource == (sandboxlink.ResourceRef{}) {
+		return ""
+	}
+	return uuid.UUID(b.Resource.EnvironmentID).String()
+}
+
+// bindPayload is the assignment_bind that binds b's Session.
+func bindPayload(b Binding) proto.AssignmentBindPayload {
+	p := proto.AssignmentBindPayload{EnvironmentID: environmentID(b)}
+	if p.EnvironmentID != "" {
+		r := b.Resource
+		kind := map[sandboxlink.ResourceKind]string{sandboxlink.ResourceAllocation: "allocation", sandboxlink.ResourceEnrollment: "enrollment"}[r.Kind]
+		p.Resource = &sandboxbootstrap.Resource{TenantID: uuid.UUID(r.TenantID).String(), EnvironmentID: p.EnvironmentID, Kind: kind,
+			ID: uuid.UUID(r.ID).String(), Generation: r.Generation}
+		p.AttachGrant = b.AttachGrant
+	}
+	return p
 }
 
 func (dm *daemon) Send(_ context.Context, e proto.Envelope) error {
@@ -242,14 +253,11 @@ func (dm *daemon) next(t *testing.T, id string) proto.Envelope {
 	}
 }
 
-// assign binds b's Session to the Router in environment.
-func (dm *daemon) assign(t *testing.T, b Binding, environment string) {
+// assign binds b's Session to the Router.
+func (dm *daemon) assign(t *testing.T, b Binding) {
 	t.Helper()
-	dm.mu.Lock()
-	dm.bindings[b.SessionID.String()] = b
-	dm.mu.Unlock()
 	id := sandboxwire.NewID().String()
-	dm.handle(t, ref(b), proto.TypeAssignmentBind, id, proto.AssignmentBindPayload{EnvironmentID: environment})
+	dm.handle(t, ref(b), proto.TypeAssignmentBind, id, bindPayload(b))
 	if status := dm.status(t, id); status.State != proto.AssignmentBound {
 		t.Fatalf("the bind is %s (%s), want bound", status.State, status.ErrorCode)
 	}
@@ -265,13 +273,18 @@ func (dm *daemon) status(t *testing.T, id string) proto.AssignmentStatusPayload 
 	return status
 }
 
-// prepare binds b's Session and prepares an Executor of it for req. It
-// returns the request ID and the preparation's first status other than
-// preparing.
+// prepare binds b's Session and prepares an Executor of it for req in the
+// Environment of b's resource. It returns the request ID and the
+// preparation's first status other than preparing.
 func (dm *daemon) prepare(t *testing.T, b Binding, req proto.PromptRequestPayload) (string, proto.PreparationStatusPayload) {
 	t.Helper()
-	dm.assign(t, b, req.EnvironmentID())
-	session := b.SessionID.String()
+	dm.assign(t, b)
+	session := ref(b).SessionID
+	if req.LocalEnvironment != nil {
+		local := *req.LocalEnvironment
+		local.ID = environmentID(b)
+		req.LocalEnvironment = &local
+	}
 	req.AgentStateKey = stateKeyPrefix + session
 	id := sandboxwire.NewID().String()
 	dm.handle(t, ref(b), proto.TypeExecutionPrepare, id, proto.ExecutionPreparePayload{SessionID: session, Configuration: req})
@@ -326,7 +339,7 @@ func (dm *daemon) done(t *testing.T, run string) []proto.Envelope {
 func (dm *daemon) session(b Binding) *session {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
-	return dm.opened[b.SessionID.String()]
+	return dm.opened[ref(b).SessionID]
 }
 
 // shutdown shuts the Router down, which closes every Executor, and returns

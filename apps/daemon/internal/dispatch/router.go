@@ -53,7 +53,6 @@ type Router struct {
 	workspaceExport     *workspaceExport
 	workspaceReads      map[string]string // read ID → SessionID
 	environments        func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
-	sessionEnvironments bool
 	removeHome          func(sessionID string) error
 }
 
@@ -96,10 +95,6 @@ type Config struct {
 	// the bind: the Runtime does not serve that Session. Nil Environments
 	// leaves every Session without an owner.
 	Environments func(proto.AssignmentRef, proto.AssignmentBindPayload) Environment
-	// SessionEnvironments says that the Executor factory binds a prepared
-	// execution's LocalEnvironment itself, without an owner. It excludes
-	// Environments.
-	SessionEnvironments bool
 	// RemoveHome removes the Session's native home once its Executors have
 	// closed. Nil declares that assignment_release does not accept RemoveHome.
 	RemoveHome func(sessionID string) error
@@ -114,9 +109,6 @@ func New(cfg Config) (*Router, error) {
 	}
 	if cfg.Sender == nil {
 		return nil, errors.New("dispatch.New: Sender is required")
-	}
-	if cfg.SessionEnvironments && cfg.Environments != nil {
-		return nil, errors.New("dispatch.New: SessionEnvironments excludes Environments")
 	}
 	log := cfg.Log
 	if log == nil {
@@ -145,7 +137,6 @@ func New(cfg Config) (*Router, error) {
 		preparationRequests: make(map[string]*preparationState),
 		preparationTimeout:  preparationTimeout,
 		environments:        cfg.Environments,
-		sessionEnvironments: cfg.SessionEnvironments,
 		removeHome:          cfg.RemoveHome,
 	}, nil
 }

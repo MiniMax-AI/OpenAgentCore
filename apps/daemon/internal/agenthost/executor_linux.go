@@ -23,19 +23,22 @@ import (
 type deps struct {
 	dial  dialFunc
 	tasks listTasks
+	// stream wraps each stream an Environment owner opens; nil keeps it.
+	stream func(sandboxlink.Service, io.ReadWriteCloser) io.ReadWriteCloser
 }
 
 // Registry returns the kinds the agent host runs, for the daemon's dispatch
 // and heartbeat: each kind in Config.Harnesses that declares an agent.View,
 // in the Environments the agent host serves. Its Executor factory prepares an
-// Executor of the Session that bind binds the request to, as the package
-// documentation describes, and bind's error fails the preparation. The Router
-// that runs it sets dispatch.Config.SessionEnvironments.
-func (h *Host) Registry(bind func(proto.PromptRequestPayload) (Binding, Environment, error)) *agent.Registry {
-	d := deps{dial: relayDial(h.cfg), tasks: taskUIDs}
-	return registry(h.cfg.Harnesses, func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-		return open(ctx, h.cfg, req, bind, d)
-	})
+// Executor of the Session whose Environment owner Host.Environments resolved
+// and prepared, as the package documentation describes. The Router that runs
+// it sets dispatch.Config.Environments to Host.Environments.
+func (h *Host) Registry() *agent.Registry {
+	return registry(h.cfg.Harnesses, h.openExecutor)
+}
+
+func (h *Host) openExecutor(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
+	return open(ctx, h.cfg, req, func(r proto.PromptRequestPayload) (Binding, Environment, error) { return h.executor(ctx, r) }, h.owners.d)
 }
 
 // registry registers each kind in harnesses that declares a view, with

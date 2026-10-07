@@ -120,6 +120,7 @@ type Host struct {
 	cfg Config
 	// state and views hold the locks; nil until taken.
 	state, views *os.File
+	owners       owners
 }
 
 // Close releases the installation locks. Call it once every Executor has

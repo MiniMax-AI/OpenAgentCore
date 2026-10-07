@@ -227,12 +227,7 @@ func (s *session) processScope(ctx context.Context) (sandboxprocess.Scope, error
 	if err != nil {
 		return 0, err
 	}
-	for _, scope := range []sandboxprocess.Scope{sandboxprocess.ScopeCgroupV2, sandboxprocess.ScopePOSIXSession} {
-		if slices.Contains(d.Capabilities.Scopes, scope) {
-			return scope, nil
-		}
-	}
-	return 0, fmt.Errorf("the Process service declares no scope among %v", d.Capabilities.Scopes)
+	return strongestScope(d.Capabilities)
 }
 
 // brokerFailed fails the Session with a process broker failure.

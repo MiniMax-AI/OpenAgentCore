@@ -162,7 +162,7 @@ func TestStdioMCPRunsUnderItsAlias(t *testing.T) {
 func TestRegistryRunsKindsWithViews(t *testing.T) {
 	f := newViewFixture(t)
 	var kinds []string
-	for _, info := range (&Host{cfg: f.cfg}).Registry(nil).SupportedAgentKinds() {
+	for _, info := range (&Host{cfg: f.cfg}).Registry().SupportedAgentKinds() {
 		kinds = append(kinds, info.Kind)
 	}
 	slices.Sort(kinds)
@@ -178,9 +178,9 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "docs", ServerURL: "https://mcp.test/docs?tenant=a", BearerToken: &bearer}}
 	original := *req.ModelProvider
 	var dials atomic.Int32
-	d := newDaemon(t, f.cfg, deps{dial: countingDial(&dials), tasks: noTasks})
-	if _, p := d.prepare(t, newBinding(newResource()), req); p.State != "failed" || p.ErrorCode != "preparation_failed" {
-		t.Fatalf("the preparation is %s (%s), want failed with the factory", p.State, p.ErrorCode)
+	e, err := open(context.Background(), f.cfg, req, bindTo(newBinding(newResource())), deps{dial: countingDial(&dials), tasks: noTasks})
+	if !errors.Is(err, errFactory) {
+		t.Fatalf("open = %v, want the factory's error", err)
 	}
 	if provider := f.req.ModelProvider; provider == nil || provider.BaseURL != "http://127.0.0.1:17101" || provider.APIKey != modelprovider.Placeholder || provider.Protocol != modelprovider.Anthropic {
 		t.Errorf("model provider %+v; want the gateway with the placeholder", provider)
@@ -201,9 +201,12 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	if !strings.HasPrefix(f.session.Home.Host, sessionsDir(f.cfg.StateDir)+string(filepath.Separator)) {
 		t.Errorf("home %s is outside the Session directories", f.session.Home.Host)
 	}
-	// The failed preparation closed its Executor, which keeps only the home.
+	// Closing the failed Executor keeps only the home.
+	if err := e.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := os.Stat(f.session.Home.Host); dials.Load() != 0 || err != nil || len(leftEntries(t, f.cfg)) != 0 {
-		t.Errorf("%d dials, home %v and transient entries %v after the preparation", dials.Load(), err, leftEntries(t, f.cfg))
+		t.Errorf("%d dials, home %v and transient entries %v after the Executor closed", dials.Load(), err, leftEntries(t, f.cfg))
 	}
 }
 
@@ -213,8 +216,10 @@ func TestReleaseRemovesTheHome(t *testing.T) {
 	f := newViewFixture(t)
 	var dials atomic.Int32
 	d := newDaemon(t, f.cfg, deps{dial: countingDial(&dials), tasks: noTasks})
-	b := newBinding(newResource())
-	if _, p := d.prepare(t, b, request("viewed", "/workspace", "https://model.test", "sk-test")); p.State != "failed" {
+	b := newBinding(sandboxlink.ResourceRef{})
+	none := request("viewed", "", "https://model.test", "sk-test")
+	none.LocalEnvironment, none.DisableExecutionEnvironment = nil, true
+	if _, p := d.prepare(t, b, none); p.State != "failed" {
 		t.Fatalf("the preparation is %s, want failed with the factory", p.State)
 	}
 	if _, err := os.Stat(f.session.Home.Host); err != nil {

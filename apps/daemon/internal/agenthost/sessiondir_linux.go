@@ -156,15 +156,19 @@ func sweep(stateDir string) error {
 	return nil
 }
 
-// RemoveHome removes the Session's directory with its home once the Session's
-// processes have settled. It returns ErrSessionExists while an Executor of
-// the Session has not closed, and an Executor of the Session does not open
-// while RemoveHome runs. A Session without a directory has nothing to remove.
+// RemoveHome drains and forgets the Session's Environment owner, then removes
+// the Session's directory with its home once the Session's processes have
+// settled. It returns ErrSessionExists while an Executor of the Session has
+// not closed, and an Executor of the Session does not open while RemoveHome
+// runs. A Session without a directory has nothing to remove.
 func (h *Host) RemoveHome(id sandboxwire.ID) error {
 	if !claimSession(id) {
 		return fmt.Errorf("%w: remove home", ErrSessionExists)
 	}
 	defer releaseSession(id)
+	if err := h.dropEnvironment(id); err != nil {
+		return fmt.Errorf("%w: remove home: %w", ErrTeardown, err)
+	}
 	if err := os.RemoveAll(filepath.Join(sessionsDir(h.cfg.StateDir), id.String())); err != nil {
 		return fmt.Errorf("%w: remove home: %w", ErrTeardown, err)
 	}

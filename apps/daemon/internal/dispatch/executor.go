@@ -63,7 +63,7 @@ func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, 
 	}
 	if environment != nil {
 		req, err = environment.Configure(req)
-	} else if req.LocalEnvironment != nil && !r.sessionEnvironments {
+	} else if req.LocalEnvironment != nil {
 		err = errors.New("the Session has no Environment owner")
 	}
 	if err != nil {
