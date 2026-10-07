@@ -147,7 +147,10 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		}
 	}
 	options := runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"OAC_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "OAC_RUNTIME_SESSION_ID=" + b.SessionID, "OAC_RUNTIME_NETWORK_ACCESS=" + policy.Access, "OAC_RUNTIME_ALLOWED_DOMAINS=" + string(domains)})
-	options.Config.Cmd = []string{"connect", "--profile", "default", "--bootstrap-file", "/home/runtime/runtime-bootstrap.json"}
+	// The container's own command starts both processes from the files
+	// bootstrap writes before start, so ContainerStart is the last mutating
+	// step and a running container has started the Sandbox I/O service.
+	options.Config.Entrypoint = []string{"/bin/sh", "-c", launch}
 	v, e := p.client.ContainerCreate(ctx, options)
 	if errdefs.IsConflict(e) {
 		return info, sandbox.ErrExists
@@ -177,16 +180,13 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	if _, e = p.client.ContainerStart(ctx, v.ID, client.ContainerStartOptions{}); e != nil {
 		return info, e
 	}
-	// The Sandbox I/O service runs beside the daemon, as the same account.
-	exec, e := p.client.ExecCreate(ctx, v.ID, client.ExecCreateOptions{User: "1000:1000", Cmd: []string{"/usr/local/bin/oac-sandbox-io", "--bootstrap-file", "/home/runtime/sandbox-io-bootstrap.json"}})
-	if e != nil {
-		return info, e
-	}
-	if _, e = p.client.ExecStart(ctx, exec.ID, client.ExecStartOptions{Detach: true}); e != nil {
-		return info, e
-	}
 	return p.GetInfo(ctx, b.Reference)
 }
+
+// launch starts the Sandbox I/O service in the background, then replaces the
+// shell with the daemon, which stays the container's main process.
+const launch = "/usr/local/bin/oac-sandbox-io --bootstrap-file /home/runtime/sandbox-io-bootstrap.json & " +
+	"exec /usr/local/bin/oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json"
 
 // Kill is idempotent only for absence, not for errors or foreign ownership. It
 // checks all resources before removing any and confirms removal of named volumes.

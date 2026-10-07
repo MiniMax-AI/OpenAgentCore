@@ -1,7 +1,7 @@
 ---
 title: "添加 Sandbox Provider"
 source: docs/sandbox-provider.md
-source_hash: c6bcdf8b09e317b9e2dd0e6afc3b872918b8756144982908f9b90953686b09cc
+source_hash: 8745eff0e19b6c033f8d00edfc3b45a91826b53374948b64b48218c9f089d2d9
 ---
 
 **Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
@@ -172,7 +172,7 @@ allocation、专用 daemon credential digest、Serve credential digest 和精确
 
 ### Sandbox I/O 服务 {#sandbox-io-service}
 
-每个托管 sandbox 还会运行 `oac-sandbox-io`，它通过[沙箱 Link](./sandbox-link-protocol.md) Serve 该 allocation。`Bootstrap.SandboxIO` 是它的[沙箱引导](./sandbox-bootstrap.md)输入：从[公开 URL](./configuration.md#changing-the-public-url) 派生的 Link URL、allocation 的 Serve credential，以及作为 resource 的 allocation 及其 Serve generation。Core 在 `Create` 前用 `Bootstrap.Validate` 对整个 `Bootstrap` 校验一次，adapter 原样交付。`Create` 将 `SandboxIO` 写入私有文件（参考 adapter 中为 `/home/runtime/sandbox-io-bootstrap.json`，mode 0600、UID 1000），并以 daemon 的账户在 daemon 旁边启动 `oac-sandbox-io --bootstrap-file`，参数为该路径。该输入从不通过命令参数或环境变量传递。每个 Runtime 镜像都包含 `/usr/local/bin/oac-sandbox-io`。allocation cleanup 在调用 `Kill` 前先在 relay 撤销该 resource。
+每个托管 sandbox 还会运行 `oac-sandbox-io`，它通过[沙箱 Link](./sandbox-link-protocol.md) Serve 该 allocation。`Bootstrap.SandboxIO` 是它的[沙箱引导](./sandbox-bootstrap.md)输入：从[公开 URL](./configuration.md#changing-the-public-url) 派生的 Link URL、allocation 的 Serve credential，以及作为 resource 的 allocation 及其 Serve generation。Core 在 `Create` 前用 `Bootstrap.Validate` 对整个 `Bootstrap` 校验一次，adapter 原样交付。`Create` 将 `SandboxIO` 写入私有文件（参考 adapter 中为 `/home/runtime/sandbox-io-bootstrap.json`，mode 0600、UID 1000），并以 daemon 的账户在 daemon 旁边启动 `oac-sandbox-io --bootstrap-file`，参数为该路径。`BootstrapComplete` 意味着两个进程都已启动。该输入从不通过命令参数或环境变量传递。每个 Runtime 镜像都包含 `/usr/local/bin/oac-sandbox-io`。allocation cleanup 在调用 `Kill` 前先在 relay 撤销该 resource。
 
 ### 每节点生命周期 worker {#per-node-lifecycle-workers}
 
@@ -212,7 +212,7 @@ installer 与 Go adapter 的 E2B template 和 endpoint validator 消费共享 [s
 
 node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 丢失后的 cleanup。helper protocol 和 [sandbox node 协议](../../contracts/agents-api/zh/node-generation-protocol.md)要求精确版本匹配；直接进程内接口没有独立 wire version。
 
-原生验收证明 fixture 无法证明的事实：creation、lease 行为、所属 partial cleanup、声明的 isolation 与 limit，以及支持时的 snapshot。显式启用的 Docker lifecycle、recovery、Serve 和 node transport 测试使用 `AGENTS_RUNTIME_DOCKER_TEST_IMAGE`，即一个 entry point 为 sleep 且包含 `/usr/local/bin/oac-sandbox-io` 的镜像 digest；SDK helper 使用 `make check-e2b-provider` 和 `make check-microsandbox-provider`。mock compute 不能证明 reclamation 或 isolation。
+原生验收证明 fixture 无法证明的事实：creation、lease 行为、所属 partial cleanup、声明的 isolation 与 limit，以及支持时的 snapshot。显式启用的 Docker lifecycle、recovery、Serve 和 node transport 测试使用 `AGENTS_RUNTIME_DOCKER_TEST_IMAGE`，即一个包含 `/bin/sh` 和持续运行的 `/usr/local/bin/oac-daemon` 的镜像 digest；Serve 测试会把本源码树的 `oac-sandbox-io` 加入它派生的镜像；SDK helper 使用 `make check-e2b-provider` 和 `make check-microsandbox-provider`。mock compute 不能证明 reclamation 或 isolation。
 
 ## 参考 adapter {#reference-adapters}
 
