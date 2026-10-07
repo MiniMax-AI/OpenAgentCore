@@ -39,6 +39,8 @@ func New(export sandboxlink.ExportID, dial Dial) *World {
 	ctx, cancel := context.WithCancel(context.Background())
 	drainCtx, stopDrain := context.WithCancel(ctx)
 	return &World{fs: &frontend{
+		RawFileSystem: fuse.NewDefaultRawFileSystem(),
+
 		export:    export,
 		dial:      dial,
 		ctx:       ctx,
@@ -89,6 +91,9 @@ func (w *World) Err() error {
 
 // frontend is the FUSE file system. go-fuse calls it from its reader goroutines.
 type frontend struct {
+	// RawFileSystem answers what the File protocol has no request for, as the Mapping table in the package documentation lists.
+	fuse.RawFileSystem
+
 	export sandboxlink.ExportID
 	dial   Dial
 	ctx    context.Context
@@ -141,7 +146,7 @@ type frontend struct {
 
 func (f *frontend) serve(ctx context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.Presentation, error) {
 	if !f.started.CompareAndSwap(false, true) {
-		return sessionview.Presentation{}, &Error{Kind: ErrConnect, Op: "serve", Err: errors.New("the world already serves a view")}
+		return sessionview.Presentation{}, fmt.Errorf("%w: serve: the world already serves a view", ErrConnect)
 	}
 	f.view = sandboxfs.Identity{UID: mount.UID, GID: mount.GID}
 	now := time.Now()
@@ -161,23 +166,23 @@ func (f *frontend) serve(ctx context.Context, dev *os.File, mount sessionview.Wo
 func (f *frontend) attach(ctx context.Context, mps []sessionview.Mountpoint) (sessionview.Presentation, *fuse.MountOptions, error) {
 	c, d, err := f.connect(ctx)
 	if err != nil {
-		return sessionview.Presentation{}, nil, &Error{Kind: ErrConnect, Op: "describe", Err: err}
+		return sessionview.Presentation{}, nil, fmt.Errorf("%w: describe: %w", ErrConnect, err)
 	}
 	f.conn, f.instance, f.service, f.caps = c, d.ServerInstanceID, d.Identity, d.Capabilities
 	maxIO := min(f.caps.MaxReadBytes, f.caps.MaxWriteBytes) &^ uint32(os.Getpagesize()-1)
 	switch {
 	case f.caps.PathProfile != sandboxfs.PathProfileLinuxBytes || f.caps.CacheProfile != sandboxfs.CacheProfileUncached:
-		return sessionview.Presentation{}, nil, &Error{Kind: ErrIncompatible, Op: "describe", Err: fmt.Errorf("path profile %d, cache profile %d", f.caps.PathProfile, f.caps.CacheProfile)}
+		return sessionview.Presentation{}, nil, fmt.Errorf("%w: describe: path profile %d, cache profile %d", ErrIncompatible, f.caps.PathProfile, f.caps.CacheProfile)
 	case f.caps.ReadOnly:
-		return sessionview.Presentation{}, nil, &Error{Kind: ErrIncompatible, Op: "describe", Err: errors.New("the export is read-only")}
+		return sessionview.Presentation{}, nil, fmt.Errorf("%w: describe: the export is read-only", ErrIncompatible)
 	case maxIO == 0 || f.caps.MaxWalkComponents == 0 || f.caps.MaxReadDirBytes == 0:
-		return sessionview.Presentation{}, nil, &Error{Kind: ErrIncompatible, Op: "describe", Err: errors.New("read, write, walk or directory limit too small")}
+		return sessionview.Presentation{}, nil, fmt.Errorf("%w: describe: read, write, walk or directory limit too small", ErrIncompatible)
 	}
 	a, err := c.Attach(ctx, &sandboxfs.AttachRequest{Export: f.export})
 	if err != nil {
 		var fail *sandboxfs.Failure
 		f.maybe = !errors.As(err, &fail) || fail.Effect != sandboxwire.EffectNone
-		return sessionview.Presentation{}, nil, &Error{Kind: ErrConnect, Op: "attach", Path: string(f.export), Err: err}
+		return sessionview.Presentation{}, nil, fmt.Errorf("%w: attach %s: %w", ErrConnect, f.export, err)
 	}
 	f.attached = true
 	f.root = f.newInode(a.Root.Node)
@@ -200,11 +205,11 @@ func (f *frontend) attach(ctx context.Context, mps []sessionview.Mountpoint) (se
 func (f *frontend) start(dev *os.File, opts *fuse.MountOptions) error {
 	fd, err := unix.FcntlInt(dev.Fd(), unix.F_DUPFD_CLOEXEC, 3)
 	if err != nil {
-		return &Error{Kind: ErrConnect, Op: "dup", Err: err}
+		return fmt.Errorf("%w: dup: %w", ErrConnect, err)
 	}
 	srv, err := fuse.NewServer(f, fmt.Sprintf("/dev/fd/%d", fd), opts)
 	if err != nil {
-		return &Error{Kind: ErrConnect, Op: "init", Err: err}
+		return fmt.Errorf("%w: init: %w", ErrConnect, err)
 	}
 	go f.drain()
 	go func() {
@@ -226,7 +231,7 @@ func (f *frontend) abort(ctx context.Context, err error) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachWait)
 	defer cancel()
 	if _, derr := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{}); derr != nil && !f.dead.Load() {
-		return &Error{Kind: ErrAttachmentDirty, Op: "detach", Err: errors.Join(err, derr)}
+		return fmt.Errorf("%w: detach: %w", ErrAttachmentDirty, errors.Join(err, derr))
 	}
 	return err
 }
@@ -237,9 +242,9 @@ func (f *frontend) observe(err error) {
 	if errors.As(err, &fail) {
 		switch fail.Code {
 		case sandboxfs.CodeInstanceChanged:
-			f.lose(&Error{Kind: ErrInstanceChanged, Err: err}, true)
+			f.lose(fmt.Errorf("%w: %w", ErrInstanceChanged, err), true)
 		case sandboxfs.CodeStaleAttachment:
-			f.lose(&Error{Kind: ErrAttachmentLost, Err: err}, true)
+			f.lose(fmt.Errorf("%w: %w", ErrAttachmentLost, err), true)
 		}
 		return
 	}
@@ -247,9 +252,9 @@ func (f *frontend) observe(err error) {
 	switch {
 	case !ok || code.Retryable():
 	case code == sandboxlink.InstanceChanged:
-		f.lose(&Error{Kind: ErrInstanceChanged, Err: err}, true)
+		f.lose(fmt.Errorf("%w: %w", ErrInstanceChanged, err), true)
 	default:
-		f.lose(&Error{Kind: ErrAttachmentLost, Err: err}, true)
+		f.lose(fmt.Errorf("%w: %w", ErrAttachmentLost, err), true)
 	}
 }
 
@@ -263,7 +268,7 @@ func linkCode(err error) (sandboxlink.Code, bool) {
 }
 
 // lose reports why the view must be rebuilt. dead also fails every later request.
-func (f *frontend) lose(err *Error, dead bool) {
+func (f *frontend) lose(err error, dead bool) {
 	if dead {
 		f.dead.Store(true)
 	}
@@ -282,7 +287,7 @@ func (f *frontend) stop() error {
 	select {
 	case <-f.served:
 	case <-time.After(stopWait):
-		errs = append(errs, &Error{Kind: ErrConnect, Op: "stop", Err: errors.New("the view's mount still exists")})
+		errs = append(errs, fmt.Errorf("%w: stop: the view's mount still exists", ErrConnect))
 	}
 	f.closed.Store(true)
 	ctx, cancel := context.WithTimeout(f.ctx, detachWait)
@@ -294,7 +299,7 @@ func (f *frontend) stop() error {
 	<-f.drained
 	if !f.dead.Load() {
 		if _, err := call(f, ctx, (*sandboxfs.Client).Detach, &sandboxfs.DetachRequest{}); err != nil {
-			errs = append(errs, &Error{Kind: ErrConnect, Op: "detach", Err: err})
+			errs = append(errs, fmt.Errorf("%w: detach: %w", ErrConnect, err))
 		}
 	}
 	f.shutdown()

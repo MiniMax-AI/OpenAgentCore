@@ -100,7 +100,7 @@ func newResource() sandboxlink.ResourceRef {
 
 // countingDial counts dials and connects nothing.
 func countingDial(n *atomic.Int32) dialFunc {
-	return func(context.Context, func(sandboxlink.AttachmentClosed)) (attachLink, error) {
+	return func(context.Context, func(sandboxlink.AttachmentClosed)) (*sandboxlink.AttachLink, error) {
 		n.Add(1)
 		return nil, errors.New("no relay in this test")
 	}
@@ -116,9 +116,5 @@ func leftSessions(t *testing.T, cfg Config) []os.DirEntry {
 	return entries
 }
 
-// fakeProcesses is a process table that lists fixed tasks.
-type fakeProcesses struct {
-	list []task
-}
-
-func (f *fakeProcesses) tasks() ([]task, error) { return f.list, nil }
+// noTasks lists no running task.
+func noTasks() ([][4]uint32, error) { return nil, nil }

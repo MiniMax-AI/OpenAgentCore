@@ -4,6 +4,7 @@ package agenthost
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -24,7 +25,7 @@ func Open(cfg Config) (_ *Host, err error) {
 		return nil, invalidConfig("view cgroups %q is not the canonical path of a directory", cfg.ViewCgroups)
 	}
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
-		return nil, &Error{Kind: ErrInvalidConfig, Op: "state directory", Err: err}
+		return nil, fmt.Errorf("%w: state directory: %w", ErrInvalidConfig, err)
 	}
 	h := &Host{cfg: cfg}
 	defer func() {
@@ -43,13 +44,13 @@ func Open(cfg Config) (_ *Host, err error) {
 		if errors.Is(err, sessionview.ErrCleanup) {
 			kind = ErrTeardown
 		}
-		return nil, &Error{Kind: kind, Op: "view cgroups", Err: err}
+		return nil, fmt.Errorf("%w: view cgroups: %w", kind, err)
 	}
 	if err := sessionview.Probe(); err != nil {
-		return nil, &Error{Kind: ErrUnsupported, Op: "views", Err: err}
+		return nil, fmt.Errorf("%w: views: %w", ErrUnsupported, err)
 	}
 	if err := os.RemoveAll(sessionsDir(cfg.StateDir)); err != nil {
-		return nil, &Error{Kind: ErrTeardown, Op: "remove session directories", Err: err}
+		return nil, fmt.Errorf("%w: remove session directories: %w", ErrTeardown, err)
 	}
 	return h, nil
 }
@@ -59,7 +60,7 @@ func Open(cfg Config) (_ *Host, err error) {
 func lock(path string, flag int) (*os.File, error) {
 	f, err := os.OpenFile(path, flag, 0o600)
 	if err != nil {
-		return nil, &Error{Kind: ErrInvalidConfig, Op: "lock", Err: err}
+		return nil, fmt.Errorf("%w: lock: %w", ErrInvalidConfig, err)
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		f.Close()
@@ -67,7 +68,7 @@ func lock(path string, flag int) (*os.File, error) {
 		if errors.Is(err, unix.EWOULDBLOCK) {
 			kind = ErrStateLocked
 		}
-		return nil, &Error{Kind: kind, Op: "lock " + path, Err: err}
+		return nil, fmt.Errorf("%w: lock %s: %w", kind, path, err)
 	}
 	return f, nil
 }

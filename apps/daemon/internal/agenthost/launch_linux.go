@@ -66,11 +66,11 @@ func (s *session) closeLive() {
 func (s *session) checkStart(opts clirunner.StartOptions) error {
 	switch {
 	case !slices.Contains(s.plan.view.LocalExec, opts.Binary):
-		return &Error{Kind: ErrLaunch, Err: fmt.Errorf("%w: %q", agent.ErrNotLocalExec, opts.Binary)}
+		return fmt.Errorf("%w: %w: %q", ErrLaunch, agent.ErrNotLocalExec, opts.Binary)
 	case !isViewPath(opts.Dir):
-		return &Error{Kind: ErrLaunch, Err: fmt.Errorf("directory %q is not absolute and clean", opts.Dir)}
+		return fmt.Errorf("%w: directory %q is not absolute and clean", ErrLaunch, opts.Dir)
 	case !opts.OwnProcessGroup:
-		return &Error{Kind: ErrLaunch, Err: errors.New("a view process runs in its own process group")}
+		return fmt.Errorf("%w: a view process runs in its own process group", ErrLaunch)
 	}
 	return nil
 }
@@ -90,10 +90,10 @@ func (s *session) launch(opts clirunner.StartOptions) (*clirunner.Process, error
 	switch {
 	case s.ctx.Err() != nil:
 		s.mu.Unlock()
-		return nil, &Error{Kind: ErrLaunch, Err: errors.New("the Session is ending")}
+		return nil, fmt.Errorf("%w: the Session is ending", ErrLaunch)
 	case s.live != nil:
 		s.mu.Unlock()
-		return nil, &Error{Kind: ErrLaunch, Err: errors.New("the Session already has a live view")}
+		return nil, fmt.Errorf("%w: the Session already has a live view", ErrLaunch)
 	}
 	lv := &liveView{}
 	s.live = lv
@@ -114,7 +114,7 @@ func (s *session) spawn(opts clirunner.StartOptions) (*clirunner.Process, error)
 	}
 	s.mu.Unlock()
 	if v == nil {
-		return nil, &Error{Kind: ErrLaunch, Op: "spawn", Err: agent.ErrNoLiveView}
+		return nil, fmt.Errorf("%w: spawn: %w", ErrLaunch, agent.ErrNoLiveView)
 	}
 	if opts.Parent == nil {
 		opts.Parent = context.Background()
@@ -125,7 +125,7 @@ func (s *session) spawn(opts clirunner.StartOptions) (*clirunner.Process, error)
 		if errors.Is(err, sessionview.ErrExited) || errors.Is(err, sessionview.ErrClosed) {
 			err = fmt.Errorf("%w: %w", agent.ErrNoLiveView, err)
 		}
-		return nil, &Error{Kind: ErrLaunch, Op: "spawn", Err: err}
+		return nil, fmt.Errorf("%w: spawn: %w", ErrLaunch, err)
 	}
 	var stdin io.WriteCloser
 	if p.Stdin != nil {
@@ -160,28 +160,34 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 		if scope, err = s.processScope(startCtx); err != nil {
 			s.release(lv)
 			if startCtx.Err() != nil {
-				return nil, &Error{Kind: ErrLaunch, Op: "describe", Err: err}
+				return nil, fmt.Errorf("%w: describe: %w", ErrLaunch, err)
 			}
 			return nil, s.brokerFailed("describe", err)
 		}
 	}
 	if err := s.dir.chownHome(s.uid); err != nil {
 		s.release(lv)
-		return nil, &Error{Kind: ErrLaunch, Op: "home", Err: err}
+		return nil, fmt.Errorf("%w: home: %w", ErrLaunch, err)
 	}
 	ends, err := newStdio(opts.NeedStdin)
 	if err != nil {
 		s.release(lv)
-		return nil, &Error{Kind: ErrLaunch, Op: "stdio", Err: err}
+		return nil, fmt.Errorf("%w: stdio: %w", ErrLaunch, err)
 	}
-	// The gateway serves until the view has ended.
-	viewCtx, stopGateway := context.WithCancel(context.Background())
 	world := worldfs.New(worldExport, s.openFile)
-	spec := s.spec(viewCtx, world, opts, ends)
+	spec := s.spec(world, opts, ends)
+	// The gateway serves from the view's network hook until the view has ended.
+	var stopGateway func()
+	spec.Network.Setup = func(netns *os.File) (err error) {
+		stopGateway, err = gateway.Start(netns, s.plan.gateway)
+		return err
+	}
 	v, err := sessionview.Start(startCtx, spec)
 	ends.closeChild()
 	if err != nil {
-		stopGateway()
+		if stopGateway != nil {
+			stopGateway()
+		}
 		ends.closeParent()
 		defer s.release(lv)
 		// sessionview stops a world that served; Stop reports how that went.
@@ -196,7 +202,7 @@ func (s *session) start(lv *liveView, opts clirunner.StartOptions) (*clirunner.P
 		case left != nil:
 			return nil, left
 		}
-		return nil, &Error{Kind: ErrLaunch, Err: err}
+		return nil, fmt.Errorf("%w: %w", ErrLaunch, err)
 	}
 	p := v.Presentation()
 	s.log.Info("agent host view started", "binary", opts.Binary, "targets", p.Targets, "links", p.Links, "synthesized", p.Synthesized)
@@ -227,7 +233,7 @@ func (s *session) processScope(ctx context.Context) (sandboxprocess.Scope, error
 
 // brokerFailed fails the Session with a process broker failure.
 func (s *session) brokerFailed(op string, err error) error {
-	e := &Error{Kind: ErrProcessBroker, Op: op, Err: err}
+	e := fmt.Errorf("%w: %s: %w", ErrProcessBroker, op, err)
 	s.fail(e)
 	return e
 }
@@ -259,14 +265,14 @@ func (s *session) own(lv *liveView, v runningView, world viewWorld, stopGateway 
 	case brokerErr != nil:
 		err = s.brokerFailed("start", brokerErr)
 	case closed:
-		err = &Error{Kind: ErrLaunch, Err: errors.New("the Session is ending")}
+		err = fmt.Errorf("%w: the Session is ending", ErrLaunch)
 	}
 	var process *clirunner.Process
 	if err == nil {
 		process, err = clirunner.FromHandle(h, clirunner.HandleOptions{Parent: opts.Parent, Stdin: ends.stdin(),
 			Stdout: ends.parent[1], Stderr: ends.parent[2], KillTimeout: opts.KillTimeout})
 		if err != nil {
-			err = &Error{Kind: ErrLaunch, Err: err}
+			err = fmt.Errorf("%w: %w", ErrLaunch, err)
 		}
 	}
 	if err != nil {
@@ -307,7 +313,7 @@ func (h *ownedView) watch() {
 	for {
 		select {
 		case <-h.world.Lost():
-			h.s.fail(&Error{Kind: ErrWorld, Op: "world", Err: h.world.Err()})
+			h.s.fail(fmt.Errorf("%w: world: %w", ErrWorld, h.world.Err()))
 			return
 		case <-relayEnded:
 			// The broker stops serving on Close, which end calls only after
@@ -353,14 +359,14 @@ func (h *ownedView) end(waitErr error) {
 	<-h.watched
 	if h.broker != nil {
 		if err := h.broker.Close(); err != nil {
-			h.s.ended(&Error{Kind: ErrTeardown, Op: "close process broker", Err: err}, false)
+			h.s.ended(fmt.Errorf("%w: close process broker: %w", ErrTeardown, err), false)
 		}
 	}
 	if errors.Is(waitErr, sessionview.ErrCleanup) {
 		h.s.viewLeft(waitErr)
 	}
 	if lost := h.world.Err(); lost != nil {
-		h.s.fail(&Error{Kind: ErrWorld, Op: "world", Err: lost})
+		h.s.fail(fmt.Errorf("%w: world: %w", ErrWorld, lost))
 	}
 	// The view has stopped its world; Stop reports how that went.
 	if err := h.world.Stop(); err != nil {
@@ -370,9 +376,9 @@ func (h *ownedView) end(waitErr error) {
 }
 
 // spec builds the view: the closure and home directories, the agent
-// host's /etc files and CA directory, the adapter's overlays and masks, the
-// shim and the gateway in the view's network namespace.
-func (s *session) spec(viewCtx context.Context, world *worldfs.World, opts clirunner.StartOptions, ends *stdio) sessionview.Spec {
+// host's /etc files and CA directory, the adapter's overlays and masks, and
+// the shim.
+func (s *session) spec(world *worldfs.World, opts clirunner.StartOptions, ends *stdio) sessionview.Spec {
 	view := s.plan.view
 	var private []sessionview.PrivateDir
 	for _, m := range view.Closure {
@@ -402,10 +408,6 @@ func (s *session) spec(viewCtx context.Context, world *worldfs.World, opts cliru
 		Process: sessionview.Process{Path: opts.Binary, Args: append([]string{opts.Binary}, opts.Args...), Env: opts.Env,
 			Dir: opts.Dir, UID: s.uid, GID: s.uid, Stdin: ends.child[0], Stdout: ends.child[1], Stderr: ends.child[2],
 			Grace: opts.KillTimeout},
-		Network: sessionview.Network{Setup: func(netns *os.File) error {
-			_, err := gateway.Start(viewCtx, gateway.SessionNetwork{Namespace: netns}, s.plan.gateway)
-			return err
-		}},
 		StagingParent: s.dir.entry(stagingEntry),
 		CgroupParent:  s.cfg.ViewCgroups,
 	}

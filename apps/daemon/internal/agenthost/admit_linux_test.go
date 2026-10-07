@@ -90,7 +90,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		c.change(&req)
 		s, _, _ := newSession(newResource(), req)
 		var dials atomic.Int32
-		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
+		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
 		for _, want := range c.want {
 			if !errors.Is(err, want) {
 				t.Errorf("%s: Run = %v, want %v", name, err, want)
@@ -112,7 +112,7 @@ func TestAdmissionRejectsBeforeAnyEffect(t *testing.T) {
 		s, _, _ := newSession(newResource(), request("viewed", "/workspace", "https://model.test", "sk-test"))
 		change(&s.Binding)
 		var dials atomic.Int32
-		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
+		err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
 		if !errors.Is(err, ErrInvalidSession) || dials.Load() != 0 {
 			t.Errorf("%s: Run = %v after %d dials, want ErrInvalidSession", name, err, dials.Load())
 		}
@@ -130,7 +130,7 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	original := maps.Clone(req.AgentOptions)
 	s, _, _ := newSession(newResource(), req)
 	var dials atomic.Int32
-	err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
+	err := run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
 	if !errors.Is(err, ErrExecutor) || !errors.Is(err, errFactory) {
 		t.Fatalf("Run = %v, want the factory's error as ErrExecutor", err)
 	}
@@ -164,7 +164,7 @@ func TestViewExecutorReceivesTheGatewayRequest(t *testing.T) {
 	req.AgentOptions["mcp_servers"] = map[string]any{}
 	s, _, _ = newSession(newResource(), req)
 	f.req = proto.PromptRequestPayload{}
-	err = run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), procs: &fakeProcesses{}})
+	err = run(context.Background(), f.cfg, s, deps{dial: countingDial(&dials), tasks: noTasks})
 	if !errors.Is(err, ErrUnsupported) || !errors.Is(err, agent.ErrViewHandoff) || f.req.AgentKind != "" {
 		t.Errorf("Run with a connection option = %v, want ErrUnsupported and ErrViewHandoff before the adapter", err)
 	}

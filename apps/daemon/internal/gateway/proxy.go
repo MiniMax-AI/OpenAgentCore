@@ -3,26 +3,22 @@ package gateway
 import (
 	"context"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"strings"
 	"sync"
-
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxnet"
 )
 
 // proxy is the generic proxy. It serves CONNECT tunnels and absolute-form
 // plain-HTTP requests, and connects only through a new Network stream to the
 // sandbox for each connection. It rejects every other request form.
 type proxy struct {
-	open    func(context.Context) (sandboxlink.Stream, error)
+	dial    dialFunc // through the sandbox; nil without a sandbox network
 	forward *httputil.ReverseProxy
 }
 
-func newProxy(open func(context.Context) (sandboxlink.Stream, error), sandbox *http.Transport) *proxy {
-	p := &proxy{open: open}
+func newProxy(dial dialFunc, sandbox *http.Transport) *proxy {
+	p := &proxy{dial: dial}
 	if sandbox != nil {
 		// The request is relayed as the Harness addressed it; the reverse
 		// proxy drops hop-by-hop headers, Proxy-Authorization among them. It
@@ -37,7 +33,7 @@ func newProxy(open func(context.Context) (sandboxlink.Stream, error), sandbox *h
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
-	case p.open == nil:
+	case p.dial == nil:
 		http.Error(w, "the Session has no sandbox network", http.StatusForbidden)
 	case r.Method == http.MethodConnect && r.URL.Host != "" && r.URL.Path == "":
 		p.tunnel(w, r)
@@ -50,12 +46,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // tunnel connects through the sandbox, answers 200 and then carries raw bytes.
 func (p *proxy) tunnel(w http.ResponseWriter, r *http.Request) {
-	host, port, err := splitHostPort(r.URL.Host)
-	if err != nil {
-		http.Error(w, "invalid CONNECT authority", http.StatusBadRequest)
-		return
-	}
-	remote, err := connectSandbox(r.Context(), p.open, host, port)
+	remote, err := p.dial(r.Context(), "tcp", r.URL.Host)
 	if err != nil {
 		status := statusOf(err)
 		http.Error(w, http.StatusText(status), status)
@@ -75,22 +66,19 @@ func (p *proxy) tunnel(w http.ResponseWriter, r *http.Request) {
 		client.Close()
 		return
 	}
-	splice(r.Context(), client, pending, remote)
+	splice(r.Context(), client.(conn), pending, remote)
 }
 
 // splice carries bytes both ways between the Harness's connection and the
 // sandbox's. Each direction's orderly end reaches the other side as a
 // half-close after every byte before it, and starts no timeout. An error on
 // either side, or the end of ctx, aborts both.
-func splice(ctx context.Context, client net.Conn, pending []byte, remote *sandboxnet.Conn) {
+func splice(ctx context.Context, client conn, pending []byte, remote conn) {
 	var end sync.Once
 	abort := func() {
 		end.Do(func() {
 			remote.Reset()
-			if l, ok := client.(interface{ SetLinger(int) error }); ok {
-				l.SetLinger(0)
-			}
-			client.Close()
+			client.Reset()
 		})
 	}
 	stop := context.AfterFunc(ctx, abort)
@@ -115,7 +103,7 @@ func splice(ctx context.Context, client net.Conn, pending []byte, remote *sandbo
 	}()
 	_, err := io.Copy(struct{ io.Writer }{client}, struct{ io.Reader }{remote})
 	if err == nil {
-		err = closeWrite(client)
+		err = client.CloseWrite()
 	}
 	if err != nil {
 		abort()
@@ -125,11 +113,4 @@ func splice(ctx context.Context, client net.Conn, pending []byte, remote *sandbo
 		remote.Close()
 		client.Close()
 	})
-}
-
-func closeWrite(c net.Conn) error {
-	if cw, ok := c.(interface{ CloseWrite() error }); ok {
-		return cw.CloseWrite()
-	}
-	return c.Close()
 }

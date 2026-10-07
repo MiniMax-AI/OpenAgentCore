@@ -128,7 +128,7 @@ func TestOpenRecoversWhatAnEarlierAgentHostLeft(t *testing.T) {
 			t.Errorf("the %s process ended with %v, want SIGKILL", name, err)
 		}
 	}
-	if held, err := heldUIDs(procfs{}, UIDRange{First: cfg.UIDs.First, Count: 2}); err != nil || len(held) != 0 {
+	if held, err := heldUIDs(taskUIDs, UIDRange{First: cfg.UIDs.First, Count: 2}); err != nil || len(held) != 0 {
 		t.Errorf("Session uids held after Open: %v, %v", held, err)
 	}
 	if left := sessionviewtest.Cgroups(t, cfg.ViewCgroups); len(left) != 0 {

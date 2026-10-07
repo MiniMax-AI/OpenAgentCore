@@ -15,30 +15,22 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// task is one running task, a thread of a process, as /proc lists it.
-type task struct {
-	tgid, tid int
-	uids      [4]uint32 // real, effective, saved and file-system
-}
-
 func (r UIDRange) has(id uint32) bool { return id >= r.First && id-r.First < r.Count }
 
-// processTable lists the host's tasks. Tests replace it.
-type processTable interface {
-	// tasks returns every task that runs, each thread of each process; a
-	// zombie runs nothing and is left out.
-	tasks() ([]task, error)
-}
+// listTasks returns the real, effective, saved and file-system uids of every
+// task that runs, each thread of each process; a zombie runs nothing and is
+// left out. taskUIDs lists the host's; tests list fixed tasks.
+type listTasks func() ([][4]uint32, error)
 
 // heldUIDs returns the uids in r that a running task holds.
-func heldUIDs(procs processTable, r UIDRange) (map[uint32]bool, error) {
-	tasks, err := procs.tasks()
+func heldUIDs(tasks listTasks, r UIDRange) (map[uint32]bool, error) {
+	list, err := tasks()
 	if err != nil {
 		return nil, err
 	}
 	held := map[uint32]bool{}
-	for _, t := range tasks {
-		for _, id := range t.uids {
+	for _, uids := range list {
+		for _, id := range uids {
 			if r.has(id) {
 				held[id] = true
 			}
@@ -47,18 +39,16 @@ func heldUIDs(procs processTable, r UIDRange) (map[uint32]bool, error) {
 	return held, nil
 }
 
-// procfs is the host's /proc.
-type procfs struct{}
-
 // errGone is a process or task that has ended.
 var errGone = errors.New("ended")
 
-func (procfs) tasks() ([]task, error) {
+// taskUIDs is the listTasks of the host's /proc.
+func taskUIDs() ([][4]uint32, error) {
 	pids, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil, err
 	}
-	var list []task
+	var list [][4]uint32
 	for _, p := range pids {
 		pid, err := strconv.Atoi(p.Name())
 		if err != nil || pid <= 0 {
@@ -72,10 +62,6 @@ func (procfs) tasks() ([]task, error) {
 			return nil, err
 		}
 		for _, e := range tids {
-			tid, err := strconv.Atoi(e.Name())
-			if err != nil {
-				continue
-			}
 			s, err := readStatus(procPath(pid, "task", e.Name(), "status"))
 			if errors.Is(err, errGone) {
 				continue
@@ -84,7 +70,7 @@ func (procfs) tasks() ([]task, error) {
 				return nil, err
 			}
 			if s.running() {
-				list = append(list, task{tgid: pid, tid: tid, uids: s.uids})
+				list = append(list, s.uids)
 			}
 		}
 	}

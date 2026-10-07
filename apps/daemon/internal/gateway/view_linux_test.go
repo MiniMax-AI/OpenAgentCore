@@ -17,13 +17,13 @@ import (
 	"testing"
 	"time"
 
-	gofs "github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/sys/unix"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/sessionview/sessionviewtest"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/worldfs"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/fileservicetest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
@@ -69,7 +69,7 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 	port := strconv.Itoa(ln.Addr().(*net.TCPAddr).Port)
 
 	cfg := Config{
-		Models:      []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://127.0.0.1:1", APIKey: upstreamKey}}},
+		Model:       modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: "https://127.0.0.1:1", APIKey: upstreamKey},
 		MCP:         []agent.MCPBinding{{ConnectionOrigin: "service", ServerLabel: "tools", Transport: "http", ServerURL: "http://127.0.0.1:" + port + "/mcp"}},
 		Prompt:      proto.PromptRequestPayload{DisableExecutionEnvironment: true},
 		OpenNetwork: startSandbox(t).open,
@@ -82,21 +82,21 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 	}
 	encoded, _ := json.Marshal(eps)
 
-	world, harness := t.TempDir(), t.TempDir()
-	for _, d := range []string{".oac/harness", ".oac/bin", "proc", "dev"} {
-		if err := os.MkdirAll(filepath.Join(world, d), 0o755); err != nil {
-			t.Fatal(err)
-		}
+	world, err := fileservicetest.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer world.Close()
+	harness := t.TempDir()
 	if err := os.Chmod(harness, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	copyExecutable(t, filepath.Join(harness, "harness"))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	stop := func() {}
+	defer func() { stop() }()
 	v, err := sessionview.Start(context.Background(), sessionview.Spec{
-		World:         (&loopbackWorld{dir: world}).serve,
+		World:         worldfs.New(fileservicetest.Export, world.Dial).Serve,
 		StagingParent: t.TempDir(),
 		CgroupParent:  sessionviewtest.CgroupParent(t),
 		Private:       []sessionview.PrivateDir{{Name: "harness", HostDir: harness, Exec: true}},
@@ -104,8 +104,8 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 			Path: "/.oac/harness/harness", Args: []string{"harness"}, Dir: "/", UID: viewID, GID: viewID, Stderr: os.Stderr,
 			Env: []string{harnessEnv + "=1", endpointsEnv + "=" + string(encoded), externalEnv + "=" + net.JoinHostPort(hostAddress(t), port)},
 		},
-		Network: sessionview.Network{Setup: func(netns *os.File) error {
-			_, err := Start(ctx, SessionNetwork{Namespace: netns}, cfg)
+		Network: sessionview.Network{Setup: func(netns *os.File) (err error) {
+			stop, err = Start(netns, cfg)
 			return err
 		}},
 	})
@@ -131,7 +131,7 @@ func TestListenersExistOnlyInTheSession(t *testing.T) {
 	}
 
 	// The listeners still serve the Session's namespace; the host's has none.
-	for _, u := range []string{eps.Proxy, eps.Models["main"], eps.MCP["tools"]} {
+	for _, u := range []string{eps.Proxy, eps.Model, eps.MCP["tools"]} {
 		parsed, _ := url.Parse(u)
 		if c, err := net.DialTimeout("tcp", parsed.Host, time.Second); err == nil {
 			c.Close()
@@ -171,7 +171,7 @@ func runHarness() int {
 	}
 	checks := map[string]func() error{
 		// An undeclared route is answered by the listener itself.
-		"model listener": func() error { return answers(direct, eps.Models["main"]+"/", http.StatusNotFound, "") },
+		"model listener": func() error { return answers(direct, eps.Model+"/", http.StatusNotFound, "") },
 		"MCP listener":   func() error { return answers(direct, eps.MCP["tools"], http.StatusOK, "tools") },
 		"no direct route": func() error {
 			c, err := net.DialTimeout("tcp", external, 2*time.Second)
@@ -226,47 +226,5 @@ func copyExecutable(t *testing.T, dst string) {
 	}
 	if err := os.WriteFile(dst, data, 0o755); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// loopbackWorld serves a directory as the view's world. It presents each mountpoint at its declared path.
-type loopbackWorld struct {
-	dir    string
-	served chan struct{}
-}
-
-func (w *loopbackWorld) serve(_ context.Context, dev *os.File, mount sessionview.WorldMount) (sessionview.WorldServer, sessionview.Presentation, error) {
-	fd, err := unix.Dup(int(dev.Fd()))
-	if err != nil {
-		return nil, sessionview.Presentation{}, err
-	}
-	root, err := gofs.NewLoopbackRoot(w.dir)
-	if err != nil {
-		unix.Close(fd)
-		return nil, sessionview.Presentation{}, err
-	}
-	srv, err := fuse.NewServer(gofs.NewNodeFS(root, &gofs.Options{}), fmt.Sprintf("/dev/fd/%d", fd), &fuse.MountOptions{})
-	if err != nil {
-		unix.Close(fd)
-		return nil, sessionview.Presentation{}, err
-	}
-	w.served = make(chan struct{})
-	go func() {
-		srv.Serve()
-		close(w.served)
-	}()
-	var p sessionview.Presentation
-	for _, m := range mount.Mountpoints {
-		p.Targets = append(p.Targets, m.Path)
-	}
-	return w, p, nil
-}
-
-func (w *loopbackWorld) Stop() error {
-	select {
-	case <-w.served:
-		return nil
-	case <-time.After(10 * time.Second):
-		return errors.New("world still serving 10s after the view ended")
 	}
 }

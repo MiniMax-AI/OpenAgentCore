@@ -31,7 +31,7 @@ const (
 // deps are the parts tests replace.
 type deps struct {
 	dial  dialFunc
-	procs processTable
+	tasks listTasks
 }
 
 // Run runs one Session until Input is closed, ctx ends or the Session fails,
@@ -40,7 +40,7 @@ type deps struct {
 // that ended it, joined with any view cleanup and teardown failure. A failure
 // recorded during teardown counts. Sessions may run concurrently.
 func (h *Host) Run(ctx context.Context, s Session) error {
-	return run(ctx, h.cfg, s, deps{dial: relayDial(h.cfg), procs: procfs{}})
+	return run(ctx, h.cfg, s, deps{dial: relayDial(h.cfg), tasks: taskUIDs})
 }
 
 // session is one running Session.
@@ -90,7 +90,7 @@ func run(ctx context.Context, cfg Config, in Session, d deps) error {
 	if s.plan, err = admit(cfg, roots, in, s.openNetwork); err != nil {
 		return err
 	}
-	if s.uid, err = allocUID(cfg.UIDs, d.procs); err != nil {
+	if s.uid, err = allocUID(cfg.UIDs, d.tasks); err != nil {
 		return err
 	}
 	if s.dir, err = createSessionDir(cfg.StateDir, in.Binding.SessionID, s.uid); err != nil {
@@ -140,9 +140,9 @@ func (s *session) finish(exec agent.Executor, err, ended error) error {
 
 func executorError(err error) error {
 	if errors.Is(err, agent.ErrUnsupportedOperation) || errors.Is(err, agent.ErrViewHandoff) {
-		return &Error{Kind: ErrUnsupported, Op: "executor", Err: err}
+		return fmt.Errorf("%w: executor: %w", ErrUnsupported, err)
 	}
-	return &Error{Kind: ErrExecutor, Err: err}
+	return fmt.Errorf("%w: %w", ErrExecutor, err)
 }
 
 // fail records the Session's first failure and ends the Session: its live
@@ -161,7 +161,7 @@ func (s *session) fail(err error) {
 // state, so the Session fails, and Run reports the error even after another
 // failure.
 func (s *session) worldEnded(op string, err error) error {
-	return s.ended(&Error{Kind: ErrWorld, Op: op, Err: err}, false)
+	return s.ended(fmt.Errorf("%w: %s: %w", ErrWorld, op, err), false)
 }
 
 // viewLeft records a view whose teardown did not finish within sessionview's
@@ -169,12 +169,12 @@ func (s *session) worldEnded(op string, err error) error {
 // Session directory. The Session fails, Run reports the error even after
 // another failure, and teardown keeps the directory and the uid.
 func (s *session) viewLeft(err error) error {
-	return s.ended(&Error{Kind: ErrTeardown, Op: "view", Err: err}, true)
+	return s.ended(fmt.Errorf("%w: view: %w", ErrTeardown, err), true)
 }
 
 // ended records e, a resource that did not stop cleanly, and fails the
 // Session with it. left says that the Session directory may still be in use.
-func (s *session) ended(e *Error, left bool) error {
+func (s *session) ended(e error, left bool) error {
 	s.failMu.Lock()
 	s.cleanup = append(s.cleanup, e)
 	s.left = s.left || left
@@ -310,7 +310,7 @@ func (s *session) turn(exec agent.Executor, in Input) error {
 		if startErr == nil {
 			startErr = errors.New("no Turn")
 		}
-		return &Error{Kind: ErrTurn, Op: "start", Err: startErr}
+		return fmt.Errorf("%w: start: %w", ErrTurn, startErr)
 	}
 	if startErr != nil {
 		f.cancel()
@@ -335,7 +335,7 @@ func (s *session) turn(exec agent.Executor, in Input) error {
 	f.mu.Unlock()
 	if nativeErr != nil || !settlement.Reusable || startErr != nil || protocolErr != nil || s.ctx.Err() != nil {
 		if err := s.closeExecutor(exec); err != nil {
-			return &Error{Kind: ErrTurn, Op: "close executor", Err: errors.Join(nativeErr, err)}
+			return fmt.Errorf("%w: close executor: %w", ErrTurn, errors.Join(nativeErr, err))
 		}
 	}
 	// A confirmed Close confirms that out is closed too. What arrived during
@@ -351,13 +351,13 @@ func (s *session) turn(exec agent.Executor, in Input) error {
 	var result error
 	switch {
 	case nativeErr != nil:
-		failure, result = "executor Turn settlement failed", &Error{Kind: ErrTurn, Op: "settle", Err: nativeErr}
+		failure, result = "executor Turn settlement failed", fmt.Errorf("%w: settle: %w", ErrTurn, nativeErr)
 	case protocolErr != nil:
-		failure, result = protocolErr.Error(), &Error{Kind: ErrTurn, Op: "output", Err: protocolErr}
+		failure, result = protocolErr.Error(), fmt.Errorf("%w: output: %w", ErrTurn, protocolErr)
 	case startErr != nil:
-		failure, result = "executor Turn could not start", &Error{Kind: ErrTurn, Op: "start", Err: startErr}
+		failure, result = "executor Turn could not start", fmt.Errorf("%w: start: %w", ErrTurn, startErr)
 	case !settlement.Reusable:
-		result = &Error{Kind: ErrTurn, Op: "settle", Err: fmt.Errorf("the Executor is not reusable: %s", settlement.Reason)}
+		result = fmt.Errorf("%w: settle: the Executor is not reusable: %s", ErrTurn, settlement.Reason)
 	}
 	if failure != "" {
 		e, err := proto.NewEnvelope(proto.TypeError, in.RunID, proto.ErrorPayload{Error: failure})
@@ -459,7 +459,7 @@ func (s *session) teardown(exec agent.Executor) error {
 	}
 	errs = append(errs, s.link.close())
 	if closeErr != nil {
-		errs = append(errs, &Error{Kind: ErrTeardown, Op: "close executor", Err: closeErr})
+		errs = append(errs, fmt.Errorf("%w: close executor: %w", ErrTeardown, closeErr))
 	}
 	s.failMu.Lock()
 	left := s.left
@@ -468,7 +468,7 @@ func (s *session) teardown(exec agent.Executor) error {
 		return errors.Join(errs...)
 	}
 	if err := os.RemoveAll(string(s.dir)); err != nil {
-		errs = append(errs, &Error{Kind: ErrTeardown, Op: "remove session directory", Err: err})
+		errs = append(errs, fmt.Errorf("%w: remove session directory: %w", ErrTeardown, err))
 	}
 	freeUID(s.uid)
 	return errors.Join(errs...)

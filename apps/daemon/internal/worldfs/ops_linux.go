@@ -3,6 +3,7 @@
 package worldfs
 
 import (
+	"fmt"
 	"syscall"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
@@ -10,10 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func (f *frontend) String() string    { return "oac-world" }
-func (f *frontend) SetDebug(bool)     {}
-func (f *frontend) Init(*fuse.Server) {}
-func (f *frontend) OnUnmount()        {}
+func (f *frontend) String() string { return "oac-world" }
 
 func (f *frontend) Lookup(_ <-chan struct{}, in *fuse.InHeader, name string, out *fuse.EntryOut) fuse.Status {
 	p, st := f.node(in.NodeId)
@@ -53,7 +51,7 @@ func (f *frontend) lookupPinned(p *inode, name string, c *inode, out *fuse.Entry
 	case !isErrno(err, sandboxfs.ErrnoNotFound):
 		return status(err)
 	}
-	f.lose(&Error{Kind: ErrTopologyChanged, Op: "lookup", Path: c.path}, false)
+	f.lose(fmt.Errorf("%w: lookup %s", ErrTopologyChanged, c.path), false)
 	f.lookedUp(c)
 	f.entry(c, c.attr, out)
 	return fuse.OK
@@ -329,27 +327,4 @@ func (f *frontend) StatFs(_ <-chan struct{}, in *fuse.InHeader, out *fuse.Statfs
 		Bsize: r.BlockSize, NameLen: r.NameMax, Frsize: r.FragmentSize,
 	}
 	return fuse.OK
-}
-
-// The File protocol has no extended attributes. ENOSYS makes the kernel stop asking and answer EOPNOTSUPP itself.
-
-func (f *frontend) GetXAttr(<-chan struct{}, *fuse.InHeader, string, []byte) (uint32, fuse.Status) {
-	return 0, fuse.ENOSYS
-}
-
-func (f *frontend) ListXAttr(<-chan struct{}, *fuse.InHeader, []byte) (uint32, fuse.Status) {
-	return 0, fuse.ENOSYS
-}
-
-func (f *frontend) SetXAttr(<-chan struct{}, *fuse.SetXAttrIn, string, []byte) fuse.Status {
-	return fuse.ENOSYS
-}
-
-func (f *frontend) RemoveXAttr(<-chan struct{}, *fuse.InHeader, string) fuse.Status {
-	return fuse.ENOSYS
-}
-
-// Statx has no File request. ENOSYS makes the kernel fall back to GetAttr.
-func (f *frontend) Statx(<-chan struct{}, *fuse.StatxIn, *fuse.StatxOut) fuse.Status {
-	return fuse.ENOSYS
 }

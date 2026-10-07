@@ -27,10 +27,10 @@ func startModel(t *testing.T, key string, handler http.HandlerFunc) (string, *ht
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 	eps := serveOnLoopback(t, Config{
-		Models:  []Model{{Name: "main", Provider: modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: srv.URL + "/anthropic", APIKey: key}}},
+		Model:   modelprovider.Provider{Protocol: modelprovider.Anthropic, BaseURL: srv.URL + "/anthropic", APIKey: key},
 		RootCAs: trust(srv),
 	})
-	return eps.Models["main"], srv
+	return eps.Model, srv
 }
 
 func TestModelInjectsTheKeyAndNeverThePlaceholder(t *testing.T) {

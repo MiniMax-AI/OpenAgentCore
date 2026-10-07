@@ -223,7 +223,7 @@ func (r *resolver) at(name string) string {
 }
 
 func (r *resolver) fail(err error) error {
-	return &Error{Kind: ErrMountpoint, Op: "present", Path: r.mp.Path, Err: err}
+	return fmt.Errorf("%w: present %s: %w", ErrMountpoint, r.mp.Path, err)
 }
 
 // serverErr reports a sandbox errno as a presentation failure and anything else as a connection failure.
@@ -232,7 +232,7 @@ func (r *resolver) serverErr(err error) error {
 	if errors.As(err, &fail) && fail.Code == sandboxfs.CodeErrno {
 		return r.fail(fmt.Errorf("%w (%w)", errnoOf(err), err))
 	}
-	return &Error{Kind: ErrConnect, Op: "present", Path: r.mp.Path, Err: err}
+	return fmt.Errorf("%w: present %s: %w", ErrConnect, r.mp.Path, err)
 }
 
 func isName(s string) bool { return s != "" && s != "." && s != ".." }

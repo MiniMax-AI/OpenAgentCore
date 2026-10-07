@@ -35,7 +35,7 @@ const (
 	connectMargin = 5 * time.Second
 )
 
-type dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+type dialFunc func(ctx context.Context, network, addr string) (conn, error)
 
 // newTransport returns an upstream transport that relays requests as they
 // are: no proxy from the environment, no added compression and no redirects,
@@ -43,7 +43,7 @@ type dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 // when roots is nil, and always verifies the destination's hostname.
 func newTransport(roots *x509.CertPool, dial dialFunc) *http.Transport {
 	return &http.Transport{
-		DialContext:           dial,
+		DialContext:           func(ctx context.Context, network, addr string) (net.Conn, error) { return dial(ctx, network, addr) },
 		TLSClientConfig:       &tls.Config{RootCAs: roots},
 		ForceAttemptHTTP2:     true,
 		DisableCompression:    true,
@@ -66,23 +66,38 @@ func relayTransport(roots *x509.CertPool, dial dialFunc) *http.Transport {
 	return t
 }
 
-// sessionDial binds each dial to the Session as well as to its own context.
-// http.Transport detaches a dial from the request that started it, and
-// CloseIdleConnections cancels only dials that no request waits for.
-func sessionDial(session context.Context, dial dialFunc) dialFunc {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+// sessionDial binds each dial to the Session as well as to its own context,
+// because http.Transport detaches a dial from the request that started it,
+// and records each connection in conns.
+func sessionDial(session context.Context, conns *connSet, dial dialFunc) dialFunc {
+	return func(ctx context.Context, network, addr string) (conn, error) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		stop := context.AfterFunc(session, cancel)
 		defer stop()
-		return dial(ctx, network, addr)
+		c, err := dial(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return conns.add(c)
 	}
 }
 
+// hostDial connects from the agent host.
+func hostDial(ctx context.Context, network, addr string) (conn, error) {
+	c, err := (&net.Dialer{Timeout: dialTimeout, KeepAlive: 30 * time.Second}).DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, err
+	}
+	return tcpConn{c.(*net.TCPConn)}, nil
+}
+
 // sandboxDialer connects through a new Network stream for each connection, so
-// the sandbox resolves the name and the connection has sandbox origin.
+// the sandbox resolves the name and the connection has sandbox origin. A local
+// deadline bounds the stream's opening and the sandbox's answer, so a sandbox
+// that never answers cannot hold the dial; the connection outlives it.
 func sandboxDialer(open func(context.Context) (sandboxlink.Stream, error)) dialFunc {
-	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+	return func(ctx context.Context, network, addr string) (conn, error) {
 		if network != "tcp" && network != "tcp4" && network != "tcp6" {
 			return nil, &sandboxnet.Error{Code: sandboxnet.CodeUnsupportedNetwork, Effect: sandboxwire.EffectNone}
 		}
@@ -90,21 +105,18 @@ func sandboxDialer(open func(context.Context) (sandboxlink.Stream, error)) dialF
 		if err != nil {
 			return nil, err
 		}
-		return connectSandbox(ctx, open, host, port)
+		ctx, cancel := context.WithTimeout(ctx, connectTimeout+connectMargin)
+		defer cancel()
+		s, err := open(ctx)
+		if err != nil {
+			return nil, err
+		}
+		c, err := sandboxnet.Connect(ctx, s, host, port, connectTimeout)
+		if err != nil {
+			return nil, err
+		}
+		return c, nil
 	}
-}
-
-// connectSandbox opens a Network stream and connects through it. A local
-// deadline bounds both, so a sandbox that never answers cannot hold the
-// connection open; the returned Conn outlives it.
-func connectSandbox(ctx context.Context, open func(context.Context) (sandboxlink.Stream, error), host string, port uint16) (*sandboxnet.Conn, error) {
-	ctx, cancel := context.WithTimeout(ctx, connectTimeout+connectMargin)
-	defer cancel()
-	s, err := open(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return sandboxnet.Connect(ctx, s, host, port, connectTimeout)
 }
 
 // splitHostPort splits an authority into an unbracketed host and a nonzero

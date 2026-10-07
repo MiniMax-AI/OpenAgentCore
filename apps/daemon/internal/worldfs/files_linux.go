@@ -143,21 +143,6 @@ func (f *frontend) Release(_ <-chan struct{}, in *fuse.ReleaseIn) {
 	}
 }
 
-// Lseek has no File request. ENOSYS makes the kernel seek itself; SEEK_DATA and SEEK_HOLE then treat the file as one data extent.
-func (f *frontend) Lseek(<-chan struct{}, *fuse.LseekIn, *fuse.LseekOut) fuse.Status {
-	return fuse.ENOSYS
-}
-
-// Fallocate has no File request. ENOSYS makes the kernel stop asking and answer EOPNOTSUPP itself.
-func (f *frontend) Fallocate(<-chan struct{}, *fuse.FallocateIn) fuse.Status {
-	return fuse.ENOSYS
-}
-
-// CopyFileRange has no File request. ENOSYS makes the kernel copy with Read and Write.
-func (f *frontend) CopyFileRange(<-chan struct{}, *fuse.CopyFileRangeIn) (uint32, fuse.Status) {
-	return 0, fuse.ENOSYS
-}
-
 // Ioctl has no File request: no world file takes ioctls.
 func (f *frontend) Ioctl(<-chan struct{}, *fuse.IoctlIn, []byte, *fuse.IoctlOut, []byte) fuse.Status {
 	return errno(syscall.ENOTTY)

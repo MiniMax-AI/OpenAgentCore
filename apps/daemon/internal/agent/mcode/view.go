@@ -190,10 +190,12 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 	defer data.Close()
 	opts := launchOptions{Dir: workspace, DataDir: filepath.Join(session.Home.Host, viewDataName), bindings: session.MCP,
 		start: session.Launch, script: i.cli, home: session.Home.Host}
-	if opts.Model, err = writeNativeConfig(private, data); err != nil {
+	dataDir, tempDir := path.Join(session.Home.View, viewDataName), path.Join(session.Home.View, viewTempName)
+	tools := workspaceTools{node: i.node, bridge: i.bridge, profile: map[string]any{"workspace": workspace, "scratch": tempDir, "network": "enabled"}}
+	if opts.Model, err = writeNativeConfig(private, data, dataDir, &tools); err != nil {
 		return opts, err
 	}
-	dataDir, tempDir := path.Join(session.Home.View, viewDataName), path.Join(session.Home.View, viewTempName)
+	opts.MCP = append([]map[string]any{tools.server(dataDir)}, servers...)
 	opts.Env = []string{
 		"PATH=" + path.Join(agent.ViewPrivateRoot, agent.ViewShimName),
 		"TMPDIR=" + tempDir,
@@ -208,7 +210,5 @@ func (i viewInstall) prepare(_ context.Context, req proto.PromptRequestPayload, 
 	opts.Env = append(opts.Env, nativeEnvironment(private, dataDir)...)
 	opts.spawn = session.Spawn
 	opts.reader = clirunner.StartOptions{Binary: i.node, Args: []string{path.Join(path.Dir(i.bridge), "subagent-snapshot.mjs"), dataDir}, Dir: dataDir, Env: opts.Env, OwnProcessGroup: true}
-	profile := map[string]any{"workspace": workspace, "scratch": tempDir, "network": "enabled"}
-	tools := workspaceTools{node: i.node, bridge: i.bridge, profile: path.Join(dataDir, "workspace-profile.json")}
-	return opts, writeWorkspaceTools(&opts, data, req, tools, profile, nil, servers)
+	return opts, nil
 }

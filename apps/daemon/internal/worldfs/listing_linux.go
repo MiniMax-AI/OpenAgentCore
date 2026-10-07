@@ -3,6 +3,8 @@
 package worldfs
 
 import (
+	"fmt"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxfs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 )
@@ -62,7 +64,7 @@ func (f *frontend) readPresented(h *handle, in *fuse.ReadIn, out *fuse.DirEntryL
 			c := n.fixed[name]
 			if c != nil {
 				if !c.synthetic() && e.Type != c.fileType() {
-					f.lose(&Error{Kind: ErrTopologyChanged, Op: "readdir", Path: c.path}, false)
+					f.lose(fmt.Errorf("%w: readdir %s", ErrTopologyChanged, c.path), false)
 				}
 				ent.Mode, ent.Ino = c.fileType(), f.ino(c)
 			}
@@ -82,7 +84,7 @@ func (f *frontend) readPresented(h *handle, in *fuse.ReadIn, out *fuse.DirEntryL
 		if l.pass != nil {
 			for _, name := range n.order {
 				if c := n.fixed[name]; !c.synthetic() && !l.pass.names[name] {
-					f.lose(&Error{Kind: ErrTopologyChanged, Op: "readdir", Path: c.path}, false)
+					f.lose(fmt.Errorf("%w: readdir %s", ErrTopologyChanged, c.path), false)
 				}
 			}
 		}
