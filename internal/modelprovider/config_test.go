@@ -7,7 +7,7 @@ import (
 
 func TestProviderValidate(t *testing.T) {
 	valid := Provider{Protocol: Responses, BaseURL: "https://model.example/api", APIKey: "fixture-upstream-key", ContextWindow: 64000, MaxOutputTokens: 4096}
-	for _, protocol := range []Protocol{Anthropic, Responses, ChatCompletions} {
+	for _, protocol := range Protocols() {
 		p := valid
 		p.Protocol = protocol
 		if err := p.Validate(); err != nil {

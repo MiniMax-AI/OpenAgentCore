@@ -1,10 +1,10 @@
 package log
 
 import (
+	"errors"
 	"io"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 )
 
@@ -22,22 +22,42 @@ type Config struct {
 	Out io.Writer
 }
 
-// ConfigFromEnv reads:
+// LoadConfig reads the logging settings Core and Web share:
 //
-//	OAC_LOG_FORMAT     = json | text  (default: auto)
 //	OAC_LOG_LEVEL      = debug | info | warn | error  (default: info)
+//	OAC_LOG_FORMAT     = auto | json | text  (default: auto)
 //	OAC_LOG_ADD_SOURCE = 0 | 1  (default: 0)
 //
-// Unknown values fall back to defaults — Init runs before most
-// error-handling exists, so "boot anyway" beats "panic on typo".
-func ConfigFromEnv() Config {
-	cfg := Config{
-		Format:    strings.ToLower(strings.TrimSpace(os.Getenv("OAC_LOG_FORMAT"))),
-		Level:     parseLevel(os.Getenv("OAC_LOG_LEVEL")),
-		AddSource: os.Getenv("OAC_LOG_ADD_SOURCE") == "1",
-		Out:       os.Stderr,
+// Unset or empty selects the default. Any other value is an error that names
+// the variable and never echoes the value.
+func LoadConfig() (Config, error) {
+	var cfg Config
+	switch os.Getenv("OAC_LOG_LEVEL") {
+	case "", "info":
+	case "debug":
+		cfg.Level = slog.LevelDebug
+	case "warn":
+		cfg.Level = slog.LevelWarn
+	case "error":
+		cfg.Level = slog.LevelError
+	default:
+		return Config{}, errors.New("OAC_LOG_LEVEL must be debug, info, warn or error")
 	}
-	return cfg
+	switch format := os.Getenv("OAC_LOG_FORMAT"); format {
+	case "", "auto":
+	case "json", "text":
+		cfg.Format = format
+	default:
+		return Config{}, errors.New("OAC_LOG_FORMAT must be auto, json or text")
+	}
+	switch os.Getenv("OAC_LOG_ADD_SOURCE") {
+	case "", "0":
+	case "1":
+		cfg.AddSource = true
+	default:
+		return Config{}, errors.New("OAC_LOG_ADD_SOURCE must be 0 or 1")
+	}
+	return cfg, nil
 }
 
 // isTerminal reports whether f is a character device (TTY) so the JSON
@@ -51,19 +71,6 @@ func isTerminal(f *os.File) bool {
 		return false
 	}
 	return info.Mode()&os.ModeCharDevice != 0
-}
-
-func parseLevel(s string) slog.Level {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "debug":
-		return slog.LevelDebug
-	case "warn", "warning":
-		return slog.LevelWarn
-	case "error", "err":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
-	}
 }
 
 // initOnce guarantees Init's slog.SetDefault side-effect runs at most

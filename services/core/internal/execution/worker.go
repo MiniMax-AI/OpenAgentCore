@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
 	"sync"
 	"time"
 
@@ -130,14 +129,6 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 	}
 	if err := w.dispatcher.validateEngineInputs(value.Engine, value.Configuration, inputs); err != nil {
 		return nil, err
-	}
-	// Messages start work. Every Session freezes a provider at creation, so a
-	// stored one without it cannot run; reject it instead of queueing work.
-	// Cancellation and results stay available.
-	var snapshot Snapshot
-	if slices.ContainsFunc(inputs, func(input sessions.Input) bool { return input.Kind == "message" }) &&
-		(json.Unmarshal(value.Configuration, &snapshot) != nil || !snapshot.ModelProviderConfigured) {
-		return nil, ErrModelProviderRequired
 	}
 	if preparedEnvironmentConfiguration(value.Configuration) {
 		return w.submitEnvironmentInputs(ctx, value, key, inputs)
@@ -382,9 +373,6 @@ func (w *Worker) runClaim(ctx context.Context, item sessions.ExecutionWork) erro
 	var rejection *preparationRejection
 	capacityRejected := errors.As(err, &rejection) && rejection.operation == proto.TypeExecutionPrepare && rejection.code == "preparation_capacity"
 	outcome := json.RawMessage(`{"error_code":"execution_unavailable"}`)
-	if errors.Is(err, ErrModelProviderRequired) {
-		outcome = json.RawMessage(`{"error_code":"model_provider_required"}`)
-	}
 	finish, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	turn, err := w.dispatcher.SessionsReader.GetTurn(finish, item.TenantID, item.SessionID, item.TurnID)

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
@@ -104,10 +105,15 @@ func (s *fakeStorage) WithInputs(ctx context.Context, tenant, session string, ap
 // inputKey is the idempotency key of the input batches under test.
 const inputKey = "request"
 
+// messageInput is a public message event with one text part, as the events
+// route stores it.
 func messageInput(text string) Input {
-	payload, _ := json.Marshal(map[string]string{"text": text})
+	payload, _ := json.Marshal(v1.SessionInput{Type: "agent.session.input.message", Input: []v1.InputMessage{{Role: "user", Content: []v1.InputContent{{Type: "input_text", Text: &text}}}}})
 	return Input{Kind: "message", Payload: payload}
 }
+
+// hi is the payload of messageInput("hi") as admission normalizes it.
+const hi = `{"input":[{"content":[{"text":"hi","type":"input_text"}],"role":"user"}],"type":"agent.session.input.message"}`
 
 var cancelInput = Input{Kind: "cancel", Payload: json.RawMessage(`{}`)}
 
@@ -144,7 +150,7 @@ func TestValidateInputs(t *testing.T) {
 }
 
 func TestValidateMessageInputs(t *testing.T) {
-	if _, encoded, err := validateMessageInputs([]Input{messageInput("hi")}); err != nil || string(encoded) != `[{"kind":"message","payload":{"text":"hi"}}]` {
+	if _, encoded, err := validateMessageInputs([]Input{messageInput("hi")}); err != nil || string(encoded) != `[{"kind":"message","payload":`+hi+`}]` {
 		t.Fatalf("batch %s, %v", encoded, err)
 	}
 	for name, inputs := range map[string][]Input{"cancel": {messageInput("hi"), cancelInput}, "no inputs": nil} {
@@ -205,13 +211,13 @@ func TestAdmitInput(t *testing.T) {
 		tx := newInputTx(t)
 		tx.loadActiveTurn, tx.createTurn, tx.appendChanges = activeTurn(nil), returns(turnWith(TurnQueued)), collect(&changes)
 		tx.createTurnInput, tx.loadUsage = sequences(7), returns(json.RawMessage(`{}`))
-		tx.loadInputSource = returns(Source{Turn: testTurn, Kind: "message", Sequence: 7, Payload: json.RawMessage(`{"text":"hi"}`)})
+		tx.loadInputSource = returns(Source{Turn: testTurn, Kind: "message", Sequence: 7, Payload: messageInput("hi").Payload})
 		tx.loadItem, tx.putItem = returns(items.Stored{}), func(items.Change) (*int32, error) { return nil, nil }
 		receipt, err := admitInput(t.Context(), tx, inputKey, 0, messageInput("hi"))
 		if err != nil || receipt != (InputReceipt{Sequence: 7, TurnID: testTurn}) {
 			t.Fatalf("receipt %+v, %v", receipt, err)
 		}
-		item := items.Identity(testTurn, "input:7")
+		item := items.Identity(testTurn, "input:7:0")
 		assertCalls(t, tx.fakeTx, "LoadActiveTurn", "CreateTurn", "AppendChanges agent.session.turn.created", "CreateTurnInput "+testTurn+" request 0 message",
 			"LoadInputSource 7", "LoadItem "+testTurn+" "+item, "PutItem "+testTurn+" "+item, "AppendChanges agent.session.turn.item.added",
 			"LoadUsage", "AppendChanges agent.session.in_progress")
@@ -255,7 +261,7 @@ func TestAdmitInput(t *testing.T) {
 }
 
 func TestSubmitInputs(t *testing.T) {
-	const batch = `[{"kind":"message","payload":{"text":"hi"}},{"kind":"cancel","payload":{}}]`
+	const batch = `[{"kind":"message","payload":` + hi + `},{"kind":"cancel","payload":{}}]`
 	inputs := []Input{messageInput("hi"), cancelInput}
 	running := turnWith(TurnInProgress)
 	submit := func(t *testing.T, tx *fakeInputTx, inputs []Input) ([]InputReceipt, error) {

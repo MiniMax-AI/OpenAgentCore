@@ -15,8 +15,7 @@ COPY --from=claude /opt/claude-sdk /opt/claude-sdk
 
 ENV OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex \
     OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node \
-    OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js \
-    OAC_RUNTIME_CLAUDE_SDK_WORKSPACE=managed
+    OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js
 
 USER 1000:1000
 RUN test "$(codex --version)" = "codex-cli 0.153.4" \

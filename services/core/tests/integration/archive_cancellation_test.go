@@ -123,7 +123,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			pending, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"first"}`)}, {Kind: "message", Payload: json.RawMessage(`{"text":"second"}`)}})
+			pending, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), h.tenant, session.ID, "pending", []sessions.Input{messageInput("first"), messageInput("second")})
 			if err != nil {
 				t.Fatal(err)
 			}

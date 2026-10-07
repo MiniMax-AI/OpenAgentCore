@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/coremetricspg"
@@ -74,14 +75,19 @@ func (s *coreMetricsSource) History(ctx context.Context, start, end time.Time, s
 	return s.store.ReadExecutionHistory(ctx, start, end, step)
 }
 
-func reportCleanupResult(metrics *coremetrics.Service, job string, count int64, err error) {
-	if metrics == nil {
-		return
-	}
-	processed, failed := &count, int64(0)
-	if err != nil {
-		processed = nil
-		failed = 1
-	}
-	metrics.ReportJob(job, time.Now(), processed, &failed, err)
+// prune makes a retention pass, bounded by timeout, a job that runs every
+// minute. A failed pass counts no rows and one failure.
+func prune(id string, timeout time.Duration, run func(context.Context) (int64, error)) coremetrics.Periodic {
+	return coremetrics.Periodic{ID: id, Every: time.Minute, Run: func(ctx context.Context) (*int64, int64, error) {
+		pass, cancel := context.WithTimeout(ctx, timeout)
+		count, err := run(pass)
+		cancel()
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Ctx(ctx).Warn("Retention cleanup failed", "job", id)
+			}
+			return nil, 1, err
+		}
+		return &count, 0, nil
+	}}
 }

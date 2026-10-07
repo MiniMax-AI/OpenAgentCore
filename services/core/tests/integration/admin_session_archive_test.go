@@ -85,7 +85,7 @@ func archiveAllocation(t *testing.T, w *Store, tenant string, session sessions.S
 func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	s, w, installation := managedArchiveFixture(t)
 	input := managerSessionInput(uuid.NewString())
-	input.InitialInputs = []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"waiting"}`)}}
+	input.InitialInputs = []sessions.Input{messageInput("waiting")}
 	tenant, session := managedArchiveSession(t, s, input)
 	ctx := adminDeleteContext(t.Context(), tenant, uuid.NewString())
 	active, err := sessionAdapter(s).GetManagedSessionArchive(t.Context(), tenant, session.ID)
@@ -135,7 +135,7 @@ func TestManagedSessionArchiveUnallocatedAndGuards(t *testing.T) {
 	if _, err := deploymentExecution(t, w).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString())); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("archived Environment allocated after archive", err)
 	}
-	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"later"}`)}}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
+	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "later", []sessions.Input{messageInput("later")}); !errors.Is(err, sessions.ErrEnvironmentUnavailable) {
 		t.Fatal("archived Environment accepted new input", err)
 	}
 	view, err := deploymentService(t, s).View(t.Context())

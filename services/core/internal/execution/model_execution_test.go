@@ -36,13 +36,6 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("missing Session credentials fell back", err)
 	}
-	// No Runtime has model configuration of its own.
-	for _, environment := range []string{"openai_hosted", "self_hosted", "none"} {
-		snapshot := Snapshot{Agent: v1.Agent{Model: "m"}, Environment: &v1.Environment{Type: environment}}
-		if _, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, ErrModelProviderRequired) {
-			t.Fatal("provider-free Session dispatched", environment, err)
-		}
-	}
 }
 
 func TestSessionModelProviderPreservesUpstreamBundleForEveryHarness(t *testing.T) {

@@ -1,4 +1,4 @@
-import { AgentCoreError, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
+import { AgentCoreError, deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
@@ -15,9 +15,8 @@ import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
 import type { MessageKey } from "../../lib/locale-strings";
 import { sandboxConfigurationRejection } from "../../lib/sandbox-labels";
-import { defaultSandboxResources, distributionRuntime, savedSpecification, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, distributionRuntime, isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
-import { isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS } from "./runtime-release";
 import { sandboxAdmin } from "./sandbox-queries";
 import "./sandbox-wizard.css";
 
@@ -41,6 +40,8 @@ function e2bService(apiURL?: string): E2BService {
 }
 
 const MIB = 2 ** 20;
+const bounds = Object.fromEntries(deploymentContract.resources.map(({ name, min, max }) => [name, `${min}–${max}`]));
+const resourceBounds = { cpus: bounds.cpus, memory: bounds.memory_mib, disk: deploymentContract.minimum_disk };
 const EASE = [0.16, 1, 0.3, 1] as const;
 // Core accepts a template ID of up to 128 characters and a canonical, non-nil build UUID.
 const TEMPLATE = /^[a-zA-Z0-9_-]{1,128}:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
@@ -413,7 +414,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       <Question title={t("Advanced settings")}>
         <form className="wizard-fields" onSubmit={(event) => { event.preventDefault(); setStep("review"); }}>
           {sized ? <fieldset className="wizard-group">
-            <legend>{t("Each sandbox")}<HelpTip>{t("1–255 CPUs, 512–1048576 MiB of memory. microsandbox disks are at least 1024 MiB.")}</HelpTip></legend>
+            <legend>{t("Each sandbox")}<HelpTip>{t("{{cpus}} CPUs, {{memory}} MiB of memory. microsandbox disks are at least {{disk}} MiB.", resourceBounds)}</HelpTip></legend>
             <div className="wizard-grid">
               <NumberField error={fieldError("resources.cpus")} id={`${id}-cpus`} label={t("CPUs")} value={resources.cpus} onChange={(cpus) => { setSize("custom"); setResources({ ...resources, cpus }); setFieldRejection(null); }} />
               <NumberField error={fieldError("resources.memory_mib")} id={`${id}-memory`} label={t("Memory (MiB)")} value={resources.memory_mib} onChange={(memory_mib) => { setSize("custom"); setResources({ ...resources, memory_mib }); setFieldRejection(null); }} />

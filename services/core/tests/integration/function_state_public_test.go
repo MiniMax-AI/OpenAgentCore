@@ -30,7 +30,7 @@ func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"fixture"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "start", messageText("fixture"))
 	if err != nil {
 		t.Fatal(err)
 	}

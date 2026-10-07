@@ -174,7 +174,7 @@ func TestNewHandlerAcceptsCompleteDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 	deps.Execution = f.execution()
-	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build"}
+	deps.Execution.NativeInstaller = &NativeInstaller{Version: "build", Base: "https://core.example/api/v1/agent-daemon/install/"}
 	deps.Sandboxes = f.sandboxes()
 	if _, err := NewHandler(deps); err != nil {
 		t.Fatal(err)

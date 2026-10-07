@@ -17,6 +17,17 @@ import (
 // testAssignment is the assignment the Session operations under test name.
 var testAssignment = proto.AssignmentRef{SessionID: "session", AssignmentID: "assignment", Epoch: 1}
 
+// NewSession builds a Session over a test connection.
+func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
+	if log == nil {
+		log = func(string, ...any) {}
+	}
+	if reg == nil {
+		reg = NewRegistry()
+	}
+	return newSession(conn, deviceID, workspaceID, daemonVersion, reg, log)
+}
+
 // fakeConn is the WSConn implementation used by session + registry
 // tests. Concurrency-safe.
 type fakeConn struct {

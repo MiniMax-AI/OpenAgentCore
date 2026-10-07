@@ -1,8 +1,6 @@
 package writeaudit
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -37,13 +35,6 @@ func ValidText(value string, max int, required bool) bool {
 	return (!required || value != "") && utf8.ValidString(value) && utf8.RuneCountInString(value) <= max && !strings.ContainsFunc(value, unicode.IsControl)
 }
 
-// ValidKeyDigest reports whether digest is the lowercase hexadecimal SHA-256
-// digest that identifies a Project key.
-func ValidKeyDigest(digest string) bool {
-	decoded, err := hex.DecodeString(digest)
-	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == digest
-}
-
 // Validate checks that s is well-formed provenance of a write in tenant.
 func (s Source) Validate(tenant string) error {
 	if !s.valid(tenant) {
@@ -75,21 +66,14 @@ func ValidateRecord(source Source, tenant, action string, resources []Resource) 
 func (s Source) valid(tenant string) bool {
 	actual, err := parseID(s.TenantID)
 	expected, expectedErr := parseID(tenant)
-	valid := err == nil && expectedErr == nil && actual == expected &&
+	_, idErr := parseID(s.KeyID)
+	valid := err == nil && expectedErr == nil && actual == expected && s.Kind == "issued" && idErr == nil &&
+		len(s.Prefix) == 11 && strings.HasPrefix(s.Prefix, "pc_") &&
 		ValidText(s.Name, 80, false) && ValidText(s.RequestID, 128, true) && ValidText(s.TraceID, 128, true)
-	switch s.Kind {
-	case "static", "console":
-		digest := strings.TrimPrefix(s.KeyID, "static:")
-		return valid && strings.HasPrefix(s.KeyID, "static:") && ValidKeyDigest(digest) && s.Prefix == digest[:min(len(digest), 8)]
-	case "issued":
-		_, idErr := parseID(s.KeyID)
-		valid = valid && idErr == nil && len(s.Prefix) == 11 && strings.HasPrefix(s.Prefix, "pc_")
-		for _, c := range strings.TrimPrefix(s.Prefix, "pc_") {
-			valid = valid && (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-')
-		}
-		return valid
+	for _, c := range strings.TrimPrefix(s.Prefix, "pc_") {
+		valid = valid && (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-')
 	}
-	return false
+	return valid
 }
 
 func parseID(value string) (uuid.UUID, error) {

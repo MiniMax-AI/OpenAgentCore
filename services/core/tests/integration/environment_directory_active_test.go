@@ -10,7 +10,7 @@ import (
 func TestEnvironmentDirectoryActiveRunUsesExistingOwner(t *testing.T) {
 	h, w, environment := directoryWorker(t)
 	awaitFixtureCapabilities(t, h, workerEnvironmentCapabilities())
-	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "execute", []sessions.Input{{Kind: "message", Payload: []byte(`{"text":"work"}`)}})
+	pending, err := sessionService(t, h.s).ReserveEnvironmentInput(t.Context(), h.tenant, h.session.ID, "execute", []sessions.Input{messageInput("work")})
 	if err != nil {
 		t.Fatal(err)
 	}

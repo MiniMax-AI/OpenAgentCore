@@ -1,6 +1,7 @@
 import { AgentCoreError } from "@oac/agents-client";
 import { describe, expect, it } from "vitest";
 import i18n from "../i18n";
+import catalog from "../../../../services/core/internal/api/testdata/core-errors.json";
 import { coreErrors as english } from "../i18n/locales/en/core-errors";
 import { coreErrors as chinese } from "../i18n/locales/zh-CN/core-errors";
 import { coreError, coreFieldError, knownCoreError } from "./core-error";
@@ -11,9 +12,10 @@ const zh = i18n.getFixedT("zh-CN", "common");
 const failure = (code: string, param?: string, details?: AgentCoreError["details"], status = 400) => new AgentCoreError("unparsed backend prose", status, code, param, undefined, details);
 
 describe("Core error catalog localization", () => {
-  it("covers both languages, without relying on backend prose", () => {
-    expect(Object.keys(chinese).sort()).toEqual(Object.keys(english).sort());
-    for (const code of ["invalid_admin_key", "console_sign_in_required", "console_origin_rejected", "console_request_invalid", "core_unreachable", "invalid_name", "invalid_node_capacity", "invalid_model_provider", "model_provider_base_url_invalid", "model_provider_protocol_unsupported", "model_provider_api_key_invalid", "model_provider_token_limits_invalid", "invalid_sandbox_configuration", "sandbox_credential_invalid", "sandbox_configuration_invalid", "sandbox_credential_ownership", "sandbox_verification_unconfirmed", "sandbox_generation_stale", "sandbox_admin_not_configured", "project_archived", "project_exists", "project_api_key_exists"]) {
+  it("localizes exactly Core's shared catalog in both languages, without relying on backend prose", () => {
+    expect(Object.keys(english).sort()).toEqual([...catalog].sort());
+    expect(Object.keys(chinese).sort()).toEqual([...catalog].sort());
+    for (const code of catalog) {
       expect(knownCoreError(failure(code), en)).not.toBeNull();
       expect(coreError(failure(code), en)).not.toContain("backend prose");
       expect(coreError(failure(code), zh)).toMatch(/[\u4e00-\u9fff]/);

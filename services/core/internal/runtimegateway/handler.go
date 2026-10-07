@@ -131,7 +131,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 			h.cfg.Log("agentdaemon gateway: heartbeat on connect: %v", hbErr)
 		}
 	}
-	sess := NewSession(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log)
+	sess := newSession(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log)
 	sess.heartbeat = h.cfg.Heartbeat
 	sess.archivedCancellations = h.cfg.ArchivedCancellations
 	sess.links = h.cfg.Links

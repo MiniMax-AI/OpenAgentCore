@@ -38,7 +38,7 @@ Dashed arrows show provisioning and installation. Solid arrows show component in
 | Model provider | Serve the model protocol selected for the Harness | [Model execution](../contracts/agents-api/model-execution.md) |
 | Web | Let administrators configure and observe the installation through a server-side Core API connection | [Console server](./web/console-server.md) |
 
-The [repository map](./development.md#repository-map) locates these components. [Concepts and ownership](./concepts.md) explains Project boundaries, administrator authority and tool isolation.
+The [repository map](./development.md#repository-map) locates these components. [Concepts](./concepts.md) explains Project boundaries, administrator authority and tool isolation.
 
 ## A Session, end to end
 

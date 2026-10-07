@@ -24,7 +24,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink/sandboxlinktest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxwire"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -79,7 +79,11 @@ func startLinkRoute(t *testing.T, s *Store) *sandboxlinktest.Server {
 	srv := httptest.NewTLSServer(handler)
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { rl.Close() })
-	link, err := placement.LinkURL(srv.URL)
+	origin, err := deployment.NewPublicOrigin(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	link, err := origin.SandboxLink()
 	if err != nil {
 		t.Fatal(err)
 	}

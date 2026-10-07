@@ -1,3 +1,4 @@
+import { modelProviderProtocols } from "./harness-catalog";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, onlyFields, sameResourceId } from "./response-projection";
 import type { ExecutionConfigurationSource, ModelProviderView, SessionExecutionConfiguration } from "./types";
 
@@ -5,6 +6,7 @@ type Invalid = () => never;
 const sources = new Set(["session", "agent", "deployment", "unknown"]);
 const selectionFields = new Set(["value", "source"]);
 const providerFields = new Set(["protocol", "base_url", "api_key_configured", "context_window", "max_output_tokens"]);
+const protocols: ReadonlySet<unknown> = new Set(modelProviderProtocols);
 
 function selection(value: unknown, invalid: Invalid): SessionExecutionConfiguration["model"] {
   if (!isRecord(value) || !exactFields(value, selectionFields) || !sources.has(String(value.source)) ||
@@ -32,14 +34,14 @@ function safeBaseURL(value: string): boolean {
 /** The safe provider view shared by frozen Session configuration and saved Agent reads. */
 export function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
   if (!isRecord(value) || !onlyFields(value, providerFields) ||
-    (value.protocol !== "responses" && value.protocol !== "anthropic" && value.protocol !== "chat_completions") ||
+    !protocols.has(value.protocol) ||
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
     (value.context_window !== undefined && !isNonnegativeInteger(value.context_window)) ||
     (value.max_output_tokens !== undefined && !isNonnegativeInteger(value.max_output_tokens)) ||
     Number(value.max_output_tokens ?? 0) > Number(value.context_window ?? 0)) return invalid();
   if (!safeBaseURL(value.base_url)) return invalid();
   return {
-    protocol: value.protocol, base_url: value.base_url, api_key_configured: value.api_key_configured,
+    protocol: value.protocol as ModelProviderView["protocol"], base_url: value.base_url, api_key_configured: value.api_key_configured,
     ...(value.context_window === undefined ? {} : { context_window: value.context_window as number }),
     ...(value.max_output_tokens === undefined ? {} : { max_output_tokens: value.max_output_tokens as number }),
   };

@@ -1,4 +1,4 @@
-import { AgentCoreError, type SandboxNode, type SandboxProvider } from "@oac/agents-client";
+import { AgentCoreError, sandboxConfigurationUnconfirmed, type SandboxNode, type SandboxProvider } from "@oac/agents-client";
 import i18n from "../i18n";
 import { knownCoreError } from "./core-error";
 import { translate, type Locale } from "./locale";
@@ -19,7 +19,7 @@ export function sandboxRequestError(error: unknown, locale: Locale): string {
   let key: MessageKey = "The sandbox request failed. Refresh to check the current state before trying again.";
   if (error instanceof AgentCoreError) {
     const refused = !sandboxWriteUncertain(error);
-    if (error.code === "sandbox_configuration_unconfirmed") { if (refused) key = "Core rejected the sandbox configuration."; else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state."; }
+    if (error.code === sandboxConfigurationUnconfirmed) { if (refused) key = "Core rejected the sandbox configuration."; else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state."; }
     else if (refused) {
       if (error.message) return error.message;
       key = "The sandbox request was rejected. Refresh to check the current state.";

@@ -22,7 +22,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, err := sendMessage(ctx, s, tenant, session.ID, "first", json.RawMessage(`{"text":"question"}`))
+	input, err := sendMessage(ctx, s, tenant, session.ID, "first", messageText("question"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	if _, err = sendMessage(ctx, s, tenant, session.ID, "steer", json.RawMessage(`{"text":"continue"}`)); err != nil {
+	if _, err = sendMessage(ctx, s, tenant, session.ID, "steer", messageText("continue")); err != nil {
 		t.Fatal(err)
 	}
 	page, err = sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true)
@@ -131,7 +131,7 @@ func TestItemObservationOrderSurvivesTiesUpdatesRetriesAndRecovery(t *testing.T)
 		t.Fatal(err)
 	}
 	checkOrder()
-	next, err := sendMessage(ctx, s, tenant, session.ID, "next-turn", json.RawMessage(`{"text":"new turn"}`))
+	next, err := sendMessage(ctx, s, tenant, session.ID, "next-turn", messageText("new turn"))
 	if err != nil {
 		t.Fatal(err)
 	}

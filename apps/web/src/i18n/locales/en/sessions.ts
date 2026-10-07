@@ -46,8 +46,6 @@ export const sessions = {
     waitingLabel: "What the Session waits for",
     exactTokens: "{{tokens}} tokens",
     open: "Open Session {{id}}",
-    unrecognized: "Unrecognized Session",
-    unrecognizedHelp: "Core listed a Session this console cannot read, for example one with a field it does not know. Nothing else is shown for it.",
     more: "Show more",
   },
   detail: {

@@ -29,10 +29,8 @@ func openAudit(t *testing.T) (*pgunit.Pool, *auditpg.Store) {
 
 func uuidOf(id string) pgtype.UUID { return pgtype.UUID{Bytes: uuid.MustParse(id), Valid: true} }
 
-func staticSource(tenant string) writeaudit.Source {
-	sum := sha256.Sum256([]byte(uuid.NewString()))
-	digest := hex.EncodeToString(sum[:])
-	return writeaudit.Source{KeyID: "static:" + digest, Prefix: digest[:8], Name: "test key", Kind: "static", TenantID: tenant, RequestID: uuid.NewString(), TraceID: uuid.NewString()}
+func issuedSource(tenant string) writeaudit.Source {
+	return writeaudit.Source{KeyID: uuid.NewString(), Prefix: "pc_" + uuid.NewString()[:8], Name: "test key", Kind: "issued", TenantID: tenant, RequestID: uuid.NewString(), TraceID: uuid.NewString()}
 }
 
 func adminSource(projectID string) adminaudit.Source {
@@ -101,7 +99,7 @@ func exec(t *testing.T, pool *pgunit.Pool, sql string, args ...any) {
 func TestWriteAuditCommitsAndRollsBackWithTheBusinessWrite(t *testing.T) {
 	pool, audit := openAudit(t)
 	tenant := uuid.NewString()
-	source := staticSource(tenant)
+	source := issuedSource(tenant)
 	for _, failure := range []string{"", "after_audit", "invalid_source", "database_audit_failure"} {
 		t.Run(failure, func(t *testing.T) {
 			id := uuid.NewString()
@@ -169,7 +167,7 @@ func TestWriteWithoutProvenanceStaysUnattributed(t *testing.T) {
 		t.Fatalf("unattributed write: %+v %v", page, err)
 	}
 	owners, err := audit.GetResourceOwners(t.Context(), tenant, "agent", []string{id})
-	if err != nil || owners[0].APIKey != nil || owners[0].Source != nil {
+	if err != nil || owners[0].APIKey != nil {
 		t.Fatalf("unattributed owner: %+v %v", owners, err)
 	}
 }
@@ -177,7 +175,7 @@ func TestWriteWithoutProvenanceStaysUnattributed(t *testing.T) {
 // Malformed provenance fails closed before any statement runs, so a nil q
 // shows that nothing reached the database.
 func TestMalformedProvenanceFailsClosed(t *testing.T) {
-	valid := staticSource(uuid.NewString())
+	valid := issuedSource(uuid.NewString())
 	for _, field := range []string{"tenant", "key", "prefix", "kind", "request", "trace", "name", "action", "resource_type", "created_type", "resource_id"} {
 		source, action, kind, id := valid, "create", "agent", "resource"
 		created := []writeaudit.Resource{{Type: "agent", ID: "resource"}}
@@ -185,11 +183,11 @@ func TestMalformedProvenanceFailsClosed(t *testing.T) {
 		case "tenant":
 			source.TenantID = uuid.NewString()
 		case "key":
-			source.KeyID = "static:abcd"
+			source.KeyID = "key"
 		case "prefix":
 			source.Prefix = "bad"
 		case "kind":
-			source.Kind = "unknown"
+			source.Kind = "static"
 		case "request":
 			source.RequestID = ""
 		case "trace":
@@ -238,7 +236,7 @@ func TestAdministratorProvenance(t *testing.T) {
 	pool, audit := openAudit(t)
 	p := createProject(t, pool)
 	id := uuid.NewString()
-	ctx := adminaudit.WithSource(writeaudit.WithSource(t.Context(), staticSource(p.tenant)), adminSource(p.id))
+	ctx := adminaudit.WithSource(writeaudit.WithSource(t.Context(), issuedSource(p.tenant)), adminSource(p.id))
 	if err := record(t, pool, ctx, func(ctx context.Context, q *sqlc.Queries) error {
 		if err := createAgent(ctx, q, p.tenant, id); err != nil {
 			return err
@@ -283,14 +281,13 @@ func TestAdministratorProvenance(t *testing.T) {
 func TestWriteAuditOwnersIdentityReplayAndRevocation(t *testing.T) {
 	pool, audit := openAudit(t)
 	tenant := uuid.NewString()
-	a := staticSource(tenant)
+	a := issuedSource(tenant)
 	id, implicit := uuid.NewString(), uuid.NewString()
 	recordWrite(t, pool, a, "create", "session", id, writeaudit.Resource{Type: "session", ID: id}, writeaudit.Resource{Type: "environment", ID: implicit, ParentID: id})
 	// Same request may reach a commit receipt twice but cannot create another owner.
 	replayID := uuid.NewString()
 	recordWrite(t, pool, a, "create", "session", id, writeaudit.Resource{Type: "session", ID: replayID})
-	b := staticSource(tenant)
-	b.Kind = "console"
+	b := issuedSource(tenant)
 	recordWrite(t, pool, b, "update", "session", id)
 	owners, err := audit.GetResourceOwners(t.Context(), tenant, "session", []string{replayID, id, id, "historical"})
 	if err != nil || len(owners) != 4 || owners[0].APIKey != nil || owners[1].APIKey.ID != a.KeyID || owners[2].APIKey.ID != a.KeyID || owners[3].APIKey != nil {
@@ -305,7 +302,7 @@ func TestWriteAuditOwnersIdentityReplayAndRevocation(t *testing.T) {
 		t.Fatalf("foreign owner: %+v %v", foreign, err)
 	}
 	page, err := audit.ListWriteOperations(t.Context(), tenant, writeaudit.Filter{ResourceID: id})
-	if err != nil || len(page.Data) != 2 || page.Data[0].APIKey.Kind != "console" || page.Data[1].APIKey.ID != a.KeyID {
+	if err != nil || len(page.Data) != 2 || page.Data[0].APIKey.ID != b.KeyID || page.Data[1].APIKey.ID != a.KeyID {
 		t.Fatalf("request dedup or key identity: %+v %v", page, err)
 	}
 	p := createProject(t, pool)
@@ -317,8 +314,8 @@ func TestWriteAuditOwnersIdentityReplayAndRevocation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	c := staticSource(p.tenant)
-	c.KeyID, c.Name, c.Prefix, c.Kind = keyID, "issued key", "pc_"+hex.EncodeToString(sum[:4]), "issued"
+	c := issuedSource(p.tenant)
+	c.KeyID, c.Name, c.Prefix = keyID, "issued key", "pc_"+hex.EncodeToString(sum[:4])
 	fileID := "file_" + uuid.NewString()
 	recordWrite(t, pool, c, "create", "file", fileID, writeaudit.Resource{Type: "file", ID: fileID})
 	if err := record(t, pool, t.Context(), func(ctx context.Context, q *sqlc.Queries) error {
@@ -337,28 +334,10 @@ func TestWriteAuditOwnersIdentityReplayAndRevocation(t *testing.T) {
 	}
 }
 
-// The copy operation was removed; its committed provenance must stay readable.
-func TestHistoricalAdminCopyProvenance(t *testing.T) {
-	pool, audit := openAudit(t)
-	p := createProject(t, pool)
-	auditID, agentID := uuid.NewString(), uuid.NewString()
-	exec(t, pool, `INSERT INTO admin_audit_log(id,tenant_id,project_id,admin_credential_id,actor_label,action,resource_type,resource_id,result_ids,request_id,trace_id)
-		VALUES($1,$2,$3,'digest','admin','copy','agent','source-agent',$4::jsonb,'request','trace')`, auditID, p.tenant, p.id, `[{"type":"agent","source_id":"source-agent","target_id":"`+agentID+`"}]`)
-	exec(t, pool, "INSERT INTO admin_resource_owners(tenant_id,resource_type,resource_id,audit_id) VALUES($1,'agent',$2,$3)", p.tenant, agentID, auditID)
-	owners, err := audit.GetResourceOwners(t.Context(), p.tenant, "agent", []string{agentID})
-	if err != nil || len(owners) != 1 || owners[0].APIKey != nil || owners[0].Source == nil || *owners[0].Source != "admin_copy" || owners[0].AdminAuditID == nil || *owners[0].AdminAuditID != auditID {
-		t.Fatalf("historical copy owner: %+v %v", owners, err)
-	}
-	page, err := audit.ListAdminAudit(t.Context(), adminaudit.Filter{ProjectID: p.id, Action: "copy"})
-	if err != nil || len(page.Data) != 1 || page.Data[0].ID != auditID || !strings.Contains(string(page.Data[0].ResultIDs), agentID) {
-		t.Fatalf("historical copy audit: %+v %v", page, err)
-	}
-}
-
 func TestWriteAuditCursorFiltersAndRetention(t *testing.T) {
 	pool, audit := openAudit(t)
 	tenant, id := uuid.NewString(), uuid.NewString()
-	source := staticSource(tenant)
+	source := issuedSource(tenant)
 	if err := record(t, pool, t.Context(), func(ctx context.Context, q *sqlc.Queries) error { return createAgent(ctx, q, tenant, id) }); err != nil {
 		t.Fatal(err)
 	}

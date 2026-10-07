@@ -153,8 +153,8 @@ func (d Dependencies) validate() error {
 		if e.ExecutorURL == "" {
 			return errors.New("api: Execution.ExecutorURL is required")
 		}
-		if e.NativeInstaller != nil && e.NativeInstaller.Version == "" {
-			return errors.New("api: Execution.NativeInstaller.Version is required")
+		if e.NativeInstaller != nil && (e.NativeInstaller.Version == "" || e.NativeInstaller.Base == "") {
+			return errors.New("api: Execution.NativeInstaller.Version and Base are required")
 		}
 		if err := required(
 			field{"Execution.SessionAdmission", e.SessionAdmission},

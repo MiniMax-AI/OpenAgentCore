@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 2a80d9958e34d744793307b46354dfc887becc632f70d1e5193ee4b7c27d2172
+source_hash: a169c29bd481bd32ae392a45c76ac8822df176e113b128a05d55dfe10250fe08
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接并声明[凭据网关](#credential-gateway)转发的内容，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -51,7 +51,7 @@ MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写�
 
 空的 Session 执行扩展无效。显式 null 提供商会请求继承；空的或不完整的提供商对象无效。已保存提供商配置中的未知字段、重复字段或只读输出字段均会被拒绝。没有 Harness 的已保存 Agent 可以保存有效配置包；其 Harness 兼容性会在 Session 准入时检查。仅更新提供商的 Agent 更新会保留已保存的 Harness，并在行锁保护下验证合并后的组合。Session 内联的 `agent.x_agents_core` 接受 `harness` 和 `harness_config`；提供商覆盖值必须放在请求顶层。
 
-Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式提供完整 Session 覆盖值时，无需解密已保存的配置包。Session 自身的加密快照会与 Session 及其 Environment 原子写入。现有 Session 绝不会再次查询 Agent：Agent 编辑、密钥替换、删除、暂停和重启均无法改变其模型、Harness 或提供商。加密密钥缺失或错误时会安全失败；重启前后应保持相同的 [credential key](../../../docs/zh/configuration.md#installation-directory)。不存在 Turn 级覆盖。
+Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式提供完整 Session 覆盖值时，无需解密已保存的配置包。Session 自身的加密快照会与 Session 及其 Environment 原子写入。现有 Session 绝不会再次查询 Agent：Agent 编辑、密钥替换、删除、暂停和重启均无法改变其模型、Harness 或提供商。加密密钥缺失或错误时会安全失败；重启前后应保持相同的 [credential key](../../../docs/zh/configuration.md#compose-installations)。不存在 Turn 级覆盖。
 
 每个创建请求都会在解析已保存 Agent、模板、凭据或部署默认值之前记录调用方意图，因此更改或删除它们不会改变其重试标识。匹配的创建重试会在再次解析 Agent 或提供商之前恢复已提交的 Session，并且不会进一步加入输入。流式传输不参与重试标识的计算。[TypeScript client](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md#saved-agent-and-deployment-defaults) 展示了已保存 Agent 和部署默认值。
 

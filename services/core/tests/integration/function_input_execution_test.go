@@ -18,7 +18,7 @@ func TestExecutionFunctionInputBatchStillSteersMessages(t *testing.T) {
 	h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "a", Name: "lookup_ticket", Arguments: json.RawMessage(`{}`)})
 	state := functionState(t, h, 1)
 	raw, _ := json.Marshal(sessions.FunctionResultInput{TurnID: input.TurnID, CallID: state.RequiredActions[0].CallID, Result: json.RawMessage(`{"success":true,"output":"answer"}`)})
-	batch := []sessions.Input{{Kind: "tool_result", Payload: raw}, {Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}}
+	batch := []sessions.Input{{Kind: "tool_result", Payload: raw}, messageInput("Follow up")}
 	receipts, err := submitInputs(t.Context(), h.s, h.tenant, h.session.ID, "mixed", batch)
 	if err != nil {
 		t.Fatal(err)

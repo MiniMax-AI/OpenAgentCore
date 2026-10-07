@@ -8,7 +8,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | --- | --- |
 | Design principles, public API fidelity, settings and data ownership, documentation rules | [AGENTS.md](AGENTS.md) |
 | Protocol code and documents at each component boundary | [Protocol map](AGENTS.md#protocols-at-every-boundary) |
-| Projects, keys, resource isolation, administrator authority, secrets and audit concepts | [Concepts and ownership](docs/concepts.md) |
+| Projects, keys, resource isolation, administrator authority, secrets and audit concepts | [Concepts](docs/concepts.md) |
 | Component responsibilities and Session flow | [Architecture](docs/architecture.md) |
 | Developer setup, repository map and focused checks | [Develop OpenAgentCore](docs/development.md) |
 | API callers, credentials and route inventory | [API index](docs/api/index.md) |
@@ -115,7 +115,7 @@ The role needs `CREATE DATABASE`: tests of database-wide state, such as the exec
 
 ### Contract and schema rules
 
-- `internal/harnessconfig/builtin/catalog.json` is the single authored public Harness registration list. `make generate-harness-catalog` generates Go configuration/profile registration, client identifiers/names and the reference; `make openapi` derives the matching enums. `make check-harness-catalog` verifies freshness in the full gate. Native configuration rules stay in their adapter declarations; Core qualification and Runtime availability stay separate.
+- `internal/harnessconfig/builtin/catalog.json` is the single authored public Harness registration list. `make generate-harness-catalog` generates Go configuration/profile registration, client identifiers/names and the reference, and projects the model-provider protocol names of `internal/modelprovider/config.go` to the client; `make openapi` derives the matching enums. `make check-harness-catalog` verifies freshness in the full gate. Native configuration rules stay in their adapter declarations; Core qualification and Runtime availability stay separate.
 - `make sqlc-generate` owns only `services/core/internal/db/sqlc` (sqlc v1.29.0). Do not rewrite landed migrations.
 - `make check-runtime-contract` is the focused Core–Runtime contract entry point; see [Contract verification](docs/runtime-protocol.md#contract-verification). It also runs through `check-go` and `check-core`.
 

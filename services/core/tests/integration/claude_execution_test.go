@@ -139,7 +139,7 @@ func TestClaudeInvalidImageResultRejectsWholeBatchBeforePersistence(t *testing.T
 		}
 		return sessions.Input{Kind: "tool_result", Payload: payload}
 	}
-	batch := []sessions.Input{{Kind: "message", Payload: json.RawMessage(`{"text":"Follow up"}`)}, result(`{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
+	batch := []sessions.Input{messageInput("Follow up"), result(`{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,AA=="}]}`), {Kind: "cancel", Payload: json.RawMessage(`{}`)}}
 	if _, err := worker.SubmitInputs(t.Context(), h.tenant, h.session.ID, "batch", batch); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal(err)
 	}

@@ -5,9 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { gettingStartedSteps } from "../overview/getting-started";
 import { node } from "../overview/test-fixtures";
-import type { SandboxConsoleConfig } from "../sandbox/console-config";
 import { sandboxDeploymentQuery } from "../sandbox/sandbox-queries";
-import { consoleConfigQuery, fleetQuery, type FleetSnapshot } from "./fleet-queries";
+import { fleetQuery, type FleetSnapshot } from "./fleet-queries";
 import { FleetReadNotice } from "./FleetReadNotice";
 import { fleetSnapshot, useSandboxFleet } from "./use-sandbox-fleet";
 
@@ -23,8 +22,6 @@ function Probe() {
 function render(latest: SandboxDeployment, previous = configured, failed = false) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const snapshot: FleetSnapshot = { deployment: previous, nodes: [node("n1")], allocations: [], loadedAt: 1 };
-  const config: SandboxConsoleConfig = { sandbox_admin: true, node_installer: false, node_installer_sha256: "" };
-  cache.setQueryData<SandboxConsoleConfig | null>(consoleConfigQuery.queryKey, () => config);
   cache.setQueryData(fleetQuery(false).queryKey, snapshot);
   cache.setQueryData(sandboxDeploymentQuery.queryKey, latest);
   if (failed) cache.getQueryCache().find({ queryKey: fleetQuery(false).queryKey })?.setState({ status: "error", error: new Error("inventory read failed") });

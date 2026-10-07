@@ -20,7 +20,7 @@ Every constructor also takes `baseUrl` and `fetch`. A token may be a string or a
 
 Behavior shared by the clients:
 
-- **Strict responses.** Session, history, event, Environment and Core API responses are checked against their pinned shapes before they are returned. A malformed one throws `AgentCoreError` with status 502 and a code such as `invalid_session_resource` or `invalid_admin_response` (`CoreMetricsClient`: status 0, `invalid_response`) instead of passing on a guessed value. `listSessionsTolerant` reports Sessions it cannot recognise in `unrecognized` instead of failing. Agent responses are typed but not checked at run time.
+- **Strict responses.** Session, history, event, Environment and Core API responses are checked against their pinned shapes before they are returned. A malformed one throws `AgentCoreError` with status 502 and a code such as `invalid_session_resource` or `invalid_admin_response` (`CoreMetricsClient`: status 0, `invalid_response`) instead of passing on a guessed value. Agent responses are typed but not checked at run time.
 - **Errors.** A non-2xx response throws `AgentCoreError` with `status`, `code`, `param`, `errorType` and, from the Core API, the optional `details` of the [Core error envelope](../../contracts/agents-api/core-errors.md). Invalid caller input throws `TypeError` before any request.
 - **No retries or timeouts.** No client retries a request. Pass `signal` to cancel one.
 - **Idempotency.** `createSession` takes an idempotency key and generates one when omitted; pass your own to retry a creation safely. `sendMessage`, `submitEvents`, `cancelTurn` and `submitFunctionResult` require a key of at most 128 bytes. `createIdempotencyKey()` makes one.

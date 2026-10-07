@@ -62,12 +62,12 @@ export function hostedObservation(sessionId: string, projectId: string, override
 export function sessionLister(sessions: readonly AgentSession[], calls: string[] = []) {
   return {
     calls,
-    async listSessionsTolerant(options?: { after?: string; limit?: number; signal?: AbortSignal }) {
+    async listSessions(options?: { after?: string; limit?: number; signal?: AbortSignal }) {
       options?.signal?.throwIfAborted();
       const start = options?.after ? sessions.findIndex((entry) => entry.id === options.after) + 1 : 0;
       const data = sessions.slice(start, start + (options?.limit ?? 20));
       calls.push(options?.after ?? "first");
-      return { object: "list" as const, data, unrecognized: [], has_more: start + data.length < sessions.length, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null };
+      return { object: "list" as const, data, has_more: start + data.length < sessions.length, first_id: data[0]?.id ?? null, last_id: data.at(-1)?.id ?? null };
     },
   };
 }

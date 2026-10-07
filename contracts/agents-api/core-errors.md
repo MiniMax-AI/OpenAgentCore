@@ -8,7 +8,7 @@ Errors on `/core/v1` use this envelope. `message` is safe English text; `code` a
 {"error":{"message":"A valid Core key is required as the bearer credential.","type":"invalid_request_error","code":"invalid_admin_key","param":null}}
 ```
 
-Errors on `/v1` and `/api/v1` keep their own envelopes and never carry `details`.
+Errors on `/v1` and `/api/v1` keep their own envelopes and never carry `details`. The tables below list every code a `/core/v1` or console caller can receive, except the [wire vocabulary](./wire-semantics.md#errors), such as `invalid_request`, `not_found_error` or `idempotency_conflict`, which keeps its `/v1` meaning. Codes of `/v1` Session input and of the machine routes, such as `turn_conflict` or `invalid_node_credential`, never reach these callers. The shared catalog `services/core/internal/api/testdata/core-errors.json` holds exactly the listed codes. A Go test requires a producer for each, an exact match with these tables and a catalog entry for every other code Core's error writers produce; Web's tests require a message for exactly these codes in each language.
 
 ## Optional details
 
@@ -47,7 +47,7 @@ A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-de
 | 409 | `sandbox_credential_ownership` | The candidate credential cannot manage the retained deployment; reset before changing accounts | `credential` |
 | 503 | `sandbox_verification_unconfirmed` | Verification, receipt settlement or the credential fence could not be confirmed | null |
 
-On every deployment write, the typed client replaces the message of these codes and of the other `sandbox_*` deployment codes with fixed local text. It keeps only the `current_generation`, `allocations`, `pending`, `min` and `max` details, and keeps `param` only when status, code and param match the table or the `invalid_sandbox_configuration` rows below exactly. `409 sandbox_configuration_error` becomes fixed public-URL guidance with a null `param`, even for a `PUT` without a key. Any other error becomes `sandbox_configuration_unconfirmed` and is not resent, because a rejection could echo the key.
+On every deployment write, the typed client replaces the message of these codes and of the other `sandbox_*` deployment codes with fixed local text. It keeps only the `current_generation`, `allocations`, `pending`, `min` and `max` details, and keeps `param` only when status, code and param match the table or the `invalid_sandbox_configuration` rows below exactly. `409 sandbox_configuration_error` becomes fixed public-URL guidance with a null `param`, even for a `PUT` without a key. Any other error becomes the client-only code `sandbox_configuration_unconfirmed`, which Core never returns, and is not resent, because a rejection could echo the key.
 
 ## Operation validation
 
@@ -70,6 +70,35 @@ Each code returns HTTP 400 with `type: "invalid_request_error"`. A missing, malf
 | `invalid_sandbox_configuration` | `runtime` | omitted | The Runtime release is missing, mutable, invalid or not allowed for E2B |
 
 Bounds are validation constants, never submitted values. Node names are limited in bytes; Project and key names in trimmed Unicode characters without control characters. Only the first failure is reported, in this order: model provider URL, protocol, key, general limits, the Harness's protocol, then the Harness's required limits; sandbox resources CPU, memory, disk, then Runtime. Model-provider field errors inside a `model_provider` object keep that object's field as `param`. An unknown sandbox provider returns an error without these fields.
+
+## Other administration errors
+
+These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-deployment.md#errors) describes when each sandbox code occurs.
+
+| HTTP | Code | Meaning |
+| --- | --- | --- |
+| 400 | `sandbox_operation_unsupported` | The selected sandbox provider does not support the operation |
+| 401 | `invalid_admin_key` | The bearer credential is not a valid Core key |
+| 404 | `not_found` | The operation does not exist, the Harness is unknown, or the Harness has no deployment default model provider |
+| 409 | `project_archived` | The target Project is archived |
+| 409 | `project_exists` | The Project ID already exists |
+| 409 | `project_api_key_exists` | The API key ID already exists |
+| 409 | `executor_credential_exists` | The executor credential ID already exists; rotate it to replace the secret |
+| 409 | `sandbox_not_configured` | The sandbox deployment is not configured |
+| 409 or 503 | `sandbox_reset_in_progress` | A sandbox reset is in progress |
+| 409 | `sandbox_configuration_error` | The installation cannot serve the selected provider, such as E2B while the public URL is loopback |
+| 409 | `sandbox_deployment_conflict` | The sandbox deployment cannot change in its current state |
+| 409 | `sandbox_specification_mismatch` | The saved deployment specification is no longer valid for its provider |
+| 409 | `runtime_node_in_use` | The node still holds allocations, snapshots, reservations or pending cleanup |
+| 409 | `environment_unavailable` | The Session's environment is no longer available, such as an archive on a Core without execution |
+| 409 | `runtime_history_unsupported` | Runtime history is not supported for the Session |
+| 500 | `internal_error` | Core could not complete the operation |
+| 503 | `runtime_node_unavailable` | No sandbox node is available or has capacity |
+| 503 | `credential_storage_unavailable` | Core has no credential encryption key |
+| 503 | `execution_unavailable` | Execution is not available on this Core |
+| 503 | `runtime_history_unavailable` | Durable Runtime history is not configured or temporarily unavailable |
+| 503 | `core_metrics_unavailable` | Core metrics could not be read |
+| 503 | `file_transfer_unavailable` | Bounded content transfer is unavailable |
 
 ## Diagnostic failure categories
 

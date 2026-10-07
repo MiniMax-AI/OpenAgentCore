@@ -1,4 +1,4 @@
-import type { CoreHarnessKind } from "./harness-catalog";
+import type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
 export type PageOrder = "asc" | "desc";
 
 export interface ListPage<T> {
@@ -696,32 +696,6 @@ export interface SessionListOptions extends PageOptions {
   agentId?: string;
 }
 
-/**
- * A listed Session this client does not recognize, for example one with an
- * unknown field or value. Nothing of it is kept or guessed beyond its position
- * and, when it has Core's Session ID form, its raw ID.
- */
-export interface UnrecognizedSession {
-  /** Position of the entry in the page as Core returned it. */
-  index: number;
-  /** Raw ID when it is a Session ID (a UUID); otherwise null. */
-  id: string | null;
-}
-
-/**
- * One Session page read tolerantly: `data` holds the recognized Sessions in
- * page order and `unrecognized` every other entry. The envelope and cursors
- * are Core's own; `first_id` and `last_id` may name an unrecognized entry.
- */
-export interface TolerantSessionList {
-  object: "list";
-  data: AgentSession[];
-  unrecognized: UnrecognizedSession[];
-  has_more: boolean;
-  first_id: string | null;
-  last_id: string | null;
-}
-
 /** Common preparation for both managed and user-owned Runtime locations. */
 export interface EnvironmentCapabilityArchiveInput {
   type: "inline";
@@ -1211,11 +1185,11 @@ export interface RuntimeHistory {
   token_usage: RuntimeHistoryTokenUsagePoint[];
 }
 
-export type { CoreHarnessKind } from "./harness-catalog";
+export type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
 
 /** A complete replacement bundle. API keys are write-only. */
 export interface ModelProviderInput {
-  protocol: "anthropic" | "responses" | "chat_completions";
+  protocol: ModelProviderProtocol;
   base_url: string;
   api_key: string;
   context_window?: number;
@@ -1224,7 +1198,7 @@ export interface ModelProviderInput {
 }
 
 export interface ModelProviderView {
-  protocol: "anthropic" | "responses" | "chat_completions";
+  protocol: ModelProviderProtocol;
   base_url: string;
   context_window?: number;
   max_output_tokens?: number;
@@ -1330,9 +1304,7 @@ export interface AgentCore {
   retrieveVaultCredential(vaultId: string, credentialId: string, options?: ReadOptions): Promise<VaultCredential>;
   replaceVaultCredentialToken(vaultId: string, credentialId: string, input: ReplaceVaultCredentialTokenInput): Promise<VaultCredential>;
   deleteVaultCredential(vaultId: string, credentialId: string): Promise<VaultCredentialDeleted>;
-  listSessions(options?: PageOptions & { agentId?: string }): Promise<ListPage<AgentSession>>;
-  /** Like listSessions, but a malformed Session is reported instead of failing the page. */
-  listSessionsTolerant(options?: SessionListOptions): Promise<TolerantSessionList>;
+  listSessions(options?: SessionListOptions): Promise<ListPage<AgentSession>>;
   createSession(input: CreateSessionInput, idempotencyKey?: string): Promise<AgentSession>;
   createSessionStream(
     input: Omit<CreateSessionInput, "stream">,

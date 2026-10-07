@@ -127,8 +127,7 @@ func newDispatchHarnessForSession(t *testing.T, configuration []byte, local bool
 
 func (h *dispatchHarness) message(key, text string) sessions.InputReceipt {
 	h.t.Helper()
-	body, _ := json.Marshal(map[string]string{"text": text})
-	r, err := sendMessage(context.Background(), h.s, h.tenant, h.session.ID, key, body)
+	r, err := sendMessage(context.Background(), h.s, h.tenant, h.session.ID, key, messageText(text))
 	if err != nil {
 		h.t.Fatal(err)
 	}

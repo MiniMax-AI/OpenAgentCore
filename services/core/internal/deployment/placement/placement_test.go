@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/sandboxlink"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 )
@@ -189,32 +188,6 @@ func TestCheckReservedAndRestore(t *testing.T) {
 	} {
 		if err := CheckRestore(test.restore); !errors.Is(err, test.want) || (test.want == nil) != (err == nil) {
 			t.Errorf("%s: CheckRestore = %v, want %v", name, err, test.want)
-		}
-	}
-}
-
-func TestLinkURL(t *testing.T) {
-	for origin, want := range map[string]string{
-		"https://core.example":      "wss://core.example/api/v1/sandbox-link",
-		"https://core.example:8443": "wss://core.example:8443/api/v1/sandbox-link",
-		"https://127.0.0.1:8443":    "wss://127.0.0.1:8443/api/v1/sandbox-link",
-		"http://localhost:8080":     "ws://localhost:8080/api/v1/sandbox-link",
-		"http://127.0.0.1:8080":     "ws://127.0.0.1:8080/api/v1/sandbox-link",
-		"http://[::1]:8080":         "ws://[::1]:8080/api/v1/sandbox-link",
-		"http://core.example":       "",
-		"http://10.0.0.1:8080":      "",
-		"http://host.localhost":     "",
-		"":                          "",
-	} {
-		got, err := LinkURL(origin)
-		if want == "" {
-			if !errors.Is(err, ErrNoLink) || got != "" {
-				t.Errorf("LinkURL(%q) = %q, %v; want ErrNoLink", origin, got, err)
-			}
-			continue
-		}
-		if err != nil || got != want || sandboxlink.CheckRelayURL(got) != nil {
-			t.Errorf("LinkURL(%q) = %q, %v; want %q", origin, got, err, want)
 		}
 	}
 }

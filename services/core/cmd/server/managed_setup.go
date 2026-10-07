@@ -29,8 +29,9 @@ type managedSetup struct {
 	allocations    generationAllocations
 	hub            *node.Hub
 	installationID string
-	// publicURL is OAC_PUBLIC_URL; every sandbox reaches Core through it.
-	publicURL     string
+	// runtimeAPI is the /api/v1 base of OAC_PUBLIC_URL; every sandbox reaches
+	// Core through it.
+	runtimeAPI    string
 	selected      atomic.Pointer[managedSelection]
 	providerCalls sandbox.CallFence
 }
@@ -145,7 +146,7 @@ func (s *managedSetup) configuration(setup deployment.Setup) (execution.Prepared
 		return execution.PreparedRuntimeDeployment{}, fmt.Errorf("%w: %v", execution.ErrExecutionUnavailable, err)
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode, AdmissionPaused: setup.AdmissionPaused,
-		CoreURL: s.publicURL + "/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: provider}
+		CoreURL: s.runtimeAPI, BackendFingerprint: setup.BackendFingerprint, Provider: provider}
 	if setup.Suspension != nil {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{IdleTimeout: time.Duration(setup.Suspension.IdleSeconds) * time.Second,
 			Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second, MaxActive: 4, MaxRetained: 16}

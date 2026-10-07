@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -73,13 +74,15 @@ func databaseSessionReads(pool *pgxpool.Pool) func(*Dependencies, *testFakes) {
 	}
 }
 
-// submitMessage admits one message input through the Session service on pool.
-func submitMessage(t *testing.T, pool *pgxpool.Pool, tenant, session, key string, payload json.RawMessage) sessions.InputReceipt {
+// submitMessage admits one public text message through the Session service on
+// pool.
+func submitMessage(t *testing.T, pool *pgxpool.Pool, tenant, session, key, text string) sessions.InputReceipt {
 	t.Helper()
 	service, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	payload, _ := json.Marshal(v1.SessionInput{Type: "agent.session.input.message", Input: []v1.InputMessage{{Role: "user", Content: []v1.InputContent{{Type: "input_text", Text: &text}}}}})
 	receipts, err := service.SubmitInputs(t.Context(), tenant, session, key, []sessions.Input{{Kind: "message", Payload: payload}})
 	if err != nil {
 		t.Fatal(err)

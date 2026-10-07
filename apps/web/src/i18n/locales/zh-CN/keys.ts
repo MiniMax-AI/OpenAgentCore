@@ -175,7 +175,7 @@ export const keys: TranslationShape<typeof english> = {
   },
   operations: {
     title: "写操作记录",
-    help: "这个项目里每一次成功的写操作，以及发起它的 key，由 Core 记录，按时间倒序。读操作不记录，也不保存请求内容和密钥。“未知”表示管理员复制或没有记录 key。",
+    help: "这个项目里每一次成功的写操作，以及发起它的 key，由 Core 记录，按时间倒序。读操作不记录，也不保存请求内容和密钥。“未知”表示没有记录 key。",
     filterLabel: "筛选写操作记录",
     allTypes: "全部资源",
     allKeys: "全部 key",
