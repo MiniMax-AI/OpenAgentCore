@@ -328,19 +328,20 @@ describe("AdminClient installation", () => {
   const installation = {
     object: "core.installation", installation_id: resourceId, public_url: "https://core.example", api_base_url: "https://core.example/v1",
     local_only: false, source_commit: "a".repeat(40),
-    configuration: { path: "/home/alice/.oac/core/config.json", apply_command: "/home/alice/.oac/core/oac apply", applied_at: "2026-09-25T09:30:00Z", settings: [port, headers] },
+    configuration: { settings: [port, headers] },
     address_bindings: { nodes: 2, nodes_on_other_address: 1, hosted_sandboxes: 3, self_hosted_executors: 1 },
   };
   it("reads installation facts before any deployment and rejects inconsistent snapshots", async () => {
     expect(await clientWith(installation).client.retrieveInstallation()).toEqual(installation);
-    expect(await clientWith({ ...installation, installation_id: null, public_url: null, api_base_url: null, source_commit: null, configuration: null }).client.retrieveInstallation()).toMatchObject({ public_url: null });
-    const configuration = (settings: unknown[]) => ({ ...installation, configuration: { ...installation.configuration, settings } });
+    expect(await clientWith({ ...installation, installation_id: null, public_url: null, api_base_url: null, source_commit: null }).client.retrieveInstallation()).toMatchObject({ public_url: null });
+    const configuration = (settings: unknown[]) => ({ ...installation, configuration: { settings } });
     for (const invalid of [
       configuration([port, { ...headers, value: { authorization: "leak" } }]),
       configuration([port, { key: headers.key, value: null, default: null, changeable: true, sensitive: true, restarts: ["core"] }]),
       configuration([port, port]),
       { ...installation, address_bindings: { ...installation.address_bindings, nodes_on_other_address: 3 } },
       { ...installation, token: "leak" },
+      { ...installation, configuration: null },
       configuration([{ ...port, configured: true }]),
     ]) {
       await expect(clientWith(invalid).client.retrieveInstallation()).rejects.toMatchObject({ code: "invalid_admin_response" });

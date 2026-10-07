@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 3fc6573b19b9c78ca8a3b275122793b1a99e31f739d83ff25ff56624013dc428
+source_hash: 22ac83d8596bcee671a4f94c81d2fe65e109ab9c0b3759e17cf30626bd5d41df
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -139,7 +139,7 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 | `api_base_url` | 在 `public_url` 后附加 `/v1`，即 Project API 密钥使用的 `OPENAI_BASE_URL`。当 `public_url` 为 null 时为 null |
 | `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
 | `source_commit` | Core 构建所依据的完整源代码提交；开发构建为 null |
-| `configuration` | Core 从环境加载的进程设置。`path` 和 `apply_command` 为空，`applied_at` 为 null |
+| `configuration` | Core 从环境加载的进程设置，位于 `settings` 中 |
 | `address_bindings` | 更改 `public_url` 所影响的内容，每次读取都会重新统计 |
 
 `configuration.settings` 为 Core 加载的每项设置一条记录，包含以点分隔的 `key`、生效的 `value`、`default`、是否 `changeable`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`、`database`）。

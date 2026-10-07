@@ -33,6 +33,6 @@ func installationFacts(publicURL string) (api.Installation, error) {
 	if err != nil {
 		return facts, err
 	}
-	facts.Configuration = &api.InstallationConfiguration{Settings: settings}
+	facts.Configuration = api.InstallationConfiguration{Settings: settings}
 	return facts, nil
 }

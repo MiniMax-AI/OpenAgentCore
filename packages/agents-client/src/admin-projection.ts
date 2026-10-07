@@ -292,14 +292,9 @@ export function projectInstallation(value: unknown): CoreInstallation {
   const bindings = record(installation.address_bindings, ["nodes", "nodes_on_other_address", "hosted_sandboxes", "self_hosted_executors"]);
   if (![bindings.nodes, bindings.nodes_on_other_address, bindings.hosted_sandboxes, bindings.self_hosted_executors].every(isNonnegativeInteger) ||
     (bindings.nodes_on_other_address as number) > (bindings.nodes as number)) return invalidAdminResponse();
-  let configuration: CoreInstallation["configuration"] = null;
-  if (installation.configuration !== null) {
-    const applied = record(installation.configuration, ["path", "apply_command", "applied_at", "settings"]);
-    if (typeof applied.path !== "string" || (applied.path !== "" && !applied.path.startsWith("/")) || typeof applied.apply_command !== "string" ||
-      (applied.applied_at !== null && (typeof applied.applied_at !== "string" || !date(applied.applied_at))) || !Array.isArray(applied.settings)) return invalidAdminResponse();
-    const settings = applied.settings.map(projectInstallationSetting);
-    if (new Set(settings.map((setting) => setting.key)).size !== settings.length) return invalidAdminResponse();
-    configuration = { path: applied.path, apply_command: applied.apply_command, applied_at: applied.applied_at, settings };
-  }
-  return { ...installation, address_bindings: { ...bindings }, configuration } as unknown as CoreInstallation;
+  const configuration = record(installation.configuration, ["settings"]);
+  if (!Array.isArray(configuration.settings)) return invalidAdminResponse();
+  const settings = configuration.settings.map(projectInstallationSetting);
+  if (new Set(settings.map((setting) => setting.key)).size !== settings.length) return invalidAdminResponse();
+  return { ...installation, address_bindings: { ...bindings }, configuration: { settings } } as unknown as CoreInstallation;
 }

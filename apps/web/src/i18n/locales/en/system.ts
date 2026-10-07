@@ -19,12 +19,7 @@ export const system = {
   startup: {
     title: "Startup settings",
     help: "Core reports the process settings it loaded. A sensitive setting shows only whether it is set.",
-    none: "Core did not report startup settings.",
     effective: "These are the settings this Core process loaded.",
-    where: "Change these in <path/>, then run <command/>",
-    copyPath: "Copy path",
-    copyCommand: "Copy command",
-    appliedAt: "Last applied {{time}}",
     columns: {
       key: "Setting",
       value: "Value",
