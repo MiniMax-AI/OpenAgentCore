@@ -2,7 +2,7 @@
 title: "Install Core and Web"
 ---
 
-One command installs Core, the Web console and PostgreSQL on a Linux host. Sign in to Web with the Core key, set a default model and issue Project API keys. Applications call Core with those keys. Sessions run in sandboxes on nodes you add, or on E2B.
+One command installs Core, the Web console and PostgreSQL on Linux, macOS or Windows. Sign in to Web with the Core key, set a default model and issue Project API keys. Applications call Core with those keys. Sessions run in sandboxes on nodes you add, or on E2B.
 
 1. [Check the prerequisites](#prerequisites).
 2. [Run the installer](#install).
@@ -16,21 +16,29 @@ This page follows the default path. Every flag, existing reverse proxies and off
 
 ## Prerequisites
 
-- Linux amd64 and curl.
-- Docker Engine with Docker Compose 2.26.0 or newer (`docker compose version`).
+- Linux amd64/arm64 or macOS Intel/Apple Silicon with curl; Windows x64 with PowerShell.
+- Docker Engine 26 or newer and Docker Compose 2.26.0 or newer. On macOS and Windows, install and start Docker Desktop using Linux containers. Windows containers are unsupported.
 - An account that can run `docker` and write to its home directory. Ordinary users and root both work; the installer never calls sudo.
 - Free port 8080 for Web. See [ports](./install-options.md#ports). Docker must be able to publish it; the installer does not change host policy.
 - For anything off this machine, the origin in `OAC_PUBLIC_URL` must be the address browsers, nodes and executors use. You can sign in on this machine first.
 
-The Core host needs no KVM; nodes that run microsandbox do.
+The Core host needs no KVM. Sandbox nodes remain Linux amd64; use a separate Linux node or E2B when Core runs on macOS or Windows.
 
 ## Install
+
+Linux and macOS:
 
 ```sh
 curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
 ```
 
-On a host whose default route has a private-network address, the installer sets the public URL to `http://<that address>:8080`, so machines on the same network can open Web and add nodes; otherwise only this machine can. If a reverse proxy already serves this host, pass its HTTPS address:
+Windows PowerShell:
+
+```powershell
+irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
+```
+
+The default console address is `http://localhost:8080`. For access from other machines, pass the origin they can reach; if a reverse proxy already serves this host, use its HTTPS address:
 
 ```sh
 curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --public-url https://core.example
@@ -38,13 +46,13 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 The script downloads that release's Compose files, checks their SHA-256, and:
 
-1. checks Linux amd64, Docker Compose 2.26 or newer, and that the ports it will publish are free;
-2. creates the [installation directory](../configuration.md#installation-directory), `~/.oac/core`, writes `.env`, and copies the `oac` command out of the Core image;
+1. checks Docker is running Linux containers, meets the required versions, and can publish the chosen port;
+2. prepares the [installation directory](../configuration.md#installation-directory), `~/.oac/core`, with `.env` and the native `oac` command (`oac.exe` on Windows);
 3. starts the services with Docker Compose. Web serves the console on port 8080 and forwards `/v1`, `/api/v1` and `/docs` to Core. Core and PostgreSQL are not published.
 
 It saves no sandbox backend, adds no node, creates no Project or key and makes no model request. It ends by printing the console address and the Core key.
 
-Downloads and configuration checks happen before the installation directory is published. After that, failures preserve the configuration and data and show the service logs. Fix the reported cause and rerun the same command, or specify the installation directory:
+Downloads and configuration checks happen before the installation directory is published. After that, failures preserve the configuration and data and report the failed step; inspect it with `docker compose logs --tail 100` in the installation directory. Fix the reported cause and rerun the same command, or specify the installation directory:
 
 ```bash
 curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
@@ -62,6 +70,8 @@ For insufficient space or quota, free space on the filesystem named by the error
    ```sh
    ~/.oac/core/oac core-key --show
    ```
+
+   On Windows, use `& "$HOME/.oac/core/oac.exe" core-key --show`. The same command arguments work on every platform.
 
 ## Configure the public address {#configure-the-domain-and-https}
 

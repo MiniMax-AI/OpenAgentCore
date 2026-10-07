@@ -61,7 +61,9 @@ class ComposeTests(unittest.TestCase):
             self.assertTrue(service['image'].endswith(':latest') or service['image'] == 'postgres:16-alpine' or service['image'].endswith('@sha256:' + 'e' * 64))
             for volume in service.get('volumes', []):
                 self.assertNotIn('docker.sock', json.dumps(volume))
-                self.assertEqual(volume['type'], 'bind')
+                self.assertEqual(volume['type'], 'volume')
+                self.assertEqual(volume['source'], 'data')
+            self.assertNotIn('platform', service)
         self.assertEqual({v['target'] for v in services['web']['volumes']}, {'/run/oac', '/node-payload'})
         self.assertIsNone(services['core']['command'])
         self.assertNotIn('OAC_WEB_INSTALLATION_SOCKET', services['web']['environment'])

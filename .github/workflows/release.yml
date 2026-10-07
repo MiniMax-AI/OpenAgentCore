@@ -114,6 +114,9 @@ jobs:
           path: ${{ runner.temp }}/native-artifacts
       - name: Assemble the native installation catalog
         run: node scripts/build-native-catalog.mjs "$RUNNER_TEMP/native-artifacts" "$RUNNER_TEMP/native-installers"
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
       - uses: ./.github/actions/e2b-provider
       - name: Build matched artifacts
         env:
@@ -133,8 +136,8 @@ jobs:
           for asset in "$HOME/.oac/build/core-distribution/"*; do
             if [[ -f "$asset" ]]; then ln "$asset" "$HOME/.oac/build/release-upload/"; fi
           done
-          cp deploy/install.sh "$HOME/.oac/build/release-upload/install.sh"
-          (cd "$HOME/.oac/build/release-upload" && sha256sum install.sh > install.sh.sha256)
+          cp deploy/install.sh deploy/install.ps1 "$HOME/.oac/build/release-upload/"
+          (cd "$HOME/.oac/build/release-upload" && sha256sum install.sh > install.sh.sha256 && sha256sum install.ps1 > install.ps1.sha256)
       - name: Sign in to GHCR
         if: github.event_name == 'push' || inputs.draft_release
         env:

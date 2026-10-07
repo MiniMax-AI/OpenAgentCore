@@ -10,11 +10,11 @@ Pass options to the downloaded script:
 ./install.sh --public-url https://core.example
 ```
 
-With the one-line command, append them after `bash -s --`. `--version TAG` selects a published release; otherwise the script selects the latest stable release and verifies each Compose file's SHA-256. A failed step stops installation without a success message.
+On Windows, download `install.ps1` and pass the same flags with `& ./install.ps1 --public-url https://core.example`. With the Unix one-line command, append them after `bash -s --`. `--version TAG` selects a published release; otherwise the script selects the latest stable release and verifies each Compose file's SHA-256. A failed step stops installation without a success message.
 
 ## Docker Compose and hosting platforms
 
-Use the `compose.yaml` from a release with Docker Compose 2.26 or newer on Linux amd64. The release pins its initialization image and source revision in the [Compose template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml). Core and Web use the `latest` images, and PostgreSQL uses `postgres:16-alpine`. It starts PostgreSQL, Core and Web. Web forwards `/v1` and `/api/v1` to Core. Data is bind-mounted from a directory. The one-time initialization service generates random secrets there and prepares the node installer; Core applies database migrations when it starts. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
+Use the `compose.yaml` from a release on any [supported Core host](./install.md#prerequisites). The release pins its initialization image and source revision in the [Compose template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml). Core and Web use the `latest` images, and PostgreSQL uses `postgres:16-alpine`. It starts PostgreSQL, Core and Web. Web forwards `/v1` and `/api/v1` to Core. Data lives in a named Docker volume. The one-time initialization service generates random secrets there and prepares the node installer; Core applies database migrations when it starts. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
 
 For a local trial, download `compose.yaml` from a release into an empty directory, then run:
 
@@ -23,7 +23,7 @@ docker compose up -d --wait --wait-timeout 900
 docker compose exec web oac-web core-key
 ```
 
-`oac-web core-key` prints the generated Core key to your terminal without writing it to container logs. Open `http://localhost:8080` and use that key to sign in. All installation secrets are generated automatically; keep the same Compose project and its data directory when restarting.
+`oac-web core-key` prints the generated Core key to your terminal without writing it to container logs. Open `http://localhost:8080` and use that key to sign in. All installation secrets are generated automatically; keep the same Compose project and its data volume when restarting.
 
 The initialization image contains only the small node installation metadata alongside the initialization command. First startup verifies and copies that metadata without downloading the control archive or requiring access to GitHub Releases. Later starts verify the saved files. Container images still need to be pulled. An interrupted first initialization can be rerun; an existing database with missing installation secrets is refused.
 
@@ -41,7 +41,7 @@ On either platform, open its server terminal and run `docker compose ls` to find
 
 After signing in, choose the sandbox backend and add nodes using [Nodes](./nodes.md). The Compose stack deploys the control plane; execution machines remain separate.
 
-Stop with `docker compose stop` using the same files and environment. Back up the data directory together while the services are stopped. Follow the [installation version policy](./operations.md#installation-version-policy): a different release needs a new Compose project and a fresh data directory.
+Stop with `docker compose stop` using the same files and environment. Back up the data volume and configuration together while the services are stopped. Follow the [installation version policy](./operations.md#installation-version-policy): a different release needs a new Compose project and a fresh data volume.
 
 ## Process settings
 

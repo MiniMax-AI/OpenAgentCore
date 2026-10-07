@@ -24,8 +24,9 @@ def checked(args, **options):
 
 
 def main():
-    if sys.version_info[:3] != (3, 12, 12) or platform.system() != 'Linux' or platform.machine() != 'x86_64':
-        raise RuntimeError('Use the pinned Linux amd64 build image')
+    if sys.version_info[:3] != (3, 12, 12) or platform.system() != 'Linux' or platform.machine() not in ('x86_64', 'aarch64'):
+        raise RuntimeError('Use the pinned Linux amd64 or arm64 build image')
+    architecture = {'x86_64': 'amd64', 'aarch64': 'arm64'}[platform.machine()]
     os.umask(0o022)
     with tempfile.TemporaryDirectory(prefix='e2b-build-') as temporary:
         root = Path(temporary)
@@ -56,7 +57,7 @@ def main():
         if report != {'Version': PROTOCOL_VERSION, 'SDKVersion': SDK_VERSION}:
             raise RuntimeError('Unexpected helper readiness report')
         manifest = {'format_version': 1, 'sdk_version': report['SDKVersion'], 'python_version': platform.python_version(),
-                    'platform': 'linux-amd64', 'libc': platform.libc_ver(), 'build_image': BASE,
+                    'platform': 'linux-' + architecture, 'libc': platform.libc_ver(), 'build_image': BASE,
                     'entrypoint': NAME,
                     'source_sha256': {file.name: hashlib.sha256(file.read_bytes()).hexdigest()
                                       for file in sorted(source.glob('*.py'))},
@@ -66,7 +67,7 @@ def main():
             if entry.is_symlink() or not (entry.is_file() or entry.is_dir()):
                 raise RuntimeError('Unsupported artifact entry')
             entry.chmod(0o755 if entry.is_dir() or entry.stat().st_mode & 0o111 else 0o644)
-        destination = OUTPUT / (NAME + '-linux-amd64.tar.gz')
+        destination = OUTPUT / (NAME + '-linux-' + architecture + '.tar.gz')
         with tarfile.open(destination, 'w:gz', dereference=True) as archive:
             archive.add(exported, arcname=NAME)
         checksum = hashlib.sha256(destination.read_bytes()).hexdigest()

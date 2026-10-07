@@ -55,7 +55,7 @@ def prepare_pinned_payload(destination):
 def build_images(directory, tag):
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     protocol = re.search(r'const Version = "([^"]+)"', (ROOT / 'internal/agentdaemon/proto/version.go').read_text()).group(1)
-    go_env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': 'amd64'}
+    go_env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': os.environ.get('GOARCH', 'amd64')}
 
     def go_build(package, output, build_revision=revision):
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -88,7 +88,7 @@ def build_images(directory, tag):
     images = {}
     for name, context in contexts.items():
         images[name] = f'oac-smoke/{name}:{tag}'
-        subprocess.run(['docker', 'build', '-q', '--platform', 'linux/amd64', '-t', images[name], str(context)],
+        subprocess.run(['docker', 'build', '-q', '--platform', 'linux/' + go_env['GOARCH'], '-t', images[name], str(context)],
                        check=True, stdout=subprocess.DEVNULL)
     return images
 
@@ -113,7 +113,7 @@ def main():
     images = build_images(directory, project.removeprefix('oac-smoke-'))
 
     override.write_text(json.dumps({'services': {'init': {'network_mode': 'none'}}}))
-    env = {**os.environ, 'COMPOSE_PROGRESS': 'plain', 'OAC_DATA_DIR': str(data),
+    env = {**os.environ, 'COMPOSE_PROGRESS': 'plain',
            'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': '0',
            **{'OAC_IMAGE_' + name.upper(): image for name, image in images.items()}}
     env.pop('OAC_PUBLIC_URL', None)
@@ -167,6 +167,7 @@ def main():
     signal.signal(signal.SIGTERM, terminate)
     try:
         print('Starting the images with an unset public URL and an empty data directory', flush=True)
+        compose('run', '--rm', '--no-deps', 'init')
         compose('up', '-d', '--wait', '--wait-timeout', '600', timeout=900)
         address = 'http://' + compose('port', 'web', '8080').decode().strip()
         key = compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip()
@@ -212,7 +213,18 @@ def main():
         assert any(p['id'] == project_data['id'] for p in get('/core/v1/projects')['data']), 'Project was lost'
         assert get('/v1/files/' + uploaded['id'], headers=api)['bytes'] == len(content), 'Uploaded file metadata was lost'
         assert 'Bundled node installation metadata verified' not in private_logs(key, project_key), 'Completed initialization recopied metadata'
-        print('PASS: startup, origin validation, sign-in, API, upload, node installer and persistent installation', flush=True)
+        compose('run', '--rm', '--no-deps', 'init', '/usr/local/bin/oac', 'rotate-volume-key')
+        compose('restart', 'core', 'web')
+        compose('up', '-d', '--wait', '--wait-timeout', '120', timeout=180)
+        rotated = compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip()
+        assert rotated != key, 'Core key was not rotated'
+        browser = client()
+        request('/console/auth/login', {'core_key': rotated})
+        compose('down')
+        compose('up', '-d', '--wait', '--wait-timeout', '120', timeout=180)
+        assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == rotated, 'Rotated key was not retained'
+        private_logs(key, rotated, project_key)
+        print('PASS: startup, origin validation, sign-in, API, upload, node installer, key rotation and persistent installation', flush=True)
     except BaseException:
         # Service status identifies failed containers without dumping secret-bearing logs.
         status = subprocess.run(command + ['ps', '--all'], env=env, capture_output=True, timeout=30)
@@ -220,9 +232,6 @@ def main():
         raise
     finally:
         compose('down', '--volumes', '--remove-orphans', timeout=60)
-        # Match the host installer's cleanup without requiring tools in scratch init.
-        compose('run', '--rm', '--no-deps', '--volume', str(data) + ':/data',
-                '--entrypoint', 'find', 'database', '/data', '-mindepth', '1', '-delete')
         subprocess.run(['docker', 'image', 'rm', '-f', *images.values()], capture_output=True, timeout=60)
 
 

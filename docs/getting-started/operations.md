@@ -6,7 +6,7 @@ The installation operator owns the Core host, its storage and its availability. 
 
 ## The oac command
 
-Each installation has its own management command in its directory. It needs neither the bundle nor root:
+Each installation has its own native management command in its directory: `oac` on Unix, `oac.exe` on Windows. It needs Docker access and no root privileges:
 
 ```sh
 docker compose -f ~/.oac/core/compose.yaml ps
@@ -18,7 +18,7 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `docker compose start` | Starts the services |
 | `docker compose stop` | Stops the services. Data, nodes and sandboxes are kept |
 | `oac apply` | Runs `oac-core check-config`, then `docker compose up -d --wait`. A failed check changes no service |
-| `oac core-key [--show]` | Prints the Core key path, or the key itself with `--show` |
+| `oac core-key [--show]` | Identifies the key location in the data volume, or prints the key with `--show` |
 | `oac rotate-core-key` | Replaces the Core key and restarts Core and Web |
 | `docker compose down` | Removes the containers. Data is kept; to delete it, [uninstall](#uninstall) |
 
@@ -63,13 +63,13 @@ A Web restart, including one caused by `oac apply`, signs everyone out of the co
 
 ## Core key
 
-Each installation has one administrator credential, the Core key. The installer generates a key with the `oac_admin_` prefix followed by 64 random lowercase hexadecimal characters in `data/secrets/web/core.key`. Read it with `oac core-key --show`; the file is owned by the container user. The Core key:
+Each installation has one administrator credential, the Core key. The installer generates a key with the `oac_admin_` prefix followed by 64 random lowercase hexadecimal characters in `secrets/web/core.key`. Read it with `oac core-key --show`; the file is owned by the container user. The Core key:
 
 - signs in to Web. The browser gets an HttpOnly session cookie, never the key;
 - authorizes Core API (`/core/v1`) requests sent as `Authorization: Bearer <Core key>`;
 - never authorizes the Agents API (`/v1`). Applications use Project API keys, which in turn can't call `/core/v1`.
 
-Keep it private. Web reads `data/secrets/web/core.key`. Core reads only its SHA-256 from `data/secrets/core/core-key-digests.json`. A Core key has at least 32 characters and no whitespace. Web limits failed sign-ins.
+Keep it private. Web reads `secrets/web/core.key`. Core reads only its SHA-256 from `secrets/core/core-key-digests.json`. A Core key has at least 32 characters and no whitespace. Web limits failed sign-ins.
 
 ### Script the Core API
 
@@ -103,7 +103,7 @@ The [Core administration API](../../contracts/agents-api/admin-api.md) lists eve
 ~/.oac/core/oac rotate-core-key
 ```
 
-It writes a new key to `data/secrets/web/core.key`, regenerates `data/secrets/core/core-key-digests.json`, and restarts Core and Web. The old key stops working as soon as Core restarts, and every console session ends: sign in again and update your scripts.
+It runs in the initialization container, updates `secrets/web/core.key` and `secrets/core/core-key-digests.json` in the data volume, and restarts Core and Web. The old key stops working as soon as Core restarts, and every console session ends: sign in again and update your scripts.
 
 ## Projects and API keys
 
@@ -123,17 +123,17 @@ Core records which key made each public resource write; the retention of that hi
 
 Back up these together; a restore needs all of them:
 
-- the PostgreSQL volume `<project>_database`. It holds Projects, key digests, nodes, default models, encrypted credentials and all execution history, including large objects. A logical dump:
+- the Docker volume `<project>_data`, including its `database/`, `secrets/` and `state/` directories. It holds Projects, key digests, nodes, default models, encrypted credentials and all execution history, including large objects. A logical dump:
 
   ```sh
   docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
     pg_dump -U agents_api agents_api > oac-backup.sql
   ```
 
-- the installation directory, especially `data/`. `data/secrets/core/credential.key` must stay with the database, or stored credentials can't be decrypted.
+- the installation directory containing `.env`, `compose.yaml` and the command. The data volume's `secrets/core/credential.key` must stay with the database, or stored credentials cannot be decrypted.
 - each node's state directory on its host, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, with its provider storage: Docker volumes or microsandbox's store. See [when a node host fails](./nodes.md#when-a-node-host-fails) for restoring them.
 
-Stop with `docker compose stop`, archive the installation directory, then `docker compose start`.
+Stop with `docker compose stop`, export the complete data volume and archive the installation directory, then `docker compose start`. Docker Desktop supports volume export from its **Volumes** view. A SQL dump alone does not include the encryption key or Provider state.
 
 Never prune Docker volumes or delete native harness history to make a retry pass. A deleted Session does not prove that all provider resources were reclaimed.
 
@@ -141,19 +141,17 @@ Never prune Docker volumes or delete native harness history to make a retry pass
 
 ```sh
 cd ~/.oac/core
-docker compose down --remove-orphans
-docker compose run --rm --no-deps --entrypoint find init /data -mindepth 1 -delete
-docker compose down --rmi all
+docker compose down --volumes --remove-orphans --rmi all
 cd && rm -rf ~/.oac/core
 ```
 
-The containers own `data/`, so the `init` image deletes its contents; then `down --rmi all` removes the images and `rm` removes the installation directory. Run these only when you mean to delete the data.
+`down --volumes` deletes the installation data volume. Remove the installation directory afterward; on Windows use `Remove-Item -Recurse "$HOME/.oac/core"`. Run these only when you mean to delete the data.
 
 All data goes with it: Projects and API keys, Session history, stored credentials and the Core key. To keep the data, stop the installation with `docker compose stop` instead, or [back it up](#back-up) first.
 
 Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete; the command shows how many sandboxes Core has in use.
 
-Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](./nodes.md#remove-a-node). After the installation directory is gone, their Core is gone: on each node host, run the node uninstall command with `--force`, using `node-install.pyz` from the release that installed them. The installation ID is `data/secrets/core/installation.id`.
+Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](./nodes.md#remove-a-node). After the installation directory is gone, their Core is gone: on each node host, run the node uninstall command with `--force`, using `node-install.pyz` from the release that installed them. The installation ID is `secrets/core/installation.id` in the data volume.
 
 ## Installation version policy
 

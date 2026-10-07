@@ -12,6 +12,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -81,7 +82,7 @@ func TestInitializeKeepsIdentityAndKeysAcrossRestarts(t *testing.T) {
 	}
 	for _, name := range []string{"secrets/web/core.key", "secrets/database/password", "secrets/core/credential.key"} {
 		info, err := os.Stat(filepath.Join(root, name))
-		if err != nil || info.Mode().Perm() != 0o600 {
+		if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 			t.Fatalf("%s: %v %v", name, info.Mode(), err)
 		}
 	}
@@ -299,5 +300,31 @@ func TestInitializationLogsFailureStep(t *testing.T) {
 	}
 	if strings.Contains(output.String(), "Initialization completed") || strings.Contains(output.String(), "Credential file generated") {
 		t.Fatal("failure logged success or generated credentials")
+	}
+}
+
+func TestInitializationRetainsRotatedKeyAndRepairsItsDerivedDigest(t *testing.T) {
+	root, release, files := initFixture(t)
+	if err := initialize(root, release, fixed(files)); err != nil {
+		t.Fatal(err)
+	}
+	key, err := generateCoreKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate interruption after publishing the new key but before its digest.
+	if err := writeOwned(filepath.Join(root, "secrets", "web", "core.key"), []byte(key+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := initialize(root, release, refuseDownload(t)); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := coreKey(root)
+	if after != key {
+		t.Fatal("rotated key replaced")
+	}
+	digest, _ := os.ReadFile(filepath.Join(root, "secrets", "core", "core-key-digests.json"))
+	if !strings.Contains(string(digest), keyDigest(key)) {
+		t.Fatal("derived digest not repaired")
 	}
 }
