@@ -33,17 +33,17 @@ func (h *Handler) getTurn(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "session_id")
 	turn, err := h.Turns.GetTurn(r.Context(), tenantID(r), sessionID, chi.URLParam(r, "turn_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response, err := turnResponse(session, turn)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -70,19 +70,19 @@ func (h *Handler) listTurns(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "session_id")
 	session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), sessionID)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	page, err := h.Turns.ListTurns(r.Context(), tenantID(r), sessionID, options.after, options.limit, options.ascending)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response := v1.TurnList{Data: make([]v1.Turn, 0, len(page.Turns)), HasMore: page.NextCursor != ""}
 	for _, turn := range page.Turns {
 		item, err := turnResponse(session, turn)
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 			return
 		}
 		response.Data = append(response.Data, item)

@@ -16,7 +16,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -72,7 +71,7 @@ func delayedReadWriter(t *testing.T, armed *atomic.Bool, reading chan struct{}, 
 		}
 	})
 	deployments, reader, operations := testDeployment(t, pool, nil, lease)
-	return Owner{Lease: lease, Store: store.NewExecution(store.New(pool), lease), Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader, pool
+	return Owner{Lease: lease, Deployment: operations, Sessions: sessionExecution(t, lease)}, deployments, reader, pool
 }
 
 func TestSandboxDeploymentDrainPreservesLeaseInFlightRead(t *testing.T) {
@@ -227,7 +226,7 @@ func (c *delayedCancellationContext) unblock() {
 }
 
 func TestSandboxDeploymentDrainFailureCannotReactivate(t *testing.T) {
-	_, owner, deployments, reader := resetManagerStore(t)
+	owner, deployments, reader := resetManager(t)
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()

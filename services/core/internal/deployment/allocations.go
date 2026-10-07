@@ -307,7 +307,6 @@ func checkAllocation(tx AllocationTx, owner Allocation, live bool) (Allocation, 
 		return current, nil
 	}
 	if current.SessionDeleted {
-		// sessions.ErrNotFound keeps the public 404 that writeStoreError maps.
 		return Allocation{}, sessions.ErrNotFound
 	}
 	device, bound, err := tx.LoadSessionDevice()

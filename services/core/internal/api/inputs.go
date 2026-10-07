@@ -52,14 +52,14 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 		key = uuid.NewString()
 	}
 	if err := sessions.ValidateInputKey(key); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if request.Events != nil && len(request.Events) == 0 {
 		// Empty batches have no execution identity to reserve or replay.
 		// Authorize the resource even when no executor is configured.
 		if _, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), chi.URLParam(r, "session_id")); err != nil {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 			return
 		}
 		if !h.auditSessionOperation(w, r, chi.URLParam(r, "session_id"), "send_events") {
@@ -75,12 +75,12 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	inputs, err := executionInputs(request.Events)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	sessionID := chi.URLParam(r, "session_id")
 	if err := h.setEnvironmentInputWriteDeadline(w, r, sessionID); err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	if _, err := h.Execution.InputAdmission.SubmitInputs(r.Context(), tenantID(r), sessionID, key, inputs); err != nil {

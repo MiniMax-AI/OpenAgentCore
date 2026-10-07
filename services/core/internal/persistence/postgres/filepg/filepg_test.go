@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
@@ -348,6 +349,60 @@ func TestFileReadAdmittedBeforeDeletionCompletes(t *testing.T) {
 		}
 		return err
 	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ReadSourceForCopy reads a File up to a limit in the caller's transaction
+// and holds it until that transaction ends, so a deletion waits for the copy.
+func TestReadSourceForCopy(t *testing.T) {
+	pool := pgtest.Open(t)
+	_, service := open(t, pool)
+	ctx := t.Context()
+	tenant := uuid.NewString()
+	data := []byte("copied\x00source")
+	file := create(t, service, ctx, tenant, data)
+	tenantID := pgtype.UUID{Bytes: uuid.MustParse(tenant), Valid: true}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	for _, missing := range []string{"file-" + uuid.NewString(), "malformed"} {
+		if _, err := filepg.ReadSourceForCopy(ctx, tx, tenantID, missing, 100); !errors.Is(err, files.ErrNotFound) {
+			t.Fatal(missing, err)
+		}
+	}
+	if _, err := filepg.ReadSourceForCopy(ctx, tx, pgtype.UUID{Bytes: uuid.New(), Valid: true}, file.ID, 100); !errors.Is(err, files.ErrNotFound) {
+		t.Fatal("foreign File", err)
+	}
+	if _, err := filepg.ReadSourceForCopy(ctx, tx, tenantID, file.ID, int64(len(data))-1); !errors.Is(err, files.ErrTooLarge) {
+		t.Fatal("over the limit", err)
+	}
+	got, err := filepg.ReadSourceForCopy(ctx, tx, tenantID, file.ID, int64(len(data)))
+	if err != nil || !bytes.Equal(got, data) {
+		t.Fatal("copied content", err)
+	}
+	var holder int32
+	if err := tx.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&holder); err != nil {
+		t.Fatal(err)
+	}
+	deleted := make(chan error, 1)
+	go func() { deleted <- service.Delete(ctx, files.DeleteCommand{TenantID: tenant, FileID: file.ID}) }()
+	for blocked := 0; blocked == 0; {
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))", holder).Scan(&blocked); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case err := <-deleted:
+			t.Fatal("deletion did not wait for the copy", err)
+		default:
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-deleted; err != nil {
 		t.Fatal(err)
 	}
 }

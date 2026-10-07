@@ -23,7 +23,7 @@ func LoadEnvironment(ctx context.Context, q *sqlc.Queries, tenant, environment s
 		return sessions.Environment{}, err
 	}
 	row, err := q.GetEnvironment(ctx, sqlc.GetEnvironmentParams{TenantID: tenantID, ID: pgunit.PathID(environment)})
-	return EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
+	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }
 
 // loadSessionEnvironment reads, on q, the Environment of the tenant's Session
@@ -39,15 +39,7 @@ func loadSessionEnvironment(ctx context.Context, q *sqlc.Queries, tenant, sessio
 		return sessions.Environment{}, err
 	}
 	row, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenantID, ID: id})
-	return EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
-}
-
-// CreateSessionEnvironment creates, on q, the Environment of a new Session
-// whose configuration has one, as sessions.CreatesEnvironment decides. Its
-// preparation is pending when the Session froze a setup or initial files, and
-// complete otherwise, so it runs after those are saved.
-func CreateSessionEnvironment(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {
-	return q.CreateEnvironment(ctx, sqlc.CreateEnvironmentParams{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, SessionID: session})
+	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }
 
 func (s *Store) GetEnvironment(ctx context.Context, tenant, environment string) (sessions.Environment, error) {

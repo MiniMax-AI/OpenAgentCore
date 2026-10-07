@@ -1,0 +1,174 @@
+package integration
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtime"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeenrollment"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+)
+
+func TestEnrolledDaemonConnectionRevocationAndRestart(t *testing.T) {
+	s, _ := testStore(t)
+	principal := FixtureExecutorPrincipal(t, s, uuid.NewString())
+	session, err := s.CreateSession(t.Context(), principal.TenantID, sessions.CreateSession{
+		Creator: principal.Subject(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment, err := sessionAdapter(s).GetSessionEnvironment(t.Context(), principal.TenantID, session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := sessionService(t, s).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte(key.Token))
+	bound, err := sessionService(t, s).EnrollRuntime(t.Context(), environment.ID, hex.EncodeToString(digest[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(nil)
+	wsURL := "ws://" + server.Listener.Addr().String() + "/api/v1/agent-daemon/ws"
+	handler, registry, err := runtime.NewGateway(sessionAdapter(s), sessionService(t, s), sessionAdapter(s), wsURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connection := runtimeenrollment.ConnectionHandler(sessionAdapter(s), registry)
+	assertConnection := func(target, token, status string, code int) {
+		t.Helper()
+		request := httptest.NewRequest("GET", "/api/v1/agent-daemon/connection?environment_id="+target, nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		connection.ServeHTTP(response, request)
+		if response.Code != code || response.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("connection status %d, want %d", response.Code, code)
+		}
+		if code == 200 {
+			var got map[string]string
+			if json.Unmarshal(response.Body.Bytes(), &got) != nil || len(got) != 2 || got["environment_id"] != target || got["status"] != status {
+				t.Fatalf("connection response: %s", response.Body.String())
+			}
+		}
+	}
+	assertConnection(environment.ID, key.Token, "disconnected", 200)
+	assertConnection(uuid.NewString(), key.Token, "", 401)
+	otherKey, err := sessionService(t, s).IssueExecutorCredential(t.Context(), principal, uuid.NewString(), environment.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConnection(environment.ID, otherKey.Token, "", 409)
+	foreign := FixtureExecutorPrincipal(t, s, uuid.NewString())
+	foreignKey, err := sessionService(t, s).IssueExecutorCredential(t.Context(), foreign, uuid.NewString(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConnection(environment.ID, foreignKey.Token, "", 401)
+	server.Config.Handler = handler
+	server.Start()
+	t.Cleanup(func() { server.Close(); runtime.CloseConnections(registry) })
+	start := func() func() {
+		worker := startWorker(t, t.Context(), s, &execution.Dispatcher{Registry: registry})
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- worker.Run(ctx) }()
+		return func() {
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("worker did not stop")
+			}
+		}
+	}
+	stop := start()
+	defer func() {
+		if stop != nil {
+			stop()
+		}
+	}()
+	connect := func(token string) *websocket.Conn {
+		u, _ := url.Parse(wsURL)
+		u.RawQuery = url.Values{"device_id": {bound.DeviceID}, "version": {proto.Version}}.Encode()
+		conn, resp, err := websocket.DefaultDialer.Dial(u.String(), http.Header{"Authorization": {"Bearer " + token}})
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if err != nil {
+			t.Fatal("daemon connection rejected")
+		}
+		t.Cleanup(func() { conn.Close() })
+		return conn
+	}
+	await := func(status string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			current, err := sessionAdapter(s).GetEnvironment(t.Context(), principal.TenantID, environment.ID)
+			if err == nil && current.Status == status {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatalf("environment did not become %s", status)
+	}
+	first := connect(key.Token)
+	await("connected")
+	assertConnection(environment.ID, key.Token, "connected", 200)
+	rotated, err := sessionService(t, s).RotateExecutorCredential(t.Context(), principal, key.KeyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertConnection(environment.ID, key.Token, "", 401)
+	assertConnection(environment.ID, rotated.Token, "disconnected", 200)
+	// No heartbeat is sent: the Worker's authority check must fence the old socket.
+	await("disconnected")
+	_ = first.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err = first.ReadMessage(); err == nil {
+		t.Fatal("rotated socket retained authority")
+	}
+	second := connect(rotated.Token)
+	await("connected")
+	assertConnection(environment.ID, rotated.Token, "connected", 200)
+	awaitRelease := pgtest.ObserveExecutionLeaseRelease(t, s.pool)
+	stop()
+	stop = nil
+	awaitRelease()
+	// A new Core owner clears prior transport evidence, then observes the same
+	// live, authorized daemon. No compute allocation or native execution is made.
+	stop = start()
+	await("connected")
+	if err = sessionService(t, s).RevokeExecutorCredential(t.Context(), principal, key.KeyID); err != nil {
+		t.Fatal(err)
+	}
+	assertConnection(environment.ID, rotated.Token, "", 401)
+	await("disconnected")
+	_ = second.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err = second.ReadMessage(); err == nil {
+		t.Fatal("revoked socket retained authority")
+	}
+	var allocations int
+	if err = s.pool.QueryRow(t.Context(), "SELECT count(*) FROM runtime_allocations WHERE environment_id=$1", environment.ID).Scan(&allocations); err != nil || allocations != 0 {
+		t.Fatal("user Runtime acquired managed allocation", allocations, err)
+	}
+	current, err := sessionAdapter(s).GetSession(t.Context(), principal.TenantID, session.ID)
+	if err != nil || current.LastTurn != nil {
+		t.Fatal("connection handling created execution", err)
+	}
+}

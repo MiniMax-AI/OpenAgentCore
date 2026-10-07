@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: c7a280c8367f0b86b4ccc4eeb3e3ee203519804ef5e0a09f874a71b0e78ac6be
+source_hash: cfab5d1ad336c809b2b27bc870b02934f54184f3778e2c5d770a945c6830e097
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -169,7 +169,7 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 | `hygiene` | 名称、仓库链接、随包文档完整性以及 CI 计划器/门禁测试；每次变更都会运行 |
 | `distribution` | Harness 目录和安装器模式、安装/应用/恢复/清理测试、Compose 解析和初始化固定数据、发布/下载和捆绑包契约、Go 控制台测试与构建；模板解析需要 Docker Compose，不需要 pnpm install 或浏览器 |
 | `compose` | 使用从当前检出构建的镜像从空数据卷实际启动、登录和 API 访问、上传文件和下载节点安装器，然后在保留凭据和数据的同时重新配置 URL 并重新创建容器；需要 Docker、Go 和网络访问，不需要模型凭据 |
-| `backend` | 并行部分，每部分都有专用 PostgreSQL 保护检查：`runtime`（sqlc 新鲜度、Runtime/共享 Go 测试、Linux microsandbox 辅助程序、守护进程构建）、`core`（独立 Core 构建、Core 服务和客户端测试），以及串行 Core 持久化集成包的三个 `store` 分片 |
+| `backend` | 并行部分，每部分都有专用 PostgreSQL 保护检查：`runtime`（sqlc 新鲜度、Runtime/共享 Go 测试、Linux microsandbox 辅助程序、守护进程构建）、`core`（独立 Core 构建、Core 服务和客户端测试），以及串行 Core 集成测试包的三个 `integration` 分片 |
 | `harness` | Claude SDK 测试和打包、MiniMax 配套脚本 |
 | `example` | 可选的应用程序类型检查、测试、构建和隔离的浏览器验收 |
 | `web` | TypeScript、Web/客户端测试和 Web 构建 |
@@ -204,7 +204,7 @@ python3 scripts/ci_plan.py plan --base origin/main --head HEAD
 make check-ci
 ```
 
-`make check` 仍是完整的本地入口，使用未分片的 Web 测试套件和未分片的 store 软件包。`make check-web-unit` 和 `make check-web-acceptance OAC_WEB_TEST_SHARD=1/4` 用于分别运行 Web 部分；`make check-core-packages` 和 `make check-core-store OAC_CORE_STORE_SHARD=1/3` 用于分别运行 Core 部分，其中 store 测试按名称的稳定哈希分配到分片。选择测试涵盖混合变更、共享使用方、重命名/删除、未知输入、浅合并检出以及失败/取消/缺失结果。对于选择映射的更改，请针对受影响的规则重放具有代表性的差异。对于工作流更改，请运行 actionlint，并验证更改后的调度或分区行为。仅在需要验证受变更影响的行为时，才运行真实组件测试。
+`make check` 仍是完整的本地入口，使用未分片的 Web 测试套件和未分片的 Core 集成测试包。`make check-web-unit` 和 `make check-web-acceptance OAC_WEB_TEST_SHARD=1/4` 用于分别运行 Web 部分；`make check-core-packages` 和 `make check-core-integration OAC_CORE_INTEGRATION_SHARD=1/3` 用于分别运行 Core 部分，其中集成测试按名称的稳定哈希分配到分片。选择测试涵盖混合变更、共享使用方、重命名/删除、未知输入、浅合并检出以及失败/取消/缺失结果。对于选择映射的更改，请针对受影响的规则重放具有代表性的差异。对于工作流更改，请运行 actionlint，并验证更改后的调度或分区行为。仅在需要验证受变更影响的行为时，才运行真实组件测试。
 
 使用 `python3 scripts/ci_metrics.py RUN_ID ...` 衡量已完成的运行。它会报告最近一次尝试的运行器分钟数总和、耗时、从该次尝试开始计算的初始排队延迟、并发作业峰值、平台明细以及作业结果/失败比例。只有在该次尝试中被分配了运行器的作业才计入机器时间和执行并发；排队期间被取消的作业仍保留其结果和实际耗时。更早的尝试不计入其中。失败作业的重新运行可能沿用更早的成功结果：这些结果会单独显示，且其原有执行时间会被排除。如果缺少重新运行的开始时间戳，测量会停止，因为无法可靠区分复用的作业。比较时应保留 run/head/attempt 标识，并分别报告取消和未完成的运行。原始运行器分钟数并非计费分钟数；估算成本前，应使用各平台公布的转换和配额规则。较小的成功样本不能作为长期失败率估计。定时完整运行不在此策略范围内。
 

@@ -173,7 +173,7 @@ type artifactStaging struct {
 
 func (t *artifactStaging) LoadEnvironment(ctx context.Context) (sessions.Environment, error) {
 	row, err := t.q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: t.turn.TenantID, ID: t.turn.SessionID})
-	return EnvironmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
+	return environmentFromRow(row.Environment, row.TenantID, row.Configuration, err)
 }
 
 func (t *artifactStaging) PutArtifactContent(ctx context.Context, path string, size int64, content io.Reader) error {

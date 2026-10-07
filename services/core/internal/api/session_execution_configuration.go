@@ -66,7 +66,7 @@ func sessionExecutionProjection(input sessionRequest, saved *v1.SavedAgent, inhe
 func (h *Handler) getSessionExecutionConfiguration(w http.ResponseWriter, r *http.Request) {
 	configuration, err := h.SessionAdmin.GetSessionExecutionConfiguration(r.Context(), tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")

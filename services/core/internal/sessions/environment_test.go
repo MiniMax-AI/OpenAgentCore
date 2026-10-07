@@ -13,12 +13,12 @@ func TestCreatesEnvironment(t *testing.T) {
 		`{"environment":{"type":"self_hosted"}}`:   true,
 		`{"environment":{"type":"openai_hosted"}}`: true,
 	} {
-		if got, err := CreatesEnvironment([]byte(configuration)); err != nil || got != want {
+		if got, err := createsEnvironment([]byte(configuration)); err != nil || got != want {
 			t.Fatalf("%s: %v, %v", configuration, got, err)
 		}
 	}
 	for _, configuration := range []string{`not json`, `{"environment":{"type":"docker"}}`, `{"environment":{}}`} {
-		if _, err := CreatesEnvironment([]byte(configuration)); !errors.Is(err, ErrInvalidInput) {
+		if _, err := createsEnvironment([]byte(configuration)); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("%s: %v", configuration, err)
 		}
 	}

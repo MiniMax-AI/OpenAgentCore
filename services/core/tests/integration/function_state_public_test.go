@@ -1,0 +1,88 @@
+package integration
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http/httptest"
+	"os"
+	"os/exec"
+	"testing"
+	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/google/uuid"
+)
+
+func TestFunctionStateOfficialClientReadsAndLiveEvents(t *testing.T) {
+	python := os.Getenv("OAC_TEST_OFFICIAL_SDK_PYTHON")
+	if python == "" {
+		t.Skip("OAC_TEST_OFFICIAL_SDK_PYTHON is required for official-client verification")
+	}
+	s, _ := testStore(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	tenant, token, foreign := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	cfg := json.RawMessage(`{"agent":{"id":"agent_fixture","model":"fixture","tools":[],"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"}},"environment":{"type":"none"}}`)
+	session, err := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "fixture", Configuration: cfg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input, err := sendMessage(ctx, s, tenant, session.ID, "start", json.RawMessage(`{"text":"fixture"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := transitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress}); err != nil {
+		t.Fatal(err)
+	}
+	functions := executionOwner(t, s).Sessions
+	record := func(id string) {
+		t.Helper()
+		if err := functions.RecordFunctionCall(ctx, tenant, session.ID, input.TurnID, sessions.FunctionCall{CallID: id, ExecutorCallID: "private-" + id, Name: "lookup", Arguments: json.RawMessage(`{"ticket":9007199254740993}`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record("first")
+	auth := newTestAuthenticator(t, []testAPIKey{{OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(token), TenantID: tenant}, {OrganizationID: "test-org", ProjectID: uuid.NewString(), SubjectKind: "service_account", SubjectID: "test-runner", TokenSHA256: runtimedevice.HashCredential(foreign), TenantID: uuid.NewString()}})
+	handler, err := publicHandler(t, s, auth, "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	command := exec.CommandContext(ctx, python, "../../tests/official_function_state.py", server.URL, token, foreign, session.ID, input.TurnID)
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { cancel(); _ = command.Wait() }()
+	reader := bufio.NewReader(stdout)
+	if line, err := reader.ReadString('\n'); err != nil || line != "connected\n" {
+		cancel()
+		_ = command.Wait()
+		t.Fatalf("SDK readiness: %s %v %s", line, err, stderr.String())
+	}
+	record("second")
+	for _, id := range []string{"first", "second"} {
+		if err := SubmitFixtureFunctionResult(ctx, s, tenant, session.ID, input.TurnID, id, json.RawMessage(`{"success":true,"output":"private"}`)); err != nil {
+			t.Fatal(err)
+		}
+		if err := functions.ConfirmFunctionResult(ctx, tenant, session.ID, input.TurnID, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := functions.CompleteExecution(ctx, tenant, session.ID, input.TurnID, sessions.TurnCompleted, nil, "", input.Sequence); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatalf("official function-state verification: %v\n%s", err, stderr.String())
+	}
+	t.Log("Pinned official client verified persisted waiting reads, isolation, exact event fields and changing action snapshots")
+}

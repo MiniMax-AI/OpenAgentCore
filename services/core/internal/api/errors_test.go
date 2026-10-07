@@ -152,7 +152,7 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodPost, "/v1/agents/environments/environment/files", nil)
-			writeStoreError(response, request, fmt.Errorf("operation: %w", err))
+			writeOperationError(response, request, fmt.Errorf("operation: %w", err))
 			var body v1.ErrorResponse
 			if response.Code != http.StatusConflict || json.Unmarshal(response.Body.Bytes(), &body) != nil ||
 				body.Error.Type != "conflict_error" || body.Error.Code == nil || *body.Error.Code != code || body.Error.Param != nil {
@@ -167,30 +167,29 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 	}
 }
 
-// The shared persistence errors keep the responses the store errors had: an
-// audit source or query that cannot be used answers like invalid input.
+// The shared persistence errors answer alike in every domain mapper: an audit
+// source or query that cannot be used answers like invalid input.
 func TestSharedPersistenceErrors(t *testing.T) {
-	storeError := func(w http.ResponseWriter, r *http.Request, err error) { writeStoreError(w, r, err) }
 	respond := func(write func(http.ResponseWriter, *http.Request, error), err error) *httptest.ResponseRecorder {
 		response := httptest.NewRecorder()
 		write(response, httptest.NewRequest(http.MethodPost, "/v1/agents", nil), err)
 		return response
 	}
-	invalid := respond(storeError, sessions.ErrInvalidInput).Body.String()
+	invalid := respond(writeSessionsError, sessions.ErrInvalidInput).Body.String()
 	for _, test := range []struct {
 		write  func(http.ResponseWriter, *http.Request, error)
 		err    error
 		status int
 		body   string
 	}{
-		{storeError, fmt.Errorf("write: %w", writeaudit.ErrInvalidSource), 400, invalid},
-		{storeError, fmt.Errorf("write: %w", adminaudit.ErrInvalidSource), 400, invalid},
+		{writeSessionsError, fmt.Errorf("write: %w", writeaudit.ErrInvalidSource), 400, invalid},
+		{writeSessionsError, fmt.Errorf("write: %w", adminaudit.ErrInvalidSource), 400, invalid},
 		{writeAuditError, writeaudit.ErrInvalidQuery, 400, invalid},
 		{writeAuditError, adminaudit.ErrInvalidQuery, 400, invalid},
-		{storeError, fmt.Errorf("write: %w", textvalue.ErrUnstorable), 400, unstorableTextMessage},
+		{writeSessionsError, fmt.Errorf("write: %w", textvalue.ErrUnstorable), 400, unstorableTextMessage},
 		{writeAuditError, textvalue.ErrUnstorable, 400, unstorableTextMessage},
-		{storeError, deployment.ErrInvalidInput, 400, invalid},
-		{storeError, credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
+		{writeDeploymentError, deployment.ErrInvalidInput, 400, invalid},
+		{writeSessionsError, credentialcrypto.ErrUnavailable, 503, "credential_storage_unavailable"},
 		{writeAuditError, errors.New("canary"), 500, "internal_error"},
 	} {
 		response := respond(test.write, test.err)

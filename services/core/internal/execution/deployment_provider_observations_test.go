@@ -18,13 +18,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/store"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type finishObservationFixture struct {
-	s          *store.Store
 	execution  *sessions.ExecutionOperations
 	lease      Ownership
 	pool       *pgxpool.Pool
@@ -37,7 +35,7 @@ type finishObservationFixture struct {
 func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObservationFixture {
 	t.Helper()
 	var cfg *pgxpool.Config
-	s, owner, _, _ := resetManagerStoreConfig(t, func(c *pgxpool.Config) {
+	owner, _, _ := resetManagerConfig(t, func(c *pgxpool.Config) {
 		if maxConnections > 0 {
 			c.MaxConns = maxConnections
 		}
@@ -70,7 +68,8 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	model, harness := "fixture-model", "codex"
 	input := sessions.CreateSession{Creator: identity.Subject{Kind: "service_account", ID: "fixture"}, Engine: harness, IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"agent":{"model":"fixture-model"},"environment":{"type":"none"}}`), ModelProvider: snapshot.Provider, ModelProviderSource: "deployment", DeploymentProviderRevision: snapshot.Revision,
 		ExecutionConfiguration: &v1.SessionExecutionConfiguration{Model: v1.ExecutionSelection{Value: &model, Source: "session"}, Harness: v1.ExecutionSelection{Value: &harness, Source: "deployment"}, ModelProvider: v1.ExecutionProviderSelection{Source: "deployment"}}}
-	session, err := s.CreateSession(t.Context(), tenant, input)
+	_, sessionService := testSessions(t, pool, cipher)
+	created, err := sessionService.CreateSession(t.Context(), tenant, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +77,7 @@ func newFinishObservationFixture(t *testing.T, maxConnections int32) finishObser
 	if err != nil {
 		t.Fatal(err)
 	}
-	return finishObservationFixture{s, owner.Sessions, owner.Lease, pool, defaults, tenant, session, *dispatcher}
+	return finishObservationFixture{owner.Sessions, owner.Lease, pool, defaults, tenant, created.Session, *dispatcher}
 }
 func (f finishObservationFixture) start(t *testing.T) sessions.InputReceipt {
 	t.Helper()

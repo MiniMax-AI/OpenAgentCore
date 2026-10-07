@@ -18,9 +18,9 @@ type sandboxCreationRecorder struct {
 	calls int
 }
 
-func (r *sandboxCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Session, error) {
+func (r *sandboxCreationRecorder) CreateSession(context.Context, string, sessions.CreateSession) (sessions.Creation, error) {
 	r.calls++
-	return sessions.Session{}, sessions.ErrInvalidInput
+	return sessions.Creation{}, sessions.ErrInvalidInput
 }
 
 // Placement is automatic. A node selector is an unknown member wherever it appears.

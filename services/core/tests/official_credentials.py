@@ -45,7 +45,7 @@ def verify_credentials(client, other, invalid, peer, saved_vaults, canary, expec
         saved.append(value)
 
         # These successful writes exercise opaque strings, not a public token
-        # round-trip. Byte preservation is verified by private Store tests.
+        # round-trip. Byte preservation is verified by Core's Go tests.
         for name, token in (("🧪" * 64, canary + "x" * 1024), ("Whitespace opaque token", " ")):
             response = raw.post(endpoint, headers=headers, json={"name": " " + name + "\n",
                                 "auth": {**auth, "token": token}})

@@ -69,12 +69,12 @@ func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 	session, err := h.SessionsReader.GetSession(ctx, tenantID(r), chi.URLParam(r, "session_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	public, err := sessionResponse(session, h.executorURL())
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response := SessionDiagnostics{Object: "core.session_diagnostics", SessionID: public.ID, Status: public.Status}
@@ -125,12 +125,12 @@ func (h *Handler) getTurnDiagnostics(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	snapshot, err := h.SessionAdmin.GetTurnDiagnosticsSnapshot(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "turn_id"))
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	public, err := turnResponse(snapshot.Session, snapshot.Turn)
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return
 	}
 	response := TurnDiagnostics{Object: "core.turn_diagnostics", SessionID: public.SessionID, TurnID: public.ID, Status: public.Status, Failure: turnDiagnosticFailure(snapshot.Turn), Items: []ItemDiagnosticTiming{}, ItemsTruncated: snapshot.ItemsTruncated}

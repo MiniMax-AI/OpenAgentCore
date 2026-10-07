@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
@@ -36,8 +37,7 @@ func (s *Store) ReadEnvironmentSetup(ctx context.Context, tenant, session string
 	if s.cipher == nil {
 		return environmentconfig.Setup{}, credentialcrypto.ErrUnavailable
 	}
-	binding := credentialcrypto.EnvironmentSetupBinding{TenantID: uuid.UUID(lookup.TenantID.Bytes).String(), Resource: "session", OwnerID: uuid.UUID(lookup.ID.Bytes).String(), Field: "initialization"}
-	plaintext, err := s.cipher.OpenEnvironmentSetup(encrypted, binding)
+	plaintext, err := s.cipher.OpenEnvironmentSetup(encrypted, setupBinding(lookup.TenantID, lookup.ID))
 	if err != nil {
 		return environmentconfig.Setup{}, fmt.Errorf("open frozen environment setup: %w", err)
 	}
@@ -66,8 +66,7 @@ func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, session 
 		return environmentconfig.InitialFileMetadata{}, nil, credentialcrypto.ErrUnavailable
 	}
 	id := uuid.UUID(row.ID.Bytes).String()
-	binding := credentialcrypto.EnvironmentFileBinding{TenantID: uuid.UUID(lookup.TenantID.Bytes).String(), Resource: "session", OwnerID: uuid.UUID(lookup.ID.Bytes).String(), FileID: id}
-	body, err := s.cipher.OpenEnvironmentFile(row.Contents, binding)
+	body, err := s.cipher.OpenEnvironmentFile(row.Contents, fileBinding(lookup.TenantID, lookup.ID, id))
 	if err != nil {
 		return environmentconfig.InitialFileMetadata{}, nil, fmt.Errorf("open frozen initial file: %w", err)
 	}
@@ -75,4 +74,15 @@ func (s *Store) ReadInitialEnvironmentFile(ctx context.Context, tenant, session 
 		return environmentconfig.InitialFileMetadata{}, nil, errors.New("frozen initial file does not match its recorded size")
 	}
 	return environmentconfig.InitialFileMetadata{ID: id, Path: row.Path, SizeBytes: &row.SizeBytes}, body, nil
+}
+
+// setupBinding binds the setup a Session froze to the tenant and Session.
+func setupBinding(tenant, session pgtype.UUID) credentialcrypto.EnvironmentSetupBinding {
+	return credentialcrypto.EnvironmentSetupBinding{TenantID: optionalID(tenant), Resource: "session", OwnerID: optionalID(session), Field: "initialization"}
+}
+
+// fileBinding binds an initial file a Session froze to the tenant, Session
+// and file.
+func fileBinding(tenant, session pgtype.UUID, file string) credentialcrypto.EnvironmentFileBinding {
+	return credentialcrypto.EnvironmentFileBinding{TenantID: optionalID(tenant), Resource: "session", OwnerID: optionalID(session), FileID: file}
 }

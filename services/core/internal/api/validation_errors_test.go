@@ -10,13 +10,11 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // validationStore counts every persistence attempt so rejected requests can
@@ -45,9 +43,9 @@ func (s *validationStore) UpdateSessionMetadata(_ context.Context, command sessi
 	return sessions.Session{ID: command.SessionID, TenantID: command.TenantID, Metadata: command.Metadata, Configuration: json.RawMessage(`{"agent":{"id":"agent_validation","model":"validation-model"},"environment":{"type":"none"}}`)}, nil
 }
 
-func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
+func (s *validationStore) CreateSession(_ context.Context, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	s.writes++
-	return sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, nil
+	return sessions.Creation{Session: sessions.Session{ID: uuid.NewString(), TenantID: tenant, Metadata: input.Metadata, Configuration: input.Configuration}, Created: true}, nil
 }
 
 func (s *validationStore) CreateEnvironmentTemplate(context.Context, environmenttemplates.CreateCommand) (environmenttemplates.Template, error) {
@@ -261,27 +259,6 @@ func TestTemplateNetworkRejectionsUseOfficialCode(t *testing.T) {
 		w := credentialRequest(h, http.MethodPost, "/v1/agents/environments/templates/"+template, `{"network":`+network+`}`)
 		if w.Code != http.StatusOK || s.writes != before+1 {
 			t.Fatalf("%s rejected: %d %s", network, w.Code, w.Body)
-		}
-	}
-}
-
-func TestUnstorableTextMapsToInvalidRequest(t *testing.T) {
-	for _, tc := range []struct {
-		err    error
-		status int
-	}{
-		{fmt.Errorf("create agent: %w", &pgconn.PgError{Code: "22P05"}), http.StatusBadRequest},
-		{fmt.Errorf("create vault: %w", &pgconn.PgError{Code: "22021"}), http.StatusBadRequest},
-		{&pgconn.PgError{Code: "23505"}, http.StatusInternalServerError},
-	} {
-		w := httptest.NewRecorder()
-		writeStoreError(w, httptest.NewRequest(http.MethodPost, "/v1/agents", nil), tc.err)
-		var response v1.ErrorResponse
-		if w.Code != tc.status || json.Unmarshal(w.Body.Bytes(), &response) != nil || response.Error.Param != nil {
-			t.Fatalf("%v: %d %s", tc.err, w.Code, w.Body)
-		}
-		if tc.status == http.StatusBadRequest && (response.Error.Code == nil || *response.Error.Code != "invalid_request_error" || response.Error.Type != "invalid_request_error" || response.Error.Message != unstorableTextMessage) {
-			t.Fatalf("%v: %s", tc.err, w.Body)
 		}
 	}
 }

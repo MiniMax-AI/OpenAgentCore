@@ -48,7 +48,7 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 		}
 		rows, err := q.ListSessions(ctx, params)
 		if err != nil {
-			return fmt.Errorf("list sessions: %w", err)
+			return storable(fmt.Errorf("list sessions: %w", err))
 		}
 		page.Sessions = make([]sessions.Session, 0, min(limit, len(rows)))
 		if len(rows) > limit {
@@ -56,9 +56,9 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 			rows = rows[:limit]
 		}
 		for _, row := range rows {
-			session, err := SessionFromRow(row)
+			session, err := sessionFromRow(row)
 			if err == nil {
-				session, err = LoadSessionActivity(ctx, q, session)
+				session, err = loadSessionActivity(ctx, q, session)
 			}
 			if err != nil {
 				return err
@@ -81,16 +81,8 @@ func (s *Store) SessionStreamSnapshot(ctx context.Context, tenantID, sessionID s
 	var session sessions.Session
 	var cursor int64
 	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		q := sqlc.New(tx)
-		row, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: pgunit.PathID(sessionID)})
-		if err != nil {
-			return err
-		}
-		if session, err = SessionFromRow(row); err != nil {
-			return err
-		}
-		cursor = row.EventSequence
-		session, err = LoadSessionActivity(ctx, q, session)
+		var err error
+		session, cursor, err = loadSession(ctx, sqlc.New(tx), tenant, pgunit.PathID(sessionID))
 		return err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -171,7 +163,7 @@ func (s *Store) GetTurnDiagnosticsSnapshot(ctx context.Context, tenantID, sessio
 		if err != nil {
 			return err
 		}
-		result.Session, err = SessionFromRow(row)
+		result.Session, err = sessionFromRow(row)
 		if err != nil {
 			return err
 		}
@@ -272,14 +264,29 @@ func loadManagedArchive(ctx context.Context, q *sqlc.Queries, tenant, session pg
 	return sessions.ManagedArchive{SessionID: uuid.UUID(row.SessionID.Bytes).String(), EnvironmentID: uuid.UUID(row.EnvironmentID.Bytes).String(), State: row.State}, nil
 }
 
-// LoadSessionActivity adds the Environment, input activity and latest Turn
+// loadSession reads, on q, the tenant's visible Session with the projection
+// of GetSession and its event cursor; a missing one is pgx.ErrNoRows.
+func loadSession(ctx context.Context, q *sqlc.Queries, tenant, id pgtype.UUID) (sessions.Session, int64, error) {
+	row, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: id})
+	if err != nil {
+		return sessions.Session{}, 0, err
+	}
+	session, err := sessionFromRow(row)
+	if err != nil {
+		return sessions.Session{}, 0, err
+	}
+	session, err = loadSessionActivity(ctx, q, session)
+	return session, row.EventSequence, err
+}
+
+// loadSessionActivity adds the Environment, input activity and latest Turn
 // projection of GetSession to session within the caller's snapshot.
-func LoadSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.Session) (sessions.Session, error) {
+func loadSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.Session) (sessions.Session, error) {
 	id, _ := parseID(session.ID)
 	tenant, _ := parseID(session.TenantID)
 	environment, err := q.GetSessionEnvironment(ctx, sqlc.GetSessionEnvironmentParams{TenantID: tenant, ID: id})
 	if err == nil {
-		value, err := EnvironmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
+		value, err := environmentFromRow(environment.Environment, environment.TenantID, environment.Configuration, nil)
 		if err != nil {
 			return session, err
 		}

@@ -13,8 +13,9 @@ import (
 // sessionCreationRequest records caller intent before mutable sources resolve:
 // saved Agents, templates, credentials and hosted deployment defaults. A retry
 // then returns the committed Session even after those sources change. Other
-// inline requests keep the resolved-request retry rule; the store leaves the
-// deployment default out of that hash, so it cannot change their identity.
+// inline requests keep the resolved-request retry rule; the sessions package
+// leaves the deployment default out of that hash, so it cannot change their
+// identity.
 func sessionCreationRequest(input sessionRequest, initial []sessions.Input) (json.RawMessage, error) {
 	if input.Agent != nil && input.Agent.Model != nil && (input.Environment == nil || input.Environment.Type != "openai_hosted") && input.XAgentsCore == nil && input.AgentID == nil && input.templateID == "" && len(input.initialFiles) == 0 && input.initialization.Empty() && !inlineCredentialIntent(input) && input.agentFields["x_agents_core"] == nil {
 		return nil, nil
@@ -50,7 +51,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 		return false
 	}
 	if err != nil {
-		writeStoreError(w, r, err)
+		writeSessionsError(w, r, err)
 		return true
 	}
 	if stream {
@@ -62,7 +63,7 @@ func (h *Handler) recoverSessionCreation(w http.ResponseWriter, r *http.Request,
 	} else {
 		session, err := h.SessionsReader.GetSession(r.Context(), tenantID(r), result.Session.ID)
 		if err != nil {
-			writeStoreError(w, r, err)
+			writeSessionsError(w, r, err)
 		} else if h.auditSessionOperation(w, r, session.ID, "create") {
 			h.respondSessionStatus(w, r, session, http.StatusCreated)
 		}

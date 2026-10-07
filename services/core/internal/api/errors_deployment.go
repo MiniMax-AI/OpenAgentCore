@@ -30,9 +30,9 @@ func writeDeploymentError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
-// writeSandboxError reports a sandbox deployment, node or Sandbox Provider
-// error and returns false for any other error. Session and Environment
-// admission report the same errors through writeStoreError.
+// writeSandboxError reports a sandbox deployment, node, placement or Sandbox
+// Provider error and returns false for any other error. Session operations that meet
+// the deployment report the same errors through writeOperationError.
 func writeSandboxError(w http.ResponseWriter, err error) bool {
 	// Adapter discovery and persisted configuration share the same public error.
 	var validation *sandbox.ValidationError
@@ -84,6 +84,10 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusConflict, "sandbox_not_configured", "The sandbox deployment is not configured.")
 	case errors.As(err, &deploymentConfiguration):
 		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", deploymentConfiguration.Message)
+	case errors.Is(err, placement.ErrResetAdmission):
+		writeError(w, http.StatusServiceUnavailable, "sandbox_reset_in_progress", "A sandbox reset is in progress.")
+	case errors.Is(err, placement.ErrAdmissionClosed):
+		writeError(w, http.StatusConflict, "environment_unavailable", "The environment is no longer available for new input.")
 	case errors.Is(err, placement.ErrPublicURLUnreachable):
 		writeError(w, http.StatusConflict, "sandbox_configuration_error", err.Error())
 	case errors.Is(err, deployment.ErrNodeAddressMismatch):

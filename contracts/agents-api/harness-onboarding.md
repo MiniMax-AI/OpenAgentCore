@@ -199,7 +199,7 @@ An omitted or unknown policy, missing required callback, or callback paired with
 
 `engine.NewCatalog` validates every entry before publishing its immutable snapshot and panics with `engine.ErrInvalidDeclaration` for invalid static registrations. Kinds must be nonempty without surrounding whitespace. Placements must explicitly list at least one supported placement; MCP origins must be a non-nil list (an empty list qualifies none). Unknown or duplicate choices, origins without a corresponding placement and bearer support without an MCP origin are rejected. Errors identify authored fields without echoing declaration values. Future profile fields must be classified by the completeness validator and explicitly decided by every profile; there is no production default-filling constructor.
 
-Run the `engine` and `execution` tests for omission, policy, combination and error precedence coverage, and the public onboarding/store tests for admission and Runtime dispatch. Test fixtures use `engine/enginetest`, whose exhaustive literal also requires a decision when a field is added; it is not a production profile.
+Run the `engine` and `execution` tests for omission, policy, combination and error precedence coverage, and the public onboarding tests in `services/core/tests/integration` for admission and Runtime dispatch. Test fixtures use `engine/enginetest`, whose exhaustive literal also requires a decision when a field is added; it is not a production profile.
 
 `execution.Policy` supplies immutable service qualification to HTTP admission, Worker device selection and final dispatch. Custom composition gives the same Policy to `api.Dependencies.Policy` and the Core dispatcher's `Policy`. The zero value uses the built-in profiles; an explicitly empty catalog authorizes none. There is no mutable global registration.
 
@@ -221,7 +221,7 @@ Before starting, record the operation set, expected results, exclusions and stop
 4. **Regression.** Existing Harnesses keep working. Run targeted tests, then `make check`; run `make openapi` after API changes and `make sqlc-generate` after query changes.
 5. **Review.** Follow the [blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review).
 
-| Operation | Test in `services/core/internal/store` | Options file variable, and Harness variable where the test takes one |
+| Operation | Test in `services/core/tests/integration` | Options file variable, and Harness variable where the test takes one |
 | --- | --- | --- |
 | Model provider protocols | `TestNativeModelProtocolPublicExecution` | [Model execution](./model-execution.md#acceptance) |
 | MiniMax Code text | `TestNativeMCodePublicExecution` | `OAC_TEST_MCODE_REAL_OPTIONS` |

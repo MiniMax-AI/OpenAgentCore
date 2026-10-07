@@ -110,7 +110,7 @@ func run() error {
 	}
 	defer pool.Close()
 	// Executor credentials need no credential key.
-	credentials, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil))
+	credentials, err := sessions.NewService(sessionpg.New(pgunit.NewPool(pool), nil), nil)
 	if err != nil {
 		return err
 	}
