@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"testing"
@@ -60,15 +62,32 @@ func TestDockerSandboxServesItsAllocation(t *testing.T) {
 	server.StartTLS()
 	t.Cleanup(server.Close)
 	port := strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
-	// Derive a labeled image whose only trust anchor is the test certificate.
+	// Derive a labeled image that runs this tree's oac-sandbox-io and whose
+	// only trust anchor is the test certificate.
+	binary := filepath.Join(t.TempDir(), "oac-sandbox-io")
+	build := exec.CommandContext(t.Context(), "go", "build", "-trimpath", "-o", binary, "github.com/MiniMax-AI/OpenAgentCore/apps/sandboxio/cmd/oac-sandbox-io")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build oac-sandbox-io: %v\n%s", err, output)
+	}
+	serveBinary, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 	var content bytes.Buffer
 	archive := tar.NewWriter(&content)
-	if err := archive.WriteHeader(&tar.Header{Name: "etc/ssl/certs/ca-certificates.crt", Mode: 0o644, Size: int64(len(ca)), Typeflag: tar.TypeReg}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := archive.Write(ca); err != nil {
-		t.Fatal(err)
+	for _, file := range []struct {
+		name string
+		mode int64
+		data []byte
+	}{{"etc/ssl/certs/ca-certificates.crt", 0o644, ca}, {"usr/local/bin/oac-sandbox-io", 0o555, serveBinary}} {
+		if err := archive.WriteHeader(&tar.Header{Name: file.name, Mode: file.mode, Size: int64(len(file.data)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := archive.Write(file.data); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := archive.Close(); err != nil {
 		t.Fatal(err)

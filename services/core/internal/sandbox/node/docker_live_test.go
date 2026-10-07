@@ -16,9 +16,10 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// This uses the same pinned sleep-entrypoint image as the Docker mechanism
-// tests. It exercises real Docker resources through the node transport, not a
-// native harness/model workflow. No provider credentials are required.
+// This uses the same pinned fixture image, whose oac-daemon only sleeps, as
+// the Docker mechanism tests. It exercises real Docker resources through the
+// node transport, not a native harness/model workflow. No provider
+// credentials are required.
 func TestDockerNodeTransportLifecycle(t *testing.T) {
 	image := os.Getenv("AGENTS_RUNTIME_DOCKER_TEST_IMAGE")
 	if image == "" {

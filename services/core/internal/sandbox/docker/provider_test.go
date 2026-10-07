@@ -37,8 +37,9 @@ func TestProviderRejectsUnsafeOperatorConfiguration(t *testing.T) {
 	}
 }
 
-// This optional Docker mechanism test uses a pinned fixture image whose entrypoint
-// is sleep. It is not native/model acceptance; the real Runtime has separate checks.
+// This optional Docker mechanism test uses a pinned fixture image whose
+// oac-daemon only sleeps. It is not native/model acceptance; the real Runtime
+// has separate checks.
 func TestDockerProviderLifecycle(t *testing.T) {
 	image := os.Getenv("AGENTS_RUNTIME_DOCKER_TEST_IMAGE")
 	if image == "" {
