@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 4f9fd38af5afd47e21589160930347f6693dd4786f56fb2dff2abd4853b3f72f
+source_hash: 28b5e75d31a2707ba166c20181d8972a644756ea6313a528aab93115c7a62685
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -196,7 +196,9 @@ Go 模块和工作区输入会选择后端、API（包括容器）、原生和�
 
 要手动执行完整检查，请使用 **Actions → core-check → Run workflow**。遇到暂时性故障时，请使用 GitHub 的 **Re-run failed jobs**，这样已成功的作业可保持完成状态。PR 更新后，Actions 并发机制会取消已被取代的运行。构建和依赖项缓存可加快执行，但不能替代成功的测试。原生发布安装器通过 Actions 构建产物在同一发布工作流的不同作业之间传递。
 
-`CI review and Feishu notification` 工作流仅在 PR 合并到 main 后运行一次。它检出合并后的提交，读取该 PR 已有的检查和日志，并报告实际状态，不会触发另一轮测试。关闭未合并 PR 不触发审查。该工作流只针对合并事件使用 `pull_request_target`，绝不在持有通知凭据时检出未合并 PR 的 head。
+`CI review and Feishu notification` 工作流仅在 PR 合并到 main 后运行一次。它检出合并后的提交，读取该 PR 已有的检查和日志，并报告实际状态。审查和通知失败不会让作业失败，也不会触发另一轮测试。关闭未合并 PR 不触发审查。该工作流只针对合并事件使用 `pull_request_target`，绝不在持有通知凭据时检出未合并 PR 的 head。
+
+LLM 审查会核对本次行为变化与文档是否一致，即使 PR 没有修改文档。修改文档时，还会检查矛盾、重复维护的事实、CONTRIBUTING 规定的主题归属及中英文含义是否一致。每项问题包含文件和行号、代码或文档依据及最小修改建议。飞书卡片同时报告两项文档结论与 CI 状态，包括未检查完整的范围。审查只读取仓库，不修改文件。
 
 浏览器作业各自拥有独立的固定数据和服务；对共享可变固定数据增加 worker 数不安全。失败的浏览器作业保留报告与 trace 七天。原生失败阶段摘要保留七天，详细输出留在 Actions 日志中；凭据和临时安装目录不上传。成功的原生归档仅用于显式手动打包或发布时上传，不重新压缩已压缩的归档。发布分发产物保留现有恢复策略；失败发布可以按前述方式复用原构建。
 
