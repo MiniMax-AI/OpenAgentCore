@@ -21,7 +21,7 @@ func TestExecutionOptionsInheritUserEnvironment(t *testing.T) {
 	r := executionRequest(t)
 	t.Setenv("OAC_TEST_SECRET_CANARY", "secret")
 	t.Setenv("NODE_OPTIONS", "--import=untrusted")
-	opts, err := prepareOptions(t.Context(), r)
+	opts, err := prepareOptions(r)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 	} {
 		r := executionRequest(t)
 		change(&r)
-		if _, err := prepareOptions(t.Context(), r); err == nil {
+		if _, err := prepareOptions(r); err == nil {
 			t.Fatal("unsupported execution accepted")
 		}
 	}

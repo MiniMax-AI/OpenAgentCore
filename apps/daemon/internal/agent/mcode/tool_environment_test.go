@@ -60,7 +60,7 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
-		opts, err := prepareWorkspaceOptions(t.Context(), config, prepared)
+		opts, err := prepareWorkspaceOptions(config, prepared)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +125,7 @@ func TestWorkspaceRejectsInvalidToolEnvironment(t *testing.T) {
 	}
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", file)
 	t.Setenv("OAC_RUNTIME_INITIALIZATION_DIRECTORY", t.TempDir())
-	if _, err := prepareWorkspaceOptions(t.Context(), config, req); err == nil {
+	if _, err := prepareWorkspaceOptions(config, req); err == nil {
 		t.Fatal("invalid explicit tool configuration was ignored")
 	}
 }

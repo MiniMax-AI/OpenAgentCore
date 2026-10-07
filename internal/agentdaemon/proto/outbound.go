@@ -1,6 +1,9 @@
 package proto
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+)
 
 // Type constants for server → daemon frames.
 const (
@@ -53,10 +56,8 @@ type PromptRequestPayload struct {
 	// Input preserves ordered user messages and content.
 	Input MessageInput `json:"input,omitempty"`
 
-	// AgentOptions carries agent-specific overrides (model, mode,
-	// allowed_tools, system_prompt, mcp_servers, plugin_dirs, env,
-	// ...). The daemon's agent interprets these; the gateway never
-	// inspects them.
+	// AgentOptions carries only the keys ValidateAgentOptions accepts. The
+	// daemon's agent interprets them; the gateway never inspects them.
 	AgentOptions map[string]any `json:"agent_options,omitempty"`
 
 	// ExecutionControls are authoritative engine-neutral settings, translated by the adapter.
@@ -140,4 +141,17 @@ type ExecutionControls struct {
 type OutputFormat struct {
 	Type   string          `json:"type"`
 	Schema json.RawMessage `json:"schema"`
+}
+
+// ValidateAgentOptions rejects any agent_options key other than model,
+// system_prompt, model_provider and harness_config.
+func (r PromptRequestPayload) ValidateAgentOptions() error {
+	for key := range r.AgentOptions {
+		switch key {
+		case "model", "system_prompt", "model_provider", "harness_config":
+		default:
+			return errors.New("unsupported agent option")
+		}
+	}
+	return nil
 }

@@ -7,6 +7,9 @@ import (
 )
 
 func validateExecutionEnvironment(req proto.PromptRequestPayload, caps proto.AgentKindCapabilities) error {
+	if err := req.ValidateAgentOptions(); err != nil {
+		return err
+	}
 	if err := req.ValidateProgrammaticToolCallingDisable(caps.ProgrammaticToolCallingDisable.IsSupported()); err != nil {
 		return err
 	}

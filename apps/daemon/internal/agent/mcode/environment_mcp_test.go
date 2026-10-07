@@ -98,7 +98,7 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 			case "reserved":
 				req.LocalEnvironment.MCP[0].Server.Name = "oac_workspace"
 			}
-			if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
+			if _, err := prepareWorkspaceOptions(c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")
 			}
 		})
@@ -238,7 +238,7 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 	token := "selected-public-vault-canary"
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token}}
-	opts, err := prepareWorkspaceOptions(t.Context(), c, req)
+	opts, err := prepareWorkspaceOptions(c, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,12 +267,12 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	}
 	empty := []string{}
 	(*req.MCPHTTPServers)[0].AllowedTools = &empty
-	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+	if _, err := prepareWorkspaceOptions(c, req); err == nil {
 		t.Fatal("empty allowlist silently treated as all")
 	}
 	(*req.MCPHTTPServers)[0].AllowedTools = nil
 	(*req.MCPHTTPServers)[0].Required = true
-	if _, err := prepareWorkspaceOptions(t.Context(), c, req); err == nil {
+	if _, err := prepareWorkspaceOptions(c, req); err == nil {
 		t.Fatal("required initialization silently ignored")
 	}
 }

@@ -50,17 +50,12 @@ type DiscoveryOptions struct {
 }
 
 // Runtime binds one discovered descriptor to its native factories.
-// SessionCapabilityContext and ExecutorCapabilityContext request the Runtime's
-// capability-download URL and scoped product-upload context for those factories.
-// Preparation never receives those execution-only effects.
 type Runtime struct {
-	Info                      proto.SupportedAgentKind
-	Session                   Factory
-	Preparation               PreparationFactory
-	Executor                  ExecutorFactory
-	WorkspaceReadPreparation  bool
-	SessionCapabilityContext  bool
-	ExecutorCapabilityContext bool
+	Info                     proto.SupportedAgentKind
+	Session                  Factory
+	Preparation              PreparationFactory
+	Executor                 ExecutorFactory
+	WorkspaceReadPreparation bool
 }
 
 // Register installs a discovered Runtime with its declaration's configuration.
@@ -297,7 +292,7 @@ func (r *Registry) RegisterExecutor(kind string, factory ExecutorFactory) {
 }
 
 // RegisterPreparation installs a separate execution-only path. Product factory
-// wrappers must not add authoring or capability-download side effects to it.
+// wrappers must not add authoring side effects to it.
 func (r *Registry) RegisterPreparation(kind string, workspaceRead bool, prepare PreparationFactory) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

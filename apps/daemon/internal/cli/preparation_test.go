@@ -24,7 +24,7 @@ func TestPreparationRegistrationBypassesProductWrappers(t *testing.T) {
 			runtime.Preparation = func(context.Context, proto.PromptRequestPayload) (agent.Prepared, error) { return nil, nil }
 			runtime.WorkspaceReadPreparation = true
 		}
-		registerAgentKinds(reg, agentCLIDiscovery{{declaration: agent.Declaration{Info: info}, runtime: runtime}}, "http://unreachable.invalid")
+		registerAgentKinds(reg, agentCLIDiscovery{{declaration: agent.Declaration{Info: info}, runtime: runtime}})
 
 		_, err := reg.ResolvePreparation("codex")
 		if (err == nil) != supported {

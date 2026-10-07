@@ -16,7 +16,7 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 			req := testRequest(t)
 			req.AgentOptions["model_provider"].(map[string]any)["protocol"] = tc.protocol
 			req.AgentOptions["model"] = "chosen-model"
-			opts, err := prepareOptions(t.Context(), req)
+			opts, err := prepareOptions(req)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -60,7 +60,7 @@ func TestOptionsRejectInvalidProvider(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := testRequest(t)
 			req.AgentOptions["model_provider"].(map[string]any)[tc.field] = tc.value
-			if _, err := prepareOptions(t.Context(), req); err == nil {
+			if _, err := prepareOptions(req); err == nil {
 				t.Fatal("invalid model provider accepted")
 			}
 		})
@@ -69,7 +69,7 @@ func TestOptionsRejectInvalidProvider(t *testing.T) {
 		req := testRequest(t)
 		req.AgentOptions["mcode_provider"] = req.AgentOptions["model_provider"]
 		delete(req.AgentOptions, "model_provider")
-		if _, err := prepareOptions(t.Context(), req); err == nil {
+		if _, err := prepareOptions(req); err == nil {
 			t.Fatal("retired native provider option accepted")
 		}
 	})
@@ -78,7 +78,7 @@ func TestOptionsRejectInvalidProvider(t *testing.T) {
 func TestOptionsAllowLoopbackProviderFixture(t *testing.T) {
 	req := testRequest(t)
 	req.AgentOptions["model_provider"].(map[string]any)["base_url"] = "http://127.0.0.1:4321/v1"
-	if _, err := prepareOptions(t.Context(), req); err != nil {
+	if _, err := prepareOptions(req); err != nil {
 		t.Fatal(err)
 	}
 }

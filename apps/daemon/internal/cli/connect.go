@@ -327,7 +327,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	obslog.Bg().Info("bootstrap ok", "device_id", boot.DeviceID, "ws_url", wsURL, "heartbeat_interval", boot.HeartbeatInterval())
 
 	registry := agent.NewRegistry()
-	registerAgentKinds(registry, agentCLIs, prof.ServerURL)
+	registerAgentKinds(registry, agentCLIs)
 
 	control, err := newSuspendControl()
 	if err != nil {

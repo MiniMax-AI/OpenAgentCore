@@ -72,7 +72,7 @@ func TestLiveRegisteredClaudeSDK(t *testing.T) {
 	run := func(index int, prompt, resume string, callFunction, cancelOnText bool) execution {
 		t.Helper()
 		reg := agent.NewRegistry()
-		registerAgentKinds(reg, discovery, "https://product.invalid")
+		registerAgentKinds(reg, discovery)
 		reg = authoringRegistry(reg, authoring.New(nil))
 		sender := make(registeredSDKSender, 256)
 		router, err := dispatch.New(dispatch.Config{Registry: reg, Sender: sender})

@@ -151,7 +151,7 @@ A Harness that supports the Subagent reads implements the [neutral observation c
 
 Registration is static and requires a build. Export one `agent.Declaration` from `apps/daemon/internal/agent/<kind>/declaration.go`, then add it to `harnessDeclarations` in [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go). The declaration contains the kind and complete capability descriptor, the shared model `Configuration` and a `Discover` function. Discovery receives the profile and diagnostic writers, owns native configuration and availability checks, and returns the installed `agent.Runtime` with its descriptor and session, preparation and Executor factories. Return nil when the adapter is not configured; return an unavailable descriptor with a session factory when configured prerequisites fail. Keep version gates and factory-selection conditions inside the adapter.
 
-`Runtime.SessionCapabilityContext` and `Runtime.ExecutorCapabilityContext` explicitly request capability-download URL resolution and scoped product-upload context for the corresponding execution factory. Preparation never receives those effects. An adapter that supports product workspace authoring declares `WorkspaceAuthoring` itself; common registration does not grant it.
+An adapter that supports product workspace authoring declares `WorkspaceAuthoring` itself; common registration does not grant it.
 
 [`cli/agent_registration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_registration.go) iterates the discovered runtimes and calls `Registry.Register` from `agent/harness.go`. It verifies that discovery retained the declared kind and installs factories in this order:
 

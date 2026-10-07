@@ -19,7 +19,7 @@ func TestMCodeExecutionOptInIsVersionBound(t *testing.T) {
 			t.Setenv("OAC_RUNTIME_MCODE_AGENTS_API", tc.enabled)
 			rc := agent.DiscoveryOptions{Stdout: io.Discard, Stderr: io.Discard}
 			runtime := discoverWithCheck(t.Context(), rc, Declaration.Info, func(context.Context, string) (string, error) { return tc.version, nil })
-			if runtime.Executor == nil || runtime.Preparation != nil || !runtime.SessionCapabilityContext || !runtime.ExecutorCapabilityContext {
+			if runtime.Executor == nil || runtime.Preparation != nil {
 				t.Fatalf("factories: %+v", runtime)
 			}
 			info := runtime.Info

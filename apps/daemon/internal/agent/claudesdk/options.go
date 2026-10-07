@@ -135,8 +135,6 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 			start.Model = value
 		case "system_prompt":
 			start.SystemPrompt = value
-		default:
-			return fail("unsupported option: " + name)
 		}
 	}
 	if strings.TrimSpace(start.Model) == "" {

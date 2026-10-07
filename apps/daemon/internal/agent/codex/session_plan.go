@@ -13,15 +13,14 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err := validateNativeTransportEnvironment(req); err != nil {
 		return SessionPlan{}, nil, err
 	}
-	_, err := runtimePermissionProfile(req)
-	if err != nil {
+	if err := validatePermissionProfile(req); err != nil {
 		return SessionPlan{}, nil, err
 	}
 	mcpServers, mcpEnv, err := runtimeMCPServers(req)
 	if err != nil {
 		return SessionPlan{}, nil, err
 	}
-	plan, err := BuildSessionPlan(req.RunID, req.AgentStateKey, req.AgentOptions)
+	plan, err := BuildSessionPlan(req.AgentStateKey, req.AgentOptions, req.ExecutionControls)
 	if err != nil {
 		return SessionPlan{}, nil, fmt.Errorf("codex: build session plan: %w", err)
 	}
@@ -35,7 +34,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		plan.Sandbox = "danger-full-access"
 		plan.Permissions = ""
 		plan.ApprovalPolicy = AskForApproval{String: "never"}
-	} else if req.DisableExecutionEnvironment {
+	} else {
 		// environment:none has no workspace; the Session's private home is its cwd.
 		plan.Cwd = nativeHomeFromPlan(plan)
 	}
@@ -64,7 +63,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		}
 	}
 
-	if stringOpt(req.AgentOptions, "model_verbosity") != "" {
+	if req.ExecutionControls != nil {
 		if err := prepareModelVerbosity(ctx, cfg.codexBinary, &plan); err != nil {
 			plan.Cleanup()
 			return SessionPlan{}, nil, err
@@ -76,22 +75,13 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	}
 	var skillRoots []string
 	if req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) > 0 {
-		err = verifyHostedSkills(req.LocalEnvironment.Skills)
-		if err == nil {
-			for _, skill := range req.LocalEnvironment.Skills {
-				skillRoots = append(skillRoots, localworkspace.SkillPath(skill))
-			}
+		if err := verifyHostedSkills(req.LocalEnvironment.Skills); err != nil {
+			plan.Cleanup()
+			return SessionPlan{}, nil, err
 		}
-	} else if !req.DisableExecutionEnvironment {
-		var root string
-		root, err = prepareManagedSkills(ctx, cfg.logger, req)
-		if root != "" {
-			skillRoots = []string{root}
+		for _, skill := range req.LocalEnvironment.Skills {
+			skillRoots = append(skillRoots, localworkspace.SkillPath(skill))
 		}
-	}
-	if err != nil {
-		plan.Cleanup()
-		return SessionPlan{}, nil, err
 	}
 
 	plan.Env = append(plan.Env, mcpEnv...)

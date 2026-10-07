@@ -2,12 +2,8 @@ package codex
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/managedskills"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -22,25 +18,6 @@ func effectiveAgentStateKey(req proto.PromptRequestPayload) string {
 		return "_legacy_run/" + id + "/codex"
 	}
 	return ""
-}
-
-func prepareManagedSkills(ctx context.Context, logger *slog.Logger, req proto.PromptRequestPayload) (string, error) {
-	rawSkills := req.AgentOptions["skills"]
-	root, err := agent.ManagedSkillsRoot("codex", req.AgentStateKey, req.ConversationID, req.RunID)
-	if err != nil {
-		return "", fmt.Errorf("codex: resolve managed skills root: %w", err)
-	}
-	result, err := managedskills.InstallManagedSkills(ctx, logger, root, rawSkills)
-	if err != nil {
-		return "", fmt.Errorf("codex: install skills: %w", err)
-	}
-	for _, warning := range result.Warnings {
-		logger.Warn("codex: skill install warning", "run_id", req.RunID, "msg", warning)
-	}
-	if len(result.SkillDirs) == 0 {
-		return "", nil
-	}
-	return root, nil
 }
 
 func setSkillExtraRoots(ctx context.Context, rpc *JSONRPCClient, roots []string) error {

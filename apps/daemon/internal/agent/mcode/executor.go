@@ -46,10 +46,10 @@ func NewExecutorFactory(config *WorkspaceConfig) agent.ExecutorFactory {
 		var opts launchOptions
 		binary := defaultBinary()
 		if frozen == nil {
-			opts, err = prepareOptions(ctx, req)
+			opts, err = prepareOptions(req)
 		} else {
 			binary = frozen.Binary
-			opts, err = prepareWorkspaceOptions(ctx, *frozen, req)
+			opts, err = prepareWorkspaceOptions(*frozen, req)
 		}
 		if err != nil {
 			return nil, err
